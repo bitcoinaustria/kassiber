@@ -7,6 +7,8 @@ from kassiber.errors import AppError
 from kassiber.core.privacy_hygiene import build_privacy_hygiene_snapshot
 from kassiber.db import open_db, set_setting
 
+from .privacy_assertions import assert_tier3_linkage_identifiers_absent
+
 
 NOW = "2026-07-01T12:00:00Z"
 P2WPKH_SCRIPT = "0014" + ("11" * 20)
@@ -257,6 +259,20 @@ class PrivacyHygieneTests(unittest.TestCase):
         self.assertNotIn("bc1qinputreused", encoded)
         self.assertNotIn(P2WPKH_SCRIPT, encoded)
         self.assertNotIn(P2PKH_SCRIPT, encoded)
+        assert_tier3_linkage_identifiers_absent(
+            self,
+            snapshot,
+            forbidden_values=(
+                input_a,
+                input_b,
+                spend_txid,
+                f"{input_a}:0",
+                f"{input_b}:1",
+                f"{spend_txid}:1",
+                "fp-spend",
+            ),
+        )
+        self.assertEqual(tx["id"], "spend")
 
     def test_script_fallback_does_not_assign_ambiguous_cross_wallet_owner(self):
         self.conn.execute(

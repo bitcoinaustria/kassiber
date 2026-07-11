@@ -134,7 +134,8 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
 import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
-import type { AssistantReturnPath } from "@/components/ai/assistantSession";
+import type { AssistantScreenContext } from "@/components/ai/assistantSession";
+import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
 import { appWorkflowHotkeyAction } from "@/lib/appWorkflowHotkeys";
@@ -549,19 +550,6 @@ function exhaustiveSearchAction(actionId: never): never {
   throw new Error(`Unhandled search action: ${actionId}`);
 }
 
-function assistantReturnPathFor(pathname: string): AssistantReturnPath {
-  if (pathname.startsWith("/connections")) return "/connections";
-  if (pathname === "/transactions") return "/transactions";
-  if (pathname === "/reports") return "/reports";
-  if (pathname === "/source-of-funds") return "/source-of-funds";
-  if (pathname === "/books" || pathname.startsWith("/books/") || pathname === "/profiles") return "/books";
-  if (pathname === "/journals") return "/journals";
-  if (pathname === "/quarantine") return "/quarantine";
-  if (pathname === "/logs" || pathname === "/diagnostics") return "/logs";
-  if (pathname === "/settings") return "/settings";
-  return "/overview";
-}
-
 function identityFromProject(
   project: ProjectCatalogEntry,
   status?: ProjectSelectSnapshot["status"],
@@ -587,6 +575,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const routeSearch = useRouterState({ select: (s) => s.location.search });
   const identity = useUiStore((s) => s.identity);
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
@@ -667,8 +656,10 @@ export function AppShell() {
     React.useState(() =>
       foregroundTouchIdAutoPrompt(lockEncryptedWorkspaceOnLaunch),
     );
-  const [assistantReturnPath, setAssistantReturnPath] =
-    React.useState<AssistantReturnPath>("/overview");
+  const [assistantScreenContext, setAssistantScreenContext] =
+    React.useState<AssistantScreenContext>(() =>
+      assistantScreenContextFor("/overview"),
+    );
   const mainRef = React.useRef<HTMLElement>(null);
   const launchLockApplied = React.useRef(false);
   const workspaceValidationApplied = React.useRef(false);
@@ -1453,9 +1444,15 @@ export function AppShell() {
 
   React.useEffect(() => {
     if (!isAssistantRoute) {
-      setAssistantReturnPath(assistantReturnPathFor(pathname));
+      void routeSearch;
+      setAssistantScreenContext(
+        assistantScreenContextFor(
+          pathname,
+          typeof window === "undefined" ? "" : window.location.search,
+        ),
+      );
     }
-  }, [isAssistantRoute, pathname]);
+  }, [isAssistantRoute, pathname, routeSearch]);
 
   React.useEffect(() => {
     const handleAssistantDockSuppressed = (event: Event) => {
@@ -1692,7 +1689,7 @@ export function AppShell() {
                   </main>
                 ) : (
                   aiFeaturesEnabled ? (
-                    <AssistantSessionProvider returnPath={assistantReturnPath}>
+                    <AssistantSessionProvider screenContext={assistantScreenContext}>
                       <main
                         id="app-main"
                         ref={mainRef}

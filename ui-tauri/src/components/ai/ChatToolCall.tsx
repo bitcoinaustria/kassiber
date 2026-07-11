@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -10,6 +11,7 @@ import {
 } from "@/components/ai-elements";
 import type { AiChatToolCall } from "@/daemon/stream";
 import { formatFiatAmount } from "@/lib/currency";
+import { Button } from "@/components/ui/button";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -20,6 +22,7 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
   const summary = summarizeToolResult(toolCall.result, t);
+  const localReference = localToolReference(toolCall.result);
   const errorText =
     toolCall.status === "error" || toolCall.status === "denied"
       ? toolCall.reason
@@ -33,6 +36,20 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       }
     >
       <ToolHeader name={toolCall.name} state={toolCall.status} />
+      {localReference ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="mx-1 mb-1 h-7 w-fit gap-1.5 px-2 text-xs"
+          onClick={() => {
+            openLocalReference(localReference);
+          }}
+        >
+          <ArrowUpRight className="size-3.5" aria-hidden="true" />
+          {t("tool.openReference")}
+        </Button>
+      ) : null}
       <ToolContent>
         {hasArguments ? <ToolInput input={toolCall.arguments} /> : null}
         {summary ? (
@@ -49,6 +66,29 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       </ToolContent>
     </Tool>
   );
+}
+
+function openLocalReference(reference: {
+  route: "/transactions";
+  transaction: string;
+}) {
+  if (typeof window === "undefined") return;
+  const target = `${reference.route}?tx=${encodeURIComponent(reference.transaction)}`;
+  window.history.pushState({}, "", target);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function localToolReference(
+  result: unknown,
+): { route: "/transactions"; transaction: string } | null {
+  const envelope = asRecord(result);
+  const data = asRecord(envelope?.data);
+  const reference = asRecord(data?.local_reference);
+  return reference?.route === "/transactions" &&
+    typeof reference.transaction === "string" &&
+    reference.transaction
+    ? { route: "/transactions", transaction: reference.transaction }
+    : null;
 }
 
 function summarizeToolResult(

@@ -27,6 +27,7 @@ import {
   useUiStore,
 } from "@/store/ui";
 import {
+  DocumentImportDialog,
   NewTransactionDialog,
   createNewTransactionDraft,
   mockNewTransactionWalletSourceOptions,
@@ -527,6 +528,7 @@ const TransactionsDashboard = ({
           />
         ) : (
           <div className={pageHeaderActionsClassName}>
+            <DocumentImportDialog />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

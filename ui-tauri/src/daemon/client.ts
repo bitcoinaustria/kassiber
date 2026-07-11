@@ -288,6 +288,36 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
   "ui.backends.electrum.test": [],
   "ui.backends.http.test": [],
   "ui.backends.lightning.test": [],
+  "ui.wallets.document_import.preview": [],
+  "ui.wallets.document_import.import": [
+    "ui.activity.history",
+    "ui.activity.stale",
+    "ui.attachments.list",
+    "ui.audit.evidence.summary",
+    "ui.journals.events.list",
+    "ui.journals.quarantine",
+    "ui.journals.snapshot",
+    "ui.journals.transfers.list",
+    "ui.next_actions",
+    "ui.overview.snapshot",
+    "ui.rates.coverage",
+    "ui.report.blockers",
+    "ui.reports.balance_history",
+    "ui.reports.balance_sheet",
+    "ui.reports.capital_gains",
+    "ui.reports.portfolio_summary",
+    "ui.reports.summary",
+    "ui.reports.tax_summary",
+    "ui.source_funds.coverage",
+    "ui.source_funds.evidence.list",
+    "ui.transactions.graph",
+    "ui.transactions.extremes",
+    "ui.transactions.list",
+    "ui.transactions.resolve",
+    "ui.wallets.list",
+    "ui.review.badges",
+    "ui.workspace.health",
+  ],
   "wallets.reveal_descriptor": [],
   "ui.chat.history.configure": [
     "ui.chat.history.configure",
@@ -410,7 +440,7 @@ export function invalidatedDaemonQueryKindsForMutation(kind: string) {
   return TARGETED_DAEMON_QUERY_INVALIDATIONS[kind] ?? null;
 }
 
-function invalidateDaemonQueriesForMutation(
+export function invalidateDaemonQueriesForMutation(
   queryClient: QueryClient,
   dataMode: DataMode,
   kind: string,

@@ -402,6 +402,12 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "and ui-tauri/vite.config.ts).",
         )
 
+    def test_document_import_stage_kind_is_privileged(self):
+        kind = "internal.document_import.stage"
+        self.assertIn(kind, set(SUPPORTED_KINDS))
+        self.assertNotIn(kind, self._rust_allowlist())
+        self.assertNotIn(kind, self._vite_allowlist())
+
     def test_invoked_ui_kinds_are_in_desktop_allowlist(self):
         """Forward-direction guard: every ``ui.*`` daemon kind the desktop
         React app actually invokes MUST be in the Tauri shell allowlist.
@@ -486,6 +492,8 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "ui.sync.push",
             "ui.sync.pull",
             "ui.sync.join",
+            "ui.wallets.document_import.preview",
+            "ui.wallets.document_import.import",
         ):
             self.assertIn(
                 f'"{kind}"',

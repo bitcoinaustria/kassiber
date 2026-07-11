@@ -106,17 +106,25 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   exclude it.
 - In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
   dispatch. Current read-only AI kinds are `status`,
-  `ui.overview.snapshot`, `ui.transactions.list`,
+  `ui.overview.snapshot`, `ui.workspace.overview.snapshot`,
+  `ui.review.worklist`, `ui.loans.list`, `ui.transactions.list`,
   `ui.transactions.extremes`, `ui.transactions.search`, `ui.wallets.list`,
   `ui.backends.list`, `ui.profiles.snapshot`, `ui.reports.capital_gains`,
   `ui.reports.summary`, `ui.reports.balance_sheet`,
   `ui.reports.portfolio_summary`, `ui.reports.tax_summary`,
   `ui.reports.balance_history`, `ui.reports.lightning_profitability`,
   `ui.connections.node.snapshot`, `ui.journals.snapshot`,
-  `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
+  `ui.journals.events.list`, `ui.journals.quarantine`,
+  `ui.journals.transfers.list`, `ui.transfers.payouts.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
-  `ui.transactions.history`, `ui.activity.history`, `ui.activity.stale`,
+  `ui.transactions.resolve`, `ui.transactions.graph`,
+  `ui.transactions.review_context`, `ui.transactions.history`,
+  `ui.activity.history`, `ui.activity.stale`, `ui.attachments.list`,
+  `ui.review.badges`, `ui.transactions.commercial_context`,
+  `ui.btcpay.provenance.{list,suggest,links}`, `ui.documents.list`,
+  `ui.source_funds.{evidence.list,coverage,cases.list}`,
+  `ui.reports.exit_tax_preview`, `ui.egress.snapshot`,
   `ui.wallets.utxos`, `ui.wallets.identify`, `ui.maintenance.settings`, `ui.workspace.health`,
   `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
@@ -127,6 +135,21 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   returns safe backend names and metadata without exact URLs or tokens.
   `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
+  Live chats capability-scope the advertised schemas from the latest question
+  plus typed ephemeral `screen_context`; the renderer builds that context from
+  canonical route/entity/filter allowlists, and provider-requested tools are
+  checked against both the advertised set and their JSON schema at execution.
+  Capability-discovery calls may still request the full catalog.
+  `ui.transactions.review_context` is AI-only and
+  composes safe local transaction, graph, journal, evidence, commercial,
+  source-funds, transfer/direct-payout, loan, and privacy state without public
+  lookup. Every terminal answer
+  includes a UI-only privacy receipt for provider kind, selected schema count,
+  executed tools, and outbound event/byte counts.
+  Reads, writes, and history persistence stay pinned to the project/workspace/
+  profile captured when the chat began. Consent-gated AI additions include
+  loan mark/link/unmark, direct payout create/delete, transfer-pair update,
+  existing-evidence attach to source-funds records, and opted-in latest rates.
   Desktop-only replication kinds are `ui.sync.status`,
   `ui.sync.{enable,disable,push,pull,join_request,invite,join}`,
   `ui.sync.transports.{list,configure,delete}`,
@@ -259,7 +282,7 @@ the real transport must be present in `ALLOWED_DAEMON_KINDS`.
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,identify,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-ledger,ledger-template,import-samourai}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,identify,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-ledger,ledger-template,preview-document,import-document,import-samourai}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list,export}` (`export --export-format {csv,xlsx} --file [--wallet]` writes the styled transaction ledger — per-row fiat currency/price/FMV/fee, journal cost basis + realized gain/loss, the own-wallet counterparty of self-transfers (`transfer`), notes, tags, reference URLs, counterparty, linked-file/URL attachments — so a user can verify every row by hand; reuses the report's Transactions sheet, so the full report shares the same columns; daemon kinds `ui.transactions.export_csv` / `ui.transactions.export_xlsx`. Cost basis / gain-loss come from the processed journal and stay blank while journals are unprocessed or stale; fiat columns show the currency each transaction was priced in, with `fmv` = amount × recorded price and `fiat_value` the recorded (possibly fee-adjusted) cash leg.)
 - `attachments {add,list,remove,verify,gc}`
@@ -480,7 +503,7 @@ uv run python -m kassiber ai providers create --help
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
 - Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from Coinbase Exchange by default, CoinGecko fallback, local Kraken OHLCVT CSV archive ingest (`rates sync --source kraken-csv --path <csv-zip-or-directory>`), or manual upsert. Coinbase Exchange sync stores sparse 1-minute candles from chunked 300-minute public API windows. Kraken CSV ingest is local-file only, keeps 1-minute sparse candles, and stores the close as the lookup rate plus OHLCVT metadata. `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp, but reports still use stored transaction and journal pricing rather than querying the cache live.
-- Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River Bitcoin Activity / Account Activity CSV import is implemented (`wallets import-river` and `--source-format river_csv`). Bull Bitcoin order CSV import is implemented as exchange evidence (`wallets import-bull` and `--source-format bullbitcoin_csv`), while Bull's unified wallet transaction CSV is wallet-scoped (`--source-format bullbitcoin_wallet_csv`) and can be split by `bullbitcoin_wallet_network` or mapped onto existing wallets with `wallets attach-bullbitcoin-wallet`. Coinfinity order CSV import is implemented (`wallets import-coinfinity` and `--source-format coinfinity_csv`). 21bitcoin transaction CSV import is implemented (`wallets import-21bitcoin` and `--source-format 21bitcoin_csv`). Strike CSV import is implemented (`wallets import-strike` and `--source-format strike_csv`). A generic manual ledger importer is implemented (`wallets import-ledger`, source format `generic_ledger`): a fill-in `.xlsx` (read via `openpyxl`) or CSV/TSV template whose `Type` column maps onto real `(direction, kind)` pairs, one Bitcoin leg per row, with the fiat leg becoming exact `exchange_execution` pricing. `wallets ledger-template` writes the blank template (no DB; `.xlsx` via XlsxWriter or `.csv` by extension), and `ui.transactions.ledger_template` is its desktop kind; the desktop import reuses `ui.wallets.import_file` with `source_format=generic_ledger`. A preview-before-import path is also available: `wallets import-ledger --dry-run` (no DB) and the read-only `ui.wallets.ledger_preview` daemon kind both reuse the loader + per-row normalizer to return `{rows_read, mapped, errors, problems[], preview[]}` without persisting (collecting every rejected row's problem at once, unlike the real import which stops at the first); the desktop Generic-ledger setup panel renders that preview before the import action. Non-template files are auto-detected: `infer_ledger_columns(header)` remaps an arbitrary export's columns (date; a Type/Side column, or direction/sign, or separate sent/received columns; fee; fiat currency/price/value; note; tx id) onto the ledger shape and feeds the same normalizer (taxonomy + exact pricing preserved); rows without an explicit type become `Buy`/`Sell` when a cash counterleg is present, otherwise `Deposit`/`Withdrawal` by direction. Unrecognized columns raise `ledger_unrecognized` (preview returns `confident: false` + detected columns). Template files keep the native path. An explicit `column_map` overrides the guess.
+- Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River Bitcoin Activity / Account Activity CSV import is implemented (`wallets import-river` and `--source-format river_csv`). Bull Bitcoin order CSV import is implemented as exchange evidence (`wallets import-bull` and `--source-format bullbitcoin_csv`), while Bull's unified wallet transaction CSV is wallet-scoped (`--source-format bullbitcoin_wallet_csv`) and can be split by `bullbitcoin_wallet_network` or mapped onto existing wallets with `wallets attach-bullbitcoin-wallet`. Coinfinity order CSV import is implemented (`wallets import-coinfinity` and `--source-format coinfinity_csv`). 21bitcoin transaction CSV import is implemented (`wallets import-21bitcoin` and `--source-format 21bitcoin_csv`). Strike CSV import is implemented (`wallets import-strike` and `--source-format strike_csv`). A generic manual ledger importer is implemented (`wallets import-ledger`, source format `generic_ledger`): a fill-in `.xlsx` (read via `openpyxl`) or CSV/TSV template whose `Type` column maps onto real `(direction, kind)` pairs, one Bitcoin leg per row, with the fiat leg becoming exact `exchange_execution` pricing. `wallets ledger-template` writes the blank template (no DB; `.xlsx` via XlsxWriter or `.csv` by extension), and `ui.transactions.ledger_template` is its desktop kind; the desktop import reuses `ui.wallets.import_file` with `source_format=generic_ledger`. A preview-before-import path is also available: `wallets import-ledger --dry-run` (no DB) and the read-only `ui.wallets.ledger_preview` daemon kind both reuse the loader + per-row normalizer to return `{rows_read, mapped, errors, problems[], preview[]}` without persisting (collecting every rejected row's problem at once, unlike the real import which stops at the first); the desktop Generic-ledger setup panel renders that preview before the import action. Local-AI photo/PDF OCR drafts are implemented through `wallets preview-document`, `wallets import-document`, and desktop `ui.wallets.document_import.{preview,import}`; this path is hard-local (loopback Ollama vision/OCR models only), returns ready/quarantined draft rows with confidence metadata, and attaches the source document to imported/enriched transactions. Non-template files are auto-detected: `infer_ledger_columns(header)` remaps an arbitrary export's columns (date; a Type/Side column, or direction/sign, or separate sent/received columns; fee; fiat currency/price/value; note; tx id) onto the ledger shape and feeds the same normalizer (taxonomy + exact pricing preserved); rows without an explicit type become `Buy`/`Sell` when a cash counterleg is present, otherwise `Deposit`/`Withdrawal` by direction. Unrecognized columns raise `ledger_unrecognized` (preview returns `confident: false` + detected columns). Template files keep the native path. An explicit `column_map` overrides the guess.
 - No `custom` wallet kind CSV mapping DSL yet.
 - No account adjustments yet.
 - No per-profile Tor proxy configuration yet.

@@ -24,6 +24,7 @@ import { inspectImportProjectDirectory } from "./vite/importProject";
 const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
+const DOCUMENT_IMPORT_STAGE_KIND = "internal.document_import.stage";
 const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
 const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
 const LEDGER_PREVIEW_EXTENSIONS = new Set([".csv", ".tsv", ".xlsx", ".xlsm"]);
@@ -226,6 +227,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.loans.unmark",
   "ui.wallets.create",
   "ui.wallets.import_file",
+  "ui.wallets.document_import.preview",
+  "ui.wallets.document_import.import",
   "ui.wallets.import_samourai",
   "ui.wallets.ledger_preview",
   "ui.wallets.preview_descriptor",
@@ -322,6 +325,8 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.workspace.freshness.run",
   "ui.journals.process",
   "ui.rates.rebuild",
+  "ui.wallets.document_import.preview",
+  "ui.wallets.document_import.import",
   "ui.sync.push",
   "ui.sync.pull",
   "ui.sync.join",
@@ -684,7 +689,7 @@ function daemonBridgePlugin() {
           return;
         }
         if (pathname === FILE_PICKER_BRIDGE_PATH) {
-          await handleBridgeFilePicker(req, res);
+          await handleBridgeFilePicker(req, res, supervisor);
           return;
         }
         if (pathname === IMPORT_PROJECT_BRIDGE_PATH) {
@@ -798,7 +803,11 @@ return thePaths as text`;
   }
 }
 
-async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse) {
+async function handleBridgeFilePicker(
+  req: IncomingMessage,
+  res: ServerResponse,
+  supervisor: DaemonBridgeSupervisor,
+) {
   if (!isLoopbackHost(req.headers.host)) {
     writeJsonError(
       res,
@@ -840,6 +849,42 @@ async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
+    if (request.purpose === "document_import") {
+      const paths = await pickFileViaNativeBridge({
+        title: "Choose a receipt or statement",
+        filters: [
+          {
+            name: "Images and PDF",
+            extensions: ["png", "jpg", "jpeg", "webp", "gif", "pdf"],
+          },
+        ],
+        multiple: false,
+      });
+      if (!paths[0]) {
+        writeJson(res, 200, { documentImportSource: null });
+        return;
+      }
+      const staged = await supervisor.invoke({
+        kind: DOCUMENT_IMPORT_STAGE_KIND,
+        args: { source_file: paths[0] },
+      });
+      if (staged.kind !== DOCUMENT_IMPORT_STAGE_KIND || !staged.data) {
+        const error = staged.error;
+        const message =
+          error && typeof error === "object" && !Array.isArray(error)
+            ? (error as { message?: unknown }).message
+            : undefined;
+        throw new Error(
+          typeof message === "string"
+            ? message
+            : "Could not stage the selected document.",
+        );
+      }
+      writeJson(res, 200, {
+        documentImportSource: staged.data as Record<string, unknown>,
+      });
+      return;
+    }
     const paths = await pickFileViaNativeBridge(request);
     if (request.multiple === true) {
       writeJson(res, 200, { paths });
@@ -858,14 +903,24 @@ async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse)
       /User cancelled/i.test(message) ||
       /cancel/i.test(message);
     if (cancelled) {
-      writeJson(res, 200, request.multiple === true ? { paths: [] } : { path: null });
+      writeJson(
+        res,
+        200,
+        request.purpose === "document_import"
+          ? { documentImportSource: null }
+          : request.multiple === true
+            ? { paths: [] }
+            : { path: null },
+      );
     } else {
       writeJson(
         res,
         200,
-        request.multiple === true
-          ? { paths: [], error: message }
-          : { path: null, error: message },
+        request.purpose === "document_import"
+          ? { documentImportSource: null, error: message }
+          : request.multiple === true
+            ? { paths: [], error: message }
+            : { path: null, error: message },
       );
     }
   }

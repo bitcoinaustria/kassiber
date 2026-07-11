@@ -12,11 +12,13 @@
  */
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type {
   DaemonEnvelope,
   DaemonStreamRecord,
 } from "./transport";
+import { invalidateDaemonQueriesForMutation } from "./client";
 import { getTransport, makeDaemonRequestId } from "./transport";
 import { ThinkParser } from "@/lib/thinkParser";
 import { useUiStore } from "@/store/ui";
@@ -55,6 +57,8 @@ export interface AiAnswerProvenance {
   provider?: string;
   model?: string;
   tools_used?: string[];
+  tools_attempted?: string[];
+  tool_denials?: Array<{ tool: string; reason: string }>;
   active_transactions?: number | null;
   quarantines?: number | null;
   missing_price_transactions?: number | null;
@@ -62,6 +66,23 @@ export interface AiAnswerProvenance {
   auto_journal_processed?: boolean;
   auto_sync_attempted?: boolean;
   auto_sync_ok?: boolean | null;
+  privacy_receipt?: {
+    provider_kind?: string | null;
+    remote_provider?: boolean;
+    screen_route?: string | null;
+    advertised_tool_count?: number | null;
+    tools_attempted?: number;
+    tools_executed?: number;
+    tools_denied?: number;
+    egress_records?: number;
+    egress_endpoints?: number;
+    egress_bytes_out?: number;
+    egress_subsystems?: string[];
+    egress_gap?: boolean;
+    history_intent?: boolean | "auto" | null;
+    hostnames_disclosed_to_model?: boolean;
+    cross_book_data_disclosed?: boolean;
+  };
 }
 
 export type AiToolCallStatus =
@@ -108,6 +129,20 @@ export interface AiChatRequest {
    * a fork — a null session id alone must not backfill detached history.
    */
   seedHistory?: boolean;
+  /** Typed, ephemeral UI state. Never includes descriptors, file content, or secrets. */
+  screenContext?: {
+    route?: string;
+    entityType?:
+      | "transaction"
+      | "wallet"
+      | "report"
+      | "source_funds_case"
+      | "connection"
+      | "profile";
+    entityId?: string;
+    filters?: Record<string, unknown>;
+    capabilities?: string[];
+  };
 }
 
 /** One stored exchange row from ui.chat.sessions.get. */
@@ -131,6 +166,15 @@ export function buildAiChatStreamArgs(
     session_id: request.sessionId ?? undefined,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
+    screen_context: request.screenContext
+      ? {
+          route: request.screenContext.route,
+          entity_type: request.screenContext.entityType,
+          entity_id: request.screenContext.entityId,
+          filters: request.screenContext.filters,
+          capabilities: request.screenContext.capabilities,
+        }
+      : undefined,
   };
 }
 
@@ -198,12 +242,45 @@ interface AiToolConsentResponseShape {
   reason?: string;
 }
 
-type AiChatStreamRecordData =
+export type AiChatStreamRecordData =
   | AiChatStatusShape
   | AiChatDeltaShape
   | AiChatToolCallShape
   | AiChatToolResultShape
   | AiChatToolConsentRequiredShape;
+
+interface ObservedAiToolCall {
+  name: string;
+  kindClass: AiChatToolCall["kindClass"];
+}
+
+/**
+ * Track the streamed tool lifecycle and return a daemon mutation kind exactly
+ * once, only when the matching mutating call completed successfully.
+ */
+export function completedAiMutationKind(
+  observedCalls: Map<string, ObservedAiToolCall>,
+  record: DaemonStreamRecord<AiChatStreamRecordData>,
+): string | null {
+  if (record.kind === "ai.chat.tool_call") {
+    const data = record.data as AiChatToolCallShape | undefined;
+    if (data?.call_id && data.name) {
+      observedCalls.set(data.call_id, {
+        name: data.name,
+        kindClass: data.kind_class ?? "unknown",
+      });
+    }
+    return null;
+  }
+  if (record.kind !== "ai.chat.tool_result") return null;
+  const data = record.data as AiChatToolResultShape | undefined;
+  if (!data?.call_id) return null;
+  const observed = observedCalls.get(data.call_id);
+  observedCalls.delete(data.call_id);
+  return data.ok === true && observed?.kindClass === "mutating"
+    ? observed.name
+    : null;
+}
 
 export interface UseAiChatStreamResult {
   messages: AiChatMessage[];
@@ -533,6 +610,7 @@ export function terminalAiChatStatus(
 /** React hook driving one assistant thread. */
 export function useAiChatStream(): UseAiChatStreamResult {
   const dataMode = useUiStore((state) => state.dataMode);
+  const queryClient = useQueryClient();
   const [messages, setMessages] = React.useState<AiChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = React.useState(false);
   const [error, setError] = React.useState<UseAiChatStreamResult["error"]>(
@@ -545,6 +623,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const parserRef = React.useRef<ThinkParser | null>(null);
   const assistantIdRef = React.useRef<string | null>(null);
   const requestIdRef = React.useRef<string | null>(null);
+  const observedToolCallsRef = React.useRef(new Map<string, ObservedAiToolCall>());
   const recordQueueRef = React.useRef<
     DaemonStreamRecord<AiChatStreamRecordData>[]
   >([]);
@@ -605,6 +684,17 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const onRecord = React.useCallback(
     (record: DaemonStreamRecord<AiChatStreamRecordData>) => {
       if (!mountedRef.current) return;
+      const completedMutation = completedAiMutationKind(
+        observedToolCallsRef.current,
+        record,
+      );
+      if (completedMutation) {
+        invalidateDaemonQueriesForMutation(
+          queryClient,
+          dataModeRef.current,
+          completedMutation,
+        );
+      }
       if (record.kind === "ai.chat.tool_consent_required") {
         const data = record.data as AiChatToolConsentRequiredShape | undefined;
         const targetRequestId =
@@ -632,13 +722,14 @@ export function useAiChatStream(): UseAiChatStreamResult {
       recordQueueRef.current.push(record);
       scheduleRecordFlush();
     },
-    [scheduleRecordFlush],
+    [queryClient, scheduleRecordFlush],
   );
 
   const cancelActiveRequest = React.useCallback(() => {
     const requestId = requestIdRef.current;
     abortRef.current?.abort();
     recordQueueRef.current = [];
+    observedToolCallsRef.current.clear();
     if (flushTimerRef.current !== null) {
       window.clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
@@ -672,6 +763,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
       const assistantId = makeId();
       assistantIdRef.current = assistantId;
       parserRef.current = new ThinkParser();
+      observedToolCallsRef.current.clear();
       setMessages((prev) => [
         ...prev,
         {
@@ -789,6 +881,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           flushTimerRef.current = null;
         }
         recordQueueRef.current = [];
+        observedToolCallsRef.current.clear();
         if (mountedRef.current) {
           setIsStreaming(false);
           setPendingConsent(null);

@@ -1,9 +1,11 @@
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 
 import {
   DaemonAuthRequiredError,
   DaemonRequestError,
   daemonMutationKey,
+  invalidateDaemonQueriesForMutation,
   invalidatedDaemonQueryKindsForMutation,
   isRetryableDaemonError,
   mutationAdvancesDaemonSession,
@@ -129,6 +131,26 @@ describe("daemon mutation key", () => {
 });
 
 describe("daemon mutation invalidation scope", () => {
+  it("applies the same targeted cache policy to external mutation callers", () => {
+    const queryClient = new QueryClient();
+    const journalKey = ["daemon", "real", "ui.journals.snapshot", {}];
+    const transactionKey = ["daemon", "real", "ui.transactions.list", {}];
+    const unrelatedKey = ["daemon", "real", "ui.backends.list", {}];
+    queryClient.setQueryData(journalKey, { ok: true });
+    queryClient.setQueryData(transactionKey, { ok: true });
+    queryClient.setQueryData(unrelatedKey, { ok: true });
+
+    invalidateDaemonQueriesForMutation(
+      queryClient,
+      "real",
+      "ui.journals.process",
+    );
+
+    expect(queryClient.getQueryState(journalKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(transactionKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(unrelatedKey)?.isInvalidated).toBe(false);
+  });
+
   it("limits attachment renames to attachment and evidence reads", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.attachments.rename"),
@@ -167,6 +189,21 @@ describe("daemon mutation invalidation scope", () => {
         ]),
       );
     }
+  });
+
+  it("refreshes transaction-derived reads after document OCR import", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation(
+        "ui.wallets.document_import.import",
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "ui.transactions.extremes",
+        "ui.transactions.list",
+        "ui.review.badges",
+        "ui.workspace.health",
+      ]),
+    );
   });
 
   it("does not invalidate daemon reads after read-only backend probes", () => {

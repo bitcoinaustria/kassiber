@@ -89,6 +89,8 @@ daemon for the exact current allowlist:
       "ui.next_actions",
       "ui.wallets.create",
       "ui.wallets.import_file",
+      "ui.wallets.document_import.preview",
+      "ui.wallets.document_import.import",
       "ui.wallets.import_samourai",
       "ui.connections.btcpay.create",
       "ui.connections.bullbitcoin_wallet.create",
@@ -223,6 +225,23 @@ complete current-transaction graph, not witnesses, arbitrary script payloads, or
 backend response shape. The payload never returns descriptors, xpubs, backend
 URLs/tokens, wallet config, raw files, raw JSON blobs, or other secret-bearing
 material.
+
+`ui.transactions.review_context` is the AI-oriented composite review packet.
+It accepts one transaction id/txid plus bounded include flags and joins the
+safe transaction row with the local graph, journal events, append-only edit
+history, audit/evidence readiness, attachment labels, commercial provenance,
+source-funds links, reviewed transfer/direct-payout state, loan marks/hints,
+privacy findings, staleness, and deterministic next-action descriptors. It
+never performs public lookup. Raw evidence URLs, managed paths,
+document bytes, backend identities, descriptors, xpubs, and raw importer JSON
+are removed before provider context. The kind is AI-only and intentionally
+absent from the desktop invoke allowlist.
+
+`ui.review.worklist` is the AI-only bounded accounting queue. It composes
+report readiness, quarantine, stale edits, transfer candidates, and heuristic
+loan locks by default; commercial and source-funds sections are opt-in
+categories. `ui.workspace.overview.snapshot` is AI-readable only for the
+chat's frozen workspace and keeps every profile/book boundary visible.
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
@@ -439,6 +458,49 @@ The result also includes `matched`, `skipped_unmatched`, and
 `skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full
 mode.
+
+The desktop first uses the privileged native picker to invoke
+`internal.document_import.stage`. That kind is supported by the Python daemon
+but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
+the canonical source path in a bounded, expiring, process-local daemon session
+and returns only an opaque `document_token` plus safe filename/type metadata.
+
+`ui.wallets.document_import.preview` accepts that `document_token`, optional
+`provider`, optional `model`, `confidence_threshold`, `max_pages`, and an
+optional contiguous `pages` range such as `2-6`. Raw path, draft, and row fields
+are rejected. PDFs within the page budget are rendered completely; longer PDFs
+require an explicit range, and the result reports total/rendered pages plus
+whether the selection is complete. It is read-only, but it calls a local AI
+model, so the Tauri shell gates it through `AI_RUNTIME_KINDS`. The daemon stores
+the normalized rows, source hash, selected page set, and active profile currency
+in a new immutable preview session and returns its fresh token; the renderer
+response omits the source path. A later preview therefore cannot change an
+already-reviewed snapshot. Non-loopback or non-local providers are rejected,
+and missing local vision/OCR models return
+`document_import_model_missing` with Ollama model recommendations.
+
+`ui.wallets.document_import.import` accepts `wallet`, `document_token`, and a
+required `selected_row_ids` list. It rejects raw paths, renderer drafts/rows,
+quarantined-row overrides, and attachment-policy overrides. Selected ids must
+belong to ready rows in the daemon-owned preview. The daemon verifies the
+stored source hash against the current file before writing, copies the source
+into managed attachments for every inserted or enriched transaction, and
+consumes the session only after a successful import. Both preview and import
+use the long-running supervisor budget because local OCR and multi-row evidence
+copying can exceed 15 seconds. A daemon restart, project switch, or expired
+session requires selecting and previewing the document again. The public success
+result omits both the original source path and managed attachment relative paths.
+OCR requests bypass ambient HTTP proxies and reject off-origin redirects. PDF
+rendering/page inspection has a hard timeout plus per-page geometry and byte
+budgets before any raster is base64 encoded; model ids match exact installed
+tags; preview and import cap row counts; and import hashes/copies a stable
+source snapshot. Row ids are derived from source bytes and normalized economic
+facts, so model response reordering cannot duplicate a retry. Every populated
+accounting field requires cell confidence.
+Unsupported assets, non-positive amounts, invalid/negative fees, invalid or
+non-positive fiat facts, missing/mismatched fiat currencies, and source pages
+outside the rendered set stay quarantined,
+while projected managed-evidence copies have a bounded storage budget.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

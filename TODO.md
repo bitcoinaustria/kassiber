@@ -355,9 +355,13 @@ top of the monolith.
   with actionable gap cards dispatching `next_step.action`.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
-- [ ] Add optional OCR/photo/invoice extraction after the evidence review and
-  audit package workflow has real-user feedback; keep suggestions review-gated
-  and never auto-mark evidence complete.
+- [x] Add optional local OCR/photo/PDF transaction extraction as a review-gated
+  draft importer: `wallets preview-document`, `wallets import-document`, and
+  desktop `ui.wallets.document_import.{preview,import}` require loopback local
+  vision/OCR models, quarantine ambiguous rows, bind reviewed drafts to the
+  source-file SHA-256, and attach the source document as managed evidence.
+  Source-funds-specific extraction polish remains future
+  feedback-driven work.
 
 ## Phase 1 - Desktop UI
 
@@ -466,6 +470,19 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   fields, add report-blocker / rate-coverage / change-audit / maintenance
   tools, expose answer provenance in GUI/export, and export tool args/results
   for debugging inaccurate small-model answers.
+- [x] In-app AI review/operator expansion: capability-scope the advertised
+  schemas for smaller local models; pass typed ephemeral screen context; add a
+  composite transaction review packet; expose consent-gated metadata/evidence,
+  source-funds assembly/export, commercial reconciliation, and report handoff
+  tools; and attach an outbound/privacy receipt to every answer. OCR files and
+  raw document bytes remain desktop-local and outside the chat tool surface.
+- [x] In-app AI second review pass: add a deterministic cross-workflow
+  worklist, explicit book-set overview, loan accounting review, direct payout
+  maintenance, managed-evidence linking, and consent-gated latest rates; build
+  typed route context in the renderer and invalidate affected UI caches after
+  successful AI writes. Freeze every read/write/history target to the original
+  project/book, enforce advertised schemas at execution, and close hidden
+  public-lookup and OCR proxy/source-race paths.
 - [x] Wire the in-app AI swap-review surface end to end: advertised
   `ui.transfers.*` and `ui.saved_views.*` tools now execute through the same
   daemon dispatcher as the GUI, with writes still behind tool consent; the chat
@@ -736,7 +753,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Review/confirmation workflow for proposed matches and commercial annotations
 - [x] Split commercial annotations from RP2-facing tax primitives during journal preparation
 - [x] Accountant-facing export of matched BTC subledger rows with document references
-- [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
+- [x] Opt-in local AI extraction for long-tail documents now exists as a
+  hard-local OCR draft importer; AI tie-breaking for source-funds/commercial
+  matching remains deferred until there is real-user feedback.
 - [ ] Build the richer desktop visual reconciliation workflow on top of
   the new `ui.btcpay.provenance.*` and `ui.documents.*` daemon-safe
   surfaces. The transaction detail sheet now has a first-pass commercial

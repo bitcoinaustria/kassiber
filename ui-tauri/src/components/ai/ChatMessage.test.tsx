@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { ChatMessage } from "./ChatMessage";
+import { ChatToolCall } from "./ChatToolCall";
 import type { AiChatMessage } from "@/daemon/stream";
 
 describe("ChatMessage", () => {
@@ -41,6 +42,60 @@ describe("ChatMessage", () => {
 
     expect(html).toContain('aria-label="Copy"');
     expect(html).toContain('aria-label="More options"');
+  });
+
+  it("renders local references and the per-answer privacy receipt", () => {
+    const message: AiChatMessage = {
+      id: "assistant-review",
+      role: "assistant",
+      content: "Review complete.",
+      status: "done",
+      toolCalls: [
+        {
+          callId: "call-review",
+          name: "ui.transactions.review_context",
+          arguments: { transaction: "tx-1" },
+          kindClass: "read_only",
+          needsConsent: false,
+          status: "done",
+          result: {
+            kind: "ui.transactions.review_context",
+            schema_version: 1,
+            data: {
+              local_reference: {
+                route: "/transactions",
+                transaction: "tx-1",
+              },
+            },
+          },
+        },
+      ],
+      provenance: {
+        tools_used: ["ui.transactions.review_context"],
+        privacy_receipt: {
+          provider_kind: "remote",
+          remote_provider: true,
+          advertised_tool_count: 18,
+          tools_denied: 1,
+          cross_book_data_disclosed: true,
+          egress_records: 2,
+          egress_bytes_out: 1234,
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(<ChatMessage message={message} />);
+
+    expect(html).toContain("remote provider");
+    expect(html).toContain("18 tool schemas");
+    expect(html).toContain("1 denied tool");
+    expect(html).toContain("book-set data shared");
+    expect(html).toContain("2 outbound events");
+
+    const toolHtml = renderToStaticMarkup(
+      <ChatToolCall toolCall={message.toolCalls![0]} />,
+    );
+    expect(toolHtml).toContain("Open transaction");
   });
 
   it("offers an edit action on a user message when enabled", () => {

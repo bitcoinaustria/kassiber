@@ -689,6 +689,42 @@ function provenanceParts(
         : t("provenance.syncChecked"),
     );
   }
+  const receipt = provenance.privacy_receipt;
+  if (receipt) {
+    parts.push(
+      receipt.remote_provider
+        ? t("provenance.remoteProvider")
+        : t("provenance.localProvider"),
+    );
+    if (
+      receipt.advertised_tool_count !== null &&
+      receipt.advertised_tool_count !== undefined
+    ) {
+      parts.push(
+        t("provenance.advertisedTools", {
+          count: Number(receipt.advertised_tool_count),
+        }),
+      );
+    }
+    if ((receipt.tools_denied ?? 0) > 0) {
+      parts.push(
+        t("provenance.deniedTools", {
+          count: Number(receipt.tools_denied),
+        }),
+      );
+    }
+    if (receipt.cross_book_data_disclosed) {
+      parts.push(t("provenance.crossBookRead"));
+    }
+    if ((receipt.egress_records ?? 0) > 0) {
+      parts.push(
+        t("provenance.egressReceipt", {
+          records: Number(receipt.egress_records ?? 0),
+          bytes: formatCount(receipt.egress_bytes_out ?? 0),
+        }),
+      );
+    }
+  }
   if (provenance.generated_at) {
     parts.push(
       t("provenance.answeredAt", { time: shortTime(provenance.generated_at) }),

@@ -293,6 +293,7 @@ def add_attachment(
     url: str | None = None,
     label: str | None = None,
     media_type: str | None = None,
+    commit: bool = True,
 ):
     if bool(file_path) == bool(url):
         raise AppError("Provide exactly one of --file or --url", code="validation")
@@ -362,7 +363,8 @@ def add_attachment(
                 created_at,
             ),
         )
-        conn.commit()
+        if commit:
+            conn.commit()
     except Exception:
         if destination is not None:
             try:
@@ -558,6 +560,8 @@ def list_attachments(
     hooks: AttachmentHooks,
     *,
     tx_ref: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
 ):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     where = ["a.profile_id = ?"]
@@ -566,6 +570,10 @@ def list_attachments(
         tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
         where.append("a.transaction_id = ?")
         params.append(tx["id"])
+    pagination = ""
+    if limit is not None:
+        pagination = "LIMIT ? OFFSET ?"
+        params.extend((limit, offset))
     rows = conn.execute(
         f"""
         SELECT
@@ -579,6 +587,7 @@ def list_attachments(
         LEFT JOIN wallets w ON w.id = t.wallet_id
         WHERE {' AND '.join(where)}
         ORDER BY a.created_at DESC, a.id DESC
+        {pagination}
         """,
         params,
     ).fetchall()

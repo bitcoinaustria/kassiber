@@ -21,6 +21,7 @@ from kassiber.daemon import (
     AiToolRuntime,
     MAX_REQUEST_LINE_CHARS,
     ParsedAiToolCall,
+    _ai_chat_args,
     _ai_chat_seed_prefix,
     _auto_tool_context_for_model,
     _execute_mutating_ai_tool,
@@ -1085,7 +1086,12 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.process", ready["data"]["supported_kinds"])
             self.assertIn("ui.transfers.review_context", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transfers.payouts.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transfers.payouts.create", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transfers.payouts.delete", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transfers.update", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.workspace.overview.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.onboarding.complete", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.switch", ready["data"]["supported_kinds"])
@@ -1097,6 +1103,11 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertIn("ui.rates.latest", ready["data"]["supported_kinds"])
             self.assertIn("ui.report.blockers", ready["data"]["supported_kinds"])
+            self.assertIn("ui.review.worklist", ready["data"]["supported_kinds"])
+            self.assertIn("ui.loans.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.loans.mark", ready["data"]["supported_kinds"])
+            self.assertIn("ui.loans.link", ready["data"]["supported_kinds"])
+            self.assertIn("ui.loans.unmark", ready["data"]["supported_kinds"])
             self.assertIn(
                 "ui.audit.changes_since_last_answer",
                 ready["data"]["supported_kinds"],
@@ -4920,6 +4931,664 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertEqual(decision, "allow_once")
         self.assertFalse(consent.record("call_1", "deny"))
 
+    def test_ai_chat_accepts_typed_screen_context_and_rejects_sensitive_filters(self):
+        base = {
+            "model": "local-model",
+            "messages": [{"role": "user", "content": "Explain this"}],
+            "tools_enabled": True,
+        }
+        validated = _ai_chat_args(
+            {
+                **base,
+                "screen_context": {
+                    "route": "/transactions",
+                    "entity_type": "transaction",
+                    "entity_id": "tx-1",
+                    "capabilities": ["transactions"],
+                },
+            }
+        )
+        self.assertEqual(validated["screen_context"]["route"], "/transactions")
+        self.assertEqual(validated["screen_context"]["entity_id"], "tx-1")
+
+        for invalid_context in (
+            {"route": "/transactions/tx-1"},
+            {
+                "route": "/transactions",
+                "entity_type": "transaction",
+                "entity_id": "https://explorer.example/tx/secret",
+            },
+            {
+                "route": "/transactions",
+                "entity_type": "transaction",
+                "entity_id": "/private/book/transaction.json",
+            },
+        ):
+            with self.subTest(invalid_context=invalid_context):
+                with self.assertRaises(AppError) as context_raised:
+                    _ai_chat_args({**base, "screen_context": invalid_context})
+                self.assertEqual(context_raised.exception.code, "validation")
+
+        with self.assertRaises(AppError) as raised:
+            _ai_chat_args(
+                {
+                    **base,
+                    "screen_context": {
+                        "route": "/transactions",
+                        "filters": {"descriptor": "wpkh(xpub...)"},
+                    },
+                }
+            )
+        self.assertEqual(raised.exception.code, "validation")
+
+        with self.assertRaises(AppError) as path_raised:
+            _ai_chat_args(
+                {
+                    **base,
+                    "screen_context": {
+                        "route": "/transactions",
+                        "filters": {"nested": {"file_path": "/private/tax.pdf"}},
+                    },
+                }
+            )
+        self.assertEqual(path_raised.exception.code, "validation")
+
+    def test_document_import_preserves_explicit_empty_row_selection(self):
+        self.assertEqual(
+            daemon_module._document_import_selected_row_ids(
+                {"selected_row_ids": []}
+            ),
+            [],
+        )
+
+    def test_document_import_sessions_expire_and_are_scope_bound(self):
+        now = [100.0]
+        sessions = daemon_module.DocumentImportSessions(
+            ttl_seconds=10,
+            max_sessions=2,
+            clock=lambda: now[0],
+        )
+        token = sessions.stage(
+            source_file="/trusted/receipt.png",
+            workspace_id="workspace-1",
+            profile_id="profile-1",
+            data_root="/data-1",
+        )
+        self.assertEqual(
+            sessions.source_for_preview(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data-1",
+            ),
+            "/trusted/receipt.png",
+        )
+        with self.assertRaises(AppError) as wrong_scope:
+            sessions.source_for_preview(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-2",
+                data_root="/data-1",
+            )
+        self.assertEqual(wrong_scope.exception.code, "document_import_session_expired")
+
+        now[0] = 111.0
+        with self.assertRaises(AppError) as expired:
+            sessions.source_for_preview(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data-1",
+            )
+        self.assertEqual(expired.exception.code, "document_import_session_expired")
+
+    def test_document_import_sessions_evict_the_oldest_grant(self):
+        now = [1.0]
+        sessions = daemon_module.DocumentImportSessions(
+            ttl_seconds=100,
+            max_sessions=2,
+            clock=lambda: now[0],
+        )
+
+        def stage(name):
+            token = sessions.stage(
+                source_file=f"/trusted/{name}.png",
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+            now[0] += 1
+            return token
+
+        oldest = stage("oldest")
+        stage("middle")
+        newest = stage("newest")
+        with self.assertRaises(AppError) as evicted:
+            sessions.source_for_preview(
+                oldest,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+        self.assertEqual(evicted.exception.code, "document_import_session_expired")
+        self.assertEqual(
+            sessions.source_for_preview(
+                newest,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            ),
+            "/trusted/newest.png",
+        )
+
+    def test_document_import_preview_sessions_are_immutable(self):
+        sessions = daemon_module.DocumentImportSessions()
+        source_token = sessions.stage(
+            source_file="/trusted/receipt.png",
+            workspace_id="workspace-1",
+            profile_id="profile-1",
+            data_root="/data",
+        )
+        scope = {
+            "workspace_id": "workspace-1",
+            "profile_id": "profile-1",
+            "data_root": "/data",
+        }
+        first = sessions.create_preview(
+            source_token,
+            {"rows": [{"id": "first"}]},
+            **scope,
+        )
+        second = sessions.create_preview(
+            source_token,
+            {"rows": [{"id": "second"}]},
+            **scope,
+        )
+
+        self.assertNotEqual(first, second)
+        self.assertEqual(
+            sessions.preview_for_import(first, **scope).draft,
+            {"rows": [{"id": "first"}]},
+        )
+        self.assertEqual(
+            sessions.preview_for_import(second, **scope).draft,
+            {"rows": [{"id": "second"}]},
+        )
+
+    def test_document_import_stage_returns_only_an_opaque_session(self):
+        sessions = daemon_module.DocumentImportSessions()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "receipt.png"
+            source.write_bytes(b"local image bytes")
+            ctx = SimpleNamespace(
+                conn=object(),
+                data_root="/data",
+                document_import_sessions=sessions,
+            )
+            with mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+            ):
+                staged = daemon_module._document_import_stage_payload(
+                    ctx,
+                    {"source_file": str(source)},
+                )
+
+        self.assertEqual(staged["source"]["filename"], "receipt.png")
+        self.assertNotIn("path", staged["source"])
+        self.assertNotIn(str(source), json.dumps(staged))
+        self.assertEqual(
+            sessions.source_for_preview(
+                staged["document_token"],
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            ),
+            str(source.resolve()),
+        )
+
+        missing = "/private/secret/does-not-exist.pdf"
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+            ),
+            self.assertRaises(AppError) as unavailable,
+        ):
+            daemon_module._document_import_stage_payload(
+                ctx,
+                {"source_file": missing},
+            )
+        self.assertEqual(
+            unavailable.exception.code, "document_import_source_unavailable"
+        )
+        self.assertNotIn(missing, str(unavailable.exception))
+
+    def test_document_import_uses_daemon_owned_preview_and_consumes_session(self):
+        sessions = daemon_module.DocumentImportSessions()
+        token = sessions.stage(
+            source_file="/trusted/receipt.png",
+            workspace_id="workspace-1",
+            profile_id="profile-1",
+            data_root="/data",
+        )
+        ctx = SimpleNamespace(
+            conn=object(),
+            data_root="/data",
+            document_import_sessions=sessions,
+        )
+        authoritative_draft = {
+            "confidence_threshold": 0.9,
+            "source": {
+                "path": "/trusted/receipt.png",
+                "filename": "receipt.png",
+                "sha256": "a" * 64,
+            },
+            "rows": [
+                {
+                    "id": "docrow-aaaaaaaaaaaaaaaa-001",
+                    "status": "ready",
+                    "record": {"amount_btc": "0.01"},
+                },
+                {
+                    "id": "docrow-aaaaaaaaaaaaaaaa-002",
+                    "status": "quarantined",
+                    "record": {"amount_btc": "20"},
+                },
+            ],
+        }
+        with self.assertRaises(AppError) as renderer_path:
+            daemon_module._document_import_preview_payload(
+                ctx,
+                {
+                    "document_token": token,
+                    "source_file": "/private/other.pdf",
+                    "provider": "local",
+                },
+            )
+        self.assertEqual(renderer_path.exception.code, "validation")
+
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=(
+                    {"id": "workspace-1"},
+                    {"id": "profile-1", "fiat_currency": "EUR"},
+                ),
+            ),
+            mock.patch(
+                "kassiber.daemon.core_document_import.preview_document_import",
+                return_value=authoritative_draft,
+            ) as preview,
+        ):
+            public_draft = daemon_module._document_import_preview_payload(
+                ctx,
+                {
+                    "document_token": token,
+                    "provider": "local",
+                    "pages": "2-4",
+                },
+            )
+        self.assertNotIn("path", public_draft["source"])
+        preview_token = public_draft["document_token"]
+        self.assertNotEqual(preview_token, token)
+        self.assertEqual(preview.call_args.kwargs["source_file"], "/trusted/receipt.png")
+        self.assertEqual(preview.call_args.kwargs["pages"], "2-4")
+        self.assertEqual(preview.call_args.kwargs["expected_fiat_currency"], "EUR")
+        with self.assertRaises(AppError) as unpreviewed_source:
+            sessions.preview_for_import(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+        self.assertEqual(
+            unpreviewed_source.exception.code, "document_import_preview_required"
+        )
+
+        with self.assertRaises(AppError) as renderer_rows:
+            daemon_module._document_import_import_payload(
+                ctx,
+                {
+                    "document_token": preview_token,
+                    "wallet": "wallet-1",
+                    "selected_row_ids": ["docrow-aaaaaaaaaaaaaaaa-001"],
+                    "rows": [{"record": {"amount_btc": "999"}}],
+                },
+            )
+        self.assertEqual(renderer_rows.exception.code, "validation")
+
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=(
+                    {"id": "workspace-1"},
+                    {"id": "profile-1", "fiat_currency": "EUR"},
+                ),
+            ),
+            self.assertRaises(AppError) as quarantined,
+        ):
+            daemon_module._document_import_import_payload(
+                ctx,
+                {
+                    "document_token": preview_token,
+                    "wallet": "wallet-1",
+                    "selected_row_ids": ["docrow-aaaaaaaaaaaaaaaa-002"],
+                },
+            )
+        self.assertEqual(quarantined.exception.code, "validation")
+
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=(
+                    {"id": "workspace-1"},
+                    {"id": "profile-1", "fiat_currency": "EUR"},
+                ),
+            ),
+            mock.patch(
+                "kassiber.daemon.core_resolve_wallet",
+                return_value={"id": "wallet-1"},
+            ),
+            mock.patch(
+                "kassiber.daemon.core_document_import.import_document_draft",
+                return_value={
+                    "draft_rows_imported": 1,
+                    "source": {
+                        "path": "/trusted/receipt.png",
+                        "filename": "receipt.png",
+                    },
+                    "attached_evidence": [
+                        {
+                            "attachment_id": "attachment-1",
+                            "stored_relpath": "profile/transaction/receipt.png",
+                        }
+                    ],
+                },
+            ) as import_draft,
+        ):
+            outcome = daemon_module._document_import_import_payload(
+                ctx,
+                {
+                    "document_token": preview_token,
+                    "wallet": "wallet-1",
+                    "selected_row_ids": ["docrow-aaaaaaaaaaaaaaaa-001"],
+                },
+            )
+        self.assertEqual(outcome["draft_rows_imported"], 1)
+        self.assertNotIn("path", outcome["source"])
+        self.assertNotIn("stored_relpath", outcome["attached_evidence"][0])
+        self.assertEqual(
+            import_draft.call_args.kwargs["rows"], authoritative_draft["rows"]
+        )
+        self.assertFalse(import_draft.call_args.kwargs["include_quarantined"])
+        self.assertEqual(
+            import_draft.call_args.kwargs["expected_source_sha256"], "a" * 64
+        )
+        self.assertEqual(import_draft.call_args.kwargs["confidence_threshold"], 0.9)
+        with self.assertRaises(AppError) as consumed:
+            sessions.preview_for_import(
+                preview_token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+        self.assertEqual(consumed.exception.code, "document_import_session_expired")
+
+    def test_ai_tool_execution_rejects_tools_not_advertised_for_the_turn(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"advertised_tools": ["ui_overview_snapshot"]},
+        )
+
+        read_result = _execute_read_only_ai_tool(
+            ParsedAiToolCall(
+                call_id="call-hidden-read",
+                name="ui.transactions.graph",
+                arguments={"transaction": "tx-1"},
+            ),
+            runtime,
+        )
+        mutation_result = _execute_mutating_ai_tool(
+            ParsedAiToolCall(
+                call_id="call-hidden-write",
+                name="ui.loans.mark",
+                arguments={"txid": "tx-1", "as": "collateral"},
+            ),
+            runtime,
+        )
+
+        self.assertEqual(read_result, {"ok": False, "reason": "tool_not_advertised"})
+        self.assertEqual(
+            mutation_result,
+            {"ok": False, "reason": "tool_not_advertised"},
+        )
+        self.assertTrue(runtime.main_thread_tasks.empty())
+
+    def test_ai_provenance_counts_only_successful_tools_as_executed(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"egress_after_id": 0},
+        )
+        daemon_module._record_ai_tool_usage(
+            runtime,
+            "ui.workspace.overview.snapshot",
+            {"ok": False, "reason": "validation"},
+        )
+        daemon_module._record_ai_tool_usage(
+            runtime,
+            "ui.workspace.health",
+            {
+                "ok": True,
+                "envelope": {
+                    "kind": "ui.workspace.health",
+                    "data": {"counts": {}},
+                },
+            },
+        )
+
+        provenance = daemon_module._ai_answer_provenance(
+            {"name": "local", "kind": "local"},
+            {"model": "test", "persist": False},
+            runtime,
+        )
+
+        self.assertEqual(provenance["tools_used"], ["ui.workspace.health"])
+        self.assertEqual(
+            provenance["tools_attempted"],
+            ["ui.workspace.overview.snapshot", "ui.workspace.health"],
+        )
+        self.assertEqual(
+            provenance["tool_denials"],
+            [{"tool": "ui.workspace.overview.snapshot", "reason": "validation"}],
+        )
+        self.assertEqual(provenance["privacy_receipt"]["tools_executed"], 1)
+        self.assertEqual(provenance["privacy_receipt"]["tools_denied"], 1)
+        self.assertFalse(
+            provenance["privacy_receipt"]["cross_book_data_disclosed"]
+        )
+
+    def test_ai_provenance_reports_successful_profile_disclosure(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"egress_after_id": 0},
+        )
+        daemon_module._record_ai_tool_usage(
+            runtime,
+            "ui.profiles.snapshot",
+            {
+                "ok": True,
+                "envelope": {
+                    "kind": "ui.profiles.snapshot",
+                    "data": {"workspaces": []},
+                },
+            },
+        )
+
+        provenance = daemon_module._ai_answer_provenance(
+            {"name": "local", "kind": "local"},
+            {"model": "test", "persist": False},
+            runtime,
+        )
+
+        self.assertTrue(
+            provenance["privacy_receipt"]["cross_book_data_disclosed"]
+        )
+
+    def test_ai_read_rejects_project_changed_after_turn_started(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-read-scope-") as tmp:
+            data_root = Path(tmp) / "original"
+            other_root = Path(tmp) / "other"
+            conn = open_db(data_root)
+            try:
+                runtime = AiToolRuntime(
+                    data_root=str(other_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                with mock.patch(
+                    "kassiber.daemon.build_overview_snapshot"
+                ) as payload_mock:
+                    result = _execute_ai_tool_on_conn(
+                        _execute_read_only_ai_tool,
+                        ParsedAiToolCall(
+                            call_id="call-stale-project",
+                            name="ui.overview.snapshot",
+                            arguments={},
+                        ),
+                        runtime,
+                        conn,
+                    )
+
+                payload_mock.assert_not_called()
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["reason"], "stale_context")
+            finally:
+                conn.close()
+
+    def test_ai_read_rejects_book_changed_after_turn_started(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={
+                "scope_workspace_id": "workspace-a",
+                "scope_profile_id": "profile-a",
+            },
+        )
+        results = []
+        call = ParsedAiToolCall(
+            call_id="call-stale-book",
+            name="ui.overview.snapshot",
+            arguments={},
+        )
+
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon.current_context_snapshot",
+                return_value={"workspace_id": "workspace-b", "profile_id": "profile-b"},
+            ),
+            mock.patch("kassiber.daemon.build_overview_snapshot") as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_read_only_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            try:
+                payload = task.callback(object())
+            except Exception as exc:
+                task.response.put((False, exc))
+            else:
+                task.response.put((True, payload))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_not_called()
+        self.assertFalse(results[0]["ok"])
+        self.assertEqual(results[0]["reason"], "stale_context")
+
+    def test_ai_history_persists_to_original_book_after_active_book_changes(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-history-scope-") as tmp:
+            data_root = Path(tmp) / "data"
+            conn = open_db(data_root)
+            try:
+                workspace = daemon_module.core_accounts.create_workspace(conn, "Main")
+                original = daemon_module.core_accounts.create_profile(
+                    conn,
+                    workspace["id"],
+                    "Original",
+                    "EUR",
+                    "FIFO",
+                    "generic",
+                    365,
+                )
+                active = daemon_module.core_accounts.create_profile(
+                    conn,
+                    workspace["id"],
+                    "Now Active",
+                    "EUR",
+                    "FIFO",
+                    "generic",
+                    365,
+                )
+                self.assertNotEqual(original["id"], active["id"])
+                daemon_module.core_chat_history.set_history_mode(conn, "on")
+                runtime = AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={
+                        "scope_workspace_id": workspace["id"],
+                        "scope_profile_id": original["id"],
+                    },
+                )
+                results = []
+                thread = threading.Thread(
+                    target=lambda: results.append(
+                        daemon_module._persist_ai_chat_exchange(
+                            runtime,
+                            {"name": "local"},
+                            {
+                                "persist": True,
+                                "session_id": None,
+                                "messages": [
+                                    {"role": "user", "content": "Review the original book"}
+                                ],
+                                "model": "test-model",
+                                "seed_history": False,
+                            },
+                            finish_reason="stop",
+                            assistant_content="Reviewed.",
+                            provenance={},
+                        )
+                    )
+                )
+                thread.start()
+                task = runtime.main_thread_tasks.get(timeout=1)
+                task.response.put((True, task.callback(conn)))
+                thread.join(timeout=1)
+
+                self.assertFalse(thread.is_alive())
+                self.assertIsInstance(results[0], str)
+                session = conn.execute(
+                    "SELECT workspace_id, profile_id FROM ai_chat_sessions WHERE id = ?",
+                    (results[0],),
+                ).fetchone()
+                self.assertEqual(session["workspace_id"], workspace["id"])
+                self.assertEqual(session["profile_id"], original["id"])
+            finally:
+                conn.close()
+
     def test_mutating_tool_uses_daemon_main_thread_connection(self):
         task_queue = queue.Queue()
         runtime = AiToolRuntime(
@@ -4936,6 +5605,7 @@ class DaemonSmokeTest(unittest.TestCase):
         results = []
 
         with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
             mock.patch(
                 "kassiber.daemon.open_db",
                 side_effect=AssertionError("should use daemon main connection"),
@@ -4975,6 +5645,7 @@ class DaemonSmokeTest(unittest.TestCase):
         results = []
 
         with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
             mock.patch(
                 "kassiber.daemon.open_db",
                 side_effect=AssertionError("should use daemon main connection"),
@@ -5014,6 +5685,7 @@ class DaemonSmokeTest(unittest.TestCase):
         results = []
 
         with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
             mock.patch(
                 "kassiber.daemon.open_db",
                 side_effect=AssertionError("should use daemon main connection"),
@@ -5047,11 +5719,12 @@ class DaemonSmokeTest(unittest.TestCase):
         call = ParsedAiToolCall(
             call_id="call_1",
             name="ui.journals.events.list",
-            arguments={"limit": 5},
+            arguments={"transaction": "tx-1", "limit": 5},
         )
         results = []
 
         with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
             mock.patch(
                 "kassiber.daemon.open_db",
                 side_effect=AssertionError("should use daemon main connection"),
@@ -5071,9 +5744,591 @@ class DaemonSmokeTest(unittest.TestCase):
             thread.join(timeout=1)
 
         self.assertFalse(thread.is_alive())
-        payload_mock.assert_called_once_with(conn_marker, {"limit": 5})
+        payload_mock.assert_called_once_with(
+            conn_marker,
+            {"transaction": "tx-1", "limit": 5},
+        )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.events.list")
+
+    def test_transaction_graph_ai_tool_rejects_public_lookup_and_extra_arguments(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-graph-public",
+            name="ui.transactions.graph",
+            arguments={"transaction": "tx-1", "allowPublicLookup": True},
+        )
+        with mock.patch(
+            "kassiber.daemon.build_transaction_graph_snapshot"
+        ) as payload_mock:
+            result = _execute_read_only_ai_tool(call, runtime)
+
+        payload_mock.assert_not_called()
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason"], "validation")
+        self.assertTrue(runtime.main_thread_tasks.empty())
+
+    def test_expanded_ai_read_tools_dispatch_to_bounded_builders(self):
+        cases = (
+            (
+                "ui.workspace.overview.snapshot",
+                {"workspace_id": "workspace-1"},
+                "build_workspace_overview_snapshot",
+                {"workspace_id": "workspace-1", "books": []},
+            ),
+            (
+                "ui.review.worklist",
+                {"limit": 7, "categories": ["loans"]},
+                "_review_worklist_payload",
+                {"categories": ["loans"], "sections": {}},
+            ),
+            (
+                "ui.loans.list",
+                {},
+                "_loans_snapshot_from_conn",
+                {"marks": [], "open_locks": []},
+            ),
+        )
+
+        for index, (tool_name, arguments, builder_name, builder_result) in enumerate(cases):
+            with self.subTest(tool=tool_name):
+                task_queue = queue.Queue()
+                runtime = AiToolRuntime(
+                    data_root="/not-used",
+                    runtime_config={},
+                    main_thread_tasks=task_queue,
+                    maintenance_state={},
+                )
+                call = ParsedAiToolCall(
+                    call_id=f"call-expanded-{index}",
+                    name=tool_name,
+                    arguments=arguments,
+                )
+                results = []
+                patches = [
+                    mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+                    mock.patch(
+                        f"kassiber.daemon.{builder_name}",
+                        return_value=builder_result,
+                    ),
+                ]
+                if tool_name == "ui.review.worklist":
+                    patches.append(
+                        mock.patch(
+                            "kassiber.daemon._auto_maintain_for_read",
+                            return_value={},
+                        )
+                    )
+
+                started = [patcher.start() for patcher in patches]
+                try:
+                    builder_mock = started[1]
+                    thread = threading.Thread(
+                        target=lambda: results.append(
+                            _execute_read_only_ai_tool(call, runtime)
+                        ),
+                    )
+                    thread.start()
+                    task = task_queue.get(timeout=1)
+                    conn_marker = object()
+                    task.response.put((True, task.callback(conn_marker)))
+                    thread.join(timeout=1)
+                finally:
+                    for patcher in reversed(patches):
+                        patcher.stop()
+
+                self.assertFalse(thread.is_alive())
+                if tool_name == "ui.review.worklist":
+                    builder_mock.assert_called_once_with(
+                        conn_marker,
+                        runtime,
+                        arguments,
+                    )
+                else:
+                    expected_args = (
+                        (conn_marker, arguments)
+                        if tool_name == "ui.workspace.overview.snapshot"
+                        else (conn_marker,)
+                    )
+                    builder_mock.assert_called_once_with(*expected_args)
+                self.assertTrue(results[0]["ok"])
+                self.assertEqual(results[0]["envelope"]["kind"], tool_name)
+
+    def test_workspace_overview_requires_explicit_cross_book_intent(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"cross_book_read_allowed": False},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-unrequested-books",
+            name="ui.workspace.overview.snapshot",
+            arguments={"workspace_id": "workspace-1"},
+        )
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch("kassiber.daemon.build_workspace_overview_snapshot") as builder,
+        ):
+            result = _execute_ai_tool_on_conn(
+                _execute_read_only_ai_tool,
+                call,
+                runtime,
+                object(),
+            )
+
+        builder.assert_not_called()
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason"], "validation")
+
+    def test_profiles_snapshot_requires_explicit_cross_book_intent(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"cross_book_read_allowed": False},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-unrequested-profiles",
+            name="ui.profiles.snapshot",
+            arguments={},
+        )
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch("kassiber.daemon.build_profiles_snapshot") as builder,
+        ):
+            result = _execute_ai_tool_on_conn(
+                _execute_read_only_ai_tool,
+                call,
+                runtime,
+                object(),
+            )
+
+        builder.assert_not_called()
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason"], "validation")
+
+    def test_profiles_snapshot_is_limited_to_the_frozen_workspace(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={
+                "cross_book_read_allowed": True,
+                "scope_workspace_id": "workspace-a",
+                "scope_profile_id": "profile-a",
+            },
+        )
+        call = ParsedAiToolCall(
+            call_id="call-scoped-profiles",
+            name="ui.profiles.snapshot",
+            arguments={},
+        )
+        raw_snapshot = {
+            "workspaces": [
+                {
+                    "id": "workspace-a",
+                    "name": "Allowed",
+                    "profiles": [{"id": "profile-a", "name": "Current"}],
+                },
+                {
+                    "id": "workspace-b",
+                    "name": "Private other workspace",
+                    "profiles": [{"id": "profile-b", "name": "Other"}],
+                },
+            ],
+            "activeWorkspaceId": "workspace-a",
+            "activeProfileId": "profile-a",
+        }
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon.current_context_snapshot",
+                return_value={
+                    "workspace_id": "workspace-a",
+                    "profile_id": "profile-a",
+                },
+            ),
+            mock.patch(
+                "kassiber.daemon.build_profiles_snapshot",
+                return_value=raw_snapshot,
+            ),
+        ):
+            result = _execute_ai_tool_on_conn(
+                _execute_read_only_ai_tool,
+                call,
+                runtime,
+                object(),
+            )
+
+        self.assertTrue(result["ok"])
+        data = result["envelope"]["data"]
+        self.assertEqual(data["activeWorkspaceId"], "workspace-a")
+        self.assertEqual(
+            [workspace["id"] for workspace in data["workspaces"]],
+            ["workspace-a"],
+        )
+        self.assertNotIn("workspace-b", json.dumps(result, sort_keys=True))
+
+    def test_ai_tool_success_results_do_not_expose_embedded_locations(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-location-result",
+            name="ui.overview.snapshot",
+            arguments={},
+        )
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon._auto_maintain_for_read",
+                return_value={},
+            ),
+            mock.patch(
+                "kassiber.daemon.build_overview_snapshot",
+                return_value={
+                    "message": (
+                        "Read https://private.example/report from "
+                        "/Users/alice/private/report.pdf"
+                    )
+                },
+            ),
+        ):
+            result = _execute_ai_tool_on_conn(
+                _execute_read_only_ai_tool,
+                call,
+                runtime,
+                object(),
+            )
+
+        encoded = json.dumps(result, sort_keys=True)
+        self.assertTrue(result["ok"])
+        self.assertNotIn("private.example", encoded)
+        self.assertNotIn("/Users/alice", encoded)
+        self.assertIn("<redacted-url>", encoded)
+        self.assertIn("<redacted-path>", encoded)
+
+    def test_ai_tool_errors_do_not_echo_local_locations(self):
+        for exception, expected_message in (
+            (
+                AppError(
+                    "Could not read https://private.example/report from "
+                    "/Users/alice/private/report.pdf",
+                    code="validation",
+                ),
+                "Could not read <redacted-url> from <redacted-path>",
+            ),
+            (
+                RuntimeError(
+                    "crash at https://private.example/report in "
+                    "/Users/alice/private/report.pdf"
+                ),
+                "AI tool execution failed unexpectedly",
+            ),
+        ):
+            with self.subTest(exception=type(exception).__name__):
+                runtime = AiToolRuntime(
+                    data_root="/not-used",
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                call = ParsedAiToolCall(
+                    call_id="call-location-error",
+                    name="ui.overview.snapshot",
+                    arguments={},
+                )
+                with (
+                    mock.patch(
+                        "kassiber.daemon._run_scoped_ai_operation",
+                        side_effect=exception,
+                    ),
+                    mock.patch("kassiber.daemon.traceback.print_exc"),
+                    mock.patch("kassiber.daemon._REQUEST_LOGGER.error"),
+                ):
+                    result = _execute_read_only_ai_tool(call, runtime)
+
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["message"], expected_message)
+                encoded = json.dumps(result, sort_keys=True)
+                self.assertNotIn("private.example", encoded)
+                self.assertNotIn("/Users/alice", encoded)
+
+    def test_mutating_ai_tool_unexpected_error_does_not_echo_local_locations(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-mutating-location-error",
+            name="ui.loans.mark",
+            arguments={"txid": "tx-1", "as": "collateral"},
+        )
+        with (
+            mock.patch(
+                "kassiber.daemon._run_scoped_ai_mutation",
+                side_effect=RuntimeError(
+                    "crash at https://private.example/report in "
+                    "/Users/alice/private/report.pdf"
+                ),
+            ),
+            mock.patch("kassiber.daemon.traceback.print_exc"),
+            mock.patch("kassiber.daemon._REQUEST_LOGGER.error"),
+        ):
+            result = _execute_mutating_ai_tool(call, runtime)
+
+        self.assertEqual(
+            result,
+            {
+                "ok": False,
+                "reason": "tool_error",
+                "message": "AI tool execution failed unexpectedly",
+            },
+        )
+
+    def test_skill_reference_result_redacts_embedded_locations(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-skill-reference-location",
+            name="read_skill_reference",
+            arguments={"name": "index"},
+        )
+        with mock.patch(
+            "kassiber.daemon.read_skill_reference",
+            return_value=(
+                "See https://private.example/guide and "
+                "/Users/alice/private/guide.md"
+            ),
+        ):
+            result = _execute_read_only_ai_tool(call, runtime)
+
+        self.assertTrue(result["ok"])
+        encoded = json.dumps(result, sort_keys=True)
+        self.assertNotIn("private.example", encoded)
+        self.assertNotIn("/Users/alice", encoded)
+        self.assertIn("<redacted-url>", encoded)
+        self.assertIn("<redacted-path>", encoded)
+
+    def test_transaction_review_context_ai_tool_uses_composite_builder(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-review",
+            name="ui.transactions.review_context",
+            arguments={"transaction": "tx-1"},
+        )
+        results = []
+
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon._auto_maintain_for_read",
+                return_value={},
+            ),
+            mock.patch(
+                "kassiber.daemon._transaction_review_context_payload",
+                return_value={"transaction": {"id": "tx-1"}, "next_actions": []},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_read_only_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(conn_marker, runtime, {"transaction": "tx-1"})
+        self.assertTrue(results[0]["ok"])
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.transactions.review_context")
+
+    def test_transaction_review_context_runs_against_real_book(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-review-context-") as tmp:
+            tmp_root = Path(tmp)
+            data_root = tmp_root / "data"
+            _seed_workspace_with_transaction(data_root, tmp_root)
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "review-context-1",
+                        "kind": "ui.transactions.review_context",
+                        "args": {"transaction": "seed-inbound-1"},
+                    },
+                )
+                payload = _read_payload_timeout(proc)
+                self.assertEqual(payload["kind"], "ui.transactions.review_context")
+                data = payload["data"]
+                self.assertEqual(
+                    data["transaction"]["externalId"],
+                    "seed-inbound-1",
+                )
+                self.assertEqual(
+                    data["local_reference"]["transaction"],
+                    data["transaction"]["id"],
+                )
+                self.assertTrue(data["safety"]["local_only_reads"])
+                self.assertFalse(data["safety"]["network_contacted"])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+
+    def test_transaction_metadata_ai_tool_records_ai_source(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-edit",
+            name="ui.transactions.metadata.update",
+            arguments={"transaction": "tx-1", "note": "reviewed"},
+        )
+        results = []
+
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon._transaction_metadata_update_payload",
+                return_value={"transaction_id": "tx-1", "changed": True},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(
+            conn_marker,
+            {"transaction": "tx-1", "note": "reviewed", "source": "ai"},
+            default_source="ai",
+        )
+        self.assertTrue(results[0]["ok"])
+
+    def test_ai_mutation_rejects_book_changed_while_waiting_for_consent(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={
+                "scope_workspace_id": "workspace-a",
+                "scope_profile_id": "profile-a",
+            },
+        )
+        call = ParsedAiToolCall(
+            call_id="call-stale",
+            name="ui.journals.process",
+            arguments={},
+        )
+        results = []
+
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon.current_context_snapshot",
+                return_value={"workspace_id": "workspace-b", "profile_id": "profile-b"},
+            ),
+            mock.patch("kassiber.daemon._journals_process_payload") as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            try:
+                result = task.callback(object())
+            except Exception as exc:
+                task.response.put((False, exc))
+            else:
+                task.response.put((True, result))
+            thread.join(timeout=1)
+
+        payload_mock.assert_not_called()
+        self.assertFalse(results[0]["ok"])
+        self.assertEqual(results[0]["reason"], "stale_context")
+
+    def test_report_export_ai_tool_hides_managed_path(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-export",
+            name="ui.reports.export",
+            arguments={"report": "full", "format": "pdf"},
+        )
+        results = []
+
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon._ui_report_export_payload_from_conn",
+                return_value={
+                    "file": "/safe-data/exports/report.pdf",
+                    "filename": "report.pdf",
+                },
+            ),
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        payload = results[0]["envelope"]["data"]
+        self.assertNotIn("file", payload)
+        self.assertEqual(payload["filename"], "report.pdf")
+        self.assertTrue(payload["saved_locally"])
 
     def test_swap_read_only_ai_tool_dispatches_to_swap_payload(self):
         task_queue = queue.Queue()
@@ -5091,6 +6346,7 @@ class DaemonSmokeTest(unittest.TestCase):
         results = []
 
         with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
             mock.patch(
                 "kassiber.daemon.open_db",
                 side_effect=AssertionError("should use daemon main connection"),
@@ -5134,6 +6390,7 @@ class DaemonSmokeTest(unittest.TestCase):
         results = []
 
         with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
             mock.patch(
                 "kassiber.daemon.open_db",
                 side_effect=AssertionError("should use daemon main connection"),
@@ -5160,6 +6417,91 @@ class DaemonSmokeTest(unittest.TestCase):
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.pair")
+
+    def test_expanded_ai_mutations_dispatch_through_scoped_daemon_paths(self):
+        cases = (
+            (
+                "ui.loans.mark",
+                {"txid": "tx-1", "as": "collateral"},
+                "_ui_loans_payload_from_conn",
+                {"mark": {"transaction_id": "tx-1"}},
+            ),
+            (
+                "ui.transfers.payouts.create",
+                {
+                    "tx_out": "tx-1",
+                    "payout_asset": "BTC",
+                    "payout_amount": "0.09",
+                },
+                "_ui_swap_matching_payload_from_conn",
+                {"id": "payout-1"},
+            ),
+            (
+                "ui.source_funds.sources.attach",
+                {"source": "source-1", "attachment_id": "attachment-1"},
+                "_ui_source_funds_payload_from_conn",
+                {"source_id": "source-1", "attachment_ids": ["attachment-1"]},
+            ),
+            (
+                "ui.rates.latest",
+                {"pair": "BTC-EUR", "source": "coinbase-exchange"},
+                "_rates_latest_payload",
+                {"pair": "BTC-EUR"},
+            ),
+        )
+
+        for index, (tool_name, arguments, handler_name, handler_result) in enumerate(cases):
+            with self.subTest(tool=tool_name):
+                task_queue = queue.Queue()
+                runtime = AiToolRuntime(
+                    data_root="/safe-data",
+                    runtime_config={},
+                    main_thread_tasks=task_queue,
+                    maintenance_state={},
+                )
+                call = ParsedAiToolCall(
+                    call_id=f"call-expanded-write-{index}",
+                    name=tool_name,
+                    arguments=arguments,
+                )
+                results = []
+
+                with (
+                    mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+                    mock.patch(
+                        f"kassiber.daemon.{handler_name}",
+                        return_value=handler_result,
+                    ) as handler_mock,
+                ):
+                    thread = threading.Thread(
+                        target=lambda: results.append(
+                            _execute_mutating_ai_tool(call, runtime)
+                        ),
+                    )
+                    thread.start()
+                    task = task_queue.get(timeout=1)
+                    conn_marker = object()
+                    task.response.put((True, task.callback(conn_marker)))
+                    thread.join(timeout=1)
+
+                self.assertFalse(thread.is_alive())
+                if tool_name == "ui.rates.latest":
+                    handler_mock.assert_called_once_with(conn_marker, arguments)
+                elif tool_name == "ui.source_funds.sources.attach":
+                    handler_mock.assert_called_once_with(
+                        conn_marker,
+                        tool_name,
+                        arguments,
+                        data_root=runtime.data_root,
+                    )
+                else:
+                    handler_mock.assert_called_once_with(
+                        conn_marker,
+                        tool_name,
+                        arguments,
+                    )
+                self.assertTrue(results[0]["ok"])
+                self.assertEqual(results[0]["envelope"]["kind"], tool_name)
 
     def test_source_funds_ai_tool_schemas_track_core_enums(self):
         self.assertEqual(
@@ -5350,6 +6692,58 @@ class DaemonSmokeTest(unittest.TestCase):
                     runtime,
                     conn,
                 )
+                evidence_page = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_evidence_page",
+                        name="ui_source_funds_evidence_list",
+                        arguments={"limit": 1},
+                    ),
+                    runtime,
+                    conn,
+                )
+                attachment_page = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_attachment_page",
+                        name="ui_attachments_list",
+                        arguments={"limit": 1},
+                    ),
+                    runtime,
+                    conn,
+                )
+                for page_result in (evidence_page, attachment_page):
+                    self.assertTrue(page_result["ok"])
+                    page_data = page_result["envelope"]["data"]
+                    self.assertEqual(len(page_data["attachments"]), 1)
+                    self.assertEqual(page_data["next_cursor"], "1")
+
+                evidence_next_page = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_evidence_next_page",
+                        name="ui_source_funds_evidence_list",
+                        arguments={"limit": 1, "cursor": "1"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                attachment_next_page = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_attachment_next_page",
+                        name="ui_attachments_list",
+                        arguments={"limit": 1, "cursor": "1"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                for page_result in (evidence_next_page, attachment_next_page):
+                    self.assertTrue(page_result["ok"])
+                    page_data = page_result["envelope"]["data"]
+                    self.assertEqual(len(page_data["attachments"]), 1)
+                    self.assertIsNone(page_data["next_cursor"])
+
                 for result in (source_list, link_list):
                     self.assertTrue(result["ok"])
                     payload_text = json.dumps(result["envelope"]["data"], sort_keys=True)
@@ -5359,8 +6753,32 @@ class DaemonSmokeTest(unittest.TestCase):
                     self.assertNotIn("stored_relpath", payload_text)
                     self.assertNotIn("bank.example", payload_text)
                     self.assertNotIn("private-bank-statement.txt", payload_text)
+                paged_payload_text = json.dumps(
+                    [
+                        evidence_page["envelope"]["data"],
+                        evidence_next_page["envelope"]["data"],
+                        attachment_page["envelope"]["data"],
+                        attachment_next_page["envelope"]["data"],
+                    ],
+                    sort_keys=True,
+                )
+                self.assertNotIn("bank.example", paged_payload_text)
+                self.assertNotIn(str(evidence_file), paged_payload_text)
             finally:
                 conn.close()
+
+    def test_evidence_ai_redaction_removes_derived_urls_and_paths(self):
+        redacted = daemon_module._redact_evidence_payload_for_ai(
+            {
+                "origin_url": "https://merchant.invalid/invoice/secret",
+                "documentUrl": "https://merchant.invalid/document/secret",
+                "manifest": "/private/export/manifest.json",
+                "artifact_path": "/private/export/report.pdf",
+                "label": "Invoice evidence",
+            }
+        )
+
+        self.assertEqual(redacted, {"label": "Invoice evidence"})
 
     def test_source_funds_ai_link_create_surfaces_validation_errors(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-invalid-") as tmp:
@@ -5413,8 +6831,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(bad_result["reason"], "validation")
                 self.assertIn("exactly one", bad_result["message"])
 
-                bad_bool_result = _execute_ai_tool_on_conn(
-                    _execute_mutating_ai_tool,
+                bad_bool_result = _execute_mutating_ai_tool(
                     ParsedAiToolCall(
                         call_id="call_bad_bool",
                         name="ui.source_funds.links.create",
@@ -5429,25 +6846,23 @@ class DaemonSmokeTest(unittest.TestCase):
                         },
                     ),
                     runtime,
-                    conn,
                 )
                 self.assertFalse(bad_bool_result["ok"])
                 self.assertEqual(bad_bool_result["reason"], "validation")
                 self.assertIn("uses_chain_observation", bad_bool_result["message"])
 
-                bad_suggest_bool_result = _execute_ai_tool_on_conn(
-                    _execute_mutating_ai_tool,
+                bad_suggest_bool_result = _execute_mutating_ai_tool(
                     ParsedAiToolCall(
                         call_id="call_bad_suggest_bool",
                         name="ui.source_funds.suggest",
                         arguments={"include_broad_hints": "false"},
                     ),
                     runtime,
-                    conn,
                 )
                 self.assertFalse(bad_suggest_bool_result["ok"])
                 self.assertEqual(bad_suggest_bool_result["reason"], "validation")
                 self.assertIn("include_broad_hints", bad_suggest_bool_result["message"])
+                self.assertTrue(runtime.main_thread_tasks.empty())
             finally:
                 conn.close()
 
@@ -8031,6 +9446,10 @@ class DaemonSmokeTest(unittest.TestCase):
                             "provider": "slow-local",
                             "model": "test-model",
                             "messages": [{"role": "user", "content": "hello"}],
+                            "screen_context": {
+                                "route": "/transactions",
+                                "capabilities": ["transfers", "transactions"],
+                            },
                         },
                     },
                 )
@@ -8195,7 +9614,9 @@ class DaemonSmokeTest(unittest.TestCase):
                             "provider": "tool-local",
                             "model": "test-model",
                             "tools_enabled": True,
-                            "messages": [{"role": "user", "content": "hello"}],
+                            "messages": [
+                                {"role": "user", "content": "show journal transfer pairs"}
+                            ],
                         },
                     },
                 )
@@ -8222,11 +9643,19 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertIsNotNone(terminal)
                 self.assertEqual(terminal["data"]["finish_reason"], "stop")
                 tool_call = next(
-                    record for record in records if record["kind"] == "ai.chat.tool_call"
+                    record
+                    for record in records
+                    if record["kind"] == "ai.chat.tool_call"
+                    and record.get("data", {}).get("name")
+                    == "ui.journals.transfers.list"
                 )
                 self.assertEqual(tool_call["data"]["name"], "ui.journals.transfers.list")
                 tool_result = next(
-                    record for record in records if record["kind"] == "ai.chat.tool_result"
+                    record
+                    for record in records
+                    if record["kind"] == "ai.chat.tool_result"
+                    and record.get("data", {}).get("envelope", {}).get("kind")
+                    == "ui.journals.transfers.list"
                 )
                 self.assertTrue(tool_result["data"]["ok"])
                 self.assertEqual(
@@ -8318,7 +9747,11 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(terminal["data"]["finish_reason"], "stop")
                 self.assertEqual(
                     terminal["data"]["provenance"]["tools_used"],
-                    ["ui.workspace.health", "ui.next_actions"],
+                    [
+                        "ui.workspace.health",
+                        "ui.next_actions",
+                        "ui.review.worklist",
+                    ],
                 )
                 tool_results = [
                     record
@@ -8326,9 +9759,19 @@ class DaemonSmokeTest(unittest.TestCase):
                     if record["kind"] == "ai.chat.tool_result"
                 ]
                 self.assertEqual(
-                    [record["data"]["envelope"]["kind"] for record in tool_results],
-                    ["ui.workspace.health", "ui.next_actions"],
+                    [
+                        record["data"]["envelope"]["kind"]
+                        for record in tool_results
+                        if "envelope" in record["data"]
+                    ],
+                    [
+                        "ui.workspace.health",
+                        "ui.next_actions",
+                        "ui.review.worklist",
+                    ],
                 )
+                worklist_result = tool_results[-1]["data"]
+                self.assertTrue(worklist_result["ok"])
                 self.assertEqual(len(server.requests), 1)  # type: ignore[attr-defined]
                 first_tool_names = {
                     tool["function"]["name"]
@@ -8336,6 +9779,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 }
                 self.assertIn("ui_workspace_health", first_tool_names)
                 self.assertIn("ui_next_actions", first_tool_names)
+                self.assertIn("ui_review_worklist", first_tool_names)
                 self.assertTrue(
                     any(
                         message.get("role") == "user"

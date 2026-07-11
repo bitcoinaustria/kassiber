@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import ipaddress
 import json
+import re
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
@@ -1433,6 +1434,66 @@ def _privacy_mirror_score(
     }
 
 
+_PRIVACY_MIRROR_TXID_RE = re.compile(
+    r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])"
+)
+_PRIVACY_MIRROR_RAW_IDENTIFIER_KEYS = frozenset(
+    {"external_id", "fingerprint", "outpoint", "txid"}
+)
+
+
+def _redact_privacy_mirror_identifiers(value: Any) -> Any:
+    """Replace raw graph identifiers with stable references inside one payload."""
+
+    raw_txids: set[str] = set()
+
+    def collect(item: Any) -> None:
+        if isinstance(item, Mapping):
+            for child in item.values():
+                collect(child)
+        elif isinstance(item, (list, tuple)):
+            for child in item:
+                collect(child)
+        elif isinstance(item, str):
+            raw_txids.update(
+                match.group(0).lower()
+                for match in _PRIVACY_MIRROR_TXID_RE.finditer(item)
+            )
+
+    collect(value)
+    transaction_refs = {
+        txid: f"transaction-ref-{index}"
+        for index, txid in enumerate(sorted(raw_txids), start=1)
+    }
+
+    def scrub_text(text: str) -> str:
+        return _PRIVACY_MIRROR_TXID_RE.sub(
+            lambda match: transaction_refs[match.group(0).lower()],
+            text,
+        )
+
+    def scrub(item: Any) -> Any:
+        if isinstance(item, Mapping):
+            redacted: dict[str, Any] = {}
+            for raw_key, child in item.items():
+                key = str(raw_key)
+                if key in _PRIVACY_MIRROR_RAW_IDENTIFIER_KEYS:
+                    if key == "txid" and isinstance(child, str) and child:
+                        redacted["transaction_ref"] = scrub_text(child)
+                    elif key == "outpoint" and isinstance(child, str) and child:
+                        redacted["coin_ref"] = scrub_text(child)
+                    continue
+                redacted[key] = scrub(child)
+            return redacted
+        if isinstance(item, (list, tuple)):
+            return [scrub(child) for child in item]
+        if isinstance(item, str):
+            return scrub_text(item)
+        return item
+
+    return scrub(value)
+
+
 def report_privacy_mirror(
     conn: sqlite3.Connection,
     workspace_ref,
@@ -1485,7 +1546,7 @@ def report_privacy_mirror(
         "finding_count": int(graph_summary.get("finding_count") or 0) + int(hygiene_summary.get("finding_count") or 0),
         "worst_risk": worst_risk,
     }
-    return {
+    payload = {
         "payload_schema_version": 1,
         "redaction": "ai_export_safe",
         "local_only": True,
@@ -1546,6 +1607,7 @@ def report_privacy_mirror(
             *hygiene_payload.get("limitations", []),
         ],
     }
+    return _redact_privacy_mirror_identifiers(payload)
 
 
 def privacy_mirror_table_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:

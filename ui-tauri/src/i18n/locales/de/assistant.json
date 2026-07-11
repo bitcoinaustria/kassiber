@@ -125,12 +125,21 @@
     "journalsAt": "Journale {{time}}",
     "syncFailed": "Sync fehlgeschlagen",
     "syncChecked": "Sync geprüft",
+    "localProvider": "lokaler Provider",
+    "remoteProvider": "Remote-Provider",
+    "advertisedTools_one": "{{count}} Tool-Schema",
+    "advertisedTools_other": "{{count}} Tool-Schemas",
+    "deniedTools_one": "{{count}} abgelehntes Tool",
+    "deniedTools_other": "{{count}} abgelehnte Tools",
+    "crossBookRead": "Buchset-Daten geteilt",
+    "egressReceipt": "{{records}} ausgehende Ereignisse / {{bytes}} Bytes",
     "answeredAt": "beantwortet {{time}}"
   },
   "tool": {
     "summaryLabel": "Zusammenfassung",
     "detailsLabel": "Details",
     "reasonLabel": "Grund",
+    "openReference": "Transaktion öffnen",
     "overviewSnapshot": {
       "connections_one": "{{count}} Verbindung",
       "connections_other": "{{count}} Verbindungen",

@@ -26,6 +26,7 @@ use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, State, Url};
 use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_dialog::DialogExt;
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
@@ -36,6 +37,8 @@ const CLI_LEGACY_UNLOCK_QUARANTINED_SETTING: &str = "cli_legacy_unlock_quarantin
 const DESKTOP_BIOMETRIC_STALE_SETTING: &str = "desktop_biometric_stale";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
+const DOCUMENT_IMPORT_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "pdf"];
+const DOCUMENT_IMPORT_STAGE_KIND: &str = "internal.document_import.stage";
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
 const TERMINAL_COMMAND_NAME: &str = "kassiber";
 const TERMINAL_COMMAND_MARKER: &str =
@@ -285,6 +288,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.loans.unmark",
     "ui.wallets.create",
     "ui.wallets.import_file",
+    "ui.wallets.document_import.preview",
+    "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
     "ui.wallets.ledger_preview",
     "ui.wallets.preview_descriptor",
@@ -390,6 +395,8 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.workspace.freshness.run",
     "ui.journals.process",
     "ui.rates.rebuild",
+    "ui.wallets.document_import.preview",
+    "ui.wallets.document_import.import",
     "ui.sync.push",
     "ui.sync.pull",
     "ui.sync.join",
@@ -404,6 +411,7 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
 const AI_RUNTIME_KINDS: &[&str] = &[
     "ai.list_models",
     "ai.test_connection",
+    "ui.wallets.document_import.preview",
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
@@ -595,6 +603,56 @@ async fn daemon_invoke(
             request_id,
             true,
         )),
+    }
+}
+
+#[tauri::command]
+async fn pick_document_import_source(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+) -> Result<Option<Value>, String> {
+    // This command deliberately accepts no path or filter arguments from the
+    // webview. Only the native picker may mint the daemon's opaque document
+    // session, so a compromised renderer cannot turn OCR into a local-file
+    // read oracle.
+    let selection = app
+        .dialog()
+        .file()
+        .add_filter("Images and PDF", DOCUMENT_IMPORT_EXTENSIONS)
+        .blocking_pick_file();
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let source_path = selection
+        .into_path()
+        .map_err(|_| "The selected document path is unavailable.".to_string())?;
+    let supervisor = Arc::clone(state.inner());
+    let response = tauri::async_runtime::spawn_blocking(move || {
+        supervisor.invoke(
+            DOCUMENT_IMPORT_STAGE_KIND,
+            Some(json!({ "source_file": source_path.to_string_lossy() })),
+            &app,
+            false,
+            None,
+        )
+    })
+    .await
+    .map_err(|error| format!("Document picker task failed: {error}"))?
+    .map_err(|error| format!("Could not stage the selected document: {}", error.message))?;
+
+    match response.get("kind").and_then(Value::as_str) {
+        Some(DOCUMENT_IMPORT_STAGE_KIND) => response
+            .get("data")
+            .cloned()
+            .map(Some)
+            .ok_or_else(|| "Document staging returned no session.".to_string()),
+        Some("error") | Some("auth_required") => Err(response
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or("Could not stage the selected document.")
+            .to_string()),
+        _ => Err("Document staging returned an unexpected response.".to_string()),
     }
 }
 
@@ -2287,6 +2345,7 @@ pub fn run() {
         .on_menu_event(handle_app_menu_event)
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
+            pick_document_import_source,
             daemon_lifecycle_snapshot,
             open_exported_file,
             open_attachment_file,
@@ -2843,13 +2902,14 @@ mod tests {
         path_is_on_path, terminal_command_contents, terminal_command_path_hint,
         touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
         validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
-        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, MENU_HELP_DOCS, MENU_LOCK_APP,
-        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI,
-        MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
-        MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
-        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
-        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
+        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
+        MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS,
+        MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY,
+        MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY,
+        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
+        MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
+        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -2961,6 +3021,13 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn document_import_stage_is_not_renderer_allowlisted() {
+        assert!(!ALLOWED_DAEMON_KINDS.contains(&DOCUMENT_IMPORT_STAGE_KIND));
+        assert!(ALLOWED_DAEMON_KINDS.contains(&"ui.wallets.document_import.preview"));
+        assert!(ALLOWED_DAEMON_KINDS.contains(&"ui.wallets.document_import.import"));
     }
 
     #[test]

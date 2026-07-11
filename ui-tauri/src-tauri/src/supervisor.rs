@@ -877,21 +877,38 @@ impl DaemonProcess {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         hide_console_window(&mut process_command);
-        let mut child = process_command.spawn().map_err(|error| {
-            SupervisorError::new(
-                "daemon_spawn_failed",
-                format!(
-                    "Could not start Kassiber daemon with {:?}: {error}",
-                    command.program
-                ),
-            )
-            .hint(command.failure_hint())
-            .details(json!({
-                "cwd": command.cwd,
-                "source": command.source,
-            }))
-            .retryable()
-        })?;
+        let mut executable_busy_retries = 0u8;
+        let mut child = loop {
+            match process_command.spawn() {
+                Ok(child) => break child,
+                Err(error)
+                    if cfg!(unix)
+                        && error.raw_os_error() == Some(26)
+                        && executable_busy_retries < 3 =>
+                {
+                    // Linux can briefly return ETXTBSY while an atomically
+                    // installed sidecar or test stub is still being released
+                    // by the filesystem. Retry only that transient error.
+                    executable_busy_retries += 1;
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => {
+                    return Err(SupervisorError::new(
+                        "daemon_spawn_failed",
+                        format!(
+                            "Could not start Kassiber daemon with {:?}: {error}",
+                            command.program
+                        ),
+                    )
+                    .hint(command.failure_hint())
+                    .details(json!({
+                        "cwd": command.cwd,
+                        "source": command.source,
+                    }))
+                    .retryable());
+                }
+            }
+        };
 
         let stdin = child.stdin.take().ok_or_else(|| {
             SupervisorError::new(
@@ -2032,6 +2049,43 @@ for line in sys.stdin:
         permissions.set_mode(0o755);
         fs::set_permissions(&script, permissions).expect("chmod stub daemon");
         (dir, script)
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn retries_transient_executable_busy_when_starting_daemon() {
+        let (dir, script) = write_stub_daemon();
+        let writer = fs::OpenOptions::new()
+            .write(true)
+            .open(&script)
+            .expect("hold stub executable open for writing");
+        let release_writer = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(15));
+            drop(writer);
+        });
+
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("retry transient executable-busy spawn");
+        release_writer.join().expect("release stub writer");
+        let supervisor = DaemonSupervisor::new_with_process(process);
+        let response = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-after-retry")), |_| {})
+            .expect("daemon responds after executable-busy retry");
+        assert_eq!(response.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-retry")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
