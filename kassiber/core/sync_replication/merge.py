@@ -88,6 +88,80 @@ def _event_order(event: Mapping[str, Any]) -> tuple[str, str, int, str]:
     )
 
 
+def _validate_bundle_event_range(
+    events: tuple[Mapping[str, Any], ...],
+    *,
+    sender: str,
+    first_seq: int,
+    last_seq: int,
+) -> None:
+    """Validate one contiguous replica stream without materializing its range."""
+
+    if not events:
+        return
+    if any(event["replica_id"] != sender for event in events):
+        raise AppError("bundle mixes replica event streams", code="sync_bundle_tampered")
+    previous_seq = events[0]["replica_seq"]
+    for event in events[1:]:
+        current_seq = event["replica_seq"]
+        if current_seq != previous_seq + 1:
+            raise AppError("bundle event sequence is not contiguous", code="sync_bundle_tampered")
+        previous_seq = current_seq
+    if events[0]["replica_seq"] != first_seq or events[-1]["replica_seq"] != last_seq:
+        raise AppError("bundle range does not match its events", code="sync_bundle_tampered")
+
+
+def _normalize_snapshot_base(
+    snapshot_base: Any,
+    replicas: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    if not isinstance(snapshot_base, Mapping) or set(snapshot_base) != set(replicas):
+        raise AppError("snapshot checkpoint is incomplete", code="sync_bundle_invalid")
+    normalized_base: dict[str, Mapping[str, Any]] = {}
+    for replica_id, checkpoint in snapshot_base.items():
+        if not isinstance(checkpoint, Mapping) or set(checkpoint) != {
+            "last_seq",
+            "last_hlc",
+            "last_event_hash",
+        }:
+            raise AppError("snapshot checkpoint is invalid", code="sync_bundle_invalid")
+        seq = checkpoint.get("last_seq")
+        if type(seq) is not int or seq < 0 or seq > MAX_SYNC_SEQUENCE:
+            raise AppError(
+                "snapshot checkpoint sequence is invalid", code="sync_bundle_invalid"
+            )
+        last_hlc = checkpoint.get("last_hlc")
+        last_event_hash = checkpoint.get("last_event_hash")
+        if seq == 0 and (last_hlc is not None or last_event_hash is not None):
+            raise AppError("empty snapshot checkpoint has a hash", code="sync_bundle_invalid")
+        if seq > 0 and (
+            not isinstance(last_hlc, str)
+            or not last_hlc
+            or not isinstance(last_event_hash, str)
+            or len(last_event_hash) != 64
+            or any(character not in "0123456789abcdef" for character in last_event_hash)
+        ):
+            raise AppError(
+                "snapshot checkpoint is missing its hash chain tip",
+                code="sync_bundle_invalid",
+            )
+        if last_hlc is not None:
+            try:
+                parsed_hlc = HybridLogicalClock.parse(last_hlc)
+            except ValueError as exc:
+                raise AppError(
+                    "snapshot checkpoint clock is invalid",
+                    code="sync_bundle_invalid",
+                ) from exc
+            if parsed_hlc.replica_id != str(replica_id):
+                raise AppError(
+                    "snapshot checkpoint clock names another replica",
+                    code="sync_bundle_invalid",
+                )
+        normalized_base[str(replica_id)] = checkpoint
+    return normalized_base
+
+
 def _causal_relation(new: Mapping[str, Any], old: Mapping[str, Any]) -> str:
     if new["replica_id"] == old["replica_id"]:
         if int(new["replica_seq"]) > int(old["replica_seq"]):
@@ -1433,13 +1507,12 @@ def import_bundle(
         raise AppError("bundle belongs to another book", code="sync_wrong_book")
     if parsed.events:
         sender = str(manifest.get("sender_replica_id") or "")
-        sequences = [event["replica_seq"] for event in parsed.events]
-        if any(event["replica_id"] != sender for event in parsed.events):
-            raise AppError("bundle mixes replica event streams", code="sync_bundle_tampered")
-        if sequences != list(range(sequences[0], sequences[-1] + 1)):
-            raise AppError("bundle event sequence is not contiguous", code="sync_bundle_tampered")
-        if sequences[0] != first_seq or sequences[-1] != last_seq:
-            raise AppError("bundle range does not match its events", code="sync_bundle_tampered")
+        _validate_bundle_event_range(
+            parsed.events,
+            sender=sender,
+            first_seq=first_seq,
+            last_seq=last_seq,
+        )
 
     created_files: list[Path] = []
     applied = duplicates = pending_count = rejected = mutations = conflicts = 0
@@ -1518,36 +1591,7 @@ def import_bundle(
                     (profile_id,),
                 ).fetchall()
             }
-            if not isinstance(snapshot_base, Mapping) or set(snapshot_base) != set(replicas):
-                raise AppError("snapshot checkpoint is incomplete", code="sync_bundle_invalid")
-            normalized_base: dict[str, Mapping[str, Any]] = {}
-            for replica_id, checkpoint in snapshot_base.items():
-                if not isinstance(checkpoint, Mapping) or set(checkpoint) != {
-                    "last_seq", "last_hlc", "last_event_hash"
-                }:
-                    raise AppError("snapshot checkpoint is invalid", code="sync_bundle_invalid")
-                seq = checkpoint.get("last_seq")
-                if not isinstance(seq, int) or seq < 0:
-                    raise AppError(
-                        "snapshot checkpoint sequence is invalid", code="sync_bundle_invalid"
-                    )
-                if seq == 0 and (
-                    checkpoint.get("last_hlc") is not None
-                    or checkpoint.get("last_event_hash") is not None
-                ):
-                    raise AppError(
-                        "empty snapshot checkpoint has a hash", code="sync_bundle_invalid"
-                    )
-                if seq > 0 and (
-                    not checkpoint.get("last_hlc") or not checkpoint.get("last_event_hash")
-                ):
-                    raise AppError(
-                        "snapshot checkpoint is missing its hash chain tip",
-                        code="sync_bundle_invalid",
-                    )
-                if checkpoint.get("last_hlc") is not None:
-                    HybridLogicalClock.parse(str(checkpoint["last_hlc"]))
-                normalized_base[str(replica_id)] = checkpoint
+            normalized_base = _normalize_snapshot_base(snapshot_base, replicas)
             pristine = (
                 conn.execute(
                     "SELECT COUNT(*) FROM sync_events WHERE profile_id = ?", (profile_id,)

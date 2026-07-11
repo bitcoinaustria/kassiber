@@ -13,7 +13,7 @@ import uuid
 
 from ...errors import AppError
 from ...time_utils import now_iso
-from .bundle import MAX_SYNC_SEQUENCE, build_bundle
+from .bundle import MAX_BUNDLE_BYTES, MAX_SYNC_SEQUENCE, build_bundle
 from .crypto import (
     canonical_json_bytes,
     decode_secret,
@@ -34,6 +34,7 @@ DEFAULT_STALE_AFTER_SECONDS = 7 * 24 * 60 * 60
 MAILBOX_HEAD_DOMAIN = "mailbox-head-v1"
 MAILBOX_ACK_DOMAIN = "mailbox-ack-v1"
 MAX_HEAD_FUTURE_DRIFT_SECONDS = 5 * 60
+MAX_MAILBOX_CONTROL_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,7 @@ def _bundle_key_parts(key: str) -> tuple[bool, int, int, str]:
         raise AppError("mailbox bundle name is invalid", code="sync_mailbox_bundle_tampered")
     first_seq = int(match.group("first"))
     last_seq = int(match.group("last"))
-    if first_seq < 1 or last_seq < first_seq:
+    if first_seq < 1 or last_seq < first_seq or last_seq > MAX_SYNC_SEQUENCE:
         raise AppError("mailbox bundle range is invalid", code="sync_mailbox_bundle_tampered")
     return bool(match.group("snapshot")), first_seq, last_seq, match.group("hash")
 
@@ -567,7 +568,11 @@ def pull_mailbox(
             if key.endswith("/ack.json")
         ]
         for ack_key in sorted(ack_keys):
-            replica, vector = _parse_ack(conn, book=book, payload=transport.get(ack_key))
+            replica, vector = _parse_ack(
+                conn,
+                book=book,
+                payload=transport.get(ack_key, max_bytes=MAX_MAILBOX_CONTROL_BYTES),
+            )
             if ack_key != mailbox_ack_key(book, replica["id"]):
                 raise AppError("mailbox acknowledgement path is invalid", code="sync_ack_invalid")
             parsed_acknowledgements.append((replica, vector))
@@ -576,7 +581,11 @@ def pull_mailbox(
             if key.endswith("/head.json")
         ]
         for head_key in sorted(head_keys):
-            head, replica = _parse_head(conn, book=book, payload=transport.get(head_key))
+            head, replica = _parse_head(
+                conn,
+                book=book,
+                payload=transport.get(head_key, max_bytes=MAX_MAILBOX_CONTROL_BYTES),
+            )
             heads_seen += 1
             if head_key != mailbox_head_key(book, replica["id"]):
                 raise AppError("mailbox head path binding is invalid", code="sync_mailbox_head_tampered")
@@ -619,12 +628,17 @@ def pull_mailbox(
                 )
             )
             for bundle_key, _is_snapshot, first_seq, last_seq, named_hash in parsed_keys:
+                if conn.execute(
+                    "SELECT 1 FROM sync_ingests WHERE profile_id = ? AND bundle_hash = ?",
+                    (profile_id, named_hash),
+                ).fetchone():
+                    continue
                 replica_progress = conn.execute(
                     "SELECT last_seq FROM sync_replicas WHERE id = ?", (replica["id"],)
                 ).fetchone()
                 if replica_progress and last_seq <= int(replica_progress["last_seq"] or 0):
                     continue
-                ciphertext = transport.get(bundle_key)
+                ciphertext = transport.get(bundle_key, max_bytes=MAX_BUNDLE_BYTES)
                 bundles_seen += 1
                 bundle_hash = sha256_hex(ciphertext)
                 if named_hash != bundle_hash:

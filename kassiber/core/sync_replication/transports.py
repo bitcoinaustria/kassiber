@@ -30,6 +30,10 @@ from ...time_utils import now_iso
 _HTTP_RETRY_STATUS = frozenset({429, 503})
 _HTTP_MAX_ATTEMPTS = 3
 _HTTP_BACKOFF_CAP_SECONDS = 8.0
+_MAX_LIST_RESPONSE_BYTES = 8 * 1024 * 1024
+_MAX_LIST_TOTAL_BYTES = 32 * 1024 * 1024
+_MAX_LIST_OBJECTS = 100_000
+_MAX_S3_LIST_PAGES = 100
 
 
 def _is_loopback_host(hostname: str | None) -> bool:
@@ -76,11 +80,35 @@ def _retrying_open(
     raise AssertionError("unreachable mailbox HTTP retry state")
 
 
+def _read_bounded(stream, *, max_bytes: int | None, label: str) -> bytes:
+    if max_bytes is None:
+        return stream.read()
+    if type(max_bytes) is not int or max_bytes < 0:
+        raise AppError("mailbox read limit is invalid", code="sync_transport_invalid")
+    chunks: list[bytes] = []
+    remaining = max_bytes + 1
+    while remaining:
+        chunk = stream.read(remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    payload = b"".join(chunks)
+    if len(payload) > max_bytes:
+        raise AppError(
+            f"{label} exceeds its size limit",
+            code="sync_transport_object_too_large",
+            details={"max_bytes": max_bytes},
+            retryable=False,
+        )
+    return payload
+
+
 class ObjectTransport(Protocol):
     def put(self, key: str, payload: bytes, *, if_absent: bool = False) -> None:
         raise NotImplementedError
 
-    def get(self, key: str) -> bytes:
+    def get(self, key: str, *, max_bytes: int | None = None) -> bytes:
         raise NotImplementedError
 
     def list(self, prefix: str) -> list[str]:
@@ -140,7 +168,13 @@ class FolderTransport:
         destination = self._path(key)
         destination.parent.mkdir(parents=True, exist_ok=True)
         if if_absent and destination.exists():
-            if destination.read_bytes() != payload:
+            with destination.open("rb") as handle:
+                existing = _read_bounded(
+                    handle,
+                    max_bytes=len(payload),
+                    label="mailbox object",
+                )
+            if existing != payload:
                 raise AppError("mailbox object already exists with different bytes", code="sync_mailbox_collision")
             return
         fd, name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
@@ -156,11 +190,12 @@ class FolderTransport:
             temporary.unlink(missing_ok=True)
             raise
 
-    def get(self, key: str) -> bytes:
+    def get(self, key: str, *, max_bytes: int | None = None) -> bytes:
         path = self._path(key)
         if not path.is_file() or path.is_symlink():
             raise AppError("mailbox object was not found", code="sync_mailbox_missing", details={"key": key})
-        return path.read_bytes()
+        with path.open("rb") as handle:
+            return _read_bounded(handle, max_bytes=max_bytes, label="mailbox object")
 
     def list(self, prefix: str) -> list[str]:
         safe_prefix = _safe_key(prefix)
@@ -202,10 +237,17 @@ class WebDavTransport:
                 code="sync_transport_insecure",
                 hint="Use an https:// WebDAV URL. Plain HTTP is allowed only for localhost testing.",
             )
+        normalized_proxy = str(proxy_url or "").strip() or None
+        if parsed.scheme == "http" and normalized_proxy is not None:
+            raise AppError(
+                "Plain-HTTP loopback WebDAV endpoints cannot use a proxy",
+                code="sync_transport_insecure",
+                hint="Remove the proxy for local WebDAV testing, or use an https:// endpoint.",
+            )
         self.base_url = base_url.rstrip("/") + "/"
         self.username = username
         self.password = password
-        self.proxy_url = str(proxy_url or "").strip() or None
+        self.proxy_url = normalized_proxy
         self.opener = opener or (
             lambda request, timeout: urlopen_with_proxy(
                 request,
@@ -277,13 +319,13 @@ class WebDavTransport:
                 pass
         except AppError as exc:
             if if_absent and exc.details and exc.details.get("status") == 412:
-                if self.get(key) == payload:
+                if self.get(key, max_bytes=len(payload)) == payload:
                     return
             raise
 
-    def get(self, key: str) -> bytes:
+    def get(self, key: str, *, max_bytes: int | None = None) -> bytes:
         with self._open(Request(self._url(key), method="GET", headers=self._headers())) as response:
-            return response.read()
+            return _read_bounded(response, max_bytes=max_bytes, label="mailbox object")
 
     def list(self, prefix: str) -> list[str]:
         safe_prefix = _safe_key(prefix)
@@ -291,7 +333,11 @@ class WebDavTransport:
         body = b'<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/></prop></propfind>'
         request = Request(self._url(prefix), data=body, method="PROPFIND", headers=headers)
         with self._open(request) as response:
-            payload = response.read()
+            payload = _read_bounded(
+                response,
+                max_bytes=_MAX_LIST_RESPONSE_BYTES,
+                label="WebDAV listing response",
+            )
         try:
             root = ET.fromstring(payload)
         except ET.ParseError as exc:
@@ -308,6 +354,11 @@ class WebDavTransport:
             key = _decode_webdav_key(raw_key)
             if key == safe_prefix or key.startswith(safe_prefix + "/"):
                 output.append(key)
+                if len(output) > _MAX_LIST_OBJECTS:
+                    raise AppError(
+                        "WebDAV listing contains too many objects",
+                        code="sync_transport_invalid",
+                    )
         return sorted(set(output))
 
     def exists(self, key: str) -> bool:
@@ -457,13 +508,18 @@ class S3Transport:
             with self._request("PUT", key=key, payload=payload, extra_headers=headers):
                 pass
         except AppError as exc:
-            if if_absent and exc.details and exc.details.get("status") == 412 and self.get(key) == payload:
+            if (
+                if_absent
+                and exc.details
+                and exc.details.get("status") == 412
+                and self.get(key, max_bytes=len(payload)) == payload
+            ):
                 return
             raise
 
-    def get(self, key: str) -> bytes:
+    def get(self, key: str, *, max_bytes: int | None = None) -> bytes:
         with self._request("GET", key=key) as response:
-            return response.read()
+            return _read_bounded(response, max_bytes=max_bytes, label="mailbox object")
 
     def exists(self, key: str) -> bool:
         try:
@@ -477,13 +533,25 @@ class S3Transport:
     def list(self, prefix: str) -> list[str]:
         requested = self._object_key(_safe_key(prefix))
         token: str | None = None
+        seen_tokens: set[str] = set()
+        total_payload_bytes = 0
         output: list[str] = []
-        while True:
+        for _page in range(_MAX_S3_LIST_PAGES):
             query = {"list-type": "2", "prefix": requested}
             if token:
                 query["continuation-token"] = token
             with self._request("GET", query=query) as response:
-                payload = response.read()
+                payload = _read_bounded(
+                    response,
+                    max_bytes=_MAX_LIST_RESPONSE_BYTES,
+                    label="S3 listing response",
+                )
+            total_payload_bytes += len(payload)
+            if total_payload_bytes > _MAX_LIST_TOTAL_BYTES:
+                raise AppError(
+                    "S3 listing responses exceed their aggregate size limit",
+                    code="sync_transport_invalid",
+                )
             try:
                 root = ET.fromstring(payload)
             except ET.ParseError as exc:
@@ -494,12 +562,22 @@ class S3Transport:
                 if self.prefix and value.startswith(self.prefix + "/"):
                     value = value[len(self.prefix) + 1 :]
                 output.append(value)
+                if len(output) > _MAX_LIST_OBJECTS:
+                    raise AppError(
+                        "S3 listing contains too many objects",
+                        code="sync_transport_invalid",
+                    )
             truncated = (root.findtext(f"{namespace}IsTruncated") or root.findtext("IsTruncated") or "false").lower() == "true"
             if not truncated:
                 break
             token = root.findtext(f"{namespace}NextContinuationToken") or root.findtext("NextContinuationToken")
             if not token:
                 raise AppError("S3 listing omitted continuation token", code="sync_transport_invalid")
+            if token in seen_tokens:
+                raise AppError("S3 listing repeated a continuation token", code="sync_transport_invalid")
+            seen_tokens.add(token)
+        else:
+            raise AppError("S3 listing has too many pages", code="sync_transport_invalid")
         return sorted(set(output))
 
 
@@ -541,6 +619,7 @@ def configure_transport(
             base_url=str(config.get("url") or ""),
             username=str(credentials.get("username")) if credentials.get("username") is not None else None,
             password=str(credentials.get("password")) if credentials.get("password") is not None else None,
+            proxy_url=str(config.get("proxy") or "") or None,
         )
         config = {
             "url": str(config.get("url")),
