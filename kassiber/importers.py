@@ -135,6 +135,8 @@ def load_import_records(file_path, input_format):
         return load_wasabi_bundle_records(file_path)
     if input_format == GENERIC_LEDGER_FORMAT:
         return load_generic_ledger_records(file_path)
+    if input_format == LEGACY_HOLDINGS_FORMAT:
+        return load_legacy_holdings_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -2600,10 +2602,27 @@ GENERIC_LEDGER_COLUMNS = (
 )
 
 # Asset codes (normalized via `normalize_asset_code`) treated as the Bitcoin
-# leg. Anything else in an asset cell is treated as a fiat/cash currency (the
-# pricing leg). `SATS`/`SAT` mark an amount denominated in whole satoshis.
+# leg. A cash-side cell must be a known fiat currency; an unknown symbol is a
+# hard row error rather than a silently mispriced "fiat" leg. `SATS`/`SAT`
+# mark an amount denominated in whole satoshis.
 _GENERIC_LEDGER_SATS_ASSETS = {"SATS", "SAT"}
 _GENERIC_LEDGER_CRYPTO_ASSETS = BITCOIN_FAMILY_ASSETS | _GENERIC_LEDGER_SATS_ASSETS
+
+# Legacy-holdings overlay import: the same ledger template, but any asset code
+# that is not a known fiat currency is a crypto leg, and rows with two crypto
+# legs (a CEX trade) split into a sell + buy record pair. Overlay assets are
+# overview-only — the tax engine excludes them (see asset_codes.is_tax_engine_asset).
+LEGACY_HOLDINGS_FORMAT = "legacy_holdings"
+
+# Quantities are stored in the msat-scaled 64-bit integer column, which bounds
+# an amount to 11 decimal places and ~92.2M units. Rows outside that envelope
+# are rejected with a row-numbered error — never silently rounded.
+_LEGACY_HOLDINGS_SCALE = Decimal("100000000000")  # 1e11, mirrors msat.MSAT_PER_BTC
+_LEGACY_HOLDINGS_MAX_SCALED = Decimal(2**63 - 1)
+
+# Two-crypto-leg rows additionally accept trade-flavored Types that have no
+# single direction of their own.
+_LEGACY_TRADE_TYPES = {"trade", "swap", "convert", "exchange"}
 
 # Type -> (direction, kind). `kind` is None for a plain acquisition/disposal.
 # Every kind here is one the tax engine recognizes (see core/engines/rp2.py):
@@ -2658,8 +2677,62 @@ def _generic_ledger_asset(value):
     return normalize_asset_code(code) if code else None
 
 
-def _generic_ledger_is_crypto(asset):
-    return bool(asset) and asset.upper() in _GENERIC_LEDGER_CRYPTO_ASSETS
+def _generic_ledger_is_crypto(asset, multi_asset=False):
+    if not asset:
+        return False
+    upper = asset.upper()
+    if upper in _GENERIC_LEDGER_CRYPTO_ASSETS:
+        return True
+    return multi_asset and upper not in FIAT_CURRENCIES
+
+
+def _generic_ledger_cash_asset(asset, row_label):
+    """Validate a non-crypto leg as a known fiat currency.
+
+    An unrecognized symbol used to be booked as a "fiat" pricing leg, silently
+    corrupting the execution price. Altcoin legs belong to the legacy-holdings
+    import; everything else is a typo worth surfacing.
+    """
+    if asset is None:
+        return None
+    if asset.upper() in FIAT_CURRENCIES:
+        return asset
+    raise AppError(
+        f"{row_label}: unrecognized cash currency '{asset}'",
+        code="validation",
+        hint=(
+            "Use an ISO fiat code (EUR, USD, CHF, …) on the cash side. "
+            "Altcoin legs are only supported by the legacy-holdings import "
+            "(a wallet with --kind legacy-holdings)."
+        ),
+    )
+
+
+def _legacy_holdings_check_amount(amount, asset, field, row_label):
+    """Reject amounts outside the msat-scaled integer storage envelope."""
+    if amount is None:
+        return
+    scaled = abs(amount) * _LEGACY_HOLDINGS_SCALE
+    if scaled != scaled.to_integral_value():
+        raise AppError(
+            f"{row_label}: {field} for {asset} has more than 11 decimal places",
+            code="validation",
+            hint=(
+                "Kassiber stores overlay quantities with at most 11 decimal "
+                "places. Round the exported amount yourself (and note the dust "
+                "difference) or drop the row."
+            ),
+        )
+    if scaled > _LEGACY_HOLDINGS_MAX_SCALED:
+        raise AppError(
+            f"{row_label}: {field} for {asset} exceeds the maximum storable quantity (~92.2M units)",
+            code="validation",
+            hint=(
+                "Quantities above ~92,233,720 units do not fit Kassiber's "
+                "integer amount storage. Split the position into several rows "
+                "or leave this asset out."
+            ),
+        )
 
 
 def _generic_ledger_canonical_crypto(asset):
@@ -2795,6 +2868,21 @@ def normalize_generic_ledger_record(record, index=0):
     Raises `AppError` with a row-numbered, actionable message on a malformed
     row rather than silently dropping it, since these rows are hand-entered.
     """
+    return _normalize_ledger_records(record, index=index, multi_asset=False)[0]
+
+
+def normalize_legacy_holdings_records(record, index=0):
+    """Multi-asset (legacy-holdings) variant; returns a LIST of records.
+
+    Single-leg rows normalize to one record. Two-crypto-leg rows (a CEX
+    trade, e.g. sell an altcoin for BTC) split into an outbound sell plus an
+    inbound buy sharing the row's Tx-ID, so the BTC side books normally with
+    its execution value while the altcoin side stays overview-only.
+    """
+    return _normalize_ledger_records(record, index=index, multi_asset=True)
+
+
+def _normalize_ledger_records(record, index=0, *, multi_asset=False):
     sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
     row_label = f"Ledger row {index}" if index else "Ledger row"
 
@@ -2806,13 +2894,17 @@ def normalize_generic_ledger_record(record, index=0):
             hint="Set a Type such as Buy, Sell, Deposit, Withdrawal, Income, Mining, or Gift sent.",
         )
     type_key = " ".join(type_text.strip().lower().split())
-    if type_key not in _GENERIC_LEDGER_TYPES:
+    is_trade_type = multi_asset and type_key in _LEGACY_TRADE_TYPES
+    if type_key not in _GENERIC_LEDGER_TYPES and not is_trade_type:
+        allowed = ", ".join(GENERIC_LEDGER_DISPLAY_TYPES)
+        if multi_asset:
+            allowed += ", Trade"
         raise AppError(
             f"{row_label}: unknown Type '{type_text}'",
             code="validation",
-            hint="Use one of: " + ", ".join(GENERIC_LEDGER_DISPLAY_TYPES) + ".",
+            hint="Use one of: " + allowed + ".",
         )
-    type_direction, kind = _GENERIC_LEDGER_TYPES[type_key]
+    type_direction, kind = (None, None) if is_trade_type else _GENERIC_LEDGER_TYPES[type_key]
 
     received_asset = _generic_ledger_asset(
         _get_cell(sanitized, "Received Asset", "Received Cur.", "Buy Asset", "Buy Cur.")
@@ -2842,37 +2934,66 @@ def normalize_generic_ledger_record(record, index=0):
         row_label,
     )
 
-    received_is_crypto = _generic_ledger_is_crypto(received_asset) and received_amount is not None
-    sent_is_crypto = _generic_ledger_is_crypto(sent_asset) and sent_amount is not None
+    received_is_crypto = _generic_ledger_is_crypto(received_asset, multi_asset) and received_amount is not None
+    sent_is_crypto = _generic_ledger_is_crypto(sent_asset, multi_asset) and sent_amount is not None
     if received_is_crypto and sent_is_crypto:
-        raise AppError(
-            f"{row_label}: both sides are Bitcoin — crypto-to-crypto rows are not supported",
-            code="validation",
-            hint="Record one Bitcoin leg per row and price it with a fiat amount or a Fiat Value.",
+        if not multi_asset:
+            raise AppError(
+                f"{row_label}: both sides are Bitcoin — crypto-to-crypto rows are not supported",
+                code="validation",
+                hint="Record one Bitcoin leg per row and price it with a fiat amount or a Fiat Value.",
+            )
+        return _normalize_legacy_trade_records(
+            sanitized,
+            row_label,
+            type_text=type_text,
+            type_key=type_key,
+            is_trade_type=is_trade_type,
+            sent_asset=sent_asset,
+            sent_amount=sent_amount,
+            received_asset=received_asset,
+            received_amount=received_amount,
+            fee_amount=fee_amount,
+            fee_asset=fee_asset,
+            explicit_fiat=explicit_fiat,
         )
     if not received_is_crypto and not sent_is_crypto:
+        expected = (
+            "expected a crypto asset on the Received or Sent side"
+            if multi_asset
+            else "expected BTC, LBTC, or SATS on the Received or Sent side"
+        )
         raise AppError(
-            f"{row_label}: no Bitcoin leg found (expected BTC, LBTC, or SATS on the Received or Sent side)",
+            f"{row_label}: no crypto leg found ({expected})",
             code="validation",
-            hint="Put the Bitcoin amount + asset on the Received side (inbound) or the Sent side (outbound).",
+            hint="Put the crypto amount + asset on the Received side (inbound) or the Sent side (outbound).",
         )
 
     if received_is_crypto:
         direction = "inbound"
         leg_asset = received_asset
         amount = _generic_ledger_btc_amount(received_amount, received_asset)
-        fiat_asset = sent_asset if (sent_asset and not _generic_ledger_is_crypto(sent_asset)) else None
+        cash_asset = sent_asset if (sent_asset and not _generic_ledger_is_crypto(sent_asset, multi_asset)) else None
+        fiat_asset = _generic_ledger_cash_asset(cash_asset, row_label)
         fiat_leg_amount = sent_amount if fiat_asset else None
     else:
         direction = "outbound"
         leg_asset = sent_asset
         amount = _generic_ledger_btc_amount(sent_amount, sent_asset)
-        fiat_asset = received_asset if (received_asset and not _generic_ledger_is_crypto(received_asset)) else None
+        cash_asset = received_asset if (received_asset and not _generic_ledger_is_crypto(received_asset, multi_asset)) else None
+        fiat_asset = _generic_ledger_cash_asset(cash_asset, row_label)
         fiat_leg_amount = received_amount if fiat_asset else None
     # `leg_asset` keeps the row's original Bitcoin spelling (e.g. SATS); `asset`
     # is canonicalized for storage (SATS/XBT -> BTC). The fee fallback below
     # needs the original so a blank Fee Asset on a SATS leg stays in sats.
     asset = _generic_ledger_canonical_crypto(leg_asset)
+    if multi_asset:
+        _legacy_holdings_check_amount(amount, asset, "Amount", row_label)
+    if is_trade_type:
+        # A trade-flavored Type with only one crypto leg is a plain cash
+        # buy/sell; adopt the leg's direction.
+        type_direction = direction
+        kind = "buy" if direction == "inbound" else "sell"
 
     if type_direction != direction:
         raise AppError(
@@ -2887,11 +3008,23 @@ def normalize_generic_ledger_record(record, index=0):
     fee = Decimal("0")
     fee_fiat = Decimal("0")
     if fee_amount is not None and abs(fee_amount) > 0:
-        if _generic_ledger_is_crypto(fee_asset) or fee_asset is None:
+        if _generic_ledger_is_crypto(fee_asset, multi_asset) or fee_asset is None:
+            if (
+                multi_asset
+                and fee_asset is not None
+                and _generic_ledger_canonical_crypto(fee_asset) != asset
+            ):
+                raise AppError(
+                    f"{row_label}: Fee Asset {fee_asset} does not match the crypto leg {asset}",
+                    code="validation",
+                    hint="Put the fee in the leg's asset, or fold it into the cash amount.",
+                )
             # No fee asset given defaults to the Bitcoin leg (on-chain/network
             # fee), using the leg's ORIGINAL spelling so a blank fee on a SATS
             # leg is read as sats, not BTC.
             fee = _generic_ledger_btc_amount(abs(fee_amount), fee_asset or leg_asset)
+            if multi_asset:
+                _legacy_holdings_check_amount(fee, asset, "Fee Amount", row_label)
         else:
             # A fiat fee only makes sense as an adjustment to a same-currency
             # cash leg's execution price; network fees belong on the Bitcoin leg.
@@ -2974,30 +3107,140 @@ def normalize_generic_ledger_record(record, index=0):
         )
     )
 
-    return {
-        "txid": external_id,
-        "occurred_at": occurred_at,
-        "direction": direction,
-        "asset": asset,
-        "amount": amount,
-        "fee": fee,
-        "fiat_rate": fiat_rate,
-        "fiat_value": fiat_value,
-        "fiat_currency": fiat_currency,
-        "pricing_source_kind": pricing_source_kind,
-        "pricing_provider": counterparty if pricing_source_kind else None,
-        "pricing_pair": f"{asset}-{fiat_currency}" if (pricing_source_kind and fiat_currency) else None,
-        "pricing_method": "generic_ledger" if pricing_source_kind else None,
-        "pricing_external_ref": txid or None,
-        "pricing_quality": pricing_quality,
-        "kind": kind,
-        "description": note,
-        "counterparty": counterparty,
-        "payment_hash": payment_hash,
-        "payment_hash_source": payment_hash_source or ("generic_ledger" if payment_hash else None),
-        "swap_refund_funding_txid": swap_refund_funding_txid,
-        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
-    }
+    return [
+        {
+            "txid": external_id,
+            "occurred_at": occurred_at,
+            "direction": direction,
+            "asset": asset,
+            "amount": amount,
+            "fee": fee,
+            "fiat_rate": fiat_rate,
+            "fiat_value": fiat_value,
+            "fiat_currency": fiat_currency,
+            "pricing_source_kind": pricing_source_kind,
+            "pricing_provider": counterparty if pricing_source_kind else None,
+            "pricing_pair": f"{asset}-{fiat_currency}" if (pricing_source_kind and fiat_currency) else None,
+            "pricing_method": "generic_ledger" if pricing_source_kind else None,
+            "pricing_external_ref": txid or None,
+            "pricing_quality": pricing_quality,
+            "kind": kind,
+            "description": note,
+            "counterparty": counterparty,
+            "payment_hash": payment_hash,
+            "payment_hash_source": payment_hash_source or ("generic_ledger" if payment_hash else None),
+            "swap_refund_funding_txid": swap_refund_funding_txid,
+            "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+        }
+    ]
+
+
+def _normalize_legacy_trade_records(
+    sanitized,
+    row_label,
+    *,
+    type_text,
+    type_key,
+    is_trade_type,
+    sent_asset,
+    sent_amount,
+    received_asset,
+    received_amount,
+    fee_amount,
+    fee_asset,
+    explicit_fiat,
+):
+    """Split one two-crypto-leg legacy-holdings row into a sell + buy pair.
+
+    Both legs share the row's Tx-ID (suffixed ``:out`` / ``:in``) and, when a
+    Fiat Value is given, the trade's execution value in the book currency — so
+    a BTC leg acquired by selling an altcoin books with a real cost basis.
+    """
+    if not (is_trade_type or type_key in {"sell", "buy", "purchase"}):
+        raise AppError(
+            f"{row_label}: Type '{type_text}' cannot carry two crypto legs",
+            code="validation",
+            hint="Use Type Trade (or Sell/Buy) for crypto-to-crypto rows.",
+        )
+    out_asset = _generic_ledger_canonical_crypto(sent_asset)
+    in_asset = _generic_ledger_canonical_crypto(received_asset)
+    if out_asset == in_asset:
+        raise AppError(
+            f"{row_label}: both legs are {out_asset} — a trade needs two different assets",
+            code="validation",
+            hint="Same-asset moves are transfers; record them as Withdrawal + Deposit rows.",
+        )
+    out_amount = _generic_ledger_btc_amount(sent_amount, sent_asset)
+    in_amount = _generic_ledger_btc_amount(received_amount, received_asset)
+    _legacy_holdings_check_amount(out_amount, out_asset, "Sent Amount", row_label)
+    _legacy_holdings_check_amount(in_amount, in_asset, "Received Amount", row_label)
+    if not out_amount or not in_amount:
+        raise AppError(
+            f"{row_label}: both legs of a trade need a positive amount",
+            code="validation",
+            hint="Fill Sent Amount and Received Amount.",
+        )
+
+    out_fee = Decimal("0")
+    in_fee = Decimal("0")
+    if fee_amount is not None and abs(fee_amount) > 0:
+        fee_canonical = _generic_ledger_canonical_crypto(fee_asset) if fee_asset else None
+        if fee_canonical == out_asset:
+            out_fee = _generic_ledger_btc_amount(abs(fee_amount), fee_asset)
+            _legacy_holdings_check_amount(out_fee, out_asset, "Fee Amount", row_label)
+        elif fee_canonical == in_asset:
+            in_fee = _generic_ledger_btc_amount(abs(fee_amount), fee_asset)
+            _legacy_holdings_check_amount(in_fee, in_asset, "Fee Amount", row_label)
+        else:
+            raise AppError(
+                f"{row_label}: a trade fee needs a Fee Asset matching one of the crypto legs",
+                code="validation",
+                hint="Set Fee Asset to the leg the exchange charged, or fold the fee into the amounts.",
+            )
+
+    fiat_value = abs(explicit_fiat) if explicit_fiat is not None else None
+    occurred_at = _generic_ledger_occurred_at(
+        _get_cell(sanitized, "Date", "Timestamp", "Time"), row_label
+    )
+    txid = str_or_none(_get_cell(sanitized, "Tx-ID", "TxID", "Txid", "Transaction ID"))
+    note = str_or_none(_get_cell(sanitized, "Note", "Comment", "Description"))
+    counterparty = str_or_none(_get_cell(sanitized, "Counterparty", "Exchange", "Platform"))
+
+    records = []
+    for leg, direction, kind, asset, amount, fee in (
+        ("out", "outbound", "sell", out_asset, out_amount, out_fee),
+        ("in", "inbound", "buy", in_asset, in_amount, in_fee),
+    ):
+        fiat_rate = None
+        if fiat_value is not None and amount and amount > 0:
+            fiat_rate = fiat_value / amount
+        records.append(
+            {
+                "txid": f"{txid}:{leg}" if txid else "",
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": asset,
+                "amount": amount,
+                "fee": fee,
+                "fiat_rate": fiat_rate,
+                "fiat_value": fiat_value,
+                "fiat_currency": None,
+                "pricing_source_kind": None,
+                "pricing_provider": None,
+                "pricing_pair": None,
+                "pricing_method": None,
+                "pricing_external_ref": txid or None,
+                "pricing_quality": None,
+                "kind": kind,
+                "description": note,
+                "counterparty": counterparty,
+                "payment_hash": None,
+                "payment_hash_source": None,
+                "swap_refund_funding_txid": None,
+                "raw_json": json.dumps(json_ready({**sanitized, "_leg": leg}), sort_keys=True),
+            }
+        )
+    return records
 
 
 def _generic_ledger_xlsx_cell(value):
@@ -3503,6 +3746,31 @@ def load_generic_ledger_records(file_path, column_map=None):
             hint="Add at least one transaction row below the header.",
         )
     return normalized
+
+
+def load_legacy_holdings_records(file_path, column_map=None):
+    """Load a legacy-holdings (multi-asset) ledger file into import records.
+
+    Same reader + template shape as the generic ledger, but any non-fiat asset
+    code is accepted as a crypto leg and two-crypto trade rows split into a
+    sell + buy record pair.
+    """
+    rows = _read_ledger_rows(file_path)
+    records, _ = _ledger_source_records(rows, column_map)
+    normalized = []
+    for index, record in enumerate(records, start=1):
+        normalized.extend(normalize_legacy_holdings_records(record, index=index))
+    if not normalized:
+        raise AppError(
+            "Ledger file has a header but no transaction rows to import",
+            code="validation",
+            hint="Add at least one transaction row below the header.",
+        )
+    return normalized
+
+
+def is_legacy_holdings_format(input_format):
+    return input_format == LEGACY_HOLDINGS_FORMAT
 
 
 def _generic_ledger_preview_row(record):

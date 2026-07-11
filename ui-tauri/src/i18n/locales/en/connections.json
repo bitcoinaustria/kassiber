@@ -800,7 +800,8 @@
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",
       "csvOrJson": "CSV or JSON",
-      "genericLedger": "Excel or CSV ledger"
+      "genericLedger": "Excel or CSV ledger",
+      "legacyHoldingsCsv": "Legacy holdings CSV"
     },
     "genericLedger": {
       "templateHint": "New here? Download the template, fill in your transactions, then import the file.",

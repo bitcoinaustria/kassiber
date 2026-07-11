@@ -28,6 +28,7 @@ from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_rep
     report_exit_tax,
 )
 from .privacy_linkage import analyze_psbt_privacy, build_privacy_linkage_graph
+from ..asset_codes import is_tax_engine_asset
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
@@ -1936,6 +1937,76 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
                 "cost_basis": float(cost_basis),
                 "market_value": float(market_value),
                 "unrealized_pnl": float(market_value - cost_basis),
+            }
+        )
+    return rows
+
+
+def report_legacy_holdings(conn, workspace_ref, profile_ref, hooks: ReportHooks):
+    """Overview-only positions in legacy (non-Bitcoin) overlay assets.
+
+    Overlay assets never reach the journal pipeline, so positions are computed
+    directly from raw import rows and valued at the latest import-time price
+    per asset. Nothing here is tax-accounted: these rows are deliberately
+    absent from journals, capital gains, tax summaries, E 1kv, and exit tax.
+    Negative positions (incomplete history) stay visible instead of clamping.
+    """
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    position_rows = conn.execute(
+        """
+        SELECT
+            t.asset AS asset,
+            w.label AS wallet,
+            SUM(CASE WHEN t.direction = 'inbound' THEN t.amount ELSE -t.amount END) AS net_amount,
+            SUM(
+                CASE
+                    WHEN t.direction = 'outbound' AND COALESCE(t.amount_includes_fee, 0) = 0
+                    THEN COALESCE(t.fee, 0)
+                    ELSE 0
+                END
+            ) AS outbound_fees,
+            COUNT(*) AS transaction_count,
+            MAX(t.occurred_at) AS last_activity_at
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.excluded = 0
+        GROUP BY t.asset, w.id, w.label
+        ORDER BY t.asset ASC, w.label ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    overlay_rows = [row for row in position_rows if not is_tax_engine_asset(row["asset"])]
+    if not overlay_rows:
+        return []
+    priced_at_rows = conn.execute(
+        """
+        SELECT asset, MAX(occurred_at) AS priced_at
+        FROM transactions
+        WHERE profile_id = ? AND excluded = 0
+          AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+        GROUP BY asset
+        """,
+        (profile["id"],),
+    ).fetchall()
+    priced_at_by_asset = {row["asset"]: row["priced_at"] for row in priced_at_rows}
+    rates = latest_transaction_rates_for_profile(conn, profile["id"])
+    rows = []
+    for value in overlay_rows:
+        asset = value["asset"]
+        quantity = msat_to_btc(int(value["net_amount"] or 0) - int(value["outbound_fees"] or 0))
+        rate = rates.get(asset)
+        rows.append(
+            {
+                "asset": asset,
+                "wallet": value["wallet"],
+                "quantity": float(quantity),
+                "last_price": float(rate) if rate is not None else None,
+                "priced_at": priced_at_by_asset.get(asset),
+                "market_value": float(quantity * rate) if rate is not None else None,
+                "fiat_currency": profile["fiat_currency"],
+                "transaction_count": int(value["transaction_count"] or 0),
+                "last_activity_at": value["last_activity_at"],
+                "tax_accounted": False,
             }
         )
     return rows

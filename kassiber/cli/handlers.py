@@ -13,6 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .. import __version__
+from ..asset_codes import is_tax_engine_asset
 from ..backends import (
     BACKEND_CLEAR_FIELD_ALIASES,
     BACKEND_KINDS,
@@ -2254,6 +2255,11 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format", "config"],
         "requires": ["source_file"],
     },
+    "legacy-holdings": {
+        "summary": "Import-only overlay for non-Bitcoin exchange history (CSV); overview-only, excluded from tax reports.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": ["source_file"],
+    },
 }
 
 
@@ -2352,6 +2358,7 @@ def import_exchange_api(
     wallet_ref=None,
     *,
     expected_backend_kind=None,
+    include_legacy=False,
     commit=True,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -2377,7 +2384,10 @@ def import_exchange_api(
         backend["name"],
         wallet_ref,
     )
-    records = core_exchange_imports.fetch_exchange_records(backend)
+    legacy_notes = []
+    records = core_exchange_imports.fetch_exchange_records(
+        backend, include_legacy=include_legacy, legacy_notes=legacy_notes
+    )
     outcome = core_imports.import_records_into_wallet(
         conn,
         profile,
@@ -2394,6 +2404,9 @@ def import_exchange_api(
     outcome["wallet"] = wallet["label"]
     outcome["fetched"] = len(records)
     outcome["input_format"] = f"{provider_kind}_api"
+    if include_legacy:
+        outcome["legacy_assets_included"] = True
+        outcome["legacy_rows_skipped"] = legacy_notes
     return outcome
 
 
@@ -4255,7 +4268,7 @@ def _duplicate_label_warnings(wallet_refs_by_id):
 
 def build_ledger_state(conn, profile):
     require_tax_processing_supported(profile)
-    rows = conn.execute(
+    all_rows = conn.execute(
         """
         SELECT
             t.*,
@@ -4273,6 +4286,16 @@ def build_ledger_state(conn, profile):
         """,
         (profile["id"],),
     ).fetchall()
+    # Kassiber's tax engine is Bitcoin-only. Legacy-holdings overlay assets
+    # (anything that is not BTC/LBTC or a Liquid asset id) are overview-only:
+    # they never reach RP2, journals, or any tax report. BTC legs of overlay
+    # trades DO book normally — that is what gives BTC acquired by selling an
+    # altcoin its real execution cost basis.
+    rows = [row for row in all_rows if is_tax_engine_asset(row["asset"])]
+    overlay_assets = sorted(
+        {str(row["asset"]) for row in all_rows if not is_tax_engine_asset(row["asset"])}
+    )
+    overlay_row_count = len(all_rows) - len(rows)
     manual_pair_records = conn.execute(
         "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),
@@ -4319,6 +4342,19 @@ def build_ledger_state(conn, profile):
     # to read outputs from. Skip the build entirely for pure CSV / Lightning
     # profiles.
     warnings = _duplicate_label_warnings(wallet_refs_by_id)
+    if overlay_row_count:
+        warnings.append(
+            {
+                "code": "legacy_holdings_excluded",
+                "count": overlay_row_count,
+                "assets": overlay_assets,
+                "message": (
+                    f"{overlay_row_count} transaction(s) in non-Bitcoin assets "
+                    f"({', '.join(overlay_assets)}) are overview-only legacy "
+                    "holdings and are excluded from journals and all tax reports."
+                ),
+            }
+        )
     owned_index = None
     has_onchain_outbound = any(
         row["direction"] == "outbound" and (row["raw_json"] or "").find('"vout"') != -1

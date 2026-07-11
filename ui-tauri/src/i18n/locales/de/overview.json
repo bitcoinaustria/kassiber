@@ -250,6 +250,19 @@
     },
     "otherSources": "Sonstige Quellen"
   },
+  "legacyHoldings": {
+    "title": "Frühere Altcoin-Bestände",
+    "notTaxAccounted": "Nicht steuerlich erfasst",
+    "explainer": "Nur zur Übersicht: Positionen aus importierter Nicht-Bitcoin-Börsenhistorie, bewertet zum letzten Importpreis. In keinem Steuerbericht enthalten.",
+    "columns": {
+      "asset": "Asset",
+      "wallet": "Wallet",
+      "quantity": "Menge",
+      "lastPrice": "Letzter Preis",
+      "value": "Wert",
+      "pricedAt": "Preisstand"
+    }
+  },
   "recentTx": {
     "title": "Letzte Transaktionen",
     "showAll": "Alle anzeigen",

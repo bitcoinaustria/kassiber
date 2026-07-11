@@ -250,6 +250,19 @@
     },
     "otherSources": "Other sources"
   },
+  "legacyHoldings": {
+    "title": "Legacy holdings",
+    "notTaxAccounted": "Not tax-accounted",
+    "explainer": "Overview-only positions from imported non-Bitcoin exchange history, valued at the last import price. Excluded from all tax reports.",
+    "columns": {
+      "asset": "Asset",
+      "wallet": "Wallet",
+      "quantity": "Quantity",
+      "lastPrice": "Last price",
+      "value": "Value",
+      "pricedAt": "Priced at"
+    }
+  },
   "recentTx": {
     "title": "Recent Transactions",
     "showAll": "Show all",

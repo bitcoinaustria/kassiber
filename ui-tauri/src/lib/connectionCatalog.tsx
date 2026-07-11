@@ -75,7 +75,8 @@ export type ConnectionSourceFormat =
   | "ledgerlive_csv"
   | "binance_supplemental_csv"
   | "wasabi_bundle"
-  | "generic_ledger";
+  | "generic_ledger"
+  | "legacy_holdings";
 
 export interface ConnectionSource {
   id: string;
@@ -766,6 +767,24 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "BTC autoinvest rows funded by fiat preserve exact execution value",
       "BTC dividend/mining rows import as income without guessing fiat price",
+    ],
+  },
+  {
+    id: "legacy-holdings",
+    title: "Legacy altcoin holdings",
+    description: "Non-Bitcoin exchange history, overview-only.",
+    category: "exchanges",
+    image: sourceIcon("ALT", "#64748b", "#ffffff"),
+    status: "ready",
+    pathLabel: "CSV import",
+    formatLabel: "legacy_holdings",
+    setupKind: "file-wallet",
+    walletKind: "legacy-holdings",
+    sourceFormat: "legacy_holdings",
+    details: [
+      "Import-only overlay for old non-Bitcoin exchange history",
+      "Positions show in the overview, valued at import-time prices",
+      "Never included in journals or tax reports",
     ],
   },
   {

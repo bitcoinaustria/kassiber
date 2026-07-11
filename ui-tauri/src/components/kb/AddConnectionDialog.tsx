@@ -597,6 +597,11 @@ function sourceFileFilters(
       },
     ];
   }
+  if (source.sourceFormat === "legacy_holdings") {
+    return [
+      { name: t("add.fileFilter.legacyHoldingsCsv"), extensions: ["csv"] },
+    ];
+  }
   if (source.id === "csv") {
     return [{ name: t("add.fileFilter.csvOrJson"), extensions: ["csv", "json"] }];
   }
