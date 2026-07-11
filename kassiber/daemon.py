@@ -10,13 +10,14 @@ import logging
 import math
 import queue
 import re
+import secrets
 import sqlite3
 import sys
 import tempfile
 import threading
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO
 from urllib import error as urlerror
@@ -447,6 +448,7 @@ SUPPORTED_KINDS = (
     "ui.review.badges",
     "ui.wallets.create",
     "ui.wallets.import_file",
+    "internal.document_import.stage",
     "ui.wallets.document_import.preview",
     "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
@@ -594,6 +596,8 @@ _AI_SCREEN_ROUTES = frozenset(
 )
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
+DOCUMENT_IMPORT_SESSION_TTL_SECONDS = 30 * 60.0
+MAX_DOCUMENT_IMPORT_SESSIONS = 8
 # Hard caps for source-funds daemon kinds that drive build_report. The
 # core function already clamps internally (_MAX_BUILD_REPORT_DEPTH=64),
 # but the daemon boundary is the right place to reject runaway desktop
@@ -758,6 +762,192 @@ class ActiveAiChats:
         return chat.consent.record(call_id, decision)
 
 
+@dataclass
+class DocumentImportSession:
+    token: str
+    source_file: str
+    workspace_id: str
+    profile_id: str
+    data_root: str
+    created_at: float
+    last_accessed_at: float
+    draft: dict[str, Any] | None = None
+
+
+class DocumentImportSessions:
+    """Process-local grants for native-picker document imports.
+
+    The renderer receives only an opaque token. Source paths and normalized OCR
+    rows stay authoritative inside the daemon until the import succeeds or the
+    bounded session expires.
+    """
+
+    def __init__(
+        self,
+        *,
+        ttl_seconds: float = DOCUMENT_IMPORT_SESSION_TTL_SECONDS,
+        max_sessions: int = MAX_DOCUMENT_IMPORT_SESSIONS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._ttl_seconds = ttl_seconds
+        self._max_sessions = max_sessions
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._sessions: dict[str, DocumentImportSession] = {}
+
+    def stage(
+        self,
+        *,
+        source_file: str,
+        workspace_id: str,
+        profile_id: str,
+        data_root: str,
+    ) -> str:
+        now = self._clock()
+        token = secrets.token_urlsafe(32)
+        session = DocumentImportSession(
+            token=token,
+            source_file=source_file,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            data_root=data_root,
+            created_at=now,
+            last_accessed_at=now,
+        )
+        with self._lock:
+            self._prune_locked(now)
+            self._sessions[token] = session
+            while len(self._sessions) > self._max_sessions:
+                oldest = min(
+                    self._sessions.values(),
+                    key=lambda entry: entry.last_accessed_at,
+                )
+                self._sessions.pop(oldest.token, None)
+        return token
+
+    def source_for_preview(
+        self,
+        token: str,
+        *,
+        workspace_id: str,
+        profile_id: str,
+        data_root: str,
+    ) -> str:
+        with self._lock:
+            session = self._require_locked(
+                token,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                data_root=data_root,
+            )
+            session.last_accessed_at = self._clock()
+            return session.source_file
+
+    def create_preview(
+        self,
+        token: str,
+        draft: Mapping[str, Any],
+        *,
+        workspace_id: str,
+        profile_id: str,
+        data_root: str,
+    ) -> str:
+        with self._lock:
+            source_session = self._require_locked(
+                token,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                data_root=data_root,
+            )
+            now = self._clock()
+            preview_token = secrets.token_urlsafe(32)
+            self._sessions[preview_token] = DocumentImportSession(
+                token=preview_token,
+                source_file=source_session.source_file,
+                workspace_id=source_session.workspace_id,
+                profile_id=source_session.profile_id,
+                data_root=source_session.data_root,
+                created_at=now,
+                last_accessed_at=now,
+                draft=copy.deepcopy(dict(draft)),
+            )
+            source_session.last_accessed_at = now
+            while len(self._sessions) > self._max_sessions:
+                oldest = min(
+                    self._sessions.values(),
+                    key=lambda entry: entry.last_accessed_at,
+                )
+                self._sessions.pop(oldest.token, None)
+            return preview_token
+
+    def preview_for_import(
+        self,
+        token: str,
+        *,
+        workspace_id: str,
+        profile_id: str,
+        data_root: str,
+    ) -> DocumentImportSession:
+        with self._lock:
+            session = self._require_locked(
+                token,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                data_root=data_root,
+            )
+            if session.draft is None:
+                raise AppError(
+                    "Document import must be previewed before it can be imported",
+                    code="document_import_preview_required",
+                    hint="Preview the selected document, then import the reviewed rows.",
+                    retryable=False,
+                )
+            session.last_accessed_at = self._clock()
+            return copy.deepcopy(session)
+
+    def consume(self, token: str) -> None:
+        with self._lock:
+            self._sessions.pop(token, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._sessions.clear()
+
+    def _require_locked(
+        self,
+        token: str,
+        *,
+        workspace_id: str,
+        profile_id: str,
+        data_root: str,
+    ) -> DocumentImportSession:
+        now = self._clock()
+        self._prune_locked(now)
+        session = self._sessions.get(token)
+        if (
+            session is None
+            or session.workspace_id != workspace_id
+            or session.profile_id != profile_id
+            or session.data_root != data_root
+        ):
+            raise AppError(
+                "Document import session is unavailable",
+                code="document_import_session_expired",
+                hint="Choose the document and preview it again.",
+                retryable=False,
+            )
+        return session
+
+    def _prune_locked(self, now: float) -> None:
+        expired = [
+            token
+            for token, session in self._sessions.items()
+            if now - session.last_accessed_at >= self._ttl_seconds
+        ]
+        for token in expired:
+            self._sessions.pop(token, None)
+
+
 class AuthAttemptBackoff:
     """Database-level throttling for passphrase verification attempts."""
 
@@ -877,6 +1067,9 @@ class DaemonContext:
     select_project_on_open: bool = True
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
+    document_import_sessions: DocumentImportSessions = field(
+        default_factory=DocumentImportSessions
+    )
 
 
 @dataclass(frozen=True)
@@ -2852,6 +3045,7 @@ def _projects_list_payload(ctx: DaemonContext) -> dict[str, Any]:
 
 def _close_current_project_for_switch(ctx: DaemonContext) -> None:
     _stop_freshness_background_worker(ctx, cancel_running=True)
+    ctx.document_import_sessions.clear()
     if ctx.conn is not None:
         ctx.conn.close()
         ctx.conn = None
@@ -8826,53 +9020,62 @@ def _import_wallet_file_payload(
     return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)
 
 
-def _document_import_source_file(args: dict[str, Any]) -> str:
-    source_file = (
-        _optional_str_arg(args, "source_file")
-        or _optional_str_arg(args, "file")
-        or _optional_str_arg(args, "file_path")
-    )
-    if source_file:
-        return source_file
-    draft = args.get("draft")
-    if isinstance(draft, dict):
-        source = draft.get("source")
-        if isinstance(source, dict):
-            value = source.get("path")
-            if isinstance(value, str) and value:
-                return value
-    raise AppError(
-        "source_file is required",
-        code="validation",
-        hint="Choose the local image or PDF to import.",
-        retryable=False,
-    )
+_DOCUMENT_IMPORT_RENDERER_FIELDS = frozenset(
+    {
+        "source_file",
+        "file",
+        "file_path",
+        "draft",
+        "rows",
+        "expected_source_sha256",
+    }
+)
 
 
-def _document_import_rows(args: dict[str, Any]) -> list[dict[str, Any]]:
-    rows = args.get("rows")
-    if rows is None and isinstance(args.get("draft"), dict):
-        rows = args["draft"].get("rows")
-    if not isinstance(rows, list):
+def _reject_document_import_renderer_fields(
+    args: Mapping[str, Any],
+    *,
+    importing: bool = False,
+) -> None:
+    forbidden = set(_DOCUMENT_IMPORT_RENDERER_FIELDS)
+    if importing:
+        forbidden.update({"include_quarantined", "attach_evidence", "row_ids"})
+    supplied = sorted(key for key in forbidden if key in args)
+    if supplied:
         raise AppError(
-            "document import rows must be a list",
+            "Document import accepts only a trusted document session",
             code="validation",
-            hint="Pass the rows returned by ui.wallets.document_import.preview.",
+            hint="Choose the document again and use the reviewed preview.",
+            details={"forbidden_fields": supplied},
             retryable=False,
         )
-    return [row for row in rows if isinstance(row, dict)]
+
+
+def _document_import_token(args: Mapping[str, Any]) -> str:
+    value = args.get("document_token")
+    if not isinstance(value, str) or not value.strip():
+        raise AppError(
+            "document_token is required",
+            code="validation",
+            hint="Choose the local document before previewing or importing it.",
+            retryable=False,
+        )
+    return value.strip()
 
 
 def _document_import_selected_row_ids(args: dict[str, Any]) -> list[str] | None:
-    if "selected_row_ids" in args:
-        selected = args.get("selected_row_ids")
-    else:
-        selected = args.get("row_ids")
+    selected = args.get("selected_row_ids")
     if selected is None:
         return None
     if not isinstance(selected, list):
         raise AppError("selected_row_ids must be a list", code="validation", retryable=False)
-    return [str(value) for value in selected if str(value)]
+    if any(not isinstance(value, str) or not value for value in selected):
+        raise AppError(
+            "selected_row_ids must contain non-empty strings",
+            code="validation",
+            retryable=False,
+        )
+    return list(dict.fromkeys(selected))
 
 
 def _document_import_hooks() -> core_document_import.DocumentImportHooks:
@@ -8892,64 +9095,173 @@ def _document_import_hooks() -> core_document_import.DocumentImportHooks:
     )
 
 
-def _document_import_preview_payload(
-    conn: sqlite3.Connection,
+def _document_import_source_unavailable() -> AppError:
+    return AppError(
+        "Selected document is no longer available for local OCR",
+        code="document_import_source_unavailable",
+        hint="Choose the document again and create a new preview.",
+        retryable=False,
+    )
+
+
+def _document_import_os_error_mentions_source(
+    exc: OSError,
+    source_file: str,
+) -> bool:
+    return any(
+        value is not None and str(value) == source_file
+        for value in (
+            getattr(exc, "filename", None),
+            getattr(exc, "filename2", None),
+        )
+    )
+
+
+def _document_import_stage_payload(
+    ctx: DaemonContext,
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    return core_document_import.preview_document_import(
-        conn,
-        source_file=_document_import_source_file(args),
-        provider_name=_optional_str_arg(args, "provider"),
-        model=_optional_str_arg(args, "model"),
-        confidence_threshold=args.get("confidence_threshold"),
-        max_pages=args.get("max_pages"),
+    source_file = _required_str_arg(args, "source_file", "Selected document")
+    try:
+        source_path = core_document_import._source_path(source_file).resolve(strict=True)
+        source_stat = source_path.stat()
+    except (AppError, OSError) as exc:
+        raise _document_import_source_unavailable() from exc
+    workspace, profile = resolve_scope(ctx.conn, None, None)
+    token = ctx.document_import_sessions.stage(
+        source_file=str(source_path),
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        data_root=ctx.data_root,
     )
+    return {
+        "document_token": token,
+        "source": {
+            "filename": source_path.name,
+            "media_type": core_document_import._mime_type(source_path),
+            "size_bytes": source_stat.st_size,
+            "kind": "pdf" if source_path.suffix.lower() == ".pdf" else "image",
+        },
+    }
+
+
+def _document_import_preview_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    _reject_document_import_renderer_fields(args)
+    token = _document_import_token(args)
+    workspace, profile = resolve_scope(ctx.conn, None, None)
+    source_file = ctx.document_import_sessions.source_for_preview(
+        token,
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        data_root=ctx.data_root,
+    )
+    try:
+        draft = core_document_import.preview_document_import(
+            ctx.conn,
+            source_file=source_file,
+            provider_name=_optional_str_arg(args, "provider"),
+            model=_optional_str_arg(args, "model"),
+            confidence_threshold=args.get("confidence_threshold"),
+            max_pages=args.get("max_pages"),
+        )
+    except AppError as exc:
+        if exc.code == "not_found" and source_file in str(exc):
+            raise _document_import_source_unavailable() from exc
+        raise
+    except OSError as exc:
+        if _document_import_os_error_mentions_source(exc, source_file):
+            raise _document_import_source_unavailable() from exc
+        raise
+    preview_token = ctx.document_import_sessions.create_preview(
+        token,
+        draft,
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        data_root=ctx.data_root,
+    )
+    public_draft = copy.deepcopy(draft)
+    source = public_draft.get("source")
+    if isinstance(source, dict):
+        source.pop("path", None)
+    public_draft["document_token"] = preview_token
+    return public_draft
 
 
 def _document_import_import_payload(
-    conn: sqlite3.Connection,
-    data_root: str,
+    ctx: DaemonContext,
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    _reject_document_import_renderer_fields(args, importing=True)
+    token = _document_import_token(args)
     wallet_ref = _required_str_arg(args, "wallet", "Wallet")
-    _, profile = resolve_scope(conn, None, None)
-    wallet = core_resolve_wallet(conn, profile["id"], wallet_ref)
-    include_quarantined = args.get("include_quarantined")
-    if include_quarantined is None:
-        include_quarantined = False
-    if not isinstance(include_quarantined, bool):
-        raise AppError("include_quarantined must be a boolean", code="validation")
-    attach_evidence = args.get("attach_evidence")
-    if attach_evidence is None:
-        attach_evidence = True
-    if not isinstance(attach_evidence, bool):
-        raise AppError("attach_evidence must be a boolean", code="validation")
-    expected_source_sha256 = None
-    draft = args.get("draft")
-    if isinstance(draft, dict) and isinstance(draft.get("source"), dict):
-        source_sha256 = draft["source"].get("sha256")
-        if isinstance(source_sha256, str) and source_sha256:
-            expected_source_sha256 = source_sha256
-    if expected_source_sha256 is None:
+    workspace, profile = resolve_scope(ctx.conn, None, None)
+    session = ctx.document_import_sessions.preview_for_import(
+        token,
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        data_root=ctx.data_root,
+    )
+    draft = session.draft or {}
+    rows = draft.get("rows")
+    source = draft.get("source")
+    expected_source_sha256 = source.get("sha256") if isinstance(source, dict) else None
+    if not isinstance(rows, list) or not isinstance(expected_source_sha256, str):
         raise AppError(
-            "document import requires the reviewed preview source hash",
-            code="validation",
+            "Document import preview is incomplete",
+            code="document_import_preview_required",
             hint="Preview the local document again before importing selected rows.",
             retryable=False,
         )
-    return core_document_import.import_document_draft(
-        conn,
-        source_file=_document_import_source_file(args),
-        data_root=data_root,
-        wallet=wallet,
-        profile=profile,
-        rows=_document_import_rows(args),
-        hooks=_document_import_hooks(),
-        include_quarantined=include_quarantined,
-        selected_row_ids=_document_import_selected_row_ids(args),
-        expected_source_sha256=expected_source_sha256,
-        attach_evidence=attach_evidence,
-    )
+    selected_row_ids = _document_import_selected_row_ids(args)
+    if selected_row_ids is None:
+        raise AppError(
+            "selected_row_ids is required",
+            code="validation",
+            hint="Select one or more reviewed rows to import.",
+            retryable=False,
+        )
+    ready_ids = {
+        str(row.get("id"))
+        for row in rows
+        if isinstance(row, Mapping) and row.get("status") == "ready" and row.get("id")
+    }
+    invalid_selection = sorted(set(selected_row_ids) - ready_ids)
+    if invalid_selection:
+        raise AppError(
+            "Selected document rows are not importable",
+            code="validation",
+            hint="Select only ready rows from the current preview.",
+            details={"invalid_row_count": len(invalid_selection)},
+            retryable=False,
+        )
+    wallet = core_resolve_wallet(ctx.conn, profile["id"], wallet_ref)
+    try:
+        outcome = core_document_import.import_document_draft(
+            ctx.conn,
+            source_file=session.source_file,
+            data_root=ctx.data_root,
+            wallet=wallet,
+            profile=profile,
+            rows=[row for row in rows if isinstance(row, Mapping)],
+            hooks=_document_import_hooks(),
+            include_quarantined=False,
+            selected_row_ids=selected_row_ids,
+            expected_source_sha256=expected_source_sha256,
+            attach_evidence=True,
+        )
+    except AppError as exc:
+        if exc.code == "not_found" and session.source_file in str(exc):
+            raise _document_import_source_unavailable() from exc
+        raise
+    except OSError as exc:
+        if _document_import_os_error_mentions_source(exc, session.source_file):
+            raise _document_import_source_unavailable() from exc
+        raise
+    ctx.document_import_sessions.consume(token)
+    return outcome
 
 
 def _import_samourai_payload(
@@ -12079,6 +12391,7 @@ def handle_request(
 
     if kind == "daemon.lock":
         _stop_freshness_background_worker(ctx, cancel_running=True)
+        ctx.document_import_sessions.clear()
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
@@ -13380,14 +13693,16 @@ def handle_request(
         )
 
     if kind == "ui.profiles.switch":
+        payload = _switch_profile_payload(
+            ctx.conn,
+            _coerce_args_dict(request_id, request.get("args")),
+        )
+        ctx.document_import_sessions.clear()
         return (
             _with_request_id(
                 build_envelope(
                     "ui.profiles.switch",
-                    _switch_profile_payload(
-                        ctx.conn,
-                        _coerce_args_dict(request_id, request.get("args")),
-                    ),
+                    payload,
                 ),
                 request_id,
             ),
@@ -13913,13 +14228,28 @@ def handle_request(
             True,
         )
 
+    if kind == "internal.document_import.stage":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "internal.document_import.stage",
+                    _document_import_stage_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.wallets.document_import.preview":
         return (
             _with_request_id(
                 build_envelope(
                     "ui.wallets.document_import.preview",
                     _document_import_preview_payload(
-                        ctx.conn,
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),
@@ -13934,8 +14264,7 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.document_import.import",
                     _document_import_import_payload(
-                        ctx.conn,
-                        ctx.data_root,
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

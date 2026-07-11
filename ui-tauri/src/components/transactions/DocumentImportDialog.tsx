@@ -32,8 +32,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import {
+  isFilePickerAvailable,
+  pickDocumentImportSource,
+  type DocumentImportSourceSelection,
+} from "@/lib/filePicker";
 import type { AiProvidersListData } from "@/lib/aiCapabilities";
+import {
+  buildDocumentImportArgs,
+  buildDocumentImportPreviewArgs,
+} from "@/lib/documentImport";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -62,8 +70,8 @@ interface DocumentDraftRow {
 }
 
 interface DocumentDraft {
+  document_token: string;
   source: {
-    path: string;
     filename: string;
     media_type?: string;
     sha256?: string;
@@ -135,7 +143,8 @@ export function DocumentImportDialog() {
     [providersQuery.data],
   );
   const [open, setOpen] = React.useState(false);
-  const [sourceFile, setSourceFile] = React.useState("");
+  const [sourceSelection, setSourceSelection] =
+    React.useState<DocumentImportSourceSelection | null>(null);
   const [wallet, setWallet] = React.useState("");
   const [provider, setProvider] = React.useState("");
   const [model, setModel] = React.useState("");
@@ -164,24 +173,18 @@ export function DocumentImportDialog() {
   );
   const selectedCount = selectedRows.size;
   const canPreview =
-    Boolean(sourceFile.trim()) && Boolean(provider) && !previewDocument.isPending;
+    Boolean(sourceSelection?.document_token) &&
+    Boolean(provider) &&
+    !previewDocument.isPending;
   const canImport =
     Boolean(draft) && Boolean(wallet) && selectedCount > 0 && !importDocument.isPending;
 
   const chooseFile = React.useCallback(async () => {
     setPickerBusy(true);
     try {
-      const picked = await pickFile({
-        title: t("documentImport.pickTitle"),
-        filters: [
-          {
-            name: t("documentImport.fileFilter"),
-            extensions: ["png", "jpg", "jpeg", "webp", "gif", "pdf"],
-          },
-        ],
-      });
+      const picked = await pickDocumentImportSource();
       if (picked) {
-        setSourceFile(picked);
+        setSourceSelection(picked);
         setDraft(null);
         setSelectedRows(new Set());
       }
@@ -197,12 +200,13 @@ export function DocumentImportDialog() {
   }, [addNotification, t]);
 
   const runPreview = React.useCallback(() => {
+    if (!sourceSelection) return;
     previewDocument.mutate(
-      {
-        source_file: sourceFile.trim(),
+      buildDocumentImportPreviewArgs(
+        sourceSelection.document_token,
         provider,
-        ...(model.trim() ? { model: model.trim() } : {}),
-      },
+        model,
+      ),
       {
         onSuccess: (envelope) => {
           const payload = envelope.data;
@@ -224,16 +228,12 @@ export function DocumentImportDialog() {
         },
       },
     );
-  }, [addNotification, model, previewDocument, provider, sourceFile, t]);
+  }, [addNotification, model, previewDocument, provider, sourceSelection, t]);
 
   const runImport = React.useCallback(() => {
     if (!draft) return;
     importDocument.mutate(
-      {
-        wallet,
-        draft,
-        selected_row_ids: Array.from(selectedRows),
-      },
+      buildDocumentImportArgs(draft.document_token, wallet, selectedRows),
       {
         onSuccess: (envelope) => {
           const payload = envelope.data;
@@ -246,6 +246,7 @@ export function DocumentImportDialog() {
             tone: "success",
           });
           setOpen(false);
+          setSourceSelection(null);
           setDraft(null);
           setSelectedRows(new Set());
         },
@@ -303,12 +304,8 @@ export function DocumentImportDialog() {
               <div className="flex gap-2">
                 <Input
                   id="document-import-source"
-                  value={sourceFile}
-                  onChange={(event) => {
-                    setSourceFile(event.target.value);
-                    setDraft(null);
-                    setSelectedRows(new Set());
-                  }}
+                  value={sourceSelection?.source.filename ?? ""}
+                  readOnly
                   placeholder={t("documentImport.sourcePlaceholder")}
                 />
                 <Button

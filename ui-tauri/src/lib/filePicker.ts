@@ -14,6 +14,10 @@
  *   - Anything else throws — failed bridge fetch, non-2xx response, Tauri
  *     error, or a server-side `{ error: "…" }` payload. Callers that care
  *     about the difference between cancel and failure should try/catch.
+ *
+ * Document OCR is the exception to the path-returning contract: its dedicated
+ * helper stages the native selection inside the daemon and returns only an
+ * opaque session token plus display metadata.
  */
 
 export interface FilePickerOptions {
@@ -32,6 +36,16 @@ export interface PickedFileWithContents {
   contentsBase64: string;
 }
 
+export interface DocumentImportSourceSelection {
+  document_token: string;
+  source: {
+    filename: string;
+    media_type?: string;
+    size_bytes?: number;
+    kind?: "image" | "pdf" | string;
+  };
+}
+
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 
 const isTauriRuntime =
@@ -48,6 +62,7 @@ async function callFilePickerBridge(
   path?: unknown;
   paths?: unknown;
   contentsBase64?: unknown;
+  documentImportSource?: unknown;
   error?: unknown;
 }> {
   const response = await fetch(FILE_PICKER_BRIDGE_PATH, {
@@ -64,8 +79,52 @@ async function callFilePickerBridge(
     path?: unknown;
     paths?: unknown;
     contentsBase64?: unknown;
+    documentImportSource?: unknown;
     error?: unknown;
   };
+}
+
+function documentImportSourceSelection(
+  value: unknown,
+): DocumentImportSourceSelection | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as {
+    document_token?: unknown;
+    source?: { filename?: unknown };
+  };
+  if (
+    typeof candidate.document_token !== "string" ||
+    !candidate.document_token ||
+    !candidate.source ||
+    typeof candidate.source.filename !== "string" ||
+    !candidate.source.filename
+  ) {
+    throw new Error("document picker returned an invalid session");
+  }
+  return value as DocumentImportSourceSelection;
+}
+
+export async function pickDocumentImportSource(): Promise<DocumentImportSourceSelection | null> {
+  if (!isFilePickerAvailable) return null;
+  if (import.meta.env.VITE_DAEMON === "mock") {
+    return {
+      document_token: "mock-document-session",
+      source: {
+        filename: "receipt.png",
+        media_type: "image/png",
+        kind: "image",
+      },
+    };
+  }
+  if (isDevBridgeRuntime) {
+    const payload = await callFilePickerBridge({ purpose: "document_import" });
+    if (payload.error) throw new Error(String(payload.error));
+    return documentImportSourceSelection(payload.documentImportSource);
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return documentImportSourceSelection(
+    await invoke<unknown>("pick_document_import_source"),
+  );
 }
 
 async function pickFileViaDevBridge(

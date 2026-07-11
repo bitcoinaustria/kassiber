@@ -5001,7 +5001,270 @@ class DaemonSmokeTest(unittest.TestCase):
             [],
         )
 
-    def test_document_import_daemon_requires_reviewed_source_hash(self):
+    def test_document_import_sessions_expire_and_are_scope_bound(self):
+        now = [100.0]
+        sessions = daemon_module.DocumentImportSessions(
+            ttl_seconds=10,
+            max_sessions=2,
+            clock=lambda: now[0],
+        )
+        token = sessions.stage(
+            source_file="/trusted/receipt.png",
+            workspace_id="workspace-1",
+            profile_id="profile-1",
+            data_root="/data-1",
+        )
+        self.assertEqual(
+            sessions.source_for_preview(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data-1",
+            ),
+            "/trusted/receipt.png",
+        )
+        with self.assertRaises(AppError) as wrong_scope:
+            sessions.source_for_preview(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-2",
+                data_root="/data-1",
+            )
+        self.assertEqual(wrong_scope.exception.code, "document_import_session_expired")
+
+        now[0] = 111.0
+        with self.assertRaises(AppError) as expired:
+            sessions.source_for_preview(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data-1",
+            )
+        self.assertEqual(expired.exception.code, "document_import_session_expired")
+
+    def test_document_import_sessions_evict_the_oldest_grant(self):
+        now = [1.0]
+        sessions = daemon_module.DocumentImportSessions(
+            ttl_seconds=100,
+            max_sessions=2,
+            clock=lambda: now[0],
+        )
+
+        def stage(name):
+            token = sessions.stage(
+                source_file=f"/trusted/{name}.png",
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+            now[0] += 1
+            return token
+
+        oldest = stage("oldest")
+        stage("middle")
+        newest = stage("newest")
+        with self.assertRaises(AppError) as evicted:
+            sessions.source_for_preview(
+                oldest,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+        self.assertEqual(evicted.exception.code, "document_import_session_expired")
+        self.assertEqual(
+            sessions.source_for_preview(
+                newest,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            ),
+            "/trusted/newest.png",
+        )
+
+    def test_document_import_preview_sessions_are_immutable(self):
+        sessions = daemon_module.DocumentImportSessions()
+        source_token = sessions.stage(
+            source_file="/trusted/receipt.png",
+            workspace_id="workspace-1",
+            profile_id="profile-1",
+            data_root="/data",
+        )
+        scope = {
+            "workspace_id": "workspace-1",
+            "profile_id": "profile-1",
+            "data_root": "/data",
+        }
+        first = sessions.create_preview(
+            source_token,
+            {"rows": [{"id": "first"}]},
+            **scope,
+        )
+        second = sessions.create_preview(
+            source_token,
+            {"rows": [{"id": "second"}]},
+            **scope,
+        )
+
+        self.assertNotEqual(first, second)
+        self.assertEqual(
+            sessions.preview_for_import(first, **scope).draft,
+            {"rows": [{"id": "first"}]},
+        )
+        self.assertEqual(
+            sessions.preview_for_import(second, **scope).draft,
+            {"rows": [{"id": "second"}]},
+        )
+
+    def test_document_import_stage_returns_only_an_opaque_session(self):
+        sessions = daemon_module.DocumentImportSessions()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "receipt.png"
+            source.write_bytes(b"local image bytes")
+            ctx = SimpleNamespace(
+                conn=object(),
+                data_root="/data",
+                document_import_sessions=sessions,
+            )
+            with mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+            ):
+                staged = daemon_module._document_import_stage_payload(
+                    ctx,
+                    {"source_file": str(source)},
+                )
+
+        self.assertEqual(staged["source"]["filename"], "receipt.png")
+        self.assertNotIn("path", staged["source"])
+        self.assertNotIn(str(source), json.dumps(staged))
+        self.assertEqual(
+            sessions.source_for_preview(
+                staged["document_token"],
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            ),
+            str(source.resolve()),
+        )
+
+        missing = "/private/secret/does-not-exist.pdf"
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+            ),
+            self.assertRaises(AppError) as unavailable,
+        ):
+            daemon_module._document_import_stage_payload(
+                ctx,
+                {"source_file": missing},
+            )
+        self.assertEqual(
+            unavailable.exception.code, "document_import_source_unavailable"
+        )
+        self.assertNotIn(missing, str(unavailable.exception))
+
+    def test_document_import_uses_daemon_owned_preview_and_consumes_session(self):
+        sessions = daemon_module.DocumentImportSessions()
+        token = sessions.stage(
+            source_file="/trusted/receipt.png",
+            workspace_id="workspace-1",
+            profile_id="profile-1",
+            data_root="/data",
+        )
+        ctx = SimpleNamespace(
+            conn=object(),
+            data_root="/data",
+            document_import_sessions=sessions,
+        )
+        authoritative_draft = {
+            "source": {
+                "path": "/trusted/receipt.png",
+                "filename": "receipt.png",
+                "sha256": "a" * 64,
+            },
+            "rows": [
+                {
+                    "id": "docrow-aaaaaaaaaaaaaaaa-001",
+                    "status": "ready",
+                    "record": {"amount_btc": "0.01"},
+                },
+                {
+                    "id": "docrow-aaaaaaaaaaaaaaaa-002",
+                    "status": "quarantined",
+                    "record": {"amount_btc": "20"},
+                },
+            ],
+        }
+        with self.assertRaises(AppError) as renderer_path:
+            daemon_module._document_import_preview_payload(
+                ctx,
+                {
+                    "document_token": token,
+                    "source_file": "/private/other.pdf",
+                    "provider": "local",
+                },
+            )
+        self.assertEqual(renderer_path.exception.code, "validation")
+
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+            ),
+            mock.patch(
+                "kassiber.daemon.core_document_import.preview_document_import",
+                return_value=authoritative_draft,
+            ) as preview,
+        ):
+            public_draft = daemon_module._document_import_preview_payload(
+                ctx,
+                {"document_token": token, "provider": "local"},
+            )
+        self.assertNotIn("path", public_draft["source"])
+        preview_token = public_draft["document_token"]
+        self.assertNotEqual(preview_token, token)
+        self.assertEqual(preview.call_args.kwargs["source_file"], "/trusted/receipt.png")
+        with self.assertRaises(AppError) as unpreviewed_source:
+            sessions.preview_for_import(
+                token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+        self.assertEqual(
+            unpreviewed_source.exception.code, "document_import_preview_required"
+        )
+
+        with self.assertRaises(AppError) as renderer_rows:
+            daemon_module._document_import_import_payload(
+                ctx,
+                {
+                    "document_token": preview_token,
+                    "wallet": "wallet-1",
+                    "selected_row_ids": ["docrow-aaaaaaaaaaaaaaaa-001"],
+                    "rows": [{"record": {"amount_btc": "999"}}],
+                },
+            )
+        self.assertEqual(renderer_rows.exception.code, "validation")
+
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+            ),
+            self.assertRaises(AppError) as quarantined,
+        ):
+            daemon_module._document_import_import_payload(
+                ctx,
+                {
+                    "document_token": preview_token,
+                    "wallet": "wallet-1",
+                    "selected_row_ids": ["docrow-aaaaaaaaaaaaaaaa-002"],
+                },
+            )
+        self.assertEqual(quarantined.exception.code, "validation")
+
         with (
             mock.patch(
                 "kassiber.daemon.resolve_scope",
@@ -5011,19 +5274,35 @@ class DaemonSmokeTest(unittest.TestCase):
                 "kassiber.daemon.core_resolve_wallet",
                 return_value={"id": "wallet-1"},
             ),
-            self.assertRaises(AppError) as raised,
+            mock.patch(
+                "kassiber.daemon.core_document_import.import_document_draft",
+                return_value={"draft_rows_imported": 1},
+            ) as import_draft,
         ):
-            daemon_module._document_import_import_payload(
-                object(),
-                "/tmp/data",
+            outcome = daemon_module._document_import_import_payload(
+                ctx,
                 {
+                    "document_token": preview_token,
                     "wallet": "wallet-1",
-                    "source_file": "/tmp/source.png",
-                    "rows": [],
+                    "selected_row_ids": ["docrow-aaaaaaaaaaaaaaaa-001"],
                 },
             )
-
-        self.assertEqual(raised.exception.code, "validation")
+        self.assertEqual(outcome["draft_rows_imported"], 1)
+        self.assertEqual(
+            import_draft.call_args.kwargs["rows"], authoritative_draft["rows"]
+        )
+        self.assertFalse(import_draft.call_args.kwargs["include_quarantined"])
+        self.assertEqual(
+            import_draft.call_args.kwargs["expected_source_sha256"], "a" * 64
+        )
+        with self.assertRaises(AppError) as consumed:
+            sessions.preview_for_import(
+                preview_token,
+                workspace_id="workspace-1",
+                profile_id="profile-1",
+                data_root="/data",
+            )
+        self.assertEqual(consumed.exception.code, "document_import_session_expired")
 
     def test_ai_tool_execution_rejects_tools_not_advertised_for_the_turn(self):
         runtime = AiToolRuntime(

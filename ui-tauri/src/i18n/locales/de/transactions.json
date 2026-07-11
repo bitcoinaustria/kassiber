@@ -226,7 +226,7 @@
     "title": "Foto/PDF-Import",
     "description": "Entwurf mit einem lokalen Loopback-Vision-Modell; vor dem Import prüfen.",
     "source": "Quelle",
-    "sourcePlaceholder": "/pfad/zum/beleg.pdf",
+    "sourcePlaceholder": "Lokales Bild oder PDF auswählen",
     "pick": "Wählen",
     "pickTitle": "Foto oder PDF wählen",
     "fileFilter": "Bilder und PDFs",

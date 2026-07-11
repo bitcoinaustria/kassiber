@@ -886,18 +886,18 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.wallets.document_import.preview") {
-      const args = (req.args ?? {}) as { source_file?: unknown };
-      const sourcePath =
-        typeof args.source_file === "string" && args.source_file
-          ? args.source_file
-          : "/tmp/receipt.png";
+      const args = (req.args ?? {}) as { document_token?: unknown };
+      const documentToken =
+        typeof args.document_token === "string" && args.document_token
+          ? args.document_token
+          : "mock-document-session";
       return {
         kind: "ui.wallets.document_import.preview",
         schema_version: 1,
         request_id: req.request_id,
         data: {
+          document_token: documentToken,
           source: {
-            path: sourcePath,
             filename: "receipt.png",
             media_type: "image/png",
             sha256: "mock",

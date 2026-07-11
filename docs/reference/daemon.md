@@ -459,27 +459,32 @@ The result also includes `matched`, `skipped_unmatched`, and
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full
 mode.
 
-`ui.wallets.document_import.preview` accepts `source_file`, optional
-`provider`, optional `model`, `confidence_threshold`, and `max_pages`. It is
-read-only, but it calls a local AI model, so the Tauri shell gates it through
-`AI_RUNTIME_KINDS`. The daemon rejects non-loopback or non-local providers and
-returns `document_import_model_missing` with Ollama model recommendations when
-no installed vision/OCR model is available. URL inputs are rejected; users
-should download Google Drive/Docs files through their logged-in browser and
-import the local file.
+The desktop first uses the privileged native picker to invoke
+`internal.document_import.stage`. That kind is supported by the Python daemon
+but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
+the canonical source path in a bounded, expiring, process-local daemon session
+and returns only an opaque `document_token` plus safe filename/type metadata.
 
-`ui.wallets.document_import.import` accepts `wallet`, a local `source_file`
-or preview `draft.source.path`, preview `rows` (or a full `draft` object),
-optional `selected_row_ids`, optional `include_quarantined`, and optional
-`attach_evidence` (default true). It imports only selected ready rows by
-default, then copies the source file into managed attachments for every
-inserted or enriched transaction. When a full preview draft is supplied, the
-daemon verifies `draft.source.sha256` against the current file before writing;
-a changed source fails with `document_import_source_changed`. The full preview
-draft (including its source hash) is required. Import reconstructs normalized
-records from validated visible draft fields rather than trusting the renderer's
-`import_record` object. Both preview and import use the long-running supervisor
-budget because local OCR and multi-row evidence copying can exceed 15 seconds.
+`ui.wallets.document_import.preview` accepts that `document_token`, optional
+`provider`, optional `model`, `confidence_threshold`, and `max_pages`. Raw path,
+draft, and row fields are rejected. It is read-only, but it calls a local AI
+model, so the Tauri shell gates it through `AI_RUNTIME_KINDS`. The daemon stores
+the normalized rows and source hash in a new immutable preview session and
+returns its fresh token; the renderer response omits the source path. A later
+preview therefore cannot change an already-reviewed snapshot. Non-loopback or non-local
+providers are rejected, and missing local vision/OCR models return
+`document_import_model_missing` with Ollama model recommendations.
+
+`ui.wallets.document_import.import` accepts `wallet`, `document_token`, and a
+required `selected_row_ids` list. It rejects raw paths, renderer drafts/rows,
+quarantined-row overrides, and attachment-policy overrides. Selected ids must
+belong to ready rows in the daemon-owned preview. The daemon verifies the
+stored source hash against the current file before writing, copies the source
+into managed attachments for every inserted or enriched transaction, and
+consumes the session only after a successful import. Both preview and import
+use the long-running supervisor budget because local OCR and multi-row evidence
+copying can exceed 15 seconds. A daemon restart, project switch, or expired
+session requires selecting and previewing the document again.
 OCR requests bypass ambient HTTP proxies and reject off-origin redirects. PDF
 rendering has a hard timeout; model ids match exact installed tags; preview and
 import cap row counts; and import hashes/copies a stable source snapshot.

@@ -331,7 +331,10 @@ kassiber wallets import-document --wallet WID --file receipt.png --model glm-ocr
 Recommended Ollama models are `glm-ocr`, `qwen3-vl:8b`,
 `qwen3-vl:4b`, `llama3.2-vision:11b`, and `minicpm-v:8b`.
 The desktop picker lists only configured local providers; remote providers are
-never offered for document extraction.
+never offered for document extraction. Desktop selection is capability-bound:
+the native picker stages the canonical path in a short-lived daemon session and
+the renderer receives only an opaque document token and display filename. Raw
+paths cannot be supplied to the desktop preview endpoint.
 
 The preview returns draft rows with `ready` / `quarantined` status,
 per-row and per-cell confidence, evidence text, source regions when the model
@@ -340,10 +343,12 @@ only ready rows unless `--include-quarantined` is passed, then copies the
 source image/PDF into the managed attachments tree for every inserted or
 enriched transaction. The preview carries a SHA-256 digest of the local source,
 and import rejects the draft if that file changed during preview or between
-review and commit. The daemon reconstructs import rows from validated draft
-fields and the required source hash; renderer-supplied hidden import records
-are never trusted on the write path. Fiat-only/generic amounts and unparseable
-dates stay quarantined instead of being guessed as Bitcoin transactions.
+review and commit. For the desktop flow, the normalized rows and source digest
+remain authoritative in the daemon session; import sends only the token and
+selected ready-row ids. Neither renderer-supplied drafts nor hidden import
+records are trusted on the write path. Fiat-only/generic amounts and
+unparseable dates stay quarantined instead of being guessed as Bitcoin
+transactions.
 
 Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in

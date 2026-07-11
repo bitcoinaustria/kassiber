@@ -226,7 +226,7 @@
     "title": "Photo/PDF Import",
     "description": "Draft rows with a loopback-only local vision model; review before import.",
     "source": "Source",
-    "sourcePlaceholder": "/path/to/receipt.pdf",
+    "sourcePlaceholder": "Choose a local image or PDF",
     "pick": "Pick",
     "pickTitle": "Choose photo or PDF",
     "fileFilter": "Images and PDFs",
