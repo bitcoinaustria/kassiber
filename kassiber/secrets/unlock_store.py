@@ -304,6 +304,8 @@ def refresh_remembered_passphrase_after_rotation(
             )
             marker_cleared = True
         except OSError:
+            # The rotation already succeeded. Report marker_cleared=False so
+            # callers can surface the non-fatal managed-settings failure.
             pass
     else:
         try:
@@ -315,6 +317,8 @@ def refresh_remembered_passphrase_after_rotation(
             marker_cleared = True
             legacy_quarantined = True
         except OSError:
+            # The rotation already succeeded. Report marker/quarantine state
+            # conservatively instead of turning cleanup into a rekey failure.
             pass
     return {
         "code": "remembered_unlock_update_failed",
