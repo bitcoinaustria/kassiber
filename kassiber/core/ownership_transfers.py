@@ -289,12 +289,16 @@ def derive_ownership_review_proofs(
         if _get(row, "direction") == "inbound" and int(_get(row, "amount") or 0) > 0:
             inbound_by_wallet.setdefault(str(_get(row, "wallet_id")), []).append(row)
         row_scope = onchain_transfer_scope(row)
-        legacy_review_key = (
-            "unscoped_review",
-            normalize_group_txid(str(_get(row, "external_id") or "")),
-            str(_get(row, "asset") or "").upper(),
+        legacy_external_id = normalize_group_txid(
+            str(_get(row, "external_id") or "")
         )
-        groups.setdefault(legacy_review_key, []).append(row)
+        if legacy_external_id:
+            legacy_review_key = (
+                "unscoped_review",
+                legacy_external_id,
+                str(_get(row, "asset") or "").upper(),
+            )
+            groups.setdefault(legacy_review_key, []).append(row)
         if row_scope is not None:
             groups.setdefault(("physical", *row_scope), []).append(row)
 
@@ -341,12 +345,17 @@ def derive_ownership_review_proofs(
                 continue
         elif reason == "owned_fanout_unresolved":
             source_scope = onchain_transfer_scope(source)
+            legacy_external_id = normalize_group_txid(
+                str(_get(source, "external_id") or "")
+            )
+            if source_scope is None and not legacy_external_id:
+                continue
             group_key = (
                 ("physical", *source_scope)
                 if source_scope is not None
                 else (
                     "unscoped_review",
-                    normalize_group_txid(str(_get(source, "external_id") or "")),
+                    legacy_external_id,
                     str(_get(source, "asset") or "").upper(),
                 )
             )

@@ -1290,6 +1290,19 @@ class OwnershipReviewProofTests(unittest.TestCase):
         self.assertTrue(all(proof.conflict_size == 1 for proof in proofs))
         self.assertTrue(all(proof.confidence == "strong" for proof in proofs))
 
+    def test_blank_external_ids_do_not_coalesce_review_groups(self):
+        rows = self._fanout_rows()
+        for row in rows:
+            row["external_id"] = ""
+
+        proofs = derive_ownership_review_proofs(
+            rows,
+            index=_index({}),
+            blocked_reasons_by_row_id={"a-out": "owned_fanout_unresolved"},
+        )
+
+        self.assertEqual(proofs, [])
+
     def test_existing_pair_suppresses_only_that_proof(self):
         proofs = derive_ownership_review_proofs(
             self._fanout_rows(),
