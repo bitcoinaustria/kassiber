@@ -1316,6 +1316,24 @@ def _persist_lnd_channel_records(
 ) -> None:
     for record in records:
         external_id = str(record["external_id"])
+        # Early lifecycle builds keyed LND rows only by tag + transaction id.
+        # Remove that obsolete identity before writing the channel-aware row or
+        # upgrades retain two records for the same physical open/close.
+        legacy_external_id = f"channel:{record['tag']}:{record['txid']}"
+        if legacy_external_id != external_id:
+            conn.execute(
+                """
+                DELETE FROM lightning_node_records
+                WHERE profile_id = ? AND wallet_id = ? AND backend_name = ?
+                  AND record_type = 'channel' AND external_id = ?
+                """,
+                (
+                    profile["id"],
+                    wallet["id"],
+                    backend["name"],
+                    legacy_external_id,
+                ),
+            )
         record_id = f"{wallet['id']}:{backend['name']}:channel:{external_id}"
         conn.execute(
             """

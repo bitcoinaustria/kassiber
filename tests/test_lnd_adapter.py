@@ -858,7 +858,7 @@ class LndTransactionImportTest(unittest.TestCase):
                 "local_funding_amount_sat": "100000",
             }
 
-            for network in ("regtest", "mainnet"):
+            for index, network in enumerate(("regtest", "mainnet")):
                 records = core_lnd.lnd_channel_records(
                     [channel], [], network=network
                 )
@@ -870,6 +870,16 @@ class LndTransactionImportTest(unittest.TestCase):
                     records,
                     "2026-01-01T00:00:00Z",
                 )
+                if index == 0:
+                    conn.execute(
+                        "UPDATE lightning_node_records SET id = ?, external_id = ? "
+                        "WHERE wallet_id = ? AND record_type = 'channel'",
+                        (
+                            "legacy-channel-row",
+                            f"channel:channel_open:{'aa' * 32}",
+                            wallet["id"],
+                        ),
+                    )
 
             row = conn.execute(
                 "SELECT raw_json FROM lightning_node_records"
@@ -879,6 +889,14 @@ class LndTransactionImportTest(unittest.TestCase):
             self.assertEqual(
                 json.loads(row["raw_json"]),
                 {"chain": "bitcoin", "network": "mainnet"},
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM lightning_node_records "
+                    "WHERE wallet_id = ? AND record_type = 'channel'",
+                    (wallet["id"],),
+                ).fetchone()[0],
+                1,
             )
             conn.close()
 
