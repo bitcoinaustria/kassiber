@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import hashlib
+from io import BytesIO
 import json
 import tarfile
 import tempfile
 import time
 import unittest
+import unittest.mock as mock
 import uuid
 from pathlib import Path
 
 from kassiber.cli.handlers import process_journals
 from kassiber.core.accounts import create_profile, create_workspace
-from kassiber.core.sync_replication.bundle import _membership_catalog, build_bundle, parse_bundle
+from kassiber.core.sync_replication.bundle import (
+    MAX_SYNC_SEQUENCE,
+    _membership_catalog,
+    build_bundle,
+    parse_bundle,
+)
 from kassiber.core.sync_replication.capture import (
     authored_state_digest,
     capture_full_snapshot,
@@ -29,6 +36,8 @@ from kassiber.core.sync_replication.membership import (
 from kassiber.core.sync_replication.merge import (
     _event_role_rejection,
     _merge_membership_catalog,
+    _normalize_snapshot_base,
+    _validate_bundle_event_range,
     import_bundle,
 )
 from kassiber.core.transaction_history import append_event
@@ -37,6 +46,245 @@ from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import sqlcipher_available
 from kassiber.time_utils import now_iso
+
+
+class BundleParserValidationTests(unittest.TestCase):
+    @staticmethod
+    def _plaintext_bundle(
+        manifest,
+        *,
+        events_bytes: bytes = b"",
+        blobs: dict[str, bytes] | None = None,
+        mode: str = "w",
+    ) -> bytes:
+        output = BytesIO()
+        with tarfile.open(fileobj=output, mode=mode) as archive:
+            entries = [
+                ("manifest.json", json.dumps(manifest).encode("utf-8")),
+                ("events.jsonl", events_bytes),
+            ]
+            entries.extend((f"blobs/{name}", payload) for name, payload in (blobs or {}).items())
+            for name, payload in entries:
+                info = tarfile.TarInfo(name)
+                info.size = len(payload)
+                archive.addfile(info, BytesIO(payload))
+        return output.getvalue()
+
+    def _parse_plaintext(self, plaintext: bytes):
+        def decrypt(_source, destination, **_kwargs):
+            destination.write(plaintext)
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.decrypt_age_stream",
+            side_effect=decrypt,
+        ):
+            return parse_bundle(b"age-ciphertext", age_identity="AGE-SECRET-KEY-test")
+
+    def _parse_manifest(self, manifest, *, events_bytes: bytes = b""):
+        return self._parse_plaintext(
+            self._plaintext_bundle(manifest, events_bytes=events_bytes)
+        )
+
+    @staticmethod
+    def _baseline_manifest(*, blob_hmacs: list[str] | None = None) -> dict:
+        return {
+            "schema_version": 1,
+            "events_sha256": hashlib.sha256(b"").hexdigest(),
+            "event_count": 0,
+            "first_seq": 0,
+            "last_seq": 0,
+            "version_vector": {},
+            "blob_hmacs": blob_hmacs or [],
+        }
+
+    def test_manifest_requires_object_and_typed_inventory_fields(self):
+        for malformed in ([], None, True, "manifest"):
+            with self.subTest(manifest=malformed), self.assertRaises(AppError) as raised:
+                self._parse_manifest(malformed)
+            self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        baseline = self._baseline_manifest()
+        for field, malformed in (
+            ("schema_version", True),
+            ("event_count", True),
+            ("event_count", "0"),
+            ("first_seq", True),
+            ("first_seq", "0"),
+            ("last_seq", 2**63),
+            ("version_vector", []),
+            ("version_vector", {"replica": True}),
+            ("blob_hmacs", {}),
+            ("blob_hmacs", [1]),
+        ):
+            with self.subTest(field=field, malformed=malformed):
+                manifest = baseline | {field: malformed}
+                with self.assertRaises(AppError) as raised:
+                    self._parse_manifest(manifest)
+                self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        parsed = self._parse_manifest(baseline)
+        self.assertEqual(parsed.events, ())
+
+        for malformed_seq in ({"nested": 1}, True, None, "1", 2**63):
+            with self.subTest(replica_seq=malformed_seq):
+                event = {"replica_seq": malformed_seq}
+                events_bytes = json.dumps(event).encode("utf-8") + b"\n"
+                manifest = baseline | {
+                    "events_sha256": hashlib.sha256(events_bytes).hexdigest(),
+                    "event_count": 1,
+                    "first_seq": 1,
+                    "last_seq": 1,
+                }
+                with self.assertRaises(AppError) as raised:
+                    self._parse_manifest(manifest, events_bytes=events_bytes)
+                self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+    def test_parser_rejects_compressed_tar_and_decrypted_size_overflow(self):
+        compressed = self._plaintext_bundle(self._baseline_manifest(), mode="w:gz")
+        with self.assertRaises(AppError) as raised:
+            self._parse_plaintext(compressed)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_PLAINTEXT_BYTES",
+            64,
+        ):
+            with self.assertRaises(AppError) as raised:
+                self._parse_plaintext(b"x" * 65)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+    def test_parser_bounds_aggregate_payload_and_tar_member_count(self):
+        blobs = {"first": b"a" * 128, "second": b"b" * 128}
+        manifest = self._baseline_manifest(blob_hmacs=list(blobs))
+        plaintext = self._plaintext_bundle(manifest, blobs=blobs)
+        member_sizes = [
+            len(json.dumps(manifest).encode("utf-8")),
+            0,
+            *(len(payload) for payload in blobs.values()),
+        ]
+        aggregate_limit = max(member_sizes) + 1
+        self.assertGreater(sum(member_sizes), aggregate_limit)
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EXTRACTED_BYTES",
+            aggregate_limit,
+        ):
+            with self.assertRaises(AppError) as raised:
+                self._parse_plaintext(plaintext)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_MEMBERS",
+            3,
+        ):
+            with self.assertRaises(AppError) as raised:
+                self._parse_plaintext(plaintext)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+    def test_parser_bounds_event_count_stream_and_individual_line_before_json(self):
+        event = {"replica_seq": 1}
+        events_bytes = json.dumps(event).encode("utf-8") + b"\n"
+        manifest = self._baseline_manifest() | {
+            "events_sha256": hashlib.sha256(events_bytes).hexdigest(),
+            "event_count": 1,
+            "first_seq": 1,
+            "last_seq": 1,
+        }
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EVENTS",
+            0,
+        ):
+            with self.assertRaises(AppError) as raised:
+                self._parse_manifest(manifest, events_bytes=events_bytes)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EVENT_STREAM_BYTES",
+            len(events_bytes) - 1,
+        ):
+            with self.assertRaises(AppError) as raised:
+                self._parse_manifest(manifest, events_bytes=events_bytes)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EVENT_LINE_BYTES",
+            len(events_bytes.rstrip(b"\n")) - 1,
+        ):
+            with self.assertRaises(AppError) as raised:
+                self._parse_manifest(manifest, events_bytes=events_bytes)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        blank_lines = b"\n\n"
+        blank_manifest = self._baseline_manifest() | {
+            "events_sha256": hashlib.sha256(blank_lines).hexdigest(),
+        }
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EVENTS",
+            1,
+        ):
+            with self.assertRaises(AppError) as raised:
+                self._parse_manifest(blank_manifest, events_bytes=blank_lines)
+        self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+    def test_extreme_sequence_gap_is_rejected_without_materializing_the_range(self):
+        events = (
+            {"replica_id": "replica", "replica_seq": 1},
+            {"replica_id": "replica", "replica_seq": MAX_SYNC_SEQUENCE},
+        )
+        with self.assertRaises(AppError) as raised:
+            _validate_bundle_event_range(
+                events,
+                sender="replica",
+                first_seq=1,
+                last_seq=MAX_SYNC_SEQUENCE,
+            )
+        self.assertEqual(raised.exception.code, "sync_bundle_tampered")
+
+    def test_snapshot_checkpoint_sequence_rejects_bool_and_out_of_range_values(self):
+        replicas = {"replica": object()}
+        valid = {
+            "replica": {
+                "last_seq": 0,
+                "last_hlc": None,
+                "last_event_hash": None,
+            }
+        }
+        self.assertEqual(_normalize_snapshot_base(valid, replicas), valid)
+        for malformed_seq in (True, -1, MAX_SYNC_SEQUENCE + 1):
+            with self.subTest(last_seq=malformed_seq):
+                malformed = {
+                    "replica": valid["replica"] | {"last_seq": malformed_seq}
+                }
+                with self.assertRaises(AppError) as raised:
+                    _normalize_snapshot_base(malformed, replicas)
+                self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+    def test_snapshot_checkpoint_rejects_malformed_clock_and_hash_types(self):
+        replicas = {"replica": object()}
+        valid = {
+            "replica": {
+                "last_seq": 1,
+                "last_hlc": "0000000000000001:0000000000:replica",
+                "last_event_hash": "a" * 64,
+            }
+        }
+        self.assertEqual(_normalize_snapshot_base(valid, replicas), valid)
+        for field, malformed in (
+            ("last_hlc", 1),
+            ("last_hlc", "not-an-hlc"),
+            ("last_hlc", "0000000000000001:0000000000:another-replica"),
+            ("last_event_hash", {"nested": 1}),
+            ("last_event_hash", 1),
+            ("last_event_hash", "a" * 63),
+            ("last_event_hash", "g" * 64),
+        ):
+            with self.subTest(field=field, malformed=malformed):
+                malformed_checkpoint = {
+                    "replica": valid["replica"] | {field: malformed}
+                }
+                with self.assertRaises(AppError) as raised:
+                    _normalize_snapshot_base(malformed_checkpoint, replicas)
+                self.assertEqual(raised.exception.code, "sync_bundle_invalid")
 
 
 @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
@@ -189,6 +437,46 @@ class SyncBundleReplayTests(unittest.TestCase):
             ),
         )
         return wallet_id, tx_id, attachment_id, content
+
+    def test_incremental_bundles_chunk_at_event_limit_but_snapshot_rejects_truncation(self):
+        self.owner.execute(
+            "UPDATE profiles SET label = 'Chunk me' WHERE id = ?",
+            (self.profile["id"],),
+        )
+        self.owner.execute(
+            "UPDATE workspaces SET label = 'Chunk workspace' WHERE id = ?",
+            (self.workspace["id"],),
+        )
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EVENTS",
+            1,
+        ):
+            first = build_bundle(
+                self.owner,
+                profile_id=self.profile["id"],
+                attachments_root=self.attachments_a,
+            )
+            second = build_bundle(
+                self.owner,
+                profile_id=self.profile["id"],
+                attachments_root=self.attachments_a,
+            )
+        self.assertEqual(first.event_count, 1)
+        self.assertIsNotNone(second)
+        self.assertEqual(second.event_count, 1)
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EVENTS",
+            1,
+        ):
+            with self.assertRaises(AppError) as raised:
+                build_bundle(
+                    self.owner,
+                    profile_id=self.profile["id"],
+                    attachments_root=self.attachments_a,
+                    snapshot=True,
+                )
+        self.assertEqual(raised.exception.code, "sync_bundle_too_large")
 
     def test_sealed_allowlisted_bundle_round_trips_attachment_without_plaintext_leaks(self):
         self._join_peer("editor")

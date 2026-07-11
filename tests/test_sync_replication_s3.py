@@ -13,16 +13,20 @@ from urllib.error import HTTPError
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.sync_replication.identity import enable_sync
 from kassiber.core.sync_replication.mailbox import (
+    _bundle_key_parts,
+    _sign_head,
     mailbox_head_key,
     mailbox_status,
     pull_mailbox,
     push_mailbox,
 )
+from kassiber.core.sync_replication import transports as transports_module
 from kassiber.core.sync_replication.membership import (
     create_invitation,
     create_join_request,
     join_invitation,
 )
+from kassiber.core.sync_replication import membership as membership_module
 from kassiber.core.sync_replication.transports import (
     FolderTransport,
     S3Transport,
@@ -94,6 +98,121 @@ class TransportAdapterTests(unittest.TestCase):
                 username="alice",
                 password="secret",
             )
+
+        with self.assertRaisesRegex(AppError, "cannot use a proxy") as proxied:
+            WebDavTransport(
+                base_url="http://127.0.0.1:8080/mail/",
+                username="alice",
+                password="secret",
+                proxy_url="http://proxy.example:8080",
+            )
+        self.assertEqual(proxied.exception.code, "sync_transport_insecure")
+
+    def test_remote_transport_reads_and_list_responses_are_bounded(self):
+        oversized = b"x" * 9
+
+        webdav = WebDavTransport(
+            base_url="https://storage.example/mail/",
+            opener=lambda _request, timeout: _Response(oversized),
+        )
+        with self.assertRaises(AppError) as webdav_object:
+            webdav.get("book/one.age", max_bytes=8)
+        self.assertEqual(
+            webdav_object.exception.code,
+            "sync_transport_object_too_large",
+        )
+        with (
+            mock.patch.object(transports_module, "_MAX_LIST_RESPONSE_BYTES", 8),
+            self.assertRaises(AppError) as webdav_list,
+        ):
+            webdav.list("book")
+        self.assertEqual(webdav_list.exception.code, "sync_transport_object_too_large")
+
+        s3 = S3Transport(
+            endpoint="https://s3.example",
+            bucket="bucket",
+            region="eu-central-1",
+            access_key="ACCESS",
+            secret_key="SECRET",
+            opener=lambda _request, timeout: _Response(oversized),
+        )
+        with self.assertRaises(AppError) as s3_object:
+            s3.get("book/one.age", max_bytes=8)
+        self.assertEqual(s3_object.exception.code, "sync_transport_object_too_large")
+        with (
+            mock.patch.object(transports_module, "_MAX_LIST_RESPONSE_BYTES", 8),
+            self.assertRaises(AppError) as s3_list,
+        ):
+            s3.list("book")
+        self.assertEqual(s3_list.exception.code, "sync_transport_object_too_large")
+
+        pages = []
+
+        def paginated(_request, timeout):
+            pages.append(timeout)
+            return _Response(
+                b"<ListBucketResult><IsTruncated>true</IsTruncated>"
+                + f"<NextContinuationToken>next-{len(pages)}</NextContinuationToken>".encode()
+                + b"</ListBucketResult>"
+            )
+
+        paginated_s3 = S3Transport(
+            endpoint="https://s3.example",
+            bucket="bucket",
+            region="eu-central-1",
+            access_key="ACCESS",
+            secret_key="SECRET",
+            opener=paginated,
+        )
+        with (
+            mock.patch.object(transports_module, "_MAX_LIST_TOTAL_BYTES", 160),
+            self.assertRaisesRegex(AppError, "aggregate size limit") as aggregate,
+        ):
+            paginated_s3.list("book")
+        self.assertEqual(aggregate.exception.code, "sync_transport_invalid")
+
+    def test_mailbox_bundle_names_reject_sequences_above_sqlite_range(self):
+        maximum = (1 << 63) - 1
+        valid = f"{maximum:020d}-{maximum:020d}-{'a' * 64}.age"
+        self.assertEqual(_bundle_key_parts(valid)[1:3], (maximum, maximum))
+        oversized = f"{1 << 63:020d}-{1 << 63:020d}-{'a' * 64}.age"
+        with self.assertRaises(AppError) as raised:
+            _bundle_key_parts(oversized)
+        self.assertEqual(raised.exception.code, "sync_mailbox_bundle_tampered")
+
+    def test_webdav_list_decodes_keys_once_and_rejects_encoded_separators(self):
+        requests = []
+
+        def opener(request, timeout):
+            requests.append(request)
+            if request.method == "PROPFIND":
+                return _Response(
+                    b'<?xml version="1.0"?><multistatus xmlns="DAV:">'
+                    b'<response><href>/mail/book/a%20b</href></response>'
+                    b'<response><href>/mail/book/caf%C3%A9</href></response>'
+                    b'<response><href>/mail/book/percent%25value</href></response>'
+                    b'</multistatus>'
+                )
+            return _Response(b"payload")
+
+        transport = WebDavTransport(base_url="https://storage.example/mail/", opener=opener)
+        keys = transport.list("book")
+        self.assertEqual(keys, ["book/a b", "book/café", "book/percent%value"])
+        for key in keys:
+            transport.get(key)
+        get_urls = [request.full_url for request in requests if request.method == "GET"]
+        self.assertTrue(any(url.endswith("/book/a%20b") for url in get_urls))
+        self.assertFalse(any("%2520" in url for url in get_urls))
+
+        def unsafe_listing(request, timeout):
+            return _Response(
+                b'<?xml version="1.0"?><multistatus xmlns="DAV:">'
+                b'<response><href>/mail/book/a%2Fb</href></response></multistatus>'
+            )
+
+        unsafe = WebDavTransport(base_url="https://storage.example/mail/", opener=unsafe_listing)
+        with self.assertRaisesRegex(AppError, "unsafe"):
+            unsafe.list("book")
 
     def test_webdav_retries_429_with_retry_after_and_bounds_503(self):
         attempts = []
@@ -181,6 +300,26 @@ class TransportAdapterTests(unittest.TestCase):
         self.assertIn("AWS4-HMAC-SHA256", request.headers["Authorization"])
         self.assertNotIn("TOP-SECRET", request.headers["Authorization"])
         self.assertNotIn("TOP-SECRET", request.full_url)
+
+    def test_s3_requires_https_except_on_loopback(self):
+        common = {
+            "bucket": "bucket",
+            "region": "eu-central-1",
+            "access_key": "ACCESS",
+            "secret_key": "SECRET",
+        }
+        with self.assertRaisesRegex(AppError, "require HTTPS") as raised:
+            S3Transport(endpoint="http://s3.example", **common)
+        self.assertEqual(raised.exception.code, "sync_transport_insecure")
+        S3Transport(endpoint="https://s3.example", **common)
+        S3Transport(endpoint="http://127.0.0.1:9000", **common)
+        with self.assertRaisesRegex(AppError, "cannot use a proxy") as proxied:
+            S3Transport(
+                endpoint="http://127.0.0.1:9000",
+                proxy_url="http://proxy.example:8080",
+                **common,
+            )
+        self.assertEqual(proxied.exception.code, "sync_transport_insecure")
 
     def test_plaintext_profile_cannot_store_transport_credentials(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -298,6 +437,52 @@ class MailboxEndToEndTests(unittest.TestCase):
         status = mailbox_status(self.owner, profile_id=self.profile_id)
         self.assertEqual(status["transports"][0]["peers"][0]["status"], "fresh")
 
+    def test_known_bundle_hash_is_skipped_before_a_renamed_object_is_downloaded(self):
+        pushed = push_mailbox(
+            self.owner,
+            profile_id=self.profile_id,
+            transport_id=self.owner_transport["id"],
+        )
+        pull_mailbox(
+            self.peer,
+            profile_id=self.profile_id,
+            transport_id=self.peer_transport["id"],
+        )
+        original = self.mailbox_root / pushed.object_key
+        maximum = (1 << 63) - 1
+        renamed = original.with_name(
+            f"{maximum:020d}-{maximum:020d}-{pushed.bundle_hash}.age"
+        )
+        renamed.write_bytes(original.read_bytes())
+
+        class CountingFolderTransport:
+            def __init__(self, root):
+                self.inner = FolderTransport(root)
+                self.bundle_gets = 0
+
+            def put(self, key, payload, *, if_absent=False):
+                return self.inner.put(key, payload, if_absent=if_absent)
+
+            def get(self, key, *, max_bytes=None):
+                if key.endswith(".age"):
+                    self.bundle_gets += 1
+                return self.inner.get(key, max_bytes=max_bytes)
+
+            def list(self, prefix):
+                return self.inner.list(prefix)
+
+            def exists(self, key):
+                return self.inner.exists(key)
+
+        transport = CountingFolderTransport(self.mailbox_root)
+        pull_mailbox(
+            self.peer,
+            profile_id=self.profile_id,
+            transport_id=self.peer_transport["id"],
+            transport_override=transport,
+        )
+        self.assertEqual(transport.bundle_gets, 0)
+
     def test_replayed_head_observation_does_not_hide_staleness(self):
         push_mailbox(
             self.owner,
@@ -346,8 +531,14 @@ class MailboxEndToEndTests(unittest.TestCase):
                     raise AppError("collision", code="sync_mailbox_collision")
                 self.objects[key] = payload
 
-            def get(self, key):
-                return self.objects[key]
+            def get(self, key, *, max_bytes=None):
+                payload = self.objects[key]
+                if max_bytes is not None and len(payload) > max_bytes:
+                    raise AppError(
+                        "object too large",
+                        code="sync_transport_object_too_large",
+                    )
+                return payload
 
             def list(self, prefix):
                 return sorted(key for key in self.objects if key.startswith(prefix))
@@ -447,6 +638,98 @@ class MailboxEndToEndTests(unittest.TestCase):
                 transport_id=self.peer_transport["id"],
             )
 
+    def test_signed_head_rejects_malformed_sequence_types_with_typed_error(self):
+        pushed = push_mailbox(
+            self.owner,
+            profile_id=self.profile_id,
+            transport_id=self.owner_transport["id"],
+        )
+        book = self.owner.execute(
+            "SELECT * FROM sync_books WHERE profile_id = ?", (self.profile_id,)
+        ).fetchone()
+        head_path = self.mailbox_root / pushed.head_key
+        original = json.loads(head_path.read_text())
+        for malformed in ({"nested": 1}, True, None, -1, "1"):
+            with self.subTest(malformed=malformed):
+                core = {
+                    key: value
+                    for key, value in original.items()
+                    if key not in {"head_hash", "signature"}
+                }
+                core["first_seq"] = malformed
+                head_path.write_bytes(_sign_head(self.owner, book=book, core=core))
+                with self.assertRaises(AppError) as raised:
+                    pull_mailbox(
+                        self.peer,
+                        profile_id=self.profile_id,
+                        transport_id=self.peer_transport["id"],
+                    )
+                self.assertEqual(raised.exception.code, "sync_mailbox_head_invalid")
+
+        for created_at in (
+            "0001-01-01T00:00:00+23:59",
+            "9999-12-31T23:59:59-23:59",
+        ):
+            with self.subTest(created_at=created_at):
+                core = {
+                    key: value
+                    for key, value in original.items()
+                    if key not in {"head_hash", "signature"}
+                }
+                core["created_at"] = created_at
+                head_path.write_bytes(_sign_head(self.owner, book=book, core=core))
+                with self.assertRaises(AppError) as raised:
+                    pull_mailbox(
+                        self.peer,
+                        profile_id=self.profile_id,
+                        transport_id=self.peer_transport["id"],
+                    )
+                self.assertEqual(raised.exception.code, "sync_mailbox_head_invalid")
+
+        core = {
+            key: value
+            for key, value in original.items()
+            if key not in {"head_hash", "signature"}
+        }
+        core["first_seq"] = 2**63
+        core["last_seq"] = 2**63
+        head_path.write_bytes(_sign_head(self.owner, book=book, core=core))
+        with self.assertRaises(AppError) as raised:
+            pull_mailbox(
+                self.peer,
+                profile_id=self.profile_id,
+                transport_id=self.peer_transport["id"],
+            )
+        self.assertEqual(raised.exception.code, "sync_mailbox_head_invalid")
+
+    def test_invitation_decryption_output_and_ciphertext_are_bounded(self):
+        request = create_join_request(
+            self.peer, member_name="Second editor", device_label="Second peer"
+        )
+
+        def oversized_plaintext(_source, destination, **_kwargs):
+            destination.write(b"x" * (membership_module._MAX_INVITATION_ENVELOPE_BYTES + 1))
+
+        with mock.patch(
+            "kassiber.core.sync_replication.membership.decrypt_age_stream",
+            side_effect=oversized_plaintext,
+        ):
+            with self.assertRaises(AppError) as raised:
+                join_invitation(
+                    self.peer,
+                    request_id=request["request_id"],
+                    ciphertext=b"bounded-ciphertext",
+                )
+        self.assertEqual(raised.exception.code, "sync_invitation_invalid")
+
+        with self.assertRaises(AppError) as raised:
+            join_invitation(
+                self.peer,
+                request_id=request["request_id"],
+                ciphertext=b"x" * (membership_module._MAX_INVITATION_CIPHERTEXT_BYTES + 1),
+            )
+        self.assertEqual(raised.exception.code, "sync_invitation_invalid")
+
     def test_owner_snapshot_bootstraps_new_recipient_past_old_ciphertext(self):
         # This setup already invited the peer, so create a third device only
         # after an incremental bundle has been sealed to the first two.
@@ -521,3 +804,27 @@ class MailboxEndToEndTests(unittest.TestCase):
         self.assertNotIn("alice", serialized)
         self.assertNotIn("private/path", serialized)
         self.assertTrue(configured["credentials_configured"])
+
+    def test_webdav_configuration_rejects_plain_http_proxy_before_storage(self):
+        before = self.owner.execute(
+            "SELECT COUNT(*) FROM sync_transports WHERE profile_id = ?",
+            (self.profile_id,),
+        ).fetchone()[0]
+        with self.assertRaises(AppError) as raised:
+            configure_transport(
+                self.owner,
+                profile_id=self.profile_id,
+                kind="webdav",
+                label="Unsafe proxy",
+                config={
+                    "url": "http://127.0.0.1:8080/mail/",
+                    "proxy": "http://proxy.example:8080",
+                },
+                credentials={"username": "alice", "password": "secret"},
+            )
+        self.assertEqual(raised.exception.code, "sync_transport_insecure")
+        after = self.owner.execute(
+            "SELECT COUNT(*) FROM sync_transports WHERE profile_id = ?",
+            (self.profile_id,),
+        ).fetchone()[0]
+        self.assertEqual(after, before)

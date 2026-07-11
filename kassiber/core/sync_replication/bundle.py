@@ -28,6 +28,14 @@ BUNDLE_EVENTS_NAME = "events.jsonl"
 BUNDLE_BLOBS_DIR = "blobs"
 BUNDLE_ALLOWED_TOP_LEVEL = (BUNDLE_MANIFEST_NAME, BUNDLE_EVENTS_NAME, BUNDLE_BLOBS_DIR)
 MAX_BUNDLE_BYTES = 512 * 1024 * 1024
+MAX_BUNDLE_PLAINTEXT_BYTES = MAX_BUNDLE_BYTES
+MAX_BUNDLE_EXTRACTED_BYTES = MAX_BUNDLE_BYTES
+MAX_BUNDLE_MEMBERS = 10_000
+MAX_BUNDLE_EVENTS = 10_000
+MAX_BUNDLE_MANIFEST_BYTES = 1024 * 1024
+MAX_BUNDLE_EVENT_STREAM_BYTES = 64 * 1024 * 1024
+MAX_BUNDLE_EVENT_LINE_BYTES = 1024 * 1024
+MAX_SYNC_SEQUENCE = (1 << 63) - 1
 _PYRAGE_BACKEND = AgeBackend(flavor="pyrage")
 
 
@@ -48,6 +56,28 @@ class ParsedBundle:
     manifest: Mapping[str, Any]
     events: tuple[Mapping[str, Any], ...]
     blobs: Mapping[str, bytes]
+
+
+class _BoundedBytesIO(BytesIO):
+    """BytesIO sink that refuses to retain more than a fixed byte budget."""
+
+    def __init__(self, max_bytes: int) -> None:
+        super().__init__()
+        self._max_bytes = max_bytes
+        self._bytes_written = 0
+
+    def write(self, payload) -> int:
+        payload_size = len(payload)
+        if self._bytes_written + payload_size > self._max_bytes:
+            raise AppError(
+                "decrypted sync bundle exceeds the maximum size",
+                code="sync_bundle_invalid",
+                details={"max_bytes": self._max_bytes},
+                retryable=False,
+            )
+        written = super().write(payload)
+        self._bytes_written += written
+        return written
 
 
 def _event_from_row(row) -> dict[str, Any]:
@@ -207,18 +237,33 @@ def _build_plaintext_tar(
     events_bytes: bytes,
     blobs: Mapping[str, bytes],
 ) -> bytes:
+    manifest_bytes = canonical_json_bytes(manifest)
+    if len(manifest_bytes) > MAX_BUNDLE_MANIFEST_BYTES:
+        raise AppError(
+            "sync bundle manifest exceeds the maximum size",
+            code="sync_bundle_too_large",
+            details={"max_bytes": MAX_BUNDLE_MANIFEST_BYTES},
+            retryable=False,
+        )
+    if len(events_bytes) > MAX_BUNDLE_EVENT_STREAM_BYTES:
+        raise AppError(
+            "sync event stream exceeds the maximum size",
+            code="sync_bundle_too_large",
+            details={"max_bytes": MAX_BUNDLE_EVENT_STREAM_BYTES},
+            retryable=False,
+        )
     output = BytesIO()
     with tarfile.open(fileobj=output, mode="w") as tar:
-        _tar_add_bytes(tar, BUNDLE_MANIFEST_NAME, canonical_json_bytes(manifest))
+        _tar_add_bytes(tar, BUNDLE_MANIFEST_NAME, manifest_bytes)
         _tar_add_bytes(tar, BUNDLE_EVENTS_NAME, events_bytes)
         for content_hmac, payload in sorted(blobs.items()):
             _tar_add_bytes(tar, f"{BUNDLE_BLOBS_DIR}/{content_hmac}", payload)
     plaintext = output.getvalue()
-    if len(plaintext) > MAX_BUNDLE_BYTES:
+    if len(plaintext) > MAX_BUNDLE_PLAINTEXT_BYTES:
         raise AppError(
             "sync bundle exceeds the maximum size",
             code="sync_bundle_too_large",
-            details={"max_bytes": MAX_BUNDLE_BYTES},
+            details={"max_bytes": MAX_BUNDLE_PLAINTEXT_BYTES},
             retryable=False,
         )
     return plaintext
@@ -281,13 +326,58 @@ def build_bundle(
         SELECT * FROM sync_events
         WHERE profile_id = ? AND replica_id = ? AND replica_seq > ?
         ORDER BY replica_seq
+        LIMIT ?
         """,
-        (profile_id, book["local_replica_id"], after_seq),
+        (
+            profile_id,
+            book["local_replica_id"],
+            after_seq,
+            MAX_BUNDLE_EVENTS + 1,
+        ),
     ).fetchall()
     if not rows:
         return None
-    events = [_event_from_row(row) for row in rows]
-    events_bytes = b"".join(canonical_json_bytes(event) + b"\n" for event in events)
+    exceeds_event_limit = len(rows) > MAX_BUNDLE_EVENTS
+    candidate_rows = rows[:MAX_BUNDLE_EVENTS]
+    selected_rows = []
+    events: list[dict[str, Any]] = []
+    event_lines: list[bytes] = []
+    event_stream_bytes = 0
+    for row in candidate_rows:
+        event = _event_from_row(row)
+        line = canonical_json_bytes(event) + b"\n"
+        if len(line) > MAX_BUNDLE_EVENT_LINE_BYTES:
+            raise AppError(
+                "sync event exceeds the maximum size",
+                code="sync_bundle_too_large",
+                details={"max_bytes": MAX_BUNDLE_EVENT_LINE_BYTES},
+                retryable=False,
+            )
+        if event_stream_bytes + len(line) > MAX_BUNDLE_EVENT_STREAM_BYTES:
+            break
+        selected_rows.append(row)
+        events.append(event)
+        event_lines.append(line)
+        event_stream_bytes += len(line)
+    if snapshot and (exceeds_event_limit or len(selected_rows) != len(candidate_rows)):
+        raise AppError(
+            "snapshot bundle cannot fit all captured events",
+            code="sync_bundle_too_large",
+            details={
+                "max_events": MAX_BUNDLE_EVENTS,
+                "max_event_bytes": MAX_BUNDLE_EVENT_STREAM_BYTES,
+            },
+            retryable=False,
+        )
+    if not selected_rows:
+        raise AppError(
+            "sync event stream exceeds the maximum size",
+            code="sync_bundle_too_large",
+            details={"max_bytes": MAX_BUNDLE_EVENT_STREAM_BYTES},
+            retryable=False,
+        )
+    rows = selected_rows
+    events_bytes = b"".join(event_lines)
     blobs = _referenced_blobs(events, attachments_root)
     recipients = [
         row["recipient_public_key"]
@@ -391,7 +481,7 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
             code="sync_bundle_invalid",
             retryable=False,
         )
-    plaintext = BytesIO()
+    plaintext = _BoundedBytesIO(MAX_BUNDLE_PLAINTEXT_BYTES)
     try:
         decrypt_age_stream(
             BytesIO(ciphertext),
@@ -410,20 +500,72 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
 
     entries: dict[str, bytes] = {}
     try:
-        with tarfile.open(fileobj=BytesIO(plaintext.getvalue()), mode="r:*") as tar:
-            members = tar.getmembers()
-            inspect_tar_members(
+        plaintext.seek(0)
+        with tarfile.open(fileobj=plaintext, mode="r:") as tar:
+            members: list[tarfile.TarInfo] = []
+            declared_bytes = 0
+            for member in tar:
+                if len(members) >= MAX_BUNDLE_MEMBERS:
+                    raise AppError(
+                        "sync bundle contains too many tar members",
+                        code="sync_bundle_invalid",
+                        details={"max_members": MAX_BUNDLE_MEMBERS},
+                        retryable=False,
+                    )
+                members.append(member)
+                if member.isfile():
+                    if member.size < 0:
+                        raise AppError(
+                            "sync bundle member has an invalid size",
+                            code="sync_bundle_invalid",
+                            retryable=False,
+                        )
+                    declared_bytes += member.size
+                    if declared_bytes > MAX_BUNDLE_EXTRACTED_BYTES:
+                        raise AppError(
+                            "sync bundle extracted payload exceeds the maximum size",
+                            code="sync_bundle_invalid",
+                            details={"max_bytes": MAX_BUNDLE_EXTRACTED_BYTES},
+                            retryable=False,
+                        )
+            sanitized = inspect_tar_members(
                 members,
                 allowed_top_level=BUNDLE_ALLOWED_TOP_LEVEL,
-                max_member_bytes=MAX_BUNDLE_BYTES,
+                max_member_bytes=MAX_BUNDLE_EXTRACTED_BYTES,
             )
-            for member in members:
-                if not member.isfile():
+            for member, clean in zip(members, sanitized):
+                if not clean.isfile():
                     continue
+                if (
+                    clean.name == BUNDLE_MANIFEST_NAME
+                    and clean.size > MAX_BUNDLE_MANIFEST_BYTES
+                ):
+                    raise AppError(
+                        "sync bundle manifest exceeds the maximum size",
+                        code="sync_bundle_invalid",
+                        details={"max_bytes": MAX_BUNDLE_MANIFEST_BYTES},
+                        retryable=False,
+                    )
+                if (
+                    clean.name == BUNDLE_EVENTS_NAME
+                    and clean.size > MAX_BUNDLE_EVENT_STREAM_BYTES
+                ):
+                    raise AppError(
+                        "sync event stream exceeds the maximum size",
+                        code="sync_bundle_invalid",
+                        details={"max_bytes": MAX_BUNDLE_EVENT_STREAM_BYTES},
+                        retryable=False,
+                    )
                 extracted = tar.extractfile(member)
                 if extracted is None:
                     raise AppError("sync bundle member could not be read", code="sync_bundle_invalid")
-                entries[member.name.lstrip("./")] = extracted.read()
+                payload = extracted.read(clean.size + 1)
+                if len(payload) != clean.size:
+                    raise AppError(
+                        "sync bundle member size does not match its tar header",
+                        code="sync_bundle_invalid",
+                    )
+                entries[clean.name] = payload
     except AppError:
         raise
     except Exception as exc:
@@ -441,8 +583,12 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
         )
     try:
         manifest = json.loads(entries[BUNDLE_MANIFEST_NAME].decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise AppError("sync manifest is invalid", code="sync_bundle_invalid") from exc
+    if not isinstance(manifest, dict):
+        raise AppError("sync manifest must be a JSON object", code="sync_bundle_invalid")
+    if type(manifest.get("schema_version")) is not int:
+        raise AppError("sync manifest schema version is invalid", code="sync_bundle_invalid")
     if manifest.get("schema_version") != BUNDLE_SCHEMA_VERSION:
         raise AppError(
             "sync bundle schema version is not supported",
@@ -457,13 +603,49 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
             code="sync_bundle_tampered",
             retryable=False,
         )
+    event_count = manifest.get("event_count")
+    if (
+        type(event_count) is not int
+        or event_count < 0
+        or event_count > MAX_BUNDLE_EVENTS
+    ):
+        raise AppError("sync manifest event count is invalid", code="sync_bundle_invalid")
     events: list[Mapping[str, Any]] = []
-    for line_number, line in enumerate(events_bytes.splitlines(), start=1):
+    offset = 0
+    line_number = 0
+    while offset < len(events_bytes):
+        line_number += 1
+        if line_number > MAX_BUNDLE_EVENTS:
+            raise AppError(
+                "sync event stream contains too many lines",
+                code="sync_bundle_invalid",
+                details={"max_lines": MAX_BUNDLE_EVENTS},
+                retryable=False,
+            )
+        newline = events_bytes.find(b"\n", offset)
+        line_end = len(events_bytes) if newline < 0 else newline
+        line_size = line_end - offset
+        if line_size > MAX_BUNDLE_EVENT_LINE_BYTES:
+            raise AppError(
+                "sync event stream contains an oversized event",
+                code="sync_bundle_invalid",
+                details={"line": line_number, "max_bytes": MAX_BUNDLE_EVENT_LINE_BYTES},
+                retryable=False,
+            )
+        line = events_bytes[offset:line_end]
+        offset = len(events_bytes) if newline < 0 else newline + 1
         if not line.strip():
             continue
+        if len(events) >= MAX_BUNDLE_EVENTS:
+            raise AppError(
+                "sync event stream contains too many events",
+                code="sync_bundle_invalid",
+                details={"max_events": MAX_BUNDLE_EVENTS},
+                retryable=False,
+            )
         try:
             event = json.loads(line)
-        except json.JSONDecodeError as exc:
+        except (ValueError, RecursionError) as exc:
             raise AppError(
                 "sync event stream contains invalid JSON",
                 code="sync_bundle_invalid",
@@ -472,19 +654,56 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
             ) from exc
         if not isinstance(event, dict):
             raise AppError("sync event must be a JSON object", code="sync_bundle_invalid")
+        replica_seq = event.get("replica_seq")
+        if (
+            type(replica_seq) is not int
+            or replica_seq < 1
+            or replica_seq > MAX_SYNC_SEQUENCE
+        ):
+            raise AppError(
+                "sync event sequence is invalid",
+                code="sync_bundle_invalid",
+            )
         events.append(event)
-    if len(events) != int(manifest.get("event_count", -1)):
+    if len(events) != event_count:
         raise AppError(
             "sync event count does not match the manifest",
             code="sync_bundle_tampered",
             retryable=False,
+        )
+    first_seq = manifest.get("first_seq")
+    last_seq = manifest.get("last_seq")
+    if (
+        type(first_seq) is not int
+        or type(last_seq) is not int
+        or first_seq < 0
+        or last_seq < first_seq
+        or last_seq > MAX_SYNC_SEQUENCE
+        or (events and first_seq < 1)
+    ):
+        raise AppError("sync manifest range is invalid", code="sync_bundle_invalid")
+    version_vector = manifest.get("version_vector")
+    if not isinstance(version_vector, dict) or any(
+        not isinstance(replica_id, str)
+        or not replica_id
+        or type(seq) is not int
+        or seq < 0
+        or seq > MAX_SYNC_SEQUENCE
+        for replica_id, seq in version_vector.items()
+    ):
+        raise AppError(
+            "sync manifest version vector is invalid",
+            code="sync_bundle_invalid",
         )
     blobs = {
         name.split("/", 1)[1]: payload
         for name, payload in entries.items()
         if name.startswith(f"{BUNDLE_BLOBS_DIR}/") and "/" in name
     }
-    if sorted(blobs) != sorted(manifest.get("blob_hmacs") or []):
+    blob_hmacs = manifest.get("blob_hmacs")
+    if not isinstance(blob_hmacs, list) or any(not isinstance(item, str) for item in blob_hmacs):
+        raise AppError("sync manifest blob inventory is invalid", code="sync_bundle_invalid")
+    if sorted(blobs) != sorted(blob_hmacs):
         raise AppError(
             "sync blob inventory does not match the manifest",
             code="sync_bundle_tampered",

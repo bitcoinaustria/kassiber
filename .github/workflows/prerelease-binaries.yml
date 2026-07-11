@@ -43,18 +43,18 @@ jobs:
           - macos-15-intel
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.11"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
         with:
           enable-cache: true
 
@@ -209,7 +209,7 @@ jobs:
           tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
 
       - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: kassiber-cli-${{ steps.target.outputs.target }}
           path: |
@@ -249,23 +249,25 @@ jobs:
             sidecar_expected: 1
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "20"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 10.33.0
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: stable
 
       - name: Install macOS universal Rust targets
         if: matrix.target == 'macos-universal'
@@ -294,7 +296,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download desktop CLI sidecar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: ${{ matrix.sidecar_artifact_pattern }}
           path: ui-tauri/src-tauri/binaries
@@ -351,7 +353,7 @@ jobs:
           test -n "$(find release -type f -print -quit)"
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: kassiber-desktop-${{ matrix.target }}-preview
           path: |
@@ -384,18 +386,18 @@ jobs:
             exe_ext: ".exe"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.11"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
         with:
           enable-cache: true
 
@@ -488,7 +490,7 @@ jobs:
           chmod 755 "$dst"
 
       - name: Upload desktop sidecar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: kassiber-desktop-sidecar-${{ matrix.triple }}
           path: sidecar/*
@@ -512,14 +514,14 @@ jobs:
 
     steps:
       - name: Download CLI release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: kassiber-cli-*
           path: release
           merge-multiple: true
 
       - name: Download desktop release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: kassiber-desktop-*-preview
           path: release
@@ -557,7 +559,7 @@ jobs:
               done > release/SHA256SUMS.txt
 
       - name: Create or update prerelease
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           prerelease: true
@@ -590,7 +592,7 @@ jobs:
 
       - name: Check out Homebrew tap
         if: steps.homebrew-tap.outputs.enabled == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
           ref: ${{ env.HOMEBREW_TAP_BRANCH }}
