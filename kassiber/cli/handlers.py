@@ -4616,32 +4616,6 @@ def list_transactions(
     }
 
 
-def available_quantity(lots):
-    total = Decimal("0")
-    for lot in lots:
-        total += lot["quantity"]
-    return total
-
-
-def consume_lots(lots, quantity, algorithm):
-    remaining = dec(quantity)
-    cost_basis = Decimal("0")
-    while remaining > 0:
-        if not lots:
-            raise AppError("Not enough lots to consume")
-        lot = lots[0] if algorithm == "FIFO" else lots[-1]
-        take = min(remaining, lot["quantity"])
-        cost_basis += take * lot["unit_cost"]
-        lot["quantity"] -= take
-        remaining -= take
-        if lot["quantity"] <= Decimal("0"):
-            if algorithm == "FIFO":
-                lots.pop(0)
-            else:
-                lots.pop()
-    return cost_basis
-
-
 def latest_rates_for_profile(conn, profile_id):
     return core_reports.latest_transaction_rates_for_profile(conn, profile_id)
 
