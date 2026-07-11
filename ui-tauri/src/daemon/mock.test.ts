@@ -70,6 +70,14 @@ describe("mock daemon transaction resolver", () => {
 });
 
 describe("mock daemon custody component bulk resolution", () => {
+  it("matches the custody component list daemon envelope", async () => {
+    const response = await mockDaemon.invoke<{
+      components: unknown[];
+    }>({ kind: "ui.transfers.components.list", args: {} });
+
+    expect(response.data?.components).toEqual(expect.any(Array));
+  });
+
   it("mirrors draft dry-run intent and batch cardinality", async () => {
     const preview = await mockDaemon.invoke<{
       components: Array<{ state: string; effective_state: string }>;

@@ -648,9 +648,7 @@ interface CustodyComponent {
   };
 }
 
-type CustodyComponentListEnvelope =
-  | CustodyComponent[]
-  | { components: CustodyComponent[] };
+type CustodyComponentListEnvelope = { components: CustodyComponent[] };
 
 interface CustodyBulkResolveResult {
   components: CustodyComponent[];
@@ -659,7 +657,6 @@ interface CustodyBulkResolveResult {
 }
 
 function custodyComponentsFromEnvelope(data: CustodyComponentListEnvelope | undefined) {
-  if (Array.isArray(data)) return data;
   return data?.components ?? [];
 }
 

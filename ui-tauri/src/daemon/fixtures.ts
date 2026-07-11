@@ -898,7 +898,7 @@ export const fixtures: Record<string, unknown> = {
       },
     ],
   },
-  "ui.transfers.components.list": [MOCK_CUSTODY_COMPONENT],
+  "ui.transfers.components.list": { components: [MOCK_CUSTODY_COMPONENT] },
   "ui.transfers.components.get": MOCK_CUSTODY_COMPONENT,
   "ui.transfers.components.create": MOCK_CUSTODY_COMPONENT,
   "ui.transfers.components.update": {
