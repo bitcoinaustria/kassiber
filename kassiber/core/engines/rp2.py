@@ -2320,7 +2320,7 @@ def _partition_network_compatible_carrying_pairs(
     profile: Mapping[str, Any],
     rows: Sequence[Mapping[str, Any]],
     pair_records: Sequence[Mapping[str, Any]],
-) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]], set[str]]:
     """Fail closed for persisted carrying-value pairs across known networks.
 
     The command boundary rejects new mismatches, but replicated or historical
@@ -2331,6 +2331,7 @@ def _partition_network_compatible_carrying_pairs(
     rows_by_id = {str(_row_get(row, "id")): row for row in rows}
     accepted: list[Mapping[str, Any]] = []
     quarantines: list[dict[str, Any]] = []
+    rejected_row_ids: set[str] = set()
     for record in pair_records:
         if str(_row_get(record, "policy") or "") != "carrying-value":
             accepted.append(record)
@@ -2355,24 +2356,27 @@ def _partition_network_compatible_carrying_pairs(
         ):
             accepted.append(record)
             continue
-        quarantines.append(
+        detail = {
+            "pair_id": str(_row_get(record, "id") or ""),
+            "out_transaction_id": out_id,
+            "in_transaction_id": in_id,
+            "out_network_domain": out_domain,
+            "in_network_domain": in_domain,
+            "out_network_valid": out_valid,
+            "in_network_valid": in_valid,
+            "required_for": "carrying_value_pair",
+        }
+        rejected_row_ids.update((out_id, in_id))
+        quarantines.extend(
             build_tax_quarantine(
                 profile,
-                out_row,
+                row,
                 "transfer_network_mismatch",
-                {
-                    "pair_id": str(_row_get(record, "id") or ""),
-                    "out_transaction_id": out_id,
-                    "in_transaction_id": in_id,
-                    "out_network_domain": out_domain,
-                    "in_network_domain": in_domain,
-                    "out_network_valid": out_valid,
-                    "in_network_valid": in_valid,
-                    "required_for": "carrying_value_pair",
-                },
+                detail,
             )
+            for row in (out_row, in_row)
         )
-    return accepted, quarantines
+    return accepted, quarantines, rejected_row_ids
 
 
 def _apply_generic_bitcoin_rail_carry_values(
@@ -2508,11 +2512,18 @@ class GenericRP2TaxEngine:
         (
             projected_manual_pairs,
             pair_network_quarantines,
+            pair_network_blocked_row_ids,
         ) = _partition_network_compatible_carrying_pairs(
             self.profile,
             projected_rows,
             projected_manual_pairs,
         )
+        if pair_network_blocked_row_ids:
+            projected_rows = [
+                row
+                for row in projected_rows
+                if str(_row_get(row, "id")) not in pair_network_blocked_row_ids
+            ]
         projected_payout_records = [
             record
             for record in inputs.direct_payout_records
@@ -2522,7 +2533,10 @@ class GenericRP2TaxEngine:
         if not projected_rows and not blocked_custody_anchor_rows:
             return TaxEngineLedgerResult(
                 entries=[],
-                quarantines=list(custody_projection.quarantines),
+                quarantines=[
+                    *custody_projection.quarantines,
+                    *pair_network_quarantines,
+                ],
                 intra_audit=[],
                 cross_asset_pairs=[],
                 direct_swap_payouts=[],

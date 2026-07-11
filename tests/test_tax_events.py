@@ -2201,8 +2201,41 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
             "transfer_network_mismatch",
             {item["reason"] for item in state.quarantines},
         )
+        self.assertEqual(
+            {item["transaction_id"] for item in state.quarantines},
+            {"out", "in"},
+        )
         self.assertFalse(
             [item for item in state.intra_audit if item.get("out_id") == "out"]
+        )
+        self.assertFalse(
+            [
+                item
+                for item in state.entries
+                if item.get("transaction_id") in {"out", "in"}
+            ]
+        )
+
+        pair_only_state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows[1:],
+                wallet_refs_by_id=wallet_refs,
+                manual_pair_records=[
+                    {
+                        "id": "legacy-bad-pair",
+                        "out_transaction_id": "out",
+                        "in_transaction_id": "in",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                        "out_amount": None,
+                    }
+                ],
+            )
+        )
+        self.assertEqual(pair_only_state.entries, [])
+        self.assertEqual(
+            {item["transaction_id"] for item in pair_only_state.quarantines},
+            {"out", "in"},
         )
 
     def test_same_wallet_payment_hash_books_fee_not_sell_buy(self):

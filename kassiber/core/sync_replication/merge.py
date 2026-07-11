@@ -744,6 +744,20 @@ def _prepare_actual_row(
                 table=referenced_table,
                 wire_id=actual[column],
             )
+    missing_optional_columns = [
+        column for column in spec.optional_columns if column not in wire_row
+    ]
+    if missing_optional_columns:
+        where = " AND ".join(f"{column} = ?" for column in spec.primary_key)
+        local_pk = tuple(actual[column] for column in spec.primary_key)
+        existing_optional = conn.execute(
+            f"SELECT {', '.join(sorted(missing_optional_columns))} "
+            f"FROM {spec.table} WHERE {where}",
+            local_pk,
+        ).fetchone()
+        if existing_optional:
+            for column in missing_optional_columns:
+                actual[column] = existing_optional[column]
     if (
         spec.table == "custody_component_legs"
         and "anchor_transaction_id" not in wire_row
@@ -1146,10 +1160,10 @@ def _apply_row_delete(conn, *, book, event: Mapping[str, Any]) -> tuple[bool, in
         _mapped_id(
             conn,
             profile_id=book["profile_id"],
-            table=spec.table,
+            table=REFERENCE_TABLES.get(column, spec.table),
             wire_id=value,
         )
-        for value in wire_pk
+        for column, value in zip(spec.primary_key, wire_pk, strict=True)
     )
     where = " AND ".join(f"{column} = ?" for column in spec.primary_key)
     preserve_alias = _has_other_active_alias(

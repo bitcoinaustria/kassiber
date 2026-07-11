@@ -9,12 +9,14 @@ from pathlib import Path
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.sync_replication.capture import capture_local_changes
 from kassiber.core.sync_replication.clock import HybridLogicalClock, observe_clock, tick_clock
-from kassiber.core.sync_replication.events import verify_event
+from kassiber.core.sync_replication.events import author_event, verify_event
 from kassiber.core.sync_replication.identity import enable_sync
+from kassiber.core.sync_replication.merge import _apply_row_delete, _prepare_actual_row
 from kassiber.core.sync_replication.schema_allowlist import (
     NEVER_SYNC_TABLES,
     SYNC_TABLE_MAP,
     public_wallet_config,
+    serialize_row,
     validate_wire_row,
 )
 from kassiber.core.transaction_history import append_event
@@ -353,6 +355,89 @@ class SyncIdentityAndCaptureTests(unittest.TestCase):
             {(row["entity_table"], row["entity_key"]) for row in tombstones},
             deleted,
         )
+
+    def test_composite_tombstone_maps_each_referenced_primary_key(self):
+        self._enable()
+        _, tx_id, _ = self._insert_wallet_and_transaction()
+        tag_id = str(uuid.uuid4())
+        created_at = now_iso()
+        self.conn.execute(
+            "INSERT INTO tags(id, workspace_id, profile_id, code, label, created_at) "
+            "VALUES(?, ?, ?, 'reviewed', 'Reviewed', ?)",
+            (tag_id, self.workspace["id"], self.profile["id"], created_at),
+        )
+        self.conn.execute(
+            "INSERT INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+            (tx_id, tag_id),
+        )
+        wire_tx_id = "wire-transaction"
+        wire_tag_id = "wire-tag"
+        self.conn.executemany(
+            "INSERT INTO sync_id_map(profile_id, entity_table, wire_id, local_id, created_at) "
+            "VALUES(?, ?, ?, ?, ?)",
+            [
+                (self.profile["id"], "transactions", wire_tx_id, tx_id, created_at),
+                (self.profile["id"], "tags", wire_tag_id, tag_id, created_at),
+            ],
+        )
+        key = json.dumps([wire_tx_id, wire_tag_id], separators=(",", ":"))
+        authored = author_event(
+            self.conn,
+            profile_id=self.profile["id"],
+            event_type="row.delete",
+            entity_table="transaction_tags",
+            entity_key=key,
+            payload={"key": key, "reason": "reviewed-delete"},
+        )
+        self.assertIsNotNone(authored)
+        book = self.conn.execute(
+            "SELECT * FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+
+        _apply_row_delete(self.conn, book=book, event=authored.to_wire_dict())
+
+        self.assertIsNone(
+            self.conn.execute(
+                "SELECT 1 FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
+                (tx_id, tag_id),
+            ).fetchone()
+        )
+
+    def test_older_transaction_event_preserves_optional_refund_vout(self):
+        self._enable()
+        _, tx_id, _ = self._insert_wallet_and_transaction()
+        self.conn.execute(
+            "UPDATE transactions SET swap_refund_funding_txid = ?, "
+            "swap_refund_funding_vout = 7 WHERE id = ?",
+            ("ab" * 32, tx_id),
+        )
+        spec = SYNC_TABLE_MAP["transactions"]
+        row = self.conn.execute(
+            "SELECT * FROM transactions WHERE id = ?", (tx_id,)
+        ).fetchone()
+        book = self.conn.execute(
+            "SELECT * FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+        wire_row = serialize_row(
+            spec,
+            row,
+            hmac_key_b64=book["hmac_key_b64"],
+        )
+        wire_row.pop("swap_refund_funding_vout")
+
+        actual, _ = _prepare_actual_row(
+            self.conn,
+            book=book,
+            spec=spec,
+            wire_row=wire_row,
+            blobs={},
+            attachments_root=None,
+            created_files=[],
+        )
+
+        self.assertEqual(actual["swap_refund_funding_vout"], 7)
 
 
 if __name__ == "__main__":
