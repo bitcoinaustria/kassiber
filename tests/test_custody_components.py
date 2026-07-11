@@ -479,6 +479,7 @@ class CustodyComponentApiTests(unittest.TestCase):
         component_payload.pop("expected_leg_count")
         component_payload.pop("expected_allocation_count")
         validate_wire_row("custody_components", component_payload)
+
         self.conn.execute(
             """
             INSERT INTO transaction_pairs(
@@ -508,6 +509,24 @@ class CustodyComponentApiTests(unittest.TestCase):
         )
         leg_payload.pop("anchor_transaction_id")
         validate_wire_row("custody_component_legs", leg_payload)
+
+    def test_component_header_created_at_must_be_a_timestamp(self):
+        with self.assertRaises(AppError) as caught:
+            create_component(
+                self.conn,
+                workspace_id="ws",
+                profile_id="profile",
+                component_type="native_transfer",
+                legs=[
+                    _leg("source", 100, tx="out", wallet="btc"),
+                    _leg("destination", 60, tx="in-1", wallet="btc"),
+                    _leg("destination", 39, tx="in-2", wallet="btc"),
+                    _leg("fee", 1, tx="out", wallet="btc"),
+                ],
+                created_at="sort-before-everything",
+            )
+
+        self.assertEqual(caught.exception.code, "validation")
 
     def test_decimal_string_quantities_cannot_exceed_sqlite_integer_range(self):
         too_large = "9223372036854775808"

@@ -2819,7 +2819,7 @@ def create_component(
     normalized_allocations = normalize_allocations(allocations, normalized_legs)
     component_id = _optional_text(component_id, "component_id") or str(uuid.uuid4())
     lineage_id = _optional_text(lineage_id, "lineage_id") or component_id
-    timestamp = created_at or _now_iso()
+    timestamp = parse_timestamp(created_at) if created_at is not None else _now_iso()
     authored_source = _required_text(authored_source, "authored_source")
     if authored_source not in AUTHORED_SOURCES:
         raise _error(
@@ -3028,7 +3028,7 @@ def update_component(
         ).fetchone()["revision"]
     )
     new_id = _optional_text(new_component_id, "new_component_id") or str(uuid.uuid4())
-    timestamp = created_at or _now_iso()
+    timestamp = parse_timestamp(created_at) if created_at is not None else _now_iso()
     authored_source = _required_text(authored_source, "authored_source")
     if authored_source not in AUTHORED_SOURCES:
         raise _error(
