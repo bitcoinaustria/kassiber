@@ -770,7 +770,9 @@ def derive_ownership_transfers(
             exact_folded_fee_msat = exact_onchain_fee_msat_from_parsed(
                 parsed, asset=str(_get(row, "asset") or "")
             )
-            source_fee_msat = exact_folded_fee_msat or 0
+            source_fee_msat = (
+                0 if exact_folded_fee_msat is None else exact_folded_fee_msat
+            )
         else:
             source_total_msat += source_fee_msat
         conserves, conservation_detail = _liquid_source_conserves(
