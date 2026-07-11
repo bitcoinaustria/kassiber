@@ -872,6 +872,78 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         }
         self.assertIn("anchor_transaction_retracted", validation_codes)
 
+    def test_live_remote_leg_does_not_wedge_peer_with_retracted_anchor(self):
+        self._join_peer()
+        wallet_id, out_id, in_id = self._insert_wallet_and_transactions()
+        self._sync_owner_to_peer()
+        self.peer.execute("DELETE FROM transactions WHERE id = ?", (out_id,))
+
+        component = create_component(
+            self.owner,
+            workspace_id=self.workspace["id"],
+            profile_id=self.profile["id"],
+            component_type="native_transfer",
+            evidence_kind="ownership_graph",
+            evidence_grade="exact",
+            legs=[
+                {
+                    "role": "source",
+                    "rail": "bitcoin",
+                    "chain": "bitcoin",
+                    "network": "regtest",
+                    "asset": "BTC",
+                    "exposure": "bitcoin",
+                    "conservation_unit": "msat",
+                    "amount_msat": 100000,
+                    "transaction_id": out_id,
+                    "wallet_id": wallet_id,
+                },
+                {
+                    "role": "destination",
+                    "rail": "bitcoin",
+                    "chain": "bitcoin",
+                    "network": "regtest",
+                    "asset": "BTC",
+                    "exposure": "bitcoin",
+                    "conservation_unit": "msat",
+                    "amount_msat": 100000,
+                    "transaction_id": in_id,
+                    "wallet_id": wallet_id,
+                },
+            ],
+            allocations=[
+                {
+                    "source_ordinal": 0,
+                    "sink_ordinal": 1,
+                    "source_amount_msat": 100000,
+                    "sink_amount_msat": 100000,
+                }
+            ],
+            created_at=NOW,
+        )
+        bundle = build_bundle(self.owner, profile_id=self.profile["id"])
+        self.assertIsNotNone(bundle)
+
+        result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+
+        self.assertEqual(0, result.rejected_events)
+        remote = self.peer.execute(
+            "SELECT transaction_id, anchor_transaction_id "
+            "FROM custody_component_legs WHERE component_id = ? AND ordinal = 0",
+            (component["id"],),
+        ).fetchone()
+        self.assertIsNone(remote["transaction_id"])
+        self.assertEqual(out_id, remote["anchor_transaction_id"])
+        validation_codes = {
+            issue["code"]
+            for issue in get_component(self.peer, component["id"])["validation"]["issues"]
+        }
+        self.assertIn("anchor_transaction_retracted", validation_codes)
+
     def test_legacy_leg_event_without_anchor_preserves_materialized_anchor(self):
         self._join_peer()
         component = self._create_component(active=False)

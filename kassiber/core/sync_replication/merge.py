@@ -744,6 +744,27 @@ def _prepare_actual_row(
                 table=referenced_table,
                 wire_id=actual[column],
             )
+    if spec.table == "custody_component_legs":
+        # Live FKs are intentionally retractable while the immutable anchor
+        # survives. A peer may receive an older/live authored leg after its
+        # importer has already removed that transaction or wallet. Materialize
+        # the same retracted shape SQLite's ON DELETE SET NULL would have
+        # produced locally instead of wedging the replica stream on the FK or
+        # scope trigger forever.
+        transaction_id = actual.get("transaction_id")
+        if transaction_id is not None and not conn.execute(
+            "SELECT 1 FROM transactions "
+            "WHERE id = ? AND workspace_id = ? AND profile_id = ?",
+            (transaction_id, book["workspace_id"], profile_id),
+        ).fetchone():
+            actual["transaction_id"] = None
+        wallet_id = actual.get("wallet_id")
+        if wallet_id is not None and not conn.execute(
+            "SELECT 1 FROM wallets "
+            "WHERE id = ? AND workspace_id = ? AND profile_id = ?",
+            (wallet_id, book["workspace_id"], profile_id),
+        ).fetchone():
+            actual["wallet_id"] = None
     missing_optional_columns = [
         column for column in spec.optional_columns if column not in wire_row
     ]
