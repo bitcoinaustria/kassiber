@@ -358,17 +358,6 @@
     "reviewed": "Geprüft",
     "rejected": "Abgelehnt"
   },
-  "method": {
-    "same_external_id": "Veraltete externe ID (manuell)",
-    "same_onchain_scope": "Kanonische On-Chain-Transaktion",
-    "transaction_pair": "Transaktionspaar",
-    "provider_trade_id": "Provider-Trade-id",
-    "provider_order_id": "Provider-Order-id",
-    "provider_payment_id": "Provider-Payment-id",
-    "provider_exchange_order_id": "Provider-Exchange-Order-id",
-    "provider_ledger_id": "Provider-Ledger-id",
-    "manual": "Manuell"
-  },
   "toast": {
     "suggestionsUpdated": "Vorschläge aktualisiert",
     "evidenceMatched": "Nachweis zugeordnet",
