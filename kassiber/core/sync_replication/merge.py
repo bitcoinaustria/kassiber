@@ -456,20 +456,10 @@ def _validate_event_for_book(
             "sync event version vector does not match its replica sequence",
             code="sync_bundle_invalid",
         )
-    known_replicas = {
-        str(row["id"])
-        for row in conn.execute(
-            "SELECT id FROM sync_replicas WHERE profile_id = ?",
-            (book["profile_id"],),
-        ).fetchall()
-    }
-    unknown_dependencies = sorted(set(event["context"]) - known_replicas)
-    if unknown_dependencies:
-        raise AppError(
-            "sync event version vector references an unknown replica",
-            code="sync_bundle_invalid",
-            details={"replica_ids": unknown_dependencies},
-        )
+    # A valid signer can reference a replica whose membership catalog has not
+    # arrived on this device yet. Signature validation below still authenticates
+    # the event author; the causal gate stores the event as pending until every
+    # referenced replica and signed prefix becomes known.
     replica = conn.execute(
         "SELECT * FROM sync_replicas WHERE id = ? AND profile_id = ?",
         (event["replica_id"], book["profile_id"]),

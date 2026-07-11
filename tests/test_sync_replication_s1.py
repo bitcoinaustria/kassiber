@@ -14,7 +14,11 @@ from kassiber.core.sync_replication.capture import (
 from kassiber.core.sync_replication.clock import HybridLogicalClock, observe_clock, tick_clock
 from kassiber.core.sync_replication.events import author_event, verify_event
 from kassiber.core.sync_replication.identity import enable_sync
-from kassiber.core.sync_replication.merge import _apply_row_delete, _prepare_actual_row
+from kassiber.core.sync_replication.merge import (
+    _apply_row_delete,
+    _causal_dependencies_satisfied,
+    _prepare_actual_row,
+)
 from kassiber.core.sync_replication.schema_allowlist import (
     NEVER_SYNC_TABLES,
     SYNC_TABLE_MAP,
@@ -428,6 +432,16 @@ class SyncIdentityAndCaptureTests(unittest.TestCase):
                 local_id=tx_id,
             ),
             "0-wire",
+        )
+
+    def test_unknown_causal_replica_defers_instead_of_invalidating_event(self):
+        self._enable()
+        self.assertFalse(
+            _causal_dependencies_satisfied(
+                self.conn,
+                profile_id=self.profile["id"],
+                event={"context": {"replica-not-received-yet": 1}},
+            )
         )
 
     def test_older_transaction_event_preserves_optional_refund_vout(self):
