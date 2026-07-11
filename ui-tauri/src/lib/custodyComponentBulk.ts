@@ -1,4 +1,4 @@
-export const CUSTODY_COMPONENT_TYPES = [
+const CUSTODY_COMPONENT_TYPES = [
   "native_transfer",
   "channel_lifecycle",
   "peg",
@@ -7,7 +7,7 @@ export const CUSTODY_COMPONENT_TYPES = [
   "manual_bridge",
 ] as const;
 
-export const CUSTODY_LEG_ROLES = [
+const CUSTODY_LEG_ROLES = [
   "source",
   "destination",
   "fee",
@@ -713,7 +713,7 @@ export interface CustodyBulkRequest {
   dry_run?: true;
 }
 
-export interface CustodyRevisionLegInput {
+interface CustodyRevisionLegInput {
   id: string;
   role: string;
   rail: string;
@@ -732,14 +732,14 @@ export interface CustodyRevisionLegInput {
   notes?: string | null;
 }
 
-export interface CustodyRevisionAllocationInput {
+interface CustodyRevisionAllocationInput {
   source_leg_id: string;
   sink_leg_id: string;
   source_amount_msat: CustodyExactInteger;
   sink_amount_msat: CustodyExactInteger;
 }
 
-export interface CustodyRevisionComponentInput {
+interface CustodyRevisionComponentInput {
   component_type: string;
   conservation_mode: "quantity" | "conversion";
   evidence_kind: string | null;
