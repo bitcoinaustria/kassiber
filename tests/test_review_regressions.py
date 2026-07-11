@@ -1609,6 +1609,10 @@ class ReviewRegressionTest(unittest.TestCase):
         # 1.0 BTC because the outflow is quarantined. The wallet tile and fiat
         # overview must follow the book/report quantity, not the raw import sum.
         self.assertAlmostEqual(overview["connections"][0]["balance"], 1.0)
+        self.assertEqual(overview["balanceSummary"]["status"], "quarantines")
+        self.assertEqual(overview["balanceSummary"]["source"], "books")
+        self.assertEqual(overview["balanceSummary"]["quarantines"], 1)
+        self.assertAlmostEqual(overview["balanceSummary"]["totalBtc"], 1.0)
         self.assertAlmostEqual(overview["balanceSeries"][-1], 1.0)
         self.assertAlmostEqual(overview["fiat"]["eurBalance"], 50_000)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 1.0)
@@ -1726,6 +1730,8 @@ class ReviewRegressionTest(unittest.TestCase):
 
         self.assertFalse(overview["status"]["needsJournals"])
         self.assertEqual(overview["status"]["quarantines"], 1)
+        self.assertEqual(overview["balanceSummary"]["status"], "quarantines")
+        self.assertAlmostEqual(overview["balanceSummary"]["totalBtc"], 0.0)
         self.assertAlmostEqual(overview["connections"][0]["balance"], 0.0)
         self.assertAlmostEqual(overview["balanceSeries"][-1], 0.0)
         self.assertAlmostEqual(overview["fiat"]["eurBalance"], 0.0)
@@ -1895,6 +1901,9 @@ class ReviewRegressionTest(unittest.TestCase):
         overview = build_overview_snapshot(conn)
 
         self.assertTrue(overview["status"]["needsJournals"])
+        self.assertEqual(overview["balanceSummary"]["status"], "needs_journals")
+        self.assertEqual(overview["balanceSummary"]["source"], "transactions")
+        self.assertAlmostEqual(overview["balanceSummary"]["totalBtc"], 1.25)
         self.assertAlmostEqual(overview["connections"][0]["balance"], 1.25)
         self.assertAlmostEqual(overview["balanceSeries"][-1], 1.25)
         self.assertAlmostEqual(overview["fiat"]["eurBalance"], 62_500)

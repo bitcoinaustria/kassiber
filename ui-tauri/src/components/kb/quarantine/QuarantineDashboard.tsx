@@ -528,7 +528,7 @@ export function QuarantineDashboard({
         kind="quarantine"
         eyebrow={t("quarantine.eyebrow")}
         title={t("quarantine.title")}
-        description={t("quarantine.description")}
+        description={t("quarantine.balanceExplanation")}
         rows={rows}
         metrics={metrics}
         showSummaryBadge={false}

@@ -74,6 +74,7 @@ function taxFreeStatusKey(
 }
 
 interface WalletsMetricGridProps {
+  balanceSummary?: OverviewSnapshot["balanceSummary"];
   connections: Connection[];
   currency: Currency;
   hideSensitive: boolean;
@@ -84,6 +85,7 @@ interface WalletsMetricGridProps {
 }
 
 export function WalletsMetricGrid({
+  balanceSummary,
   connections,
   currency,
   hideSensitive,
@@ -94,6 +96,19 @@ export function WalletsMetricGrid({
 }: WalletsMetricGridProps) {
   const { t } = useTranslation("connections");
   const totalEur = totalBtc * priceEur;
+  const balanceDetail = balanceSummary?.needsJournals
+    ? t("metrics.balanceNeedsJournals")
+    : (balanceSummary?.quarantines ?? 0) > 0
+      ? t("metrics.balanceQuarantines", {
+          count: balanceSummary?.quarantines ?? 0,
+        })
+      : balanceSummary?.source === "chain"
+        ? t("metrics.balanceChain")
+        : balanceSummary?.source === "books"
+          ? t("metrics.balanceBooks")
+          : balanceSummary?.source === "transactions"
+            ? t("metrics.balanceTransactions")
+            : t("metrics.balanceMixed");
   const totalTransactions = connections.reduce(
     (sum, connection) => sum + (connection.transactionCount ?? 0),
     0,
@@ -153,7 +168,7 @@ export function WalletsMetricGrid({
         }
       >
         <WalletsOverviewStat
-          label={t("metrics.totalBalance")}
+          label={t("metrics.walletBalance")}
           value={
             <span className={hiddenSensitiveClassName(hideSensitive)}>
               <CurrencyToggleText>
@@ -163,13 +178,7 @@ export function WalletsMetricGrid({
               </CurrencyToggleText>
             </span>
           }
-          detail={
-            <CurrencyToggleText>
-              {currency === "eur"
-                ? `₿ ${formatBtc(totalBtc)}`
-                : formatEur(totalEur)}
-            </CurrencyToggleText>
-          }
+          detail={balanceDetail}
         />
         {taxFreeBalance ? (
           <WalletsOverviewStat

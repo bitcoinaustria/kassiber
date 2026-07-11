@@ -6,6 +6,14 @@
   },
   "metrics": {
     "totalBalance": "Total balance",
+    "walletBalance": "Wallet balance",
+    "balanceChain": "Observed on-chain balance",
+    "balanceBooks": "Processed book balance",
+    "balanceTransactions": "Provisional transaction balance",
+    "balanceMixed": "On-chain where available, books otherwise",
+    "balanceNeedsJournals": "Journals pending · this provisional total may change",
+    "balanceQuarantines_one": "{{count}} quarantine · accounting view may change after review",
+    "balanceQuarantines_other": "{{count}} quarantines · accounting view may change after review",
     "totalTransactions": "Total transactions",
     "totalTransactionsDetail": "Imported across wallets",
     "openTransactions": "Open all wallet transactions",
@@ -39,6 +47,9 @@
     "clearStatus": "Clear {{status}} status filter",
     "clearKind": "Clear {{kind}} kind filter",
     "clearAll": "Clear all"
+  },
+  "table": {
+    "balanceOverlap": "Shared outpoint · wallet shares overlap"
   },
   "detail": {
     "notFound": "No connection found for {{id}}.",

@@ -57,4 +57,25 @@ describe("WalletsTable", () => {
     expect(html).toContain("never");
     expect(html).not.toContain("just now");
   });
+
+  it("does not show impossible percentages for overlapping wallet inventories", () => {
+    const html = renderToStaticMarkup(
+      <WalletsTable
+        balanceSharesOverlap
+        connections={[
+          connection({ id: "wallet-a", balance: 0.5 }),
+          connection({ id: "wallet-b", balance: 0.5 }),
+        ]}
+        currency="btc"
+        hideSensitive={false}
+        onSelectConnection={vi.fn()}
+        priceEur={60_000}
+        totalBtc={0.5}
+        totalCount={2}
+      />,
+    );
+
+    expect(html).toContain("Shared outpoint · wallet shares overlap");
+    expect(html).not.toContain("100% of total balance");
+  });
 });

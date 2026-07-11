@@ -25,7 +25,22 @@ import {
 
 const numberFormatter = fiatNumberFormatter("EUR");
 
-export function statStatusKey(stat: StatItem, isBitcoinPortfolio: boolean) {
+type BalanceStatus = Pick<
+  NonNullable<OverviewSnapshot["balanceSummary"]>,
+  "needsJournals" | "quarantines"
+>;
+
+export function statStatusKey(
+  stat: StatItem,
+  isBitcoinPortfolio: boolean,
+  balanceStatus?: BalanceStatus,
+) {
+  if (stat.id === "portfolioValue" && balanceStatus?.needsJournals) {
+    return "stats.status.needsJournals";
+  }
+  if (stat.id === "portfolioValue" && (balanceStatus?.quarantines ?? 0) > 0) {
+    return "stats.status.reviewQuarantines";
+  }
   if (stat.previousValue > 0) {
     return null;
   }
@@ -127,10 +142,26 @@ export const StatsCards = ({
         {stats.map((stat) => {
           const isBitcoinPortfolio =
             currency === "btc" && stat.id === "portfolioValue";
-          const statusKey = statStatusKey(stat, isBitcoinPortfolio);
+          const balanceStatus = snapshot.balanceSummary ?? snapshot.status;
+          const statusKey = statStatusKey(
+            stat,
+            isBitcoinPortfolio,
+            balanceStatus,
+          );
           const statusText = statusKey
-            ? t(statusKey)
+            ? t(statusKey, {
+                count: balanceStatus?.quarantines ?? 0,
+              })
             : `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`;
+          const balanceWarning =
+            statusKey === "stats.status.needsJournals" ||
+            statusKey === "stats.status.reviewQuarantines";
+          const balanceWarningHref =
+            statusKey === "stats.status.needsJournals"
+              ? "/journals"
+              : statusKey === "stats.status.reviewQuarantines"
+                ? "/quarantine"
+                : null;
           const showComparisonLabel =
             !statusKey ||
             ![
@@ -150,7 +181,7 @@ export const StatsCards = ({
             >
               <>
                 <Link
-                  to={stat.href}
+                  to={balanceWarningHref ?? stat.href}
                   className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={t("stats.openStat", { title: statTitle })}
                 />
@@ -189,7 +220,9 @@ export const StatsCards = ({
                     <span
                       className={cn(
                         "shrink-0 font-medium",
-                        stat.isPositive
+                        balanceWarning
+                          ? "text-amber-600 dark:text-amber-400"
+                          : stat.isPositive
                           ? "text-emerald-600 dark:text-emerald-400"
                           : "text-red-600 dark:text-red-400",
                         blurClass(hideSensitive),
