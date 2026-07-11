@@ -7,7 +7,10 @@ import uuid
 from pathlib import Path
 
 from kassiber.core.accounts import create_profile, create_workspace
-from kassiber.core.sync_replication.capture import capture_local_changes
+from kassiber.core.sync_replication.capture import (
+    capture_local_changes,
+    preferred_wire_id,
+)
 from kassiber.core.sync_replication.clock import HybridLogicalClock, observe_clock, tick_clock
 from kassiber.core.sync_replication.events import author_event, verify_event
 from kassiber.core.sync_replication.identity import enable_sync
@@ -402,6 +405,29 @@ class SyncIdentityAndCaptureTests(unittest.TestCase):
                 "SELECT 1 FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
                 (tx_id, tag_id),
             ).fetchone()
+        )
+
+    def test_wire_alias_preference_is_device_independent(self):
+        self._enable()
+        _, tx_id, _ = self._insert_wallet_and_transaction()
+        self.conn.executemany(
+            "INSERT INTO sync_id_map("
+            "profile_id, entity_table, wire_id, local_id, created_at"
+            ") VALUES(?, 'transactions', ?, ?, ?)",
+            [
+                (self.profile["id"], "z-wire", tx_id, "2025-01-01T00:00:00Z"),
+                (self.profile["id"], "0-wire", tx_id, "2026-01-01T00:00:00Z"),
+            ],
+        )
+
+        self.assertEqual(
+            preferred_wire_id(
+                self.conn,
+                profile_id=self.profile["id"],
+                table="transactions",
+                local_id=tx_id,
+            ),
+            "0-wire",
         )
 
     def test_older_transaction_event_preserves_optional_refund_vout(self):

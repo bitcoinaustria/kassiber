@@ -43,10 +43,11 @@ def preferred_wire_id(
 ) -> Any:
     """Return the authored identity a local deduplicated row should retain.
 
-    Prefer a locally-authored live identity, then an already-replayed live wire
-    identity. If capture has not established row state yet, preserve the oldest
-    imported alias. This prevents an imported transaction ``A`` materialized as
-    local ``B`` from being re-authored as B and tombstoning A on the next peer.
+    Choose the lexicographically smallest live identity, independent of which
+    replica authored it or when this device observed it. If capture has not
+    established row state yet, use the same deterministic ordering across all
+    known aliases. This prevents device-relative alias preferences from
+    re-authoring equivalent rows back and forth forever.
     """
 
     if local_id is None:
@@ -63,12 +64,7 @@ def preferred_wire_id(
             ).fetchall()
         ),
     }
-    local_replica = conn.execute(
-        "SELECT local_replica_id FROM sync_books WHERE profile_id = ?",
-        (profile_id,),
-    ).fetchone()
-    local_replica_id = str(local_replica["local_replica_id"]) if local_replica else ""
-    live: list[tuple[int, str, str]] = []
+    live: list[str] = []
     for alias in aliases:
         key = json.dumps([alias], ensure_ascii=True, separators=(",", ":"))
         state = conn.execute(
@@ -82,24 +78,10 @@ def preferred_wire_id(
             (profile_id, table, key),
         ).fetchone()
         if state:
-            live.append(
-                (
-                    0 if str(state["replica_id"] or "") == local_replica_id else 1,
-                    str(state["updated_at"] or ""),
-                    alias,
-                )
-            )
+            live.append(alias)
     if live:
-        return min(live)[2]
-    imported = conn.execute(
-        """
-        SELECT wire_id FROM sync_id_map
-        WHERE profile_id = ? AND entity_table = ? AND local_id = ?
-        ORDER BY created_at, wire_id LIMIT 1
-        """,
-        (profile_id, table, local_text),
-    ).fetchone()
-    return str(imported["wire_id"]) if imported else local_id
+        return min(live)
+    return min(aliases)
 
 
 def _wire_payload(
