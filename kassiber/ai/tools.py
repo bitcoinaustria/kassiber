@@ -184,7 +184,6 @@ _CUSTODY_COMPONENT_SPEC_SCHEMA: dict[str, Any] = {
         "notes": {"type": "string"},
         "change_reason": {"type": "string"},
         "conversion_policy": {"type": "string"},
-        "conversion_reviewed": {"type": "boolean"},
         "conversion_metadata": {"type": "object"},
         "legs": {
             "type": "array",
@@ -1678,7 +1677,10 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "activate": {
                     "type": "boolean",
-                    "description": "Activate complete components. Defaults to true.",
+                    "description": (
+                        "Activate complete quantity-conserving components. Defaults to true. "
+                        "Conversion components must remain drafts for separate human review."
+                    ),
                 },
                 "dry_run": {
                     "type": "boolean",

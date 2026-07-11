@@ -682,6 +682,10 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "Exclude tx-1 from accounting",
         )
         components_tool = get_tool("ui.transfers.components.bulk_resolve")
+        component_properties = components_tool.parameters["properties"]["components"][
+            "items"
+        ]["properties"]
+        self.assertNotIn("conversion_reviewed", component_properties)
         self.assertEqual(
             summarize_tool_call(
                 components_tool,

@@ -30,6 +30,7 @@ from kassiber.daemon import (
     _effective_ai_chat_tools_enabled,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
+    _validate_ai_custody_conversion_boundary,
 )
 from kassiber import daemon as daemon_module
 from kassiber.ai import tools as ai_tools
@@ -1016,6 +1017,33 @@ class DaemonFreshnessForceFullTest(unittest.TestCase):
         self.assertEqual(results[0]["code"], "backend_timeout")
         self.assertEqual(results[0]["details"], {"phase": "backend_fetch"})
         self.assertTrue(results[0]["retryable"])
+
+
+class AiCustodyConversionBoundaryTest(unittest.TestCase):
+    def test_ai_conversion_must_remain_a_draft(self):
+        with self.assertRaises(AppError) as raised:
+            _validate_ai_custody_conversion_boundary(
+                [{"conservation_mode": "conversion"}], activate=True
+            )
+        self.assertEqual(raised.exception.code, "interaction_required")
+
+    def test_ai_cannot_self_attest_conversion_review(self):
+        with self.assertRaises(AppError) as raised:
+            _validate_ai_custody_conversion_boundary(
+                [
+                    {
+                        "conservation_mode": "conversion",
+                        "conversion_reviewed": True,
+                    }
+                ],
+                activate=False,
+            )
+        self.assertEqual(raised.exception.code, "interaction_required")
+
+    def test_ai_quantity_component_can_activate(self):
+        _validate_ai_custody_conversion_boundary(
+            [{"conservation_mode": "quantity"}], activate=True
+        )
 
 
 class DaemonSmokeTest(unittest.TestCase):

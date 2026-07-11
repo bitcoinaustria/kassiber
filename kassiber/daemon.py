@@ -1711,6 +1711,39 @@ def _ui_exact_integer_payload(value: Any) -> Any:
     return value
 
 
+def _validate_ai_custody_conversion_boundary(
+    components: list[dict[str, Any]], *, activate: bool
+) -> None:
+    """Keep conversion review independent from the proposing AI tool."""
+
+    conversions = [
+        index
+        for index, component in enumerate(components)
+        if str(component.get("conservation_mode") or "quantity") == "conversion"
+    ]
+    if not conversions:
+        return
+    self_attested = [
+        index
+        for index in conversions
+        if components[index].get("conversion_reviewed") is True
+    ]
+    if self_attested:
+        raise AppError(
+            "AI-authored conversion components cannot attest their own review",
+            code="interaction_required",
+            hint="Create the conversion as a draft, then review and activate it in Custody Review.",
+            details={"component_indexes": self_attested},
+        )
+    if activate:
+        raise AppError(
+            "AI-authored conversion components require separate human review before activation",
+            code="interaction_required",
+            hint="Retry with activate=false, then review and activate the draft in Custody Review.",
+            details={"component_indexes": conversions},
+        )
+
+
 def _ui_swap_matching_payload_from_conn(
     conn: sqlite3.Connection,
     kind: str,
@@ -1866,6 +1899,8 @@ def _ui_swap_matching_payload_from_conn(
             )
         activate = exact_bool("activate", True)
         dry_run = exact_bool("dry_run")
+        if authored_source == "ai_tool":
+            _validate_ai_custody_conversion_boundary(components, activate=activate)
         if not dry_run:
             return _ui_exact_integer_payload(
                 bulk_resolve_custody_components(
