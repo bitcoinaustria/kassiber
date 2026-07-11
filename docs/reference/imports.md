@@ -324,6 +324,8 @@ rows:
 ```bash
 kassiber wallets preview-document --file receipt.png --model glm-ocr
 kassiber wallets import-document --wallet WID --file receipt.png --model glm-ocr
+# A long statement needs an explicit contiguous range (up to 8 pages):
+kassiber wallets preview-document --file statement.pdf --pages 9-16
 ```
 
 `preview-document` is read-only. It requires a local loopback AI provider
@@ -336,19 +338,37 @@ the native picker stages the canonical path in a short-lived daemon session and
 the renderer receives only an opaque document token and display filename. Raw
 paths cannot be supplied to the desktop preview endpoint.
 
-The preview returns draft rows with `ready` / `quarantined` status,
-per-row and per-cell confidence, evidence text, source regions when the model
-provides them, and a normalized `import_record`. `import-document` imports
-only ready rows unless `--include-quarantined` is passed, then copies the
-source image/PDF into the managed attachments tree for every inserted or
-enriched transaction. The preview carries a SHA-256 digest of the local source,
+PDFs up to eight pages are scanned completely by default. Longer PDFs are not
+silently truncated: choose an explicit contiguous `--pages START-END` range or
+split the statement. The preview reports the total and rendered page set, and
+source regions outside that set are quarantined. Rendered page dimensions and
+encoded byte totals are capped before raster data reaches the local model.
+
+The preview returns draft rows with `ready` / `quarantined` status, per-row and
+per-populated-field confidence, every financial field, evidence text, source
+regions when the model provides them, and a normalized `import_record`.
+Missing/low cell confidence, invalid fee/fiat numbers, currency-less prices,
+and prices outside the active book currency remain quarantined. Negative fiat
+values are never converted to positive values.
+
+The desktop selects no rows by default and displays date, direction, asset,
+amount, fee, fiat currency/value/rate, counterparty, description, per-cell
+confidence, and source page before the user opts rows in. The CLI
+`import-document` command likewise prints the exact draft and requires an
+interactive row-number selection; machine/non-interactive mode returns
+`interaction_required`. `--include-quarantined` may expose confidence-only
+rows for explicit review, but never makes structurally invalid rows selectable.
+Imported rows copy the source image/PDF into the managed attachments tree for
+every inserted or enriched transaction. The preview carries a SHA-256 digest
+of the local source,
 and import rejects the draft if that file changed during preview or between
 review and commit. For the desktop flow, the normalized rows and source digest
 remain authoritative in the daemon session; import sends only the token and
 selected ready-row ids. Neither renderer-supplied drafts nor hidden import
 records are trusted on the write path. Fiat-only/generic amounts and
 unparseable dates stay quarantined instead of being guessed as Bitcoin
-transactions.
+transactions. Stable source-and-row identities keep reordered OCR retries
+idempotent, while desktop success payloads omit source and managed-storage paths.
 
 Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in

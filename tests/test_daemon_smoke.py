@@ -5178,6 +5178,7 @@ class DaemonSmokeTest(unittest.TestCase):
             document_import_sessions=sessions,
         )
         authoritative_draft = {
+            "confidence_threshold": 0.9,
             "source": {
                 "path": "/trusted/receipt.png",
                 "filename": "receipt.png",
@@ -5210,7 +5211,10 @@ class DaemonSmokeTest(unittest.TestCase):
         with (
             mock.patch(
                 "kassiber.daemon.resolve_scope",
-                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+                return_value=(
+                    {"id": "workspace-1"},
+                    {"id": "profile-1", "fiat_currency": "EUR"},
+                ),
             ),
             mock.patch(
                 "kassiber.daemon.core_document_import.preview_document_import",
@@ -5219,12 +5223,18 @@ class DaemonSmokeTest(unittest.TestCase):
         ):
             public_draft = daemon_module._document_import_preview_payload(
                 ctx,
-                {"document_token": token, "provider": "local"},
+                {
+                    "document_token": token,
+                    "provider": "local",
+                    "pages": "2-4",
+                },
             )
         self.assertNotIn("path", public_draft["source"])
         preview_token = public_draft["document_token"]
         self.assertNotEqual(preview_token, token)
         self.assertEqual(preview.call_args.kwargs["source_file"], "/trusted/receipt.png")
+        self.assertEqual(preview.call_args.kwargs["pages"], "2-4")
+        self.assertEqual(preview.call_args.kwargs["expected_fiat_currency"], "EUR")
         with self.assertRaises(AppError) as unpreviewed_source:
             sessions.preview_for_import(
                 token,
@@ -5251,7 +5261,10 @@ class DaemonSmokeTest(unittest.TestCase):
         with (
             mock.patch(
                 "kassiber.daemon.resolve_scope",
-                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+                return_value=(
+                    {"id": "workspace-1"},
+                    {"id": "profile-1", "fiat_currency": "EUR"},
+                ),
             ),
             self.assertRaises(AppError) as quarantined,
         ):
@@ -5268,7 +5281,10 @@ class DaemonSmokeTest(unittest.TestCase):
         with (
             mock.patch(
                 "kassiber.daemon.resolve_scope",
-                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+                return_value=(
+                    {"id": "workspace-1"},
+                    {"id": "profile-1", "fiat_currency": "EUR"},
+                ),
             ),
             mock.patch(
                 "kassiber.daemon.core_resolve_wallet",
@@ -5276,7 +5292,19 @@ class DaemonSmokeTest(unittest.TestCase):
             ),
             mock.patch(
                 "kassiber.daemon.core_document_import.import_document_draft",
-                return_value={"draft_rows_imported": 1},
+                return_value={
+                    "draft_rows_imported": 1,
+                    "source": {
+                        "path": "/trusted/receipt.png",
+                        "filename": "receipt.png",
+                    },
+                    "attached_evidence": [
+                        {
+                            "attachment_id": "attachment-1",
+                            "stored_relpath": "profile/transaction/receipt.png",
+                        }
+                    ],
+                },
             ) as import_draft,
         ):
             outcome = daemon_module._document_import_import_payload(
@@ -5288,6 +5316,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 },
             )
         self.assertEqual(outcome["draft_rows_imported"], 1)
+        self.assertNotIn("path", outcome["source"])
+        self.assertNotIn("stored_relpath", outcome["attached_evidence"][0])
         self.assertEqual(
             import_draft.call_args.kwargs["rows"], authoritative_draft["rows"]
         )
@@ -5295,6 +5325,7 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertEqual(
             import_draft.call_args.kwargs["expected_source_sha256"], "a" * 64
         )
+        self.assertEqual(import_draft.call_args.kwargs["confidence_threshold"], 0.9)
         with self.assertRaises(AppError) as consumed:
             sessions.preview_for_import(
                 preview_token,

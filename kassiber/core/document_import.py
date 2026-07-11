@@ -3,6 +3,7 @@ from __future__ import annotations
 """Local-AI document importer for photo/PDF transaction evidence."""
 
 import base64
+import hashlib
 import ipaddress
 import json
 import mimetypes
@@ -27,14 +28,21 @@ from . import attachments as core_attachments
 from . import imports as core_imports
 
 
-DEFAULT_CONFIDENCE_THRESHOLD = Decimal("0.78")
-DEFAULT_MAX_PDF_PAGES = 3
 MAX_RENDERED_PDF_PAGES = 8
+DEFAULT_CONFIDENCE_THRESHOLD = Decimal("0.78")
+# A PDF is scanned completely by default up to the hard local-model budget.
+# Longer documents require an explicit page range instead of being silently
+# truncated to a prefix.
+DEFAULT_MAX_PDF_PAGES = MAX_RENDERED_PDF_PAGES
 MAX_SOURCE_BYTES = 25 * 1024 * 1024
 MAX_DRAFT_ROWS = 500
 MAX_PROJECTED_ATTACHMENT_BYTES = 512 * 1024 * 1024
 PDF_RENDER_DPI = 180
 PDF_RENDER_TIMEOUT_SECONDS = 30
+PDF_RENDER_MAX_DIMENSION = 2400
+MAX_RENDERED_PDF_PAGE_BYTES = 24 * 1024 * 1024
+MAX_RENDERED_PDF_TOTAL_BYTES = 96 * 1024 * 1024
+MAX_RENDERED_PDF_PIXELS = PDF_RENDER_MAX_DIMENSION * PDF_RENDER_MAX_DIMENSION
 DOCUMENT_IMPORT_FORMAT = "document_import"
 SUPPORTED_DOCUMENT_ASSETS = frozenset({"BTC", "LBTC"})
 _OCR_CONFIDENCE_FIELDS = frozenset(
@@ -49,6 +57,25 @@ _OCR_CONFIDENCE_FIELDS = frozenset(
         "fiat_rate",
         "counterparty",
         "description",
+    }
+)
+_STRUCTURAL_ROW_FLAGS = frozenset(
+    {
+        "missing_date",
+        "invalid_date",
+        "missing_direction",
+        "missing_amount",
+        "unsupported_asset",
+        "non_positive_amount",
+        "invalid_fee",
+        "negative_fee",
+        "invalid_fiat_value",
+        "non_positive_fiat_value",
+        "invalid_fiat_rate",
+        "non_positive_fiat_rate",
+        "missing_fiat_currency",
+        "fiat_currency_mismatch",
+        "invalid_source_page",
     }
 )
 
@@ -122,9 +149,14 @@ Schema:
       "cell_confidences": {
         "occurred_at": 0.0,
         "direction": 0.0,
+        "asset": 0.0,
         "amount_btc": 0.0,
+        "fee_btc": 0.0,
+        "fiat_currency": 0.0,
         "fiat_value": 0.0,
-        "counterparty": 0.0
+        "fiat_rate": 0.0,
+        "counterparty": 0.0,
+        "description": 0.0
       },
       "source_region": {
         "page": 1,
@@ -142,7 +174,9 @@ Schema:
 Rules:
 - Extract only rows that appear to be Bitcoin, Lightning, Liquid, or fiat-to-Bitcoin activity.
 - Never invent missing values. Use null and low confidence when unsure.
+- Include a cell_confidences entry for every non-null accounting field.
 - Use positive amount_btc and direction to express side.
+- Fiat values and rates must be positive and must include their visible ISO currency.
 - If a row is a fiat-only bank movement without a Bitcoin amount, omit it.
 - If there are no transaction rows, return {"rows":[]}.
 """
@@ -339,8 +373,6 @@ def _source_path(path: str | Path) -> Path:
 
 
 def _sha256_file(path: Path) -> str:
-    import hashlib
-
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -361,7 +393,158 @@ def _image_content_part(path: Path) -> dict[str, Any]:
     }
 
 
-def _render_pdf_pages(path: Path, *, max_pages: int) -> tuple[list[Path], tempfile.TemporaryDirectory[str]]:
+def _rendered_png_dimensions(path: Path) -> tuple[int, int]:
+    with path.open("rb") as handle:
+        header = handle.read(24)
+    if (
+        len(header) != 24
+        or header[:8] != b"\x89PNG\r\n\x1a\n"
+        or header[12:16] != b"IHDR"
+    ):
+        raise AppError(
+            "PDF renderer produced an invalid image",
+            code="document_import_pdf_render_failed",
+            retryable=False,
+        )
+    return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+
+
+def _validate_rendered_pdf_pages(rendered: Sequence[Path]) -> None:
+    total_bytes = 0
+    for page_path in rendered:
+        size_bytes = page_path.stat().st_size
+        width, height = _rendered_png_dimensions(page_path)
+        total_bytes += size_bytes
+        if (
+            size_bytes < 1
+            or size_bytes > MAX_RENDERED_PDF_PAGE_BYTES
+            or width < 1
+            or height < 1
+            or width > PDF_RENDER_MAX_DIMENSION
+            or height > PDF_RENDER_MAX_DIMENSION
+            or width * height > MAX_RENDERED_PDF_PIXELS
+            or total_bytes > MAX_RENDERED_PDF_TOTAL_BYTES
+        ):
+            raise AppError(
+                "Rendered PDF pages exceed the local OCR safety budget",
+                code="document_import_pdf_render_too_large",
+                hint="Export the transaction pages as smaller PNG/JPEG images and import those.",
+                details={
+                    "page_bytes": size_bytes,
+                    "width": width,
+                    "height": height,
+                    "total_bytes": total_bytes,
+                    "max_dimension": PDF_RENDER_MAX_DIMENSION,
+                    "max_page_bytes": MAX_RENDERED_PDF_PAGE_BYTES,
+                    "max_total_bytes": MAX_RENDERED_PDF_TOTAL_BYTES,
+                },
+                retryable=False,
+            )
+
+
+def _pdf_page_count(path: Path) -> int:
+    pdfinfo = shutil.which("pdfinfo")
+    if not pdfinfo:
+        raise AppError(
+            "PDF OCR import requires Poppler's pdfinfo",
+            code="document_import_pdf_renderer_missing",
+            hint="Install poppler-utils, or export the statement pages as images and import those.",
+            details={"tool": "pdfinfo"},
+            retryable=False,
+        )
+    try:
+        completed = subprocess.run(
+            [pdfinfo, str(path)],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=PDF_RENDER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AppError(
+            "PDF inspection timed out",
+            code="document_import_pdf_render_timeout",
+            hint="Export only the transaction pages as PNG/JPEG and import those images.",
+            details={"timeout_seconds": PDF_RENDER_TIMEOUT_SECONDS},
+            retryable=False,
+        ) from exc
+    if completed.returncode != 0:
+        raise AppError(
+            "Could not inspect the PDF page count",
+            code="document_import_pdf_render_failed",
+            hint="Check whether the PDF is password-protected, then export the transaction pages as images.",
+            retryable=False,
+        )
+    match = re.search(r"^Pages:\s*(\d+)\s*$", completed.stdout or "", flags=re.MULTILINE)
+    if match is None or int(match.group(1)) < 1:
+        raise AppError(
+            "Could not determine the PDF page count",
+            code="document_import_pdf_render_failed",
+            hint="Export the transaction pages as PNG/JPEG and import those images.",
+            retryable=False,
+        )
+    return int(match.group(1))
+
+
+def _selected_pdf_pages(
+    value: Any,
+    *,
+    total_pages: int,
+    max_pages: int,
+) -> tuple[list[int], bool]:
+    raw = str(value or "").strip()
+    if not raw:
+        if total_pages > max_pages:
+            raise AppError(
+                "This PDF needs an explicit page range before OCR",
+                code="document_import_pdf_page_selection_required",
+                hint=(
+                    f"Choose a contiguous range of at most {max_pages} pages, for example "
+                    f"1-{max_pages}, or split the statement into smaller PDFs."
+                ),
+                details={"total_pages": total_pages, "max_pages": max_pages},
+                retryable=False,
+            )
+        return list(range(1, total_pages + 1)), False
+
+    match = re.fullmatch(r"(\d+)(?:\s*-\s*(\d+))?", raw)
+    if match is None:
+        raise AppError(
+            "PDF pages must be one page or a contiguous range such as 2-6",
+            code="validation",
+            details={"pages": raw, "total_pages": total_pages},
+            retryable=False,
+        )
+    start = int(match.group(1))
+    end = int(match.group(2) or start)
+    if start < 1 or end < start or end > total_pages:
+        raise AppError(
+            "PDF page range is outside the document",
+            code="validation",
+            details={"pages": raw, "total_pages": total_pages},
+            retryable=False,
+        )
+    selected = list(range(start, end + 1))
+    if len(selected) > max_pages:
+        raise AppError(
+            f"PDF page range may contain at most {max_pages} pages",
+            code="validation",
+            details={"pages": raw, "selected_pages": len(selected), "max_pages": max_pages},
+            retryable=False,
+        )
+    return selected, True
+
+
+def _render_pdf_pages(
+    path: Path,
+    *,
+    max_pages: int,
+    pages: Any = None,
+) -> tuple[
+    list[tuple[int, Path]],
+    tempfile.TemporaryDirectory[str],
+    dict[str, Any],
+]:
     pdftoppm = shutil.which("pdftoppm")
     if not pdftoppm:
         raise AppError(
@@ -371,18 +554,25 @@ def _render_pdf_pages(path: Path, *, max_pages: int) -> tuple[list[Path], tempfi
             details={"tool": "pdftoppm"},
             retryable=False,
         )
+    total_pages = _pdf_page_count(path)
+    selected_pages, selection_explicit = _selected_pdf_pages(
+        pages,
+        total_pages=total_pages,
+        max_pages=max_pages,
+    )
     tempdir = tempfile.TemporaryDirectory(prefix="kassiber-document-ocr-")
     prefix = Path(tempdir.name) / "page"
-    pages = max(1, min(max_pages, MAX_RENDERED_PDF_PAGES))
     command = [
         pdftoppm,
         "-png",
         "-r",
         str(PDF_RENDER_DPI),
+        "-scale-to",
+        str(PDF_RENDER_MAX_DIMENSION),
         "-f",
-        "1",
+        str(selected_pages[0]),
         "-l",
-        str(pages),
+        str(selected_pages[-1]),
         str(path),
         str(prefix),
     ]
@@ -412,28 +602,59 @@ def _render_pdf_pages(path: Path, *, max_pages: int) -> tuple[list[Path], tempfi
             details={"stderr": (completed.stderr or "").strip()[-2048:]},
             retryable=False,
         )
-    rendered = sorted(Path(tempdir.name).glob("page-*.png"))
-    if not rendered:
+    rendered = sorted(
+        Path(tempdir.name).glob("page-*.png"),
+        key=lambda candidate: int(re.search(r"-(\d+)\.png$", candidate.name).group(1))
+        if re.search(r"-(\d+)\.png$", candidate.name)
+        else 0,
+    )
+    if len(rendered) != len(selected_pages):
         tempdir.cleanup()
         raise AppError(
-            "PDF rendering produced no pages",
+            "PDF rendering did not produce the reviewed page range",
             code="document_import_pdf_render_failed",
             hint="Check whether the PDF is password-protected, then export the transaction pages as images.",
+            details={"expected_pages": len(selected_pages), "rendered_pages": len(rendered)},
             retryable=False,
         )
-    return rendered[:pages], tempdir
+    try:
+        _validate_rendered_pdf_pages(rendered)
+    except Exception:
+        tempdir.cleanup()
+        raise
+    metadata = {
+        "total_pages": total_pages,
+        "rendered_pages": selected_pages,
+        "complete": len(selected_pages) == total_pages,
+        "selection_explicit": selection_explicit,
+        "selection": (
+            str(selected_pages[0])
+            if len(selected_pages) == 1
+            else f"{selected_pages[0]}-{selected_pages[-1]}"
+        ),
+    }
+    return list(zip(selected_pages, rendered)), tempdir, metadata
 
 
-def _document_parts(path: Path, *, max_pages: int) -> tuple[list[dict[str, Any]], Callable[[], None]]:
+def _document_parts(
+    path: Path,
+    *,
+    max_pages: int,
+    pages: Any = None,
+) -> tuple[list[dict[str, Any]], Callable[[], None], dict[str, Any] | None]:
     if path.suffix.lower() in IMAGE_EXTENSIONS:
-        return [_image_content_part(path)], lambda: None
+        return [_image_content_part(path)], lambda: None, None
 
-    rendered, tempdir = _render_pdf_pages(path, max_pages=max_pages)
+    rendered, tempdir, metadata = _render_pdf_pages(
+        path,
+        max_pages=max_pages,
+        pages=pages,
+    )
     parts: list[dict[str, Any]] = []
-    for index, page_path in enumerate(rendered, start=1):
-        parts.append({"type": "text", "text": f"PDF page {index}:"})
+    for page_number, page_path in rendered:
+        parts.append({"type": "text", "text": f"PDF page {page_number}:"})
         parts.append(_image_content_part(page_path))
-    return parts, tempdir.cleanup
+    return parts, tempdir.cleanup, metadata
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
@@ -501,7 +722,7 @@ def _decimal_text(value: Any) -> str | None:
     number = _decimal_or_none(value)
     if number is None:
         return None
-    return format(abs(number).normalize(), "f")
+    return format(number.normalize(), "f")
 
 
 def _signed_decimal_text(value: Any) -> str | None:
@@ -545,17 +766,22 @@ def _cell_confidences(value: Any) -> dict[str, float]:
     return out
 
 
-def _source_region(value: Any) -> dict[str, Any] | None:
+def _source_region(
+    value: Any,
+    *,
+    allowed_pages: Sequence[int] | None = None,
+) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
-    page = value.get("page")
-    try:
-        page_number = int(page)
-    except (TypeError, ValueError):
-        page_number = 1
-    region: dict[str, Any] = {
-        "page": min(max(1, page_number), MAX_RENDERED_PDF_PAGES)
-    }
+    page = _decimal_or_none(value.get("page"))
+    if page is None or page != page.to_integral_value():
+        return None
+    page_number = int(page)
+    if page_number < 1:
+        return None
+    if allowed_pages is not None and page_number not in set(allowed_pages):
+        return None
+    region: dict[str, Any] = {"page": page_number}
     for key in ("x", "y", "width", "height"):
         number = _decimal_or_none(value.get(key))
         if number is not None and abs(number) <= 1_000_000:
@@ -572,6 +798,7 @@ def _row_flags(
     amount_btc: str | None,
     confidence: Decimal,
     cell_confidences: Mapping[str, float],
+    populated_confidence_fields: Sequence[str],
     threshold: Decimal,
     invalid_date: bool = False,
 ) -> list[str]:
@@ -586,11 +813,118 @@ def _row_flags(
         flags.append("missing_amount")
     if confidence < threshold:
         flags.append("low_row_confidence")
-    for key in ("occurred_at", "direction", "amount_btc"):
+    for key in populated_confidence_fields:
         value = cell_confidences.get(key)
-        if value is not None and Decimal(str(value)) < threshold:
+        if value is None:
+            flags.append(f"missing_{key}_confidence")
+        elif Decimal(str(value)) < threshold:
             flags.append(f"low_{key}_confidence")
     return flags
+
+
+def _confidence_review_flags(
+    row: Mapping[str, Any],
+    *,
+    threshold: Decimal,
+) -> list[str]:
+    """Recompute the confidence gate from canonical visible draft fields."""
+
+    flags: list[str] = []
+    if _confidence(row.get("confidence")) < threshold:
+        flags.append("low_row_confidence")
+    draft = row.get("record")
+    if not isinstance(draft, Mapping):
+        return [*flags, "missing_review_record"]
+    populated_fields = [
+        key
+        for key, populated in (
+            ("occurred_at", draft.get("occurred_at") not in (None, "")),
+            ("direction", draft.get("direction") not in (None, "")),
+            ("asset", draft.get("asset") not in (None, "")),
+            ("amount_btc", draft.get("amount_btc") not in (None, "")),
+            (
+                "fee_btc",
+                draft.get("fee_btc") not in (None, "")
+                and not bool(draft.get("fee_defaulted")),
+            ),
+            ("fiat_currency", draft.get("fiat_currency") not in (None, "")),
+            ("fiat_value", draft.get("fiat_value") not in (None, "")),
+            ("fiat_rate", draft.get("fiat_rate") not in (None, "")),
+            ("counterparty", draft.get("counterparty") not in (None, "")),
+            ("description", draft.get("description") not in (None, "")),
+        )
+        if populated
+    ]
+    cell_confidences = _cell_confidences(row.get("cell_confidences"))
+    for key in populated_fields:
+        value = cell_confidences.get(key)
+        if value is None:
+            flags.append(f"missing_{key}_confidence")
+        elif Decimal(str(value)) < threshold:
+            flags.append(f"low_{key}_confidence")
+    return flags
+
+
+def _document_row_base_id(
+    *,
+    source_hash: str,
+    occurred_at: str | None,
+    direction: str | None,
+    asset: str | None,
+    amount_btc: str | None,
+    fee_btc: str,
+) -> str:
+    """Build an order-independent identity from the reviewed economic row."""
+
+    canonical = json.dumps(
+        {
+            "occurred_at": occurred_at,
+            "direction": direction,
+            "asset": asset,
+            "amount_btc": amount_btc,
+            "fee_btc": fee_btc,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    digest = hashlib.sha256(canonical).hexdigest()[:16]
+    return f"docrow-{source_hash[:16]}-{digest}"
+
+
+def _set_draft_row_id(row: dict[str, Any], row_id: str) -> None:
+    row["id"] = row_id
+    import_record = row.get("import_record")
+    if not isinstance(import_record, dict):
+        return
+    import_record["id"] = row_id
+    raw_json = import_record.get("raw_json")
+    if isinstance(raw_json, dict):
+        raw_json["row_id"] = row_id
+
+
+def _stabilize_duplicate_row_ids(rows: list[dict[str, Any]]) -> None:
+    """Assign duplicate ordinals without depending on OCR response order."""
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        base_id = str(row.get("id") or "").rsplit("-", 1)[0]
+        grouped.setdefault(base_id, []).append(row)
+    for base_id, duplicates in grouped.items():
+        duplicates.sort(
+            key=lambda row: json.dumps(
+                {
+                    "source_region": row.get("source_region"),
+                    "evidence_text": row.get("evidence_text"),
+                    "record": row.get("record"),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+        )
+        for ordinal, row in enumerate(duplicates, start=1):
+            _set_draft_row_id(row, f"{base_id}-{ordinal:03d}")
 
 
 def _draft_row(
@@ -599,6 +933,8 @@ def _draft_row(
     index: int,
     threshold: Decimal,
     source_hash: str,
+    expected_fiat_currency: str | None = None,
+    allowed_pages: Sequence[int] | None = None,
 ) -> dict[str, Any]:
     raw_occurred_at = str_or_none(raw.get("occurred_at") or raw.get("date"))
     invalid_date = False
@@ -624,20 +960,61 @@ def _draft_row(
     fee_value = raw.get("fee_btc")
     if fee_value in (None, ""):
         fee_value = raw.get("fee_crypto")
+    fee_present = fee_value not in (None, "")
     fee_btc = _signed_decimal_text(fee_value)
     fee_number = _decimal_or_none(fee_value)
     fiat_currency = str_or_none(raw.get("fiat_currency"))
-    fiat_currency = fiat_currency[:16] if fiat_currency else None
-    fiat_value = _decimal_text(raw.get("fiat_value"))
-    fiat_rate = _decimal_text(raw.get("fiat_rate"))
+    fiat_currency = fiat_currency.strip().upper()[:16] if fiat_currency else None
+    raw_fiat_value = raw.get("fiat_value")
+    raw_fiat_rate = raw.get("fiat_rate")
+    fiat_value_present = raw_fiat_value not in (None, "")
+    fiat_rate_present = raw_fiat_rate not in (None, "")
+    fiat_value_number = _decimal_or_none(raw_fiat_value)
+    fiat_rate_number = _decimal_or_none(raw_fiat_rate)
+    fiat_value = _decimal_text(raw_fiat_value)
+    fiat_rate = _decimal_text(raw_fiat_rate)
+    fee_display = (
+        fee_btc
+        if fee_btc is not None
+        else (str(fee_value).strip()[:128] if fee_present else None)
+    )
+    fiat_value_display = (
+        fiat_value
+        if fiat_value is not None
+        else (str(raw_fiat_value).strip()[:128] if fiat_value_present else None)
+    )
+    fiat_rate_display = (
+        fiat_rate
+        if fiat_rate is not None
+        else (str(raw_fiat_rate).strip()[:128] if fiat_rate_present else None)
+    )
     confidence = _confidence(raw.get("confidence"))
     cell_confidences = _cell_confidences(raw.get("cell_confidences"))
+    counterparty = str_or_none(raw.get("counterparty"))
+    description = str_or_none(raw.get("description"))
+    populated_confidence_fields = [
+        key
+        for key, populated in (
+            ("occurred_at", raw_occurred_at is not None),
+            ("direction", str_or_none(raw.get("direction")) is not None),
+            ("asset", asset is not None),
+            ("amount_btc", amount_value not in (None, "")),
+            ("fee_btc", fee_present),
+            ("fiat_currency", fiat_currency is not None),
+            ("fiat_value", fiat_value_present),
+            ("fiat_rate", fiat_rate_present),
+            ("counterparty", counterparty is not None),
+            ("description", description is not None),
+        )
+        if populated
+    ]
     flags = _row_flags(
         occurred_at=occurred_at,
         direction=direction,
         amount_btc=amount_btc,
         confidence=confidence,
         cell_confidences=cell_confidences,
+        populated_confidence_fields=populated_confidence_fields,
         threshold=threshold,
         invalid_date=invalid_date,
     )
@@ -645,18 +1022,60 @@ def _draft_row(
         flags.append("unsupported_asset")
     if amount_number is not None and amount_number <= 0:
         flags.append("non_positive_amount")
-    if fee_number is not None and fee_number < 0:
+    if fee_present and fee_number is None:
+        flags.append("invalid_fee")
+    elif fee_number is not None and fee_number < 0:
         flags.append("negative_fee")
+    if fiat_value_present and fiat_value_number is None:
+        flags.append("invalid_fiat_value")
+    elif fiat_value_number is not None and fiat_value_number <= 0:
+        flags.append("non_positive_fiat_value")
+    if fiat_rate_present and fiat_rate_number is None:
+        flags.append("invalid_fiat_rate")
+    elif fiat_rate_number is not None and fiat_rate_number <= 0:
+        flags.append("non_positive_fiat_rate")
+    has_fiat_fact = fiat_value_present or fiat_rate_present
+    if has_fiat_fact and not fiat_currency:
+        flags.append("missing_fiat_currency")
+    normalized_expected_currency = str(expected_fiat_currency or "").strip().upper()
+    if (
+        fiat_currency
+        and normalized_expected_currency
+        and fiat_currency != normalized_expected_currency
+    ):
+        flags.append("fiat_currency_mismatch")
+    raw_source_region = raw.get("source_region")
+    source_region = _source_region(raw_source_region, allowed_pages=allowed_pages)
+    if isinstance(raw_source_region, Mapping) and source_region is None:
+        flags.append("invalid_source_page")
     status = "ready" if not flags else "quarantined"
     evidence_text = str_or_none(raw.get("evidence_text"))
-    counterparty = str_or_none(raw.get("counterparty"))
-    description = str_or_none(raw.get("description"))
     evidence_text = evidence_text[:4000] if evidence_text else None
     counterparty = counterparty[:500] if counterparty else None
     description = description[:4000] if description else None
     model_row_id = str_or_none(raw.get("id") or raw.get("row_id"))
     model_row_id = model_row_id[:256] if model_row_id else None
-    row_id = f"docrow-{source_hash[:16]}-{index:03d}"
+    row_id = (
+        _document_row_base_id(
+            source_hash=source_hash,
+            occurred_at=occurred_at,
+            direction=direction,
+            asset=asset,
+            amount_btc=amount_btc,
+            fee_btc=fee_display or "0",
+        )
+        + "-001"
+    )
+    fiat_values_valid = (
+        (not fiat_value_present or (fiat_value_number is not None and fiat_value_number > 0))
+        and (not fiat_rate_present or (fiat_rate_number is not None and fiat_rate_number > 0))
+        and (not has_fiat_fact or bool(fiat_currency))
+        and (
+            not fiat_currency
+            or not normalized_expected_currency
+            or fiat_currency == normalized_expected_currency
+        )
+    )
     import_record = None
     if (
         occurred_at
@@ -665,7 +1084,8 @@ def _draft_row(
         and amount_number is not None
         and amount_number > 0
         and asset in SUPPORTED_DOCUMENT_ASSETS
-        and (fee_number is None or fee_number >= 0)
+        and (not fee_present or (fee_number is not None and fee_number >= 0))
+        and fiat_values_valid
     ):
         import_record = {
             "id": row_id,
@@ -678,14 +1098,15 @@ def _draft_row(
             "fiat_value": fiat_value,
             "fiat_rate": fiat_rate,
             "counterparty": counterparty,
-            "description": description or evidence_text,
+            "description": description,
             "raw_json": {
                 "source": "document_import",
                 "row_id": row_id,
                 "model_row_id": model_row_id,
                 "model_confidence": float(confidence),
                 "cell_confidences": cell_confidences,
-                "source_region": _source_region(raw.get("source_region")),
+                "fee_defaulted": not fee_present,
+                "source_region": source_region,
                 "evidence_text": evidence_text,
             },
         }
@@ -695,17 +1116,19 @@ def _draft_row(
         "flags": flags,
         "confidence": float(confidence),
         "cell_confidences": cell_confidences,
-        "source_region": _source_region(raw.get("source_region")),
+        "confidence_threshold": float(threshold),
+        "source_region": source_region,
         "evidence_text": evidence_text,
         "record": {
             "occurred_at": occurred_at,
             "direction": direction,
             "asset": asset,
             "amount_btc": amount_btc,
-            "fee_btc": fee_btc or "0",
+            "fee_btc": fee_display or "0",
+            "fee_defaulted": not fee_present,
             "fiat_currency": fiat_currency,
-            "fiat_value": fiat_value,
-            "fiat_rate": fiat_rate,
+            "fiat_value": fiat_value_display,
+            "fiat_rate": fiat_rate_display,
             "counterparty": counterparty,
             "description": description,
         },
@@ -718,6 +1141,8 @@ def _draft_rows(
     *,
     threshold: Decimal,
     source_hash: str,
+    expected_fiat_currency: str | None = None,
+    allowed_pages: Sequence[int] | None = None,
 ) -> list[dict[str, Any]]:
     raw_rows = payload.get("rows")
     if not isinstance(raw_rows, list):
@@ -744,8 +1169,11 @@ def _draft_rows(
                 index=index,
                 threshold=threshold,
                 source_hash=source_hash,
+                expected_fiat_currency=expected_fiat_currency,
+                allowed_pages=allowed_pages,
             )
         )
+    _stabilize_duplicate_row_ids(rows)
     return rows
 
 
@@ -795,6 +1223,8 @@ def preview_document_import(
     model: str | None = None,
     confidence_threshold: Any = None,
     max_pages: Any = None,
+    pages: Any = None,
+    expected_fiat_currency: str | None = None,
     client_factory: ClientFactory | None = None,
 ) -> dict[str, Any]:
     source_path = _source_path(source_file)
@@ -811,7 +1241,11 @@ def preview_document_import(
     shutil.copyfile(source_path, stable_path)
     source_hash = _sha256_file(stable_path)
     try:
-        parts, cleanup = _document_parts(stable_path, max_pages=page_limit)
+        parts, cleanup, pdf_metadata = _document_parts(
+            stable_path,
+            max_pages=page_limit,
+            pages=pages,
+        )
     except Exception:
         stable_dir.cleanup()
         raise
@@ -850,7 +1284,16 @@ def preview_document_import(
             details={"filename": source_path.name},
             retryable=False,
         )
-    rows = _draft_rows(payload, threshold=threshold, source_hash=source_hash)
+    allowed_pages = (
+        pdf_metadata["rendered_pages"] if pdf_metadata is not None else [1]
+    )
+    rows = _draft_rows(
+        payload,
+        threshold=threshold,
+        source_hash=source_hash,
+        expected_fiat_currency=expected_fiat_currency,
+        allowed_pages=allowed_pages,
+    )
     ready = sum(1 for row in rows if row["status"] == "ready")
     quarantined = sum(1 for row in rows if row["status"] != "ready")
     return {
@@ -861,6 +1304,7 @@ def preview_document_import(
             "size_bytes": source_path.stat().st_size,
             "sha256": source_hash,
             "kind": "pdf" if source_path.suffix.lower() == PDF_EXTENSION else "image",
+            **({"pdf": pdf_metadata} if pdf_metadata is not None else {}),
         },
         "provider": {
             "name": provider["name"],
@@ -870,6 +1314,9 @@ def preview_document_import(
         "installed_models": installed_models,
         "recommendations": model_recommendations(),
         "confidence_threshold": float(threshold),
+        "expected_fiat_currency": (
+            str(expected_fiat_currency).strip().upper() if expected_fiat_currency else None
+        ),
         "rows": rows,
         "summary": {
             "rows": len(rows),
@@ -887,6 +1334,8 @@ def _import_records_from_rows(
     include_quarantined: bool,
     selected_row_ids: Sequence[str] | None,
     source_hash: str,
+    expected_fiat_currency: str | None = None,
+    confidence_threshold: Any = None,
 ) -> tuple[list[dict[str, Any]], int]:
     if len(rows) > MAX_DRAFT_ROWS:
         raise AppError(
@@ -902,18 +1351,28 @@ def _import_records_from_rows(
     )
     records: list[dict[str, Any]] = []
     skipped_quarantined = 0
+    threshold = _confidence_threshold(confidence_threshold)
     for row in rows:
         row_id = str(row.get("id") or "")
         if selected is not None and row_id not in selected:
             continue
-        status = str(row.get("status") or "")
-        if status != "ready" and not include_quarantined:
+        confidence_flags = _confidence_review_flags(row, threshold=threshold)
+        if confidence_flags and not include_quarantined:
             skipped_quarantined += 1
             continue
-        record = _import_record_from_draft_row(row, source_hash=source_hash)
+        record = _import_record_from_draft_row(
+            row,
+            source_hash=source_hash,
+            expected_fiat_currency=expected_fiat_currency,
+        )
         if record is None:
             skipped_quarantined += 1
             continue
+        if confidence_flags:
+            raw_json = record.get("raw_json")
+            if isinstance(raw_json, dict):
+                raw_json["confidence_override"] = True
+                raw_json["review_flags"] = confidence_flags
         records.append(record)
     return records, skipped_quarantined
 
@@ -922,6 +1381,7 @@ def _import_record_from_draft_row(
     row: Mapping[str, Any],
     *,
     source_hash: str,
+    expected_fiat_currency: str | None = None,
 ) -> dict[str, Any] | None:
     """Rebuild an import row from validated public draft fields.
 
@@ -930,8 +1390,15 @@ def _import_record_from_draft_row(
     """
 
     row_id = str(row.get("id") or "")
-    if not re.fullmatch(rf"docrow-{re.escape(source_hash[:16])}-\d{{3}}", row_id):
+    if not re.fullmatch(
+        rf"docrow-{re.escape(source_hash[:16])}-[0-9a-f]{{16}}-\d{{3}}",
+        row_id,
+    ):
         return None
+    flags = row.get("flags")
+    if isinstance(flags, Sequence) and not isinstance(flags, (str, bytes)):
+        if any(str(flag) in _STRUCTURAL_ROW_FLAGS for flag in flags):
+            return None
     draft = row.get("record")
     if not isinstance(draft, Mapping):
         return None
@@ -944,9 +1411,20 @@ def _import_record_from_draft_row(
     raw_amount = draft.get("amount_btc")
     raw_fee = draft.get("fee_btc")
     amount = _signed_decimal_text(raw_amount)
-    fee = _signed_decimal_text(raw_fee) or "0"
+    fee_present = raw_fee not in (None, "")
+    fee = _signed_decimal_text(raw_fee) if fee_present else "0"
     amount_number = _decimal_or_none(raw_amount)
-    fee_number = Decimal("0") if raw_fee in (None, "") else _decimal_or_none(raw_fee)
+    fee_number = Decimal("0") if not fee_present else _decimal_or_none(raw_fee)
+    raw_fiat_value = draft.get("fiat_value")
+    raw_fiat_rate = draft.get("fiat_rate")
+    fiat_value_present = raw_fiat_value not in (None, "")
+    fiat_rate_present = raw_fiat_rate not in (None, "")
+    fiat_value_number = _decimal_or_none(raw_fiat_value)
+    fiat_rate_number = _decimal_or_none(raw_fiat_rate)
+    fiat_currency = str_or_none(draft.get("fiat_currency"))
+    fiat_currency = fiat_currency.strip().upper()[:16] if fiat_currency else None
+    has_fiat_fact = fiat_value_present or fiat_rate_present
+    normalized_expected_currency = str(expected_fiat_currency or "").strip().upper()
     if (
         direction is None
         or asset not in SUPPORTED_DOCUMENT_ASSETS
@@ -954,6 +1432,14 @@ def _import_record_from_draft_row(
         or amount_number <= 0
         or fee_number is None
         or fee_number < 0
+        or (fiat_value_present and (fiat_value_number is None or fiat_value_number <= 0))
+        or (fiat_rate_present and (fiat_rate_number is None or fiat_rate_number <= 0))
+        or (has_fiat_fact and not fiat_currency)
+        or (
+            fiat_currency
+            and normalized_expected_currency
+            and fiat_currency != normalized_expected_currency
+        )
     ):
         return None
     confidence = _confidence(row.get("confidence"))
@@ -961,8 +1447,6 @@ def _import_record_from_draft_row(
     evidence_text = str_or_none(row.get("evidence_text"))
     if evidence_text:
         evidence_text = evidence_text[:4000]
-    fiat_currency = str_or_none(draft.get("fiat_currency"))
-    fiat_currency = fiat_currency[:16] if fiat_currency else None
     counterparty = str_or_none(draft.get("counterparty"))
     counterparty = counterparty[:500] if counterparty else None
     description = str_or_none(draft.get("description"))
@@ -975,15 +1459,16 @@ def _import_record_from_draft_row(
         "amount": amount,
         "fee": fee,
         "fiat_currency": fiat_currency,
-        "fiat_value": _decimal_text(draft.get("fiat_value")),
-        "fiat_rate": _decimal_text(draft.get("fiat_rate")),
+        "fiat_value": _decimal_text(raw_fiat_value),
+        "fiat_rate": _decimal_text(raw_fiat_rate),
         "counterparty": counterparty,
-        "description": description or evidence_text,
+        "description": description,
         "raw_json": {
             "source": "document_import",
             "row_id": row_id,
             "model_confidence": float(confidence),
             "cell_confidences": cell_confidences,
+            "fee_defaulted": bool(draft.get("fee_defaulted")),
             "source_region": _source_region(row.get("source_region")),
             "evidence_text": evidence_text,
         },
@@ -1002,6 +1487,7 @@ def import_document_draft(
     include_quarantined: bool = False,
     selected_row_ids: Sequence[str] | None = None,
     expected_source_sha256: str | None = None,
+    confidence_threshold: Any = None,
     attach_evidence: bool = True,
     commit: bool = True,
 ) -> dict[str, Any]:
@@ -1039,6 +1525,8 @@ def import_document_draft(
             include_quarantined=include_quarantined,
             selected_row_ids=selected_row_ids,
             source_hash=source_sha256,
+            expected_fiat_currency=str(profile["fiat_currency"] or ""),
+            confidence_threshold=confidence_threshold,
         )
     except Exception:
         stable_dir.cleanup()
@@ -1197,6 +1685,7 @@ def preview_then_import_document(
     model: str | None = None,
     confidence_threshold: Any = None,
     max_pages: Any = None,
+    pages: Any = None,
     include_quarantined: bool = False,
     client_factory: ClientFactory | None = None,
 ) -> dict[str, Any]:
@@ -1207,6 +1696,8 @@ def preview_then_import_document(
         model=model,
         confidence_threshold=confidence_threshold,
         max_pages=max_pages,
+        pages=pages,
+        expected_fiat_currency=str(profile["fiat_currency"] or ""),
         client_factory=client_factory,
     )
     outcome = import_document_draft(
@@ -1219,6 +1710,7 @@ def preview_then_import_document(
         hooks=hooks,
         include_quarantined=include_quarantined,
         expected_source_sha256=draft["source"]["sha256"],
+        confidence_threshold=confidence_threshold,
         commit=True,
     )
     return {"draft": draft, "import": outcome}

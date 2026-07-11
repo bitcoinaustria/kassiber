@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 import subprocess
 import tempfile
 import unittest
@@ -41,7 +42,13 @@ class FakeVisionClient:
                         "cell_confidences": {
                             "occurred_at": 0.96,
                             "direction": 0.91,
+                            "asset": 0.96,
                             "amount_btc": 0.95,
+                            "fee_btc": 0.94,
+                            "fiat_currency": 0.93,
+                            "fiat_value": 0.92,
+                            "counterparty": 0.91,
+                            "description": 0.90,
                         },
                         "source_region": {
                             "page": 1,
@@ -72,6 +79,20 @@ class FakeVisionClient:
     def chat(self, **kwargs):
         self.chat_requests.append(kwargs)
         return {"role": "assistant", "content": self._content, "finish_reason": "stop"}
+
+
+def _confidences(*fields: str, value: float = 0.99) -> dict[str, float]:
+    return {field: value for field in fields}
+
+
+def _png_header(*, width: int = 1200, height: int = 1600) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + (13).to_bytes(4, "big")
+        + b"IHDR"
+        + width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+    )
 
 
 def _book(conn):
@@ -268,6 +289,7 @@ class DocumentImportTest(unittest.TestCase):
 
         with (
             mock.patch.object(document_import.shutil, "which", return_value="/usr/bin/pdftoppm"),
+            mock.patch.object(document_import, "_pdf_page_count", return_value=3),
             mock.patch.object(
                 document_import.subprocess,
                 "run",
@@ -286,6 +308,132 @@ class DocumentImportTest(unittest.TestCase):
             run.call_args.kwargs["timeout"],
             document_import.PDF_RENDER_TIMEOUT_SECONDS,
         )
+
+    def test_pdf_requires_an_explicit_range_instead_of_silent_truncation(self):
+        with self.assertRaises(AppError) as raised:
+            document_import._selected_pdf_pages(
+                None,
+                total_pages=9,
+                max_pages=document_import.MAX_RENDERED_PDF_PAGES,
+            )
+
+        self.assertEqual(
+            raised.exception.code,
+            "document_import_pdf_page_selection_required",
+        )
+        self.assertEqual(raised.exception.details["total_pages"], 9)
+        selected, explicit = document_import._selected_pdf_pages(
+            "3-5",
+            total_pages=9,
+            max_pages=document_import.MAX_RENDERED_PDF_PAGES,
+        )
+        self.assertEqual(selected, [3, 4, 5])
+        self.assertTrue(explicit)
+        self.assertEqual(
+            document_import._source_region({"page": 9}, allowed_pages=[9]),
+            {"page": 9, "unit": "relative"},
+        )
+
+    def test_pdf_renderer_uses_and_reports_the_exact_explicit_range(self):
+        source = self.root / "statement.pdf"
+        source.write_bytes(b"%PDF-1.7")
+
+        def render(command, **_kwargs):
+            start = int(command[command.index("-f") + 1])
+            end = int(command[command.index("-l") + 1])
+            prefix = Path(command[-1])
+            for page in range(start, end + 1):
+                prefix.with_name(f"{prefix.name}-{page}.png").write_bytes(_png_header())
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with (
+            mock.patch.object(document_import.shutil, "which", return_value="/usr/bin/pdftoppm"),
+            mock.patch.object(document_import, "_pdf_page_count", return_value=12),
+            mock.patch.object(document_import.subprocess, "run", side_effect=render),
+        ):
+            rendered, tempdir, metadata = document_import._render_pdf_pages(
+                source,
+                max_pages=document_import.MAX_RENDERED_PDF_PAGES,
+                pages="9-12",
+            )
+        try:
+            self.assertEqual([page for page, _path in rendered], [9, 10, 11, 12])
+            self.assertEqual(metadata["total_pages"], 12)
+            self.assertEqual(metadata["rendered_pages"], [9, 10, 11, 12])
+            self.assertFalse(metadata["complete"])
+            self.assertTrue(metadata["selection_explicit"])
+        finally:
+            tempdir.cleanup()
+
+    def test_pdf_renderer_caps_and_rejects_oversized_raster_geometry(self):
+        source = self.root / "statement.pdf"
+        source.write_bytes(b"%PDF-1.7")
+
+        def render(command, **_kwargs):
+            prefix = Path(command[-1])
+            prefix.with_name(f"{prefix.name}-1.png").write_bytes(
+                _png_header(width=document_import.PDF_RENDER_MAX_DIMENSION + 1)
+            )
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with (
+            mock.patch.object(document_import.shutil, "which", return_value="/usr/bin/pdftoppm"),
+            mock.patch.object(document_import, "_pdf_page_count", return_value=1),
+            mock.patch.object(document_import.subprocess, "run", side_effect=render) as run,
+            self.assertRaises(AppError) as raised,
+        ):
+            document_import._render_pdf_pages(source, max_pages=1)
+
+        self.assertEqual(raised.exception.code, "document_import_pdf_render_too_large")
+        command = run.call_args.args[0]
+        self.assertEqual(
+            command[command.index("-scale-to") + 1],
+            str(document_import.PDF_RENDER_MAX_DIMENSION),
+        )
+
+    def test_preview_reports_the_exact_pdf_page_selection(self):
+        source = self.root / "statement.pdf"
+        source.write_bytes(b"%PDF-1.7")
+        metadata = {
+            "total_pages": 9,
+            "rendered_pages": [3, 4, 5],
+            "complete": False,
+            "selection_explicit": True,
+            "selection": "3-5",
+        }
+        content = json.dumps(
+            {
+                "rows": [
+                    {
+                        "occurred_at": "2026-01-02",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount_btc": "0.01",
+                        "confidence": 0.99,
+                        "cell_confidences": _confidences(
+                            "occurred_at", "direction", "asset", "amount_btc"
+                        ),
+                        "source_region": {"page": 3},
+                    }
+                ]
+            }
+        )
+
+        with mock.patch.object(
+            document_import,
+            "_document_parts",
+            return_value=([{"type": "text", "text": "PDF page 3:"}], lambda: None, metadata),
+        ):
+            draft = document_import.preview_document_import(
+                self.conn,
+                source_file=str(source),
+                pages="3-5",
+                client_factory=lambda _provider: FakeVisionClient(content=content),
+            )
+
+        self.assertEqual(draft["source"]["pdf"], metadata)
+        self.assertEqual(draft["rows"][0]["source_region"]["page"], 3)
+        self.assertEqual(draft["summary"]["ready"], 1)
 
     def test_ocr_response_row_cap_rejects_oversized_drafts(self):
         content = json.dumps(
@@ -527,7 +675,7 @@ class DocumentImportTest(unittest.TestCase):
 
     def test_fenced_nested_json_is_parsed_completely(self):
         content = """```json
-        {"rows":[{"occurred_at":"2026-01-02","direction":"inbound","amount_btc":"0.01","confidence":0.99,"source_region":{"page":1}}]}
+        {"rows":[{"occurred_at":"2026-01-02","direction":"inbound","amount_btc":"0.01","confidence":0.99,"cell_confidences":{"occurred_at":0.99,"direction":0.99,"asset":0.99,"amount_btc":0.99},"source_region":{"page":1}}]}
         ```"""
         draft = document_import.preview_document_import(
             self.conn,
@@ -545,8 +693,17 @@ class DocumentImportTest(unittest.TestCase):
                         "occurred_at": "2026-01-02",
                         "direction": "inbound",
                         "amount_btc": "0,01000000",
+                        "fiat_currency": "EUR",
                         "fiat_value": "500,00",
                         "confidence": "0,94",
+                        "cell_confidences": _confidences(
+                            "occurred_at",
+                            "direction",
+                            "asset",
+                            "amount_btc",
+                            "fiat_currency",
+                            "fiat_value",
+                        ),
                     }
                 ]
             }
@@ -561,6 +718,162 @@ class DocumentImportTest(unittest.TestCase):
         self.assertEqual(record["amount"], "0.01")
         self.assertEqual(record["fiat_value"], "500")
         self.assertEqual(draft["rows"][0]["confidence"], 0.94)
+
+    def test_accounting_fields_require_valid_values_currency_and_cell_confidence(self):
+        source_hash = "a" * 64
+
+        def draft_row(**updates):
+            raw = {
+                "occurred_at": "2026-01-02",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount_btc": "0.01",
+                "fee_btc": "0.00001",
+                "fiat_currency": "EUR",
+                "fiat_value": "500",
+                "fiat_rate": "50000",
+                "confidence": 0.99,
+                "cell_confidences": _confidences(
+                    "occurred_at",
+                    "direction",
+                    "asset",
+                    "amount_btc",
+                    "fee_btc",
+                    "fiat_currency",
+                    "fiat_value",
+                    "fiat_rate",
+                ),
+                "source_region": {"page": 1},
+            }
+            raw.update(updates)
+            return document_import._draft_row(
+                raw,
+                index=1,
+                threshold=document_import.DEFAULT_CONFIDENCE_THRESHOLD,
+                source_hash=source_hash,
+                expected_fiat_currency="EUR",
+                allowed_pages=[1],
+            )
+
+        valid = draft_row()
+        self.assertEqual(valid["status"], "ready")
+
+        missing_fee = draft_row(fee_btc=None)
+        self.assertEqual(missing_fee["status"], "ready")
+        self.assertEqual(missing_fee["record"]["fee_btc"], "0")
+        self.assertTrue(missing_fee["record"]["fee_defaulted"])
+        rebuilt_missing_fee = document_import._import_record_from_draft_row(
+            missing_fee,
+            source_hash=source_hash,
+            expected_fiat_currency="EUR",
+        )
+        self.assertEqual(rebuilt_missing_fee["fee"], "0")
+        self.assertTrue(rebuilt_missing_fee["raw_json"]["fee_defaulted"])
+
+        missing_fee_confidence = draft_row(
+            cell_confidences=_confidences(
+                "occurred_at",
+                "direction",
+                "asset",
+                "amount_btc",
+                "fiat_currency",
+                "fiat_value",
+                "fiat_rate",
+            )
+        )
+        self.assertIn(
+            "missing_fee_btc_confidence",
+            missing_fee_confidence["flags"],
+        )
+
+        low_fiat_confidence = draft_row(
+            cell_confidences={
+                **_confidences(
+                    "occurred_at",
+                    "direction",
+                    "asset",
+                    "amount_btc",
+                    "fee_btc",
+                    "fiat_currency",
+                    "fiat_rate",
+                ),
+                "fiat_value": 0.2,
+            }
+        )
+        self.assertIn("low_fiat_value_confidence", low_fiat_confidence["flags"])
+
+        invalid_fee = draft_row(fee_btc="1,234")
+        self.assertIn("invalid_fee", invalid_fee["flags"])
+        self.assertEqual(invalid_fee["record"]["fee_btc"], "1,234")
+        self.assertIsNone(invalid_fee["import_record"])
+
+        negative_fiat = draft_row(fiat_value="-500")
+        self.assertIn("non_positive_fiat_value", negative_fiat["flags"])
+        self.assertEqual(negative_fiat["record"]["fiat_value"], "-500")
+        self.assertIsNone(negative_fiat["import_record"])
+
+        missing_currency = draft_row(fiat_currency=None)
+        self.assertIn("missing_fiat_currency", missing_currency["flags"])
+        self.assertIsNone(missing_currency["import_record"])
+
+        wrong_currency = draft_row(fiat_currency="USD")
+        self.assertIn("fiat_currency_mismatch", wrong_currency["flags"])
+        self.assertIsNone(wrong_currency["import_record"])
+
+        invalid_page = draft_row(source_region={"page": 2})
+        self.assertIn("invalid_source_page", invalid_page["flags"])
+        self.assertIsNone(
+            document_import._import_record_from_draft_row(
+                invalid_page,
+                source_hash=source_hash,
+                expected_fiat_currency="EUR",
+            )
+        )
+
+        records, skipped = document_import._import_records_from_rows(
+            [invalid_fee],
+            include_quarantined=True,
+            selected_row_ids=None,
+            source_hash=source_hash,
+            expected_fiat_currency="EUR",
+        )
+        self.assertEqual(records, [])
+        self.assertEqual(skipped, 1)
+
+        overridden, skipped = document_import._import_records_from_rows(
+            [missing_fee_confidence],
+            include_quarantined=True,
+            selected_row_ids=None,
+            source_hash=source_hash,
+            expected_fiat_currency="EUR",
+        )
+        self.assertEqual(len(overridden), 1)
+        self.assertEqual(skipped, 0)
+        self.assertTrue(overridden[0]["raw_json"]["confidence_override"])
+        self.assertIn(
+            "missing_fee_btc_confidence",
+            overridden[0]["raw_json"]["review_flags"],
+        )
+
+        forged_ready = {
+            **valid,
+            "status": "ready",
+            "flags": [],
+            "confidence": 0.99,
+            "cell_confidences": {
+                **valid["cell_confidences"],
+                "fiat_value": 0.1,
+            },
+        }
+        forged_records, skipped = document_import._import_records_from_rows(
+            [forged_ready],
+            include_quarantined=False,
+            selected_row_ids=None,
+            source_hash=source_hash,
+            expected_fiat_currency="EUR",
+        )
+        self.assertEqual(forged_records, [])
+        self.assertEqual(skipped, 1)
 
     def test_generated_row_ids_are_unique_to_source_document(self):
         other = self.root / "other.png"
@@ -581,6 +894,67 @@ class DocumentImportTest(unittest.TestCase):
             first["rows"][0]["import_record"]["id"],
             second["rows"][0]["import_record"]["id"],
         )
+
+    def test_reordered_ocr_rows_keep_ids_and_do_not_duplicate_imports(self):
+        _, profile, wallet = _book(self.conn)
+
+        def raw_row(date: str, amount: str) -> dict[str, object]:
+            return {
+                "occurred_at": date,
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount_btc": amount,
+                "fee_btc": "0",
+                "confidence": 0.99,
+                "cell_confidences": _confidences(
+                    "occurred_at", "direction", "asset", "amount_btc", "fee_btc"
+                ),
+            }
+
+        rows = [raw_row("2026-01-02", "0.01"), raw_row("2026-01-03", "0.02")]
+        first = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(
+                content=json.dumps({"rows": rows})
+            ),
+        )
+        second = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(
+                content=json.dumps({"rows": list(reversed(rows))})
+            ),
+        )
+
+        first_ids = {row["record"]["occurred_at"]: row["id"] for row in first["rows"]}
+        second_ids = {row["record"]["occurred_at"]: row["id"] for row in second["rows"]}
+        self.assertEqual(first_ids, second_ids)
+
+        first_outcome = document_import.import_document_draft(
+            self.conn,
+            source_file=str(self.source),
+            wallet=wallet,
+            profile=profile,
+            rows=first["rows"],
+            selected_row_ids=[row["id"] for row in first["rows"]],
+            hooks=_hooks(),
+            attach_evidence=False,
+        )
+        second_outcome = document_import.import_document_draft(
+            self.conn,
+            source_file=str(self.source),
+            wallet=wallet,
+            profile=profile,
+            rows=second["rows"],
+            selected_row_ids=[row["id"] for row in second["rows"]],
+            hooks=_hooks(),
+            attach_evidence=False,
+        )
+
+        self.assertEqual(first_outcome["imported"], 2)
+        self.assertEqual(second_outcome["imported"], 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 2)
 
     def test_explicit_empty_selection_imports_nothing(self):
         _, profile, wallet = _book(self.conn)
@@ -614,12 +988,18 @@ class DocumentImportTest(unittest.TestCase):
                         "direction": "inbound",
                         "amount_btc": "0.01",
                         "confidence": 0.95,
+                        "cell_confidences": _confidences(
+                            "occurred_at", "direction", "asset", "amount_btc"
+                        ),
                     },
                     {
                         "occurred_at": "2026-01-03",
                         "direction": "inbound",
                         "amount_btc": "0.02",
                         "confidence": 0.95,
+                        "cell_confidences": _confidences(
+                            "occurred_at", "direction", "asset", "amount_btc"
+                        ),
                     },
                 ]
             }
@@ -726,6 +1106,85 @@ class DocumentImportTest(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0],
             0,
         )
+
+    def test_cli_document_import_requires_active_review_and_row_selection(self):
+        from kassiber.cli.main import _select_document_import_rows_for_cli
+
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            expected_fiat_currency="EUR",
+            client_factory=lambda _provider: FakeVisionClient(),
+        )
+
+        with self.assertRaises(AppError) as raised:
+            _select_document_import_rows_for_cli(
+                draft,
+                expected_fiat_currency="EUR",
+                include_quarantined=False,
+                interactive=False,
+            )
+        self.assertEqual(raised.exception.code, "interaction_required")
+
+        output = io.StringIO()
+        selected = _select_document_import_rows_for_cli(
+            draft,
+            expected_fiat_currency="EUR",
+            include_quarantined=False,
+            interactive=True,
+            input_fn=lambda _prompt: "1",
+            output=output,
+        )
+        self.assertEqual(selected, [draft["rows"][0]["id"]])
+        review = output.getvalue()
+        self.assertIn("nothing is selected by default", review)
+        self.assertIn("fee=0", review)
+        self.assertIn("fiat=500 EUR", review)
+        self.assertIn("cell_confidences=", review)
+
+    def test_noninteractive_cli_import_stops_before_ocr_or_database_writes(self):
+        import kassiber.cli.main as cli_main
+
+        args = cli_main.build_parser().parse_args(
+            [
+                "--non-interactive",
+                "wallets",
+                "import-document",
+                "--wallet",
+                "wallet-1",
+                "--file",
+                str(self.source),
+            ]
+        )
+        with (
+            mock.patch.object(
+                cli_main,
+                "resolve_scope",
+                return_value=(
+                    {"id": "workspace-1"},
+                    {"id": "profile-1", "fiat_currency": "EUR"},
+                ),
+            ),
+            mock.patch.object(
+                cli_main,
+                "resolve_wallet",
+                return_value={"id": "wallet-1"},
+            ),
+            mock.patch.object(
+                document_import,
+                "preview_document_import",
+            ) as preview,
+            mock.patch.object(
+                document_import,
+                "import_document_draft",
+            ) as import_draft,
+            self.assertRaises(AppError) as raised,
+        ):
+            cli_main.dispatch(object(), args)
+
+        self.assertEqual(raised.exception.code, "interaction_required")
+        preview.assert_not_called()
+        import_draft.assert_not_called()
 
 
 if __name__ == "__main__":

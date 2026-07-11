@@ -9166,6 +9166,8 @@ def _document_import_preview_payload(
             model=_optional_str_arg(args, "model"),
             confidence_threshold=args.get("confidence_threshold"),
             max_pages=args.get("max_pages"),
+            pages=args.get("pages"),
+            expected_fiat_currency=str(profile["fiat_currency"]),
         )
     except AppError as exc:
         if exc.code == "not_found" and source_file in str(exc):
@@ -9250,6 +9252,7 @@ def _document_import_import_payload(
             include_quarantined=False,
             selected_row_ids=selected_row_ids,
             expected_source_sha256=expected_source_sha256,
+            confidence_threshold=draft.get("confidence_threshold"),
             attach_evidence=True,
         )
     except AppError as exc:
@@ -9261,7 +9264,16 @@ def _document_import_import_payload(
             raise _document_import_source_unavailable() from exc
         raise
     ctx.document_import_sessions.consume(token)
-    return outcome
+    public_outcome = copy.deepcopy(outcome)
+    public_source = public_outcome.get("source")
+    if isinstance(public_source, dict):
+        public_source.pop("path", None)
+    attached_evidence = public_outcome.get("attached_evidence")
+    if isinstance(attached_evidence, list):
+        for attachment in attached_evidence:
+            if isinstance(attachment, dict):
+                attachment.pop("stored_relpath", None)
+    return public_outcome
 
 
 def _import_samourai_payload(

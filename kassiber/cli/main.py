@@ -636,6 +636,140 @@ def _emit_exit_tax_report(
     return emit(args, report)
 
 
+def _select_document_import_rows_for_cli(
+    draft: dict[str, Any],
+    *,
+    expected_fiat_currency: str,
+    include_quarantined: bool,
+    interactive: bool,
+    input_fn: Any = input,
+    output: Any = None,
+) -> list[str]:
+    """Render the exact OCR draft and require an active row selection.
+
+    Nothing is selected by default.  Confidence-only quarantined rows may be
+    offered when the caller explicitly requested them, but rows that fail the
+    structural accounting validator are never selectable.
+    """
+
+    if not interactive:
+        raise AppError(
+            "Document OCR import requires an interactive review",
+            code="interaction_required",
+            hint=(
+                "Run wallets preview-document first, then rerun wallets import-document "
+                "in a terminal and explicitly select the reviewed rows."
+            ),
+            retryable=False,
+        )
+    output = output or sys.stderr
+    source = draft.get("source")
+    rows = draft.get("rows")
+    if not isinstance(source, dict) or not isinstance(rows, list):
+        raise AppError("Document OCR draft is invalid", code="validation", retryable=False)
+    source_hash = str(source.get("sha256") or "")
+    threshold = core_document_import._confidence_threshold(
+        draft.get("confidence_threshold")
+    )
+    selectable: dict[int, str] = {}
+    print("OCR accounting draft (nothing is selected by default):", file=output)
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            continue
+        record = row.get("record") if isinstance(row.get("record"), dict) else {}
+        structurally_valid = (
+            core_document_import._import_record_from_draft_row(
+                row,
+                source_hash=source_hash,
+                expected_fiat_currency=expected_fiat_currency,
+            )
+            is not None
+        )
+        confidence_flags = core_document_import._confidence_review_flags(
+            row,
+            threshold=threshold,
+        )
+        permitted = structurally_valid and (
+            not confidence_flags or include_quarantined
+        )
+        if permitted:
+            selectable[index] = str(row.get("id") or "")
+        region = row.get("source_region")
+        page = region.get("page") if isinstance(region, dict) else "—"
+        confidence = row.get("confidence")
+        confidence_text = (
+            f"{float(confidence) * 100:.0f}%"
+            if isinstance(confidence, (int, float))
+            else "—"
+        )
+        print(
+            (
+                f"[{index}] {'selectable' if permitted else 'blocked'} | "
+                f"{row.get('status', 'unknown')} | confidence {confidence_text} | page {page}\n"
+                f"    date={record.get('occurred_at') or '—'} | "
+                f"side={record.get('direction') or '—'} | "
+                f"asset={record.get('asset') or '—'} | "
+                f"amount={record.get('amount_btc') or '—'} | "
+                f"fee={record.get('fee_btc') or '—'}"
+                f"{' (not provided; records 0)' if record.get('fee_defaulted') else ''} | "
+                f"fiat={record.get('fiat_value') or '—'} "
+                f"{record.get('fiat_currency') or ''} | "
+                f"rate={record.get('fiat_rate') or '—'}\n"
+                f"    counterparty={record.get('counterparty') or '—'} | "
+                f"description={record.get('description') or '—'}\n"
+                f"    cell_confidences={json.dumps(row.get('cell_confidences') or {}, sort_keys=True)} | "
+                f"flags={','.join(str(flag) for flag in row.get('flags') or []) or 'none'}"
+            ),
+            file=output,
+        )
+    if not selectable:
+        raise AppError(
+            "Document draft has no structurally valid rows to review",
+            code="document_import_no_ready_rows",
+            retryable=False,
+        )
+    try:
+        response = str(
+            input_fn("Enter comma-separated row numbers to import, or press Enter to cancel: ")
+            or ""
+        ).strip()
+    except (EOFError, KeyboardInterrupt) as exc:
+        raise AppError(
+            "Document import review was cancelled",
+            code="document_import_review_cancelled",
+            retryable=False,
+        ) from exc
+    if not response:
+        raise AppError(
+            "Document import review was cancelled",
+            code="document_import_review_cancelled",
+            retryable=False,
+        )
+    selected_ids: list[str] = []
+    seen: set[int] = set()
+    for token in response.split(","):
+        value = token.strip()
+        if not value.isdigit():
+            raise AppError(
+                "Document row selection must contain comma-separated row numbers",
+                code="validation",
+                details={"selection": response},
+                retryable=False,
+            )
+        index = int(value)
+        if index not in selectable:
+            raise AppError(
+                f"Document row {index} is not selectable",
+                code="validation",
+                details={"selection": response, "selectable_rows": sorted(selectable)},
+                retryable=False,
+            )
+        if index not in seen:
+            selected_ids.append(selectable[index])
+            seen.add(index)
+    return selected_ids
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
@@ -1400,6 +1534,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=core_document_import.DEFAULT_MAX_PDF_PAGES,
         help="Maximum PDF pages to render for local OCR",
     )
+    wallets_preview_document.add_argument(
+        "--pages",
+        help="Explicit contiguous PDF page range, for example 2-6; required for PDFs over the page limit",
+    )
     wallets_import_document = wallets_sub.add_parser(
         "import-document",
         help="Import ready local-OCR draft rows into a wallet and attach the source document",
@@ -1422,9 +1560,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum PDF pages to render for local OCR",
     )
     wallets_import_document.add_argument(
+        "--pages",
+        help="Explicit contiguous PDF page range, for example 2-6; required for PDFs over the page limit",
+    )
+    wallets_import_document.add_argument(
         "--include-quarantined",
         action="store_true",
-        help="Import rows that failed the confidence gate",
+        help="Offer confidence-only quarantined rows for explicit interactive selection",
     )
     wallets_import_samourai = wallets_sub.add_parser("import-samourai")
     wallets_import_samourai.add_argument("--workspace")
@@ -3187,6 +3329,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.wallets_command == "ledger-template":
             return emit(args, write_generic_ledger_template(args.file))
         if args.wallets_command == "preview-document":
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
             return emit(
                 args,
                 core_document_import.preview_document_import(
@@ -3196,14 +3339,43 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     model=args.model,
                     confidence_threshold=args.confidence_threshold,
                     max_pages=args.max_pages,
+                    pages=args.pages,
+                    expected_fiat_currency=str(profile["fiat_currency"]),
                 ),
             )
         if args.wallets_command == "import-document":
             _, profile = resolve_scope(conn, args.workspace, args.profile)
             wallet = resolve_wallet(conn, profile["id"], args.wallet)
+            interactive_review = not args.non_interactive and sys.stdin.isatty()
+            if not interactive_review:
+                raise AppError(
+                    "Document OCR import requires an interactive review",
+                    code="interaction_required",
+                    hint=(
+                        "Run wallets preview-document first, then rerun wallets import-document "
+                        "in a terminal and explicitly select the reviewed rows."
+                    ),
+                    retryable=False,
+                )
+            draft = core_document_import.preview_document_import(
+                conn,
+                source_file=args.file,
+                provider_name=args.provider,
+                model=args.model,
+                confidence_threshold=args.confidence_threshold,
+                max_pages=args.max_pages,
+                pages=args.pages,
+                expected_fiat_currency=str(profile["fiat_currency"]),
+            )
+            selected_row_ids = _select_document_import_rows_for_cli(
+                draft,
+                expected_fiat_currency=str(profile["fiat_currency"]),
+                include_quarantined=args.include_quarantined,
+                interactive=interactive_review,
+            )
             return emit(
                 args,
-                core_document_import.preview_then_import_document(
+                core_document_import.import_document_draft(
                     conn,
                     source_file=args.file,
                     data_root=args.data_root,
@@ -3213,11 +3385,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         import_hooks=_import_coordinator_hooks(),
                         attachment_hooks=_attachment_hooks(),
                     ),
-                    provider_name=args.provider,
-                    model=args.model,
-                    confidence_threshold=args.confidence_threshold,
-                    max_pages=args.max_pages,
+                    rows=draft["rows"],
                     include_quarantined=args.include_quarantined,
+                    selected_row_ids=selected_row_ids,
+                    expected_source_sha256=draft["source"]["sha256"],
+                    confidence_threshold=args.confidence_threshold,
                 ),
             )
         if args.wallets_command == "import-samourai":

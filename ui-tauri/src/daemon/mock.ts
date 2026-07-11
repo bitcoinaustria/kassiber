@@ -914,6 +914,20 @@ export const mockDaemon: DaemonTransport = {
               status: "ready",
               flags: [],
               confidence: 0.93,
+              confidence_threshold: 0.78,
+              cell_confidences: {
+                occurred_at: 0.98,
+                direction: 0.97,
+                asset: 0.99,
+                amount_btc: 0.96,
+                fee_btc: 0.95,
+                fiat_currency: 0.94,
+                fiat_value: 0.93,
+                fiat_rate: 0.92,
+                counterparty: 0.91,
+                description: 0.9,
+              },
+              source_region: { page: 1 },
               evidence_text: "2026-01-15 BTC 0.01000000 EUR 620 OTC Desk",
               record: {
                 occurred_at: "2026-01-15",
@@ -923,6 +937,7 @@ export const mockDaemon: DaemonTransport = {
                 fee_btc: "0",
                 fiat_currency: "EUR",
                 fiat_value: "620.00",
+                fiat_rate: "62000.00",
                 counterparty: "OTC Desk",
                 description: "Receipt row",
               },
@@ -935,6 +950,7 @@ export const mockDaemon: DaemonTransport = {
                 fee: "0",
                 fiat_currency: "EUR",
                 fiat_value: "620.00",
+                fiat_rate: "62000.00",
                 counterparty: "OTC Desk",
                 description: "Receipt row",
               },
@@ -968,9 +984,7 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ui.wallets.document_import.import") {
       const args = (req.args ?? {}) as { selected_row_ids?: unknown };
       const selected =
-        Array.isArray(args.selected_row_ids) && args.selected_row_ids.length
-          ? args.selected_row_ids.length
-          : 1;
+        Array.isArray(args.selected_row_ids) ? args.selected_row_ids.length : 0;
       return {
         kind: "ui.wallets.document_import.import",
         schema_version: 1,
