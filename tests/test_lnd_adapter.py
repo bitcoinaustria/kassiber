@@ -798,8 +798,12 @@ class LndTransactionImportTest(unittest.TestCase):
             {record["txid"] for record in by_tag["channel_open"]},
             {"aa" * 32, "dd" * 32},
         )
+        self.assertEqual(
+            sorted(record["amount_msat"] for record in by_tag["channel_open"]),
+            [100_000_000, 200_000_000],
+        )
         self.assertTrue(
-            all(record["status"] == "incomplete" for record in by_tag["channel_open"])
+            all(record["status"] == "complete" for record in by_tag["channel_open"])
         )
         close = by_tag["channel_close"][0]
         self.assertEqual(close["txid"], "bb" * 32)
@@ -898,6 +902,37 @@ class LndTransactionImportTest(unittest.TestCase):
 
         self.assertEqual(records[0]["amount_msat"], 75_000_000)
         self.assertEqual(records[0]["status"], "complete")
+
+    def test_stock_lnd_capacity_enables_standard_local_open(self) -> None:
+        records = core_lnd.lnd_channel_records(
+            [
+                {
+                    "channel_point": "aa" * 32 + ":0",
+                    "initiator": True,
+                    "capacity": "100000",
+                }
+            ],
+            [],
+        )
+
+        self.assertEqual(records[0]["amount_msat"], 100_000_000)
+        self.assertEqual(records[0]["status"], "complete")
+
+    def test_stock_lnd_ambiguous_push_stays_incomplete(self) -> None:
+        records = core_lnd.lnd_channel_records(
+            [
+                {
+                    "channel_point": "aa" * 32 + ":0",
+                    "initiator": True,
+                    "capacity": "100000",
+                    "push_amount_sat": "10000",
+                }
+            ],
+            [],
+        )
+
+        self.assertEqual(records[0]["amount_msat"], -1)
+        self.assertEqual(records[0]["status"], "incomplete")
 
     def test_remote_funded_open_is_not_a_local_onchain_outflow(self) -> None:
         records = core_lnd.lnd_channel_records(

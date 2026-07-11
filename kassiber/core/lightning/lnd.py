@@ -1181,6 +1181,37 @@ def _lnd_channel_id(row: Mapping[str, Any]) -> str:
     return f"{_LND_CHANNEL_ID_PREFIX}{channel_point or fallback}"
 
 
+def _lnd_local_funding_sat(
+    row: Mapping[str, Any], *, local_initiator: bool | None
+) -> int:
+    """Return ordinary single-funded local capacity, or zero if ambiguous.
+
+    Stock LND's Channel and ChannelCloseSummary payloads expose ``capacity``
+    and the initiator, not the synthetic local-contribution fields used by
+    older Kassiber tests. For a locally initiated, single-funded channel the
+    capacity is the exact funding output. Explicit contribution evidence wins;
+    visible push/remote/dual-funding markers deliberately fail closed because
+    capacity would then overstate the operator's owned channel principal.
+    """
+
+    explicit = _int(
+        row.get("local_funding_amount_sat") or row.get("local_contribution_sat")
+    )
+    if explicit > 0:
+        return explicit
+    if local_initiator is not True:
+        return 0
+    if _int(row.get("push_amount_sat") or row.get("push_sat")) > 0:
+        return 0
+    if _int(
+        row.get("remote_funding_amount_sat") or row.get("remote_contribution_sat")
+    ) > 0:
+        return 0
+    if _is_truthy(row.get("is_dual_funded") or row.get("dual_funded")):
+        return 0
+    return _int(row.get("capacity"))
+
+
 def _lnd_channel_record(
     tag: str,
     txid: str,
@@ -1222,21 +1253,21 @@ def lnd_channel_records(
 ) -> list[dict[str, Any]]:
     """Build amount-bearing, channel-linked LND lifecycle evidence.
 
-    ``capacity`` is not proof of the user's initial owned balance: a local
-    initiator may push value to the peer at open or use leased/dual funding.
-    Only an explicit adapter-provided local contribution is safe. Stock LND REST
-    does not currently expose that historical value, so those opens stay typed
-    incomplete and the lifecycle classifier quarantines rather than suppressing
-    the L1 row. Remote-funded openings are not local on-chain outflows.
+    Stock LND exposes ``capacity`` plus the funding initiator. That proves the
+    ordinary locally initiated, single-funded output amount; explicit local
+    contribution evidence takes precedence. Visible push, remote-contribution,
+    or dual-funding markers stay incomplete so lifecycle classification fails
+    closed instead of claiming the full capacity as owned principal.
+    Remote-funded openings are not local on-chain outflows.
     """
     records_by_id: dict[str, dict[str, Any]] = {}
     for row in [*open_channels, *closed_channels]:
         funding = _lnd_funding_txid(row)
         local_initiator = _lnd_local_initiator(row)
         if funding and local_initiator is not False:
-            local_contribution_sat = _int(
-                row.get("local_funding_amount_sat")
-                or row.get("local_contribution_sat")
+            local_contribution_sat = _lnd_local_funding_sat(
+                row,
+                local_initiator=local_initiator,
             )
             amount_msat = (
                 local_contribution_sat * 1000
