@@ -228,6 +228,10 @@ BACKEND = {
 
 
 class LndAdapterRegistrationTest(unittest.TestCase):
+    def test_legacy_boolean_testnet_flag_maps_to_network_name(self) -> None:
+        self.assertEqual(core_lnd._chains_to_network({"testnet": True}), "testnet")
+        self.assertEqual(core_lnd._chains_to_network({"testnet": False}), "mainnet")
+
     """Confirm the side-effect import wires the adapter into the shared
     registry. Other suites in the project intentionally swap the registry
     entry, so this test re-imports the module to recreate the

@@ -644,7 +644,10 @@ def _chains_to_network(info: Mapping[str, Any]) -> str:
     for entry in chains:
         if isinstance(entry, Mapping) and entry.get("network"):
             return _normalize_network(entry.get("network"))
-    return _normalize_network(info.get("testnet"))
+    legacy_testnet = info.get("testnet")
+    if isinstance(legacy_testnet, bool):
+        return "testnet" if legacy_testnet else "mainnet"
+    return _normalize_network(legacy_testnet)
 
 
 class LndAdapter:
