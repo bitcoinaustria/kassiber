@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import io
+import re
 import subprocess
 import tempfile
 import unittest
@@ -488,6 +489,26 @@ class DocumentImportTest(unittest.TestCase):
         self.assertEqual(draft["rows"][0]["status"], "ready")
         self.assertEqual(draft["rows"][1]["status"], "quarantined")
         draft["rows"][0]["import_record"]["amount"] = "999999"
+        self.assertEqual(
+            client.chat_requests[0]["timeout"],
+            document_import.OCR_MODEL_TIMEOUT_SECONDS,
+        )
+        supervisor_source = (
+            Path(__file__).resolve().parent.parent
+            / "ui-tauri"
+            / "src-tauri"
+            / "src"
+            / "supervisor.rs"
+        ).read_text(encoding="utf-8")
+        inactivity_match = re.search(
+            r"DAEMON_STREAM_INACTIVITY_TIMEOUT:\s*Duration\s*=\s*Duration::from_secs\((\d+)\)",
+            supervisor_source,
+        )
+        self.assertIsNotNone(inactivity_match)
+        self.assertLess(
+            document_import.OCR_MODEL_TIMEOUT_SECONDS,
+            int(inactivity_match.group(1)),
+        )
         user_content = client.chat_requests[0]["messages"][1]["content"]
         self.assertTrue(any(part.get("type") == "image_url" for part in user_content))
 

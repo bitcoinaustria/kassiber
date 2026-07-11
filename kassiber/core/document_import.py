@@ -46,6 +46,7 @@ PDF_RENDER_MAX_DIMENSION = 2400
 MAX_RENDERED_PDF_PAGE_BYTES = 24 * 1024 * 1024
 MAX_RENDERED_PDF_TOTAL_BYTES = 96 * 1024 * 1024
 MAX_RENDERED_PDF_PIXELS = PDF_RENDER_MAX_DIMENSION * PDF_RENDER_MAX_DIMENSION
+OCR_MODEL_TIMEOUT_SECONDS = 75
 MAX_DECIMAL_INPUT_CHARS = 512
 MAX_DECIMAL_RENDER_CHARS = 512
 MAX_SQLITE_INT64 = 2**63 - 1
@@ -1362,6 +1363,7 @@ def preview_document_import(
                 "temperature": 0,
                 "response_format": {"type": "json_object"},
             },
+            timeout=OCR_MODEL_TIMEOUT_SECONDS,
         )
     finally:
         cleanup()

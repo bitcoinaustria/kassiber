@@ -2656,10 +2656,14 @@ def redact_ai_tool_result(value: Any) -> Any:
             return [scrub_locations(child) for child in item]
         if isinstance(item, str):
             without_urls = _AI_TOOL_RESULT_URL_RE.sub("<redacted-url>", item)
-            return _AI_TOOL_RESULT_ABSOLUTE_PATH_RE.sub(
-                "<redacted-path>",
-                without_urls,
-            )
+            path_match = _AI_TOOL_RESULT_ABSOLUTE_PATH_RE.search(without_urls)
+            if path_match is not None:
+                # Filesystem paths may legally contain punctuation and spaces,
+                # so there is no safe generic delimiter for their tail. Keep
+                # useful text before the path, then redact the entire remainder
+                # rather than risk leaking a suffix the regex did not consume.
+                return without_urls[: path_match.start()] + "<redacted-path>"
+            return without_urls
         return item
 
     return scrub_locations(secret_safe)

@@ -536,6 +536,12 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("<redacted-url>", encoded)
         self.assertIn("<redacted-path>", encoded)
         self.assertEqual(redacted["asset_route"], "BTC/LBTC/swap")
+        punctuated = redact_ai_tool_result(
+            "Saved to /Users/alice/Alice's Taxes/private (final), #1.pdf then uploaded"
+        )
+        self.assertEqual(punctuated, "Saved to <redacted-path>")
+        for leaked_tail in ("Alice", "Taxes", "private", "final", "uploaded"):
+            self.assertNotIn(leaked_tail, punctuated)
         # Model-supplied UI routes are not local file paths and remain useful
         # in consent/screen-context previews.
         self.assertEqual(
