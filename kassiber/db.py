@@ -1446,6 +1446,7 @@ CREATE TABLE IF NOT EXISTS custody_components (
     conversion_metadata_json TEXT NOT NULL DEFAULT '{}',
     expected_leg_count INTEGER CHECK (expected_leg_count >= 0),
     expected_allocation_count INTEGER CHECK (expected_allocation_count >= 0),
+    authored_source TEXT DEFAULT 'user',
     notes TEXT,
     change_reason TEXT,
     -- Revision links are authored identifiers, not immediate relational
@@ -2219,6 +2220,9 @@ def ensure_schema_compat(conn):
     added_allocation_commitment = _ensure_column_no_commit(
         conn, "custody_components", "expected_allocation_count", "INTEGER"
     )
+    added_authored_source = _ensure_column_no_commit(
+        conn, "custody_components", "authored_source", "TEXT DEFAULT 'user'"
+    )
     if added_leg_commitment:
         conn.execute(
             "UPDATE custody_components SET expected_leg_count = "
@@ -2233,7 +2237,12 @@ def ensure_schema_compat(conn):
             " WHERE a.component_id = custody_components.id) "
             "WHERE expected_allocation_count IS NULL"
         )
-    if added_leg_commitment or added_allocation_commitment:
+    if added_authored_source:
+        conn.execute(
+            "UPDATE custody_components SET authored_source = 'user' "
+            "WHERE authored_source IS NULL OR authored_source = ''"
+        )
+    if added_leg_commitment or added_allocation_commitment or added_authored_source:
         conn.commit()
     _ensure_custody_component_replication_schema(conn)
     ensure_column(conn, "custody_component_legs", "occurred_at", "TEXT")
@@ -2330,6 +2339,7 @@ def _ensure_custody_component_replication_schema(conn):
                 expected_leg_count INTEGER CHECK (expected_leg_count >= 0),
                 expected_allocation_count INTEGER
                     CHECK (expected_allocation_count >= 0),
+                authored_source TEXT DEFAULT 'user',
                 notes TEXT,
                 change_reason TEXT,
                 supersedes_component_id TEXT,
@@ -2343,7 +2353,7 @@ def _ensure_custody_component_replication_schema(conn):
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, notes,
+                expected_leg_count, expected_allocation_count, authored_source, notes,
                 change_reason, supersedes_component_id,
                 superseded_by_component_id, activated_at, superseded_at,
                 created_at
@@ -2353,7 +2363,8 @@ def _ensure_custody_component_replication_schema(conn):
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, notes,
+                expected_leg_count, expected_allocation_count,
+                COALESCE(authored_source, 'user'), notes,
                 change_reason, supersedes_component_id,
                 superseded_by_component_id, activated_at, superseded_at,
                 created_at
@@ -2431,6 +2442,7 @@ def _ensure_custody_revision_immutability_triggers(conn):
           OR OLD.conversion_metadata_json IS NOT NEW.conversion_metadata_json
           OR OLD.expected_leg_count IS NOT NEW.expected_leg_count
           OR OLD.expected_allocation_count IS NOT NEW.expected_allocation_count
+          OR OLD.authored_source IS NOT NEW.authored_source
           OR OLD.notes IS NOT NEW.notes
           OR OLD.supersedes_component_id IS NOT NEW.supersedes_component_id
           OR OLD.created_at IS NOT NEW.created_at

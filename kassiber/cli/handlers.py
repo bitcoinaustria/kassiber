@@ -1238,6 +1238,7 @@ def create_custody_component(
     activate=False,
     commit=True,
     include_local_evidence=True,
+    authored_source="cli",
 ):
     if not isinstance(spec, dict):
         raise AppError("custody component spec must be a JSON object", code="validation")
@@ -1252,6 +1253,7 @@ def create_custody_component(
             if field in spec
         }
         kwargs.setdefault("component_type", "manual_bridge")
+        kwargs["authored_source"] = authored_source
         kwargs["legs"] = _custody_component_leg_inputs(
             conn, workspace, profile, spec.get("legs")
         )
@@ -1293,6 +1295,7 @@ def bulk_resolve_custody_components(
     activate=True,
     commit=True,
     include_local_evidence=True,
+    authored_source="cli",
 ):
     if isinstance(specs, dict):
         specs = specs.get("components")
@@ -1315,6 +1318,7 @@ def bulk_resolve_custody_components(
                     activate=activate,
                     commit=False,
                     include_local_evidence=include_local_evidence,
+                    authored_source=authored_source,
                 )
             )
     except Exception:
@@ -1415,6 +1419,7 @@ def update_custody_component(
     *,
     activate=False,
     include_local_evidence=True,
+    authored_source="cli",
 ):
     if not isinstance(spec, dict):
         raise AppError("custody component revision must be a JSON object", code="validation")
@@ -1430,6 +1435,7 @@ def update_custody_component(
             "lineage_id",
         }
         kwargs = {field: spec[field] for field in allowed if field in spec}
+        kwargs["authored_source"] = authored_source
         if "legs" in spec:
             raw_legs = spec["legs"]
             if not include_local_evidence and isinstance(raw_legs, list):
@@ -1519,6 +1525,7 @@ def undo_custody_component(
     *,
     reason="undo",
     include_local_evidence=True,
+    authored_source="cli",
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     core_custody_components.get_component(
@@ -1526,7 +1533,10 @@ def undo_custody_component(
     )
     try:
         result = core_custody_components.undo_supersede(
-            conn, component_id, reason=reason
+            conn,
+            component_id,
+            reason=reason,
+            authored_source=authored_source,
         )
         if not include_local_evidence:
             result = core_custody_components.get_component(

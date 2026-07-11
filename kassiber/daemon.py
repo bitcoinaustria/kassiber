@@ -1714,6 +1714,8 @@ def _ui_swap_matching_payload_from_conn(
     conn: sqlite3.Connection,
     kind: str,
     args: dict[str, Any],
+    *,
+    authored_source: str = "gui",
 ) -> dict[str, Any]:
     workspace = args.get("workspace")
     profile = args.get("profile")
@@ -1785,6 +1787,7 @@ def _ui_swap_matching_payload_from_conn(
                 component_spec(),
                 activate=exact_bool("activate"),
                 include_local_evidence=False,
+                authored_source=authored_source,
             )
         )
     if kind == "ui.transfers.components.update":
@@ -1797,6 +1800,7 @@ def _ui_swap_matching_payload_from_conn(
                 component_spec(),
                 activate=exact_bool("activate"),
                 include_local_evidence=False,
+                authored_source=authored_source,
             )
         )
     if kind == "ui.transfers.components.activate":
@@ -1835,6 +1839,7 @@ def _ui_swap_matching_payload_from_conn(
                 component_id(),
                 reason=reason,
                 include_local_evidence=False,
+                authored_source=authored_source,
             )
         )
     if kind == "ui.transfers.components.bulk_resolve":
@@ -1857,6 +1862,7 @@ def _ui_swap_matching_payload_from_conn(
                     components,
                     activate=activate,
                     include_local_evidence=False,
+                    authored_source=authored_source,
                 )
             )
 
@@ -1870,6 +1876,7 @@ def _ui_swap_matching_payload_from_conn(
                 activate=activate,
                 commit=False,
                 include_local_evidence=False,
+                authored_source=authored_source,
             )
         except Exception:
             conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
@@ -5531,6 +5538,7 @@ def _execute_read_only_ai_tool(
                     conn,
                     entry.daemon_kind,
                     call.arguments,
+                    authored_source="ai_tool",
                 )
             else:
                 return _tool_result_denied("tool_not_allowed")
@@ -6072,6 +6080,7 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                     conn,
                     entry.daemon_kind,
                     call.arguments,
+                    authored_source="ai_tool",
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 

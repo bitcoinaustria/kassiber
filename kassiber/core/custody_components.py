@@ -52,6 +52,7 @@ COMPONENT_TYPES = frozenset(
 )
 COMPONENT_STATES = frozenset({"draft", "active", "superseded"})
 CONSERVATION_MODES = frozenset({"quantity", "conversion"})
+AUTHORED_SOURCES = frozenset({"user", "cli", "gui", "ai_tool"})
 # Block timestamps are not a strict sequence clock, and exchange/L2 records may
 # stamp completion after the receiving chain transaction. Custody components are
 # reviewed exact allocations, so tolerate bounded evidence-clock skew while
@@ -2642,6 +2643,7 @@ def _materialize_component(
             if expected_allocation_count is None
             else int(expected_allocation_count)
         ),
+        "authored_source": row["authored_source"] or "user",
         "notes": row["notes"],
         "change_reason": row["change_reason"],
         "supersedes_component_id": row["supersedes_component_id"],
@@ -2700,6 +2702,7 @@ def create_component(
     component_id: str | None = None,
     lineage_id: str | None = None,
     created_at: str | None = None,
+    authored_source: str = "user",
 ) -> dict[str, Any]:
     workspace_id = _required_text(workspace_id, "workspace_id")
     profile_id = _required_text(profile_id, "profile_id")
@@ -2710,6 +2713,13 @@ def create_component(
     component_id = _optional_text(component_id, "component_id") or str(uuid.uuid4())
     lineage_id = _optional_text(lineage_id, "lineage_id") or component_id
     timestamp = created_at or _now_iso()
+    authored_source = _required_text(authored_source, "authored_source")
+    if authored_source not in AUTHORED_SOURCES:
+        raise _error(
+            "authored_source is invalid",
+            "custody_component_validation",
+            details={"authored_source": authored_source},
+        )
     if type(conversion_reviewed) is not bool:
         raise _error(
             "conversion_reviewed must be a boolean",
@@ -2740,9 +2750,9 @@ def create_component(
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, notes,
+                expected_leg_count, expected_allocation_count, authored_source, notes,
                 change_reason, created_at
-            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 component_id, lineage_id, workspace_id, profile_id, component_type,
@@ -2754,6 +2764,7 @@ def create_component(
                 int(conversion_reviewed),
                 _json_text(conversion_metadata, "conversion_metadata"),
                 len(normalized_legs), len(normalized_allocations),
+                authored_source,
                 _optional_text(notes, "notes"),
                 _optional_text(change_reason, "change_reason"),
                 timestamp,
@@ -2834,6 +2845,7 @@ def update_component(
     change_reason: str | None = None,
     new_component_id: str | None = None,
     created_at: str | None = None,
+    authored_source: str = "user",
 ) -> dict[str, Any]:
     """Create a new immutable draft revision; never rewrite economic legs."""
 
@@ -2910,6 +2922,13 @@ def update_component(
     )
     new_id = _optional_text(new_component_id, "new_component_id") or str(uuid.uuid4())
     timestamp = created_at or _now_iso()
+    authored_source = _required_text(authored_source, "authored_source")
+    if authored_source not in AUTHORED_SOURCES:
+        raise _error(
+            "authored_source is invalid",
+            "custody_component_validation",
+            details={"authored_source": authored_source},
+        )
 
     new_type = old["component_type"] if component_type is _UNSET else _normalize_component_type(component_type)
     new_mode = old["conservation_mode"] if conservation_mode is _UNSET else _normalize_mode(conservation_mode)
@@ -2945,16 +2964,17 @@ def update_component(
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, notes,
+                expected_leg_count, expected_allocation_count, authored_source, notes,
                 change_reason, supersedes_component_id, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 new_id, old["lineage_id"], old["workspace_id"], old["profile_id"],
                 next_revision, new_type, new_mode, new_evidence_kind,
                 new_evidence_grade, new_evidence_json, new_policy,
                 int(new_reviewed), new_conversion_json,
-                len(normalized_legs), len(normalized_allocations), new_notes,
+                len(normalized_legs), len(normalized_allocations), authored_source,
+                new_notes,
                 _optional_text(change_reason, "change_reason"), component_id, timestamp,
             ),
         )
@@ -3144,6 +3164,7 @@ def undo_supersede(
     reason: str | None = "undo_supersede",
     new_component_id: str | None = None,
     created_at: str | None = None,
+    authored_source: str = "user",
 ) -> dict[str, Any]:
     row = _row(conn, component_id)
     if row["state"] != "superseded":
@@ -3158,6 +3179,7 @@ def undo_supersede(
         change_reason=reason,
         new_component_id=new_component_id,
         created_at=created_at,
+        authored_source=authored_source,
     )
 
 

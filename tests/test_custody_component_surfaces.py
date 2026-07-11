@@ -14,7 +14,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from kassiber.cli.main import build_parser, dispatch
-from kassiber.daemon import SUPPORTED_KINDS
+from kassiber.daemon import SUPPORTED_KINDS, _ui_swap_matching_payload_from_conn
 from kassiber.db import open_db
 from kassiber.errors import AppError
 
@@ -178,6 +178,27 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         _fixture(self.data_root)
         self.conn = open_db(str(self.data_root))
         self.addCleanup(self.conn.close)
+
+    def test_ai_bulk_resolution_stamps_component_attribution(self):
+        result = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.bulk_resolve",
+            {
+                "workspace": "Main",
+                "profile": "Book",
+                "components": [_component_spec()],
+                "activate": False,
+                "dry_run": False,
+            },
+            authored_source="ai_tool",
+        )
+
+        self.assertEqual(result["components"][0]["authored_source"], "ai_tool")
+        stored = self.conn.execute(
+            "SELECT authored_source FROM custody_components WHERE id = ?",
+            (result["components"][0]["id"],),
+        ).fetchone()
+        self.assertEqual(stored["authored_source"], "ai_tool")
 
     def test_full_revision_lifecycle_and_envelope_kinds(self):
         created = _dispatch_json(
@@ -686,6 +707,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                 },
             )
             self.assertEqual(fetched["data"]["id"], component_id)
+            self.assertEqual(fetched["data"]["authored_source"], "gui")
             self.assertNotIn("evidence", fetched["data"])
 
             listed = _request(

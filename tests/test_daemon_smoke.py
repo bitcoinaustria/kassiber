@@ -6439,6 +6439,7 @@ class DaemonSmokeTest(unittest.TestCase):
             conn_marker,
             "ui.transfers.suggest",
             {"confidence": "exact"},
+            authored_source="ai_tool",
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.suggest")
@@ -6483,6 +6484,7 @@ class DaemonSmokeTest(unittest.TestCase):
             conn_marker,
             "ui.transfers.pair",
             {"tx_out": "out-1", "tx_in": "in-1"},
+            authored_source="ai_tool",
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.pair")
@@ -6562,6 +6564,13 @@ class DaemonSmokeTest(unittest.TestCase):
                         tool_name,
                         arguments,
                         data_root=runtime.data_root,
+                    )
+                elif handler_name == "_ui_swap_matching_payload_from_conn":
+                    handler_mock.assert_called_once_with(
+                        conn_marker,
+                        tool_name,
+                        arguments,
+                        authored_source="ai_tool",
                     )
                 else:
                     handler_mock.assert_called_once_with(

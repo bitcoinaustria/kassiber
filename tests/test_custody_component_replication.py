@@ -166,7 +166,9 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             )
         return wallet_id, out_id, in_id
 
-    def _create_component(self, *, active: bool) -> dict:
+    def _create_component(
+        self, *, active: bool, authored_source: str = "user"
+    ) -> dict:
         wallet_id, out_id, in_id = self._insert_wallet_and_transactions()
         component = create_component(
             self.owner,
@@ -210,6 +212,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 }
             ],
             created_at=NOW,
+            authored_source=authored_source,
         )
         return activate_component(self.owner, component["id"], activated_at=NOW) if active else component
 
@@ -232,6 +235,20 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         self.assertEqual(first["id"], remote_second["supersedes_component_id"])
         self.assertEqual("superseded", remote_first["state"])
         self.assertEqual("draft", remote_second["state"])
+
+    def test_ai_component_attribution_replicates_with_revision(self):
+        self._join_peer()
+        component = self._create_component(
+            active=False,
+            authored_source="ai_tool",
+        )
+
+        result = self._sync_owner_to_peer()
+
+        self.assertGreater(result.row_mutations, 0)
+        remote = get_component(self.peer, component["id"])
+        self.assertEqual(component["authored_source"], "ai_tool")
+        self.assertEqual(remote["authored_source"], "ai_tool")
 
     def test_concurrent_active_revisions_remain_visible_but_lose_memberships(self):
         original = self._create_component(active=True)

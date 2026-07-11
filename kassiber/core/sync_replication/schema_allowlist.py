@@ -219,7 +219,7 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "id", "lineage_id", "workspace_id", "profile_id", "revision",
             "component_type", "conservation_mode", "state", "evidence_kind",
             "evidence_grade", "conversion_policy", "conversion_reviewed",
-            "expected_leg_count", "expected_allocation_count", "notes",
+            "expected_leg_count", "expected_allocation_count", "authored_source", "notes",
             "change_reason", "supersedes_component_id",
             "superseded_by_component_id", "activated_at", "superseded_at",
             "created_at",
@@ -231,7 +231,7 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "revision", "component_type", "conservation_mode", "state",
                 "evidence_kind", "evidence_grade", "conversion_policy",
                 "conversion_reviewed", "expected_leg_count",
-                "expected_allocation_count", "supersedes_component_id",
+                "expected_allocation_count", "authored_source", "supersedes_component_id",
                 "superseded_by_component_id",
             }
         ),
@@ -240,12 +240,12 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "lineage_id", "workspace_id", "profile_id", "revision",
                 "component_type", "conservation_mode", "evidence_kind",
                 "evidence_grade", "conversion_policy", "conversion_reviewed",
-                "expected_leg_count", "expected_allocation_count", "notes",
+                "expected_leg_count", "expected_allocation_count", "authored_source", "notes",
                 "supersedes_component_id", "created_at",
             }
         ),
         optional_columns=frozenset(
-            {"expected_leg_count", "expected_allocation_count"}
+            {"expected_leg_count", "expected_allocation_count", "authored_source"}
         ),
     ),
     TableSpec(
