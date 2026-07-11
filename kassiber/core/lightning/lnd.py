@@ -1058,7 +1058,7 @@ def _fetch_lnd_forwarding_history(client: "LndRestClient") -> list[dict[str, Any
     """
     offset = 0
     rows: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, ...]] = set()
     while True:
         payload = client.post(
             "/v1/switch",
@@ -1078,6 +1078,9 @@ def _fetch_lnd_forwarding_history(client: "LndRestClient") -> list[dict[str, Any
                 str(row.get("timestamp_ns") or row.get("timestamp") or ""),
                 str(row.get("chan_id_in") or ""),
                 str(row.get("chan_id_out") or ""),
+                str(row.get("amt_in_msat") or row.get("amt_in") or ""),
+                str(row.get("amt_out_msat") or row.get("amt_out") or ""),
+                str(row.get("fee_msat") or row.get("fee") or ""),
             )
             if key in seen:
                 continue

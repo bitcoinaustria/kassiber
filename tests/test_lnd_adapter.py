@@ -934,6 +934,35 @@ class LndTransactionImportTest(unittest.TestCase):
         self.assertEqual(records[0]["amount_msat"], -1)
         self.assertEqual(records[0]["status"], "incomplete")
 
+    def test_same_second_forwards_with_distinct_amounts_are_not_deduplicated(self) -> None:
+        class Client:
+            def post(self, _path, _payload):
+                return {
+                    "forwarding_events": [
+                        {
+                            "timestamp": "1700000000",
+                            "chan_id_in": "1",
+                            "chan_id_out": "2",
+                            "amt_in_msat": "10000",
+                            "amt_out_msat": "9000",
+                            "fee_msat": "1000",
+                        },
+                        {
+                            "timestamp": "1700000000",
+                            "chan_id_in": "1",
+                            "chan_id_out": "2",
+                            "amt_in_msat": "20000",
+                            "amt_out_msat": "18000",
+                            "fee_msat": "2000",
+                        },
+                    ],
+                    "last_offset_index": "2",
+                }
+
+        rows = core_lnd._fetch_lnd_forwarding_history(Client())
+
+        self.assertEqual(len(rows), 2)
+
     def test_remote_funded_open_is_not_a_local_onchain_outflow(self) -> None:
         records = core_lnd.lnd_channel_records(
             [
