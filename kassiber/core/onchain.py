@@ -309,6 +309,7 @@ def merge_ownership_txs(items: Sequence[Mapping[str, Any]]) -> dict[str, Any] | 
         "evidence_conflicts": list(first.get("evidence_conflicts") or ()),
     }
     inputs_by_key: dict[str, dict[str, Any]] = {}
+    input_key_by_position: dict[int, str] = {}
     outputs_by_n: dict[int, dict[str, Any]] = {}
     for item in items:
         for field in ("txid", "chain", "network"):
@@ -321,7 +322,23 @@ def merge_ownership_txs(items: Sequence[Mapping[str, Any]]) -> dict[str, Any] | 
         for position, incoming in enumerate(item.get("inputs") or ()):
             if not isinstance(incoming, Mapping):
                 continue
-            key = str(incoming.get("outpoint") or f"position:{position}")
+            outpoint = str(incoming.get("outpoint") or "").strip()
+            positional_key = input_key_by_position.get(position)
+            key = outpoint or positional_key or f"position:{position}"
+            if outpoint and positional_key and positional_key != outpoint:
+                positional = inputs_by_key.pop(positional_key, None)
+                if positional is not None:
+                    if outpoint not in inputs_by_key:
+                        inputs_by_key[outpoint] = positional
+                    else:
+                        _merge_leg(
+                            inputs_by_key[outpoint],
+                            positional,
+                            label=f"input:{outpoint}",
+                            conflicts=merged["evidence_conflicts"],
+                        )
+                key = outpoint
+            input_key_by_position[position] = key
             if key not in inputs_by_key:
                 inputs_by_key[key] = dict(incoming)
             else:
@@ -331,6 +348,8 @@ def merge_ownership_txs(items: Sequence[Mapping[str, Any]]) -> dict[str, Any] | 
                     label=f"input:{key}",
                     conflicts=merged["evidence_conflicts"],
                 )
+            if outpoint:
+                inputs_by_key[key]["outpoint"] = outpoint
         for position, incoming in enumerate(item.get("outputs") or ()):
             if not isinstance(incoming, Mapping):
                 continue

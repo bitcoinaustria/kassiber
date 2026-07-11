@@ -245,6 +245,32 @@ class StoredOnchainParserTests(unittest.TestCase):
         self.assertEqual(merged["outputs"][0]["role"], "owned")
         self.assertEqual(merged["evidence_conflicts"], [])
 
+    def test_merge_deduplicates_position_only_and_outpoint_input_observations(self):
+        outpoint = f"{'aa' * 32}:1"
+        position_only = {
+            "txid": "bb" * 32,
+            "chain": "bitcoin",
+            "network": "main",
+            "inputs": [{"script": "0014aa", "value_sats": 100}],
+            "outputs": [],
+        }
+        exact = {
+            **position_only,
+            "inputs": [
+                {
+                    "outpoint": outpoint,
+                    "script": "0014aa",
+                    "value_sats": 100,
+                }
+            ],
+        }
+
+        for observations in ((position_only, exact), (exact, position_only)):
+            with self.subTest(order=bool(observations[0]["inputs"][0].get("outpoint"))):
+                merged = merge_ownership_txs(observations)
+                self.assertEqual(len(merged["inputs"]), 1)
+                self.assertEqual(merged["inputs"][0]["outpoint"], outpoint)
+
 
 if __name__ == "__main__":
     unittest.main()
