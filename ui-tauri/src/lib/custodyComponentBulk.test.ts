@@ -355,6 +355,22 @@ describe("previewCustodyComponentBatch", () => {
     expect(preview.summary).toMatchObject({ sources: 1, destinations: 1 });
   });
 
+  it("rejects unbounded BTC decimal digits before BigInt parsing", () => {
+    const hugeDigits = "9".repeat(10_000);
+    const preview = previewCustodyComponentBatch(
+      JSON.stringify([
+        {
+          legs: [
+            { role: "source", transaction: "out", amount_btc: hugeDigits },
+            { role: "destination", transaction: "in", amount_btc: "1" },
+          ],
+        },
+      ]),
+    );
+
+    expect(issueCodes(preview.structuralErrors)).toContain("amountInvalid");
+  });
+
   it("matches daemon half-up rounding without forcing decimal strings through Number", () => {
     const preview = previewCustodyComponentBatch(
       JSON.stringify([

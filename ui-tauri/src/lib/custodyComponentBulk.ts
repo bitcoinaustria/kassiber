@@ -132,6 +132,7 @@ function pow10(exponent: number): bigint {
 
 /** Match the daemon's Decimal + ROUND_HALF_UP BTC-to-msat boundary exactly. */
 function decimalBtcToMsat(value: string): bigint | null {
+  if (value.length > 128) return null;
   const match = value
     .trim()
     .match(/^\+?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/);
@@ -140,7 +141,12 @@ function decimalBtcToMsat(value: string): bigint | null {
   const fraction = match[1] === undefined ? (match[3] ?? "") : (match[2] ?? "");
   const exponent = Number.parseInt(match[4] ?? "0", 10);
   if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > 1000) return null;
-  const coefficient = BigInt(`${whole}${fraction}`);
+  const coefficientDigits = `${whole}${fraction}`.replace(/^0+(?=\d)/, "");
+  // A valid SQLite msat result never needs an unbounded decimal coefficient.
+  // Apply the same 19-digit ceiling before BigInt construction that direct
+  // amount_msat strings use.
+  if (coefficientDigits.length > 19) return null;
+  const coefficient = BigInt(coefficientDigits);
   const scale = exponent + 11 - fraction.length;
   if (scale >= 0) return coefficient * pow10(scale);
   const divisor = pow10(-scale);
