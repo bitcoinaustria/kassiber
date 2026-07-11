@@ -61,7 +61,12 @@ from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
-from ..transfers import canonical_txid, normalize_group_txid, onchain_transfer_scope
+from ..transfers import (
+    bitcoin_network_domain_evidence,
+    canonical_txid,
+    normalize_group_txid,
+    onchain_transfer_scope,
+)
 from ..wallet_descriptors import normalize_chain, normalize_network
 from .onchain import (
     exact_onchain_fee_msat_from_parsed,
@@ -1646,7 +1651,7 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
         # parsed graph txid and fall back to external_id. Keying every leg this way
         # ensures a losing transaction's synthetic legs are quarantined too — not
         # just the rows whose external_id literally equals the txid.
-        scope = _physical_onchain_scope(row)
+        scope = _physical_conflict_scope(row, parsed)
         if scope is None:
             continue
         physical = scope[:3]
@@ -1702,7 +1707,8 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
             status.get("confirmed"), bool
         ):
             continue
-        scope = _physical_onchain_scope(row)
+        parsed = _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
+        scope = _physical_conflict_scope(row, parsed)
         if scope is None:
             continue
         physical = scope[:3]
@@ -1717,7 +1723,8 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     # Include graphless sibling legs sharing the same txid once any leg supplied
     # the explicit mempool state.
     for row in rows:
-        scope = _physical_onchain_scope(row)
+        parsed = _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
+        scope = _physical_conflict_scope(row, parsed)
         if scope is not None and scope[:3] in pending_txids:
             row_txid[str(_get(row, "id"))] = scope[:3]
     return {row_id for row_id, txid in row_txid.items() if txid in pending_txids}
@@ -1745,6 +1752,53 @@ def _physical_onchain_scope(
     probe = dict(row)
     probe["id"] = f"physical-anchor:{_get(row, 'id')}"
     return onchain_transfer_scope(probe)
+
+
+def _physical_conflict_scope(
+    row: Mapping[str, Any], parsed: Mapping[str, Any] | None
+) -> tuple[str, str, str, str] | None:
+    """Physical identity usable only to quarantine transaction conflicts.
+
+    Full transfer scope additionally requires a trustworthy asset component.
+    That is essential before carrying basis, but unnecessarily strict for an
+    RBF/double-spend safety check: two transactions spending one prevout
+    conflict across the whole transaction.  Permit that narrower check only
+    when the graph txid and the Bitcoin-family rail/network remain unambiguous.
+    The returned asset slot is a sentinel and must never drive matching.
+    """
+
+    scope = _physical_onchain_scope(row)
+    if scope is not None:
+        return scope
+    if parsed is None:
+        return None
+
+    raw_txid = str(parsed.get("txid") or "").strip()
+    parsed_txid = canonical_txid(raw_txid)
+    if raw_txid and parsed_txid is None:
+        return None
+    external_txid = canonical_txid(_get(row, "external_id"))
+    if parsed_txid and external_txid and parsed_txid != external_txid:
+        return None
+    txid = parsed_txid or external_txid
+    if txid is None:
+        return None
+
+    asset = str(_get(row, "asset") or "").strip().upper().replace("L-BTC", "LBTC")
+    if asset == "BTC":
+        chain = "bitcoin"
+    elif asset == "LBTC":
+        chain = "liquid"
+    else:
+        return None
+    domain, valid = bitcoin_network_domain_evidence(row)
+    if not valid:
+        return None
+    if domain is None:
+        if chain != "bitcoin":
+            return None
+        domain = "main"
+    return chain, domain, txid, "conflict-only"
 
 
 def _canonical_outpoint(value: Any) -> str | None:

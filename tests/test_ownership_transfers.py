@@ -1971,6 +1971,72 @@ class ConflictingSpendTests(unittest.TestCase):
 
         self.assertEqual(detect_conflicting_spend_ids(rows), set())
 
+    def test_scope_less_liquid_loser_is_quarantined_by_physical_prevout(self):
+        # Missing Liquid asset ids prevent basis-carrying transfer scope, but do
+        # not erase transaction-wide double-spend evidence.  The unconfirmed
+        # inbound-only replacement must not book as a phantom acquisition.
+        shared_prev = "77" * 32
+
+        def row(row_id, txid, confirmed):
+            return {
+                "id": row_id,
+                "wallet_id": "B",
+                "direction": "inbound",
+                "asset": "LBTC",
+                "amount": 1_000_000,
+                "fee": 0,
+                "external_id": txid,
+                "confirmed_at": confirmed,
+                "config_json": json.dumps(
+                    {"chain": "liquid", "network": "liquidv1"}
+                ),
+                "raw_json": json.dumps(
+                    {
+                        "txid": txid,
+                        "chain": "liquid",
+                        "network": "liquidv1",
+                        "vin": [{"txid": shared_prev, "vout": 0}],
+                        "vout": [{"n": 0, "value": 1000}],
+                    }
+                ),
+            }
+
+        winner = row("winner", "88" * 32, "2026-03-14T18:00:00Z")
+        loser = row("loser", "99" * 32, None)
+        self.assertEqual(detect_conflicting_spend_ids([winner, loser]), {"loser"})
+
+    def test_scope_less_liquid_conflicts_remain_network_separated(self):
+        shared_prev = "77" * 32
+        rows = []
+        for row_id, txid, network in (
+            ("main", "88" * 32, "liquidv1"),
+            ("regtest", "99" * 32, "elementsregtest"),
+        ):
+            rows.append(
+                {
+                    "id": row_id,
+                    "wallet_id": row_id,
+                    "direction": "inbound",
+                    "asset": "LBTC",
+                    "amount": 1_000_000,
+                    "fee": 0,
+                    "external_id": txid,
+                    "config_json": json.dumps(
+                        {"chain": "liquid", "network": network}
+                    ),
+                    "raw_json": json.dumps(
+                        {
+                            "txid": txid,
+                            "chain": "liquid",
+                            "network": network,
+                            "vin": [{"txid": shared_prev, "vout": 0}],
+                            "vout": [{"n": 0, "value": 1000}],
+                        }
+                    ),
+                }
+            )
+        self.assertEqual(detect_conflicting_spend_ids(rows), set())
+
 
 class PendingOnchainTests(unittest.TestCase):
     def test_explicit_mempool_state_holds_every_same_txid_leg(self):
@@ -2044,6 +2110,36 @@ class PendingOnchainTests(unittest.TestCase):
             {"txid": txid, "status": {"confirmed": True}}
         )
         self.assertEqual(detect_pending_onchain_ids([pending, confirmed]), set())
+
+    def test_scope_less_liquid_mempool_receipt_is_held(self):
+        txid = "c" * 64
+        row = {
+            "id": "pending-liquid-in",
+            "wallet_id": "B",
+            "direction": "inbound",
+            "asset": "LBTC",
+            "amount": 1_000_000,
+            "fee": 0,
+            "external_id": txid,
+            "config_json": json.dumps(
+                {"chain": "liquid", "network": "liquidv1"}
+            ),
+            # No consensus asset id: unsafe for basis matching, but the
+            # adapter-reported physical tx identity is enough to hold mempool
+            # value out of journals.
+            "raw_json": json.dumps(
+                {
+                    "txid": txid,
+                    "chain": "liquid",
+                    "network": "liquidv1",
+                    "status": {"confirmed": False},
+                    "vin": [{"txid": "d" * 64, "vout": 0}],
+                    "vout": [{"n": 0, "value": 1000}],
+                }
+            ),
+        }
+
+        self.assertEqual(detect_pending_onchain_ids([row]), {"pending-liquid-in"})
 
 
 class GraphPartialPaymentTests(unittest.TestCase):
