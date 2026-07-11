@@ -82,6 +82,10 @@ type ForgetCliUnlockData = {
   legacy_credential_deleted: boolean;
 };
 
+type ChangePassphraseData = {
+  desktop_biometric_stale_generation?: string | null;
+};
+
 interface SettingsScreenProps {
   onLock?: () => void;
 }
@@ -152,7 +156,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const resetBookData = useDaemonMutation<ResetBookData>("ui.profiles.reset_data", {
     dataMode: "real",
   });
-  const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase", {
+  const changePassphrase = useDaemonMutation<ChangePassphraseData>("ui.secrets.change_passphrase", {
     dataMode: "real",
   });
   const forgetCliUnlock = useDaemonMutation<ForgetCliUnlockData>("ui.secrets.forget_cli_unlock", {
@@ -843,7 +847,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     }
 
     try {
-      await changePassphrase.mutateAsync({
+      const envelope = await changePassphrase.mutateAsync({
         auth_response: { passphrase_secret: currentPassphrase },
         new_passphrase_secret: newPassphrase,
       });
@@ -858,6 +862,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           const status = await storeTouchIdPassphrase(
             newPassphrase,
             touchIdDataRoot,
+            envelope.data?.desktop_biometric_stale_generation ?? null,
           );
           setTouchIdStatus(status);
           if (!status.configured) {
@@ -920,6 +925,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       const status = await storeTouchIdPassphrase(
         touchIdEnrollPassphrase,
         touchIdDataRoot,
+        touchIdStatus?.staleGeneration ?? null,
       );
       setTouchIdStatus(status);
       if (!status.configured) {

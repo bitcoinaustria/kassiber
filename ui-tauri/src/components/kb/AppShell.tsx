@@ -116,6 +116,7 @@ import {
 } from "@/daemon/transport";
 import type { TouchIdPassphraseStatus } from "@/daemon/transport";
 import {
+  canEnrollTouchIdPassphrase,
   lockScreenConfig,
   shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
@@ -875,7 +876,11 @@ export function AppShell() {
             touchIdStatusConfigured: touchIdStatus?.configured === true,
           });
           if (shouldRememberWithTouchId) {
-            void storeTouchIdPassphrase(passphrase, touchIdDataRoot)
+            void storeTouchIdPassphrase(
+              passphrase,
+              touchIdDataRoot,
+              touchIdStatus?.staleGeneration ?? null,
+            )
               .then((status) => {
                 setTouchIdStatus(status);
                 if (!status.configured) {
@@ -1002,6 +1007,7 @@ export function AppShell() {
       clearDaemonQueryCache();
       setLocked(true);
     } else if (envelope.error?.code === "touch_id_passphrase_not_found") {
+      setAppLockPolicy({ touchIdUnlock: false });
       await refreshTouchIdStatus();
     } else if (envelope.error?.code === "local_auth_denied") {
       // The Keychain item passed biometric access but no longer opens this
@@ -3222,11 +3228,13 @@ function LockScreen({
   const [submitting, setSubmitting] = React.useState(false);
   const [touchIdSubmitting, setTouchIdSubmitting] = React.useState(false);
   const autoTouchIdPrompted = React.useRef(false);
-  const canEnrollTouchId =
-    touchIdPlatformSupported &&
-    passphraseRequired &&
-    !touchIdEnabled &&
-    touchIdStatus?.available !== false;
+  const canEnrollTouchId = canEnrollTouchIdPassphrase({
+    platformSupported: touchIdPlatformSupported,
+    passphraseRequired,
+    touchIdEnabled,
+    touchIdAvailable: touchIdStatus?.available !== false,
+    touchIdStale: touchIdStatus?.stale === true,
+  });
   const [enrollTouchId, setEnrollTouchId] = React.useState(
     () => touchIdEnabled && canEnrollTouchId,
   );

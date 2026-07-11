@@ -26,6 +26,7 @@ tauri-plugin-dialog = "2"
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1.0.0", features = ["keychain"] }
 block2 = "0.6.2"
+libc = "0.2"
 objc2 = "0.6.4"
 objc2-foundation = "0.3.2"
 security-framework = { version = "3.7", features = ["OSX_10_15"] }

@@ -11,13 +11,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
+use std::fs::OpenOptions;
 use std::io::ErrorKind;
 use std::io::Read;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(target_os = "macos")]
+use std::{fs::File, os::fd::AsRawFd};
 use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, State, Url};
@@ -28,6 +32,8 @@ const DEFAULT_STATE_DIR: &str = ".kassiber";
 const DEFAULT_PROJECTS_DIR: &str = "projects";
 const DEFAULT_PROJECT_ID: &str = "default";
 const DEFAULT_DATA_DIR: &str = "data";
+const CLI_LEGACY_UNLOCK_QUARANTINED_SETTING: &str = "cli_legacy_unlock_quarantined";
+const DESKTOP_BIOMETRIC_STALE_SETTING: &str = "desktop_biometric_stale";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
@@ -920,11 +926,8 @@ fn touch_id_passphrase_status_command(
     state: State<'_, Arc<DaemonSupervisor>>,
     data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
-    Ok(touch_id_passphrase_status(
-        &account,
-        cli_remembered_unlock_enabled(&account),
-    ))
+    let scope = touch_id_scope_for_data_root(&state, data_root)?;
+    touch_id_passphrase_status_with_managed_guard(&scope)
 }
 
 #[tauri::command]
@@ -932,13 +935,25 @@ fn touch_id_store_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
     data_root: Option<String>,
     passphrase_secret: String,
+    stale_generation: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
-    touch_id_store_passphrase(&account, &passphrase_secret)?;
-    Ok(touch_id_passphrase_status(
-        &account,
-        cli_remembered_unlock_enabled(&account),
-    ))
+    let scope = touch_id_scope_for_data_root(&state, data_root)?;
+    let expected_generation = stale_generation.filter(|value| !value.trim().is_empty());
+    let _lifecycle = touch_id_credential_lifecycle_lock()?;
+    if desktop_biometric_stale_generation(&scope.data_root)?.as_deref()
+        != expected_generation.as_deref()
+    {
+        return Err(
+            "Touch ID enrollment state changed; refresh status and verify the current passphrase again."
+                .to_string(),
+        );
+    }
+    touch_id_store_passphrase(&scope.account, &passphrase_secret)?;
+    clear_desktop_biometric_stale_guard_if_matches(
+        &scope.data_root,
+        expected_generation.as_deref(),
+    )?;
+    touch_id_passphrase_status_with_managed_guard(&scope)
 }
 
 #[tauri::command]
@@ -949,10 +964,19 @@ async fn touch_id_unlock_passphrase_command(
     require_existing_project: Option<bool>,
     project_id: Option<String>,
 ) -> Result<DaemonEnvelope, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
-    let Some(passphrase_secret) =
-        touch_id_get_passphrase(&account, cli_remembered_unlock_enabled(&account))?
-    else {
+    let scope = touch_id_scope_for_data_root(&state, data_root)?;
+    let (cli_owns_legacy, stale_generation) = touch_id_managed_unlock_state(&scope.data_root)?;
+    if stale_generation.is_some() {
+        return Ok(error_envelope(
+            "touch_id_passphrase_not_found",
+            "The saved Touch ID passphrase is stale for these books.",
+            Some("Unlock once with the current passphrase and re-enroll Touch ID."),
+            None,
+            None,
+            false,
+        ));
+    }
+    let Some(passphrase_secret) = touch_id_get_passphrase(&scope.account, cli_owns_legacy)? else {
         return Ok(error_envelope(
             "touch_id_passphrase_not_found",
             "No Touch ID passphrase was found for these books.",
@@ -993,10 +1017,12 @@ fn touch_id_forget_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
     data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
-    let cli_enabled = cli_remembered_unlock_enabled(&account);
-    touch_id_delete_passphrase(&account, cli_enabled)?;
-    Ok(touch_id_passphrase_status(&account, cli_enabled))
+    let scope = touch_id_scope_for_data_root(&state, data_root)?;
+    let _lifecycle = touch_id_credential_lifecycle_lock()?;
+    let (cli_owns_legacy, _stale_generation) = touch_id_managed_unlock_state(&scope.data_root)?;
+    touch_id_delete_passphrase(&scope.account, cli_owns_legacy)?;
+    clear_desktop_biometric_stale_guard(&scope.data_root)?;
+    touch_id_passphrase_status_with_managed_guard(&scope)
 }
 
 #[tauri::command]
@@ -1016,10 +1042,24 @@ fn terminal_command_remove_command() -> Result<TerminalCommandStatus, String> {
     terminal_command_status()
 }
 
-fn touch_id_account_for_data_root(
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TouchIdScope {
+    account: String,
+    data_root: String,
+}
+
+fn touch_id_scope_for_selected(selected: PathBuf) -> TouchIdScope {
+    let normalized = std::fs::canonicalize(&selected).unwrap_or_else(|_| selected.clone());
+    TouchIdScope {
+        account: normalized.to_string_lossy().into_owned(),
+        data_root: selected.to_string_lossy().into_owned(),
+    }
+}
+
+fn touch_id_scope_for_data_root(
     state: &Arc<DaemonSupervisor>,
     data_root: Option<String>,
-) -> Result<String, String> {
+) -> Result<TouchIdScope, String> {
     let selected = if let Some(explicit) = data_root.filter(|value| !value.trim().is_empty()) {
         PathBuf::from(explicit)
     } else if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
@@ -1030,11 +1070,10 @@ fn touch_id_account_for_data_root(
     // The normalized data-root path is the Keychain account namespace. Fall
     // back to the selected path for first-run/default roots that may not exist
     // before the daemon creates them.
-    let normalized = std::fs::canonicalize(&selected).unwrap_or(selected);
-    Ok(normalized.to_string_lossy().into_owned())
+    Ok(touch_id_scope_for_selected(selected))
 }
 
-fn cli_remembered_unlock_enabled(data_root: &str) -> bool {
+fn managed_settings_path(data_root: &str) -> PathBuf {
     let data_root = Path::new(data_root);
     let state_root =
         if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR) {
@@ -1042,18 +1081,203 @@ fn cli_remembered_unlock_enabled(data_root: &str) -> bool {
         } else {
             data_root
         };
-    let settings_path = state_root.join("config").join("settings.json");
-    let Ok(raw) = std::fs::read_to_string(settings_path) else {
-        return false;
+    state_root.join("config").join("settings.json")
+}
+
+fn read_managed_settings(data_root: &str) -> Result<Option<Value>, String> {
+    let settings_path = managed_settings_path(data_root);
+    let raw = match fs::read_to_string(&settings_path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("Managed settings could not be read: {error}")),
     };
-    serde_json::from_str::<serde_json::Value>(&raw)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("cli_remembered_unlock")
-                .and_then(|flag| flag.as_bool())
-        })
-        .unwrap_or(false)
+    let value = serde_json::from_str::<Value>(&raw)
+        .map_err(|error| format!("Managed settings JSON is invalid: {error}"))?;
+    if !value.is_object() {
+        return Err("Managed settings must contain a JSON object.".to_string());
+    }
+    Ok(Some(value))
+}
+
+fn stale_generation_from_settings(value: &Value) -> Option<String> {
+    let raw = value.get(DESKTOP_BIOMETRIC_STALE_SETTING)?;
+    if let Some(generation) = raw.as_str().filter(|value| !value.trim().is_empty()) {
+        return Some(generation.to_string());
+    }
+    // Compatibility for short-lived development builds that wrote a boolean
+    // guard before generation-bound compare-and-clear landed.
+    raw.as_bool()
+        .filter(|enabled| *enabled)
+        .map(|_| "legacy-boolean-guard".to_string())
+}
+
+fn desktop_biometric_stale_generation(data_root: &str) -> Result<Option<String>, String> {
+    Ok(touch_id_managed_unlock_state(data_root)?.1)
+}
+
+fn touch_id_managed_unlock_state(data_root: &str) -> Result<(bool, Option<String>), String> {
+    let settings = read_managed_settings(data_root)?;
+    let cli_owns_legacy = settings.as_ref().is_some_and(|value| {
+        value
+            .get("cli_remembered_unlock")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            || value
+                .get(CLI_LEGACY_UNLOCK_QUARANTINED_SETTING)
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+    });
+    let stale_generation = settings.as_ref().and_then(stale_generation_from_settings);
+    Ok((cli_owns_legacy, stale_generation))
+}
+
+fn touch_id_passphrase_status_with_managed_guard(
+    scope: &TouchIdScope,
+) -> Result<TouchIdPassphraseStatus, String> {
+    let (cli_owns_legacy, stale_generation) = touch_id_managed_unlock_state(&scope.data_root)?;
+    let mut status = touch_id_passphrase_status(&scope.account, cli_owns_legacy);
+    let Some(generation) = stale_generation else {
+        return Ok(status);
+    };
+    status.configured = false;
+    status.stale = true;
+    status.protection = None;
+    status.stale_generation = Some(generation);
+    Ok(status)
+}
+
+static TOUCH_ID_CREDENTIAL_LIFECYCLE: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn touch_id_credential_lifecycle_lock() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    TOUCH_ID_CREDENTIAL_LIFECYCLE
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "Touch ID credential lifecycle lock is poisoned.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+struct ManagedSettingsLock(File);
+
+#[cfg(target_os = "macos")]
+impl Drop for ManagedSettingsLock {
+    fn drop(&mut self) {
+        // SAFETY: this descriptor stays owned by the guard until after the
+        // unlock attempt. A failed unlock is harmless because closing the
+        // descriptor also releases flock locks.
+        unsafe {
+            libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn lock_managed_settings(settings_path: &Path) -> Result<ManagedSettingsLock, String> {
+    let lock_path = settings_path.with_file_name("settings.json.lock");
+    let file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|error| format!("Managed settings lock could not be opened: {error}"))?;
+    // SAFETY: flock only borrows the live file descriptor for this call.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(format!(
+            "Managed settings lock could not be acquired: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(ManagedSettingsLock(file))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn lock_managed_settings(_settings_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+fn write_managed_settings_payload(
+    settings_path: &Path,
+    parent: &Path,
+    payload: &Value,
+) -> Result<(), String> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("System clock could not create a settings nonce: {error}"))?
+        .as_nanos();
+    let temp_path = parent.join(format!(".settings.json.{}.{nonce}.tmp", std::process::id()));
+    let encoded = serde_json::to_vec_pretty(payload)
+        .map_err(|error| format!("Managed settings could not be encoded: {error}"))?;
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&temp_path)
+        .map_err(|error| format!("Managed settings temporary file could not be opened: {error}"))?;
+    let write_result = file
+        .write_all(&encoded)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all());
+    drop(file);
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Managed settings could not be written: {error}"));
+    }
+    #[cfg(target_os = "windows")]
+    if settings_path.exists() {
+        fs::remove_file(settings_path)
+            .map_err(|error| format!("Managed settings could not be replaced: {error}"))?;
+    }
+    if let Err(error) = fs::rename(&temp_path, settings_path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Managed settings could not be replaced: {error}"));
+    }
+    Ok(())
+}
+
+fn update_desktop_biometric_stale_guard(
+    data_root: &str,
+    expected_generation: Option<Option<&str>>,
+) -> Result<bool, String> {
+    let settings_path = managed_settings_path(data_root);
+    if !settings_path.exists() {
+        return Ok(matches!(expected_generation, None | Some(None)));
+    }
+    let parent = settings_path
+        .parent()
+        .ok_or_else(|| "Managed settings path has no parent directory.".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Managed settings directory could not be created: {error}"))?;
+    let _settings_lock = lock_managed_settings(&settings_path)?;
+    let mut payload = match fs::read_to_string(&settings_path) {
+        Ok(raw) => serde_json::from_str::<Value>(&raw)
+            .map_err(|error| format!("Managed settings JSON is invalid: {error}"))?,
+        Err(error) if error.kind() == ErrorKind::NotFound => json!({}),
+        Err(error) => return Err(format!("Managed settings could not be read: {error}")),
+    };
+    let current_generation = stale_generation_from_settings(&payload);
+    if let Some(expected) = expected_generation {
+        if current_generation.as_deref() != expected {
+            return Ok(false);
+        }
+    }
+    if current_generation.is_none() {
+        return Ok(true);
+    }
+    let object = payload
+        .as_object_mut()
+        .ok_or_else(|| "Managed settings must contain a JSON object.".to_string())?;
+    object.remove(DESKTOP_BIOMETRIC_STALE_SETTING);
+    write_managed_settings_payload(&settings_path, parent, &payload)?;
+    Ok(true)
+}
+
+fn clear_desktop_biometric_stale_guard_if_matches(
+    data_root: &str,
+    expected_generation: Option<&str>,
+) -> Result<bool, String> {
+    update_desktop_biometric_stale_guard(data_root, Some(expected_generation))
+}
+
+fn clear_desktop_biometric_stale_guard(data_root: &str) -> Result<bool, String> {
+    update_desktop_biometric_stale_guard(data_root, None)
 }
 
 fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelection, String> {
@@ -2609,13 +2833,15 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_report_export_directory, database_is_encrypted,
+        clear_desktop_biometric_stale_guard_if_matches, copy_report_export_directory,
+        database_is_encrypted, desktop_biometric_stale_generation,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
         inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
-        is_supported_report_export_target, menu_action, menu_action_for_deep_link,
-        menu_action_for_id, navigate_action, open_settings_action, path_is_on_path,
-        terminal_command_contents, terminal_command_path_hint, validated_attachment_file_path,
+        is_supported_report_export_target, managed_settings_path, menu_action,
+        menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
+        path_is_on_path, terminal_command_contents, terminal_command_path_hint,
+        touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
         validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
         ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, MENU_HELP_DOCS, MENU_LOCK_APP,
         MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI,
@@ -2629,6 +2855,113 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Url;
+
+    #[test]
+    fn older_stale_generation_cannot_clear_a_newer_guard() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let state_root = std::env::temp_dir().join(format!(
+            "kassiber-touch-id-stale-{}-{suffix}",
+            std::process::id()
+        ));
+        let data_root = state_root.join("data");
+        fs::create_dir_all(&data_root).unwrap();
+        let data_root = data_root.to_string_lossy().to_string();
+        let settings_path = managed_settings_path(&data_root);
+        fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
+        fs::write(
+            &settings_path,
+            b"{\"cli_legacy_unlock_quarantined\":true,\"desktop_biometric_stale\":\"generation-new\",\"keep\":true}\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            desktop_biometric_stale_generation(&data_root)
+                .unwrap()
+                .as_deref(),
+            Some("generation-new")
+        );
+        assert!(!clear_desktop_biometric_stale_guard_if_matches(
+            &data_root,
+            Some("generation-old")
+        )
+        .unwrap());
+        assert_eq!(
+            desktop_biometric_stale_generation(&data_root)
+                .unwrap()
+                .as_deref(),
+            Some("generation-new")
+        );
+        assert!(
+            clear_desktop_biometric_stale_guard_if_matches(&data_root, Some("generation-new"))
+                .unwrap()
+        );
+        assert_eq!(
+            desktop_biometric_stale_generation(&data_root).unwrap(),
+            None
+        );
+        assert!(touch_id_managed_unlock_state(&data_root).unwrap().0);
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(settings_path).unwrap()).unwrap();
+        assert_eq!(settings["keep"], serde_json::json!(true));
+
+        let _ = fs::remove_dir_all(state_root);
+    }
+
+    #[test]
+    fn stale_guard_read_errors_fail_closed() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let state_root = std::env::temp_dir().join(format!(
+            "kassiber-touch-id-invalid-settings-{}-{suffix}",
+            std::process::id()
+        ));
+        let data_root = state_root.join("data");
+        let settings_path = state_root.join("config").join("settings.json");
+        fs::create_dir_all(&data_root).unwrap();
+        fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
+        fs::write(&settings_path, b"not-json\n").unwrap();
+        let data_root_text = data_root.to_string_lossy().to_string();
+        assert!(desktop_biometric_stale_generation(&data_root_text).is_err());
+
+        fs::remove_file(&settings_path).unwrap();
+        fs::create_dir(&settings_path).unwrap();
+        assert!(desktop_biometric_stale_generation(&data_root_text).is_err());
+
+        let _ = fs::remove_dir_all(state_root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_data_root_keeps_lexical_settings_scope() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "kassiber-touch-id-symlink-{}-{suffix}",
+            std::process::id()
+        ));
+        let state_root = root.join("state");
+        let target = root.join("bookdb");
+        fs::create_dir_all(&state_root).unwrap();
+        fs::create_dir_all(&target).unwrap();
+        std::os::unix::fs::symlink(&target, state_root.join("data")).unwrap();
+
+        let scope = touch_id_scope_for_selected(state_root.join("data"));
+        assert_eq!(Path::new(&scope.account), target.canonicalize().unwrap());
+        assert_eq!(Path::new(&scope.data_root), state_root.join("data"));
+        assert_eq!(
+            super::managed_settings_path(&scope.data_root),
+            state_root.join("config").join("settings.json")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
 
     #[test]
     fn terminal_command_launcher_targets_desktop_executable() {

@@ -128,6 +128,7 @@ export interface TouchIdPassphraseStatus {
     | "legacy_shared"
     | null;
   reason?: string | null;
+  staleGeneration?: string | null;
 }
 
 export interface TerminalCommandStatus {
@@ -778,6 +779,7 @@ export async function touchIdPassphraseStatus(
 export async function storeTouchIdPassphrase(
   passphraseSecret: string,
   dataRoot?: string | null,
+  staleGeneration?: string | null,
 ): Promise<TouchIdPassphraseStatus> {
   if (DAEMON_MODE !== "tauri") {
     return TOUCH_ID_UNAVAILABLE;
@@ -786,6 +788,7 @@ export async function storeTouchIdPassphrase(
   return invoke<TouchIdPassphraseStatus>("touch_id_store_passphrase_command", {
     dataRoot: dataRoot ?? null,
     passphraseSecret,
+    staleGeneration: staleGeneration ?? null,
   });
 }
 

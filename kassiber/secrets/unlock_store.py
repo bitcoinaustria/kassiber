@@ -8,8 +8,9 @@ read-only migration input for installations created before that split.
 
 from __future__ import annotations
 
-from pathlib import Path
+import secrets as py_secrets
 import sys
+from pathlib import Path
 
 import keyring
 from keyring.errors import PasswordDeleteError
@@ -27,6 +28,8 @@ DESKTOP_APPLICATION_GATE_MARKER_SERVICE = (
     "Kassiber Desktop Biometric Enrollment (Application Gate)"
 )
 CLI_REMEMBERED_UNLOCK_SETTING = "cli_remembered_unlock"
+CLI_LEGACY_UNLOCK_QUARANTINED_SETTING = "cli_legacy_unlock_quarantined"
+DESKTOP_BIOMETRIC_STALE_SETTING = "desktop_biometric_stale"
 
 _ACCESS_POLICY_BY_PLATFORM = {
     "macos": "macos_keychain_application_acl",
@@ -81,6 +84,35 @@ def set_cli_remembered_unlock_enabled(data_root, enabled: bool) -> None:
             data_root,
             remove=(CLI_REMEMBERED_UNLOCK_SETTING,),
         )
+
+
+def cli_legacy_unlock_quarantined(data_root) -> bool:
+    """Return whether a retained legacy item is owned but unusable by CLI."""
+
+    return load_managed_settings(data_root).get(
+        CLI_LEGACY_UNLOCK_QUARANTINED_SETTING
+    ) is True
+
+
+def set_cli_unlock_state(
+    data_root,
+    *,
+    enabled: bool,
+    legacy_quarantined: bool,
+) -> None:
+    """Atomically update CLI opt-in and retained-legacy quarantine state."""
+
+    updates = {}
+    remove = []
+    if enabled:
+        updates[CLI_REMEMBERED_UNLOCK_SETTING] = True
+    else:
+        remove.append(CLI_REMEMBERED_UNLOCK_SETTING)
+    if legacy_quarantined:
+        updates[CLI_LEGACY_UNLOCK_QUARANTINED_SETTING] = True
+    else:
+        remove.append(CLI_LEGACY_UNLOCK_QUARANTINED_SETTING)
+    update_managed_settings(data_root, updates=updates, remove=tuple(remove))
 
 
 def _backend_priority(backend) -> float:
@@ -143,10 +175,21 @@ def _delete_service(data_root, service: str) -> bool:
     try:
         keyring.delete_password(service, remembered_unlock_account(data_root))
     except PasswordDeleteError:
-        return True
+        # Windows and Secret Service use PasswordDeleteError for a missing
+        # item, while macOS wraps every Security.framework deletion failure in
+        # the same exception. Verify absence instead of turning an ACL/signing
+        # failure into a false-success revocation result.
+        pass
     except Exception:
         return False
-    return True
+    try:
+        remaining = keyring.get_password(
+            service,
+            remembered_unlock_account(data_root),
+        )
+    except Exception:
+        return False
+    return remaining in (None, "")
 
 
 def load_remembered_passphrase(data_root) -> str | None:
@@ -157,7 +200,10 @@ def load_remembered_passphrase(data_root) -> str | None:
     into implicit CLI enrollment.
     """
 
-    if not cli_remembered_unlock_enabled(data_root):
+    if (
+        not cli_remembered_unlock_enabled(data_root)
+        or cli_legacy_unlock_quarantined(data_root)
+    ):
         return None
 
     _available, passphrase = _load_service_with_availability(
@@ -198,28 +244,24 @@ def store_remembered_passphrase(data_root, passphrase) -> bool:
     return True
 
 
-def mark_desktop_biometric_passphrase_stale(data_root) -> bool:
-    """Invalidate desktop enrollment after a passphrase rotation outside the app."""
+def mark_desktop_biometric_passphrase_stale(data_root) -> str | None:
+    """Arm a cross-process stale guard before rotating the database key.
 
-    if _platform_name() != "macos" or not _native_keyring_available():
-        return False
-    if not any(
-        _load_service_with_availability(data_root, service)[1] is not None
-        for service in (
-            DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE,
-            DESKTOP_APPLICATION_GATE_MARKER_SERVICE,
-        )
-    ):
-        return False
-    try:
-        keyring.set_password(
-            DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE,
-            remembered_unlock_account(data_root),
-            "1",
-        )
-    except Exception:
-        return False
-    return True
+    Desktop Keychain items are protected by a per-binary ACL, so the Python
+    sidecar cannot reliably probe marker passwords written by the Tauri binary.
+    Managed settings are deliberately non-secret and readable by both sides.
+    The desktop clears this guard only after it has refreshed or removed its
+    own protected credential.
+    """
+
+    if _platform_name() != "macos":
+        return None
+    generation = py_secrets.token_urlsafe(32)
+    update_managed_settings(
+        data_root,
+        updates={DESKTOP_BIOMETRIC_STALE_SETTING: generation},
+    )
+    return generation
 
 
 def delete_remembered_passphrase(data_root) -> bool:
@@ -250,18 +292,40 @@ def refresh_remembered_passphrase_after_rotation(
         return None
 
     credential_deleted = delete_remembered_passphrase(data_root)
-    marker_cleared = True
-    try:
-        set_cli_remembered_unlock_enabled(data_root, False)
-    except OSError:
-        marker_cleared = False
+    legacy_credential_deleted = delete_legacy_shared_passphrase(data_root)
+    marker_cleared = False
+    legacy_quarantined = False
+    if legacy_credential_deleted:
+        try:
+            set_cli_unlock_state(
+                data_root,
+                enabled=False,
+                legacy_quarantined=False,
+            )
+            marker_cleared = True
+        except OSError:
+            pass
+    else:
+        try:
+            set_cli_unlock_state(
+                data_root,
+                enabled=False,
+                legacy_quarantined=True,
+            )
+            marker_cleared = True
+            legacy_quarantined = True
+        except OSError:
+            pass
     return {
         "code": "remembered_unlock_update_failed",
         "message": (
             "The database passphrase changed, but the CLI remembered-unlock "
-            "copy could not be updated and was disabled."
+            "copy could not be updated safely. Review the cleanup fields and "
+            "re-enroll after removing any retained legacy credential."
         ),
         "credential_deleted": credential_deleted,
+        "legacy_credential_deleted": legacy_credential_deleted,
+        "legacy_quarantined": legacy_quarantined,
         "cli_marker_cleared": marker_cleared,
     }
 
@@ -270,7 +334,8 @@ def remembered_unlock_status(data_root) -> dict[str, object]:
     """Return public-safe platform, availability, enrollment, and opt-in state."""
 
     cli_enabled = cli_remembered_unlock_enabled(data_root)
-    if cli_enabled:
+    legacy_quarantined = cli_legacy_unlock_quarantined(data_root)
+    if cli_enabled and not legacy_quarantined:
         available, passphrase = _load_service_with_availability(
             data_root,
             CLI_REMEMBERED_PASSPHRASE_SERVICE,
@@ -296,4 +361,5 @@ def remembered_unlock_status(data_root) -> dict[str, object]:
         "available": available,
         "configured": passphrase is not None,
         "cli_enabled": cli_enabled,
+        "legacy_quarantined": legacy_quarantined,
     }

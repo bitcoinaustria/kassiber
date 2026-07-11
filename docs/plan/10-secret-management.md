@@ -144,10 +144,16 @@ Windows uses user-scope Credential Manager; Linux uses Secret Service only when
 available and unlocked. There is no plaintext fallback. CLI reads are not
 biometric-gated. Desktop passphrase rotation updates the CLI entry or disables
 the marker and warns if the store rejects the update, then separately refreshes
-the desktop entry. CLI rotation refreshes its own entry and writes a non-secret
-desktop invalidation marker only when a current desktop enrollment marker exists;
-the next desktop session then requires passphrase entry and re-enrollment instead
-of attempting a known-stale biometric item.
+the desktop entry. Before desktop or CLI rotation rekeys SQLCipher, the Python
+side arms a non-secret `desktop_biometric_stale` guard in managed settings.
+The value is an opaque generation token. The guard stays armed on any rotation
+error because verification can fail after the key already changed; successful
+Tauri enrollment refresh compare-and-clears only the generation that initiated
+it, while verified removal may clear the current guard. This deliberate
+cross-process channel avoids relying on per-binary Keychain ACLs for marker
+reads, prevents an older callback from clearing a newer rotation, and makes an
+interrupted rotation fail closed. The next desktop session requires passphrase
+entry and re-enrollment instead of attempting a known-stale biometric item.
 
 Existing `Kassiber Database Passphrase` entries migrate conservatively. With a
 CLI marker, the CLI claims and removes the old shared entry; without that marker,
@@ -155,12 +161,21 @@ the desktop claims it after a successful Touch ID unlock. Users who previously
 enabled both against the ambiguous shared entry may need to re-enroll the other
 surface once. Settings exposes **Forget all unlock methods** to delete both
 current entries and any remaining legacy item.
+If deletion of a CLI-owned legacy item cannot be verified, managed settings
+atomically clear `cli_remembered_unlock` and set
+`cli_legacy_unlock_quarantined`. That marker preserves CLI ownership for the
+desktop boundary while CLI load/status refuse to consume or migrate the value.
+The user must remove it manually or retry Forget all before re-enrollment.
 
 Desktop mode transitions preserve a single active credential copy. An
 unsigned/ad-hoc preview refuses to replace an existing protected enrollment,
 and protected-item deletion removes any preview fallback before removing the
 biometric item. Partial cleanup is surfaced instead of clearing enrollment
 markers and reporting success.
+Tauri treats an unreadable or invalid managed settings file as a biometric
+boundary error, not as an absent stale guard. The canonical path remains only
+the native-store account; guard lookup uses the same lexical data-root/state-root
+mapping as Python so a symlinked final data directory cannot bypass it.
 
 CLI status exposes the intended boundary without probing a secret when CLI
 enrollment is disabled: `macos_keychain_application_acl`,

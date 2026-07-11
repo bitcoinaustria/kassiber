@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canEnrollTouchIdPassphrase,
   lockScreenConfig,
   shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
@@ -144,6 +145,27 @@ describe("app lock decisions", () => {
       shouldRefreshTouchIdPassphrase({
         platformSupported: false,
         touchIdStatusConfigured: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("offers re-enrollment for a stale credential even while the old policy is enabled", () => {
+    expect(
+      canEnrollTouchIdPassphrase({
+        platformSupported: true,
+        passphraseRequired: true,
+        touchIdEnabled: true,
+        touchIdAvailable: true,
+        touchIdStale: true,
+      }),
+    ).toBe(true);
+    expect(
+      canEnrollTouchIdPassphrase({
+        platformSupported: true,
+        passphraseRequired: true,
+        touchIdEnabled: true,
+        touchIdAvailable: true,
+        touchIdStale: false,
       }),
     ).toBe(false);
   });

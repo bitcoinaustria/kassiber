@@ -103,6 +103,14 @@ impl SecretStore for NativeSecretStore {
         match entry.delete_credential() {
             Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
             Err(error) => Err(keyring_error_for_user(error)),
+        }?;
+        // apple-native-keyring-store 1.0.0's classic-Keychain backend drops
+        // SecKeychainItemDelete's OSStatus. Verify absence so an ACL/signing
+        // failure cannot be reported as successful credential revocation.
+        match entry.get_secret() {
+            Err(KeyringError::NoEntry) => Ok(()),
+            Ok(_) => Err("The credential remained in the native store after deletion.".to_string()),
+            Err(error) => Err(keyring_error_for_user(error)),
         }
     }
 
@@ -283,6 +291,8 @@ pub struct TouchIdPassphraseStatus {
     pub protection: Option<TouchIdProtection>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(rename = "staleGeneration", skip_serializing_if = "Option::is_none")]
+    pub stale_generation: Option<String>,
 }
 
 pub fn default_secret_store_availability() -> SecretStoreAvailability {
@@ -511,6 +521,7 @@ pub fn touch_id_passphrase_status(
                 "Touch ID passphrase unlock is only available in the macOS desktop app."
                     .to_string(),
             ),
+            stale_generation: None,
         };
     }
 
@@ -523,6 +534,7 @@ pub fn touch_id_passphrase_status(
                 stale: true,
                 protection: None,
                 reason: None,
+                stale_generation: None,
             },
             Ok(false) => match desktop_biometric_enrollment(account, cli_remembered_unlock_enabled)
             {
@@ -533,6 +545,7 @@ pub fn touch_id_passphrase_status(
                     stale: false,
                     protection,
                     reason: None,
+                    stale_generation: None,
                 },
                 Err(reason) => TouchIdPassphraseStatus {
                     platform,
@@ -541,6 +554,7 @@ pub fn touch_id_passphrase_status(
                     stale: false,
                     protection: None,
                     reason: Some(reason),
+                    stale_generation: None,
                 },
             },
             Err(reason) => TouchIdPassphraseStatus {
@@ -550,6 +564,7 @@ pub fn touch_id_passphrase_status(
                 stale: false,
                 protection: None,
                 reason: Some(reason),
+                stale_generation: None,
             },
         },
         Err(reason) => TouchIdPassphraseStatus {
@@ -559,6 +574,7 @@ pub fn touch_id_passphrase_status(
             stale: false,
             protection: None,
             reason: Some(reason),
+            stale_generation: None,
         },
     }
 }
@@ -733,7 +749,22 @@ fn read_desktop_passphrase_for_protection(
             let decoded = String::from_utf8(secret.clone())
                 .map_err(|_| "stored database passphrase is not UTF-8".to_string())?;
             touch_id_store_passphrase(account, &decoded)?;
-            NativeSecretStore.delete(LEGACY_SHARED_PASSPHRASE_SERVICE, account)?;
+            if let Err(error) = NativeSecretStore.delete(LEGACY_SHARED_PASSPHRASE_SERVICE, account)
+            {
+                // Do not let a new marker hide a retained shared credential.
+                // Roll the new enrollment back so the next attempt can retry
+                // ownership transfer instead of silently orphaning the legacy
+                // passphrase in Keychain.
+                let rollback = touch_id_delete_passphrase(account, true);
+                return Err(match rollback {
+                    Ok(()) => format!(
+                        "The legacy shared credential could not be removed; the new desktop enrollment was rolled back: {error}"
+                    ),
+                    Err(rollback_error) => format!(
+                        "The legacy shared credential could not be removed ({error}), and the new desktop enrollment rollback was incomplete ({rollback_error})."
+                    ),
+                });
+            }
             Ok(Some(secret))
         }
     }

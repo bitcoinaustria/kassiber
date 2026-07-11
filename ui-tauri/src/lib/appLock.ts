@@ -64,6 +64,27 @@ export function shouldRefreshTouchIdPassphrase({
   return platformSupported && touchIdStatusConfigured;
 }
 
+export function canEnrollTouchIdPassphrase({
+  platformSupported,
+  passphraseRequired,
+  touchIdEnabled,
+  touchIdAvailable,
+  touchIdStale,
+}: {
+  platformSupported: boolean;
+  passphraseRequired: boolean;
+  touchIdEnabled: boolean;
+  touchIdAvailable: boolean;
+  touchIdStale: boolean;
+}) {
+  return (
+    platformSupported &&
+    passphraseRequired &&
+    touchIdAvailable &&
+    (!touchIdEnabled || touchIdStale)
+  );
+}
+
 export function shouldAutoPromptTouchId({
   autoPromptRequested,
   canUseTouchId,

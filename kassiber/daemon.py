@@ -232,11 +232,14 @@ from .secrets.migration import create_empty_encrypted_database, migrate_plaintex
 from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import open_encrypted, require_sqlcipher, sqlcipher_available
 from .secrets.unlock_store import (
+    cli_legacy_unlock_quarantined,
+    cli_remembered_unlock_enabled,
     delete_legacy_shared_passphrase,
     delete_remembered_passphrase,
+    mark_desktop_biometric_passphrase_stale,
     refresh_remembered_passphrase_after_rotation,
     remembered_unlock_status,
-    set_cli_remembered_unlock_enabled,
+    set_cli_unlock_state,
 )
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
@@ -10275,20 +10278,72 @@ def handle_request(
         )
 
     if kind == "ui.secrets.forget_cli_unlock":
+        # Revocation is best-effort across all stores. A read-only managed
+        # settings file must not prevent us from deleting credentials that may
+        # still be usable while the opt-in marker remains set.
+        cli_owned_legacy = cli_remembered_unlock_enabled(
+            ctx.data_root
+        ) or cli_legacy_unlock_quarantined(ctx.data_root)
+        cli_credential_deleted = delete_remembered_passphrase(ctx.data_root)
+        legacy_credential_deleted = delete_legacy_shared_passphrase(ctx.data_root)
+        if cli_owned_legacy and not legacy_credential_deleted:
+            quarantine_error = None
+            try:
+                set_cli_unlock_state(
+                    ctx.data_root,
+                    enabled=False,
+                    legacy_quarantined=True,
+                )
+            except OSError as exc:
+                quarantine_error = str(exc)
+            raise AppError(
+                "the CLI-owned legacy unlock credential could not be deleted",
+                code="remembered_unlock_legacy_cleanup_failed",
+                hint=(
+                    "Remove `Kassiber Database Passphrase` in the OS credential "
+                    "manager, then retry. Kassiber quarantined the leftover from "
+                    "both CLI and desktop use when managed settings allowed it."
+                ),
+                details={
+                    "cli_marker_cleared": quarantine_error is None,
+                    "cli_credential_deleted": cli_credential_deleted,
+                    "legacy_credential_deleted": False,
+                    "legacy_quarantined": quarantine_error is None,
+                    "quarantine_error": quarantine_error,
+                },
+                retryable=True,
+            )
+
+        marker_error = None
         try:
-            set_cli_remembered_unlock_enabled(ctx.data_root, False)
+            set_cli_unlock_state(
+                ctx.data_root,
+                enabled=False,
+                legacy_quarantined=False,
+            )
         except OSError as exc:
+            marker_error = str(exc)
+        if marker_error is not None:
             raise AppError(
                 "the CLI remembered-unlock marker could not be cleared",
                 code="remembered_unlock_settings_failed",
-                hint="Fix permissions on the managed config directory and retry.",
-                details={"settings_error": str(exc)},
+                hint=(
+                    "Fix permissions on the managed config directory and retry."
+                    if cli_credential_deleted and legacy_credential_deleted
+                    else "Fix config permissions, remove the remaining OS credential manually, and retry."
+                ),
+                details={
+                    "settings_error": marker_error,
+                    "cli_marker_cleared": False,
+                    "cli_credential_deleted": cli_credential_deleted,
+                    "legacy_credential_deleted": legacy_credential_deleted,
+                },
                 retryable=True,
             ) from None
         result = {
             "cli_marker_cleared": True,
-            "cli_credential_deleted": delete_remembered_passphrase(ctx.data_root),
-            "legacy_credential_deleted": delete_legacy_shared_passphrase(ctx.data_root),
+            "cli_credential_deleted": cli_credential_deleted,
+            "legacy_credential_deleted": legacy_credential_deleted,
             "remembered_unlock": remembered_unlock_status(ctx.data_root),
         }
         return (
@@ -10338,6 +10393,9 @@ def handle_request(
                 ),
                 False,
             )
+        desktop_stale_generation = mark_desktop_biometric_passphrase_stale(
+            ctx.data_root
+        )
         if ctx.conn is not None:
             _stop_freshness_background_worker(ctx, cancel_running=True)
             ctx.conn.close()
@@ -10345,6 +10403,10 @@ def handle_request(
             _clear_unlocked_passphrase(ctx)
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
         result = change_database_passphrase(db_path, current, new_passphrase)
+        result["desktop_biometric_invalidated"] = (
+            desktop_stale_generation is not None
+        )
+        result["desktop_biometric_stale_generation"] = desktop_stale_generation
         remembered_warning = refresh_remembered_passphrase_after_rotation(
             ctx.data_root,
             new_passphrase,

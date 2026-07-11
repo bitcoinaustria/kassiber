@@ -206,7 +206,10 @@ not biometric-gated; see [SECURITY.md](SECURITY.md) for the platform trust model
 Headless machines and automation without an unlocked credential service should
 continue using `--db-passphrase-fd`.
 `kassiber secrets status` reports the stable `access_policy` code for the
-platform boundary without reading a disabled CLI credential.
+platform boundary without reading a disabled CLI credential. If an OS store
+cannot remove a CLI-owned legacy item, `legacy_quarantined: true` keeps that
+item unavailable to both CLI unlock and desktop migration until cleanup is
+retried.
 
 Desktop Settings can remove only Touch ID, while **Forget all unlock methods**
 removes the desktop entry, CLI entry, and any migration-only legacy shared item.

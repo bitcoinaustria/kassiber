@@ -74,7 +74,17 @@ enrollment removes `Kassiber Database Passphrase` after writing the CLI-only
 service and marker; a cleanup failure rolls that enrollment back when possible.
 Without the marker the desktop owns migration. Desktop Settings can forget only
 Touch ID or remove all saved unlock methods, including both current entries and
-any legacy shared item.
+any legacy shared item. Passphrase rotation arms the non-secret
+`desktop_biometric_stale` managed-settings guard before rekey and clears it only
+after Tauri successfully refreshes/removes the desktop copy. The opaque guard
+generation is compare-and-cleared by refresh so an older callback cannot erase a
+newer rotation. It deliberately stays armed after any ambiguous rotation error,
+so an interrupted or post-verification failure cannot keep offering a known-stale
+Touch ID credential.
+If a CLI-owned legacy item cannot be deleted, status reports
+`legacy_quarantined: true`: the CLI marker is disabled, neither CLI nor desktop
+may consume that item, and manual credential-manager cleanup plus a retry is
+required.
 
 `--machine` implies `--non-interactive`, so passphrase-requiring commands need
 their documented fd/identity/recipient input and return `interaction_required`

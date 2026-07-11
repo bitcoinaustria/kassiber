@@ -223,15 +223,30 @@ both plus the migration-only legacy item. The current credential names are
 `Kassiber CLI Database Passphrase` and `Kassiber Desktop Biometric Passphrase`;
 `Kassiber Database Passphrase` is legacy migration input only. Revocation does not
 change the SQLCipher key or recover a lost passphrase.
+If verified deletion of a CLI-owned legacy item fails, Kassiber atomically
+disables CLI remembered unlock and sets the non-secret
+`cli_legacy_unlock_quarantined` ownership marker. The CLI will not read or
+migrate that retained value, and the desktop will not claim it. Status exposes
+the quarantine so the user can remove the item manually and retry cleanup.
 
 Desktop passphrase rotation refreshes both enrolled namespaces. A CLI rotation
 cannot rewrite a biometric-protected desktop item without defeating that access
-policy, so it writes a non-secret invalidation marker when a current desktop
-enrollment marker exists. The desktop then requires manual passphrase entry and
-re-enrollment rather than attempting the known-stale biometric copy. A preview
-build cannot replace an existing protected enrollment, and credential removal
-does not clear enrollment markers until the applicable fallback and protected
-copies have been cleaned up successfully.
+policy, so both CLI and desktop rotation arm a non-secret
+`desktop_biometric_stale` guard in managed settings before SQLCipher is rekeyed.
+Its value is an opaque generation token, so an older enrollment callback cannot
+clear a newer rotation's guard. Because a post-rekey verification failure is
+ambiguous, the guard stays armed on any rotation error and is compare-and-cleared
+only after the Tauri process successfully refreshes its credential, or cleared
+after verified removal. The desktop therefore requires manual passphrase entry
+and re-enrollment rather than attempting a known-stale biometric copy, including
+after a process crash between rekey and Keychain refresh. A preview build cannot
+replace an existing protected enrollment, and credential removal does not clear
+enrollment markers until the applicable fallback and protected copies have been
+cleaned up successfully.
+Managed-settings reads for this guard fail closed, and Tauri keeps the lexical
+data-root for the settings path even when the Keychain account uses a canonical
+path; a symlinked final `data` directory therefore cannot split the two sides of
+the guard channel.
 
 **Desktop credential stores are a separate boundary, not SQLCipher
 replacement.** Desktop builds can store AI provider API keys in macOS

@@ -531,3 +531,30 @@ describe("mock daemon profile method update", () => {
     expect(res.error).toBeDefined();
   });
 });
+
+describe("mock daemon CLI unlock cleanup", () => {
+  it("supports forgetting CLI-managed unlock state in demo mode", async () => {
+    const result = await mockDaemon.invoke<{
+      cli_marker_cleared: boolean;
+      cli_credential_deleted: boolean;
+      legacy_credential_deleted: boolean;
+      remembered_unlock: {
+        cli_enabled: boolean;
+        legacy_quarantined: boolean;
+      };
+    }>({
+      kind: "ui.secrets.forget_cli_unlock",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({
+      cli_marker_cleared: true,
+      cli_credential_deleted: true,
+      legacy_credential_deleted: true,
+      remembered_unlock: {
+        cli_enabled: false,
+        legacy_quarantined: false,
+      },
+    });
+  });
+});
