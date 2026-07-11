@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import unittest
 
@@ -14,12 +15,14 @@ def _conn_with_two_blank_description_transfers():
     conn.executescript(
         """
         CREATE TABLE wallets (
-          id TEXT PRIMARY KEY, label TEXT, profile_id TEXT
+          id TEXT PRIMARY KEY, label TEXT, profile_id TEXT,
+          kind TEXT, config_json TEXT
         );
         CREATE TABLE transactions (
           id TEXT PRIMARY KEY, profile_id TEXT, wallet_id TEXT,
           external_id TEXT, asset TEXT, direction TEXT, amount INTEGER,
-          payment_hash TEXT, excluded INTEGER DEFAULT 0
+          payment_hash TEXT, payment_hash_source TEXT, raw_json TEXT,
+          excluded INTEGER DEFAULT 0
         );
         CREATE TABLE transaction_pairs (
           id TEXT PRIMARY KEY, profile_id TEXT,
@@ -34,6 +37,10 @@ def _conn_with_two_blank_description_transfers():
         CREATE TABLE journal_quarantines (
           transaction_id TEXT, profile_id TEXT
         );
+        CREATE TABLE direct_swap_payouts (
+          profile_id TEXT, out_transaction_id TEXT, out_amount INTEGER,
+          deleted_at TEXT
+        );
         """
     )
     for wallet_id, label in (
@@ -43,21 +50,41 @@ def _conn_with_two_blank_description_transfers():
         ("wd", "D"),
     ):
         conn.execute(
-            "INSERT INTO wallets VALUES (?, ?, ?)",
-            (wallet_id, label, "p1"),
+            "INSERT INTO wallets VALUES (?, ?, ?, 'descriptor', ?)",
+            (wallet_id, label, "p1", '{"chain":"bitcoin","network":"main"}'),
         )
     # Two same-timestamp transfers with blank descriptions: A->B and C->D.
     ts = "2026-01-01T12:00:00Z"
     legs = (
-        ("ta", "wa", "outbound", 100_000_000_000),
-        ("tb", "wb", "inbound", 100_000_000_000),
-        ("tc", "wc", "outbound", 200_000_000_000),
-        ("td", "wd", "inbound", 200_000_000_000),
+        ("ta", "wa", "outbound", 100_000_000_000, "aa" * 32),
+        ("tb", "wb", "inbound", 100_000_000_000, "aa" * 32),
+        ("tc", "wc", "outbound", 200_000_000_000, "bb" * 32),
+        ("td", "wd", "inbound", 200_000_000_000, "bb" * 32),
     )
-    for tx_id, wallet_id, direction, amount in legs:
+    for tx_id, wallet_id, direction, amount, physical_txid in legs:
         conn.execute(
-            "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
-            (tx_id, "p1", wallet_id, tx_id, "BTC", direction, amount, None),
+            "INSERT INTO transactions("
+            "id, profile_id, wallet_id, external_id, asset, direction, amount, "
+            "payment_hash, payment_hash_source, raw_json, excluded"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            (
+                tx_id,
+                "p1",
+                wallet_id,
+                physical_txid,
+                "BTC",
+                direction,
+                amount,
+                None,
+                None,
+                json.dumps(
+                    {
+                        "txid": physical_txid,
+                        "chain": "bitcoin",
+                        "network": "main",
+                    }
+                ),
+            ),
         )
     # Outgoing transfer quantities include their network fees; incoming
     # quantities contain only what arrived. The two blank-description pairs
@@ -82,6 +109,18 @@ class SelfTransferLabelTests(unittest.TestCase):
         labels = _self_transfer_legs_by_transaction(
             conn, {"id": "p1"}, journals_current=True
         )
+        self.assertEqual(labels["ta"], "B")
+        self.assertEqual(labels["tb"], "A")
+        self.assertEqual(labels["tc"], "D")
+        self.assertEqual(labels["td"], "C")
+
+    def test_stale_journal_fallback_uses_physical_transfer_metadata(self):
+        conn = _conn_with_two_blank_description_transfers()
+
+        labels = _self_transfer_legs_by_transaction(
+            conn, {"id": "p1"}, journals_current=False
+        )
+
         self.assertEqual(labels["ta"], "B")
         self.assertEqual(labels["tb"], "A")
         self.assertEqual(labels["tc"], "D")

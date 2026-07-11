@@ -2732,7 +2732,11 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
             t.amount AS amount,
             t.wallet_id AS wallet_id,
             t.payment_hash AS payment_hash,
-            w.label AS wallet_label
+            t.payment_hash_source AS payment_hash_source,
+            t.raw_json AS raw_json,
+            w.label AS wallet_label,
+            w.kind AS wallet_kind,
+            w.config_json AS config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.excluded = 0
