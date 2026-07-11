@@ -32,7 +32,13 @@ from .fingerprints import make_transaction_fingerprint
 from .msat import btc_to_msat, dec, msat_to_btc
 from .secrets import sqlcipher as secrets_sqlcipher
 from .tax_policy import DEFAULT_LONG_TERM_DAYS, DEFAULT_TAX_COUNTRY
-from .wallet_descriptors import LIQUID_POLICY_ASSET_IDS, normalize_asset_code
+from .wallet_descriptors import (
+    LIQUID_POLICY_ASSET_IDS,
+    default_policy_asset_id,
+    normalize_asset_code,
+    normalize_chain,
+    normalize_network,
+)
 
 
 APP_NAME = "kassiber"
@@ -3889,9 +3895,7 @@ def _backfill_liquid_asset_codes(conn):
         """,
         policy_asset_hexes,
     ).fetchall()
-    affected_profile_ids = sorted({row["profile_id"] for row in affected_rows})
-    if not affected_profile_ids:
-        return
+    affected_profile_ids = {row["profile_id"] for row in affected_rows}
     for row in affected_rows:
         fingerprint = _backfilled_transaction_fingerprint(row, "LBTC")
         collision = conn.execute(
@@ -3905,6 +3909,82 @@ def _backfill_liquid_asset_codes(conn):
                 "UPDATE transactions SET asset = 'LBTC', fingerprint = ? WHERE id = ?",
                 (fingerprint, row["id"]),
             )
+    legacy_rows = conn.execute(
+        f"""
+        SELECT t.id, t.profile_id, t.external_id, t.asset, t.raw_json,
+               w.config_json
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE upper(replace(t.asset, '-', '')) = 'LBTC'
+           OR lower(t.asset) IN ({placeholders})
+        """,
+        policy_asset_hexes,
+    ).fetchall()
+    for row in legacy_rows:
+        try:
+            raw = json.loads(row["raw_json"] or "{}")
+            config = json.loads(row["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(raw, dict) or not isinstance(config, dict):
+            continue
+        try:
+            if normalize_chain(config.get("chain")) != "liquid":
+                continue
+            network = normalize_network("liquid", config.get("network"))
+        except ValueError:
+            continue
+        explicit_policy_asset = normalize_asset_code(config.get("policy_asset"))
+        if explicit_policy_asset == "LBTC":
+            explicit_policy_asset = ""
+        asset_id = explicit_policy_asset or default_policy_asset_id(network)
+        asset_id = normalize_asset_code(asset_id)
+        if len(asset_id) != 64:
+            continue
+        txid = str(raw.get("txid") or row["external_id"] or "").strip().lower()
+        if len(txid) != 64 or any(char not in "0123456789abcdef" for char in txid):
+            continue
+        # Never overwrite contradictory evidence. This migration only fills the
+        # identity fields emitted by current Liquid sync for legacy observations
+        # whose wallet config proves the missing network and policy asset.
+        expected = {
+            "txid": txid,
+            "chain": "liquid",
+            "network": network,
+            "asset_id": asset_id,
+            "asset": "LBTC",
+        }
+        existing_txid = str(raw.get("txid") or "").strip().lower()
+        existing_chain = str(raw.get("chain") or "").strip()
+        existing_network = str(raw.get("network") or "").strip()
+        existing_asset_id = normalize_asset_code(raw.get("asset_id"))
+        existing_asset = normalize_asset_code(raw.get("asset"))
+        try:
+            chain_conflicts = bool(existing_chain) and normalize_chain(existing_chain) != "liquid"
+            network_conflicts = bool(existing_network) and normalize_network(
+                "liquid", existing_network
+            ) != network
+        except ValueError:
+            continue
+        if (
+            (existing_txid and existing_txid != txid)
+            or chain_conflicts
+            or network_conflicts
+            or (existing_asset_id and existing_asset_id != asset_id)
+            or (existing_asset and existing_asset not in {"LBTC", asset_id})
+        ):
+            continue
+        updated_raw = {**raw, **expected}
+        if updated_raw == raw:
+            continue
+        conn.execute(
+            "UPDATE transactions SET raw_json = ? WHERE id = ?",
+            (json.dumps(updated_raw, sort_keys=True), row["id"]),
+        )
+        affected_profile_ids.add(row["profile_id"])
+    affected_profile_ids = sorted(affected_profile_ids)
+    if not affected_profile_ids:
+        return
     profile_placeholders = ",".join("?" for _ in affected_profile_ids)
     conn.execute(
         f"UPDATE profiles "

@@ -734,3 +734,59 @@ def detect_intra_transfers(rows):
         matched_ids.add(out_row["id"])
         matched_ids.add(in_row["id"])
     return pairs, matched_ids
+
+
+def detect_unscoped_transfer_review_ids(rows):
+    """Return cross-wallet row ids that share an unresolved import identity.
+
+    A shared ``external_id`` is not physical proof and must never create an
+    automatic MOVE.  It is still enough evidence to prevent the two sides from
+    silently booking as an unrelated disposal and acquisition when the rows
+    cannot produce a canonical on-chain scope.  Keep those rows in review until
+    a custody component records the missing physical link (or the user excludes
+    the false association).
+
+    Blank identifiers are deliberately ignored: coalescing them would mix every
+    unrelated graphless import in the profile into one review group.
+    """
+
+    groups = defaultdict(list)
+    for row in rows:
+        row_id = str(_row_field(row, "id") or "")
+        if row_id.startswith(_SYNTHETIC_TRANSFER_ID_PREFIXES):
+            # A validated custody component has already supplied the physical
+            # interpretation. Its synthetic projection rows intentionally share
+            # a component id and must not be sent back into unresolved review.
+            continue
+        if onchain_transfer_scope(row) is not None:
+            continue
+        external_id = str(_row_field(row, "external_id") or "").strip()
+        if not external_id:
+            continue
+        asset = str(_row_field(row, "asset") or "").strip().upper()
+        groups[(external_id, asset)].append(row)
+
+    review_ids = set()
+    for group in groups.values():
+        outs = [
+            row
+            for row in group
+            if _row_field(row, "direction") == "outbound"
+            and int(_row_field(row, "amount") or 0) > 0
+        ]
+        ins = [
+            row
+            for row in group
+            if _row_field(row, "direction") == "inbound"
+            and int(_row_field(row, "amount") or 0) > 0
+        ]
+        if not outs or not ins:
+            continue
+        if not any(
+            _row_field(out_row, "wallet_id") != _row_field(in_row, "wallet_id")
+            for out_row in outs
+            for in_row in ins
+        ):
+            continue
+        review_ids.update(str(row["id"]) for row in group)
+    return review_ids

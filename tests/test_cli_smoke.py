@@ -1586,6 +1586,28 @@ class CliSmokeTest(unittest.TestCase):
             run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "Cold", "--kind", "custom")
             run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "Hot", "--file", str(a_csv))
             run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "Cold", "--file", str(b_csv))
+            hot_rows = run(
+                "transactions", "list", "--workspace", "Main", "--profile", "Default",
+                "--wallet", "Hot",
+            )["data"]
+            cold_rows = run(
+                "transactions", "list", "--workspace", "Main", "--profile", "Default",
+                "--wallet", "Cold",
+            )["data"]
+            transfer_out_id = next(
+                row["id"] for row in hot_rows if row["external_id"] == "xfer-001"
+            )
+            transfer_in_id = next(
+                row["id"] for row in cold_rows if row["external_id"] == "xfer-001"
+            )
+            # A provider/import label is not physical txid evidence. Review the
+            # pair explicitly so this test exercises transfer-fee accounting
+            # without weakening the fail-closed unscoped-transfer boundary.
+            run(
+                "transfers", "pair", "--workspace", "Main", "--profile", "Default",
+                "--tx-out", transfer_out_id, "--tx-in", transfer_in_id,
+                "--kind", "manual", "--policy", "carrying-value",
+            )
             run("rates", "set", "BTC-USD", "2025-06-01T00:00:00Z", "90000")
             run("journals", "process", "--workspace", "Main", "--profile", "Default")
             run("reports", "export-xlsx", "--workspace", "Main", "--profile", "Default", "--file", str(xlsx_path))

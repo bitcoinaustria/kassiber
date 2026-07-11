@@ -22,6 +22,7 @@ from kassiber.core.wallets import wallet_policy_asset_id
 from kassiber.db import open_db
 from kassiber.msat import btc_to_msat
 from kassiber.time_utils import timestamp_to_iso
+from kassiber.transfers import onchain_transfer_scope
 from kassiber.wallet_descriptors import default_policy_asset_id
 
 
@@ -599,6 +600,54 @@ class LiquidAssetBackfillTest(unittest.TestCase):
             ).fetchone()
             self.assertIsNone(profile["last_processed_at"])
             self.assertEqual(profile["last_processed_tx_count"], 0)
+        finally:
+            conn.close()
+
+    def test_open_db_enriches_legacy_liquid_scope_from_wallet_config(self):
+        txid = "ab" * 32
+        conn = open_db(str(self.data_root))
+        try:
+            self._seed_minimal_schema(conn)
+            conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id = ?",
+                (json.dumps({"chain": "liquid", "network": "liquidv1"}), "wal-1"),
+            )
+            self._insert_tx(conn, "legacy-liquid", "LBTC")
+            conn.execute(
+                "UPDATE transactions SET external_id = ?, raw_json = ? WHERE id = ?",
+                (
+                    txid,
+                    json.dumps(
+                        {
+                            "txid": txid.upper(),
+                            "network": "main",
+                            "asset": default_policy_asset_id("liquidv1"),
+                        }
+                    ),
+                    "legacy-liquid",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        conn = open_db(str(self.data_root))
+        try:
+            row = conn.execute(
+                "SELECT t.*, w.config_json, w.kind AS wallet_kind "
+                "FROM transactions t JOIN wallets w ON w.id = t.wallet_id "
+                "WHERE t.id = ?",
+                ("legacy-liquid",),
+            ).fetchone()
+            self.assertEqual(
+                onchain_transfer_scope(row),
+                (
+                    "liquid",
+                    "liquidv1",
+                    txid,
+                    default_policy_asset_id("liquidv1"),
+                ),
+            )
         finally:
             conn.close()
 

@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
-from ..transfers import onchain_transfer_scope
+from ..transfers import detect_unscoped_transfer_review_ids, onchain_transfer_scope
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 from .journal_markers import REGIME_BASIS_ELECTION
@@ -1625,6 +1625,16 @@ def normalize_tax_asset_inputs(
         conflict_row_ids = detect_conflicting_spend_ids(rows)
     if pending_onchain_row_ids is None:
         pending_onchain_row_ids = detect_pending_onchain_ids(rows)
+    unscoped_transfer_review_ids = detect_unscoped_transfer_review_ids(rows)
+    resolved_unscoped_pair_ids = {
+        str(row["id"])
+        for pair in intra_pairs
+        for row in (pair["out"], pair["in"])
+    }
+    # This hold is only for unmatched import groups. Every pair reaching this
+    # boundary has already passed either deterministic evidence matching or an
+    # explicit review path; shared provider ids alone never create a pair.
+    unscoped_transfer_review_ids -= resolved_unscoped_pair_ids
     # A pair touching a conflict loser is not booked (see pair_by_row below), so
     # it must also be dropped from regime inference: otherwise infer_outbound_regimes
     # treats the surviving partner as a transfer leg and skips it for Alt/Neu
@@ -1663,6 +1673,8 @@ def normalize_tax_asset_inputs(
         if row_id in conflict_row_ids:
             continue
         if row_id in pending_onchain_row_ids:
+            continue
+        if row_id in unscoped_transfer_review_ids:
             continue
         if row_id in samourai_manual_conflict_row_ids:
             # Quarantined below (samourai/manual-multi collision): the rows
@@ -1817,6 +1829,22 @@ def normalize_tax_asset_inputs(
                         "direction": _row_get(row, "direction"),
                         "external_id": str(_row_get(row, "external_id") or ""),
                         "required_for": "confirmed_chain_history",
+                    },
+                )
+            )
+            continue
+        if str(row["id"]) in unscoped_transfer_review_ids:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "unscoped_transfer_review",
+                    {
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "asset": asset,
+                        "direction": _row_get(row, "direction"),
+                        "external_id": str(_row_get(row, "external_id") or ""),
+                        "required_for": "physical_transfer_scope_or_custody_component",
                     },
                 )
             )

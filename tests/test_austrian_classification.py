@@ -428,7 +428,10 @@ class AustrianNormalizationTest(unittest.TestCase):
             _row("out-1", "wallet-a", "outbound", 1, occurred_at="2025-06-01T00:00:00Z", external_id="chain-1"),
             _row("in-1", "wallet-b", "inbound", 1, occurred_at="2025-06-01T00:00:00Z", external_id="chain-1"),
         ]
-        pair = {"out": rows[0], "in": rows[1]}
+        # Provider labels are not physical txids; this pair represents an
+        # explicit reviewed link so the test isolates Austrian global-pool
+        # treatment rather than unresolved-import quarantine policy.
+        pair = {"out": rows[0], "in": rows[1], "source": "manual"}
         result = normalize_tax_asset_inputs(
             self.at_profile, "BTC", rows, self.wallet_refs, [pair]
         )

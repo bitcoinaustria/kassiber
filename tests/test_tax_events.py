@@ -1696,6 +1696,24 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         )
         self.assertEqual(detect_intra_transfers([out_row, in_row]), ([], set()))
 
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [],
+        )
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(
+            {q["reason"] for q in inputs.quarantines},
+            {"unscoped_transfer_review"},
+        )
+        self.assertEqual(
+            {q["transaction_id"] for q in inputs.quarantines},
+            {"o", "i"},
+        )
+
     def test_canonical_shaped_provider_fallback_is_not_a_txid(self):
         from kassiber.transfers import detect_intra_transfers
 
