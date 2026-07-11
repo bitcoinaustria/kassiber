@@ -869,7 +869,14 @@ def _owned_fanout_row_ids(
                 if _row_get(row, "direction") == "outbound"
                 and int(_row_get(row, "amount") or 0) <= 0
             ]
-            if covered_ids != positive_ids and not (handled and zero_outs_in_group):
+            uncovered_positive_ids = positive_ids - covered_ids
+            uncovered_positive_outbound = any(
+                str(row["id"]) in uncovered_positive_ids for row in outs
+            )
+            if covered_ids != positive_ids and (
+                uncovered_positive_outbound
+                or not (handled and zero_outs_in_group)
+            ):
                 fanout_ids.update(row["id"] for row in group)
                 continue
         # A clamped amount=0 outbound (its net outflow fell below the miner fee —

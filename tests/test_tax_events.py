@@ -2625,6 +2625,32 @@ class ClampedZeroSelfSendTest(unittest.TestCase):
         # d-in is NOT booked as a standalone acquisition.
         self.assertNotIn("d-in", [e.transaction_id for e in inputs.events])
 
+    def test_uncovered_positive_outbound_blocks_mixed_zero_group(self):
+        a_out = _row("a-out", "wallet-a", "outbound", 50_000_000_000, external_id="mixed")
+        b_in = _row("b-in", "wallet-b", "inbound", 50_000_000_000, external_id="mixed")
+        c_zero = _row("c-zero", "wallet-c", "outbound", 0, external_id="mixed")
+        c_out = _row("c-out", "wallet-c", "outbound", 10_000_000_000, external_id="mixed")
+        d_in = _row("d-in", "wallet-d", "inbound", 10_000_000_000, external_id="mixed")
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [a_out, b_in, c_zero, c_out, d_in],
+            self.refs,
+            [{"out": a_out, "in": b_in}],
+        )
+
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(
+            {
+                quarantine["transaction_id"]
+                for quarantine in inputs.quarantines
+                if quarantine["reason"] == "owned_fanout_unresolved"
+            },
+            {"a-out", "b-in", "c-zero", "c-out", "d-in"},
+        )
+
     def test_clamped_zero_outbound_with_cross_wallet_inbound_quarantines(self):
         # #9: a coinjoin/payjoin self-send where wallet A's net outflow fell below
         # the miner fee gets its outbound amount clamped to 0; wallet B receives a
