@@ -13,6 +13,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from functools import cache
 from pathlib import Path
 from typing import Any
 from urllib import error, request
@@ -22,7 +23,6 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENARIO = ROOT / "dev" / "regtest" / "scenarios" / "full_accounting.json"
 _DOCKER_BASE_CMD: list[str] | None = None
 _HEX_64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-_LIQUID_POLICY_ASSET_ID: str | None = None
 
 
 class BoltzProbeError(RuntimeError):
@@ -143,12 +143,10 @@ def _elements_cli(*args: str, timeout: int = 60) -> str:
     return _docker_exec("elements-cli-sim-client", *args, timeout=timeout)
 
 
+@cache
 def _liquid_policy_asset_id() -> str:
     """Return the Elements regtest policy-asset consensus id."""
 
-    global _LIQUID_POLICY_ASSET_ID
-    if _LIQUID_POLICY_ASSET_ID is not None:
-        return _LIQUID_POLICY_ASSET_ID
     errors: list[str] = []
     for command in (("dumpassetlabels",), ("getsidechaininfo",)):
         try:
@@ -173,7 +171,6 @@ def _liquid_policy_asset_id() -> str:
         for candidate in candidates:
             text = str(candidate or "").strip().lower()
             if _HEX_64_RE.fullmatch(text) and text != "0" * 64:
-                _LIQUID_POLICY_ASSET_ID = text
                 return text
     raise BoltzProbeError(
         "Could not resolve the Elements regtest policy asset id:\n"
