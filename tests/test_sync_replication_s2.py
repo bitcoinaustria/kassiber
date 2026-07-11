@@ -851,8 +851,8 @@ class SyncBundleReplayTests(unittest.TestCase):
             workspace=self.workspace,
             profile=self.profile,
             tx=tx,
-            source="gui",
-            reason="reviewed",
+            source="ai_tool",
+            reason="AI-assisted quarantine resolution reviewed by operator",
             changed_at=now_iso(),
             changed_fields=["excluded"],
             before_state={"excluded": False},
@@ -875,6 +875,11 @@ class SyncBundleReplayTests(unittest.TestCase):
         ).fetchone()
         self.assertIsNotNone(remote_history)
         self.assertTrue(remote_history["sync_signature"])
+        self.assertEqual(remote_history["source"], "ai_tool")
+        self.assertEqual(
+            remote_history["reason"],
+            "AI-assisted quarantine resolution reviewed by operator",
+        )
         self.assertEqual(
             self.peer.execute(
                 "SELECT after_value FROM transaction_edit_fields WHERE event_id = ?",
