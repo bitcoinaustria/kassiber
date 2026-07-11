@@ -17,6 +17,8 @@ from kassiber.core import audit_package
 from kassiber.core import metadata as core_metadata
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.db import open_db
+from kassiber.daemon import _quarantine_resolution_payload
+from kassiber.errors import AppError
 from kassiber.time_utils import now_iso
 
 
@@ -372,6 +374,64 @@ class TransactionEditHistoryTest(unittest.TestCase):
             _metadata_hooks(),
         )
         self.assertEqual(second_history["events"][0]["summary"], "Pricing provenance updated")
+
+    def test_ai_quarantine_resolution_is_narrow_audited_and_verified(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        _, profile = resolve_scope(conn, None, None)
+        tx = resolve_transaction(conn, profile["id"], "seed-inbound-1")
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tx["id"],
+                profile["workspace_id"],
+                profile["id"],
+                "missing_price",
+                "{}",
+                now_iso(),
+            ),
+        )
+        conn.commit()
+
+        payload = _quarantine_resolution_payload(
+            conn,
+            {
+                "transaction": "seed-inbound-1",
+                "action": "price_override",
+                "fiat_rate": "71000",
+                "reason": "Reviewed exchange statement",
+                "reprocess": False,
+            },
+            default_source="ai_tool",
+        )
+
+        self.assertTrue(payload["cleared"])
+        self.assertFalse(payload["reprocessed"])
+        self.assertIsNone(payload["remaining_quarantine"])
+        history = core_metadata.list_transaction_history(
+            conn,
+            None,
+            None,
+            "seed-inbound-1",
+            _metadata_hooks(),
+        )
+        self.assertEqual(history["events"][0]["source"], "ai_tool")
+        self.assertEqual(history["events"][0]["reason"], "Reviewed exchange statement")
+
+        with self.assertRaisesRegex(AppError, "requires fiat_rate or fiat_value"):
+            _quarantine_resolution_payload(
+                conn,
+                {
+                    "transaction": "seed-inbound-1",
+                    "action": "price_override",
+                    "reason": "No evidence supplied",
+                },
+                default_source="ai_tool",
+            )
 
     def test_audit_package_includes_edit_history_only_when_requested(self):
         conn = open_db(self.data_root)

@@ -6097,7 +6097,15 @@ def _ensure_quarantined(conn, profile_id, transaction_id):
 
 
 def resolve_quarantine_price_override(
-    conn, workspace_ref, profile_ref, tx_ref, fiat_rate=None, fiat_value=None
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    fiat_rate=None,
+    fiat_value=None,
+    *,
+    source="cli",
+    reason=None,
 ):
     if fiat_rate is None and fiat_value is None:
         raise AppError(
@@ -6131,8 +6139,8 @@ def resolve_quarantine_price_override(
             "quality": pricing.QUALITY_EXACT,
             "method": "quarantine_price_override",
         },
-        source="cli",
-        reason="Resolved quarantine with manual pricing override",
+        source=source,
+        reason=reason or "Resolved quarantine with manual pricing override",
         commit=False,
     )
     conn.execute(
@@ -6155,7 +6163,15 @@ def resolve_quarantine_price_override(
     }
 
 
-def resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref):
+def resolve_quarantine_exclude(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    *,
+    source="cli",
+    reason=None,
+):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     tx = resolve_transaction(conn, profile["id"], tx_ref)
     _ensure_quarantined(conn, profile["id"], tx["id"])
@@ -6166,8 +6182,8 @@ def resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref):
         tx["id"],
         _metadata_hooks(),
         excluded=True,
-        source="cli",
-        reason="Resolved quarantine by excluding transaction",
+        source=source,
+        reason=reason or "Resolved quarantine by excluding transaction",
         commit=False,
     )
     conn.execute(
