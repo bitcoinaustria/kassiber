@@ -31,6 +31,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { TFunction } from "i18next";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -58,6 +59,13 @@ import lightningIcon from "@/assets/integrations/lightning.svg";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -106,7 +114,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DaemonRequestError,
+  useDaemon,
+  useDaemonMutation,
+} from "@/daemon/client";
+import {
+  buildCustodyRevisionDocument,
+  buildCustodyBulkRequest,
+  CUSTODY_COMPONENT_EXAMPLE,
+  formatCustodyExactInteger,
+  previewCustodyComponentBatch,
+  type CustodyBatchPreview,
+  type CustodyExactInteger,
+  type CustodyPreviewIssue,
+  type CustodyPreviewIssueCode,
+} from "@/lib/custodyComponentBulk";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
 import {
   pageHeaderActionClassName,
@@ -503,7 +527,7 @@ function railForLeg(
   return "onchain";
 }
 
-type PairingReviewTab = "swaps" | "transfers";
+type PairingReviewTab = "swaps" | "transfers" | "components";
 type PairingView = "review" | "paired";
 
 export function SwapMatching() {
@@ -531,6 +555,7 @@ export function SwapMatching() {
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
             <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
             <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+            <TabsTrigger value="components">{t("swap.tabs.components")}</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="transfers" className="mt-0">
@@ -556,7 +581,1095 @@ export function SwapMatching() {
             )
           ) : null}
         </TabsContent>
+        <TabsContent value="components" className="mt-0">
+          {activeTab === "components" ? <CustodyComponentResolver /> : null}
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+interface CustodyComponentLeg {
+  id: string;
+  ordinal: number;
+  role: string;
+  rail: string;
+  chain?: string | null;
+  network?: string | null;
+  asset: string;
+  exposure?: string | null;
+  conservation_unit?: string | null;
+  amount_msat: CustodyExactInteger;
+  valuation_unit?: string | null;
+  valuation_amount?: CustodyExactInteger | null;
+  transaction_id: string | null;
+  anchor_transaction_id?: string | null;
+  wallet_id: string | null;
+  occurred_at: string | null;
+  notes?: string | null;
+}
+
+interface CustodyComponentAllocation {
+  id: string;
+  ordinal: number;
+  source_leg_id: string;
+  sink_leg_id: string;
+  source_amount_msat: CustodyExactInteger;
+  sink_amount_msat: CustodyExactInteger;
+}
+
+interface CustodyValidationIssue {
+  code?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+interface CustodyComponent {
+  id: string;
+  lineage_id: string;
+  revision: number;
+  component_type: string;
+  conservation_mode: "quantity" | "conversion";
+  state: "draft" | "active" | "superseded";
+  effective_state: "draft" | "active" | "superseded";
+  evidence_kind: string | null;
+  evidence_grade: string | null;
+  conversion_policy: string | null;
+  conversion_reviewed: boolean;
+  notes: string | null;
+  created_at: string;
+  activated_at: string | null;
+  superseded_at: string | null;
+  legs: CustodyComponentLeg[];
+  allocations: CustodyComponentAllocation[];
+  validation: {
+    activatable?: boolean;
+    issues?: CustodyValidationIssue[];
+  };
+}
+
+type CustodyComponentListEnvelope =
+  | CustodyComponent[]
+  | { components: CustodyComponent[] };
+
+interface CustodyBulkResolveResult {
+  components: CustodyComponent[];
+  summary: { count: number; active: number; draft: number };
+  dry_run?: boolean;
+}
+
+function custodyComponentsFromEnvelope(data: CustodyComponentListEnvelope | undefined) {
+  if (Array.isArray(data)) return data;
+  return data?.components ?? [];
+}
+
+const CUSTODY_LOCAL_ISSUE_KEYS = {
+  jsonInvalid: "swap.components.localIssue.jsonInvalid",
+  documentRequired: "swap.components.localIssue.documentRequired",
+  componentObjectRequired: "swap.components.localIssue.componentObjectRequired",
+  componentTypeUnsupported: "swap.components.localIssue.componentTypeUnsupported",
+  conservationModeUnsupported:
+    "swap.components.localIssue.conservationModeUnsupported",
+  legsRequired: "swap.components.localIssue.legsRequired",
+  legObjectRequired: "swap.components.localIssue.legObjectRequired",
+  roleUnsupported: "swap.components.localIssue.roleUnsupported",
+  legIdDuplicate: "swap.components.localIssue.legIdDuplicate",
+  amountInvalid: "swap.components.localIssue.amountInvalid",
+  transactionlessWalletRequired:
+    "swap.components.localIssue.transactionlessWalletRequired",
+  transactionlessTimeRequired:
+    "swap.components.localIssue.transactionlessTimeRequired",
+  valuationPairRequired: "swap.components.localIssue.valuationPairRequired",
+  valuationAmountInvalid: "swap.components.localIssue.valuationAmountInvalid",
+  valuationTokenInvalid: "swap.components.localIssue.valuationTokenInvalid",
+  conversionPolicyInvalid: "swap.components.localIssue.conversionPolicyInvalid",
+  conversionReviewedInvalid:
+    "swap.components.localIssue.conversionReviewedInvalid",
+  conversionValuationRequired:
+    "swap.components.localIssue.conversionValuationRequired",
+  sourceRequired: "swap.components.localIssue.sourceRequired",
+  ownedDestinationRequired: "swap.components.localIssue.ownedDestinationRequired",
+  anchorRequired: "swap.components.localIssue.anchorRequired",
+  unresolvedValue: "swap.components.localIssue.unresolvedValue",
+  quantityUnbalanced: "swap.components.localIssue.quantityUnbalanced",
+  conversionReviewRequired: "swap.components.localIssue.conversionReviewRequired",
+  conversionValuationUnbalanced:
+    "swap.components.localIssue.conversionValuationUnbalanced",
+  conversionTopologyUnsupported:
+    "swap.components.localIssue.conversionTopologyUnsupported",
+  allocationsInvalid: "swap.components.localIssue.allocationsInvalid",
+  allocationsRequired: "swap.components.localIssue.allocationsRequired",
+  allocationObjectRequired: "swap.components.localIssue.allocationObjectRequired",
+  allocationSourceInvalid: "swap.components.localIssue.allocationSourceInvalid",
+  allocationSinkInvalid: "swap.components.localIssue.allocationSinkInvalid",
+  allocationAmountInvalid: "swap.components.localIssue.allocationAmountInvalid",
+  allocationEdgeDuplicate: "swap.components.localIssue.allocationEdgeDuplicate",
+  allocationQuantityMismatch:
+    "swap.components.localIssue.allocationQuantityMismatch",
+  allocationSourceCoverage: "swap.components.localIssue.allocationSourceCoverage",
+  allocationSinkCoverage: "swap.components.localIssue.allocationSinkCoverage",
+} as const satisfies Record<CustodyPreviewIssueCode, string>;
+
+const CUSTODY_BACKEND_ISSUE_KEYS = {
+  active_lineage_conflict: "swap.components.backendIssue.active_lineage_conflict",
+  active_transaction_membership_conflict:
+    "swap.components.backendIssue.active_transaction_membership_conflict",
+  allocation_leg_invalid: "swap.components.backendIssue.allocation_leg_invalid",
+  allocation_network_mismatch:
+    "swap.components.backendIssue.allocation_network_mismatch",
+  allocation_network_scope_invalid:
+    "swap.components.backendIssue.allocation_network_scope_invalid",
+  allocation_quantity_mismatch:
+    "swap.components.backendIssue.allocation_quantity_mismatch",
+  allocation_required: "swap.components.backendIssue.allocation_required",
+  allocation_sink_coverage_mismatch:
+    "swap.components.backendIssue.allocation_sink_coverage_mismatch",
+  allocation_source_coverage_mismatch:
+    "swap.components.backendIssue.allocation_source_coverage_mismatch",
+  anchor_asset_mismatch: "swap.components.backendIssue.anchor_asset_mismatch",
+  anchor_chain_mismatch: "swap.components.backendIssue.anchor_chain_mismatch",
+  anchor_coverage_mismatch: "swap.components.backendIssue.anchor_coverage_mismatch",
+  anchor_network_mismatch: "swap.components.backendIssue.anchor_network_mismatch",
+  anchor_occurred_at_mismatch:
+    "swap.components.backendIssue.anchor_occurred_at_mismatch",
+  anchor_rail_mismatch: "swap.components.backendIssue.anchor_rail_mismatch",
+  anchor_transaction_identity_mismatch:
+    "swap.components.backendIssue.anchor_transaction_identity_mismatch",
+  anchor_transaction_missing:
+    "swap.components.backendIssue.anchor_transaction_missing",
+  anchor_transaction_excluded:
+    "swap.components.backendIssue.anchor_transaction_excluded",
+  anchor_transaction_retracted:
+    "swap.components.backendIssue.anchor_transaction_retracted",
+  anchor_wallet_mismatch: "swap.components.backendIssue.anchor_wallet_mismatch",
+  component_allocation_count_mismatch:
+    "swap.components.backendIssue.component_allocation_count_mismatch",
+  component_content_commitment_missing:
+    "swap.components.backendIssue.component_content_commitment_missing",
+  component_leg_count_mismatch:
+    "swap.components.backendIssue.component_leg_count_mismatch",
+  conversion_not_reviewed: "swap.components.backendIssue.conversion_not_reviewed",
+  conversion_fee_quantity_mismatch:
+    "swap.components.backendIssue.conversion_fee_quantity_mismatch",
+  conversion_fee_valuation_mismatch:
+    "swap.components.backendIssue.conversion_fee_valuation_mismatch",
+  conversion_policy_missing:
+    "swap.components.backendIssue.conversion_policy_missing",
+  conversion_topology_unsupported:
+    "swap.components.backendIssue.conversion_topology_unsupported",
+  conversion_valuation_missing:
+    "swap.components.backendIssue.conversion_valuation_missing",
+  custody_component_value_only_loss_unsupported:
+    "swap.components.backendIssue.custody_component_value_only_loss_unsupported",
+  custody_component_fee_orphaned:
+    "swap.components.backendIssue.custody_component_fee_orphaned",
+  custody_location_continuity_mismatch:
+    "swap.components.backendIssue.custody_location_continuity_mismatch",
+  destination_anchor_direction_mismatch:
+    "swap.components.backendIssue.destination_anchor_direction_mismatch",
+  fee_source_asset_mismatch:
+    "swap.components.backendIssue.fee_source_asset_mismatch",
+  fee_source_scope_mismatch:
+    "swap.components.backendIssue.fee_source_scope_mismatch",
+  fee_source_wallet_mismatch:
+    "swap.components.backendIssue.fee_source_wallet_mismatch",
+  leg_occurred_at_invalid: "swap.components.backendIssue.leg_occurred_at_invalid",
+  leg_occurred_at_missing: "swap.components.backendIssue.leg_occurred_at_missing",
+  loss_anchor_direction_mismatch:
+    "swap.components.backendIssue.loss_anchor_direction_mismatch",
+  missing_owned_destination:
+    "swap.components.backendIssue.missing_owned_destination",
+  missing_source: "swap.components.backendIssue.missing_source",
+  no_legs: "swap.components.backendIssue.no_legs",
+  owned_leg_wallet_missing:
+    "swap.components.backendIssue.owned_leg_wallet_missing",
+  revision_link_invalid: "swap.components.backendIssue.revision_link_invalid",
+  revision_link_missing: "swap.components.backendIssue.revision_link_missing",
+  source_anchor_direction_mismatch:
+    "swap.components.backendIssue.source_anchor_direction_mismatch",
+  transaction_anchor_missing:
+    "swap.components.backendIssue.transaction_anchor_missing",
+  transactionless_leg_wallet_missing:
+    "swap.components.backendIssue.transactionless_leg_wallet_missing",
+  unbalanced_conversion_valuation:
+    "swap.components.backendIssue.unbalanced_conversion_valuation",
+  unbalanced_quantity: "swap.components.backendIssue.unbalanced_quantity",
+  unresolved_value: "swap.components.backendIssue.unresolved_value",
+} as const;
+
+const CUSTODY_BACKEND_ERROR_KEYS = {
+  custody_component_anchor_time_mismatch:
+    "swap.components.backendError.custody_component_anchor_time_mismatch",
+  custody_component_draft_exists:
+    "swap.components.backendError.custody_component_draft_exists",
+  custody_component_incomplete:
+    "swap.components.backendError.custody_component_incomplete",
+  custody_component_lineage_exists:
+    "swap.components.backendError.custody_component_lineage_exists",
+  custody_component_membership_conflict:
+    "swap.components.backendError.custody_component_membership_conflict",
+  custody_component_not_superseded:
+    "swap.components.backendError.custody_component_not_superseded",
+  custody_component_scope_mismatch:
+    "swap.components.backendError.custody_component_scope_mismatch",
+  custody_component_state_conflict:
+    "swap.components.backendError.custody_component_state_conflict",
+  custody_component_superseded:
+    "swap.components.backendError.custody_component_superseded",
+  custody_component_validation:
+    "swap.components.backendError.custody_component_validation",
+  conflict: "swap.components.backendError.conflict",
+  not_found: "swap.components.backendError.not_found",
+  validation: "swap.components.backendError.validation",
+} as const;
+
+function custodyPreviewIssueText(
+  t: TFunction<"review">,
+  issue: CustodyPreviewIssue,
+) {
+  return t(CUSTODY_LOCAL_ISSUE_KEYS[issue.code], issue.values ?? {});
+}
+
+function custodyBackendIssueText(
+  t: TFunction<"review">,
+  issue: CustodyValidationIssue,
+) {
+  const code = issue.code ?? "";
+  const key = CUSTODY_BACKEND_ISSUE_KEYS[
+    code as keyof typeof CUSTODY_BACKEND_ISSUE_KEYS
+  ];
+  return key
+    ? t(key, issue)
+    : t("swap.components.backendIssue.unknown", {
+        code: code || t("swap.components.unknownIssue"),
+      });
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validationIssuesFromDetails(details: unknown): CustodyValidationIssue[] {
+  if (!isUnknownRecord(details)) return [];
+  const validation = details.validation;
+  if (!isUnknownRecord(validation) || !Array.isArray(validation.issues)) return [];
+  return validation.issues.filter(isUnknownRecord) as CustodyValidationIssue[];
+}
+
+function custodyMutationError(t: TFunction<"review">, error: unknown) {
+  if (error instanceof DaemonRequestError) {
+    const code = error.envelope.error?.code ?? "";
+    const key = CUSTODY_BACKEND_ERROR_KEYS[
+      code as keyof typeof CUSTODY_BACKEND_ERROR_KEYS
+    ];
+    const base = key
+      ? t(key)
+      : t("swap.components.backendError.unknown", {
+          code: code || t("swap.components.unknownIssue"),
+        });
+    const issues = validationIssuesFromDetails(error.envelope.error?.details);
+    return [base, ...issues.map((issue) => custodyBackendIssueText(t, issue))].join(
+      "\n",
+    );
+  }
+  return t("swap.components.backendError.unexpected");
+}
+
+function custodyRoleLabel(t: TFunction<"review">, role: string) {
+  const labels: Record<string, string> = {
+    source: t("swap.components.role.source"),
+    destination: t("swap.components.role.destination"),
+    fee: t("swap.components.role.fee"),
+    external: t("swap.components.role.external"),
+    retained: t("swap.components.role.retained"),
+    unresolved: t("swap.components.role.unresolved"),
+  };
+  return labels[role] ?? t("swap.components.role.unknown", { role });
+}
+
+function formatCustodyInteger(value: CustodyExactInteger) {
+  return formatCustodyExactInteger(value, currentUiLocale());
+}
+
+function CustodyComponentResolver() {
+  const { t } = useTranslation("review");
+  const [document, setDocument] = useState(CUSTODY_COMPONENT_EXAMPLE);
+  const [preview, setPreview] = useState<CustodyBatchPreview | null>(null);
+  const [serverPreview, setServerPreview] =
+    useState<CustodyBulkResolveResult | null>(null);
+  const [serverPreviewActivates, setServerPreviewActivates] = useState(false);
+  const [serverPreviewError, setServerPreviewError] = useState<string | null>(null);
+  const [result, setResult] = useState<CustodyBulkResolveResult["summary"] | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingComponentId, setPendingComponentId] = useState<string | null>(null);
+  const [editingComponent, setEditingComponent] = useState<CustodyComponent | null>(
+    null,
+  );
+  const [revisionDocument, setRevisionDocument] = useState("");
+  const [revisionPreview, setRevisionPreview] =
+    useState<CustodyBatchPreview | null>(null);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
+
+  const componentQuery = useDaemon<CustodyComponentListEnvelope>(
+    "ui.transfers.components.list",
+    { limit: 200 },
+  );
+  const previewMutation =
+    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.bulk_resolve");
+  const bulkMutation =
+    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.bulk_resolve");
+  const updateMutation =
+    useDaemonMutation<CustodyComponent>("ui.transfers.components.update");
+  const activateMutation =
+    useDaemonMutation<CustodyComponent>("ui.transfers.components.activate");
+  const supersedeMutation =
+    useDaemonMutation<CustodyComponent>("ui.transfers.components.supersede");
+  const undoMutation =
+    useDaemonMutation<CustodyComponent>("ui.transfers.components.undo");
+
+  const components = useMemo(
+    () => custodyComponentsFromEnvelope(componentQuery.data?.data),
+    [componentQuery.data?.data],
+  );
+  const mutationPending =
+    activateMutation.isPending ||
+    supersedeMutation.isPending ||
+    undoMutation.isPending ||
+    updateMutation.isPending;
+  const batchPending = previewMutation.isPending || bulkMutation.isPending;
+
+  const handleDocumentChange = (value: string) => {
+    setDocument(value);
+    setPreview(null);
+    setServerPreview(null);
+    setServerPreviewError(null);
+    setResult(null);
+    setActionError(null);
+  };
+
+  const runAuthoritativePreview = async (
+    nextPreview: CustodyBatchPreview,
+    activate: boolean,
+  ) => {
+    setServerPreview(null);
+    setServerPreviewActivates(activate);
+    setServerPreviewError(null);
+    try {
+      const response = await previewMutation.mutateAsync(
+        buildCustodyBulkRequest(nextPreview, { activate, dryRun: true }),
+      );
+      if (!response.data) {
+        setServerPreviewError(t("swap.components.backendError.unexpected"));
+        return false;
+      }
+      setServerPreview(response.data);
+      return true;
+    } catch (error) {
+      setServerPreviewError(custodyMutationError(t, error));
+      return false;
+    }
+  };
+
+  const handlePreview = async () => {
+    const nextPreview = previewCustodyComponentBatch(document);
+    setPreview(nextPreview);
+    setResult(null);
+    setActionError(null);
+    if (nextPreview.structuralErrors.length > 0) {
+      setServerPreview(null);
+      setServerPreviewError(null);
+      return;
+    }
+    await runAuthoritativePreview(
+      nextPreview,
+      nextPreview.activationErrors.length === 0,
+    );
+  };
+
+  const submitBatch = async (activate: boolean) => {
+    const nextPreview = previewCustodyComponentBatch(document);
+    setPreview(nextPreview);
+    setServerPreview(null);
+    setServerPreviewError(null);
+    setResult(null);
+    setActionError(null);
+    if (nextPreview.structuralErrors.length > 0) return;
+    if (activate && nextPreview.activationErrors.length > 0) return;
+    const verified = await runAuthoritativePreview(nextPreview, activate);
+    if (!verified) return;
+    try {
+      const response = await bulkMutation.mutateAsync(
+        buildCustodyBulkRequest(nextPreview, { activate }),
+      );
+      if (response.data) setResult(response.data.summary);
+    } catch (error) {
+      setActionError(custodyMutationError(t, error));
+    }
+  };
+
+  const openRevisionEditor = (component: CustodyComponent) => {
+    setEditingComponent(component);
+    setRevisionDocument(buildCustodyRevisionDocument(component));
+    setRevisionPreview(null);
+    setRevisionError(null);
+  };
+
+  const closeRevisionEditor = () => {
+    setEditingComponent(null);
+    setRevisionDocument("");
+    setRevisionPreview(null);
+    setRevisionError(null);
+  };
+
+  const handleRevisionDocumentChange = (value: string) => {
+    setRevisionDocument(value);
+    setRevisionPreview(null);
+    setRevisionError(null);
+  };
+
+  const previewRevisionDocument = () => {
+    setRevisionPreview(previewCustodyComponentBatch(revisionDocument));
+    setRevisionError(null);
+  };
+
+  const saveRevision = async (activate: boolean) => {
+    if (!editingComponent) return;
+    const nextPreview = previewCustodyComponentBatch(revisionDocument);
+    setRevisionPreview(nextPreview);
+    setRevisionError(null);
+    if (nextPreview.structuralErrors.length > 0) return;
+    if (nextPreview.components.length !== 1) {
+      setRevisionError(t("swap.components.revisionSingleRequired"));
+      return;
+    }
+    if (activate && nextPreview.activationErrors.length > 0) return;
+    const [spec] = buildCustodyBulkRequest(nextPreview, { activate: false }).components;
+    if (!spec) return;
+    try {
+      await updateMutation.mutateAsync({
+        component_id: editingComponent.id,
+        spec,
+        activate,
+      });
+      closeRevisionEditor();
+    } catch (error) {
+      setRevisionError(custodyMutationError(t, error));
+    }
+  };
+
+  const mutateComponent = async (
+    component: CustodyComponent,
+    action: "activate" | "retire" | "supersede" | "undo",
+  ) => {
+    setPendingComponentId(component.id);
+    setActionError(null);
+    try {
+      if (action === "activate") {
+        await activateMutation.mutateAsync({ component_id: component.id });
+      } else if (action === "supersede" || action === "retire") {
+        await supersedeMutation.mutateAsync({
+          component_id: component.id,
+          reason:
+            action === "retire"
+              ? "desktop_custody_review_retire"
+              : "desktop_custody_review_supersede",
+        });
+      } else {
+        const response = await undoMutation.mutateAsync({
+          component_id: component.id,
+          reason: "desktop_custody_review_undo",
+        });
+        if (response.data) openRevisionEditor(response.data);
+      }
+    } catch (error) {
+      setActionError(custodyMutationError(t, error));
+    } finally {
+      setPendingComponentId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold">{t("swap.components.title")}</h1>
+        <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
+          {t("swap.components.description")}
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("swap.components.bulkTitle")}</CardTitle>
+          <CardDescription>{t("swap.components.bulkDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-400/30 dark:bg-blue-950/30 dark:text-blue-100">
+            {t("swap.components.atomicHint")}
+          </div>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="custody-component-json">
+                {t("swap.components.jsonLabel")}
+              </Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={batchPending}
+                onClick={() => handleDocumentChange(CUSTODY_COMPONENT_EXAMPLE)}
+              >
+                {t("swap.components.loadExample")}
+              </Button>
+            </div>
+            <Textarea
+              id="custody-component-json"
+              value={document}
+              onChange={(event) => handleDocumentChange(event.target.value)}
+              disabled={batchPending}
+              spellCheck={false}
+              aria-invalid={Boolean(preview?.structuralErrors.length)}
+              className="min-h-80 resize-y font-mono text-xs leading-5"
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("swap.components.referenceHint")}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={batchPending}
+              onClick={() => void handlePreview()}
+            >
+              {previewMutation.isPending ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Eye />
+              )}
+              {t("swap.components.preview")}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={batchPending}
+              onClick={() => void submitBatch(false)}
+            >
+              {batchPending ? <Loader2 className="animate-spin" /> : <Plus />}
+              {t("swap.components.saveDrafts")}
+            </Button>
+            <Button
+              type="button"
+              disabled={batchPending}
+              onClick={() => void submitBatch(true)}
+            >
+              {batchPending ? <Loader2 className="animate-spin" /> : <Check />}
+              {t("swap.components.activateAll")}
+            </Button>
+          </div>
+
+          {preview ? <CustodyBatchPreviewPanel preview={preview} /> : null}
+          {serverPreview ? (
+            <CustodyServerPreviewPanel
+              result={serverPreview}
+              activates={serverPreviewActivates}
+            />
+          ) : null}
+          {serverPreviewError ? (
+            <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="font-medium">{t("swap.components.serverPreviewFailed")}</div>
+              <div className="mt-1">{serverPreviewError}</div>
+            </div>
+          ) : null}
+          {result ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 dark:border-emerald-400/30 dark:bg-emerald-950/30 dark:text-emerald-100">
+              {t("swap.components.savedSummary", result)}
+            </div>
+          ) : null}
+          {actionError ? (
+            <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {actionError}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("swap.components.listTitle")}</CardTitle>
+          <CardDescription>{t("swap.components.listDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {componentQuery.isLoading ? (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="animate-spin" />
+              {t("swap.components.loading")}
+            </div>
+          ) : componentQuery.isError ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {t("swap.components.loadFailed", {
+                error: custodyMutationError(t, componentQuery.error),
+              })}
+            </div>
+          ) : components.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {t("swap.components.empty")}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {components.map((component) => {
+                const issues = component.validation?.issues ?? [];
+                const pending = mutationPending && pendingComponentId === component.id;
+                const legsById = new Map(
+                  component.legs.map((leg) => [leg.id, leg] as const),
+                );
+                return (
+                  <div key={component.id} className="rounded-lg border p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">
+                            {t(`swap.components.type.${component.component_type}`, {
+                              defaultValue: component.component_type,
+                            })}
+                          </span>
+                          <Badge
+                            variant={
+                              component.effective_state === "active"
+                                ? "default"
+                                : component.state === "superseded"
+                                  ? "outline"
+                                  : "secondary"
+                            }
+                          >
+                            {t(`swap.components.state.${component.effective_state}`)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {t("swap.components.revision", { count: component.revision })}
+                          </span>
+                        </div>
+                        <div className="mt-1 font-mono text-xs text-muted-foreground">
+                          {compactRecordId(component.id)}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                          <Badge variant="outline">
+                            {t("swap.components.audit.mode", {
+                              mode: t(
+                                `swap.components.mode.${component.conservation_mode}`,
+                              ),
+                            })}
+                          </Badge>
+                          {component.evidence_kind || component.evidence_grade ? (
+                            <Badge variant="outline">
+                              {t("swap.components.audit.evidence", {
+                                kind: component.evidence_kind ?? "—",
+                                grade: component.evidence_grade ?? "—",
+                              })}
+                            </Badge>
+                          ) : null}
+                          {component.conservation_mode === "conversion" ? (
+                            <>
+                              <Badge variant="outline">
+                                {t("swap.components.audit.policy", {
+                                  policy:
+                                    component.conversion_policy ??
+                                    t("swap.components.audit.missing"),
+                                })}
+                              </Badge>
+                              <Badge
+                                variant={
+                                  component.conversion_reviewed ? "default" : "secondary"
+                                }
+                              >
+                                {t("swap.components.audit.reviewed", {
+                                  value: component.conversion_reviewed
+                                    ? t("swap.components.audit.yes")
+                                    : t("swap.components.audit.no"),
+                                })}
+                              </Badge>
+                            </>
+                          ) : null}
+                        </div>
+                        {component.notes ? (
+                          <p className="mt-2 text-sm text-muted-foreground">{component.notes}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {component.state === "draft" || component.state === "active" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={mutationPending}
+                            onClick={() => openRevisionEditor(component)}
+                          >
+                            <Pencil />
+                            {component.state === "draft"
+                              ? t("swap.components.editDraft")
+                              : t("swap.components.revise")}
+                          </Button>
+                        ) : null}
+                        {component.state === "draft" ? (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={
+                                mutationPending ||
+                                component.validation?.activatable === false
+                              }
+                              onClick={() => void mutateComponent(component, "activate")}
+                            >
+                              {pending ? <Loader2 className="animate-spin" /> : <Check />}
+                              {t("swap.components.activate")}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={mutationPending}
+                              onClick={() => void mutateComponent(component, "retire")}
+                            >
+                              {pending ? (
+                                <Loader2 className="animate-spin" />
+                              ) : (
+                                <Trash2 />
+                              )}
+                              {t("swap.components.retireDraft")}
+                            </Button>
+                          </>
+                        ) : null}
+                        {component.state === "active" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={mutationPending}
+                            onClick={() => void mutateComponent(component, "supersede")}
+                          >
+                            {pending ? <Loader2 className="animate-spin" /> : <Unlink />}
+                            {t("swap.components.supersede")}
+                          </Button>
+                        ) : null}
+                        {component.state === "superseded" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={mutationPending}
+                            onClick={() => void mutateComponent(component, "undo")}
+                          >
+                            {pending ? <Loader2 className="animate-spin" /> : <Undo2 />}
+                            {t("swap.components.undo")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {component.legs.map((leg) => (
+                        <div key={leg.id} className="rounded-md bg-muted/50 p-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <Badge variant="outline">
+                              {custodyRoleLabel(t, leg.role)}
+                            </Badge>
+                            <span className="font-mono">
+                              {t("swap.components.audit.amountMsat", {
+                                amount: formatCustodyInteger(leg.amount_msat),
+                              })}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            {leg.rail} · {leg.asset} · {leg.exposure ?? "—"} / {leg.conservation_unit ?? "—"}
+                          </div>
+                          {leg.valuation_unit && leg.valuation_amount !== null && leg.valuation_amount !== undefined ? (
+                            <div className="mt-1 text-muted-foreground">
+                              {t("swap.components.audit.valuation", {
+                                amount: formatCustodyInteger(leg.valuation_amount),
+                                unit: leg.valuation_unit,
+                              })}
+                            </div>
+                          ) : null}
+                          <div className="mt-1 truncate font-mono text-muted-foreground">
+                            {compactRecordId(
+                              leg.transaction_id ?? leg.wallet_id ?? "",
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {component.allocations.length > 0 ? (
+                      <div className="mt-3 rounded-md border p-3 text-xs">
+                        <div className="font-medium">
+                          {t("swap.components.audit.allocations")}
+                        </div>
+                        <div className="mt-2 space-y-1.5">
+                          {component.allocations.map((allocation) => {
+                            const source = legsById.get(allocation.source_leg_id);
+                            const sink = legsById.get(allocation.sink_leg_id);
+                            return (
+                              <div
+                                key={allocation.id}
+                                className="rounded bg-muted/50 px-2 py-1.5 font-mono"
+                              >
+                                {t("swap.components.audit.allocationEdge", {
+                                  source: source
+                                    ? `${source.ordinal + 1} (${custodyRoleLabel(t, source.role)})`
+                                    : compactRecordId(allocation.source_leg_id),
+                                  sourceAmount: formatCustodyInteger(
+                                    allocation.source_amount_msat,
+                                  ),
+                                  sink: sink
+                                    ? `${sink.ordinal + 1} (${custodyRoleLabel(t, sink.role)})`
+                                    : compactRecordId(allocation.sink_leg_id),
+                                  sinkAmount: formatCustodyInteger(
+                                    allocation.sink_amount_msat,
+                                  ),
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {issues.length > 0 ? (
+                      <div className="mt-3 rounded-md border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-100">
+                        <div className="font-medium">{t("swap.components.validationIssues")}</div>
+                        <ul className="mt-1 list-disc space-y-1 pl-4">
+                          {issues.map((issue, index) => (
+                            <li key={`${issue.code ?? "issue"}:${index}`}>
+                              {custodyBackendIssueText(t, issue)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={editingComponent !== null}
+        onOpenChange={(open) => {
+          if (!open && !updateMutation.isPending) closeRevisionEditor();
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingComponent?.state === "active"
+                ? t("swap.components.revisionDialog.reviseTitle")
+                : t("swap.components.revisionDialog.editTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("swap.components.revisionDialog.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="custody-component-revision-json">
+              {t("swap.components.revisionDialog.jsonLabel")}
+            </Label>
+            <Textarea
+              id="custody-component-revision-json"
+              value={revisionDocument}
+              onChange={(event) => handleRevisionDocumentChange(event.target.value)}
+              disabled={updateMutation.isPending}
+              spellCheck={false}
+              aria-invalid={Boolean(revisionPreview?.structuralErrors.length)}
+              className="min-h-80 resize-y font-mono text-xs leading-5"
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("swap.components.revisionDialog.safetyHint")}
+            </p>
+            {revisionPreview ? (
+              <CustodyBatchPreviewPanel preview={revisionPreview} />
+            ) : null}
+            {revisionError ? (
+              <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {revisionError}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter className="flex-wrap sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={updateMutation.isPending}
+              onClick={closeRevisionEditor}
+            >
+              {t("swap.components.revisionDialog.cancel")}
+            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={updateMutation.isPending}
+                onClick={previewRevisionDocument}
+              >
+                <Eye />
+                {t("swap.components.preview")}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={updateMutation.isPending}
+                onClick={() => void saveRevision(false)}
+              >
+                {updateMutation.isPending ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Plus />
+                )}
+                {t("swap.components.revisionDialog.saveDraft")}
+              </Button>
+              <Button
+                type="button"
+                disabled={updateMutation.isPending}
+                onClick={() => void saveRevision(true)}
+              >
+                {updateMutation.isPending ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Check />
+                )}
+                {t("swap.components.revisionDialog.saveActivate")}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CustodyBatchPreviewPanel({ preview }: { preview: CustodyBatchPreview }) {
+  const { t } = useTranslation("review");
+  const activationReady =
+    preview.structuralErrors.length === 0 && preview.activationErrors.length === 0;
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium">{t("swap.components.previewTitle")}</div>
+        <Badge variant={activationReady ? "default" : "secondary"}>
+          {activationReady
+            ? t("swap.components.readyToActivate")
+            : preview.structuralErrors.length > 0
+              ? t("swap.components.needsCorrection")
+              : t("swap.components.draftOnly")}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+        {(
+          [
+            ["components", preview.summary.components],
+            ["legs", preview.summary.legs],
+            ["sources", preview.summary.sources],
+            ["destinations", preview.summary.destinations],
+            ["anchors", preview.summary.transactionAnchors],
+            ["untracked", preview.summary.untrackedLegs],
+          ] as const
+        ).map(([label, value]) => (
+          <div key={label} className="rounded-md bg-muted/50 p-2">
+            <div className="text-lg font-semibold tabular-nums">{value}</div>
+            <div className="text-xs text-muted-foreground">
+              {t(`swap.components.summary.${label}`)}
+            </div>
+          </div>
+        ))}
+      </div>
+      {preview.structuralErrors.length > 0 ? (
+        <CustodyErrorList
+          title={t("swap.components.structuralErrors")}
+          issues={preview.structuralErrors}
+          destructive
+        />
+      ) : null}
+      {preview.activationErrors.length > 0 ? (
+        <CustodyErrorList
+          title={t("swap.components.activationErrors")}
+          issues={preview.activationErrors}
+        />
+      ) : null}
+      {activationReady ? (
+        <p className="text-sm text-emerald-700 dark:text-emerald-300">
+          {t("swap.components.previewReadyHint")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CustodyServerPreviewPanel({
+  result,
+  activates,
+}: {
+  result: CustodyBulkResolveResult;
+  activates: boolean;
+}) {
+  const { t } = useTranslation("review");
+  const issues = result.components.flatMap(
+    (component) => component.validation?.issues ?? [],
+  );
+  return (
+    <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 dark:border-emerald-400/30 dark:bg-emerald-950/30 dark:text-emerald-100">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium">{t("swap.components.serverPreviewTitle")}</div>
+        <Badge variant="outline">{t("swap.components.serverPreviewVerified")}</Badge>
+      </div>
+      <p>
+        {activates
+          ? t("swap.components.serverPreviewActivates", result.summary)
+          : t("swap.components.serverPreviewDrafts", result.summary)}
+      </p>
+      {issues.length > 0 ? (
+        <div>
+          <div className="font-medium">{t("swap.components.validationIssues")}</div>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {issues.map((issue, index) => (
+              <li key={`${issue.code ?? "issue"}:${index}`}>
+                {custodyBackendIssueText(t, issue)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CustodyErrorList({
+  title,
+  issues,
+  destructive = false,
+}: {
+  title: string;
+  issues: CustodyPreviewIssue[];
+  destructive?: boolean;
+}) {
+  const { t } = useTranslation("review");
+  return (
+    <div
+      className={cn(
+        "rounded-md border p-3 text-sm",
+        destructive
+          ? "border-destructive/40 bg-destructive/10 text-destructive"
+          : "border-amber-300/60 bg-amber-50 text-amber-950 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-100",
+      )}
+    >
+      <div className="font-medium">{title}</div>
+      <ul className="mt-1 list-disc space-y-1 pl-5">
+        {issues.map((issue, index) => (
+          <li key={`${index}:${issue.code}`}>
+            {custodyPreviewIssueText(t, issue)}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

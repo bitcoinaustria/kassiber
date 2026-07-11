@@ -116,15 +116,10 @@ export type SourceFundsFinding = {
 
 
 export const BULK_REVIEWABLE_METHODS = new Set([
-  "same_external_id",
+  "same_onchain_scope",
   "transaction_pair",
   "utxo_spend",
   "payment_hash",
-  "provider_trade_id",
-  "provider_order_id",
-  "provider_payment_id",
-  "provider_exchange_order_id",
-  "provider_ledger_id",
 ]);
 
 
@@ -311,6 +306,7 @@ export type SourceFundsLink = {
   link_type: string;
   state: string;
   confidence: string;
+  requires_review?: boolean;
   method: string;
   asset: string;
   allocation_amount?: number | null;
@@ -625,6 +621,9 @@ export function isBulkReviewableLink(link: SourceFundsLink) {
     link.state === "suggested" &&
     deterministic &&
     (link.confidence === "exact" || link.confidence === "strong") &&
+    !link.requires_review &&
+    (!(method === "same_onchain_scope" || method === "utxo_spend") ||
+      link.confidence === "exact") &&
     typeof link.allocation_amount === "number" &&
     !link.uses_chain_observation
   );

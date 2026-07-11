@@ -61,8 +61,9 @@ Privacy techniques make this boundary more important:
 
 - A simple self-transfer can be shown when Kassiber has both owned legs or a
   reviewed manual link.
-- A swap can be shown when the two sides are linked by imported provider data
-  or a reviewed manual link.
+- A swap can be shown as confirmed when complete typed provider route/principal
+  evidence passes the exact gate or the user reviews a manual/provider link;
+  an arbitrary provider id alone remains a suggestion.
 - A payjoin or coinjoin can be shown as a privacy-preserving hop, but the
   report must not claim exact upstream ownership unless the user adds reviewed
   evidence. Wallet-specific privacy importers may set the typed transaction
@@ -138,7 +139,7 @@ Each link should carry:
 
 - `state`: `suggested`, `reviewed`, `rejected`
 - `confidence`: `exact`, `strong`, `weak`, `unknown`
-- `method`: deterministic source such as `same_external_id`, `utxo_spend`,
+- `method`: evidence source such as `same_onchain_scope`, `utxo_spend`,
   `payment_hash`, `transaction_pair`, `provider_trade_id`, `manual`, or
   `chain_observation`
 - `allocation_policy`: `explicit`, `heuristic`, or `unknown`
@@ -163,23 +164,33 @@ machine envelope must expose the unresolved amount and block PDF export.
 
 Deterministic suggestions should run in this order:
 
-1. Existing same-asset self-transfer detection by shared external transaction
-   id across owned wallets.
+1. Same-asset self-transfer detection by canonical
+   `(chain, network, 64-hex txid, asset)` scope across owned wallets. Arbitrary
+   provider/import ids never establish physical identity. Automatic bulk review
+   additionally requires equal whole-row principal; partial/mismatched rows need
+   UTXO allocation evidence, manual review, or a custody component.
 2. Existing manual `transaction_pairs`, including cross-asset swap links.
 3. Transaction input/output structure (`utxo_spend`): chain-synced rows store
    their vin outpoints in `raw_json` (esplora/electrum) and `wallet_utxos`
    records the outputs each owned wallet controls (plus `spent_by` from
    Wasabi imports). Joining a spend's inputs against owned outputs proves,
    exactly: which earlier owned transaction funded this spend inside one
-   wallet (consolidation/change chaining), and which wallet received which
-   share of a multi-wallet transaction the 1:1 external-id heuristic
-   refuses. Works identically for Bitcoin and Liquid (`wallet_utxos.chain`).
+   wallet (consolidation/change chaining), plus unambiguous 1:N and N:1 wallet
+   flows the 1:1 row matcher refuses. Exact N:1 requires complete conservation:
+   if several parents or source wallets feed a smaller owned result, Bitcoin
+   does not identify which source paid the miner fee, external output, or
+   missing change. Those residual N:1 cases — and every multi-source,
+   multi-destination matrix — remain deterministic pro-rata accounting
+   proposals marked `strong` / `requires_review`; bulk review never promotes
+   them. Use an explicit custody-component allocation for authoritative
+   residual N:1 or N:M lineage. Works identically for Bitcoin and Liquid
+   (`wallet_utxos.chain`).
 4. Lightning payment hashes (`payment_hash`): exactly one outbound and one
    inbound owned row sharing a **node-origin** payment hash are two legs of one
-   payment. The gate is shared with journal hash inference; untyped imported
+   payment with exactly equal node-native principal. The gate is shared with
+   journal hash inference; untyped imported
    hashes and `chain_script` HTLC hashes remain review evidence rather than an
-   automatically reviewed ownership link. Source-funds additionally refuses an
-   inbound amount above its outbound source allocation.
+   automatically reviewed ownership link.
 5. Provider/import evidence such as trade ids, order ids, payment ids, or
    exchange ledger ids when stored in `raw_json`.
 6. Tight time and amount matches across owned wallets, as opt-in broad hints.
@@ -191,9 +202,10 @@ Deterministic suggestions should run in this order:
 
 The `utxo_spend` and `payment_hash` derivers read only first-party wallet
 state that sync already imported — they never query a backend — so they sit
-outside the chain-observation manual-review policy and are deterministic
-bulk-review methods (re-derived from the live database before promotion,
-like every other deterministic method). One pair of transactions carries at
+outside the chain-observation manual-review policy. Exact, unambiguous edges
+are re-derived from the live database before bulk promotion; pooled residual
+N:1 and N:M pro-rata edges remain manual even though their arithmetic is
+deterministic. One pair of transactions carries at
 most one non-rejected link regardless of method: parallel edges would
 double-allocate a hop into an `ambiguous_allocation` blocker, so the first
 method to claim a pair wins and stronger evidence may only re-suggest pairs
@@ -232,8 +244,8 @@ Broad account-scoped provider ids and same-day time/amount matches are not
 persisted unless the user explicitly opts into broad hints. Every suggestion
 run has a hard write cap and aborts without committing when the cap is exceeded.
 Batch review must re-check deterministic predicates against the live database
-before promotion. A stale `same_external_id`, deleted `transaction_pair`, or
-provider id that is no longer one-to-one remains `suggested` for manual review.
+before promotion. A stale `same_onchain_scope` or deleted `transaction_pair`
+remains `suggested`. Provider ids remain manual suggestions even when one-to-one.
 
 Walkers must keep a visited set keyed by transaction and asset, enforce depth
 and node-count caps, and emit `path_truncated` instead of silently stopping.
@@ -511,18 +523,17 @@ The first implementation adds the conservative, testable core path:
   and a checked-in fictitious demo generator at
   `scripts/generate-source-funds-demo-report.py`
 
-The v1 suggestion pass seeds separate source-funds links from same
-`external_id` transfers, existing `transaction_pairs`, and one-to-one
-provider/import ids in `raw_json`; broad provider account ids and tight
+The v1 suggestion pass seeds separate source-funds links from canonical scoped
+transactions, existing `transaction_pairs`, and provider/import ids in
+`raw_json`; broad provider account ids and tight
 same-day amount matches require explicit broad-hint opt-in. These links stay
-suggested until reviewed; PDF export does not use them as proof. Exact/strong
-deterministic suggestions from same external ids, existing `transaction_pairs`,
-and one-to-one per-transaction provider/import ids may be batch-reviewed by the
-user so long consolidation chains do not require one-click-per-hop review.
+suggested until reviewed; PDF export does not use them as proof. Canonical scoped
+identity, UTXO structure, source-qualified Lightning hashes, and existing
+reviewed `transaction_pairs` may be batch-reviewed; provider/import ids may not.
 Batch review is target-scoped: it only promotes deterministic suggestions
 reachable from the selected report target and still deterministic at review
-time. Broad provider account ids, weak time/amount matches, stale provider or
-external-id matches, amount-mismatched provider rows, and chain-observation
+time. Provider account/transaction ids, weak time/amount matches, stale scoped
+matches, amount-mismatched provider rows, and chain-observation
 hints stay manual.
 
 ## Implementation Order

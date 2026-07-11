@@ -285,7 +285,8 @@ the report's Transactions sheet, so a user can verify each row by hand:
   ownership-derived moves and consolidations too) plus reviewed carrying-value
   swap pairs whose legs were not quarantined; taxable-policy swap pairs are
   never labeled. Without processed journals a best-effort detection labels
-  same-txid / payment-hash hops;
+  canonical scoped transaction-graph matches and source-qualified, unique,
+  equal-principal Lightning hashes;
 - description, note, counterparty, tags, `references` (attachment URLs), and the
   linked-file/URL Attachments column (single URLs render as clickable links).
 
@@ -352,7 +353,8 @@ kassiber source-funds links create --from-source <source-id> \
   --to-transaction <txid-or-id> --type manual_source \
   --allocation-amount 0.10000000 --allocation-policy explicit
 # One call: derive + auto-review everything provable from local evidence
-# (tx inputs/outputs, payment hashes, platform ids, reviewed pairs).
+# (scoped tx inputs/outputs, source-qualified Lightning hashes, reviewed pairs).
+# Provider/platform ids remain manual suggestions.
 kassiber source-funds assemble --target-transaction <txid-or-id>
 
 # Manual equivalents when finer control is needed:

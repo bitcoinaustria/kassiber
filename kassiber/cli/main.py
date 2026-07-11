@@ -59,7 +59,10 @@ from .handlers import (
     cmd_init,
     cmd_status,
     apply_transfer_rules,
+    activate_custody_component,
+    bulk_resolve_custody_components,
     bulk_pair_transfers,
+    create_custody_component,
     create_direct_swap_payout,
     chat_history_config_cli,
     clear_chat_sessions_cli,
@@ -85,11 +88,13 @@ from .handlers import (
     derive_wallet_targets,
     emit,
     get_journal_event,
+    get_custody_component,
     identify_wallet_owners,
     import_exchange_api,
     import_into_wallet,
     inspect_transfer_audit,
     list_direct_swap_payouts,
+    list_custody_components,
     list_journal_entries,
     list_journal_events,
     list_quarantines,
@@ -99,6 +104,7 @@ from .handlers import (
     normalize_chain_value,
     normalize_network_value,
     process_journals,
+    read_text_argument,
     resolve_scope,
     resolve_transaction,
     resolve_wallet,
@@ -110,11 +116,15 @@ from .handlers import (
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
+    supersede_custody_component,
+    undo_custody_component,
+    update_custody_component,
     update_transaction_pair,
 )
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import custody_components as core_custody_components
 from ..core import lightning as core_lightning
 from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from ..core import metadata as core_metadata
@@ -277,6 +287,40 @@ def _dry_run_transaction(conn: sqlite3.Connection, operation) -> dict[str, Any]:
     payload = dict(result)
     payload["dry_run"] = True
     return payload
+
+
+def _read_json_document(
+    inline_value: str | None,
+    file_path: str | None,
+    *,
+    label: str,
+) -> Any:
+    """Read one CLI JSON document from an inline value or a UTF-8 file."""
+
+    raw = read_text_argument(inline_value, file_path, label)
+    if raw is None:
+        raise AppError(f"{label} JSON input is required", code="validation")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        source = "inline JSON" if inline_value not in (None, "") else str(file_path)
+        raise AppError(
+            f"Invalid {label} JSON from {source}: {exc}", code="validation"
+        ) from exc
+
+
+def _add_json_document_args(parser: argparse.ArgumentParser, *, label: str) -> None:
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--json",
+        dest="json_text",
+        help=f"Inline JSON {label}",
+    )
+    source.add_argument(
+        "--file",
+        dest="json_file",
+        help=f"UTF-8 file containing the JSON {label}",
+    )
 
 
 def _project_payload(entry) -> dict[str, object]:
@@ -2118,6 +2162,117 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_update.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS))
     transfers_update.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
     transfers_update.add_argument("--note", dest="note")
+
+    transfers_components = transfers_sub.add_parser(
+        "components",
+        help="Author atomic, versioned custody interpretations across Bitcoin rails",
+    )
+    transfers_components_sub = transfers_components.add_subparsers(
+        dest="transfers_components_command", required=True
+    )
+    transfers_components_list = transfers_components_sub.add_parser(
+        "list", help="List custody components"
+    )
+    _add_workspace_profile_args(transfers_components_list)
+    transfers_components_list.add_argument(
+        "--state", choices=sorted(core_custody_components.COMPONENT_STATES)
+    )
+    transfers_components_list.add_argument(
+        "--component-type",
+        dest="component_type",
+        choices=sorted(core_custody_components.COMPONENT_TYPES),
+    )
+    transfers_components_list.add_argument(
+        "--transaction", help="Filter by transaction id or external_id"
+    )
+    transfers_components_list.add_argument(
+        "--effective-only", action="store_true"
+    )
+    transfers_components_list.add_argument(
+        "--include-local-evidence", action="store_true"
+    )
+    transfers_components_list.add_argument("--limit", type=int, default=200)
+
+    transfers_components_show = transfers_components_sub.add_parser(
+        "show", help="Show one custody component"
+    )
+    _add_workspace_profile_args(transfers_components_show)
+    transfers_components_show.add_argument(
+        "--component-id", required=True, dest="component_id"
+    )
+    transfers_components_show.add_argument(
+        "--include-local-evidence", action="store_true"
+    )
+
+    transfers_components_create = transfers_components_sub.add_parser(
+        "create", help="Create a draft custody component"
+    )
+    _add_workspace_profile_args(transfers_components_create)
+    _add_json_document_args(transfers_components_create, label="component spec")
+    transfers_components_create.add_argument(
+        "--activate",
+        action="store_true",
+        help="Activate after complete conservation and anchor validation",
+    )
+
+    transfers_components_update = transfers_components_sub.add_parser(
+        "update", help="Create a new immutable revision of a component"
+    )
+    _add_workspace_profile_args(transfers_components_update)
+    transfers_components_update.add_argument(
+        "--component-id", required=True, dest="component_id"
+    )
+    _add_json_document_args(transfers_components_update, label="component revision")
+    transfers_components_update.add_argument(
+        "--activate",
+        action="store_true",
+        help="Activate the new revision after validation",
+    )
+
+    transfers_components_activate = transfers_components_sub.add_parser(
+        "activate", help="Make a complete custody component effective"
+    )
+    _add_workspace_profile_args(transfers_components_activate)
+    transfers_components_activate.add_argument(
+        "--component-id", required=True, dest="component_id"
+    )
+
+    transfers_components_supersede = transfers_components_sub.add_parser(
+        "supersede", help="Deactivate an authored component without deleting evidence"
+    )
+    _add_workspace_profile_args(transfers_components_supersede)
+    transfers_components_supersede.add_argument(
+        "--component-id", required=True, dest="component_id"
+    )
+    transfers_components_supersede.add_argument("--reason")
+
+    transfers_components_undo = transfers_components_sub.add_parser(
+        "undo", help="Restore a superseded component as a new draft revision"
+    )
+    _add_workspace_profile_args(transfers_components_undo)
+    transfers_components_undo.add_argument(
+        "--component-id", required=True, dest="component_id"
+    )
+    transfers_components_undo.add_argument("--reason", default="undo")
+
+    transfers_components_bulk = transfers_components_sub.add_parser(
+        "bulk-resolve",
+        help="Atomically create one or more N:M custody components",
+    )
+    _add_workspace_profile_args(transfers_components_bulk)
+    _add_json_document_args(
+        transfers_components_bulk, label="component array or bulk object"
+    )
+    transfers_components_bulk.add_argument(
+        "--draft",
+        action="store_true",
+        help="Create draft components instead of activating them",
+    )
+    transfers_components_bulk.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and preview every component, then roll back the whole batch",
+    )
 
     transfers_payouts = transfers_sub.add_parser("payouts")
     transfers_payouts_sub = transfers_payouts.add_subparsers(dest="payouts_command", required=True)
@@ -4024,6 +4179,115 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn, args.workspace, args.profile, args.pair_id, **update_kwargs
                 ),
             )
+        if args.transfers_command == "components":
+            if args.transfers_components_command == "list":
+                return emit(
+                    args,
+                    list_custody_components(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        state=args.state,
+                        component_type=args.component_type,
+                        transaction=args.transaction,
+                        effective_only=args.effective_only,
+                        include_local_evidence=args.include_local_evidence,
+                        limit=args.limit,
+                    ),
+                )
+            if args.transfers_components_command == "show":
+                return emit(
+                    args,
+                    get_custody_component(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.component_id,
+                        include_local_evidence=args.include_local_evidence,
+                    ),
+                )
+            if args.transfers_components_command == "create":
+                spec = _read_json_document(
+                    args.json_text, args.json_file, label="component spec"
+                )
+                return emit(
+                    args,
+                    create_custody_component(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        spec,
+                        activate=args.activate,
+                    ),
+                )
+            if args.transfers_components_command == "update":
+                spec = _read_json_document(
+                    args.json_text, args.json_file, label="component revision"
+                )
+                return emit(
+                    args,
+                    update_custody_component(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.component_id,
+                        spec,
+                        activate=args.activate,
+                    ),
+                )
+            if args.transfers_components_command == "activate":
+                return emit(
+                    args,
+                    activate_custody_component(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.component_id,
+                    ),
+                )
+            if args.transfers_components_command == "supersede":
+                return emit(
+                    args,
+                    supersede_custody_component(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.component_id,
+                        reason=args.reason,
+                    ),
+                )
+            if args.transfers_components_command == "undo":
+                return emit(
+                    args,
+                    undo_custody_component(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.component_id,
+                        reason=args.reason,
+                    ),
+                )
+            if args.transfers_components_command == "bulk-resolve":
+                specs = _read_json_document(
+                    args.json_text,
+                    args.json_file,
+                    label="component array or bulk object",
+                )
+                operation = functools.partial(
+                    bulk_resolve_custody_components,
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    specs,
+                    activate=not args.draft,
+                    commit=not args.dry_run,
+                )
+                return emit(
+                    args,
+                    _dry_run_transaction(conn, operation)
+                    if args.dry_run
+                    else operation(),
+                )
         if args.transfers_command == "payouts":
             if args.payouts_command == "list":
                 return emit(args, list_direct_swap_payouts(conn, args.workspace, args.profile))

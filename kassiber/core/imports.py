@@ -148,13 +148,14 @@ def normalize_import_direction(direction: Any, amount: Any) -> str:
 
 
 _EXISTING_TRANSACTION_COLUMNS = """
-       id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at,
+       id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+       occurred_at, direction, asset, amount, fee,
        confirmed_at, fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
        pricing_external_ref, pricing_quality, kind, privacy_boundary, description,
        counterparty, raw_json, payment_hash, payment_hash_source,
-       swap_refund_funding_txid
+       swap_refund_funding_txid, swap_refund_funding_vout
 """
 
 
@@ -174,6 +175,28 @@ def _find_existing_transaction(
     ).fetchone()
     if existing or not normalized["external_id"]:
         return existing
+    if normalized.get("kind") == "routing_income":
+        # Node adapters deliberately emit one cumulative, privacy-bounded fee
+        # aggregate per UTC day. Its quantity grows during the day, so amount
+        # cannot be part of identity; update the stable day row in place.
+        existing = conn.execute(
+            f"""
+            SELECT {_EXISTING_TRANSACTION_COLUMNS}
+            FROM transactions
+            WHERE wallet_id = ? AND external_id = ?
+              AND direction = ? AND asset = ? AND kind = 'routing_income'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (
+                wallet_id,
+                normalized["external_id"],
+                normalized["direction"],
+                normalized["asset"],
+            ),
+        ).fetchone()
+        if existing:
+            return existing
     existing = conn.execute(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}
@@ -504,8 +527,103 @@ def _metadata_field_is_import_authored(existing: Mapping[str, Any], field: str) 
     return raw_value is not None and str(current) == raw_value
 
 
+def _ownership_graph_version(row: Mapping[str, Any]) -> int:
+    """Return the persisted ownership-evidence schema version, if any.
+
+    Chain refreshes can enrich an otherwise unchanged transaction with valued
+    historical inputs/outputs.  That evidence is part of the economic source
+    record, not user-authored metadata, and must therefore be allowed to upgrade
+    ``raw_json`` even when no ordinary transaction column changed.
+    """
+
+    payload = _raw_json_payload(row)
+    if payload is None:
+        return 0
+    value = payload.get("ownership_graph_version")
+    if type(value) is not int or value < 0:
+        return 0
+    return value
+
+
+def _ownership_graph_evidence(row: Mapping[str, Any]) -> dict[tuple[Any, ...], Any]:
+    payload = _raw_json_payload(row)
+    if payload is None or _ownership_graph_version(row) <= 0:
+        return {}
+    evidence: dict[tuple[Any, ...], Any] = {}
+    for position, vin in enumerate(payload.get("vin") or ()):
+        if not isinstance(vin, Mapping):
+            continue
+        key = (str(vin.get("txid") or ""), vin.get("vout", position))
+        prevout = vin.get("prevout")
+        if not isinstance(prevout, Mapping):
+            continue
+        for field in ("scriptpubkey", "value_sats", "asset_id", "asset", "role"):
+            value = prevout.get(field)
+            if value not in (None, ""):
+                evidence[("vin", *key, field)] = value
+    for position, vout in enumerate(payload.get("vout") or ()):
+        if not isinstance(vout, Mapping):
+            continue
+        key = vout.get("n", position)
+        for field in ("scriptpubkey", "value_sats", "asset_id", "asset", "role"):
+            value = vout.get(field)
+            if value not in (None, ""):
+                evidence[("vout", key, field)] = value
+    return evidence
+
+
+def _ownership_graph_is_strict_enrichment(
+    existing: Mapping[str, Any], incoming: Mapping[str, Any]
+) -> bool:
+    """True when same-version evidence adds facts without discarding any."""
+
+    version = _ownership_graph_version(existing)
+    if version <= 0 or _ownership_graph_version(incoming) != version:
+        return False
+    old = _ownership_graph_evidence(existing)
+    new = _ownership_graph_evidence(incoming)
+    enriched = False
+    for key, old_value in old.items():
+        if key not in new:
+            return False
+        new_value = new[key]
+        if new_value == old_value:
+            continue
+        if key[-1] == "role" and {str(old_value), str(new_value)} == {
+            "external",
+            "owned",
+        }:
+            if str(new_value) != "owned":
+                return False
+            enriched = True
+            continue
+        return False
+    if any(key not in old for key in new):
+        enriched = True
+    return enriched
+
+
 def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[str, Any], fingerprint: str):
     updates = {}
+    if normalized.get("kind") == "routing_income":
+        incoming_amount = btc_to_msat(normalized["amount"])
+        incoming_fee = btc_to_msat(normalized["fee"])
+        if (
+            int(existing["amount"] or 0) != incoming_amount
+            or int(existing["fee"] or 0) != incoming_fee
+        ):
+            updates["amount"] = incoming_amount
+            updates["fee"] = incoming_fee
+            if existing["fingerprint"] != fingerprint:
+                updates["fingerprint"] = fingerprint
+            rate = existing["fiat_rate_exact"] or existing["fiat_rate"]
+            if rate not in (None, ""):
+                exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
+                updates["fiat_value"] = float(exact_value)
+                updates["fiat_value_exact"] = exact_value
+            elif existing["fiat_value"] is not None or existing["fiat_value_exact"] is not None:
+                updates["fiat_value"] = None
+                updates["fiat_value_exact"] = None
     if (
         existing["occurred_at"] == UNKNOWN_OCCURRED_AT
         and normalized["occurred_at"] != UNKNOWN_OCCURRED_AT
@@ -586,9 +704,37 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     if not existing["payment_hash"] and normalized["payment_hash"]:
         updates["payment_hash"] = normalized["payment_hash"]
         updates["payment_hash_source"] = normalized["payment_hash_source"]
+    elif (
+        existing["payment_hash"]
+        and existing["payment_hash"] == normalized["payment_hash"]
+        and existing["payment_hash_source"] == "chain_script"
+        and normalized["payment_hash_source"]
+        == "chain_script_unique_outpoint"
+    ):
+        # New sync evidence can safely promote the same legacy hash after one
+        # canonical claim outpoint is proven. Never change the hash here and
+        # never downgrade exact evidence when an older importer is replayed.
+        updates["payment_hash_source"] = normalized["payment_hash_source"]
     if not existing["swap_refund_funding_txid"] and normalized["swap_refund_funding_txid"]:
         updates["swap_refund_funding_txid"] = normalized["swap_refund_funding_txid"]
-    if updates and normalized["raw_json"] and normalized["raw_json"] != existing["raw_json"]:
+        updates["swap_refund_funding_vout"] = normalized["swap_refund_funding_vout"]
+    elif (
+        normalized["swap_refund_funding_txid"]
+        and existing["swap_refund_funding_txid"]
+        == normalized["swap_refund_funding_txid"]
+        and existing["swap_refund_funding_vout"] is None
+        and normalized["swap_refund_funding_vout"] is not None
+    ):
+        updates["swap_refund_funding_vout"] = normalized["swap_refund_funding_vout"]
+    ownership_graph_upgrade = (
+        _ownership_graph_version(normalized) > _ownership_graph_version(existing)
+        or _ownership_graph_is_strict_enrichment(existing, normalized)
+    )
+    if (
+        (updates or ownership_graph_upgrade)
+        and normalized["raw_json"]
+        and normalized["raw_json"] != existing["raw_json"]
+    ):
         updates["raw_json"] = normalized["raw_json"]
     return updates
 
@@ -894,6 +1040,22 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         raw_json = json.dumps(json_ready(record), sort_keys=True)
     elif not isinstance(raw_json, str):
         raw_json = json.dumps(json_ready(raw_json), sort_keys=True)
+    # Provenance used by deterministic identity gates must be authored at the
+    # adapter boundary, never copied from a user-controlled CSV/JSON field.
+    # Strip any incoming reserved marker and stamp it only for the native node
+    # adapters whose source labels are fixed by Kassiber's sync code.
+    try:
+        raw_payload = json.loads(raw_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raw_payload = None
+    if isinstance(raw_payload, dict):
+        raw_payload.pop("_kassiber_provenance", None)
+        normalized_source_label = str(source_label or "").strip().lower().replace("_", "-")
+        if normalized_source_label in {"lnd", "core-lightning"}:
+            raw_payload["_kassiber_provenance"] = {
+                "import_source": normalized_source_label,
+            }
+        raw_json = json.dumps(json_ready(raw_payload), sort_keys=True)
     occurred_at = parse_timestamp(record.get("occurred_at") or record.get("timestamp") or record.get("date"))
     confirmed_at = record.get("confirmed_at")
     confirmed_at = parse_timestamp(confirmed_at) if confirmed_at not in (None, "") else None
@@ -932,6 +1094,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         str_or_none(record.get("payment_hash_source")) if payment_hash else None
     )
     swap_refund_funding_txid = str_or_none(record.get("swap_refund_funding_txid"))
+    swap_refund_funding_vout = record.get("swap_refund_funding_vout")
     if swap_refund_funding_txid is not None:
         swap_refund_funding_txid = swap_refund_funding_txid.strip().lower()
         if len(swap_refund_funding_txid) != 64:
@@ -941,6 +1104,15 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
                 bytes.fromhex(swap_refund_funding_txid)
             except ValueError:
                 swap_refund_funding_txid = None
+    if swap_refund_funding_txid is None:
+        swap_refund_funding_vout = None
+    else:
+        try:
+            swap_refund_funding_vout = int(swap_refund_funding_vout)
+        except (TypeError, ValueError):
+            swap_refund_funding_vout = None
+        if swap_refund_funding_vout is not None and swap_refund_funding_vout < 0:
+            swap_refund_funding_vout = None
     return {
         "external_id": str(record.get("txid") or record.get("id") or ""),
         "occurred_at": occurred_at,
@@ -959,6 +1131,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "payment_hash": payment_hash,
         "payment_hash_source": payment_hash_source,
         "swap_refund_funding_txid": swap_refund_funding_txid,
+        "swap_refund_funding_vout": swap_refund_funding_vout,
         "exchange_evidence_match_by_economics": bool(
             record.get("_exchange_evidence_match_by_economics")
         ),
@@ -1072,8 +1245,9 @@ def insert_wallet_records(
                 pricing_method, pricing_external_ref, pricing_quality, kind,
                 privacy_boundary, description, counterparty, raw_json,
                 payment_hash, payment_hash_source, swap_refund_funding_txid,
+                swap_refund_funding_vout,
                 created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -1112,6 +1286,7 @@ def insert_wallet_records(
                 normalized["payment_hash"],
                 normalized["payment_hash_source"],
                 normalized["swap_refund_funding_txid"],
+                normalized["swap_refund_funding_vout"],
                 now_iso(),
             ),
         )

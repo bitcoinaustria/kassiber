@@ -28,7 +28,7 @@ SQLCipher system package command if the development headers are not available.
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including 8–12-address Bitcoin wallets, legacy/nested-SegWit/bech32/taproot rotation targets, a Silent Payments wallet, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; monthly EUR-denominated receipts, payments, payroll, rent, cloud, and other expenses converted through the bundled Kraken BTC/EUR rate for each cycle; a deterministic jittered clock with quiet and doubled activity months; era-sensitive fees, rare heavy-tail receipts, 2–3 outbound payments in busy regimes, five external counterparty clusters, threshold-driven working-capital/merchant/cold-reserve transfers, near-full Bitcoin rotations with an explicit bounded legacy reserve where required, a real Liquid treasury migration with a delayed-receipt catch-up sweep, three policy-selected UTXO consolidation windows, and assertions that deprecated wallets retain at most one fee-reserve UTXO; 2021–22 pool payouts plus one solo coinbase, scheduled batched/dust/PayJoin/RBF edge cases, closed and still-open collateralized loans, ownership-derived fan-out self-transfer matching, a mempool-pending receipt, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, swap/peg bridge pairs, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning and BTCPay overlays by default, seeding merchant Lightning, BTCPay connections, paid BTCPay invoice/payment-request examples, and reviewed commercial reconciliation unless explicitly disabled. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
-| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows to the temporary book and asserts exact `provider_swap_id` pairing. |
+| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, persists the paid invoice through Kassiber's native LND adapter boundary, records the Liquid policy-asset id and Elements regtest scope, and explicitly reviews the resulting strong provider-hash candidate while the plain Liquid payment stays unpaired. An outbound submarine lockup has no owned claim witness, so provider metadata plus a native invoice is intentionally not called exact. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows. Exact `provider_swap_id` assertions require a unique 1:1 provider key, canonical send/receive route txids, explicit chain/network scope and Liquid consensus asset id, plus integer-msat principals covering both complete rows; incomplete evidence must stay strong/manual. |
 | BTCPAY | `./scripts/integration-harness.sh btcpay` | yes | Starts the standard Bitcoin regtest stack plus a BTCPay overlay (Postgres, NBXplorer, BTCPay Server) wired to the same disposable `bitcoind`, creates a first admin user, creates or reuses a test store, generates a BTC on-chain store wallet, creates and pays a realistic invoice mix from the regtest Core wallet, confirms it, syncs BTCPay wallet history into a temporary Kassiber book, syncs invoice provenance, and writes a local seed JSON containing the store id, disposable API key, invoice ids, scenarios, and payment txids. |
 | LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN/LND overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes and one LND backup merchant node. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, LND backup receipts/outbound payments, an expired quote, and an intentionally failed oversized payment, opens private CLN merchant -> LND backup and LND backup -> CLN router channels, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot` for both node implementations, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
 
@@ -236,9 +236,11 @@ API for the low-signing happy path that Kassiber needs to account for today:
   address, then local Elements mining.
 - a separate `elements-cli-sim-client sendtoaddress` payment to prove ordinary
   Liquid outflows stay payments and are not matched as swaps.
-- a temporary Kassiber book with imports generated from the observed real
-  Liquid txids, payment hash, and amounts, followed by `transfers suggest` and
-  `transfers bulk-pair` assertions.
+- a temporary Kassiber book with Liquid identity rows carrying the observed
+  txids, Elements regtest network, and policy-asset id; the paid invoice is
+  normalized through the native LND adapter/import boundary. The shared hash is
+  therefore a strong review candidate (native node + Boltz provider evidence),
+  and the lane explicitly confirms it through `transfers bulk-pair`.
 
 The lane still only live-executes the L-BTC -> BTC submarine path because
 reverse, BTC -> L-BTC chain, and refund execution require client-side
@@ -251,7 +253,8 @@ If those v2 flows have been executed by an official Boltz client/SDK or another
 wallet has the relevant facts, pass that evidence through
 `KASSIBER_BOLTZ_V2_EVIDENCE` or `--v2-evidence` when running the `boltz-liquid`
 lane. The evidence must contain real route identifiers and observed
-amounts/timestamps; the harness rejects obvious placeholder ids instead of
+amounts/timestamps, physical chain/network scope, and the consensus asset id for
+every Liquid leg; the harness rejects obvious placeholder ids instead of
 recreating the old metadata-only fixture path. If the user only has the chain
 rows and no provider/client facts, Kassiber should still surface heuristic
 swap-pair suggestions for review rather than claiming exact provider evidence.
@@ -273,6 +276,8 @@ Minimal shape:
         "txid": "real-send-txid-or-external-id",
         "occurred_at": "2026-07-02T11:00:00Z",
         "asset": "BTC",
+        "chain": "bitcoin",
+        "network": "regtest",
         "amount": "0.01000000",
         "fee": "0.00000500"
       },
@@ -280,6 +285,9 @@ Minimal shape:
         "txid": "real-receive-txid-or-external-id",
         "occurred_at": "2026-07-02T11:04:00Z",
         "asset": "LBTC",
+        "asset_id": "real-32-byte-elements-policy-asset-id",
+        "chain": "liquid",
+        "network": "elementsregtest",
         "amount": "0.00990000"
       }
     }
@@ -363,9 +371,11 @@ profitability report, CSV export, synced DB records, and the one-merchant-only
 wallet/backend invariant. The lane also checks that the merchant snapshot has
 on-chain balance evidence plus paid, expired, failed, outgoing-payment, channel,
 and forwarding activity, while the LND snapshot has two private channels plus
-paid invoice and completed payment evidence. Persisted Lightning records do not store raw RPC JSON,
-and AI-safe Lightning payloads omit sensitive route, peer, preimage,
-payment-secret, bolt11, funding-outpoint, and failure-source fields.
+paid invoice and completed payment evidence. Persisted Lightning records do not store raw RPC JSON;
+channel lifecycle rows retain only the node-observed Bitcoin chain/network
+scope required for safe L1 identity matching. AI-safe Lightning payloads omit
+sensitive route, peer, preimage, payment-secret, bolt11, funding-outpoint, and
+failure-source fields.
 
 Set `KASSIBER_REGTEST_KEEP=1` to leave the full Docker Compose project running
 for inspection (containers, bound ports, and volumes), or

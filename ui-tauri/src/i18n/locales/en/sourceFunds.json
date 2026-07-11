@@ -359,7 +359,8 @@
     "rejected": "Rejected"
   },
   "method": {
-    "same_external_id": "Same external id",
+    "same_external_id": "Legacy external id (manual)",
+    "same_onchain_scope": "Canonical on-chain transaction",
     "transaction_pair": "Transaction pair",
     "provider_trade_id": "Provider trade id",
     "provider_order_id": "Provider order id",

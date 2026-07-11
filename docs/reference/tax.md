@@ -38,10 +38,15 @@ After any transaction change, metadata change, exclusion change, transfer pair c
 ## Transfers
 
 Cross-wallet self-transfers are auto-detected when both legs share the same
-on-chain `txid` and asset. Deterministic booked moves are kept out of review.
+typed physical `(chain, network, txid, asset identity)` and principal. A
+64-hex provider/order id is not a txid merely because it has the same shape;
+the transaction graph or an explicit txid-named import field must establish
+that type. Deterministic booked moves are kept out of review.
 When the ownership graph proves a move but the journal declines to guess a
-destination or split, `transfers suggest` surfaces an exact `ownership_graph`
-card in the transfer tab instead of leaving the proof quarantine-only.
+destination or split, `transfers suggest` surfaces an `ownership_graph` card
+in the transfer tab instead of leaving the proof quarantine-only. It is exact
+only when canonical scope and whole-row amounts close; source ambiguity and
+amount-only destination reuse remain strong/manual.
 
 ### Self-transfer derivation
 
@@ -54,39 +59,51 @@ a manual pair. A derived move carries its basis across with no disposal, and is
 tagged `ownership_derived` in the transfer audit (its journal entry reads
 "proven by address ownership").
 
-1. **Address-ownership deriver** (Bitcoin base layer). For an on-chain outbound
-   whose full `vin`/`vout` are stored in `raw_json`, each output's script is
+1. **Address-ownership deriver** (valued on-chain graph). For an on-chain
+   outbound whose full `vin`/`vout` are stored in `raw_json`, each output's script is
    classified against the profile-wide ownership index, restricted to the source
    wallet's `(chain, network)`. An output paying an address owned by another of
    your wallets is a self-transfer leg — proven from the graph, no heuristic. It
    reuses a recorded destination row on a shared `txid`, synthesizes the inbound
    leg for a true sync gap, and decomposes a 1→N fan-out. Anything it cannot
-   prove safely (multi-wallet-input consolidation, an ambiguous destination, a
-   stale-RBF amount mismatch, an output owned by two wallets) is **left on its
-   existing path and flagged for review** — never mis-booked.
+   prove safely (mixed-owner inputs, ambiguous N:M routing, a stale-RBF amount
+   mismatch, an output owned by two wallets) is **left on its existing path and
+   flagged for review** — never mis-booked. Bitcoin rows usually provide the
+   whole graph. Liquid sync persists and merges only the non-secret input/output
+   values each connected wallet can locally unblind; unknown/conflicting
+   confidential value blocks the component instead of being guessed.
 
 2. **Multi-source consolidation deriver.** A conservative N→1 Bitcoin
    consolidation is decomposed when every input is owned, the graph has exactly
    one owned destination and no external output, and amounts conserve exactly.
    The network fee is assigned once rather than copied from every source row.
 
-3. **Recorded fan-out decomposer** (chain-agnostic). When a 1→N self-transfer's
-   legs were *all* synced but there is no readable graph — **Liquid** (output
-   amounts are confidential, so the stored record carries no per-output graph)
-   or a graphless CSV import — the rows themselves are enough: rows sharing one
-   `(external_id, asset)` across two or more of your wallets are all owned, and
-   the amounts conserve (`out.amount == Σ in.amount`). A single outbound fanning
-   to ≥2 recorded destinations is decomposed into per-leg moves. Multi-source
-   consolidations and any group whose amounts don't fully conserve (a
-   destination wasn't synced) are left to the `owned_fanout_unresolved`
-   quarantine.
+3. **Recorded fan-out decomposer** (chain-agnostic fallback). When a 1→N
+   self-transfer's legs were *all* synced but no readable valued graph exists —
+   for example an older Liquid record or a graphless CSV import — the rows
+   themselves are enough only when they share a canonical physical
+   `(chain, network, txid, consensus asset identity)` across two or more of your wallets and the
+   amounts conserve (`out.amount == Σ in.amount`). Provider/import labels are
+   never transaction identity. A single outbound fanning to ≥2 recorded
+   destinations is decomposed into per-leg moves. Multi-source consolidations
+   and any group whose amounts don't fully conserve (a destination wasn't
+   synced) are left to the `owned_fanout_unresolved` quarantine.
 
-**Scope.** Graph-based ownership derivation is **Bitcoin base layer only** —
-Liquid amounts are confidential, so a Liquid spend can prove a self-transfer
-only when every destination is also recorded (pass 2). A Liquid move with an
-unsynced destination stays on the review path. BTC↔L-BTC pegs, Boltz swaps, and
-submarine swaps are still Bitcoin movements for accounting, but the ledger keeps
-`BTC` and `LBTC` separate for rail visibility; pair those with `transfers pair`.
+**Scope.** Graph-based ownership derivation covers Bitcoin and sufficiently
+valued local Liquid evidence. A Liquid leg that remains confidential or has
+conflicting asset/value observations stays on the review path. BTC↔L-BTC pegs,
+Boltz swaps, and submarine swaps are still Bitcoin movements for accounting,
+but the ledger keeps `BTC` and `LBTC` separate for rail visibility; pair those
+with `transfers pair` or an atomic custody component.
+For multi-leg wallet migrations, consolidations, or missing historical wallets,
+use the atomic [custody-component workflow](custody-components.md) instead of
+forcing independent pairs.
+
+Every carrying-value pair is also checked at the write boundary and again when
+journals are rebuilt. If both legs have known Bitcoin network domains, they must
+agree: mainnet, testnet, signet, and regtest basis can never be carried into one
+another. This physical guard is country-neutral and also protects historical or
+replicated pair rows created before the current command validation.
 
 The pipeline is only as complete as the ownership index and recorded rows.
 Kassiber keeps prior descriptor, xpub script-type, and address-list ownership
@@ -117,9 +134,12 @@ submarine swaps where both legs are yours, pair those legs before trusting
 payments or receipts; leave those one-sided or counterparty-owned flows unpaired
 so they keep their normal payment/receipt treatment.
 
-`transfers suggest` can surface exact matches from Lightning `payment_hash`,
-redacted provider/client `swap_id` metadata, an on-chain HTLC refund spend, or a
-blocked ownership proof (`method=ownership_graph`). Ownership-graph cards carry
+`transfers suggest` marks evidence exact only behind explicit gates: a
+source-qualified canonical Lightning hash with compatible whole-row semantics;
+a unique provider key with canonical route txids and explicit full-row integer
+msat principals; or a witness-proven unique HTLC funding outpoint with amount
+coverage. Everything else stays strong/manual. A blocked ownership proof
+(`method=ownership_graph`) is always manual-confirm-only. Ownership-graph cards carry
 only wallet ids/labels, transaction ids, amounts, and stable reason codes. They
 are manual-confirm-only: rules and bulk-pair operations never apply them.
 Boltz v2 cooperative Taproot key-path spends are intentionally not identifiable
@@ -167,8 +187,11 @@ Current rules:
 - swap-routed payments or receipts should stay unpaired unless both legs are known owned-wallet legs of the same user
 
 Manual pairs override auto-detection. `transfers suggest` still suppresses
-transactions that already have an active reviewed link; multi-link CoinJoin or
-missing-intermediate-wallet cases are manual review flows for now.
+transactions that already have an active reviewed link. Use
+`transfers components bulk-resolve --dry-run` for 1:N, N:1, N:M, multi-hop
+migrations, or missing intermediate wallets. Model a missing owned hop with an
+`untracked_wallet`, author explicit allocations for genuine N:M, and activate
+the complete component atomically after anchor coverage and conservation pass.
 
 ## Quarantines
 

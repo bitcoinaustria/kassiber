@@ -14,6 +14,8 @@ from kassiber.db import open_db
 NOW = "2026-07-10T10:00:00Z"
 SCRIPT_A = "0014" + "aa" * 20
 SCRIPT_B = "0014" + "bb" * 20
+GRAPH_TXID = "12" * 32
+PARENT_TXID = "34" * 32
 
 
 def _match(wallet_id, label):
@@ -83,10 +85,10 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
             )
         graph = json.dumps(
             {
-                "txid": "graph-tx",
+                "txid": GRAPH_TXID,
                 "vin": [
                     {
-                        "txid": "parent",
+                        "txid": PARENT_TXID,
                         "vout": 0,
                         "prevout": {"scriptpubkey": SCRIPT_A},
                     }
@@ -99,7 +101,7 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
         self._insert_tx(
             "out",
             "cold",
-            "graph-tx",
+            GRAPH_TXID,
             "outbound",
             500_000_000,
             graph,

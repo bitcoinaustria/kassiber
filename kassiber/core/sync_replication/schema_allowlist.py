@@ -27,6 +27,13 @@ class TableSpec:
     add_win_fields: frozenset[str] = frozenset()
     soft_delete_column: str | None = None
     json_columns: frozenset[str] = frozenset()
+    # Additive nullable wire fields may be absent in older signed bundles. New
+    # captures always include them; merge materializes NULL when omitted.
+    optional_columns: frozenset[str] = frozenset()
+    # Fields on append-only authored revisions which may never be rewritten in
+    # place.  A custody revision changes by inserting a new component/leg/
+    # allocation id; only the component lifecycle fields remain mutable.
+    immutable_fields: frozenset[str] = frozenset()
 
 
 _TRANSACTION_PRICING_FIELDS = frozenset(
@@ -48,6 +55,34 @@ _TRANSACTION_PRICING_FIELDS = frozenset(
         "pricing_quality",
     }
 )
+
+
+# Wire references use the referenced row's stable authored identity, which may
+# differ from a device-local primary key after fingerprint deduplication.
+REFERENCE_TABLES: Mapping[str, str] = {
+    "account_id": "accounts",
+    "wallet_id": "wallets",
+    "transaction_id": "transactions",
+    "anchor_transaction_id": "transactions",
+    "out_transaction_id": "transactions",
+    "in_transaction_id": "transactions",
+    "from_transaction_id": "transactions",
+    "to_transaction_id": "transactions",
+    "target_transaction_id": "transactions",
+    "copied_from_transaction_id": "transactions",
+    "tag_id": "tags",
+    "attachment_id": "attachments",
+    "copied_from_attachment_id": "attachments",
+    "document_id": "external_documents",
+    "from_source_id": "source_funds_sources",
+    "source_id": "source_funds_sources",
+    "case_id": "source_funds_cases",
+    "component_id": "custody_components",
+    "supersedes_component_id": "custody_components",
+    "superseded_by_component_id": "custody_components",
+    "source_leg_id": "custody_component_legs",
+    "sink_leg_id": "custody_component_legs",
+}
 
 
 def _profile_scope(table: str) -> str:
@@ -144,6 +179,7 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "payment_hash",
             "payment_hash_source",
             "swap_refund_funding_txid",
+            "swap_refund_funding_vout",
             "created_at",
         ),
         ("id",),
@@ -159,6 +195,7 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
         )
         | _TRANSACTION_PRICING_FIELDS,
         add_win_fields=frozenset({"note"}),
+        optional_columns=frozenset({"swap_refund_funding_vout"}),
     ),
     TableSpec(
         "tags",
@@ -175,16 +212,107 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
         add_win_fields=frozenset({"transaction_id", "tag_id"}),
     ),
     TableSpec(
+        "custody_components",
+        (
+            "id", "lineage_id", "workspace_id", "profile_id", "revision",
+            "component_type", "conservation_mode", "state", "evidence_kind",
+            "evidence_grade", "conversion_policy", "conversion_reviewed",
+            "expected_leg_count", "expected_allocation_count", "notes",
+            "change_reason", "supersedes_component_id",
+            "superseded_by_component_id", "activated_at", "superseded_at",
+            "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_components"),
+        high_stakes_fields=frozenset(
+            {
+                "revision", "component_type", "conservation_mode", "state",
+                "evidence_kind", "evidence_grade", "conversion_policy",
+                "conversion_reviewed", "expected_leg_count",
+                "expected_allocation_count", "supersedes_component_id",
+                "superseded_by_component_id",
+            }
+        ),
+        immutable_fields=frozenset(
+            {
+                "lineage_id", "workspace_id", "profile_id", "revision",
+                "component_type", "conservation_mode", "evidence_kind",
+                "evidence_grade", "conversion_policy", "conversion_reviewed",
+                "expected_leg_count", "expected_allocation_count", "notes",
+                "supersedes_component_id", "created_at",
+            }
+        ),
+        optional_columns=frozenset(
+            {"expected_leg_count", "expected_allocation_count"}
+        ),
+    ),
+    TableSpec(
+        "custody_component_legs",
+        (
+            "id", "component_id", "workspace_id", "profile_id", "ordinal",
+            "role", "rail", "chain", "network", "asset", "exposure",
+            "conservation_unit", "amount_msat", "valuation_unit",
+            "valuation_amount", "occurred_at", "transaction_id",
+            "anchor_transaction_id", "wallet_id", "notes",
+            "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_component_legs"),
+        high_stakes_fields=frozenset(
+            {
+                "component_id", "ordinal", "role", "rail", "chain", "network",
+                "asset", "exposure", "conservation_unit", "amount_msat",
+                "valuation_unit", "valuation_amount", "occurred_at",
+                "transaction_id", "anchor_transaction_id", "wallet_id",
+            }
+        ),
+        optional_columns=frozenset({"anchor_transaction_id"}),
+        immutable_fields=frozenset(
+            {
+                "component_id", "workspace_id", "profile_id", "ordinal",
+                "role", "rail", "chain", "network", "asset", "exposure",
+                "conservation_unit", "amount_msat", "valuation_unit",
+                "valuation_amount", "occurred_at", "transaction_id",
+                "anchor_transaction_id", "wallet_id", "notes", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
+        "custody_component_allocations",
+        (
+            "id", "component_id", "workspace_id", "profile_id", "ordinal",
+            "source_leg_id", "sink_leg_id", "source_amount_msat",
+            "sink_amount_msat", "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_component_allocations"),
+        high_stakes_fields=frozenset(
+            {
+                "component_id", "ordinal", "source_leg_id", "sink_leg_id",
+                "source_amount_msat", "sink_amount_msat",
+            }
+        ),
+        immutable_fields=frozenset(
+            {
+                "component_id", "workspace_id", "profile_id", "ordinal",
+                "source_leg_id", "sink_leg_id", "source_amount_msat",
+                "sink_amount_msat", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
         "transaction_pairs",
         (
             "id", "workspace_id", "profile_id", "out_transaction_id", "in_transaction_id",
             "kind", "policy", "notes", "swap_fee_msat", "swap_fee_kind",
-            "confidence_at_pair", "pair_source", "out_amount", "deleted_at", "created_at",
+            "confidence_at_pair", "pair_source", "out_amount", "component_id",
+            "deleted_at", "created_at",
         ),
         ("id",),
         _profile_scope("transaction_pairs"),
-        high_stakes_fields=frozenset({"kind", "policy", "out_transaction_id", "in_transaction_id", "deleted_at"}),
+        high_stakes_fields=frozenset({"kind", "policy", "out_transaction_id", "in_transaction_id", "component_id", "deleted_at"}),
         soft_delete_column="deleted_at",
+        optional_columns=frozenset({"component_id"}),
     ),
     TableSpec(
         "direct_swap_payouts",
@@ -192,12 +320,13 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "id", "workspace_id", "profile_id", "out_transaction_id", "kind", "policy",
             "payout_asset", "payout_amount", "payout_occurred_at", "payout_fiat_value",
             "payout_external_id", "counterparty", "notes", "swap_fee_msat",
-            "swap_fee_kind", "out_amount", "deleted_at", "created_at",
+            "swap_fee_kind", "out_amount", "component_id", "deleted_at", "created_at",
         ),
         ("id",),
         _profile_scope("direct_swap_payouts"),
-        high_stakes_fields=frozenset({"policy", "payout_amount", "payout_fiat_value", "deleted_at"}),
+        high_stakes_fields=frozenset({"policy", "payout_amount", "payout_fiat_value", "component_id", "deleted_at"}),
         soft_delete_column="deleted_at",
+        optional_columns=frozenset({"component_id"}),
     ),
     TableSpec(
         "transaction_pair_dismissals",
@@ -371,6 +500,7 @@ NEVER_SYNC_TABLES = frozenset(
         "transaction_graph_cache",
         "lightning_node_syncs",
         "lightning_node_records",
+        "custody_component_transaction_memberships",
         "btcpay_provenance_records",
         "btcpay_account_routes",
         "sync_member_private_keys",
@@ -524,7 +654,7 @@ def validate_wire_row(table: str, payload: Mapping[str, Any]) -> TableSpec:
         allowed.add("content_hmac")
     if table == "commercial_links":
         allowed.add("btcpay_record_hmac")
-    required = set(spec.columns)
+    required = set(spec.columns) - set(spec.optional_columns)
     if table == "transactions":
         required.add("fingerprint_hmac")
     unknown = sorted(set(payload) - allowed)
@@ -545,6 +675,25 @@ def validate_schema_boundary() -> None:
         raise AssertionError(f"never-sync tables entered allowlist: {sorted(overlap)}")
     if len(SYNC_TABLE_MAP) != len(SYNC_TABLES):
         raise AssertionError("duplicate table in sync allowlist")
+    invalid_optional = [
+        spec.table
+        for spec in SYNC_TABLES
+        if not spec.optional_columns.issubset(spec.columns)
+    ]
+    if invalid_optional:
+        raise AssertionError(
+            f"optional sync columns are outside their table allowlist: {sorted(invalid_optional)}"
+        )
+    invalid_immutable = [
+        spec.table
+        for spec in SYNC_TABLES
+        if not spec.immutable_fields.issubset(spec.columns)
+    ]
+    if invalid_immutable:
+        raise AssertionError(
+            "immutable sync columns are outside their table allowlist: "
+            f"{sorted(invalid_immutable)}"
+        )
 
 
 validate_schema_boundary()

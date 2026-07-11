@@ -69,9 +69,12 @@ from .cli.handlers import (
     _attachment_hooks,
     _metadata_hooks,
     _report_hooks,
+    activate_custody_component,
     auto_price_transactions_from_rates_cache,
     apply_transfer_rules,
+    bulk_resolve_custody_components,
     bulk_pair_transfers,
+    create_custody_component,
     create_direct_swap_payout,
     create_saved_view_cli,
     create_transaction_pair,
@@ -81,6 +84,7 @@ from .cli.handlers import (
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
+    get_custody_component,
     invalidate_journals,
     loans_link,
     loans_mark,
@@ -89,6 +93,7 @@ from .cli.handlers import (
     import_into_wallet,
     list_saved_views_cli,
     list_direct_swap_payouts,
+    list_custody_components,
     list_transaction_pairs,
     list_transfer_rules,
     process_journals,
@@ -97,6 +102,9 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
+    supersede_custody_component,
+    undo_custody_component,
+    update_custody_component,
     update_transaction_pair,
 )
 from .core import audit_package as core_audit_package
@@ -399,6 +407,14 @@ SUPPORTED_KINDS = (
     "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.components.list",
+    "ui.transfers.components.get",
+    "ui.transfers.components.create",
+    "ui.transfers.components.update",
+    "ui.transfers.components.activate",
+    "ui.transfers.components.supersede",
+    "ui.transfers.components.undo",
+    "ui.transfers.components.bulk_resolve",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
@@ -1651,6 +1667,35 @@ def _write_records_csv(
     }
 
 
+_JAVASCRIPT_MAX_SAFE_INTEGER = (1 << 53) - 1
+
+
+def _ui_exact_integer_payload(value: Any) -> Any:
+    """Return a JSON shape whose integers survive a JavaScript round trip.
+
+    JSON has no integer type and ``JSON.parse`` coerces every numeric token to
+    a binary64 number.  Custody components are revision inputs, so silently
+    rounding one msat would author different evidence.  Preserve the existing
+    numeric representation inside JavaScript's exact range and use a decimal
+    string only outside it.  Applying this recursively also protects derived
+    validation totals carried by the same component boundary.
+    """
+
+    if type(value) is int:
+        return (
+            value
+            if -_JAVASCRIPT_MAX_SAFE_INTEGER <= value <= _JAVASCRIPT_MAX_SAFE_INTEGER
+            else str(value)
+        )
+    if isinstance(value, dict):
+        return {key: _ui_exact_integer_payload(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_ui_exact_integer_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [_ui_exact_integer_payload(item) for item in value]
+    return value
+
+
 def _ui_swap_matching_payload_from_conn(
     conn: sqlite3.Connection,
     kind: str,
@@ -1658,6 +1703,168 @@ def _ui_swap_matching_payload_from_conn(
 ) -> dict[str, Any]:
     workspace = args.get("workspace")
     profile = args.get("profile")
+
+    def exact_bool(name: str, default: bool = False) -> bool:
+        value = args.get(name, default)
+        if type(value) is not bool:
+            raise AppError(
+                f"{kind} {name} must be a boolean", code="validation"
+            )
+        return value
+
+    def component_id() -> str:
+        value = args.get("component_id")
+        if not isinstance(value, str) or not value.strip():
+            raise AppError(
+                f"{kind} requires component_id", code="validation"
+            )
+        return value.strip()
+
+    def component_spec() -> dict[str, Any]:
+        value = args.get("spec", args.get("component"))
+        if not isinstance(value, dict):
+            raise AppError(
+                f"{kind} requires a JSON object in spec", code="validation"
+            )
+        return value
+
+    if kind == "ui.transfers.components.list":
+        limit = args.get("limit", 200)
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise AppError(
+                f"{kind} limit must be an integer between 1 and 1000",
+                code="validation",
+            )
+        return _ui_exact_integer_payload(
+            {
+                "components": list_custody_components(
+                    conn,
+                    workspace,
+                    profile,
+                    state=args.get("state"),
+                    component_type=args.get("component_type"),
+                    transaction=args.get("transaction"),
+                    effective_only=exact_bool("effective_only"),
+                    # The renderer gets the privacy-safe projection. Local evidence
+                    # and location references stay behind the daemon boundary.
+                    include_local_evidence=False,
+                    limit=limit,
+                )
+            }
+        )
+    if kind == "ui.transfers.components.get":
+        return _ui_exact_integer_payload(
+            get_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.create":
+        return _ui_exact_integer_payload(
+            create_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_spec(),
+                activate=exact_bool("activate"),
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.update":
+        return _ui_exact_integer_payload(
+            update_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                component_spec(),
+                activate=exact_bool("activate"),
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.activate":
+        return _ui_exact_integer_payload(
+            activate_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.supersede":
+        reason = args.get("reason")
+        if reason is not None and not isinstance(reason, str):
+            raise AppError(f"{kind} reason must be text", code="validation")
+        return _ui_exact_integer_payload(
+            supersede_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                reason=reason,
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.undo":
+        reason = args.get("reason", "undo")
+        if not isinstance(reason, str):
+            raise AppError(f"{kind} reason must be text", code="validation")
+        return _ui_exact_integer_payload(
+            undo_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                reason=reason,
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.bulk_resolve":
+        components = args.get("components")
+        if not isinstance(components, list) or not components or not all(
+            isinstance(item, dict) for item in components
+        ):
+            raise AppError(
+                f"{kind} requires a non-empty components array of JSON objects",
+                code="validation",
+            )
+        activate = exact_bool("activate", True)
+        dry_run = exact_bool("dry_run")
+        if not dry_run:
+            return _ui_exact_integer_payload(
+                bulk_resolve_custody_components(
+                    conn,
+                    workspace,
+                    profile,
+                    components,
+                    activate=activate,
+                    include_local_evidence=False,
+                )
+            )
+
+        conn.execute("SAVEPOINT daemon_custody_component_preview")
+        try:
+            preview = bulk_resolve_custody_components(
+                conn,
+                workspace,
+                profile,
+                components,
+                activate=activate,
+                commit=False,
+                include_local_evidence=False,
+            )
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
+            conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
+            raise
+        conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
+        conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
+        preview["dry_run"] = True
+        return _ui_exact_integer_payload(preview)
 
     if kind == "ui.transfers.suggest":
         return suggest_transfer_candidates(

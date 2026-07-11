@@ -888,11 +888,15 @@ Behavior:
   chain-swap rows as `LBTC`
 - `bullbitcoin_wallet_network=lightning` imports Lightning rows as `BTC`
 - Lightning rows derive Kassiber's `payment_hash` from a valid exported
-  preimage, or fall back to a 64-hex `txid`, for exact swap-pair matching
+  preimage, or retain a 64-hex payment identifier as typed importer evidence;
+  exact matching still requires compatible provenance, unique cardinality, and
+  whole-row amount coverage
 - chain-swap metadata such as `swap_id`, `send_network`, `receive_network`,
   `send_txid`, and `receive_txid` is preserved in redacted raw metadata and
-  feeds the exact `provider_swap_id` matcher for cooperative Taproot/key-path
-  flows where chain data alone is not identifying
+  feeds `provider_swap_id` review for cooperative Taproot/key-path flows where
+  chain data alone is not identifying. Route-only exports remain `strong`;
+  `exact` additionally requires canonical route txids and explicit integer-msat
+  principal amounts that cover both complete imported rows
 - `preimage` is not stored in raw metadata; the importer records that it was
   redacted
 - `direction=self` rows and `status=failed` / `status=expired` /

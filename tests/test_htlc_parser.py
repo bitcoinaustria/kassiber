@@ -24,6 +24,7 @@ from kassiber.core.htlc_parser import (
     extract_from_claim_witness,
     extract_from_refund_witness,
     parse_htlc_redeem_script,
+    refund_funding_outpoint_from_tx_mapping,
     script_matches_payment_hash,
 )
 
@@ -213,6 +214,23 @@ class ExtractFromRefundWitnessTests(unittest.TestCase):
     def test_empty_or_short_witness_returns_none(self):
         self.assertIsNone(extract_from_refund_witness([]))
         self.assertIsNone(extract_from_refund_witness([bytes(33)]))
+
+    def test_stored_transaction_recovers_only_one_unique_refund_outpoint(self):
+        script = _build_submarine_redeem_script(_embit_hashes.hash160(_PREIMAGE))
+        funding_txid = "ab" * 32
+        refund_vin = {
+            "txid": funding_txid,
+            "vout": 7,
+            "witness": ["3045", "", script.hex()],
+        }
+        self.assertEqual(
+            refund_funding_outpoint_from_tx_mapping({"vin": [refund_vin]}),
+            (funding_txid, 7),
+        )
+        second = {**refund_vin, "txid": "cd" * 32, "vout": 1}
+        self.assertIsNone(
+            refund_funding_outpoint_from_tx_mapping({"vin": [refund_vin, second]})
+        )
 
 
 class ScriptMatchesPaymentHashTests(unittest.TestCase):
