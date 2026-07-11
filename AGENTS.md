@@ -118,7 +118,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.reports.balance_history`, `ui.reports.lightning_profitability`,
   `ui.connections.node.snapshot`, `ui.journals.snapshot`,
   `ui.journals.events.list`, `ui.journals.quarantine`,
-  `ui.journals.transfers.list`, `ui.transfers.payouts.list`, `ui.rates.summary`,
+  `ui.journals.transfers.list`, `ui.transfers.payouts.list`,
+  `ui.transfers.components.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
   `ui.transactions.resolve`, `ui.transactions.graph`,
@@ -152,7 +153,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   Reads, writes, and history persistence stay pinned to the project/workspace/
   profile captured when the chat began. Consent-gated AI additions include
   loan mark/link/unmark, direct payout create/delete, transfer-pair update,
-  existing-evidence attach to source-funds records, and opted-in latest rates.
+  audited quarantine price/exclusion resolution, typed custody-component bulk
+  resolution, existing-evidence attach to source-funds records, and opted-in
+  latest rates.
   Desktop-only replication kinds are `ui.sync.status`,
   `ui.sync.{enable,disable,push,pull,join_request,invite,join}`,
   `ui.sync.transports.{list,configure,delete}`,

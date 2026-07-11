@@ -97,6 +97,8 @@ from .cli.handlers import (
     list_transaction_pairs,
     list_transfer_rules,
     process_journals,
+    resolve_quarantine_exclude,
+    resolve_quarantine_price_override,
     resolve_scope,
     resolve_transaction,
     set_transfer_rule_enabled,
@@ -394,6 +396,7 @@ SUPPORTED_KINDS = (
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.resolve",
     "ui.journals.transfers.list",
     "ui.journals.process",
     "ui.transfers.suggest",
@@ -5707,6 +5710,135 @@ def _run_scoped_ai_mutation(
     return _run_scoped_ai_operation(runtime, callback)
 
 
+def _quarantine_resolution_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+    *,
+    default_source: str,
+) -> dict[str, Any]:
+    """Apply one narrow, audited quarantine decision and verify its effect.
+
+    Transfer/custody interpretation deliberately stays in its own typed tools;
+    this endpoint only exposes the two generic resolutions already available in
+    the CLI. AI calls are consent-gated by the catalog and stamped as AI edits.
+    """
+
+    allowed = {
+        "transaction",
+        "action",
+        "fiat_rate",
+        "fiat_value",
+        "reason",
+        "reprocess",
+    }
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.journals.quarantine.resolve received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    transaction = args.get("transaction")
+    action = args.get("action")
+    reason = args.get("reason")
+    if not isinstance(transaction, str) or not transaction.strip():
+        raise AppError(
+            "ui.journals.quarantine.resolve requires a transaction",
+            code="validation",
+            retryable=False,
+        )
+    if action not in {"price_override", "exclude"}:
+        raise AppError(
+            "ui.journals.quarantine.resolve action is invalid",
+            code="validation",
+            details={"allowed": ["price_override", "exclude"]},
+            retryable=False,
+        )
+    if not isinstance(reason, str) or not reason.strip():
+        raise AppError(
+            "ui.journals.quarantine.resolve requires an audit reason",
+            code="validation",
+            retryable=False,
+        )
+    reprocess = args.get("reprocess", True)
+    if type(reprocess) is not bool:
+        raise AppError(
+            "ui.journals.quarantine.resolve reprocess must be boolean",
+            code="validation",
+            retryable=False,
+        )
+
+    if action == "price_override":
+        if args.get("fiat_rate") is None and args.get("fiat_value") is None:
+            raise AppError(
+                "price_override requires fiat_rate or fiat_value from reviewed evidence",
+                code="validation",
+                retryable=False,
+            )
+        if args.get("fiat_rate") is not None and args.get("fiat_value") is not None:
+            raise AppError(
+                "price_override accepts either fiat_rate or fiat_value, not both",
+                code="validation",
+                retryable=False,
+            )
+        resolution = resolve_quarantine_price_override(
+            conn,
+            None,
+            None,
+            transaction.strip(),
+            fiat_rate=args.get("fiat_rate"),
+            fiat_value=args.get("fiat_value"),
+            source=default_source,
+            reason=reason.strip(),
+        )
+    else:
+        if args.get("fiat_rate") is not None or args.get("fiat_value") is not None:
+            raise AppError(
+                "exclude does not accept fiat_rate or fiat_value",
+                code="validation",
+                retryable=False,
+            )
+        resolution = resolve_quarantine_exclude(
+            conn,
+            None,
+            None,
+            transaction.strip(),
+            source=default_source,
+            reason=reason.strip(),
+        )
+
+    journal_process = _journals_process_payload(conn) if reprocess else None
+    remaining = conn.execute(
+        """
+        SELECT reason, detail_json, created_at
+        FROM journal_quarantines
+        WHERE transaction_id = ?
+        """,
+        (resolution["transaction_id"],),
+    ).fetchone()
+    remaining_payload = None
+    if remaining is not None:
+        try:
+            detail = json.loads(remaining["detail_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            detail = {}
+        remaining_payload = {
+            "reason": remaining["reason"],
+            "detail": detail if isinstance(detail, dict) else {},
+            "created_at": remaining["created_at"],
+        }
+    return {
+        "transaction_id": resolution["transaction_id"],
+        "action": action,
+        "resolution": resolution,
+        "reprocessed": reprocess,
+        "journal_process": journal_process,
+        "cleared": remaining_payload is None,
+        "remaining_quarantine": remaining_payload,
+    }
+
+
 def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -> dict[str, Any]:
     if call.argument_error:
         return _tool_result_denied(call.argument_error)
@@ -5798,6 +5930,16 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_scoped_ai_mutation(runtime, _execute)
+        if entry.daemon_kind == "ui.journals.quarantine.resolve":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _quarantine_resolution_payload(
+                    conn,
+                    call.arguments,
+                    default_source="ai_tool",
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_scoped_ai_mutation(runtime, _execute)
         if entry.daemon_kind == "ui.rates.rebuild":
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _rates_rebuild_payload(conn, call.arguments)
@@ -5831,8 +5973,8 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _transaction_metadata_update_payload(
                     conn,
-                    {**call.arguments, "source": "ai"},
-                    default_source="ai",
+                    {**call.arguments, "source": "ai_tool"},
+                    default_source="ai_tool",
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -5841,8 +5983,8 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _transaction_history_revert_payload(
                     conn,
-                    {**call.arguments, "source": "ai"},
-                    default_source="ai",
+                    {**call.arguments, "source": "ai_tool"},
+                    default_source="ai_tool",
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -13795,6 +13937,22 @@ def handle_request(
                 build_envelope(
                     "ui.journals.quarantine",
                     build_journals_quarantine_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.journals.quarantine.resolve":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.journals.quarantine.resolve",
+                    _quarantine_resolution_payload(
+                        _require_conn(ctx),
+                        _coerce_args_dict(request_id, request.get("args")),
+                        default_source="gui",
+                    ),
                 ),
                 request_id,
             ),

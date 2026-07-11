@@ -6243,10 +6243,58 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         payload_mock.assert_called_once_with(
             conn_marker,
-            {"transaction": "tx-1", "note": "reviewed", "source": "ai"},
-            default_source="ai",
+            {"transaction": "tx-1", "note": "reviewed", "source": "ai_tool"},
+            default_source="ai_tool",
         )
         self.assertTrue(results[0]["ok"])
+
+    def test_quarantine_ai_tool_records_ai_tool_source(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        arguments = {
+            "transaction": "tx-1",
+            "action": "exclude",
+            "reason": "User confirmed it is outside this book",
+        }
+        call = ParsedAiToolCall(
+            call_id="call-quarantine",
+            name="ui.journals.quarantine.resolve",
+            arguments=arguments,
+        )
+        results = []
+
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon._quarantine_resolution_payload",
+                return_value={"transaction_id": "tx-1", "cleared": True},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(
+            conn_marker,
+            arguments,
+            default_source="ai_tool",
+        )
+        self.assertTrue(results[0]["ok"])
+        self.assertEqual(
+            results[0]["envelope"]["kind"],
+            "ui.journals.quarantine.resolve",
+        )
 
     def test_ai_mutation_rejects_book_changed_while_waiting_for_consent(self):
         task_queue = queue.Queue()

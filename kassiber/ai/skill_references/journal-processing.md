@@ -80,6 +80,13 @@ kassiber journals quarantine resolve price-override --transaction <transaction-i
 kassiber journals quarantine resolve exclude --transaction <transaction-id>
 ```
 
+In chat, first read `ui.transactions.review_context` (and
+`ui.transfers.review_context` for ownership or rail questions). The consented
+`ui.journals.quarantine.resolve` tool is deliberately limited to reviewed price
+overrides and explicit exclusions. It reprocesses by default and reports
+whether the quarantine actually cleared. Never invent a rate, and never use an
+exclusion to conceal a transfer or custody gap.
+
 Clear quarantine state only when the workflow truly calls for it:
 
 ```bash
@@ -111,6 +118,9 @@ Use `transfers components bulk-resolve --dry-run` for 1:N, N:1, N:M,
 multi-hop migrations, or missing intermediate wallets. Represent missing owned
 custody with `untracked_wallet`; genuine N:M requires explicit allocations.
 Activate only after exact anchor coverage and conservation pass atomically.
+In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
+then `ui.transfers.components.bulk_resolve` with `dry_run=true` before asking
+for consent to write the final component set.
 
 If `kassiber --machine journals transfers list` reports
 `summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.
