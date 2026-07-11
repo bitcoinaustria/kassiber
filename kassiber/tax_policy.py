@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from importlib import import_module
 
 from .errors import AppError
+from .transfers import is_bitcoin_rail_pair, profile_bitcoin_rail_carrying_value
 
 
 DEFAULT_TAX_COUNTRY = "generic"
@@ -45,6 +46,37 @@ def profile_value(profile, key, default=None):
 def build_tax_policy(profile):
     country = normalize_tax_country(profile_value(profile, "tax_country"))
     return POLICY_BUILDERS[country](profile)
+
+
+def cross_asset_carrying_value_supported(tax_country, out_asset, in_asset):
+    """Whether the tax engine supports carrying basis across unlike assets.
+
+    This is deliberately a tax-policy decision. Transfer detection and custody
+    conservation never call it and never receive a country.
+    """
+
+    if str(tax_country or "").strip().lower() == AUSTRIAN_TAX_COUNTRY:
+        return True
+    return is_bitcoin_rail_pair(out_asset, in_asset)
+
+
+def recommended_pair_policy(profile, out_asset, in_asset):
+    """Classify an already-matched pair under the profile's tax policy.
+
+    Evidence decides *whether* two legs belong together before this function is
+    called. The profile country can only recommend how that proven pair should
+    be booked; it cannot add, remove, rank, or reshape candidates.
+    """
+
+    if str(out_asset or "").strip().upper() == str(in_asset or "").strip().upper():
+        return "carrying-value"
+    tax_country = normalize_tax_country(profile_value(profile, "tax_country"))
+    if cross_asset_carrying_value_supported(tax_country, out_asset, in_asset):
+        if tax_country == AUSTRIAN_TAX_COUNTRY:
+            return "carrying-value"
+        if profile_bitcoin_rail_carrying_value(profile):
+            return "carrying-value"
+    return "taxable"
 
 
 def build_generic_policy(profile):

@@ -19,6 +19,7 @@ constraints (the rebuild path through
 ``_migrate_legacy_transaction_pairs_uniques``).
 """
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -85,6 +86,69 @@ def _insert_tx(conn, *, tx_id, workspace_id, profile_id, wallet_id, asset, direc
 
 
 class FreshSchemaTests(unittest.TestCase):
+    def test_carrying_value_pair_rejects_cross_network_rows(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                for tx_id, direction, network in (
+                    ("tx-out", "outbound", "main"),
+                    ("tx-in", "inbound", "regtest"),
+                ):
+                    _insert_tx(
+                        conn,
+                        tx_id=tx_id,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        asset="BTC",
+                        direction=direction,
+                    )
+                    physical_txid = ("11" if direction == "outbound" else "22") * 32
+                    conn.execute(
+                        "UPDATE transactions SET external_id = ?, raw_json = ? WHERE id = ?",
+                        (
+                            physical_txid,
+                            json.dumps(
+                                {
+                                    "txid": physical_txid,
+                                    "chain": "bitcoin",
+                                    "network": network,
+                                }
+                            ),
+                            tx_id,
+                        ),
+                    )
+
+                with self.assertRaisesRegex(Exception, "network boundaries"):
+                    create_transaction_pair(
+                        conn,
+                        workspace_id,
+                        profile_id,
+                        "tx-out",
+                        "tx-in",
+                        policy="carrying-value",
+                    )
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = ?",
+                    (json.dumps({"chain": "bitcoin", "network": "main"}), wallet_id),
+                )
+                with self.assertRaisesRegex(Exception, "contradictory Bitcoin network"):
+                    create_transaction_pair(
+                        conn,
+                        workspace_id,
+                        profile_id,
+                        "tx-out",
+                        "tx-in",
+                        policy="carrying-value",
+                    )
+                self.assertEqual(
+                    conn.execute("SELECT COUNT(*) FROM transaction_pairs").fetchone()[0],
+                    0,
+                )
+            finally:
+                conn.close()
+
     def test_open_db_creates_new_tables_and_columns(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)

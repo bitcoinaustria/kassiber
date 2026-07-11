@@ -165,6 +165,17 @@ class OwnedIndex:
     by_outpoint: dict[str, list[OwnedMatch]] = field(default_factory=dict)
     txid_wallets: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
     scanned_depth: dict[str, dict[str, int]] = field(default_factory=dict)
+    # A txid/outpoint is not a globally unique physical identity: the same
+    # 32-byte txid (and therefore the same ``txid:vout`` spelling) can exist on
+    # independent Bitcoin or Liquid networks.  Keep the legacy unscoped maps
+    # above for address/txid-identification compatibility, but every accounting
+    # path must query these typed maps with its canonical chain/network scope.
+    by_scoped_outpoint: dict[tuple[str, str, str], list[OwnedMatch]] = field(
+        default_factory=dict
+    )
+    txid_wallets_by_scope: dict[tuple[str, str, str], set[tuple[str, str]]] = field(
+        default_factory=dict
+    )
 
     def add_script(self, script_hex: str | None, match: OwnedMatch) -> None:
         if not script_hex:
@@ -180,12 +191,31 @@ class OwnedIndex:
     def add_outpoint(self, txid: str | None, vout: Any, match: OwnedMatch) -> None:
         if not txid or vout is None:
             return
-        self.by_outpoint.setdefault(f"{str(txid).lower()}:{int(vout)}", []).append(match)
+        outpoint = f"{str(txid).lower()}:{int(vout)}"
+        self.by_outpoint.setdefault(outpoint, []).append(match)
+        chain, network = _index_chain_network(match.chain, match.network)
+        self.by_scoped_outpoint.setdefault((chain, network, outpoint), []).append(
+            match
+        )
 
-    def note_txid(self, txid: str | None, wallet_id: str, wallet_label: str) -> None:
+    def note_txid(
+        self,
+        txid: str | None,
+        wallet_id: str,
+        wallet_label: str,
+        *,
+        chain: Any = "bitcoin",
+        network: Any = "main",
+    ) -> None:
         if not txid:
             return
-        self.txid_wallets.setdefault(str(txid).lower(), set()).add((wallet_id, wallet_label))
+        txid_key = str(txid).lower()
+        wallet = (wallet_id, wallet_label)
+        self.txid_wallets.setdefault(txid_key, set()).add(wallet)
+        canonical_chain, canonical_network = _index_chain_network(chain, network)
+        self.txid_wallets_by_scope.setdefault(
+            (canonical_chain, canonical_network, txid_key), set()
+        ).add(wallet)
 
     def lookup_address(self, address: str) -> list[OwnedMatch]:
         return self.by_address.get(_address_key(address), [])
@@ -195,11 +225,39 @@ class OwnedIndex:
             return []
         return self.by_script.get(script_hex.lower(), [])
 
-    def lookup_outpoint(self, outpoint: Any) -> list[OwnedMatch]:
+    def lookup_outpoint(
+        self,
+        outpoint: Any,
+        *,
+        chain: Any = None,
+        network: Any = None,
+    ) -> list[OwnedMatch]:
         key = str(outpoint or "").lower()
         if not key:
             return []
-        value = self.by_outpoint.get(key)
+        if chain is not None or network is not None:
+            canonical_chain, canonical_network = _index_chain_network(chain, network)
+            value = self.by_scoped_outpoint.get(
+                (canonical_chain, canonical_network, key)
+            )
+            if value is None:
+                # Compatibility for callers/tests that populated ``by_outpoint``
+                # directly instead of using ``add_outpoint``.  The fallback is
+                # still strictly filtered; it never restores an unscoped match.
+                legacy = self.by_outpoint.get(key)
+                legacy_matches = (
+                    legacy
+                    if isinstance(legacy, list)
+                    else ([legacy] if legacy is not None else [])
+                )
+                value = [
+                    match
+                    for match in legacy_matches
+                    if _index_chain_network(match.chain, match.network)
+                    == (canonical_chain, canonical_network)
+                ]
+        else:
+            value = self.by_outpoint.get(key)
         if value is None:
             return []
         if isinstance(value, list):
@@ -207,6 +265,25 @@ class OwnedIndex:
         # Compatibility for older tests or callers that constructed the index by
         # assigning a single OwnedMatch directly.
         return _sorted_matches([value])
+
+    def lookup_txid_wallets(
+        self,
+        txid: Any,
+        *,
+        chain: Any = None,
+        network: Any = None,
+    ) -> set[tuple[str, str]]:
+        key = str(txid or "").lower()
+        if not key:
+            return set()
+        if chain is None and network is None:
+            return set(self.txid_wallets.get(key, set()))
+        canonical_chain, canonical_network = _index_chain_network(chain, network)
+        return set(
+            self.txid_wallets_by_scope.get(
+                (canonical_chain, canonical_network, key), set()
+            )
+        )
 
 
 def _address_key(address: str | None) -> str:
@@ -259,8 +336,14 @@ def _wallet_labels_for_matches(matches: Sequence[OwnedMatch]) -> list[str]:
     return labels
 
 
-def _outpoint_matches(index: OwnedIndex, outpoint: Any) -> list[OwnedMatch]:
-    return index.lookup_outpoint(outpoint)
+def _outpoint_matches(
+    index: OwnedIndex,
+    outpoint: Any,
+    scope: tuple[str, str] | None = None,
+) -> list[OwnedMatch]:
+    if scope is None:
+        return index.lookup_outpoint(outpoint)
+    return index.lookup_outpoint(outpoint, chain=scope[0], network=scope[1])
 
 
 def _normalize_chain_network_scope(chain: Any, network: Any) -> tuple[str, str] | None:
@@ -714,7 +797,13 @@ def _seed_from_inventory(
         index.add_address(row["address"], match)
         index.add_script(_script_hex_for_address(row["address"]) if row["address"] else None, match)
         index.add_outpoint(row["txid"], row["vout"], match)
-        index.note_txid(row["txid"], wallet_id, wallet_label)
+        index.note_txid(
+            row["txid"],
+            wallet_id,
+            wallet_label,
+            chain=chain,
+            network=network,
+        )
         branch = str(row["branch_label"] or "")
         idx = row["address_index"]
         if branch and isinstance(idx, int) and idx >= 0:
@@ -730,6 +819,12 @@ def _seed_from_transactions(
     wallets: Sequence[sqlite3.Row],
 ) -> None:
     label_by_id = {str(w["id"]): str(w["label"]) for w in wallets}
+    scope_by_id: dict[str, tuple[str, str]] = {}
+    for wallet in wallets:
+        config = _wallet_config(wallet)
+        scope_by_id[str(wallet["id"])] = _index_chain_network(
+            config.get("chain"), config.get("network")
+        )
     if not label_by_id:
         return
     placeholders = ", ".join("?" for _ in label_by_id)
@@ -740,7 +835,14 @@ def _seed_from_transactions(
     ).fetchall()
     for row in rows:
         wallet_id = str(row["wallet_id"])
-        index.note_txid(row["external_id"], wallet_id, label_by_id.get(wallet_id, wallet_id))
+        chain, network = scope_by_id.get(wallet_id, ("bitcoin", "main"))
+        index.note_txid(
+            row["external_id"],
+            wallet_id,
+            label_by_id.get(wallet_id, wallet_id),
+            chain=chain,
+            network=network,
+        )
 
 
 def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, str]:
@@ -881,7 +983,7 @@ def classify_txid(
     legs: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     txid = str(token["normalized"])
-    local_wallets = index.txid_wallets.get(txid, set())
+    local_wallets = index.lookup_txid_wallets(txid)
     if legs is None:
         if local_wallets:
             wallets = sorted({label for _wid, label in local_wallets})
@@ -928,6 +1030,12 @@ def classify_txid(
     chain = str(legs.get("chain") or token.get("chain") or "")
     network = str(legs.get("network") or token.get("network") or "")
     match_scope = _normalize_chain_network_scope(chain, network)
+    if match_scope is not None:
+        local_wallets = index.lookup_txid_wallets(
+            txid,
+            chain=match_scope[0],
+            network=match_scope[1],
+        )
     source = str(legs.get("source") or "chain")
     in_legs: list[dict[str, Any]] = []
     owned_in = 0
@@ -936,7 +1044,7 @@ def classify_txid(
     ambiguous_legs = 0
     for leg in legs.get("inputs", []):
         matches = _filter_matches_to_scope(
-            _outpoint_matches(index, leg.get("outpoint")),
+            _outpoint_matches(index, leg.get("outpoint"), match_scope),
             match_scope,
         )
         if not matches:

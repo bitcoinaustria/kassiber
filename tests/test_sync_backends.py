@@ -2242,6 +2242,61 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(record["occurred_at"], timestamp_to_iso(None))
         self.assertIsNone(record["confirmed_at"])
 
+    def test_esplora_same_wallet_consolidation_books_only_network_fee(self):
+        tracked_script = "0014watch"
+        tx = {
+            "txid": "45" * 32,
+            "fee": 100,
+            "vin": [
+                {
+                    "prevout": {
+                        "scriptpubkey": tracked_script,
+                        "value": 10_000,
+                    }
+                }
+            ],
+            "vout": [{"scriptpubkey": tracked_script, "value": 9_900}],
+            "status": {"confirmed": True, "block_time": 1_700_000_000},
+        }
+
+        record = record_from_bitcoin_esplora_tx(
+            tx, {tracked_script: {"address": "bc1qwatch"}}, "esplora"
+        )
+
+        self.assertEqual(record["direction"], "outbound")
+        self.assertEqual(record["kind"], "fee")
+        self.assertEqual(float(record["amount"]), 0.0)
+        self.assertAlmostEqual(float(record["fee"]), 0.000001, places=8)
+
+    def test_electrum_same_wallet_consolidation_books_only_network_fee(self):
+        tracked_script = "0014watch"
+        previous = {
+            "vout": [
+                {"n": 0, "script_hex": tracked_script, "value_sats": 10_000}
+            ]
+        }
+        tx = {
+            "vin": [{"txid": "44" * 32, "vout": 0}],
+            "vout": [
+                {"n": 0, "script_hex": tracked_script, "value_sats": 9_900}
+            ],
+            "total_output_sats": 9_900,
+        }
+
+        record = sb.record_from_electrum_tx(
+            "46" * 32,
+            tx,
+            1,
+            {tracked_script: {"address": "bc1qwatch"}},
+            "electrum",
+            lambda _txid: previous,
+        )
+
+        self.assertEqual(record["direction"], "outbound")
+        self.assertEqual(record["kind"], "fee")
+        self.assertEqual(float(record["amount"]), 0.0)
+        self.assertAlmostEqual(float(record["fee"]), 0.000001, places=8)
+
     def test_bitcoinrpc_unconfirmed_record_leaves_confirmed_at_empty(self):
         record = record_from_bitcoinrpc_details(
             "55" * 32,

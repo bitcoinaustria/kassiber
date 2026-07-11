@@ -38,6 +38,7 @@ from ..wallet_descriptors import (
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
+from . import custody_components as core_custody_components
 from . import lightning as core_lightning
 from . import rates as core_rates
 from . import silent_payments
@@ -5970,6 +5971,7 @@ def _load_swap_report_matcher_rows(
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
             t.payment_hash_source,
             t.swap_refund_funding_txid,
+            t.swap_refund_funding_vout,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
             t.fee, t.kind, t.raw_json, t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind
@@ -6038,8 +6040,6 @@ def _unreviewed_swap_candidate_blocker(
             rows,
             pair_records=pair_records,
             dismissals=dismissals,
-            tax_country=str(profile["tax_country"] or ""),
-            bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
         )
         if _swap_candidate_blocks_reports(candidate)
     ]
@@ -6164,6 +6164,50 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     ),
                     "daemon_kind": "ui.sync.conflicts.list",
                     "conflicts": [dict(row) for row in sync_conflicts],
+                }
+            )
+        authored_active_components = list(
+            core_custody_components.iter_authored_active_components(
+                conn,
+                profile_id=health["profile"]["id"],
+                include_local_evidence=False,
+            )
+        )
+        ineffective_components = [
+            component
+            for component in authored_active_components
+            if component["effective_state"] != "active"
+        ]
+        if ineffective_components:
+            blockers.append(
+                {
+                    "id": "custody_component_integrity",
+                    "severity": "blocking",
+                    "title": "Incomplete custody interpretation",
+                    "detail": (
+                        f"{len(ineffective_components)} authored active custody "
+                        "component(s) are incomplete or conflicting. Repair or "
+                        "supersede them before relying on reports."
+                    ),
+                    "daemon_kind": "ui.transfers.components.list",
+                    "components": [
+                        {
+                            "id": component["id"],
+                            "lineage_id": component["lineage_id"],
+                            "revision": component["revision"],
+                            "issue_codes": sorted(
+                                {
+                                    str(issue.get("code") or "unknown")
+                                    for issue in component["validation"]["issues"]
+                                }
+                            ),
+                            "known_anchor_count": sum(
+                                leg.get("transaction_id") is not None
+                                for leg in component["legs"]
+                            ),
+                        }
+                        for component in ineffective_components[:20]
+                    ],
                 }
             )
         if counts["wallets"] == 0:

@@ -14,6 +14,7 @@ from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..source_funds_pdf_report import write_source_funds_pdf
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
+from ..transfers import onchain_transfer_scope
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
 from .attachments import attachment_display_label
 from .pair_allocation import connected_pair_components
@@ -68,13 +69,8 @@ ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 PRIVACY_LINK_TYPES = {"coinjoin", "payjoin"}
 ATTESTATION_SOURCE_TYPES = {"missing_history", "opening_balance_attestation"}
 DETERMINISTIC_BULK_REVIEW_METHODS = {
-    "same_external_id",
+    "same_onchain_scope",
     "transaction_pair",
-    "provider_trade_id",
-    "provider_order_id",
-    "provider_payment_id",
-    "provider_exchange_order_id",
-    "provider_ledger_id",
     # Assembly derivers: re-verified against transaction input/output
     # structure and payment-hash groupings at bulk-review time. These read
     # only locally synced wallet data — first-party wallet state, not
@@ -609,6 +605,9 @@ def _link_row_to_dict(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[
         "link_type": row["link_type"],
         "state": row["state"],
         "confidence": row["confidence"],
+        "requires_review": bool(
+            row["state"] == "suggested" and not _is_bulk_reviewable_suggestion(row)
+        ),
         "method": row["method"],
         "asset": row["asset"],
         "allocation_amount": _btc_value(row["allocation_amount"]),
@@ -1146,12 +1145,16 @@ def _is_bulk_reviewable_suggestion(row: Mapping[str, Any]) -> bool:
         row["state"] == "suggested"
         and method in DETERMINISTIC_BULK_REVIEW_METHODS
         and row["confidence"] in {"exact", "strong"}
+        and (
+            method not in {"same_onchain_scope", "utxo_spend"}
+            or row["confidence"] == "exact"
+        )
         and row["allocation_amount"] is not None
         and not bool(row["uses_chain_observation"])
     )
 
 
-def _same_external_id_still_deterministic(
+def _same_onchain_scope_still_deterministic(
     conn: sqlite3.Connection,
     profile_id: str,
     row: Mapping[str, Any],
@@ -1160,16 +1163,15 @@ def _same_external_id_still_deterministic(
 ) -> bool:
     if not from_tx:
         return False
-    external_id = from_tx["external_id"]
-    if not external_id or external_id != to_tx["external_id"]:
+    scope = onchain_transfer_scope(from_tx)
+    if scope is None or onchain_transfer_scope(to_tx) != scope:
         return False
-    if normalize_asset_code(from_tx["asset"]) != normalize_asset_code(to_tx["asset"]):
+    if int(from_tx["amount"] or 0) != int(to_tx["amount"] or 0):
         return False
     group = [
         tx
         for tx in _active_transaction_rows(conn, profile_id)
-        if tx["external_id"] == external_id
-        and normalize_asset_code(tx["asset"]) == normalize_asset_code(to_tx["asset"])
+        if onchain_transfer_scope(tx) == scope
     ]
     outs = [tx for tx in group if tx["direction"] == "outbound"]
     ins = [tx for tx in group if tx["direction"] == "inbound"]
@@ -1179,6 +1181,8 @@ def _same_external_id_still_deterministic(
         and outs[0]["id"] == row["from_transaction_id"] == from_tx["id"]
         and ins[0]["id"] == row["to_transaction_id"] == to_tx["id"]
         and outs[0]["wallet_id"] != ins[0]["wallet_id"]
+        and int(row["allocation_amount"] or 0) == int(to_tx["amount"] or 0)
+        and int(row["from_allocation_amount"] or 0) == int(from_tx["amount"] or 0)
     )
 
 
@@ -1352,49 +1356,6 @@ def _transaction_pair_still_deterministic(
     return False
 
 
-def _provider_values_for_method(row: Mapping[str, Any], method: str) -> set[str]:
-    return {
-        value
-        for key, value in _raw_evidence_values(row)
-        if key in PROVIDER_UNIQUE_KEYS and _normalize_provider_method(key) == method
-    }
-
-
-def _provider_key_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    row: Mapping[str, Any],
-    from_tx: Mapping[str, Any] | None,
-    to_tx: Mapping[str, Any],
-) -> bool:
-    if not from_tx:
-        return False
-    method = str(row["method"] or "")
-    if method not in DETERMINISTIC_BULK_REVIEW_METHODS or not method.startswith("provider_"):
-        return False
-    shared_values = _provider_values_for_method(from_tx, method) & _provider_values_for_method(to_tx, method)
-    if not shared_values:
-        return False
-    active_rows = _active_transaction_rows(conn, profile_id)
-    for value in shared_values:
-        group = [
-            tx
-            for tx in active_rows
-            if value in _provider_values_for_method(tx, method)
-        ]
-        outs = [tx for tx in group if tx["direction"] == "outbound"]
-        ins = [tx for tx in group if tx["direction"] == "inbound"]
-        if (
-            len(outs) == 1
-            and len(ins) == 1
-            and outs[0]["id"] == row["from_transaction_id"] == from_tx["id"]
-            and ins[0]["id"] == row["to_transaction_id"] == to_tx["id"]
-            and _same_asset_amount_close(from_tx, to_tx)
-        ):
-            return True
-    return False
-
-
 def _skip_assembly_row(row: Mapping[str, Any]) -> bool:
     """Rows the assembly derivers must never assert lineage through.
 
@@ -1438,6 +1399,8 @@ def _utxo_spend_still_deterministic(
         and pair["to_row"]["id"] == row["to_transaction_id"]
         and int(pair["allocation_msat"]) == expected_allocation
         and int(pair["from_allocation_msat"]) == expected_from_allocation
+        and pair.get("confidence") == "exact"
+        and not bool(pair.get("requires_review"))
         for pair in pairs
     )
 
@@ -1470,16 +1433,18 @@ def _suggestion_still_deterministic(
     to_tx: Mapping[str, Any],
 ) -> bool:
     method = str(row["method"] or "")
-    if method == "same_external_id":
-        return _same_external_id_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    if method == "same_onchain_scope":
+        return _same_onchain_scope_still_deterministic(
+            conn, profile_id, row, from_tx, to_tx
+        )
     if method == "transaction_pair":
         return _transaction_pair_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     if method == "utxo_spend":
         return _utxo_spend_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     if method == "payment_hash":
         return _payment_hash_still_deterministic(conn, profile_id, row, from_tx, to_tx)
-    if method.startswith("provider_"):
-        return _provider_key_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    # Provider/import ids remain useful suggestions, but are not physical
+    # identity and therefore never enter deterministic bulk review.
     return False
 
 
@@ -1584,12 +1549,12 @@ def bulk_review_suggestions(
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
-    This is intentionally narrow: exact external-id matches, transaction
-    input/output structure (utxo_spend), Lightning payment hashes,
-    already-reviewed transaction_pairs, and one-to-one provider/import ids
-    can be accepted in bulk, each re-verified against the live database.
-    Broad account ids, weak time/amount guesses, chain-observation hints,
-    and pairs the user previously rejected stay manual.
+    This is intentionally narrow: canonical transaction scope, unambiguous
+    input/output structure (utxo_spend), source-qualified Lightning payment
+    hashes, and already-reviewed transaction_pairs can be accepted in bulk,
+    each re-verified against the live database. N:M pro-rata allocations,
+    provider ids, weak time/amount guesses, chain-observation hints, and pairs
+    the user previously rejected stay manual.
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
@@ -1621,11 +1586,11 @@ def bulk_review_suggestions(
         "target_transaction_id": target["id"],
         "links": [_link_row_to_dict(conn, row) for row in reviewed_rows if row],
         "policy": (
-            "Bulk review only accepts exact/strong deterministic suggestions from same external ids, "
-            "transaction input/output structure, Lightning payment hashes, existing transaction_pairs, "
-            "or one-to-one per-transaction provider/import ids, re-verified against the live database. "
-            "Weak time/amount matches, broad provider ids, chain observations, and pairs the user "
-            "previously rejected remain manual review items."
+            "Bulk review only accepts re-verified canonical transaction scope, "
+            "unambiguous transaction input/output structure, source-qualified Lightning "
+            "payment hashes, or existing reviewed transaction_pairs. Provider "
+            "ids, N:M pro-rata allocations, time/amount matches, chain observations, "
+            "and pairs the user previously rejected remain manual review items."
         ),
     }
 
@@ -1651,11 +1616,12 @@ def assemble_history(
     Alternates suggestion derivation and deterministic bulk review until the
     graph stops growing. Each reviewed edge extends the target-scoped BFS
     frontier, so multi-hop chains assemble transitively in one call:
-    transaction input/output structure and Lightning payment hashes yield
-    exact auto-reviewed hops; platform ids and reviewed pairs fill in where
-    no chain structure exists. Reads only local data — assembly never
-    contacts a backend. What remains afterwards is exactly the user's work:
-    root-source evidence, privacy boundaries, and attested gaps.
+    canonical transaction scope, unambiguous transaction input/output
+    structure, and source-qualified Lightning payment hashes yield exact
+    auto-reviewed hops; existing reviewed pairs can extend the graph. N:M
+    pro-rata allocations and provider ids stay manual. Reads only local data —
+    assembly never contacts a backend. What remains afterwards is exactly the
+    user's work: root-source evidence, privacy boundaries, and attested gaps.
     """
     if max_passes <= 0:
         raise AppError("--max-passes must be positive", code="validation")
@@ -1697,10 +1663,11 @@ def assemble_history(
         "awaiting_manual_review": total_skipped,
         "methods": dict(sorted(methods.items())),
         "policy": (
-            "Assembly derives exact edges from synced transaction inputs/outputs and "
-            "Lightning payment hashes, plus deterministic platform-id and reviewed-pair "
-            "matches. Weak hints, chain observations, privacy boundaries, and root-source "
-            "evidence remain manual review items."
+            "Assembly derives exact edges from unambiguous synced transaction "
+            "inputs/outputs and source-qualified Lightning payment hashes, plus "
+            "canonical transaction scope and reviewed-pair matches. N:M pro-rata "
+            "allocations, provider ids, weak hints, chain observations, privacy "
+            "boundaries, and root-source evidence remain manual review items."
         ),
     }
 
@@ -1927,11 +1894,12 @@ def suggest_links(
             scoped_tx_ids.add(link["from_transaction_id"])
             scoped_tx_ids.add(link["to_transaction_id"])
 
-    by_external = defaultdict(list)
+    by_onchain_scope = defaultdict(list)
     for row in rows:
-        if row["external_id"]:
-            by_external[(row["external_id"], row["asset"])].append(row)
-    for group in by_external.values():
+        scope = onchain_transfer_scope(row)
+        if scope is not None:
+            by_onchain_scope[scope].append(row)
+    for group in by_onchain_scope.values():
         outs = [row for row in group if row["direction"] == "outbound"]
         ins = [row for row in group if row["direction"] == "inbound"]
         if len(outs) != 1 or len(ins) != 1:
@@ -1951,6 +1919,7 @@ def suggest_links(
             continue
         if _raw_privacy_hop(out_tx) or _raw_privacy_hop(in_tx):
             continue
+        whole_row_equal = int(out_tx["amount"] or 0) == int(in_tx["amount"] or 0)
         link = _insert_suggestion(
             conn,
             workspace["id"],
@@ -1958,22 +1927,29 @@ def suggest_links(
             from_tx=out_tx,
             to_tx=in_tx,
             link_type="self_transfer",
-            method="same_external_id",
-            confidence="exact",
+            method="same_onchain_scope",
+            confidence="exact" if whole_row_equal else "strong",
             allocation_msat=int(in_tx["amount"]),
             from_allocation_msat=int(out_tx["amount"]),
-            explanation="Same external transaction id appears as an outbound and inbound row in two owned wallets.",
+            explanation=(
+                "The same canonical chain/network/txid/asset transaction scope "
+                "appears as an outbound and inbound row in two owned wallets."
+                + (
+                    " Equal whole-row principal permits deterministic review."
+                    if whole_row_equal
+                    else " Unequal rows require manual allocation or a custody component."
+                )
+            ),
         )
         remember(link)
 
     by_samourai_tx = defaultdict(list)
     for row in rows:
-        if not row["external_id"]:
-            continue
         metadata = _samourai_metadata_from_wallet_config(row["wallet_config_json"])
-        if metadata is None:
+        scope = onchain_transfer_scope(row)
+        if metadata is None or scope is None:
             continue
-        by_samourai_tx[(metadata["group_id"], row["external_id"], row["asset"])].append(
+        by_samourai_tx[(metadata["group_id"], *scope)].append(
             (row, metadata)
         )
     for group in by_samourai_tx.values():
@@ -2062,6 +2038,11 @@ def suggest_links(
                 continue
             if int(pair["allocation_msat"]) <= 0:
                 continue
+            pair_confidence = str(pair.get("confidence") or "exact")
+            if pair.get("requires_review"):
+                # Fail closed if a future deriver accidentally combines the
+                # manual-review marker with exact confidence.
+                pair_confidence = "strong"
             link = _insert_suggestion(
                 conn,
                 workspace["id"],
@@ -2070,7 +2051,7 @@ def suggest_links(
                 to_tx=in_tx,
                 link_type="self_transfer",
                 method="utxo_spend",
-                confidence="exact",
+                confidence=pair_confidence,
                 allocation_msat=int(pair["allocation_msat"]),
                 from_allocation_msat=int(pair["from_allocation_msat"]),
                 explanation=pair["explanation"],

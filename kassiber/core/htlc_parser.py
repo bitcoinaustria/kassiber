@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from embit import hashes as _embit_hashes
 
@@ -264,6 +264,63 @@ def extract_from_refund_witness(witness_items: Sequence[bytes]) -> Optional[Htlc
         role="refund",
         hashlock160=fund.hashlock160,
     )
+
+
+def refund_funding_outpoint_from_tx_mapping(
+    payload: Mapping[str, Any],
+) -> tuple[str, int] | None:
+    """Recover one unique v1 refund funding outpoint from stored tx JSON.
+
+    This is the replay/backfill path for transactions imported before the
+    dedicated refund-link columns existed. It accepts the public Esplora and
+    decoded Electrum/Core witness keys, requires a canonical 32-byte txid plus
+    output index, and declines batched refunds rather than choosing one HTLC.
+    """
+
+    nested = payload.get("tx")
+    if isinstance(nested, Mapping):
+        payload = nested
+    vin = payload.get("vin")
+    if not isinstance(vin, list):
+        return None
+    matches: list[tuple[str, int]] = []
+    for entry in vin:
+        if not isinstance(entry, Mapping):
+            continue
+        raw_witness = entry.get("witness")
+        if raw_witness is None:
+            raw_witness = entry.get("txinwitness")
+        if not isinstance(raw_witness, list):
+            continue
+        witness_items: list[bytes] = []
+        valid = True
+        for item in raw_witness:
+            if isinstance(item, str):
+                try:
+                    witness_items.append(bytes.fromhex(item))
+                except ValueError:
+                    valid = False
+                    break
+            elif isinstance(item, (bytes, bytearray)):
+                witness_items.append(bytes(item))
+            else:
+                valid = False
+                break
+        if not valid or extract_from_refund_witness(witness_items) is None:
+            continue
+        txid = str(entry.get("txid") or "").strip().lower()
+        if len(txid) != 64:
+            continue
+        try:
+            bytes.fromhex(txid)
+            vout = int(entry.get("vout"))
+        except (TypeError, ValueError):
+            continue
+        if vout < 0:
+            continue
+        matches.append((txid, vout))
+    unique = list(dict.fromkeys(matches))
+    return unique[0] if len(unique) == 1 else None
 
 
 def script_matches_payment_hash(script_bytes: bytes, payment_hash_hex: str) -> bool:

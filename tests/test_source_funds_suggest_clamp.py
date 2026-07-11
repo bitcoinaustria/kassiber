@@ -11,6 +11,8 @@ so every call site is covered with one test.
 from __future__ import annotations
 
 import tempfile
+import hashlib
+import json
 import unittest.mock
 import uuid
 from pathlib import Path
@@ -102,6 +104,9 @@ class SuggestLinksClampTest(unittest.TestCase):
         asset: str = "BTC",
     ) -> str:
         tx_id = str(uuid.uuid4())
+        physical_txid = hashlib.sha256(
+            f"source-funds-clamp:{external_id}".encode()
+        ).hexdigest()
         self.conn.execute(
             """
             INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
@@ -113,7 +118,7 @@ class SuggestLinksClampTest(unittest.TestCase):
                 self.workspace_id,
                 self.profile_id,
                 wallet_id,
-                external_id,
+                physical_txid,
                 f"fp-{tx_id}",
                 "2026-04-01T09:00:00Z",
                 direction,
@@ -122,7 +127,7 @@ class SuggestLinksClampTest(unittest.TestCase):
                 "EUR",
                 50000.0,
                 float(amount_msat) / 1e11 * 50000.0,
-                "{}",
+                json.dumps({"Tx Hash": physical_txid}),
                 "2026-04-01T09:00:00Z",
             ),
         )

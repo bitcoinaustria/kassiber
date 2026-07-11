@@ -12,6 +12,7 @@ Two layers:
 """
 
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,7 @@ from pathlib import Path
 from kassiber.cli import handlers
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
+from kassiber.core.ownership_transfers import OwnershipReviewProof
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import open_db
 
@@ -26,6 +28,7 @@ from kassiber.db import open_db
 NOW = "2026-01-01T00:00:00Z"
 BTC = 100_000_000_000  # 1 BTC in msat
 SATS = 1000  # msat per sat
+TEST_LIQUID_ASSET_ID = "11" * 32
 
 PROFILE = {
     "id": "profile-1",
@@ -65,10 +68,61 @@ def _fanout_index():
     return index
 
 
+def _physical_txid(label):
+    text = str(label)
+    if len(text) == 64 and all(char in "0123456789abcdefABCDEF" for char in text):
+        return text
+    return hashlib.sha256(f"rp2-ownership-test:{text}".encode()).hexdigest()
+
+
+def _physical_external_id(label):
+    text = str(label)
+    # Acquisition and provider/import identifiers are intentionally not chain
+    # proof. Keep those symbolic so review-gap tests retain their semantics.
+    if text.lower().startswith(("acq", "prov-", "provider-", "exchange-", "scan-")):
+        return text
+    return _physical_txid(text)
+
+
+def _physical_raw_json(raw_json):
+    if not raw_json or raw_json == "{}":
+        return raw_json
+    try:
+        payload = json.loads(raw_json) if isinstance(raw_json, str) else dict(raw_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return raw_json
+    if isinstance(payload, dict) and payload.get("txid"):
+        payload["txid"] = _physical_txid(payload["txid"])
+    return json.dumps(payload)
+
+
 def _row(wallet_id, direction, amount, *, external_id, raw_json="{}", fee=0, asset="BTC"):
     ref = WALLET_REFS[wallet_id]
+    display_external_id = external_id
+    physical_external_id = _physical_external_id(external_id)
+    physical_raw_json = _physical_raw_json(raw_json)
+    if physical_raw_json in (None, "{}") and len(str(physical_external_id)) == 64:
+        physical_raw_json = json.dumps(
+            {
+                "txid": physical_external_id,
+                "chain": "liquid" if asset in {"LBTC", "L-BTC"} else "bitcoin",
+                "network": (
+                    "liquidv1" if asset in {"LBTC", "L-BTC"} else "main"
+                ),
+                **(
+                    {
+                        "component": {
+                            "asset_id": TEST_LIQUID_ASSET_ID,
+                            "asset": "LBTC",
+                        }
+                    }
+                    if asset in {"LBTC", "L-BTC"}
+                    else {}
+                ),
+            }
+        )
     return {
-        "id": f"{wallet_id}-{direction}-{external_id}",
+        "id": f"{wallet_id}-{direction}-{display_external_id}",
         "workspace_id": "ws-1",
         "profile_id": "profile-1",
         "wallet_id": wallet_id,
@@ -76,7 +130,7 @@ def _row(wallet_id, direction, amount, *, external_id, raw_json="{}", fee=0, ass
         "wallet_account_id": ref["wallet_account_id"],
         "account_code": ref["account_code"],
         "account_label": ref["account_label"],
-        "external_id": external_id,
+        "external_id": physical_external_id,
         "occurred_at": NOW,
         "created_at": NOW,
         "direction": direction,
@@ -90,7 +144,13 @@ def _row(wallet_id, direction, amount, *, external_id, raw_json="{}", fee=0, ass
         "kind": "withdrawal" if direction == "outbound" else "deposit",
         "description": f"{wallet_id} {direction}",
         "note": None,
-        "raw_json": raw_json,
+        "raw_json": physical_raw_json,
+        "config_json": json.dumps(
+            {
+                "chain": "liquid" if asset in {"LBTC", "L-BTC"} else "bitcoin",
+                "network": "liquidv1" if asset in {"LBTC", "L-BTC"} else "main",
+            }
+        ),
         "excluded": 0,
     }
 
@@ -162,6 +222,70 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         # remainder (minus the network fee) stays in Cold. No disposal/gain.
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.3, places=6)
+
+    def test_mainnet_spend_never_carries_basis_to_regtest_script_owner(self):
+        raw_json = json.dumps(
+            {
+                "txid": "cross-network-journal",
+                "chain": "bitcoin",
+                "network": "main",
+                "vin": [
+                    {
+                        "txid": "prevtx",
+                        "vout": 0,
+                        "prevout": {"scriptpubkey": SCRIPT_A},
+                    }
+                ],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000}
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acq-cross-network"),
+            _row(
+                "A",
+                "outbound",
+                50 * BTC // 100,
+                external_id="cross-network-journal",
+                raw_json=raw_json,
+                fee=1_000_000,
+            ),
+        ]
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(
+            SCRIPT_B,
+            OwnedMatch(
+                "B",
+                "Hot",
+                "",
+                "bitcoin",
+                "regtest",
+                "",
+                None,
+                None,
+                "derived",
+            ),
+        )
+
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertNotIn("transfer_in", entry_types)
+        holdings = {
+            label: float(totals["quantity"])
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=8)
 
     def test_duplicate_outbound_group_quarantines_instead_of_deriving(self):
         # A stale duplicate source-overlap row can pass the source fallback via
@@ -720,6 +844,62 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         # The held-back group books nothing into B — no inflation.
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=6)
 
+    def test_shared_provider_id_cannot_suppress_canonical_graph_blocker(self):
+        # ``external_id`` is an importer/provider field. Two rows sharing an
+        # arbitrary value do not prove one physical transaction, and must not
+        # trick the RP2 blocker-dedup path into assuming the fan-out guard will
+        # quarantine the source. Only canonical chain/network/txid scope may do
+        # that suppression.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        shared = "0014" + "ef" * 20
+        index.add_script(shared, _match("B", "Hot"))
+        index.add_script(shared, _match("C", "Savings"))
+        spend = json.dumps(
+            {
+                "txid": "canonical-provider-block",
+                "vin": [
+                    {
+                        "txid": "pv",
+                        "vout": 0,
+                        "prevout": {"scriptpubkey": SCRIPT_A},
+                    }
+                ],
+                "vout": [
+                    {"n": 0, "scriptpubkey": shared, "value": 50_000_000}
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acq"),
+            _row(
+                "A",
+                "outbound",
+                50_000_000_000,
+                external_id="provider-batch-17",
+                raw_json=spend,
+            ),
+            _row(
+                "B",
+                "inbound",
+                50_000_000_000,
+                external_id="provider-batch-17",
+            ),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        self.assertIn(
+            "ownership_transfer_ambiguous_output",
+            {quarantine["reason"] for quarantine in state.quarantines},
+        )
+        self.assertNotIn("transfer_in", [entry["entry_type"] for entry in state.entries])
+
     def test_blocked_source_in_partially_paired_group_still_quarantines(self):
         # A manual pair on one leg of a blocked source's txid group disables
         # the owned-fanout guard (a paired leg means "handled" to it), so the
@@ -929,7 +1109,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
     def test_blocked_source_with_different_txid_destination_matches_baseline(self):
         # The destinations of a blocked spend were recorded under their OWN
         # external_id (CSV import / separate sync), so they do NOT share the
-        # source's (external_id, asset) group and the owned-fanout guard does not
+        # source's canonical on-chain group and the owned-fanout guard does not
         # fire. The blocked source must still post its disposal (matching the
         # deriver-off baseline) — dropping it would leave the spent coins in the
         # source while the destinations stay booked, inflating the profile total.
@@ -1095,11 +1275,63 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
             ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                tx_id, "ws-1", "profile-1", wallet_id, external_id, f"fp-{tx_id}",
+                tx_id, "ws-1", "profile-1", wallet_id,
+                _physical_external_id(external_id), f"fp-{tx_id}",
                 NOW, direction, "BTC", amount, fee, "USD", 40000.0, None,
-                "withdrawal" if direction == "outbound" else "deposit", raw_json, NOW,
+                "withdrawal" if direction == "outbound" else "deposit",
+                _physical_raw_json(raw_json), NOW,
             ),
         )
+
+    def test_matcher_rows_include_wallet_scope_and_handler_preserves_proof_confidence(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-owned-review-wire-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            self._seed(conn)
+            config_json = json.dumps({"chain": "bitcoin", "network": "regtest"})
+            conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id IN ('wallet-a', 'wallet-b')",
+                (config_json,),
+            )
+            self._tx(
+                conn,
+                tx_id="wire-out",
+                wallet_id="wallet-a",
+                direction="outbound",
+                amount=50_000_000,
+                external_id="wire-tx",
+                raw_json="{}",
+            )
+            rows = handlers._load_matcher_rows(conn, "profile-1")
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["config_json"], config_json)
+
+            out_row = dict(rows[0])
+            out_row.update(
+                {
+                    "wallet_label": "Cold",
+                    "wallet_kind": "custom",
+                    "occurred_at": NOW,
+                    "asset": "BTC",
+                }
+            )
+            in_row = {
+                **out_row,
+                "id": "wire-in",
+                "wallet_id": "wallet-b",
+                "wallet_label": "Hot",
+                "direction": "inbound",
+            }
+            proof = OwnershipReviewProof(
+                out_row=out_row,
+                in_row=in_row,
+                owned_amount_msat=50_000_000,
+                reason="ownership_transfer_destination_ambiguous",
+                conflict_set_id="ownership-review:wire",
+                confidence="strong",
+            )
+            candidate = handlers._ownership_review_candidate(proof)
+            self.assertEqual(candidate.confidence, "strong")
+            conn.close()
 
     def test_handler_derives_sync_gap_move_and_does_not_persist_pairs(self):
         addr_a = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
@@ -1288,6 +1520,43 @@ class RecordedFanoutEngineTest(unittest.TestCase):
         entry_types = [e["entry_type"] for e in state.entries]
         self.assertNotIn("transfer_in", entry_types)
         self.assertTrue(state.quarantines)  # flagged for review, nothing mis-booked
+
+    def test_graphless_liquid_one_to_one_shortfall_is_not_absorbed_as_fee(self):
+        # 1,000 sats also went to an external Liquid output.  That is below the
+        # generic 2,500-sat transfer tolerance, so the historical 1:1 matcher
+        # silently treated it as a MOVE fee. Liquid sync records miner fee
+        # separately; without valued graph evidence this must be reviewed.
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA", asset="LBTC"),
+            _row(
+                "A",
+                "outbound",
+                80_001_000_000,
+                external_id="liquid-mixed",
+                fee=200_000,
+                asset="LBTC",
+            ),
+            _row(
+                "B",
+                "inbound",
+                80_000_000_000,
+                external_id="liquid-mixed",
+                asset="LBTC",
+            ),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=None,  # real graphless handler fast path
+            )
+        )
+        reasons = {q["reason"] for q in state.quarantines}
+        self.assertIn("liquid_transfer_graph_incomplete", reasons)
+        self.assertNotIn(
+            "transfer_out", [entry["entry_type"] for entry in state.entries]
+        )
 
 
 class MultiSourceConsolidationEngineTest(unittest.TestCase):
@@ -1558,14 +1827,14 @@ class PartialPaymentWithholdingEngineTest(unittest.TestCase):
         # 0.5021 acquired - 0.5 moved - 0.002 sold - 0.0001 fee == 0.
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
-    def test_withhold_rolls_back_when_owned_output_is_ambiguous(self):
+    def test_graph_proven_external_residual_never_rolls_back_when_owned_output_is_ambiguous(self):
         # The owned output is paid to a script owned by TWO of the user's wallets
         # (shared descriptor / reused address), so the ownership deriver cannot
-        # route the leg and DECLINES. The withhold must roll the pair back to its
-        # original self-transfer instead of orphaning it into a full disposal +
-        # phantom acquisition (which carried no quarantine). Falling back here
-        # absorbs the small external leg as fee (the documented sub-ceiling P2),
-        # but never destroys basis or invents a disposal.
+        # route the leg and DECLINES. The known external output means the original
+        # row pair is provably NOT a complete MOVE, so it must never be restored:
+        # doing so would silently absorb the external principal as a transfer fee.
+        # The conservative raw rows stay booked and the source is quarantined so
+        # reports require an explicit complete custody component.
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         shared = "0014" + "dd" * 20
@@ -1592,21 +1861,22 @@ class PartialPaymentWithholdingEngineTest(unittest.TestCase):
                                   manual_pair_records=[], owned_index=index)
         )
         entry_types = [e["entry_type"] for e in state.entries]
-        # The self-transfer MOVE is booked (rolled back), NOT a phantom acquisition.
-        self.assertIn("transfer_in", entry_types)
-        self.assertIn("transfer_out", entry_types)
-        # No phantom acquisition at the destination: only A's real funding acq.
-        self.assertEqual(entry_types.count("acquisition"), 1)
+        self.assertNotIn("transfer_in", entry_types)
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertIn("disposal", entry_types)
+        self.assertEqual(entry_types.count("acquisition"), 2)
+        self.assertIn(
+            "ownership_transfer_ambiguous_output",
+            {quarantine["reason"] for quarantine in state.quarantines},
+        )
         holdings = {
             label: round(float(totals["quantity"]), 6)
             for (_, label, _, _), totals in state.wallet_holdings.items()
         }
-        # Hot got 0.5 of CARRIED basis (a MOVE), not a fresh 0.5 acquisition; the
-        # source is not over-disposed.
+        # Raw holdings still conserve while cost-basis interpretation stays blocked.
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
-        # No silent phantom: total holdings == acquired - fee-absorbed outflow.
-        self.assertLessEqual(sum(holdings.values()), 0.5021)
+        self.assertAlmostEqual(sum(holdings.values()), 0.5, places=6)
 
 
 class MultiTimestampGroupGateTest(unittest.TestCase):
@@ -1677,7 +1947,7 @@ class MultiTimestampGroupGateTest(unittest.TestCase):
                 "A", "outbound", 60_000_000_000, "2025-01-03T10:00:00Z", "mix2",
                 fee=500_000,
             ),
-            _mt_row("B", "inbound", 99_999_000_000, "2025-01-03T10:00:00Z", "postmix"),
+            _mt_row("B", "inbound", 100_000_000_000, "2025-01-03T10:00:00Z", "postmix"),
             _mt_row("B", "outbound", 50_000_000_000, "2025-01-02T10:00:00Z", "spend"),
         ]
         manual_pairs = [
@@ -1783,7 +2053,7 @@ class GroupSourceDrainGateTest(unittest.TestCase):
                 "A", "outbound", 60_000_000_000, "2025-01-03T10:00:00Z", "mix2",
                 fee=500_000,
             ),
-            _mt_row("B", "inbound", 99_999_000_000, "2025-01-03T10:00:00Z", "postmix"),
+            _mt_row("B", "inbound", 100_000_000_000, "2025-01-03T10:00:00Z", "postmix"),
         ]
         manual_pairs = [
             {
@@ -1830,16 +2100,25 @@ class AustrianSelfTransferEngineTest(unittest.TestCase):
 
     def _at_row(self, wid, direction, amount_msat, occurred_at, ext, fee=0, rate=40000.0):
         ref = WALLET_REFS[wid]
+        physical_external_id = _physical_external_id(ext)
         return {
             "id": f"{wid}-{direction}-{ext}", "workspace_id": "ws-1", "profile_id": "profile-1",
             "wallet_id": wid, "wallet_label": ref["label"],
             "wallet_account_id": ref["wallet_account_id"], "account_code": ref["account_code"],
-            "account_label": ref["account_label"], "external_id": ext,
+            "account_label": ref["account_label"],
+            "external_id": physical_external_id,
             "occurred_at": occurred_at, "created_at": occurred_at, "direction": direction,
             "asset": "BTC", "amount": amount_msat, "fee": fee, "fiat_currency": "EUR",
             "fiat_rate": rate, "fiat_rate_exact": str(int(rate)), "fiat_value": None,
             "kind": "withdrawal" if direction == "outbound" else "deposit",
-            "description": f"{wid} {direction}", "note": None, "raw_json": "{}", "excluded": 0,
+            "description": f"{wid} {direction}", "note": None,
+            "raw_json": (
+                json.dumps({"txid": physical_external_id})
+                if len(str(physical_external_id)) == 64
+                else "{}"
+            ),
+            "config_json": json.dumps({"chain": "bitcoin", "network": "main"}),
+            "excluded": 0,
         }
 
     def test_mixed_alt_neu_self_transfer_fee_does_not_abort_report(self):

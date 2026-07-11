@@ -152,22 +152,24 @@ _L_BTC_CONFIRMED_PRICING_CSV = """date,confirmed_at,txid,direction,asset,amount,
 # appears in both wallet exports, which is the trigger for IntraTransaction
 # detection. With detection on: only the 0.001 BTC network fee is realized as
 # a disposal; the 0.5 BTC transfer carries its cost basis to the hot wallet.
-_COLD_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+_SELF_TRANSFER_TXID = "a" * 64
+_SELF_TRANSFER_VALUE_TXID = "b" * 64
+_COLD_TRANSFER_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-01T10:00:00Z,cold-funding-1,inbound,BTC,1.00000000,0,60000,Cold acquisition
-2026-02-01T12:00:00Z,onchain-self-transfer-1,outbound,BTC,0.50000000,0.001,65000,Move to hot wallet
+2026-02-01T12:00:00Z,{_SELF_TRANSFER_TXID},outbound,BTC,0.50000000,0.001,65000,Move to hot wallet
 """
 
-_HOT_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
-2026-02-01T12:00:00Z,onchain-self-transfer-1,inbound,BTC,0.50000000,0,65000,Receive from cold wallet
+_HOT_TRANSFER_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-02-01T12:00:00Z,{_SELF_TRANSFER_TXID},inbound,BTC,0.50000000,0,65000,Receive from cold wallet
 """
 
-_COLD_TRANSFER_VALUE_ONLY_CSV = """date,txid,direction,asset,amount,fee,fiat_value,description
+_COLD_TRANSFER_VALUE_ONLY_CSV = f"""date,txid,direction,asset,amount,fee,fiat_value,description
 2026-01-01T10:00:00Z,cold-funding-value-1,inbound,BTC,1.00000000,0,60000,Cold acquisition
-2026-02-01T12:00:00Z,onchain-self-transfer-value-1,outbound,BTC,0.50000000,0.001,32500,Move to hot wallet
+2026-02-01T12:00:00Z,{_SELF_TRANSFER_VALUE_TXID},outbound,BTC,0.50000000,0.001,32500,Move to hot wallet
 """
 
-_HOT_TRANSFER_VALUE_ONLY_CSV = """date,txid,direction,asset,amount,fee,fiat_value,description
-2026-02-01T12:00:00Z,onchain-self-transfer-value-1,inbound,BTC,0.50000000,0,32500,Receive from cold wallet
+_HOT_TRANSFER_VALUE_ONLY_CSV = f"""date,txid,direction,asset,amount,fee,fiat_value,description
+2026-02-01T12:00:00Z,{_SELF_TRANSFER_VALUE_TXID},inbound,BTC,0.50000000,0,32500,Receive from cold wallet
 """
 
 _FEE_ONLY_CONSOLIDATION_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
@@ -180,12 +182,13 @@ _FEE_ONLY_CONSOLIDATION_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,
 # federation address that produces no owned inbound). Auto-pairing sees only the
 # 1-out/1-in BTC shape and would otherwise absorb the ~0.0195 peg as a transfer
 # "fee" and tax it as a disposal. The implausible-fee guard must quarantine it.
-_SPLIT_PEG_COLD_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+_SPLIT_PEG_TXID = "c" * 64
+_SPLIT_PEG_COLD_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-01T10:00:00Z,splitpeg-funding-1,inbound,BTC,0.10000000,0,60000,Cold acquisition
-2026-05-31T15:06:39Z,splitpeg-1,outbound,BTC,0.04702253,0,63255,Spend split between hot wallet and Liquid peg
+2026-05-31T15:06:39Z,{_SPLIT_PEG_TXID},outbound,BTC,0.04702253,0,63255,Spend split between hot wallet and Liquid peg
 """
-_SPLIT_PEG_HOT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
-2026-05-31T15:06:39Z,splitpeg-1,inbound,BTC,0.02750000,0,63255,Returned change portion
+_SPLIT_PEG_HOT_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-05-31T15:06:39Z,{_SPLIT_PEG_TXID},inbound,BTC,0.02750000,0,63255,Returned change portion
 """
 
 # Per-account over-sell: "Onchain" sells BTC on 2026-01-15, but its funding
@@ -193,13 +196,14 @@ _SPLIT_PEG_HOT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,descripti
 # Source), so the old global gate passed the sell and rp2's per-account
 # BalanceSet then crashed the whole report; the per-account gate must instead
 # quarantine just the sell and compute the rest.
-_OVERSELL_SOURCE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+_OVERSELL_MOVE_TXID = "d" * 64
+_OVERSELL_SOURCE_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-01T10:00:00Z,oversell-fund,inbound,BTC,1.00000000,0,60000,Source funding
-2026-02-01T12:00:00Z,oversell-move,outbound,BTC,0.50000000,0,65000,Move to Onchain
+2026-02-01T12:00:00Z,{_OVERSELL_MOVE_TXID},outbound,BTC,0.50000000,0,65000,Move to Onchain
 """
-_OVERSELL_ONCHAIN_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+_OVERSELL_ONCHAIN_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-15T09:00:00Z,oversell-sell,outbound,BTC,0.30000000,0,62000,Sell before funded
-2026-02-01T12:00:00Z,oversell-move,inbound,BTC,0.50000000,0,65000,Receive from Source
+2026-02-01T12:00:00Z,{_OVERSELL_MOVE_TXID},inbound,BTC,0.50000000,0,65000,Receive from Source
 """
 
 # Same-timestamp buy + sell in one wallet: the buy must fund the sell regardless
@@ -226,12 +230,13 @@ _REWARD_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
 # and pegs 0.02 to Liquid. Pairing the BTC out with the L-BTC in and declaring
 # --out-amount 0.02 must split it into a clean self-transfer MOVE + a
 # carrying-value peg, not a single transfer with a 0.02 "fee".
-_SPLIT_SWAP_SPEND_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+_SPLIT_SWAP_TXID = "e" * 64
+_SPLIT_SWAP_SPEND_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
 2025-06-01T10:00:00Z,splitswap-fund,inbound,BTC,0.10000000,0,30000,Funding
-2025-09-01T12:00:00Z,splitswap-out,outbound,BTC,0.05000000,0,60000,Spend: change back + peg to Liquid
+2025-09-01T12:00:00Z,{_SPLIT_SWAP_TXID},outbound,BTC,0.05000000,0,60000,Spend: change back + peg to Liquid
 """
-_SPLIT_SWAP_KEEP_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
-2025-09-01T12:00:00Z,splitswap-out,inbound,BTC,0.03000000,0,60000,Change returned on-chain
+_SPLIT_SWAP_KEEP_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
+2025-09-01T12:00:00Z,{_SPLIT_SWAP_TXID},inbound,BTC,0.03000000,0,60000,Change returned on-chain
 """
 _SPLIT_SWAP_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2025-09-01T12:30:00Z,splitswap-peg,inbound,LBTC,0.01980000,0,60000,Pegged-in L-BTC
@@ -2750,8 +2755,8 @@ class CliSmokeTest(unittest.TestCase):
             "transfers", "pair",
             "--workspace", "Main",
             "--profile", "SharedTxid",
-            "--tx-out", "onchain-self-transfer-1",
-            "--tx-in", "onchain-self-transfer-1",
+            "--tx-out", _SELF_TRANSFER_TXID,
+            "--tx-in", _SELF_TRANSFER_TXID,
             "--policy", "carrying-value",
         )
         self._assert_kind(payload, "transfers.pair")
@@ -2992,7 +2997,7 @@ class CliSmokeTest(unittest.TestCase):
         gains = payload["data"]
         self.assertEqual(gains, [])
 
-    def test_14c_failed_swap_refund_suggested_by_funding_link(self):
+    def test_14c_failed_swap_refund_suggested_by_legacy_funding_link(self):
         workspace = "RefundLinkWorkspace"
         self._cli("init")
         self._cli("workspaces", "create", workspace)
@@ -3020,7 +3025,8 @@ class CliSmokeTest(unittest.TestCase):
 
         # The send and refund share one wallet and sit 3 days apart, so the
         # time+amount heuristic cannot pair them — only the funding-txid link
-        # can. The matcher should surface exactly one exact swap-refund.
+        # can. A txid-only link does not prove the exact funding vout (batch
+        # sweeps exist), so it must surface as strong/manual rather than exact.
         payload = self._cli(
             "transfers", "suggest",
             "--workspace", workspace,
@@ -3030,7 +3036,7 @@ class CliSmokeTest(unittest.TestCase):
         candidates = payload["data"]["candidates"]
         self.assertEqual(len(candidates), 1)
         candidate = candidates[0]
-        self.assertEqual(candidate["confidence"], "exact")
+        self.assertEqual(candidate["confidence"], "strong")
         self.assertEqual(candidate["method"], "htlc_refund")
         self.assertEqual(candidate["default_kind"], "swap-refund")
         self.assertEqual(candidate["default_policy"], "carrying-value")
@@ -3280,7 +3286,7 @@ class CliSmokeTest(unittest.TestCase):
         # Resolve by pairing the BTC spend with the L-BTC peg and declaring the
         # 0.02 BTC that was swapped; the 0.03 remainder is the self-transfer.
         payload = self._cli("transfers", "pair", "--workspace", workspace, "--profile", "SplitSwap",
-                            "--tx-out", "splitswap-out", "--tx-in", "splitswap-peg",
+                            "--tx-out", _SPLIT_SWAP_TXID, "--tx-in", "splitswap-peg",
                             "--kind", "peg-in", "--policy", "carrying-value", "--out-amount", "0.02")
         self._assert_kind(payload, "transfers.pair")
         self.assertEqual(payload["data"]["out_amount"], 2000000000)
@@ -3334,7 +3340,7 @@ class CliSmokeTest(unittest.TestCase):
 
         payload = self._cli("transfers", "payouts", "create",
                             "--workspace", workspace, "--profile", "SplitPayout",
-                            "--tx-out", "splitswap-out",
+                            "--tx-out", _SPLIT_SWAP_TXID,
                             "--payout-asset", "BTC", "--payout-amount", "0.0198",
                             "--payout-fiat-value", "1200",
                             "--payout-external-id", "recipient-txid",
@@ -3388,7 +3394,7 @@ class CliSmokeTest(unittest.TestCase):
         self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitPayoutAT")
         payload = self._cli("transfers", "payouts", "create",
                             "--workspace", workspace, "--profile", "SplitPayoutAT",
-                            "--tx-out", "splitswap-out",
+                            "--tx-out", _SPLIT_SWAP_TXID,
                             "--payout-asset", "LBTC", "--payout-amount", "0.0198",
                             "--payout-fiat-value", "1188",
                             "--payout-external-id", "external-lbtc-recipient",
@@ -3766,7 +3772,11 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         candidate = candidates[0]
         self.assertEqual(candidate["method"], "provider_swap_id")
-        self.assertEqual(candidate["confidence"], "exact")
+        # Route-only provider metadata identifies a useful review candidate but
+        # does not prove that either aggregate transaction row is wholly this
+        # swap. Exact/bulk requires canonical route txids plus explicit principal
+        # amounts that cover both rows.
+        self.assertEqual(candidate["confidence"], "strong")
         self.assertEqual(candidate["default_kind"], "chain-swap")
         self.assertEqual(candidate["out_asset"], "BTC")
         self.assertEqual(candidate["in_asset"], "LBTC")

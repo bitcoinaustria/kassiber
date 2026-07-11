@@ -92,6 +92,47 @@ class ParseTokensTests(unittest.TestCase):
         self.assertEqual(invalid[0]["type"], "txid")
 
 
+class OwnedIndexPhysicalScopeTests(unittest.TestCase):
+    def test_same_outpoint_and_txid_are_separate_across_networks(self):
+        index = OwnedIndex()
+        txid = "ab" * 32
+        main_match = _match(label="Main", wallet_id="main", network="main")
+        regtest_match = _match(
+            label="Regtest", wallet_id="regtest", network="regtest"
+        )
+        index.add_outpoint(txid, 0, main_match)
+        index.add_outpoint(txid, 0, regtest_match)
+        index.note_txid(
+            txid, "main", "Main", chain="bitcoin", network="main"
+        )
+        index.note_txid(
+            txid, "regtest", "Regtest", chain="bitcoin", network="regtest"
+        )
+
+        self.assertEqual(
+            [match.wallet_id for match in index.lookup_outpoint(
+                f"{txid}:0", chain="bitcoin", network="main"
+            )],
+            ["main"],
+        )
+        self.assertEqual(
+            [match.wallet_id for match in index.lookup_outpoint(
+                f"{txid}:0", chain="bitcoin", network="regtest"
+            )],
+            ["regtest"],
+        )
+        self.assertEqual(
+            index.lookup_txid_wallets(txid, chain="bitcoin", network="main"),
+            {("main", "Main")},
+        )
+        self.assertEqual(
+            index.lookup_txid_wallets(
+                txid, chain="bitcoin", network="regtest"
+            ),
+            {("regtest", "Regtest")},
+        )
+
+
 class ClassifyAddressTests(unittest.TestCase):
     def test_owned_address_match(self):
         index = OwnedIndex()
@@ -303,28 +344,65 @@ class ClassifyTxidTests(unittest.TestCase):
 
 class LocalTxLegsTests(unittest.TestCase):
     def test_legs_from_esplora_shape(self):
-        raw = (
-            '{"vin":[{"txid":"AA","vout":0,"prevout":{"scriptpubkey":"0014aa"}}],'
-            '"vout":[{"scriptpubkey":"0014bb"},{"scriptpubkey":"0014cc"}]}'
+        raw = json.dumps(
+            {
+                "vin": [
+                    {
+                        "txid": "AA" * 32,
+                        "vout": 0,
+                        "prevout": {"scriptpubkey": "0014aa"},
+                    }
+                ],
+                "vout": [
+                    {"scriptpubkey": "0014bb"},
+                    {"scriptpubkey": "0014cc"},
+                ],
+            }
         )
         legs = ownership._legs_from_local_tx_json(raw)
         self.assertEqual(legs["chain"], "bitcoin")
-        self.assertEqual(legs["inputs"][0]["outpoint"], "aa:0")
+        self.assertEqual(legs["inputs"][0]["outpoint"], f"{'aa' * 32}:0")
         self.assertEqual(legs["inputs"][0]["script"], "0014aa")
         self.assertEqual([o["script"] for o in legs["outputs"]], ["0014bb", "0014cc"])
 
     def test_legs_from_electrum_decode_shape(self):
         # Electrum-synced raw_json uses script_hex on outputs and has no inline
         # prevout script; output ownership must still resolve.
-        raw = (
-            '{"vin":[{"txid":"AA","vout":1,"sequence":4294967295}],'
-            '"vout":[{"n":0,"value":1,"script_hex":"0014bb"},'
-            '{"n":1,"value":2,"script_hex":"0014cc"}]}'
+        raw = json.dumps(
+            {
+                "vin": [
+                    {"txid": "AA" * 32, "vout": 1, "sequence": 4_294_967_295}
+                ],
+                "vout": [
+                    {"n": 0, "value": 1, "script_hex": "0014bb"},
+                    {"n": 1, "value": 2, "script_hex": "0014cc"},
+                ],
+            }
         )
         legs = ownership._legs_from_local_tx_json(raw)
-        self.assertEqual(legs["inputs"][0]["outpoint"], "aa:1")
+        self.assertEqual(legs["inputs"][0]["outpoint"], f"{'aa' * 32}:1")
         self.assertIsNone(legs["inputs"][0]["script"])
         self.assertEqual([o["script"] for o in legs["outputs"]], ["0014bb", "0014cc"])
+
+    def test_malformed_prevout_txid_is_not_promoted_to_physical_identity(self):
+        legs = ownership._legs_from_local_tx_json(
+            json.dumps(
+                {
+                    "vin": [
+                        {
+                            "txid": "AA",
+                            "vout": 0,
+                            "prevout": {"scriptpubkey": "0014aa"},
+                        }
+                    ],
+                    "vout": [{"n": 0, "scriptpubkey": "0014bb"}],
+                }
+            )
+        )
+
+        self.assertIsNone(legs["inputs"][0]["outpoint"])
+        # Non-identity evidence remains available for conservative script lookup.
+        self.assertEqual("0014aa", legs["inputs"][0]["script"])
 
     def test_electrum_shape_classifies_receipt_not_external(self):
         # Regression: the esplora-only parser read None scripts for Electrum
@@ -332,7 +410,12 @@ class LocalTxLegsTests(unittest.TestCase):
         index = OwnedIndex()
         index.add_script("0014bb", _match(branch="receive", index=0))
         legs = ownership._legs_from_local_tx_json(
-            '{"vin":[{"txid":"AA","vout":1}],"vout":[{"n":0,"script_hex":"0014bb"}]}'
+            json.dumps(
+                {
+                    "vin": [{"txid": "AA" * 32, "vout": 1}],
+                    "vout": [{"n": 0, "script_hex": "0014bb"}],
+                }
+            )
         )
         result = ownership.classify_txid(
             {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
@@ -540,6 +623,60 @@ class BuildOwnedIndexTests(unittest.TestCase):
         self.assertEqual(warnings, [])
         match = index.lookup_address("legacy-owned")[0]
         self.assertEqual((match.chain, match.network), ("bitcoin", "main"))
+
+    def test_imported_txid_history_is_indexed_per_wallet_network(self):
+        conn = _engine_conn()
+        txid = "cd" * 32
+        conn.executemany(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            [
+                (
+                    "main",
+                    "p1",
+                    "Main",
+                    "address",
+                    '{"chain":"bitcoin","network":"main"}',
+                    None,
+                ),
+                (
+                    "regtest",
+                    "p1",
+                    "Regtest",
+                    "address",
+                    '{"chain":"bitcoin","network":"regtest"}',
+                    None,
+                ),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO transactions(profile_id, wallet_id, external_id, raw_json) "
+            "VALUES(?,?,?,?)",
+            [
+                ("p1", "main", txid, "{}"),
+                ("p1", "regtest", txid, "{}"),
+            ],
+        )
+        wallets = conn.execute(
+            "SELECT w.*, NULL AS account_code, NULL AS account_label "
+            "FROM wallets w ORDER BY id"
+        ).fetchall()
+
+        index, warnings = ownership.build_owned_index(
+            conn, "p1", wallets, derive=False
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(
+            index.lookup_txid_wallets(txid, chain="bitcoin", network="main"),
+            {("main", "Main")},
+        )
+        self.assertEqual(
+            index.lookup_txid_wallets(
+                txid, chain="bitcoin", network="regtest"
+            ),
+            {("regtest", "Regtest")},
+        )
 
     def test_wallet_config_can_raise_journal_ownership_scan_depth(self):
         conn = _engine_conn()

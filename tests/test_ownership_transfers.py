@@ -12,6 +12,7 @@ Electrum ``vout[].value_sats`` (msat = sats * 1000).
 """
 
 import json
+import hashlib
 import unittest
 
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
@@ -23,6 +24,7 @@ from kassiber.core.ownership_transfers import (
     derive_recorded_fanout_transfers,
     detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
+    graph_multi_owned_destination_out_ids,
     graph_partial_payment_out_ids,
 )
 
@@ -36,6 +38,16 @@ SCRIPT = {
     "EXT": "0014" + "ee" * 20,  # external recipient, never in the index
 }
 SATS = 1000  # msat per sat
+_TXID_ALIASES = {}
+
+
+def _physical_txid(value):
+    text = str(value)
+    if len(text) == 64 and all(char in "0123456789abcdefABCDEF" for char in text):
+        return text
+    return _TXID_ALIASES.setdefault(
+        text, hashlib.sha256(f"ownership-test:{text}".encode()).hexdigest()
+    )
 
 
 def _match(wallet_id, label):
@@ -75,8 +87,13 @@ def _refs(*wallet_ids):
 
 def _outbound(*, row_id, wallet_id, amount_sats, fee_sats, txid, input_scripts, outputs):
     """``outputs``: list of (script_hex, value_sats)."""
+    txid = _physical_txid(txid)
     vin = [
-        {"txid": f"prev-{i}", "vout": i, "prevout": {"scriptpubkey": script}}
+        {
+            "txid": _physical_txid(f"prev-{i}"),
+            "vout": i,
+            "prevout": {"scriptpubkey": script},
+        }
         for i, script in enumerate(input_scripts)
     ]
     vout = [
@@ -102,6 +119,7 @@ def _outbound(*, row_id, wallet_id, amount_sats, fee_sats, txid, input_scripts, 
 
 
 def _inbound(*, row_id, wallet_id, amount_sats, txid, occurred_at="2026-03-14T17:31:00Z"):
+    txid = _TXID_ALIASES.get(str(txid), str(txid))
     return {
         "id": row_id,
         "wallet_id": wallet_id,
@@ -113,7 +131,7 @@ def _inbound(*, row_id, wallet_id, amount_sats, txid, occurred_at="2026-03-14T17
         "external_id": txid,
         "occurred_at": occurred_at,
         "created_at": occurred_at,
-        "raw_json": "{}",
+        "raw_json": json.dumps({"txid": txid}),
     }
 
 
@@ -234,6 +252,67 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertIn(synth_in, result.synthetic_rows)
         self.assertEqual(result.dropped_out_ids, {"a-out"})
 
+    def test_noncanonical_graph_id_cannot_consume_provider_receipt(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid="canonical-spend",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        graph = json.loads(out["raw_json"])
+        graph["txid"] = "provider-route"
+        out["raw_json"] = json.dumps(graph)
+        unrelated = _inbound(
+            row_id="provider-in",
+            wallet_id="B",
+            amount_sats=50_000_000,
+            txid="provider-route",
+        )
+
+        result = self._run(
+            [out, unrelated],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")},
+            _refs("A", "B"),
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.synthetic_rows, [])
+
+    def test_destination_row_must_share_full_onchain_scope(self):
+        out = _outbound(
+            row_id="main-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid="scoped-spend",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        inbound = _inbound(
+            row_id="test-in",
+            wallet_id="B",
+            amount_sats=50_000_000,
+            txid="scoped-spend",
+        )
+        inbound["raw_json"] = json.dumps(
+            {
+                "txid": inbound["external_id"],
+                "chain": "bitcoin",
+                "network": "testnet",
+            }
+        )
+
+        result = self._run(
+            [out, inbound],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")},
+            _refs("A", "B"),
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+
     def test_single_input_source_falls_back_to_recorded_outbound_wallet(self):
         # A historic spend may have been synced as an outbound row before the
         # durable UTXO inventory ever saw the spent input. The row still proves
@@ -244,7 +323,7 @@ class OwnershipDeriverTests(unittest.TestCase):
             outputs=[(SCRIPT["B"], 50_000_000)],
         )
         index = _index({SCRIPT["B"]: ("B", "B")})
-        index.note_txid("prev-0", "A", "A")
+        index.note_txid(_physical_txid("prev-0"), "A", "A")
         result = derive_ownership_transfers(
             [out],
             index=index,
@@ -258,6 +337,126 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertEqual(pair["in"]["wallet_id"], "B")
         self.assertEqual(result.dropped_out_ids, {"a-out"})
 
+    def test_recorded_source_fallback_cannot_route_to_cross_network_wallet(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid="cross-network-destination",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        index = OwnedIndex()
+        index.add_script(
+            SCRIPT["B"],
+            OwnedMatch(
+                wallet_id="B",
+                wallet_label="B",
+                account="",
+                chain="bitcoin",
+                network="regtest",
+                branch_label="",
+                address_index=None,
+                derivation_path=None,
+                source="derived",
+            ),
+        )
+        index.note_txid(
+            _physical_txid("prev-0"),
+            "A",
+            "A",
+            chain="bitcoin",
+            network="main",
+        )
+
+        result = derive_ownership_transfers(
+            [out],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.dropped_out_ids, set())
+
+    def test_recorded_source_fallback_rejects_wrong_network_txid_claim(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid="cross-network-source",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        index = _index({SCRIPT["B"]: ("B", "B")})
+        index.note_txid(
+            _physical_txid("prev-0"),
+            "A",
+            "A",
+            chain="bitcoin",
+            network="regtest",
+        )
+
+        result = derive_ownership_transfers(
+            [out],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(len(result.blocked_sources), 1)
+        self.assertEqual(
+            result.blocked_sources[0]["reason"],
+            "ownership_transfer_source_ambiguous",
+        )
+        self.assertTrue(result.blocked_sources[0]["detail"]["scope_conflict"])
+
+    def test_explicit_network_contradiction_is_not_repaired_from_index(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid="contradictory-network",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        raw = json.loads(out["raw_json"])
+        raw.update({"chain": "bitcoin", "network": "regtest"})
+        out["raw_json"] = json.dumps(raw)
+        out["config_json"] = json.dumps(
+            {"chain": "bitcoin", "network": "main"}
+        )
+        index = OwnedIndex()
+        for script, wallet_id in ((SCRIPT["A"], "A"), (SCRIPT["B"], "B")):
+            index.add_script(
+                script,
+                OwnedMatch(
+                    wallet_id,
+                    wallet_id,
+                    "",
+                    "bitcoin",
+                    "regtest",
+                    "",
+                    None,
+                    None,
+                    "derived",
+                ),
+            )
+
+        result = derive_ownership_transfers(
+            [out],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.dropped_out_ids, set())
+
     def test_partial_payment_detection_uses_single_input_recorded_source(self):
         out = _outbound(
             row_id="a-out", wallet_id="A", amount_sats=70_000_000, fee_sats=1000,
@@ -265,7 +464,7 @@ class OwnershipDeriverTests(unittest.TestCase):
             outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["EXT"], 20_000_000)],
         )
         index = _index({SCRIPT["B"]: ("B", "B")})
-        index.note_txid("prev-0", "A", "A")
+        index.note_txid(_physical_txid("prev-0"), "A", "A")
         flagged = graph_partial_payment_out_ids(
             [
                 {
@@ -382,7 +581,7 @@ class OwnershipDeriverTests(unittest.TestCase):
             txid="dup-tx",
         )
         index = _index({SCRIPT["A"]: ("A", "A"), SCRIPT["C"]: ("C", "C")})
-        index.note_txid("prev-0", "B", "B")
+        index.note_txid(_physical_txid("prev-0"), "B", "B")
 
         result = derive_ownership_transfers(
             [a_out, b_out, c_in],
@@ -474,6 +673,37 @@ class OwnershipDeriverTests(unittest.TestCase):
             + result.out_row_overrides["a-out"]["fee"]
         )
         self.assertEqual(total_out, (70_000_000 + 1000) * SATS)
+
+    def test_fee_inclusive_graph_allocates_exact_fee_and_external_residual(self):
+        out = _outbound(
+            row_id="fee-inclusive",
+            wallet_id="A",
+            amount_sats=70_001_000,
+            fee_sats=0,
+            txid="fee-inclusive-graph",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["EXT"], 20_000_000)],
+        )
+        out["amount_includes_fee"] = True
+        graph = json.loads(out["raw_json"])
+        graph["vin"][0]["prevout"]["value"] = 70_001_000
+        out["raw_json"] = json.dumps(graph)
+        inbound = _inbound(
+            row_id="b-in",
+            wallet_id="B",
+            amount_sats=50_000_000,
+            txid="fee-inclusive-graph",
+        )
+
+        result = self._run(
+            [out, inbound],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")},
+            _refs("B"),
+        )
+
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertEqual(result.derived_pairs[0]["out"]["fee"], 1_000 * SATS)
+        self.assertEqual(result.out_row_overrides["fee-inclusive"]["amount"], 20_000_000 * SATS)
 
     def test_unrelated_equal_value_deposit_not_cannibalized(self):
         # B has a possible self-transfer leg (CSV provider id) AND an unrelated
@@ -649,7 +879,10 @@ class OwnershipDeriverTests(unittest.TestCase):
         out["raw_json"] = json.dumps(payload)
         result = self._run([out], {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
         self.assertEqual(len(result.derived_pairs), 1)
-        self.assertIn("owned-derive:real-txid:out:0", result.derived_pairs[0]["out"]["id"])
+        self.assertIn(
+            f"owned-derive:{_physical_txid('real-txid')}:out:0",
+            result.derived_pairs[0]["out"]["id"],
+        )
 
     def test_cross_asset_peg_to_unowned_federation_not_derived(self):
         # BTC peg-in: the output pays a Liquid federation address we do not own,
@@ -858,7 +1091,12 @@ class OwnershipDeriverTests(unittest.TestCase):
 
 
 def _plain_row(*, row_id, wallet_id, direction, amount_sats, txid, asset="LBTC", fee_sats=0):
-    """A recorded row with NO on-chain graph (Liquid / graphless CSV shape)."""
+    """A recorded row with typed txid/component identity but no vin/vout graph."""
+    txid = (
+        _physical_txid(txid)
+        if direction == "outbound"
+        else _TXID_ALIASES.get(str(txid), str(txid))
+    )
     return {
         "id": row_id,
         "wallet_id": wallet_id,
@@ -873,7 +1111,31 @@ def _plain_row(*, row_id, wallet_id, direction, amount_sats, txid, asset="LBTC",
         "fiat_rate": 40000.0,
         "fiat_rate_exact": "40000",
         "fiat_value": None,
-        "raw_json": "{}",
+        "raw_json": json.dumps(
+            {
+                "txid": txid,
+                "chain": "liquid" if asset in {"LBTC", "L-BTC"} else "bitcoin",
+                "network": (
+                    "liquidv1" if asset in {"LBTC", "L-BTC"} else "main"
+                ),
+                **(
+                    {
+                        "component": {
+                            "asset_id": LIQUID_ASSET,
+                            "asset": "LBTC",
+                        }
+                    }
+                    if asset in {"LBTC", "L-BTC"}
+                    else {}
+                ),
+            }
+        ),
+        "config_json": json.dumps(
+            {
+                "chain": "liquid" if asset in {"LBTC", "L-BTC"} else "bitcoin",
+                "network": "liquidv1" if asset in {"LBTC", "L-BTC"} else "main",
+            }
+        ),
     }
 
 
@@ -907,6 +1169,89 @@ class OwnershipReviewProofTests(unittest.TestCase):
         self.assertEqual(proofs[0].out_row["id"], "a-out")
         self.assertEqual(proofs[0].in_row["id"], "b-in")
         self.assertEqual(proofs[0].owned_amount_msat, 500_000 * SATS)
+        self.assertEqual(proofs[0].confidence, "strong")
+
+    def test_canonical_same_scope_whole_rows_are_exact(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=500_000,
+            fee_sats=1_000,
+            txid="graph-exact",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 500_000)],
+        )
+        inbound = _inbound(
+            row_id="b-in",
+            wallet_id="B",
+            amount_sats=500_000,
+            txid="graph-exact",
+        )
+        proofs = derive_ownership_review_proofs(
+            [out, inbound],
+            index=_index({SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}),
+            blocked_reasons_by_row_id={
+                "a-out": "ownership_transfer_destination_ambiguous"
+            },
+        )
+        self.assertEqual(len(proofs), 1)
+        self.assertEqual(proofs[0].confidence, "exact")
+
+    def test_source_ambiguous_graph_is_never_exact(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=500_000,
+            fee_sats=1_000,
+            txid="source-ambiguous",
+            input_scripts=[SCRIPT["A"], SCRIPT["EXT"]],
+            outputs=[(SCRIPT["B"], 500_000)],
+        )
+        inbound = _inbound(
+            row_id="b-in",
+            wallet_id="B",
+            amount_sats=500_000,
+            txid="source-ambiguous",
+        )
+
+        proofs = derive_ownership_review_proofs(
+            [out, inbound],
+            index=_index(
+                {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}
+            ),
+            blocked_reasons_by_row_id={
+                "a-out": "ownership_transfer_source_ambiguous"
+            },
+        )
+
+        self.assertEqual(len(proofs), 1)
+        self.assertEqual(proofs[0].confidence, "strong")
+
+    def test_same_scope_amount_tolerance_is_strong_not_exact(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=500_000,
+            fee_sats=1_000,
+            txid="graph-near",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 500_000)],
+        )
+        inbound = _inbound(
+            row_id="b-in",
+            wallet_id="B",
+            amount_sats=499_999,
+            txid="graph-near",
+        )
+        proofs = derive_ownership_review_proofs(
+            [out, inbound],
+            index=_index({SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}),
+            blocked_reasons_by_row_id={
+                "a-out": "ownership_transfer_destination_ambiguous"
+            },
+        )
+        self.assertEqual(len(proofs), 1)
+        self.assertEqual(proofs[0].confidence, "strong")
 
     def _fanout_rows(self):
         out = _outbound(
@@ -943,6 +1288,7 @@ class OwnershipReviewProofTests(unittest.TestCase):
         )
         self.assertEqual({proof.in_row["id"] for proof in proofs}, {"b-in", "c-in"})
         self.assertTrue(all(proof.conflict_size == 1 for proof in proofs))
+        self.assertTrue(all(proof.confidence == "strong" for proof in proofs))
 
     def test_existing_pair_suppresses_only_that_proof(self):
         proofs = derive_ownership_review_proofs(
@@ -1001,6 +1347,35 @@ class RecordedFanoutDeriverTests(unittest.TestCase):
             self.assertEqual(pair["out"]["amount"], pair["in"]["amount"])
         fees = sorted(p["out"]["fee"] for p in result.derived_pairs)
         self.assertEqual(fees, [0, 2000 * SATS])  # whole fee on exactly one leg
+
+    def test_arbitrary_shared_import_id_does_not_auto_decompose(self):
+        rows = [
+            {
+                **_plain_row(
+                    row_id="a-out", wallet_id="A", direction="outbound",
+                    amount_sats=80_000_000, txid="physical-placeholder",
+                ),
+                "external_id": "provider-batch-17",
+            },
+            {
+                **_plain_row(
+                    row_id="b-in", wallet_id="B", direction="inbound",
+                    amount_sats=50_000_000, txid="provider-receipt-b",
+                ),
+                "external_id": "provider-batch-17",
+            },
+            {
+                **_plain_row(
+                    row_id="c-in", wallet_id="C", direction="inbound",
+                    amount_sats=30_000_000, txid="provider-receipt-c",
+                ),
+                "external_id": "provider-batch-17",
+            },
+        ]
+
+        result = derive_recorded_fanout_transfers(rows, already_paired_ids=set())
+
+        self.assertEqual(result.derived_pairs, [])
 
     def test_shortfall_not_decomposed(self):
         # A destination wasn't synced -> recorded inbounds don't sum to the
@@ -1377,12 +1752,10 @@ class MultiSourceConsolidationDeriverTests(unittest.TestCase):
         )
         self.assertEqual(result.derived_pairs, [])
 
-    def test_offgroup_receipt_under_real_txid_declines(self):
-        # Codex review (derivers #1): senders imported under a provider id while
-        # the destination recorded its receipt under the REAL on-chain txid. The
-        # off-group guard must compare against the PARSED graph txid, not the
-        # provider group id, or the real receipt is treated as a different tx and
-        # double-counted (synthetic legs + the surviving receipt).
+    def test_provider_external_ids_do_not_split_one_canonical_transaction(self):
+        # Provider record ids do not override the physical transaction graph.
+        # The canonical txid joins both sources to the recorded destination, which
+        # is consumed exactly once instead of being double-counted.
         real_txid = "ab" * 32
         a = _outbound(row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=0,
                       txid=real_txid, input_scripts=[SCRIPT["A"], SCRIPT["B"]],
@@ -1398,7 +1771,9 @@ class MultiSourceConsolidationDeriverTests(unittest.TestCase):
             {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
             _refs("A", "B", "C"),
         )
-        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(result.dropped_in_ids, {"c-real"})
+        self.assertEqual(result.dropped_out_ids, {"a-out", "b-out"})
 
     def test_already_paired_offgroup_deposit_does_not_false_decline(self):
         # Codex review (derivers #2): C is sync-gapped for the consolidation but
@@ -1506,7 +1881,7 @@ class ConflictingSpendTests(unittest.TestCase):
             "external_id": "b" * 64, "confirmed_at": None,
             "raw_json": json.dumps({
                 "txid": "b" * 64,
-                "vin": [{"txid": "prev-0", "vout": 0, "prevout": {"scriptpubkey": SCRIPT["A"]}}],
+                "vin": [{"txid": _physical_txid("prev-0"), "vout": 0, "prevout": {"scriptpubkey": SCRIPT["A"]}}],
                 "vout": [{"n": 0, "scriptpubkey": SCRIPT["B"], "value": 50_000_000}],
             }),
         }
@@ -1525,9 +1900,63 @@ class ConflictingSpendTests(unittest.TestCase):
         b2 = dict(b)
         import json as _json
         graph = _json.loads(b2["raw_json"])
-        graph["vin"] = [{"txid": "other", "vout": 5, "prevout": {"scriptpubkey": SCRIPT["A"]}}]
+        graph["vin"] = [{"txid": _physical_txid("other"), "vout": 5, "prevout": {"scriptpubkey": SCRIPT["A"]}}]
         b2["raw_json"] = _json.dumps(graph)
         self.assertEqual(detect_conflicting_spend_ids([a, b2]), set())
+
+    def test_provider_ids_and_noncanonical_prevout_do_not_form_conflict(self):
+        rows = []
+        for row_id, txid in (("one", "provider-one"), ("two", "provider-two")):
+            rows.append(
+                {
+                    "id": row_id,
+                    "wallet_id": "A",
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": 1_000_000,
+                    "fee": 0,
+                    "external_id": txid,
+                    "raw_json": json.dumps(
+                        {
+                            "txid": txid,
+                            "vin": [{"txid": "provider-prev", "vout": 0}],
+                            "vout": [{"n": 0, "value": 1000}],
+                        }
+                    ),
+                }
+            )
+
+        self.assertEqual(detect_conflicting_spend_ids(rows), set())
+
+    def test_same_outpoint_on_different_networks_is_not_a_conflict(self):
+        shared_prev = "77" * 32
+        rows = []
+        for row_id, txid, network in (
+            ("main", "88" * 32, "main"),
+            ("regtest", "99" * 32, "regtest"),
+        ):
+            rows.append(
+                {
+                    "id": row_id,
+                    "wallet_id": row_id,
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": 1_000_000,
+                    "fee": 0,
+                    "external_id": txid,
+                    "raw_json": json.dumps(
+                        {
+                            "txid": txid,
+                            "chain": "bitcoin",
+                            "network": network,
+                            "vin": [{"txid": shared_prev, "vout": 0}],
+                            "vout": [{"n": 0, "value": 1000}],
+                        }
+                    ),
+                }
+            )
+
+        self.assertEqual(detect_conflicting_spend_ids(rows), set())
 
 
 class PendingOnchainTests(unittest.TestCase):
@@ -1565,6 +1994,25 @@ class PendingOnchainTests(unittest.TestCase):
             txid="provider-row",
         )
         self.assertEqual(detect_pending_onchain_ids([row]), set())
+
+    def test_noncanonical_provider_status_does_not_hold_siblings(self):
+        pending = _inbound(
+            row_id="provider-pending",
+            wallet_id="A",
+            amount_sats=1_000_000,
+            txid="provider-batch",
+        )
+        pending["raw_json"] = json.dumps(
+            {"txid": "provider-batch", "status": {"confirmed": False}}
+        )
+        sibling = _inbound(
+            row_id="provider-sibling",
+            wallet_id="B",
+            amount_sats=1_000_000,
+            txid="provider-batch",
+        )
+
+        self.assertEqual(detect_pending_onchain_ids([pending, sibling]), set())
 
     def test_confirmed_sibling_wins_over_stale_mempool_leg(self):
         txid = "b" * 64
@@ -1640,6 +2088,452 @@ class GraphPartialPaymentTests(unittest.TestCase):
         )
         self.assertEqual(flagged, set())
 
+
+LIQUID_ASSET = "11" * 32
+LIQUID_OTHER_ASSET = "22" * 32
+
+
+def _liquid_match(wallet_id, label):
+    return OwnedMatch(
+        wallet_id=wallet_id,
+        wallet_label=label,
+        account="",
+        chain="liquid",
+        network="liquidv1",
+        branch_label="",
+        address_index=None,
+        derivation_path=None,
+        source="derived",
+    )
+
+
+def _liquid_index():
+    index = OwnedIndex()
+    index.add_script(SCRIPT["A"], _liquid_match("A", "A"))
+    index.add_script(SCRIPT["B"], _liquid_match("B", "B"))
+    index.add_script(SCRIPT["C"], _liquid_match("C", "C"))
+    return index
+
+
+def _liquid_raw(*, txid, vin, vout, asset_id=LIQUID_ASSET, asset="LBTC"):
+    txid = _physical_txid(txid)
+    return json.dumps(
+        {
+            "txid": txid,
+            "chain": "liquid",
+            "network": "liquidv1",
+            "ownership_graph_version": 1,
+            "vin": vin,
+            "vout": vout,
+            "component": {
+                "asset_id": asset_id,
+                "asset": asset,
+                "net_sats": 0,
+                "fee_sats": 0,
+            },
+        }
+    )
+
+
+def _liquid_row(
+    *, row_id, wallet_id, direction, amount_sats, fee_sats, txid, raw_json, asset="LBTC"
+):
+    txid = _physical_txid(txid)
+    return {
+        "id": row_id,
+        "wallet_id": wallet_id,
+        "wallet_label": f"Wallet {wallet_id}",
+        "direction": direction,
+        "asset": asset,
+        "amount": amount_sats * SATS,
+        "fee": fee_sats * SATS,
+        "external_id": txid,
+        "occurred_at": "2026-03-14T17:30:00Z",
+        "created_at": "2026-03-14T17:30:00Z",
+        "raw_json": raw_json,
+        "config_json": json.dumps({"chain": "liquid", "network": "liquidv1"}),
+    }
+
+
+class LiquidOwnershipDeriverTests(unittest.TestCase):
+    def test_multi_source_liquid_consolidation_merges_sender_observations(self):
+        txid = "90" * 32
+        prev_a = "91" * 32
+        prev_b = "92" * 32
+
+        def raw_for(owner, owned_prevout_value=None, destination_value=None):
+            vin = []
+            for wallet, prev_txid, value in (
+                ("A", prev_a, 500),
+                ("B", prev_b, 300),
+            ):
+                entry = {"txid": prev_txid, "vout": 0}
+                if wallet == owner and owned_prevout_value is not None:
+                    entry["prevout"] = {
+                        "scriptpubkey": SCRIPT[wallet],
+                        "value_sats": value,
+                        "asset_id": LIQUID_ASSET,
+                        "asset": "LBTC",
+                    }
+                vin.append(entry)
+            destination = {"n": 0, "scriptpubkey": SCRIPT["C"]}
+            if destination_value is not None:
+                destination.update(
+                    {
+                        "value_sats": destination_value,
+                        "asset_id": LIQUID_ASSET,
+                        "asset": "LBTC",
+                    }
+                )
+            return _liquid_raw(
+                txid=txid,
+                vin=vin,
+                vout=[
+                    destination,
+                    {
+                        "n": 1,
+                        "scriptpubkey": "",
+                        "value_sats": 10,
+                        "asset_id": LIQUID_ASSET,
+                        "asset": "LBTC",
+                        "role": "fee",
+                    },
+                ],
+            )
+
+        rows = [
+            _liquid_row(
+                row_id="a-out",
+                wallet_id="A",
+                direction="outbound",
+                amount_sats=490,
+                fee_sats=10,
+                txid=txid,
+                raw_json=raw_for("A", owned_prevout_value=500),
+            ),
+            _liquid_row(
+                row_id="b-out",
+                wallet_id="B",
+                direction="outbound",
+                amount_sats=290,
+                fee_sats=10,
+                txid=txid,
+                raw_json=raw_for("B", owned_prevout_value=300),
+            ),
+            _liquid_row(
+                row_id="c-in",
+                wallet_id="C",
+                direction="inbound",
+                amount_sats=790,
+                fee_sats=0,
+                txid=txid,
+                raw_json=raw_for("C", destination_value=790),
+            ),
+        ]
+        result = derive_multi_source_consolidations(
+            rows,
+            index=_liquid_index(),
+            wallet_refs_by_id=_refs("A", "B", "C"),
+            already_paired_ids=set(),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(
+            sum(pair["out"]["amount"] for pair in result.derived_pairs),
+            790 * SATS,
+        )
+        self.assertEqual(
+            sum(pair["out"]["fee"] for pair in result.derived_pairs),
+            10 * SATS,
+        )
+        self.assertEqual(result.dropped_out_ids, {"a-out", "b-out"})
+        self.assertEqual(result.dropped_in_ids, {"c-in"})
+
+    def test_spent_historical_prevout_and_destination_observation_reconstruct_move(self):
+        txid = "ab" * 32
+        prev_txid = "cd" * 32
+        source_raw = _liquid_raw(
+            txid=txid,
+            vin=[
+                {
+                    "txid": prev_txid,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT["A"],
+                        "value_sats": 1000,
+                        "asset_id": LIQUID_ASSET,
+                        "asset": "LBTC",
+                    },
+                }
+            ],
+            vout=[
+                {"n": 0, "scriptpubkey": SCRIPT["B"]},
+                {"n": 1, "scriptpubkey": SCRIPT["EXT"]},
+                {
+                    "n": 2,
+                    "scriptpubkey": "",
+                    "value_sats": 19,
+                    "asset_id": LIQUID_ASSET,
+                    "asset": "LBTC",
+                    "role": "fee",
+                },
+            ],
+        )
+        destination_raw = _liquid_raw(
+            txid=txid,
+            vin=[{"txid": prev_txid, "vout": 0}],
+            vout=[
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT["B"],
+                    "value_sats": 600,
+                    "asset_id": LIQUID_ASSET,
+                    "asset": "LBTC",
+                    "role": "owned",
+                },
+                {"n": 1, "scriptpubkey": SCRIPT["EXT"]},
+                {
+                    "n": 2,
+                    "scriptpubkey": "",
+                    "value_sats": 19,
+                    "asset_id": LIQUID_ASSET,
+                    "asset": "LBTC",
+                    "role": "fee",
+                },
+            ],
+        )
+        source = _liquid_row(
+            row_id="a-out",
+            wallet_id="A",
+            direction="outbound",
+            amount_sats=981,
+            fee_sats=19,
+            txid=txid,
+            raw_json=source_raw,
+        )
+        destination = _liquid_row(
+            row_id="b-in",
+            wallet_id="B",
+            direction="inbound",
+            amount_sats=600,
+            fee_sats=0,
+            txid=txid,
+            raw_json=destination_raw,
+        )
+        index = _liquid_index()
+        self.assertEqual(index.by_outpoint, {})  # no current-UTXO shortcut
+
+        result = derive_ownership_transfers(
+            [source, destination],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertEqual(result.derived_pairs[0]["out"]["amount"], 600 * SATS)
+        self.assertEqual(result.derived_pairs[0]["in"]["id"], "b-in")
+        self.assertEqual(result.out_row_overrides["a-out"]["amount"], 381 * SATS)
+        self.assertEqual(result.out_row_overrides["a-out"]["fee"], 0)
+        self.assertFalse(result.blocked_sources)
+
+    def test_multi_asset_outputs_are_conserved_independently(self):
+        txid = "ef" * 32
+        prev_txid = "12" * 32
+        source_raw = _liquid_raw(
+            txid=txid,
+            vin=[
+                {
+                    "txid": prev_txid,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT["A"],
+                        "value_sats": 1000,
+                        "asset_id": LIQUID_ASSET,
+                        "asset": "LBTC",
+                    },
+                }
+            ],
+            vout=[
+                {"n": 0, "scriptpubkey": SCRIPT["B"]},
+                {"n": 1, "scriptpubkey": SCRIPT["B"]},
+                {"n": 2, "scriptpubkey": SCRIPT["EXT"]},
+                {
+                    "n": 3,
+                    "scriptpubkey": "",
+                    "value_sats": 19,
+                    "asset_id": LIQUID_ASSET,
+                    "asset": "LBTC",
+                    "role": "fee",
+                },
+            ],
+        )
+        lbtc_destination_raw = _liquid_raw(
+            txid=txid,
+            vin=[{"txid": prev_txid, "vout": 0}],
+            vout=[
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT["B"],
+                    "value_sats": 600,
+                    "asset_id": LIQUID_ASSET,
+                    "asset": "LBTC",
+                },
+                {
+                    "n": 1,
+                    "scriptpubkey": SCRIPT["B"],
+                    "value_sats": 300,
+                    "asset_id": LIQUID_OTHER_ASSET,
+                    "asset": "USDT",
+                },
+                {"n": 2, "scriptpubkey": SCRIPT["EXT"]},
+                {
+                    "n": 3,
+                    "scriptpubkey": "",
+                    "value_sats": 19,
+                    "asset_id": LIQUID_ASSET,
+                    "asset": "LBTC",
+                    "role": "fee",
+                },
+            ],
+        )
+        other_destination_raw = _liquid_raw(
+            txid=txid,
+            vin=[{"txid": prev_txid, "vout": 0}],
+            vout=json.loads(lbtc_destination_raw)["vout"],
+            asset_id=LIQUID_OTHER_ASSET,
+            asset="USDT",
+        )
+        rows = [
+            _liquid_row(
+                row_id="a-out",
+                wallet_id="A",
+                direction="outbound",
+                amount_sats=981,
+                fee_sats=19,
+                txid=txid,
+                raw_json=source_raw,
+            ),
+            _liquid_row(
+                row_id="b-lbtc",
+                wallet_id="B",
+                direction="inbound",
+                amount_sats=600,
+                fee_sats=0,
+                txid=txid,
+                raw_json=lbtc_destination_raw,
+            ),
+            _liquid_row(
+                row_id="b-usdt",
+                wallet_id="B",
+                direction="inbound",
+                amount_sats=300,
+                fee_sats=0,
+                txid=txid,
+                raw_json=other_destination_raw,
+                asset="USDT",
+            ),
+        ]
+        result = derive_ownership_transfers(
+            rows,
+            index=_liquid_index(),
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertEqual(result.derived_pairs[0]["out"]["amount"], 600 * SATS)
+        self.assertEqual(result.derived_pairs[0]["in"]["id"], "b-lbtc")
+        self.assertEqual(result.out_row_overrides["a-out"]["amount"], 381 * SATS)
+
+    def test_owned_confidential_output_without_value_blocks(self):
+        txid = "34" * 32
+        raw = _liquid_raw(
+            txid=txid,
+            vin=[
+                {
+                    "txid": "56" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT["A"],
+                        "value_sats": 1000,
+                        "asset_id": LIQUID_ASSET,
+                        "asset": "LBTC",
+                    },
+                }
+            ],
+            vout=[{"n": 0, "scriptpubkey": SCRIPT["B"]}],
+        )
+        source = _liquid_row(
+            row_id="a-out",
+            wallet_id="A",
+            direction="outbound",
+            amount_sats=1000,
+            fee_sats=0,
+            txid=txid,
+            raw_json=raw,
+        )
+        result = derive_ownership_transfers(
+            [source],
+            index=_liquid_index(),
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+        self.assertFalse(result.derived_pairs)
+        self.assertEqual(
+            result.blocked_sources[0]["reason"],
+            "ownership_transfer_asset_evidence_incomplete",
+        )
+
+    def test_graphless_liquid_shortfall_is_never_restored_as_fee(self):
+        txid = "78" * 32
+        source = _liquid_row(
+            row_id="a-out",
+            wallet_id="A",
+            direction="outbound",
+            amount_sats=981,
+            fee_sats=19,
+            txid=txid,
+            raw_json=json.dumps(
+                {
+                    "txid": txid,
+                    "chain": "liquid",
+                    "network": "liquidv1",
+                    "component": {"asset_id": LIQUID_ASSET, "asset": "LBTC"},
+                }
+            ),
+        )
+        destination = _liquid_row(
+            row_id="b-in",
+            wallet_id="B",
+            direction="inbound",
+            amount_sats=600,
+            fee_sats=0,
+            txid=txid,
+            raw_json=json.dumps(
+                {
+                    "txid": txid,
+                    "chain": "liquid",
+                    "network": "liquidv1",
+                    "component": {"asset_id": LIQUID_ASSET, "asset": "LBTC"},
+                }
+            ),
+        )
+        pair = {"out": source, "in": destination}
+        index = _liquid_index()
+        self.assertEqual(graph_partial_payment_out_ids([pair], index), {"a-out"})
+        self.assertEqual(
+            graph_multi_owned_destination_out_ids([pair], index), {"a-out"}
+        )
+        result = derive_ownership_transfers(
+            [source, destination],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+        self.assertFalse(result.derived_pairs)
+        self.assertEqual(
+            result.blocked_sources[0]["reason"], "liquid_transfer_graph_incomplete"
+        )
+
     def test_graphless_pair_not_flagged(self):
         out = {
             "id": "a-out", "wallet_id": "A", "direction": "outbound", "asset": "BTC",
@@ -1647,7 +2541,7 @@ class GraphPartialPaymentTests(unittest.TestCase):
         }
         c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=50_000_000, txid="csv")
         flagged = graph_partial_payment_out_ids(
-            [self._pair(out, c_in)],
+            [{"out": out, "in": c_in}],
             _index({SCRIPT["C"]: ("C", "C")}),
         )
         self.assertEqual(flagged, set())

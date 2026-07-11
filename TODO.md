@@ -766,13 +766,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   decomposes graph-backed and recorded 1→N fan-outs; deterministic swap
   suppression now covers conserving 1-out/N-in same-txid groups; and current
   `owned_fanout_unresolved` / pairable `ownership_transfer_*` quarantines emit
-  exact `ownership_graph` cards through the existing transfer pair store.
+  confidence-preserving `ownership_graph` cards through the pair store: exact
+  requires whole-row canonical coverage; amount-compatible cards stay strong.
   Ownership cards are deliberately manual-only (excluded from rules and every
   bulk path), while conflict clustering supports choosing each real receipt.
 - [x] Better cross-asset transfer accounting beyond audit metadata
   (matcher + rules + saved views + `/swaps` review queue land swap
-  pairing end-to-end; AT carrying-value continues through rp2; generic
-  profiles still SELL + BUY pending upstream rp2 multi-asset carry).
+  pairing end-to-end; BTC/LBTC rail changes can carry Bitcoin basis on every
+  profile, AT carrying-value for other reviewed crypto swaps continues through
+  rp2, and unsupported unlike-asset generic swaps stay SELL + BUY).
 - [x] Direct swap payout reviews for provider-settled external payments:
   source outflow, target payout amount, reviewed sale proceeds, swap fee,
   and Austrian carrying-value handoff are modeled without fake recipient
@@ -782,24 +784,28 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   the refund/timeout branch, esplora/electrum/Liquid sync links a refund
   to its lockup via `transactions.swap_refund_funding_txid` (also accepted
   as a generic import-record/CSV field), and the matcher surfaces it as an
-  exact `swap-refund` candidate (method `htlc_refund`, same-wallet and
-  window-independent). Surfacing only — no silent auto-pair; the round
+  `swap-refund` candidate (method `htlc_refund`, same-wallet and
+  window-independent). Exact requires one witness-proven canonical funding
+  input plus whole-row amount coverage; txid/outpoint metadata stays strong.
+  Surfacing only — no silent auto-pair; the round
   trip books only the fee, not a SELL + BUY.
-- [ ] Widen the failed-swap refund link beyond freshly chain-synced Boltz
-  v1 P2WSH refunds: backfill `swap_refund_funding_txid` from `raw_json`
-  for rows synced before the column existed, and fold it into the
-  bitcoinrpc HTLC enrichment below. Boltz v2 Taproot cooperative/key-path
+- [x] Widen the failed-swap refund link beyond freshly chain-synced Boltz
+  v1 P2WSH refunds: matcher replay now recovers a unique funding outpoint from
+  stored Esplora/Electrum/Core-style `raw_json` witnesses for rows synced before
+  the dedicated columns existed. Ambiguous batch refunds decline instead of
+  choosing one. Fresh sync still persists the columns. Boltz v2 Taproot cooperative/key-path
   refunds reveal no witness, so chain-only rows stay heuristic/manual by
-  physics; redacted provider/SDK metadata with a swap id + route txids is the
-  exact path for those cooperative spends.
+  physics; redacted provider/SDK metadata with a swap id, canonical route txids,
+  and explicit whole-row principal amounts is the exact path for those
+  cooperative spends. Route-only metadata stays strong/manual.
 - [ ] Add native Boltz SDK/client import or regtest bridge for cooperative v2
-  swaps: persist only redacted provider id, flow, route txids, status/version,
-  and Taproot/cooperative spend hints so chain/reverse/refund swaps can be
+  swaps: persist only redacted provider id, flow, route txids, explicit principal
+  amounts, status/version, and Taproot/cooperative spend hints so chain/reverse/refund swaps can be
   audited without treating chain-only key-path spends as exact evidence.
   Shipped in the Boltz regtest lane: optional `KASSIBER_BOLTZ_V2_EVIDENCE`
   / `--v2-evidence` ingestion for real wallet/client/provider evidence, with
-  placeholder-looking ids rejected and exact `provider_swap_id` pairing
-  asserted in a temporary Kassiber book. If those facts are missing, Kassiber
+  placeholder-looking ids rejected and exact whole-row `provider_swap_id`
+  pairing asserted in a temporary Kassiber book. If those facts are missing, Kassiber
   should stay on heuristic/manual swap suggestions. Still open: drive the
   cooperative signing paths directly through Boltz's official client/SDK inside
   the harness.
@@ -1025,12 +1031,27 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     (matching the SELL path). Affects plain self-transfers and the derived
     consolidation/fan-out legs. Test:
     `test_rp2_ownership_transfers.AustrianSelfTransferEngineTest`.
-  - [x] **`derive_recorded_fanout_transfers` grouped by raw external_id (P3).** It
-    diverged from every sibling self-transfer path (which use `normalize_group_txid`),
-    so a mixed-case 64-hex txid fan-out (source synced lowercase, dest CSV-imported
-    uppercase) split into separate groups and stuck in quarantine. Fixed: wrap the
-    group key in `normalize_group_txid`. Test:
-    `test_ownership_transfers.RecordedFanoutDeriverTests.test_mixed_case_txid_fanout_decomposes`.
+  - [x] **Automatic ownership grouping trusted arbitrary `external_id` values
+    (P1, final architecture audit).** Provider batch ids and CSV labels could be
+    promoted to physical self-transfer identity, while the same txid on different
+    networks was not scoped apart. `detect_intra_transfers`, deterministic swap
+    suppression, graph merging, recorded fan-out/consolidation derivation, and the
+    fan-out quarantine now share a canonical `(chain, network, 64-hex txid, asset)`
+    boundary. Stored graph txids win; conflicting/unsupported chain metadata fails
+    closed; Liquid never guesses a blank network. Arbitrary ids remain available to
+    reviewed pairs/custody components. Mixed-case real txids still normalize.
+  - [x] **Provider `swap_id` was exact/bulk-eligible without whole-row coverage
+    (P1, final architecture audit).** Provider evidence is now exact only for a
+    unique 1:1 key with canonical route txids plus explicit msat-denominated send
+    and receive amounts equal to both complete rows. Route-only, duplicated,
+    conflicting, or merely fee-tolerance-plausible evidence stays strong/manual.
+  - [x] **`amount_includes_fee` silently called every transfer gap a miner fee
+    (P1, final architecture audit).** Fee-inclusive gaps now require a complete
+    valued canonical transaction graph (from any consistent owned observation) and
+    exact fee equality. Missing/mismatched evidence fails closed for 1:1 and manual
+    multi-pair booking; graph derivation allocates the proven fee and leaves any
+    external residual as a disposal. Explicit custody components remain the escape
+    hatch for missing wallets and N:M attribution.
   - [x] **bitcoinrpc multi-output tx double-counts the network fee (P2,
     pre-existing).** `record_from_bitcoinrpc_details` summed `fee` per detail, but
     Bitcoin Core stamps the SAME whole-tx fee on every `send`-category detail, so an
@@ -1206,18 +1227,21 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     should extend to swap legs and self-transfer fee slices (today only
     standalone disposals carry it). Changing the default silently would change
     existing users' tax outcomes, so it needs an explicit migration story.
-  - [ ] **Plumb LND channel-lifecycle data (open Codex threads on #405).**
-    `_persist_lnd_channel_records` writes `channel_id=NULL` and
-    `amount_msat=0`, so on LND the close→open link never forms (close
-    capacity-MOVEs are dropped and the node wallet strands phantom holdings),
-    `_funding_amount_mismatch` / `_close_balance_mismatch` can never fire
-    (funding txs that also pay external recipients are absorbed untaxed;
-    vin-matched close sweeps are unbounded), and the whole round-3 channel
-    hardening only takes effect for CLN-with-bkpr balances. Populate
-    channel ids + funded/settled balances from LND `ListChannels` /
-    `ClosedChannels`, and fix the CLN `multifundchannel` first-wins account
-    collapse (`open_txids.setdefault`) that strands closes of channels 2..N
-    in a batched open.
+  - [x] **Harden LND and CLN channel-lifecycle evidence.** LND records now use
+    a stable namespaced funding-outpoint channel id, retain settled + timelocked
+    close balances, skip remote-funded opens, and require an explicit local
+    funding contribution before suppressing an L1 open with a compensating
+    MOVE. Stock LND REST capacity is deliberately *not* treated as the user's
+    contribution (push amounts, leases, and dual funding make that unsafe):
+    when the contribution is unavailable, the amount remains incomplete and
+    the lifecycle path fails closed into review. CLN now retains one lifecycle
+    record per bookkeeper channel account, including every account in a shared
+    `multifundchannel` funding transaction; account-aware external ids prevent
+    persistence collisions, while the lifecycle engine still sums all channel
+    contributions for one whole-transaction mismatch check and emits one
+    atomic on-chain-wallet → node MOVE. On close, multiple competing force-close
+    vin matches require an explicit local commitment outpoint; otherwise the
+    engine emits `CHANNEL_CLOSE_MISMATCH` and no MOVE.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,

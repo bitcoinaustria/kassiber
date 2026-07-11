@@ -33,28 +33,415 @@ class ChannelRoleMapTest(unittest.TestCase):
     def test_funding_outbound_maps_to_channel_open(self) -> None:
         channels = [{"funding_txid": FUNDING_TXID, "closing_txid": CLOSING_TXID}]
         txs = [
-            {"id": "open", "external_id": FUNDING_TXID, "direction": "outbound"},
-            {"id": "close", "external_id": CLOSING_TXID, "direction": "inbound"},
-            {"id": "other", "external_id": "cc" * 32, "direction": "outbound"},
+            {"id": "open", "external_id": FUNDING_TXID, "external_id_kind": "txid", "direction": "outbound"},
+            {"id": "close", "external_id": CLOSING_TXID, "external_id_kind": "txid", "direction": "inbound"},
+            {"id": "other", "external_id": "cc" * 32, "external_id_kind": "txid", "direction": "outbound"},
         ]
         roles = channel_role_map(channels, txs)
         self.assertEqual(roles, {"open": CHANNEL_OPEN, "close": CHANNEL_CLOSE})
 
     def test_funding_outpoint_form_and_case_folding(self) -> None:
         channels = [{"funding_outpoint": f"{FUNDING_TXID}:1"}]
-        txs = [{"id": "open", "external_id": FUNDING_TXID.upper(), "direction": "outbound"}]
+        txs = [{"id": "open", "external_id": FUNDING_TXID.upper(), "external_id_kind": "txid", "direction": "outbound"}]
         self.assertEqual(channel_role_map(channels, txs), {"open": CHANNEL_OPEN})
 
     def test_direction_guard(self) -> None:
         # A change/receive leg that shares the funding txid but is inbound must
         # NOT be labeled a channel open.
         channels = [{"funding_txid": FUNDING_TXID}]
-        txs = [{"id": "change", "external_id": FUNDING_TXID, "direction": "inbound"}]
+        txs = [{"id": "change", "external_id": FUNDING_TXID, "external_id_kind": "txid", "direction": "inbound"}]
         self.assertEqual(channel_role_map(channels, txs), {})
 
     def test_no_channels_is_empty(self) -> None:
-        txs = [{"id": "x", "external_id": FUNDING_TXID, "direction": "outbound"}]
+        txs = [{"id": "x", "external_id": FUNDING_TXID, "external_id_kind": "txid", "direction": "outbound"}]
         self.assertEqual(channel_role_map([], txs), {})
+
+    def test_noncanonical_channel_ids_never_suppress_or_pair_l1_rows(self) -> None:
+        channels = [
+            {
+                "funding_txid": "provider-funding-id",
+                "closing_txid": "provider-closing-id",
+                "funding_amount_msat": 100_000_000,
+                "close_balance_msat": 100_000_000,
+                "wallet_id": "node",
+            }
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": "provider-funding-id",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": 100_000_000,
+                "fee": 0,
+                "occurred_at": "2026-01-01T00:00:00Z",
+            },
+            {
+                "id": "close",
+                "external_id": "provider-closing-id",
+                "direction": "inbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": 100_000_000,
+                "fee": 0,
+                "occurred_at": "2026-02-01T00:00:00Z",
+            },
+        ]
+        wallet_refs = {
+            "node": {
+                "id": "node",
+                "label": "Node",
+                "wallet_account_id": None,
+                "account_code": None,
+                "account_label": None,
+            }
+        }
+
+        self.assertEqual(channel_role_map(channels, txs), {})
+        self.assertEqual(channel_transfer_pairs(channels, txs, wallet_refs), [])
+
+    def test_same_txid_on_main_and_regtest_matches_only_the_channel_network(self) -> None:
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "wallet_id": "node",
+                "config_json": {"chain": "bitcoin", "network": "main"},
+            }
+        ]
+        txs = [
+            {
+                "id": "main-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "mainnet"},
+            },
+            {
+                "id": "regtest-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+            },
+        ]
+
+        self.assertEqual(
+            channel_role_map(channels, txs),
+            {"main-open": CHANNEL_OPEN},
+        )
+        pairs = channel_transfer_pairs(channels, txs, _wallet_refs())
+        self.assertEqual(["main-open"], [pair["out"]["id"] for pair in pairs])
+
+    def test_conflicting_wallet_and_backend_network_metadata_fail_closed(self) -> None:
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "wallet_id": "node",
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+                "chain": "bitcoin",
+                "network": "main",
+            }
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "main"},
+            }
+        ]
+
+        self.assertEqual({}, channel_role_map(channels, txs))
+        self.assertEqual([], channel_transfer_pairs(channels, txs, _wallet_refs()))
+
+    def test_adapter_observed_network_scopes_blank_backend_and_wallet(self) -> None:
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "wallet_id": "node",
+                "raw_json": {"chain": "bitcoin", "network": "regtest"},
+            }
+        ]
+        txs = [
+            {
+                "id": "main-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "main"},
+            },
+            {
+                "id": "regtest-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+            },
+        ]
+
+        self.assertEqual(
+            {"regtest-open": CHANNEL_OPEN},
+            channel_role_map(channels, txs),
+        )
+
+    def test_conflicting_observed_and_backend_network_fail_closed(self) -> None:
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "wallet_id": "node",
+                "raw_json": {"chain": "bitcoin", "network": "regtest"},
+                "chain": "bitcoin",
+                "network": "mainnet",
+            }
+        ]
+        txs = [
+            {
+                "id": "regtest-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+            }
+        ]
+
+        self.assertEqual({}, channel_role_map(channels, txs))
+        self.assertEqual([], channel_transfer_pairs(channels, txs, _wallet_refs()))
+
+    def test_contradictory_raw_graph_and_external_txid_never_match(self) -> None:
+        other_txid = "cc" * 32
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "wallet_id": "node",
+            }
+        ]
+        txs = [
+            {
+                "id": "contradictory-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "raw_json": {
+                    "txid": other_txid,
+                    "vin": [],
+                    "vout": [],
+                },
+            }
+        ]
+
+        self.assertEqual({}, channel_role_map(channels, txs))
+        self.assertEqual([], channel_transfer_pairs(channels, txs, _wallet_refs()))
+
+    def test_contradictory_funding_txid_and_outpoint_never_match(self) -> None:
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_outpoint": f"{'cc' * 32}:0",
+                "funding_amount_msat": ONE_BTC,
+                "wallet_id": "node",
+            }
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+            }
+        ]
+
+        self.assertEqual({}, channel_role_map(channels, txs))
+        self.assertEqual([], channel_transfer_pairs(channels, txs, _wallet_refs()))
+
+    def test_close_and_sweep_do_not_cross_networks(self) -> None:
+        sweep_txid = "dd" * 32
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "close_balance_msat": ONE_BTC,
+                "wallet_id": "node",
+                "config_json": {"chain": "bitcoin", "network": "main"},
+            }
+        ]
+        txs = [
+            {
+                "id": "main-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "main"},
+            },
+            {
+                "id": "regtest-direct-close",
+                "external_id": CLOSING_TXID,
+                "external_id_kind": "txid",
+                "direction": "inbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+            },
+            {
+                "id": "regtest-sweep",
+                "external_id": sweep_txid,
+                "external_id_kind": "txid",
+                "direction": "inbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+                "raw_json": {
+                    "txid": sweep_txid,
+                    "chain": "bitcoin",
+                    "network": "regtest",
+                    "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                },
+            },
+        ]
+
+        self.assertEqual(
+            {"main-open": CHANNEL_OPEN},
+            channel_role_map(channels, txs),
+        )
+        pairs = channel_transfer_pairs(channels, txs, _wallet_refs())
+        self.assertEqual([CHANNEL_OPEN], [pair["kind"] for pair in pairs])
+
+    def test_split_atomic_channel_cannot_link_open_and_close_across_networks(self) -> None:
+        channel_id = f"lnd:{FUNDING_TXID}:0"
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "wallet_id": "node",
+                "channel_id": channel_id,
+                "config_json": {"chain": "bitcoin", "network": "main"},
+            },
+            {
+                "closing_txid": CLOSING_TXID,
+                "close_balance_msat": ONE_BTC,
+                "wallet_id": "node",
+                "channel_id": channel_id,
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+            },
+        ]
+        txs = [
+            {
+                "id": "main-open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "main"},
+            },
+            {
+                "id": "regtest-close",
+                "external_id": CLOSING_TXID,
+                "external_id_kind": "txid",
+                "direction": "inbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "config_json": {"chain": "bitcoin", "network": "regtest"},
+            },
+        ]
+
+        pairs = channel_transfer_pairs(channels, txs, _wallet_refs())
+        self.assertEqual([CHANNEL_OPEN], [pair["kind"] for pair in pairs])
+        self.assertEqual(
+            {
+                "main-open": CHANNEL_OPEN,
+                "regtest-close": CHANNEL_CLOSE_MISMATCH,
+            },
+            channel_role_map(channels, txs),
+        )
+
+    def test_contradictory_close_and_sweep_graphs_never_suppress(self) -> None:
+        sweep_external_txid = "dd" * 32
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "funding_amount_msat": ONE_BTC,
+                "close_balance_msat": ONE_BTC,
+                "wallet_id": "node",
+            }
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+            },
+            {
+                "id": "contradictory-direct-close",
+                "external_id": CLOSING_TXID,
+                "external_id_kind": "txid",
+                "direction": "inbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "raw_json": {"txid": "cc" * 32, "vin": [], "vout": []},
+            },
+            {
+                "id": "contradictory-sweep",
+                "external_id": sweep_external_txid,
+                "external_id_kind": "txid",
+                "direction": "inbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": ONE_BTC,
+                "raw_json": {
+                    "txid": "ee" * 32,
+                    "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                },
+            },
+        ]
+
+        self.assertEqual({"open": CHANNEL_OPEN}, channel_role_map(channels, txs))
+        pairs = channel_transfer_pairs(channels, txs, _wallet_refs())
+        self.assertEqual([CHANNEL_OPEN], [pair["kind"] for pair in pairs])
 
     def test_funding_with_external_payment_flags_mismatch(self) -> None:
         # The recorded outflow (channel + external payment) clearly exceeds the
@@ -66,6 +453,7 @@ class ChannelRoleMapTest(unittest.TestCase):
             {
                 "id": "open",
                 "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
                 "direction": "outbound",
                 "amount": 130_000_000_000,  # 0.3 BTC beyond the channel
                 "fee": 500_000,
@@ -87,6 +475,7 @@ class ChannelRoleMapTest(unittest.TestCase):
             {
                 "id": "open",
                 "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
                 "direction": "outbound",
                 "amount": 100_000_000_000,
                 "fee": 500_000,
@@ -102,12 +491,44 @@ class ChannelRoleMapTest(unittest.TestCase):
             {
                 "id": "open",
                 "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
                 "direction": "outbound",
                 "amount": 100_000_000_000,
                 "fee": 500_000,
             }
         ]
         self.assertEqual(channel_role_map(channels, txs), {"open": CHANNEL_OPEN})
+
+    def test_lnd_amount_bearing_open_rejects_any_principal_residual(self) -> None:
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": 100_000_000,
+                "wallet_id": "node",
+                "channel_id": f"lnd:{FUNDING_TXID}:0",
+            }
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": FUNDING_TXID,
+                "external_id_kind": "txid",
+                "direction": "outbound",
+                "wallet_id": "onchain",
+                "asset": "BTC",
+                "amount": 100_001_000,
+                "fee": 0,
+                "occurred_at": "2026-01-01T00:00:00Z",
+                "description": "batched payment",
+                "note": None,
+                "kind": "withdrawal",
+            }
+        ]
+
+        self.assertEqual(
+            channel_role_map(channels, txs),
+            {"open": CHANNEL_OPEN_MISMATCH},
+        )
 
 
 def _profile():
@@ -174,6 +595,7 @@ def _row(
         "description": tx_id,
         "note": None,
         "external_id": external_id or tx_id,
+        "external_id_kind": "txid",
         "occurred_at": occurred_at,
     }
 
@@ -386,6 +808,74 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
         self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
 
+    def test_multifund_accounts_share_one_open_move_and_link_each_close(self) -> None:
+        # CLN persists one open record per bookkeeper account even though
+        # multifundchannel gives all of them the same funding txid. Lifecycle
+        # validation sums the per-channel contributions for the whole L1 row,
+        # but materializes exactly one atomic wallet->node MOVE. A later close
+        # for channel B must still find B's funding record.
+        sixty = 60_000_000_000
+        forty = 40_000_000_000
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+            _row(
+                "close-b",
+                "inbound",
+                forty,
+                "2025-07-01T00:00:00Z",
+                external_id=CLOSING_TXID,
+            ),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": sixty,
+                "wallet_id": "node",
+                "channel_id": "channel-a",
+            },
+            {
+                "funding_txid": FUNDING_TXID,
+                "funding_amount_msat": forty,
+                "wallet_id": "node",
+                "channel_id": "channel-b",
+            },
+            {
+                "closing_txid": CLOSING_TXID,
+                "close_balance_msat": forty,
+                "wallet_id": "node",
+                "channel_id": "channel-b",
+            },
+        ]
+
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+        self.assertEqual(
+            [CHANNEL_OPEN, CHANNEL_CLOSE], [pair["kind"] for pair in pairs]
+        )
+        self.assertEqual(
+            1, sum(pair["kind"] == CHANNEL_OPEN for pair in pairs)
+        )
+        roles = channel_role_map(channel_rows, rows)
+        self.assertEqual(
+            {"fund": CHANNEL_OPEN, "close-b": CHANNEL_CLOSE}, roles
+        )
+
+        result = _run(rows, roles, pairs)
+        self.assertEqual([], result.quarantines)
+        self.assertFalse(_has_disposal(result))
+        wallet_quantities = {
+            key[1]: totals["quantity"]
+            for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(Decimal("0.4"), wallet_quantities["onchain"])
+        self.assertEqual(Decimal("0.6"), wallet_quantities["node"])
+
     def test_close_only_window_does_not_synthesize_node_outflow(self) -> None:
         rows = [
             _row("close", "inbound", ONE_BTC, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
@@ -484,7 +974,11 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         # capacity double-counted plus a phantom basis reset.
         sweep_txid = "dd" * 32
         sweep_raw = json.dumps(
-            {"txid": sweep_txid, "vin": [{"txid": CLOSING_TXID, "vout": 0}]}
+            {
+                "txid": sweep_txid,
+                "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
+            }
         )
         rows = [
             _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
@@ -515,6 +1009,57 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         }
         self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
         self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
+
+    def test_unique_peer_output_payment_is_not_synthesized_as_force_close(self) -> None:
+        # Candidate cardinality is not ownership evidence. A peer may spend its
+        # commitment output in a later payment to us; accepting the only vin
+        # match silently suppresses that taxable receipt as a channel close.
+        peer_payment_txid = "dd" * 32
+        rows = [
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+            _row(
+                "peer-pay",
+                "inbound",
+                ONE_BTC,
+                "2025-08-01T00:00:00Z",
+                external_id=peer_payment_txid,
+            ),
+        ]
+        rows[1]["raw_json"] = json.dumps(
+            {
+                "txid": peer_payment_txid,
+                "vin": [{"txid": CLOSING_TXID, "vout": 1}],
+            }
+        )
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+
+        roles = channel_role_map(channel_rows, rows)
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+
+        self.assertEqual(roles["peer-pay"], CHANNEL_CLOSE_MISMATCH)
+        self.assertFalse([pair for pair in pairs if pair["kind"] == CHANNEL_CLOSE])
+
+        result = _run(rows, roles, pairs)
+        self.assertTrue(
+            any(
+                item["transaction_id"] == "peer-pay"
+                and item["reason"] == "channel_close_unresolved"
+                for item in result.quarantines
+            )
+        )
 
 
     def test_close_fee_gap_books_as_move_fee_disposal(self) -> None:
@@ -665,6 +1210,155 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(fee_entries, [])
 
 
+class AtomicNodeLifecycleTest(unittest.TestCase):
+    def test_amountless_coreln_open_cannot_suppress_a_copayment(self) -> None:
+        rows = [
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            )
+        ]
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "wallet_id": "node",
+                "channel_id": "coreln:channel-a",
+                # listpeerchannels can prove the outpoint before bookkeeper
+                # evidence proves our local contribution. The tx may also pay
+                # someone external, so txid-only evidence is not a MOVE.
+                "funding_amount_msat": 0,
+            }
+        ]
+
+        self.assertEqual(
+            CHANNEL_OPEN_MISMATCH,
+            channel_role_map(channels, rows)["fund"],
+        )
+        self.assertEqual([], channel_transfer_pairs(channels, rows, _wallet_refs()))
+
+    def test_incomplete_open_quarantines_instead_of_suppressing_l1(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+        ]
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "wallet_id": "node",
+                "channel_id": f"lnd:{FUNDING_TXID}:0",
+                "funding_amount_msat": -1,
+            }
+        ]
+        self.assertEqual(
+            channel_role_map(channels, rows)["fund"], CHANNEL_OPEN_MISMATCH
+        )
+        self.assertEqual(channel_transfer_pairs(channels, rows, _wallet_refs()), [])
+
+    def test_complete_open_gets_role_only_with_compensating_move(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+        ]
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "wallet_id": "node",
+                "channel_id": f"lnd:{FUNDING_TXID}:0",
+                "funding_amount_msat": ONE_BTC,
+            }
+        ]
+        pairs = channel_transfer_pairs(channels, rows, _wallet_refs())
+        self.assertEqual([pair["kind"] for pair in pairs], [CHANNEL_OPEN])
+        self.assertEqual(channel_role_map(channels, rows)["fund"], CHANNEL_OPEN)
+
+    def test_close_only_history_is_incomplete_not_suppressed(self) -> None:
+        rows = [
+            _row(
+                "close",
+                "inbound",
+                ONE_BTC,
+                "2025-07-01T00:00:00Z",
+                external_id=CLOSING_TXID,
+            )
+        ]
+        channel_id = f"lnd:{FUNDING_TXID}:0"
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "wallet_id": "node",
+                "channel_id": channel_id,
+                "funding_amount_msat": ONE_BTC,
+            },
+            {
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "channel_id": channel_id,
+                "close_balance_msat": ONE_BTC,
+            },
+        ]
+        self.assertEqual(channel_transfer_pairs(channels, rows, _wallet_refs()), [])
+        self.assertEqual(
+            channel_role_map(channels, rows)["close"], CHANNEL_CLOSE_MISMATCH
+        )
+
+    def test_complete_round_trip_constructs_both_moves_atomically(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+            _row(
+                "close",
+                "inbound",
+                ONE_BTC,
+                "2025-07-01T00:00:00Z",
+                external_id=CLOSING_TXID,
+            ),
+        ]
+        channel_id = f"lnd:{FUNDING_TXID}:0"
+        channels = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "wallet_id": "node",
+                "channel_id": channel_id,
+                "funding_amount_msat": ONE_BTC,
+            },
+            {
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "channel_id": channel_id,
+                "close_balance_msat": ONE_BTC,
+            },
+        ]
+        pairs = channel_transfer_pairs(channels, rows, _wallet_refs())
+        self.assertEqual(
+            [pair["kind"] for pair in pairs], [CHANNEL_OPEN, CHANNEL_CLOSE]
+        )
+        self.assertEqual(
+            channel_role_map(channels, rows),
+            {"fund": CHANNEL_OPEN, "close": CHANNEL_CLOSE},
+        )
+
+
 class MultiSweepCloseTest(unittest.TestCase):
     def test_multi_sweep_close_books_one_fee_for_the_group(self) -> None:
         # A force close pays back in several legs (to_local sweep + HTLC
@@ -672,10 +1366,18 @@ class MultiSweepCloseTest(unittest.TestCase):
         # evaluation would book each other leg's amount as a "fee" once each
         # and double-debit the node wallet.
         sweep_one = json.dumps(
-            {"txid": "dd" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 0}]}
+            {
+                "txid": "dd" * 32,
+                "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
+            }
         )
         sweep_two = json.dumps(
-            {"txid": "ee" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 1}]}
+            {
+                "txid": "ee" * 32,
+                "vin": [{"txid": CLOSING_TXID, "vout": 1}],
+                "channel_close_local_outpoint": f"{CLOSING_TXID}:1",
+            }
         )
         rows = [
             _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
@@ -716,7 +1418,13 @@ class MultiSweepCloseTest(unittest.TestCase):
         # tx; if they later pay US spending that output, our inbound must not
         # be reclassified as a close leg once the close is fully accounted —
         # that would suppress taxable income.
-        payout = json.dumps({"txid": "dd" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 0}]})
+        payout = json.dumps(
+            {
+                "txid": "dd" * 32,
+                "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
+            }
+        )
         peer_payment = json.dumps(
             {"txid": "ee" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 1}]}
         )
@@ -741,6 +1449,159 @@ class MultiSweepCloseTest(unittest.TestCase):
         roles = channel_role_map(channel_rows, rows)
         self.assertEqual(roles.get("sweep"), CHANNEL_CLOSE)
         self.assertNotIn("peer-pay", roles)
+
+    def test_competing_vin_matches_without_local_outpoint_evidence_fail_closed(self) -> None:
+        # The earlier receipt spends the peer's commitment output; the later
+        # receipt is our actual local sweep. Their amounts happen to sum to the
+        # captured close balance, so chronological first-fit used to suppress
+        # both as non-taxable close receipts.
+        peer_payment = json.dumps(
+            {"txid": "dd" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 1}]}
+        )
+        local_sweep = json.dumps(
+            {"txid": "ee" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 0}]}
+        )
+        rows = [
+            _row(
+                "fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+            _row(
+                "peer-pay", "inbound", 30_000_000_000,
+                "2025-07-01T00:00:00Z", external_id="dd" * 32,
+            ),
+            _row(
+                "local-sweep", "inbound", 70_000_000_000,
+                "2025-08-01T00:00:00Z", external_id="ee" * 32,
+            ),
+        ]
+        rows[1]["raw_json"] = peer_payment
+        rows[2]["raw_json"] = local_sweep
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+
+        roles = channel_role_map(channel_rows, rows)
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+
+        self.assertEqual(roles["peer-pay"], CHANNEL_CLOSE_MISMATCH)
+        self.assertEqual(roles["local-sweep"], CHANNEL_CLOSE_MISMATCH)
+        self.assertFalse([pair for pair in pairs if pair["kind"] == CHANNEL_CLOSE])
+
+    def test_competing_vin_matches_select_only_exact_local_outpoint(self) -> None:
+        peer_payment = json.dumps(
+            {"txid": "dd" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 1}]}
+        )
+        local_sweep = json.dumps(
+            {
+                "txid": "ee" * 32,
+                "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
+            }
+        )
+        rows = [
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+            _row(
+                "peer-pay",
+                "inbound",
+                30_000_000_000,
+                "2025-07-01T00:00:00Z",
+                external_id="dd" * 32,
+            ),
+            _row(
+                "local-sweep",
+                "inbound",
+                70_000_000_000,
+                "2025-08-01T00:00:00Z",
+                external_id="ee" * 32,
+            ),
+        ]
+        rows[1]["raw_json"] = peer_payment
+        rows[2]["raw_json"] = local_sweep
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": 70_000_000_000,
+            }
+        ]
+
+        roles = channel_role_map(channel_rows, rows)
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+
+        self.assertNotIn("peer-pay", roles)
+        self.assertEqual(CHANNEL_CLOSE, roles["local-sweep"])
+        close_pairs = [pair for pair in pairs if pair["kind"] == CHANNEL_CLOSE]
+        self.assertEqual(["local-sweep"], [pair["in"]["id"] for pair in close_pairs])
+
+    def test_duplicate_claims_of_one_local_outpoint_fail_closed(self) -> None:
+        duplicate_marker = f"{CLOSING_TXID}:0"
+        sweep_one = json.dumps(
+            {
+                "txid": "dd" * 32,
+                "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                "channel_close_local_outpoint": duplicate_marker,
+            }
+        )
+        sweep_two = json.dumps(
+            {
+                "txid": "ee" * 32,
+                "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                "channel_close_local_outpoint": duplicate_marker,
+            }
+        )
+        rows = [
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+            _row(
+                "sweep-1",
+                "inbound",
+                40_000_000_000,
+                "2025-07-01T00:00:00Z",
+                external_id="dd" * 32,
+            ),
+            _row(
+                "sweep-2",
+                "inbound",
+                60_000_000_000,
+                "2025-08-01T00:00:00Z",
+                external_id="ee" * 32,
+            ),
+        ]
+        rows[1]["raw_json"] = sweep_one
+        rows[2]["raw_json"] = sweep_two
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+
+        roles = channel_role_map(channel_rows, rows)
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+
+        self.assertEqual(CHANNEL_CLOSE_MISMATCH, roles["sweep-1"])
+        self.assertEqual(CHANNEL_CLOSE_MISMATCH, roles["sweep-2"])
+        self.assertFalse([pair for pair in pairs if pair["kind"] == CHANNEL_CLOSE])
 
 
 if __name__ == "__main__":  # pragma: no cover

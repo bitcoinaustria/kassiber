@@ -23,12 +23,15 @@ from embit import hashes as _embit_hashes
 from kassiber.core.sync_backends import (
     _esplora_witness_items,
     _extract_payment_hash_from_witnesses,
+    _extract_unique_claim_payment_hash_outpoint,
+    _extract_refund_funding_outpoint,
     _extract_refund_funding_txid,
     _liquid_witness_items,
     _payment_hash_fields,
     _swap_refund_fields,
     decode_raw_transaction,
     liquid_input_txid,
+    liquid_input_vout,
     record_from_bitcoin_esplora_tx,
     record_from_electrum_tx,
 )
@@ -85,11 +88,54 @@ class EsploraEnrichmentTests(unittest.TestCase):
         result = _extract_payment_hash_from_witnesses([_esplora_witness_items({"witness": _claim_witness_hex()})])
         self.assertEqual(result, _PAYMENT_HASH)
 
+    def test_batched_claim_witnesses_do_not_choose_the_first_hash(self):
+        witness = _esplora_witness_items({"witness": _claim_witness_hex()})
+        self.assertIsNone(_extract_payment_hash_from_witnesses([witness, witness]))
+
+    def test_unique_claim_requires_one_canonical_funding_outpoint(self):
+        vins = [
+            {"txid": "11" * 32, "vout": 7, "witness": _claim_witness_hex()}
+        ]
+        self.assertEqual(
+            _extract_unique_claim_payment_hash_outpoint(
+                vins, _esplora_witness_items
+            ),
+            (_PAYMENT_HASH, "11" * 32, 7),
+        )
+        self.assertIsNone(
+            _extract_unique_claim_payment_hash_outpoint(
+                [{"txid": "provider-id", "vout": 7, "witness": _claim_witness_hex()}],
+                _esplora_witness_items,
+            )
+        )
+        self.assertIsNone(
+            _extract_unique_claim_payment_hash_outpoint(
+                [*vins, {"txid": "22" * 32, "vout": 8, "witness": _claim_witness_hex()}],
+                _esplora_witness_items,
+            )
+        )
+        self.assertIsNone(
+            _extract_unique_claim_payment_hash_outpoint(
+                [
+                    *vins,
+                    {
+                        "txid": "22" * 32,
+                        "vout": 8,
+                        "witness": ["ordinary-wallet-signature"],
+                    },
+                ],
+                _esplora_witness_items,
+            )
+        )
+
     def test_payment_hash_fields_short_circuits_on_none(self):
         self.assertEqual(_payment_hash_fields(None), {})
         self.assertEqual(
-            _payment_hash_fields(_PAYMENT_HASH),
-            {"payment_hash": _PAYMENT_HASH, "payment_hash_source": "chain_script"},
+            _payment_hash_fields((_PAYMENT_HASH, "11" * 32, 7)),
+            {
+                "payment_hash": _PAYMENT_HASH,
+                "payment_hash_source": "chain_script_unique_outpoint",
+            },
         )
 
     def test_bitcoin_esplora_record_carries_payment_hash(self):
@@ -98,6 +144,8 @@ class EsploraEnrichmentTests(unittest.TestCase):
             "txid": "tx-claim-1",
             "vin": [
                 {
+                    "txid": "11" * 32,
+                    "vout": 0,
                     "prevout": {"scriptpubkey": spk, "value": 100_000},
                     "witness": _claim_witness_hex(),
                 }
@@ -109,7 +157,71 @@ class EsploraEnrichmentTests(unittest.TestCase):
         record = record_from_bitcoin_esplora_tx(tx, tracked_scripts={spk}, backend_name="esplora")
         self.assertIsNotNone(record)
         self.assertEqual(record["payment_hash"], _PAYMENT_HASH)
-        self.assertEqual(record["payment_hash_source"], "chain_script")
+        self.assertEqual(
+            record["payment_hash_source"], "chain_script_unique_outpoint"
+        )
+
+    def test_batched_esplora_claim_record_has_no_exact_payment_hash(self):
+        wallet_spk = "0014" + "cd" * 20
+        htlc_spk = "0020" + "ab" * 32
+        tx = {
+            "txid": "33" * 32,
+            "vin": [
+                {
+                    "txid": "44" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": htlc_spk, "value": 50_000},
+                    "witness": _claim_witness_hex(),
+                },
+                {
+                    "txid": "55" * 32,
+                    "vout": 1,
+                    "prevout": {"scriptpubkey": htlc_spk, "value": 50_000},
+                    "witness": _claim_witness_hex(),
+                },
+            ],
+            "vout": [{"scriptpubkey": wallet_spk, "value": 99_500}],
+            "fee": 500,
+            "status": {"block_time": 1_741_000_000},
+        }
+
+        record = record_from_bitcoin_esplora_tx(
+            tx, tracked_scripts={wallet_spk}, backend_name="esplora"
+        )
+
+        self.assertIsNotNone(record)
+        self.assertNotIn("payment_hash", record)
+
+    def test_claim_plus_ordinary_input_has_no_exact_payment_hash(self):
+        wallet_spk = "0014" + "cd" * 20
+        htlc_spk = "0020" + "ab" * 32
+        tx = {
+            "txid": "34" * 32,
+            "vin": [
+                {
+                    "txid": "44" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": htlc_spk, "value": 50_000},
+                    "witness": _claim_witness_hex(),
+                },
+                {
+                    "txid": "55" * 32,
+                    "vout": 1,
+                    "prevout": {"scriptpubkey": wallet_spk, "value": 10_000},
+                    "witness": ["3045"],
+                },
+            ],
+            "vout": [{"scriptpubkey": wallet_spk, "value": 59_500}],
+            "fee": 500,
+            "status": {"block_time": 1_741_000_000},
+        }
+
+        record = record_from_bitcoin_esplora_tx(
+            tx, tracked_scripts={wallet_spk}, backend_name="esplora"
+        )
+
+        self.assertIsNotNone(record)
+        self.assertNotIn("payment_hash", record)
 
     def test_bitcoin_esplora_record_without_htlc_witness_has_no_field(self):
         spk = "0020" + "ab" * 32
@@ -178,7 +290,7 @@ class ElectrumDecoderPreservesWitnessesTests(unittest.TestCase):
         prev_tx = {"vout": [{"value_sats": 10_000, "script_hex": tracked_script_hex}]}
         # Wire the synthetic vin so its prevout points at a tracked output, so
         # the record-builder considers this an outbound spend the witness rides on.
-        tx["vin"][0]["txid"] = "prev-funding"
+        tx["vin"][0]["txid"] = "22" * 32
         tx["vin"][0]["vout"] = 0
         record = record_from_electrum_tx(
             "tx-claim-electrum",
@@ -190,7 +302,9 @@ class ElectrumDecoderPreservesWitnessesTests(unittest.TestCase):
         )
         self.assertIsNotNone(record)
         self.assertEqual(record["payment_hash"], _PAYMENT_HASH)
-        self.assertEqual(record["payment_hash_source"], "chain_script")
+        self.assertEqual(
+            record["payment_hash_source"], "chain_script_unique_outpoint"
+        )
 
 
 class LiquidWitnessExtractionTests(unittest.TestCase):
@@ -225,6 +339,28 @@ class LiquidWitnessExtractionTests(unittest.TestCase):
         result = _extract_payment_hash_from_witnesses([_liquid_witness_items(vin)])
         self.assertEqual(result, _PAYMENT_HASH)
 
+    def test_unique_liquid_claim_retains_exact_funding_outpoint(self):
+        items = [
+            bytes.fromhex("3045" + "00" * 70),
+            _PREIMAGE,
+            bytes([0x01]),
+            _redeem_script(),
+        ]
+        vin = SimpleNamespace(
+            txid="66" * 32,
+            vout=3,
+            witness=SimpleNamespace(script_witness=SimpleNamespace(items=items)),
+        )
+        self.assertEqual(
+            _extract_unique_claim_payment_hash_outpoint(
+                [vin],
+                _liquid_witness_items,
+                prev_txid_fn=liquid_input_txid,
+                prev_vout_fn=liquid_input_vout,
+            ),
+            (_PAYMENT_HASH, "66" * 32, 3),
+        )
+
 
 class RefundLinkEnrichmentTests(unittest.TestCase):
     def test_swap_refund_fields_short_circuits_on_none(self):
@@ -232,6 +368,13 @@ class RefundLinkEnrichmentTests(unittest.TestCase):
         self.assertEqual(
             _swap_refund_fields("ab" * 32),
             {"swap_refund_funding_txid": "ab" * 32},
+        )
+        self.assertEqual(
+            _swap_refund_fields("ab" * 32, 7),
+            {
+                "swap_refund_funding_txid": "ab" * 32,
+                "swap_refund_funding_vout": 7,
+            },
         )
 
     def test_extract_refund_funding_txid_from_refund_vin(self):
@@ -241,6 +384,10 @@ class RefundLinkEnrichmentTests(unittest.TestCase):
         self.assertEqual(
             _extract_refund_funding_txid(vins, _esplora_witness_items),
             "funding-lockup",
+        )
+        self.assertEqual(
+            _extract_refund_funding_outpoint(vins, _esplora_witness_items),
+            ("funding-lockup", 0),
         )
 
     def test_extract_refund_funding_txid_liquid_embit_vin(self):
@@ -266,6 +413,16 @@ class RefundLinkEnrichmentTests(unittest.TestCase):
         ]
         self.assertIsNone(_extract_refund_funding_txid(vins, _esplora_witness_items))
 
+    def test_exact_refund_outpoint_declines_batch_timeout_sweep(self):
+        vins = [
+            {"txid": "aa" * 32, "vout": 1, "witness": _refund_witness_hex()},
+            {"txid": "bb" * 32, "vout": 2, "witness": _refund_witness_hex()},
+        ]
+
+        self.assertIsNone(
+            _extract_refund_funding_outpoint(vins, _esplora_witness_items)
+        )
+
     def test_esplora_inbound_refund_record_carries_link(self):
         htlc_spk = "0020" + "ab" * 32  # the swap HTLC output, NOT a tracked script
         wallet_spk = "0014" + "cd" * 20  # the refund lands back on the wallet
@@ -289,6 +446,7 @@ class RefundLinkEnrichmentTests(unittest.TestCase):
         self.assertIsNotNone(record)
         self.assertEqual(record["direction"], "inbound")
         self.assertEqual(record["swap_refund_funding_txid"], "funding-lockup-txid")
+        self.assertEqual(record["swap_refund_funding_vout"], 0)
         self.assertNotIn("payment_hash", record)
 
     def test_esplora_claim_record_has_no_refund_link(self):
@@ -298,7 +456,7 @@ class RefundLinkEnrichmentTests(unittest.TestCase):
             "txid": "tx-claim-1",
             "vin": [
                 {
-                    "txid": "funding-lockup-txid",
+                    "txid": "77" * 32,
                     "vout": 0,
                     "prevout": {"scriptpubkey": htlc_spk, "value": 100_000},
                     "witness": _claim_witness_hex(),
@@ -313,6 +471,9 @@ class RefundLinkEnrichmentTests(unittest.TestCase):
         )
         self.assertIsNotNone(record)
         self.assertEqual(record["payment_hash"], _PAYMENT_HASH)
+        self.assertEqual(
+            record["payment_hash_source"], "chain_script_unique_outpoint"
+        )
         self.assertNotIn("swap_refund_funding_txid", record)
 
 

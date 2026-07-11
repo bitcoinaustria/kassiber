@@ -23,7 +23,9 @@ from pathlib import Path
 from typing import Any, Mapping
 from unittest.mock import patch
 
+from kassiber.backends import get_db_backend
 from kassiber.core import accounts as core_accounts
+from kassiber.core import wallets as core_wallets
 from kassiber.core.lightning import (
     LightningCapabilities,
     NodeSnapshot,
@@ -32,6 +34,7 @@ from kassiber.core.lightning import (
     unregister_adapter,
 )
 from kassiber.core.lightning import lnd as core_lnd
+from kassiber.core.repo import fetch_wallet_with_account
 from kassiber.db import open_db
 
 
@@ -629,6 +632,16 @@ class LndTransactionImportTest(unittest.TestCase):
         self.assertIsNone(core_lnd._normalize_lnd_hash(""))
         self.assertIsNone(core_lnd._normalize_lnd_hash("not-a-hash"))
 
+    def test_import_network_scope_is_stamped_from_node_info(self) -> None:
+        stamped = core_lnd._stamp_lightning_import_network(
+            [{"id": "row", "raw_json": "{}"}], "regtest"
+        )
+
+        self.assertEqual(
+            json.loads(stamped[0]["raw_json"]),
+            {"chain": "lightning", "network": "regtest"},
+        )
+
     def test_import_records_settled_invoice_and_succeeded_payment(self) -> None:
         import base64
 
@@ -683,18 +696,221 @@ class LndTransactionImportTest(unittest.TestCase):
         self.assertEqual(pay["amount"], msat_to_btc(1_000_000))
         self.assertEqual(pay["fee"], msat_to_btc(2_000))
 
-    def test_channel_records_from_open_and_closed_channels(self) -> None:
-        open_channels = [{"channel_point": "aa" * 32 + ":0"}]
-        closed_channels = [
-            {"channel_point": "dd" * 32 + ":1", "closing_tx_hash": "bb" * 32},
+    def test_routing_income_is_daily_fee_only_and_stable(self) -> None:
+        from kassiber.msat import msat_to_btc
+
+        forwards = [
+            {
+                "timestamp": "1709999000",
+                "chan_id_in": "1",
+                "chan_id_out": "2",
+                "amt_out_msat": "900000000",
+                "fee_msat": "7000",
+            },
+            {
+                "timestamp": "1709999100",
+                "chan_id_in": "3",
+                "chan_id_out": "4",
+                "amt_out_msat": "800000000",
+                "fee_msat": "5000",
+            },
         ]
-        records = core_lnd.lnd_channel_records(open_channels, closed_channels)
+        records = core_lnd.lnd_import_records([], [], forwards)
+        self.assertEqual(records, core_lnd.lnd_import_records([], [], forwards))
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["id"], "lnd:routing:2024-03-09")
+        self.assertEqual(record["kind"], "routing_income")
+        self.assertEqual(record["amount"], msat_to_btc(12_000))
+        self.assertEqual(record["fee"], 0)
+        self.assertNotIn("900000000", repr(record))
+        self.assertNotIn("800000000", repr(record))
+
+    def test_payment_and_invoice_history_follow_index_offsets_to_exhaustion(self) -> None:
+        class PagedClient:
+            def __init__(self):
+                self.calls = []
+
+            def get(self, path, *, params=None):
+                params = dict(params or {})
+                self.calls.append((path, params))
+                offset = int(params.get("index_offset") or 0)
+                if path == "/v1/payments":
+                    if offset == 0:
+                        return {
+                            "payments": [{"payment_index": "1", "payment_hash": "aa"}],
+                            "last_index_offset": "1",
+                        }
+                    if offset == 1:
+                        return {
+                            "payments": [{"payment_index": "2", "payment_hash": "bb"}],
+                            "last_index_offset": "2",
+                        }
+                    return {"payments": [], "last_index_offset": str(offset)}
+                if offset == 0:
+                    return {
+                        "invoices": [{"add_index": "1", "r_hash": "cc"}],
+                        "last_index_offset": "1",
+                    }
+                return {"invoices": [], "last_index_offset": str(offset)}
+
+        client = PagedClient()
+
+        payments = core_lnd._fetch_lnd_payments(client)
+        invoices = core_lnd._fetch_lnd_invoices(client)
+
+        self.assertEqual([row["payment_index"] for row in payments], ["1", "2"])
+        self.assertEqual([row["add_index"] for row in invoices], ["1"])
+        self.assertTrue(
+            all(call[1]["reversed"] == "false" for call in client.calls)
+        )
+
+    def test_channel_records_from_open_and_closed_channels(self) -> None:
+        open_channels = [
+            {
+                "channel_point": "aa" * 32 + ":0",
+                "chan_id": "1",
+                "initiator": True,
+                "capacity": "100000",
+            }
+        ]
+        closed_channels = [
+            {
+                "channel_point": "dd" * 32 + ":1",
+                "chan_id": "2",
+                "open_initiator": "INITIATOR_LOCAL",
+                "capacity": "200000",
+                "closing_tx_hash": "bb" * 32,
+                "settled_balance": "150000",
+                "time_locked_balance": "25000",
+            },
+        ]
+        records = core_lnd.lnd_channel_records(
+            open_channels,
+            closed_channels,
+            network="regtest",
+        )
         by_tag = {}
         for rec in records:
-            by_tag.setdefault(rec["tag"], set()).add(rec["txid"])
+            by_tag.setdefault(rec["tag"], []).append(rec)
         # Funding txids from both open and closed channels; closing from the close.
-        self.assertEqual(by_tag["channel_open"], {"aa" * 32, "dd" * 32})
-        self.assertEqual(by_tag["channel_close"], {"bb" * 32})
+        self.assertEqual(
+            {record["txid"] for record in by_tag["channel_open"]},
+            {"aa" * 32, "dd" * 32},
+        )
+        self.assertTrue(
+            all(record["status"] == "incomplete" for record in by_tag["channel_open"])
+        )
+        close = by_tag["channel_close"][0]
+        self.assertEqual(close["txid"], "bb" * 32)
+        self.assertEqual(close["amount_msat"], 175_000_000)
+        self.assertEqual(close["status"], "complete")
+        self.assertTrue(close["channel_id"].startswith("lnd:"))
+        self.assertTrue(
+            all(
+                json.loads(record["raw_json"])
+                == {"chain": "bitcoin", "network": "regtest"}
+                for record in records
+            )
+        )
+
+    def test_channel_network_scope_is_persisted_and_updated(self) -> None:
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(Path(data_root) / "data")
+            workspace = core_accounts.create_workspace(conn, "Personal")
+            profile = core_accounts.create_profile(
+                conn,
+                workspace["id"],
+                "Main",
+                "USD",
+                "FIFO",
+                "generic",
+                365,
+            )
+            core_accounts.create_backend(
+                conn,
+                "lnd",
+                "lnd",
+                "https://127.0.0.1:8080",
+                token="readonly-macaroon",
+            )
+            created_wallet = core_wallets.create_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                "Node",
+                "lnd",
+                config={"backend": "lnd"},
+            )
+            wallet = fetch_wallet_with_account(conn, created_wallet["id"])
+            backend = get_db_backend(conn, "lnd")
+            channel = {
+                "channel_point": "aa" * 32 + ":0",
+                "initiator": True,
+                "local_funding_amount_sat": "100000",
+            }
+
+            for network in ("regtest", "mainnet"):
+                records = core_lnd.lnd_channel_records(
+                    [channel], [], network=network
+                )
+                core_lnd._persist_lnd_channel_records(
+                    conn,
+                    profile,
+                    wallet,
+                    backend,
+                    records,
+                    "2026-01-01T00:00:00Z",
+                )
+
+            row = conn.execute(
+                "SELECT raw_json FROM lightning_node_records"
+                " WHERE wallet_id = ? AND record_type = 'channel'",
+                (wallet["id"],),
+            ).fetchone()
+            self.assertEqual(
+                json.loads(row["raw_json"]),
+                {"chain": "bitcoin", "network": "mainnet"},
+            )
+            conn.close()
+
+    def test_channel_record_without_amount_evidence_is_typed_incomplete(self) -> None:
+        records = core_lnd.lnd_channel_records(
+            [{"channel_point": "aa" * 32 + ":0"}],
+            [],
+        )
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["amount_msat"], -1)
+        self.assertEqual(records[0]["status"], "incomplete")
+
+    def test_explicit_local_contribution_enables_complete_open_record(self) -> None:
+        records = core_lnd.lnd_channel_records(
+            [
+                {
+                    "channel_point": "aa" * 32 + ":0",
+                    "initiator": True,
+                    "capacity": "100000",
+                    "local_funding_amount_sat": "75000",
+                }
+            ],
+            [],
+        )
+
+        self.assertEqual(records[0]["amount_msat"], 75_000_000)
+        self.assertEqual(records[0]["status"], "complete")
+
+    def test_remote_funded_open_is_not_a_local_onchain_outflow(self) -> None:
+        records = core_lnd.lnd_channel_records(
+            [
+                {
+                    "channel_point": "aa" * 32 + ":0",
+                    "initiator": False,
+                    "capacity": "100000",
+                }
+            ],
+            [],
+        )
+        self.assertEqual(records, [])
 
     def test_sync_lnd_wallet_rejects_wrong_backend_kind(self) -> None:
         from kassiber.errors import AppError

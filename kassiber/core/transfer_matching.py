@@ -8,9 +8,10 @@ believes form one swap.
 Confidence ladder
 -----------------
 
-* **exact** — both legs share deterministic evidence: a Lightning
-  ``payment_hash``, a redacted provider/client ``swap_id``, or an
-  on-chain HTLC refund spend.
+* **exact** — both legs share deterministic evidence: a source-qualified
+  Lightning ``payment_hash``; a unique provider/client ``swap_id`` whose
+  canonical route txids and whole-row amounts agree; or a uniquely verified
+  on-chain HTLC refund outpoint.
 * **strong** — different wallets, opposite directions, time delta within
   the configured window, and the implicit ``out_amount - in_amount``
   delta sits below the fee tolerance (``max(fee_pct_max * out, fee_sats_min)``).
@@ -59,11 +60,19 @@ from typing import Iterable, Mapping, Optional, Sequence
 from ..transfers import (
     CHAIN_INFERENCE_WALLET_KINDS,
     LIGHTNING_INFERENCE_WALLET_KINDS,
+    bitcoin_network_domain,
+    canonical_txid,
     is_bitcoin_rail_pair,
     is_lightning_payment_hash_row,
     normalize_group_txid,
     normalize_wallet_kind_alias,
+    onchain_transfer_scope,
 )
+from .htlc_parser import (
+    extract_from_claim_witness,
+    refund_funding_outpoint_from_tx_mapping,
+)
+from .onchain import exact_onchain_fee_msat_from_observations
 
 
 # Compatibility exports for callers/UI routing. The canonical sets live next to
@@ -150,6 +159,28 @@ class SwapCandidate:
     evidence_spend_path: str = ""
 
 
+@dataclass(frozen=True)
+class SwapFeeComponents:
+    """Loss-of-custody components available from two normalized swap legs.
+
+    The legacy pair table has one ``swap_fee_msat`` column, so callers still
+    receive a combined number through :func:`compute_swap_fee`.  This shape is
+    the future-proof seam for component accounting: an explicitly recorded
+    source fee is kept separate from the unexplained principal delta instead
+    of incorrectly calling the whole difference a provider fee.
+
+    ``bridge_delta_msat`` can include a provider fee, a destination claim fee,
+    rounding, or missing evidence.  It deliberately remains unallocated until
+    a rail adapter supplies those facts.
+    """
+
+    source_fee_msat: int
+    source_fee_kind: str
+    bridge_delta_msat: int
+    bridge_delta_kind: str
+    total_msat: int
+
+
 def suggest_swap_candidates(
     rows: Sequence[Mapping],
     *,
@@ -158,8 +189,6 @@ def suggest_swap_candidates(
     time_window_seconds: int = DEFAULT_TIME_WINDOW_SECONDS,
     fee_pct_max: float = DEFAULT_FEE_PCT_MAX,
     fee_sats_min: int = DEFAULT_FEE_SATS_MIN,
-    tax_country: Optional[str] = None,
-    bitcoin_rail_carrying_value: bool = True,
     now_iso: Optional[str] = None,
 ) -> list[SwapCandidate]:
     """Return the swap candidates the matcher believes form valid pairings.
@@ -183,9 +212,6 @@ def suggest_swap_candidates(
         fee_pct_max: Maximum fractional fee tolerance for the heuristic.
         fee_sats_min: Absolute minimum fee tolerance in sats, applied
             even when ``fee_pct_max * out_amount`` falls below it.
-        tax_country: Profile tax country code; informs the default policy.
-        bitcoin_rail_carrying_value: When true, BTC/LBTC rail movements default
-            to ``carrying-value`` outside country-specific rules.
         now_iso: Override the "current time" used to evaluate dismissal
             expiry. Defaults to ``datetime.now(UTC)`` when omitted.
 
@@ -198,11 +224,16 @@ def suggest_swap_candidates(
     paired_ids = _active_paired_ids(pair_records)
     dismissed_pairs = _active_dismissals(dismissals, now_seconds)
 
+    # Evidence cardinality is a property of the full imported population, not
+    # the currently-unpaired remainder.  Otherwise pairing one member of a
+    # duplicate 2x2 hash/provider set would falsely promote the remaining 1x1
+    # edge to exact on the next run.
+    population_rows = _select_eligible_rows(rows, set())
     eligible_rows = _select_eligible_rows(rows, paired_ids)
     # Deterministic suppression mirrors the journal's fixed safety ceiling.
     # Caller flags widen only heuristic generation; they must never hide a row
     # that the journal still quarantines with the default ceiling.
-    deterministic_transfer_ids = _deterministic_self_transfer_ids(eligible_rows)
+    deterministic_transfer_ids = _deterministic_self_transfer_ids(population_rows)
     out_rows = [
         row
         for row in eligible_rows
@@ -216,66 +247,105 @@ def suggest_swap_candidates(
         and _record_get(row, "id") not in deterministic_transfer_ids
     ]
 
-    exact_pairs = _match_by_payment_hash(out_rows, in_rows)
+    population_out_rows = [
+        row
+        for row in population_rows
+        if row["direction"] == "outbound"
+        and _record_get(row, "id") not in deterministic_transfer_ids
+    ]
+    population_in_rows = [
+        row
+        for row in population_rows
+        if row["direction"] == "inbound"
+        and _record_get(row, "id") not in deterministic_transfer_ids
+    ]
+    eligible_ids = {_record_get(row, "id") for row in eligible_rows}
 
-    consumed_out = {pair[0]["id"] for pair in exact_pairs}
-    consumed_in = {pair[1]["id"] for pair in exact_pairs}
-    evidence_pairs = _match_by_provider_swap_id(
-        [row for row in out_rows if row["id"] not in consumed_out],
-        [row for row in in_rows if row["id"] not in consumed_in],
-    )
-    consumed_out |= {pair[0]["id"] for pair in evidence_pairs}
-    consumed_in |= {pair[1]["id"] for pair in evidence_pairs}
-    refund_pairs = _match_by_refund_link(
-        [row for row in out_rows if row["id"] not in consumed_out],
-        [row for row in in_rows if row["id"] not in consumed_in],
-    )
-    consumed_out |= {pair[0]["id"] for pair in refund_pairs}
-    consumed_in |= {pair[1]["id"] for pair in refund_pairs}
+    hash_pairs = [
+        pair
+        for pair in _match_by_payment_hash(population_out_rows, population_in_rows)
+        if pair[0]["id"] in eligible_ids and pair[1]["id"] in eligible_ids
+        if (pair[0]["id"], pair[1]["id"]) not in dismissed_pairs
+    ]
+
+    # Build every non-heuristic evidence edge before reserving anything. A
+    # competing provider/hash/refund edge is independent contradictory evidence
+    # and must remain in the global conflict cluster even when another method is
+    # exact. Only pure time/amount heuristics may be pruned by exact evidence.
+    evidence_pairs = [
+        pair
+        for pair in _match_by_provider_swap_id(
+            population_out_rows, population_in_rows
+        )
+        if pair[0]["id"] in eligible_ids and pair[1]["id"] in eligible_ids
+        if (pair[0]["id"], pair[1]["id"]) not in dismissed_pairs
+    ]
+    refund_pairs = [
+        pair
+        for pair in _match_by_refund_link(
+            population_out_rows, population_in_rows
+        )
+        if pair[0]["id"] in eligible_ids and pair[1]["id"] in eligible_ids
+        if (pair[0]["id"], pair[1]["id"]) not in dismissed_pairs
+    ]
+    exact_out_ids = {pair[0]["id"] for pair in hash_pairs if pair[2]}
+    exact_in_ids = {pair[1]["id"] for pair in hash_pairs if pair[2]}
+    exact_out_ids |= {pair[0]["id"] for pair in evidence_pairs if pair[3]}
+    exact_in_ids |= {pair[1]["id"] for pair in evidence_pairs if pair[3]}
+    exact_out_ids |= {
+        pair[0]["id"]
+        for pair in refund_pairs
+        if pair[2].version == "outpoint_exact"
+    }
+    exact_in_ids |= {
+        pair[1]["id"]
+        for pair in refund_pairs
+        if pair[2].version == "outpoint_exact"
+    }
     heuristic_pairs = _match_heuristic(
-        [row for row in out_rows if row["id"] not in consumed_out],
-        [row for row in in_rows if row["id"] not in consumed_in],
+        [row for row in out_rows if row["id"] not in exact_out_ids],
+        [row for row in in_rows if row["id"] not in exact_in_ids],
         time_window_seconds=time_window_seconds,
         fee_pct_max=fee_pct_max,
         fee_sats_min=fee_sats_min,
     )
 
     raw_candidates: list[SwapCandidate] = []
-    for out_row, in_row in exact_pairs:
+    for out_row, in_row, whole_row_exact in hash_pairs:
         if (out_row["id"], in_row["id"]) in dismissed_pairs:
             continue
         raw_candidates.append(_build_candidate(
             out_row,
             in_row,
-            confidence=CONFIDENCE_EXACT,
+            confidence=CONFIDENCE_EXACT if whole_row_exact else CONFIDENCE_STRONG,
             method=METHOD_PAYMENT_HASH,
-            tax_country=tax_country,
-            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
         ))
-    for out_row, in_row, evidence in evidence_pairs:
+    for out_row, in_row, evidence, whole_row_exact in evidence_pairs:
         if (out_row["id"], in_row["id"]) in dismissed_pairs:
             continue
         raw_candidates.append(_build_candidate(
             out_row,
             in_row,
-            confidence=CONFIDENCE_EXACT,
+            confidence=CONFIDENCE_EXACT if whole_row_exact else CONFIDENCE_STRONG,
             method=METHOD_PROVIDER_SWAP_ID,
-            tax_country=tax_country,
-            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
             default_kind=evidence.kind or None,
             evidence=evidence,
         ))
-    for out_row, in_row in refund_pairs:
+    for out_row, in_row, evidence in refund_pairs:
         if (out_row["id"], in_row["id"]) in dismissed_pairs:
             continue
+        refund_exact = evidence.version == "outpoint_exact"
         raw_candidates.append(_build_candidate(
             out_row,
             in_row,
-            confidence=CONFIDENCE_EXACT,
+            confidence=(
+                CONFIDENCE_EXACT
+                if refund_exact
+                else CONFIDENCE_STRONG
+            ),
             method=METHOD_HTLC_REFUND,
-            tax_country=tax_country,
-            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
             default_kind=KIND_SWAP_REFUND,
+            evidence=evidence,
         ))
     for out_row, in_row in heuristic_pairs:
         if (out_row["id"], in_row["id"]) in dismissed_pairs:
@@ -285,11 +355,9 @@ def suggest_swap_candidates(
             in_row,
             confidence=CONFIDENCE_STRONG,
             method=METHOD_HEURISTIC,
-            tax_country=tax_country,
-            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
         ))
 
-    candidates = _stamp_conflict_set_ids(raw_candidates)
+    candidates = finalize_candidate_conflicts(raw_candidates)
     candidates.sort(
         key=lambda c: (
             0 if c.confidence == CONFIDENCE_EXACT else 1,
@@ -315,7 +383,38 @@ def compute_swap_fee(
     The kind defaults to ``"combined"``; future commits can split network
     vs service fee when the data supports it.
     """
-    return out_amount_msat + out_fee_msat - in_amount_msat, "combined"
+    components = compute_swap_fee_components(
+        out_amount_msat,
+        in_amount_msat,
+        out_fee_msat,
+    )
+    return components.total_msat, "combined"
+
+
+def compute_swap_fee_components(
+    out_amount_msat: int,
+    in_amount_msat: int,
+    out_fee_msat: int = 0,
+    *,
+    source_fee_kind: str = "source_network_or_routing",
+) -> SwapFeeComponents:
+    """Return the fee facts that can be proven without guessing allocation.
+
+    The source transaction's explicit fee and the cross-rail principal delta
+    are independent facts.  Keeping them separate prevents later component
+    storage from double-counting the source miner/routing fee as a provider
+    service fee.  Negative deltas are preserved as anomalies for review.
+    """
+
+    source_fee = max(0, int(out_fee_msat or 0))
+    bridge_delta = int(out_amount_msat or 0) - int(in_amount_msat or 0)
+    return SwapFeeComponents(
+        source_fee_msat=source_fee,
+        source_fee_kind=str(source_fee_kind or "source_network_or_routing"),
+        bridge_delta_msat=bridge_delta,
+        bridge_delta_kind="unallocated_bridge_delta",
+        total_msat=source_fee + bridge_delta,
+    )
 
 
 def default_kind_for(
@@ -328,8 +427,8 @@ def default_kind_for(
 
     Heavy-user defaults:
 
-    * Either leg is a Lightning wallet → ``submarine-swap``
-      (Boltz / Aqua / similar).
+    * Chain → Lightning → ``submarine-swap``.
+    * Lightning → chain → ``reverse-submarine-swap``.
     * Both legs are chain wallets:
       * BTC → LBTC → ``peg-in``.
       * LBTC → BTC → ``peg-out``.
@@ -337,7 +436,11 @@ def default_kind_for(
     """
     out_kind = normalize_wallet_kind_alias(out_wallet_kind)
     in_kind = normalize_wallet_kind_alias(in_wallet_kind)
-    if out_kind in LIGHTNING_WALLET_KINDS or in_kind in LIGHTNING_WALLET_KINDS:
+    out_is_lightning = out_kind in LIGHTNING_WALLET_KINDS
+    in_is_lightning = in_kind in LIGHTNING_WALLET_KINDS
+    if out_is_lightning and not in_is_lightning:
+        return KIND_REVERSE_SUBMARINE_SWAP
+    if in_is_lightning and not out_is_lightning:
         return KIND_SUBMARINE_SWAP
     if out_kind in CHAIN_WALLET_KINDS and in_kind in CHAIN_WALLET_KINDS:
         if out_asset == "BTC" and in_asset == "LBTC":
@@ -347,23 +450,18 @@ def default_kind_for(
     return KIND_MANUAL
 
 
-def default_policy_for(
-    tax_country: Optional[str],
+def default_ownership_policy_for(
     out_asset: Optional[str] = None,
     in_asset: Optional[str] = None,
-    *,
-    bitcoin_rail_carrying_value: bool = True,
 ) -> str:
-    """Return the profile default transfer-pair policy.
+    """Return a country-neutral ownership/rail policy recommendation.
 
-    BTC/LBTC rail changes are carrying-value candidates for every profile
-    when the profile setting is enabled, because they represent the same
-    Bitcoin exposure on different rails. Other non-Austrian cross-asset
-    candidates keep the taxable default.
+    Matching evidence is Bitcoin technology, not tax law. Same-asset moves and
+    enabled BTC/LBTC rail changes represent the same technical exposure;
+    everything else defaults to taxable until a downstream tax-policy adapter
+    recommends otherwise. No country is accepted at this boundary.
     """
-    if (tax_country or "").strip().lower() == "at":
-        return POLICY_CARRYING_VALUE
-    if bitcoin_rail_carrying_value and is_bitcoin_rail_pair(out_asset, in_asset):
+    if is_bitcoin_rail_pair(out_asset, in_asset):
         return POLICY_CARRYING_VALUE
     return POLICY_TAXABLE
 
@@ -450,28 +548,22 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
     """Return row ids that are already proven same-chain self-transfers.
 
     The swap review queue is for ambiguous layer hops. One outbound and one or
-    more inbound rows with the same external transaction id and same asset,
-    across owned wallets, are the conservative on-chain self-transfer shapes
+    more inbound rows in one canonical chain/network/txid/asset scope, across
+    owned wallets, are the conservative on-chain self-transfer shapes
     used by the journal pipeline. The conserving 1->N shape is suppressed as one
     group so its largest leg cannot leak back as a strong heuristic candidate.
 
-    Exception: when the implied fee (``out_amount - in_amount``) blows past the
-    swap-fee tolerance, the outbound almost certainly fanned out to an
-    unrecognized recipient (a cross-asset peg/swap or a payment), so this is NOT
-    a clean self-transfer. The journal pipeline quarantines it
-    (``transfer_fee_implausible`` in ``normalize_tax_asset_inputs``) rather than
-    booking the residual as a fee; here we correspondingly leave it eligible for
-    swap review instead of silently claiming it as a proven self-transfer.
+    A non-fee-inclusive row reports its network/routing fee separately. Therefore
+    any positive ``out_amount - in_amount`` is unallocated principal, not a fee;
+    it stays visible for component review. Net-delta rows may suppress a gap only
+    when a complete valued graph proves that exact network fee.
     """
-    grouped: dict[tuple[str, str], list[Mapping]] = {}
+    grouped: dict[tuple[str, str, str, str], list[Mapping]] = {}
     for row in rows:
-        external_id = _record_get(row, "external_id")
-        if not external_id:
+        scope = onchain_transfer_scope(row)
+        if scope is None:
             continue
-        # Mirror transfers.detect_intra_transfers so a mixed-case txid does not
-        # desync the swap queue from the journal (same self-transfer grouping).
-        key = (normalize_group_txid(external_id), _record_get(row, "asset"))
-        grouped.setdefault(key, []).append(row)
+        grouped.setdefault(scope, []).append(row)
 
     deterministic_ids: set[object] = set()
     for group in grouped.values():
@@ -497,19 +589,21 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
         in_amount = sum(int(_record_get(in_row, "amount") or 0) for in_row in ins)
         if in_amount > out_amount:
             continue
-        # When the out leg's `amount` is a net wallet delta with the fee folded
-        # in (BTCPay; `amount_includes_fee`), the out/in gap IS the miner fee, so
-        # it is not an implausible residual — keep it a proven self-transfer
-        # (suppressed from swap review), matching the journal's transfer-fee guard
-        # in tax_events.normalize_tax_asset_inputs.
-        if not _record_get(out_row, "amount_includes_fee") and (
-            out_amount - in_amount
-            > fee_threshold_msat(
-                out_amount, DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN
+        gap_msat = out_amount - in_amount
+        if _record_get(out_row, "amount_includes_fee") and gap_msat > 0:
+            exact_fee_msat = exact_onchain_fee_msat_from_observations(
+                [_record_get(row, "raw_json") for row in group],
+                asset=str(_record_get(out_row, "asset") or ""),
             )
-        ):
-            # Implausible implied fee — likely an unrecognized peg/payment leg.
-            # Don't claim it as a proven self-transfer; let it reach swap review.
+            if exact_fee_msat != gap_msat:
+                # A net wallet delta can include a recipient/payment as well as
+                # the miner fee.  Without a complete valued graph, this is not a
+                # deterministic MOVE and must remain visible for review.
+                continue
+        elif gap_msat > 0:
+            # The explicit fee column already accounts for network/routing cost.
+            # This remaining principal delta is an external payment or a missing
+            # wallet leg until an authored custody component proves otherwise.
             continue
         deterministic_ids.add(_record_get(out_row, "id"))
         deterministic_ids.update(_record_get(in_row, "id") for in_row in ins)
@@ -520,17 +614,20 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
     # so it must not surface as an exact payment_hash swap candidate. ONLY
     # node-sourced hashes qualify — a chain_script HTLC hash (reverse swap
     # claim) is swap evidence and stays reviewable.
-    by_hash: dict[tuple[str, str], list[Mapping]] = {}
+    by_hash: dict[tuple[str, str, str], list[Mapping]] = {}
     for row in rows:
         if _record_get(row, "id") in deterministic_ids:
             continue
-        payment_hash = _record_get(row, "payment_hash")
+        payment_hash = _normalized_payment_hash(_record_get(row, "payment_hash"))
         if not payment_hash:
             continue
         if not is_lightning_payment_hash_row(row):
             continue
+        network_domain = bitcoin_network_domain(row)
+        if network_domain is None:
+            continue
         by_hash.setdefault(
-            (str(payment_hash), _record_get(row, "asset")), []
+            (payment_hash, _record_get(row, "asset"), network_domain), []
         ).append(row)
     for group in by_hash.values():
         outs = [
@@ -548,7 +645,9 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_row, in_row = outs[0], ins[0]
-        if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
+        if int(_record_get(out_row, "amount") or 0) != int(
+            _record_get(in_row, "amount") or 0
+        ):
             continue
         deterministic_ids.add(_record_get(out_row, "id"))
         deterministic_ids.add(_record_get(in_row, "id"))
@@ -557,33 +656,177 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
 
 def _match_by_payment_hash(
     out_rows: Sequence[Mapping], in_rows: Sequence[Mapping]
-) -> list[tuple[Mapping, Mapping]]:
-    out_by_hash: dict[str, list[Mapping]] = {}
+) -> list[tuple[Mapping, Mapping, bool]]:
+    """Return only uniquely attributable, conserving cross-rail hash pairs.
+
+    A payment hash commits to a preimage, but an arbitrary imported string is
+    not by itself proof of a custody transfer.  Exact matching therefore needs
+    compatible rail roles (Lightning node versus chain/provider HTLC evidence),
+    one outbound and one inbound leg for the hash, and a plausible 1:1 Bitcoin
+    conservation delta.  Duplicate MPP/attempt/import rows remain unresolved
+    instead of becoming a Cartesian product of exact candidates.
+    """
+    out_by_hash: dict[tuple[str, str | None], list[Mapping]] = {}
     for row in out_rows:
-        payment_hash = _record_get(row, "payment_hash")
+        payment_hash = _normalized_payment_hash(_record_get(row, "payment_hash"))
         if not payment_hash:
             continue
-        out_by_hash.setdefault(payment_hash, []).append(row)
-    in_by_hash: dict[str, list[Mapping]] = {}
+        out_by_hash.setdefault(
+            (payment_hash, bitcoin_network_domain(row)), []
+        ).append(row)
+    in_by_hash: dict[tuple[str, str | None], list[Mapping]] = {}
     for row in in_rows:
-        payment_hash = _record_get(row, "payment_hash")
+        payment_hash = _normalized_payment_hash(_record_get(row, "payment_hash"))
         if not payment_hash:
             continue
-        in_by_hash.setdefault(payment_hash, []).append(row)
-    pairs: list[tuple[Mapping, Mapping]] = []
-    for payment_hash, outs in out_by_hash.items():
-        ins = in_by_hash.get(payment_hash, [])
-        for out_row in outs:
-            for in_row in ins:
-                if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
-                    continue
-                pairs.append((out_row, in_row))
+        in_by_hash.setdefault(
+            (payment_hash, bitcoin_network_domain(row)), []
+        ).append(row)
+    pairs: list[tuple[Mapping, Mapping, bool]] = []
+    for (_payment_hash, network_domain), outs in out_by_hash.items():
+        ins = in_by_hash.get((_payment_hash, network_domain), [])
+        if len(outs) != 1 or len(ins) != 1:
+            continue
+        out_row, in_row = outs[0], ins[0]
+        if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
+            continue
+        confidence = _payment_hash_confidence(out_row, in_row)
+        if confidence is None:
+            continue
+        out_domain = bitcoin_network_domain(out_row)
+        in_domain = bitcoin_network_domain(in_row)
+        if out_domain is not None and in_domain is not None and out_domain != in_domain:
+            continue
+        if confidence == CONFIDENCE_EXACT and (
+            out_domain is None or in_domain is None
+        ):
+            continue
+        if not _payment_hash_amounts_conserve(out_row, in_row):
+            continue
+        pairs.append((out_row, in_row, confidence == CONFIDENCE_EXACT))
     return pairs
+
+
+_PAYMENT_HASH_HEX = frozenset("0123456789abcdefABCDEF")
+
+
+def _normalized_payment_hash(value: object) -> str:
+    text = str(value or "").strip()
+    if len(text) != 64 or any(char not in _PAYMENT_HASH_HEX for char in text):
+        return ""
+    return text.lower()
+
+
+def _payment_hash_role(row: Mapping) -> str:
+    """Classify the provenance role of a hash-bearing transaction leg."""
+    if is_lightning_payment_hash_row(row):
+        return "lightning_node"
+    source = str(_record_get(row, "payment_hash_source") or "").strip().lower()
+    if source == "chain_script_unique_outpoint":
+        return (
+            "chain_htlc"
+            if _row_has_verified_unique_claim_outpoint(row)
+            else "chain_htlc_unscoped"
+        )
+    if source == "chain_script":
+        # Legacy enrichment selected the first matching witness in a batched
+        # claim and did not retain a unique funding outpoint. Keep it visible to
+        # the heuristic/manual queue, but never upgrade the aggregate row to an
+        # exact payment-hash link.
+        return "chain_htlc_unscoped"
+    # Stable importer labels say where the field came from, not that its value
+    # is authenticated. They can support a strong review suggestion, never
+    # exact/bulk closure by themselves. Unknown user-authored labels do not gain
+    # semantics merely by being nonempty.
+    if source in {
+        "boltz",
+        "boltz-regtest",
+        "bullbitcoin",
+        "generic_ledger",
+        "importer",
+        "importer_backfill",
+    }:
+        return "provider_or_import"
+    return "unknown"
+
+
+def _row_has_verified_unique_claim_outpoint(row: Mapping) -> bool:
+    """Replay the witness/outpoint proof behind an exact claim hash label."""
+
+    payload = _raw_json_payload(row)
+    if not isinstance(payload, Mapping):
+        return False
+    effective = payload.get("tx")
+    effective = effective if isinstance(effective, Mapping) else payload
+    vins = effective.get("vin")
+    if not isinstance(vins, list) or len(vins) != 1:
+        return False
+    vin = vins[0]
+    if not isinstance(vin, Mapping):
+        return False
+    if canonical_txid(vin.get("txid")) is None:
+        return False
+    raw_vout = vin.get("vout")
+    if type(raw_vout) is not int or raw_vout < 0:
+        return False
+    raw_witness = vin.get("witness", vin.get("txinwitness"))
+    if not isinstance(raw_witness, list) or not raw_witness:
+        return False
+    witness_items = []
+    for item in raw_witness:
+        if isinstance(item, str):
+            try:
+                witness_items.append(bytes.fromhex(item))
+            except ValueError:
+                return False
+        elif isinstance(item, (bytes, bytearray)):
+            witness_items.append(bytes(item))
+        else:
+            return False
+    extraction = extract_from_claim_witness(witness_items)
+    if extraction is None or not extraction.payment_hash:
+        return False
+    if extraction.payment_hash != _normalized_payment_hash(
+        _record_get(row, "payment_hash")
+    ):
+        return False
+    return onchain_transfer_scope(row) is not None
+
+
+def _payment_hash_confidence(
+    out_row: Mapping, in_row: Mapping
+) -> str | None:
+    roles = {_payment_hash_role(out_row), _payment_hash_role(in_row)}
+    if roles & {"unknown", "chain_htlc_unscoped"}:
+        return None
+    if roles == {"lightning_node", "chain_htlc"}:
+        return CONFIDENCE_EXACT
+    if "lightning_node" in roles and "provider_or_import" in roles:
+        return CONFIDENCE_STRONG
+    if roles == {"provider_or_import"}:
+        return CONFIDENCE_STRONG
+    # A script-derived claim/refund can be linked to an explicitly imported
+    # funding leg even when neither wallet is itself a Lightning node.
+    if roles == {"chain_htlc", "provider_or_import"}:
+        return CONFIDENCE_STRONG
+    return None
+
+
+def _payment_hash_amounts_conserve(out_row: Mapping, in_row: Mapping) -> bool:
+    out_amount = int(_record_get(out_row, "amount") or 0)
+    in_amount = int(_record_get(in_row, "amount") or 0)
+    if out_amount <= 0 or in_amount <= 0 or in_amount > out_amount:
+        return False
+    return out_amount - in_amount <= fee_threshold_msat(
+        out_amount,
+        DEFAULT_FEE_PCT_MAX,
+        DEFAULT_FEE_SATS_MIN,
+    )
 
 
 def _match_by_refund_link(
     out_rows: Sequence[Mapping], in_rows: Sequence[Mapping]
-) -> list[tuple[Mapping, Mapping]]:
+) -> list[tuple[Mapping, Mapping, "_ProviderSwapEvidence"]]:
     """Pair an inbound HTLC refund with the outbound funding leg it spent.
 
     Chain sync stamps ``swap_refund_funding_txid`` on an inbound row when its
@@ -603,17 +846,170 @@ def _match_by_refund_link(
         external_id = _record_get(row, "external_id")
         if external_id:
             out_by_external_id.setdefault(str(external_id).lower(), []).append(row)
-    pairs: list[tuple[Mapping, Mapping]] = []
+    pairs: list[tuple[Mapping, Mapping, _ProviderSwapEvidence]] = []
     for in_row in in_rows:
-        funding_txid = _record_get(in_row, "swap_refund_funding_txid")
+        funding_txid, funding_vout, outpoint_proven = _refund_funding_reference(
+            in_row
+        )
         if not funding_txid:
             continue
         in_asset = str(_record_get(in_row, "asset") or "").upper()
-        for out_row in out_by_external_id.get(str(funding_txid).lower(), []):
-            if str(_record_get(out_row, "asset") or "").upper() != in_asset:
+        funding_rows = out_by_external_id.get(str(funding_txid).lower(), [])
+        # One transaction row cannot distinguish two separate HTLC lockups in
+        # the same funding transaction.  Do not manufacture exact candidates
+        # when the imported source has duplicate funding rows.
+        if len(funding_rows) != 1:
+            continue
+        out_row = funding_rows[0]
+        if str(_record_get(out_row, "asset") or "").upper() != in_asset:
+            continue
+        if not _payment_hash_amounts_conserve(out_row, in_row):
+            continue
+        evidence_version = "txid_legacy"
+        if funding_vout is not None:
+            funding_output_msat = _funding_output_amount_msat(out_row, funding_vout)
+            if funding_output_msat is None:
+                evidence_version = "outpoint_unverified"
+            elif funding_output_msat != int(_record_get(out_row, "amount") or 0):
+                # The row aggregates more than this HTLC output. A row pair would
+                # move/dispose the whole transaction; only a custody component can
+                # split the exact outpoint safely, so do not offer a pair action.
                 continue
-            pairs.append((out_row, in_row))
+            elif (
+                outpoint_proven
+                and canonical_txid(funding_txid) is not None
+                and (
+                    (out_scope := onchain_transfer_scope(out_row)) is not None
+                    and out_scope[2] == canonical_txid(funding_txid)
+                )
+                and (
+                    (in_scope := onchain_transfer_scope(in_row)) is not None
+                    and in_scope[:2] == out_scope[:2]
+                )
+            ):
+                evidence_version = "outpoint_exact"
+            else:
+                evidence_version = "outpoint_unverified"
+        evidence_id = (
+            f"{funding_txid}:{funding_vout}"
+            if funding_vout is not None
+            else str(funding_txid)
+        )
+        pairs.append(
+            (
+                out_row,
+                in_row,
+                _ProviderSwapEvidence(
+                    provider="chain_htlc",
+                    swap_id=evidence_id,
+                    kind=KIND_SWAP_REFUND,
+                    flow="refund",
+                    status="refunded",
+                    version=evidence_version,
+                    spend_path="timeout",
+                ),
+            )
+        )
     return pairs
+
+
+def _funding_output_amount_msat(row: Mapping, vout: int) -> int | None:
+    raw = _record_get(row, "raw_json")
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    outputs = payload.get("vout")
+    if not isinstance(outputs, list):
+        return None
+    for position, output in enumerate(outputs):
+        if not isinstance(output, Mapping):
+            continue
+        raw_index = output.get("n", position)
+        try:
+            index = int(raw_index)
+        except (TypeError, ValueError):
+            continue
+        if index != vout:
+            continue
+        raw_sats = output.get("value_sats", output.get("value"))
+        try:
+            sats = int(raw_sats)
+        except (TypeError, ValueError):
+            return None
+        return sats * 1000 if sats >= 0 else None
+    return None
+
+
+def _refund_funding_reference(row: Mapping) -> tuple[str, int | None, bool]:
+    """Return the exact refund funding reference when the row exposes it.
+
+    Current databases persist the txid.  Newer import/sync paths can add the
+    backward-compatible ``swap_refund_funding_vout`` (or a combined outpoint)
+    without changing this matcher again.  The vout is returned for component
+    evidence even though the legacy transaction-pair schema cannot persist it.
+    """
+    def recovered_from_raw() -> tuple[tuple[str, int] | None, bool]:
+        raw = _record_get(row, "raw_json")
+        try:
+            payload = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None, False
+        if not isinstance(payload, Mapping):
+            return None, False
+        effective = payload.get("tx")
+        effective = effective if isinstance(effective, Mapping) else payload
+        vin = effective.get("vin")
+        return (
+            refund_funding_outpoint_from_tx_mapping(payload),
+            isinstance(vin, list) and len(vin) == 1,
+        )
+
+    recovered, recovered_covers_whole_row = recovered_from_raw()
+    outpoint = _record_get(row, "swap_refund_funding_outpoint")
+    if outpoint:
+        txid, separator, raw_vout = str(outpoint).partition(":")
+        if txid:
+            try:
+                vout = int(raw_vout) if separator else None
+                proof = (
+                    vout is not None
+                    and recovered is not None
+                    and recovered_covers_whole_row
+                    and canonical_txid(txid) == recovered[0]
+                    and vout == recovered[1]
+                )
+                return txid, vout, proof
+            except (TypeError, ValueError):
+                return txid, None, False
+
+    txid = str(_record_get(row, "swap_refund_funding_txid") or "").strip()
+    if not txid:
+        if recovered is not None:
+            return recovered[0], recovered[1], recovered_covers_whole_row
+        return "", None, False
+    raw_vout = _record_get(row, "swap_refund_funding_vout")
+    try:
+        if raw_vout not in (None, ""):
+            vout = int(raw_vout)
+            proof = (
+                recovered is not None
+                and recovered_covers_whole_row
+                and canonical_txid(txid) == recovered[0]
+                and vout == recovered[1]
+            )
+            return txid, vout, proof
+    except (TypeError, ValueError):
+        pass
+    if recovered is not None and normalize_group_txid(recovered[0]) == normalize_group_txid(txid):
+        return (
+            recovered[0],
+            recovered[1],
+            recovered_covers_whole_row and canonical_txid(txid) == recovered[0],
+        )
+    return txid, None, False
 
 
 @dataclass(frozen=True)
@@ -629,19 +1025,25 @@ class _ProviderSwapEvidence:
     taproot: str = ""
     cooperative: str = ""
     spend_path: str = ""
+    send_amount_msat: int | None = None
+    receive_amount_msat: int | None = None
+    amount_evidence_conflict: bool = False
+    route_evidence_conflict: bool = False
+    identity_evidence_conflict: bool = False
+    semantic_evidence_conflict: bool = False
 
 
 def _match_by_provider_swap_id(
     out_rows: Sequence[Mapping], in_rows: Sequence[Mapping]
-) -> list[tuple[Mapping, Mapping, _ProviderSwapEvidence]]:
+) -> list[tuple[Mapping, Mapping, _ProviderSwapEvidence, bool]]:
     """Pair rows carrying the same provider-scoped swap id.
 
-    This is the exact path for cooperative Taproot swaps: a key-path spend is
-    deliberately indistinguishable on-chain, so deterministic evidence has to
-    come from a redacted provider/client export, SDK regtest bridge, or other
-    local metadata import. The matcher requires a structured provider/source
-    marker plus a swap id; arbitrary raw ``id`` fields and free-text
-    counterparty labels are intentionally ignored.
+    Provider metadata remains useful review evidence even when incomplete.  It
+    reaches ``exact`` only for one outbound and one inbound under the provider
+    key, with both canonical route txids tied to the rows and a plausible
+    whole-row amount delta.  Duplicate/batched records, missing route ids, and
+    implausible coverage are returned as ``strong`` manual-review candidates;
+    they can never enter exact bulk/rule application.
     """
     out_by_key: dict[tuple[str, str], list[tuple[Mapping, _ProviderSwapEvidence]]] = {}
     for row in out_rows:
@@ -652,41 +1054,85 @@ def _match_by_provider_swap_id(
             (row, evidence)
         )
 
-    pairs: list[tuple[Mapping, Mapping, _ProviderSwapEvidence]] = []
+    in_by_key: dict[tuple[str, str], list[tuple[Mapping, _ProviderSwapEvidence]]] = {}
     for in_row in in_rows:
         in_evidence = _provider_swap_evidence(in_row)
         if in_evidence is None:
             continue
-        for out_row, out_evidence in out_by_key.get(
-            (in_evidence.provider, in_evidence.swap_id), []
-        ):
+        in_by_key.setdefault((in_evidence.provider, in_evidence.swap_id), []).append(
+            (in_row, in_evidence)
+        )
+
+    pairs: list[tuple[Mapping, Mapping, _ProviderSwapEvidence, bool]] = []
+    for key, outs in out_by_key.items():
+        ins = in_by_key.get(key, [])
+        unique_key = len(outs) == 1 and len(ins) == 1
+        for out_row, out_evidence in outs:
+            for in_row, in_evidence in ins:
             # Failed-swap refunds can legitimately return to the same wallet that
             # funded the lockup, so provider evidence intentionally does not apply
             # the same-wallet skip used by payment-hash swap claims.
-            evidence = _merge_provider_evidence(out_evidence, in_evidence)
-            if not _provider_route_matches_row(evidence, out_row, side="out"):
-                continue
-            if not _provider_route_matches_row(evidence, in_row, side="in"):
-                continue
-            pairs.append((out_row, in_row, evidence))
+                evidence = _merge_provider_evidence(out_evidence, in_evidence)
+                if not _provider_route_matches_row(evidence, out_row, side="out"):
+                    continue
+                if not _provider_route_matches_row(evidence, in_row, side="in"):
+                    continue
+                whole_row_exact = unique_key and _provider_whole_row_coverage(
+                    evidence, out_row, in_row
+                )
+                pairs.append((out_row, in_row, evidence, whole_row_exact))
     return pairs
+
+
+def _provider_whole_row_coverage(
+    evidence: _ProviderSwapEvidence,
+    out_row: Mapping,
+    in_row: Mapping,
+) -> bool:
+    """Whether provider evidence identifies both complete transaction rows."""
+
+    send_txid = canonical_txid(evidence.send_txid)
+    receive_txid = canonical_txid(evidence.receive_txid)
+    if send_txid is None or receive_txid is None:
+        return False
+    out_scope = onchain_transfer_scope(out_row)
+    in_scope = onchain_transfer_scope(in_row)
+    if out_scope is None or in_scope is None:
+        return False
+    if out_scope[2] != send_txid or in_scope[2] != receive_txid:
+        return False
+    out_domain = bitcoin_network_domain(out_row)
+    in_domain = bitcoin_network_domain(in_row)
+    if out_domain is None or in_domain is None or out_domain != in_domain:
+        return False
+    if evidence.amount_evidence_conflict:
+        return False
+    if evidence.route_evidence_conflict:
+        return False
+    if evidence.identity_evidence_conflict:
+        return False
+    if evidence.semantic_evidence_conflict:
+        return False
+    if evidence.send_amount_msat != int(_record_get(out_row, "amount") or 0):
+        return False
+    if evidence.receive_amount_msat != int(_record_get(in_row, "amount") or 0):
+        return False
+    return _payment_hash_amounts_conserve(out_row, in_row)
 
 
 def _provider_swap_evidence(row: Mapping) -> Optional[_ProviderSwapEvidence]:
     payload = _raw_json_payload(row)
     if not payload:
         return None
-    provider = _normalize_evidence_provider(
-        _first_text(
-            payload,
-            "provider",
-            "source",
-            "source_format",
-        )
-    )
+    provider_values = [
+        _normalize_evidence_provider(value)
+        for value in _all_text(payload, "provider", "source", "source_format")
+    ]
+    provider_values = [value for value in provider_values if value]
+    provider = provider_values[0] if provider_values else ""
     if not provider:
         return None
-    swap_id = _first_text(
+    swap_id_values = _all_text(
         payload,
         "swap_id",
         "swapId",
@@ -695,11 +1141,12 @@ def _provider_swap_evidence(row: Mapping) -> Optional[_ProviderSwapEvidence]:
         "boltz_id",
         "boltzId",
     )
+    swap_id = swap_id_values[0] if swap_id_values else ""
     if not swap_id and provider in {"boltz", "bullbitcoin"}:
         swap_id = _first_text(payload, "id")
     if not swap_id:
         return None
-    flow = _first_text(
+    flow_values = _all_text(
         payload,
         "flow",
         "type",
@@ -707,13 +1154,12 @@ def _provider_swap_evidence(row: Mapping) -> Optional[_ProviderSwapEvidence]:
         "swapType",
         "kind",
     )
-    status = _first_text(payload, "status", "state", "finality") or ""
+    flow = flow_values[0] if flow_values else ""
+    status_values = _all_text(payload, "status", "state", "finality")
+    status = status_values[0] if status_values else ""
     kind = _kind_from_provider_status(status) or _kind_from_provider_flow(flow) or ""
-    send_txid = _first_text(
-        payload, "send_txid", "sendTxid", "lockup_txid", "lockupTxid"
-    )
-    receive_txid = _first_text(
-        payload,
+    send_txid_keys = ("send_txid", "sendTxid", "lockup_txid", "lockupTxid")
+    receive_txid_keys = (
         "receive_txid",
         "receiveTxid",
         "claim_txid",
@@ -721,6 +1167,10 @@ def _provider_swap_evidence(row: Mapping) -> Optional[_ProviderSwapEvidence]:
         "refund_txid",
         "refundTxid",
     )
+    send_txid_values = _all_text(payload, *send_txid_keys)
+    receive_txid_values = _all_text(payload, *receive_txid_keys)
+    send_txid = send_txid_values[0] if send_txid_values else ""
+    receive_txid = receive_txid_values[0] if receive_txid_values else ""
     if not kind and not (send_txid or receive_txid):
         return None
     return _ProviderSwapEvidence(
@@ -737,6 +1187,20 @@ def _provider_swap_evidence(row: Mapping) -> Optional[_ProviderSwapEvidence]:
         or "",
         spend_path=_first_text(payload, "spend_path", "spendPath", "claim_path", "claimPath")
         or "",
+        send_amount_msat=_first_nonnegative_int(payload, "send_amount_msat"),
+        receive_amount_msat=_first_nonnegative_int(payload, "receive_amount_msat"),
+        route_evidence_conflict=(
+            len({value.lower() for value in send_txid_values}) > 1
+            or len({value.lower() for value in receive_txid_values}) > 1
+        ),
+        identity_evidence_conflict=(
+            len(set(provider_values)) > 1
+            or len({value.lower() for value in swap_id_values}) > 1
+        ),
+        semantic_evidence_conflict=(
+            len({_normalize_flow_text(value) for value in flow_values}) > 1
+            or len({_normalize_flow_text(value) for value in status_values}) > 1
+        ),
     )
 
 
@@ -762,6 +1226,37 @@ def _first_text(payload: Mapping, *keys: str) -> str:
         if text:
             return text
     return ""
+
+
+def _all_text(payload: Mapping, *keys: str) -> list[str]:
+    values = []
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            values.append(text)
+    return values
+
+
+def _first_nonnegative_int(payload: Mapping, *keys: str) -> int | None:
+    """Read only explicitly msat-denominated provider amount evidence."""
+
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, bool) or value in (None, ""):
+            continue
+        if isinstance(value, int):
+            parsed = value
+        elif isinstance(value, str) and value.strip().isdigit():
+            parsed = int(value.strip())
+        else:
+            # ``int(100.9)`` truncates. A fractional JSON number must never be
+            # promoted into exact/bulk-eligible whole-row amount evidence.
+            continue
+        return parsed if parsed >= 0 else None
+    return None
 
 
 def _normalize_evidence_provider(value: str) -> str:
@@ -811,6 +1306,29 @@ def _merge_provider_evidence(
     out_evidence: _ProviderSwapEvidence,
     in_evidence: _ProviderSwapEvidence,
 ) -> _ProviderSwapEvidence:
+    send_amounts = {
+        value
+        for value in (out_evidence.send_amount_msat, in_evidence.send_amount_msat)
+        if value is not None
+    }
+    receive_amounts = {
+        value
+        for value in (
+            out_evidence.receive_amount_msat,
+            in_evidence.receive_amount_msat,
+        )
+        if value is not None
+    }
+    send_txids = {
+        str(value).strip().lower()
+        for value in (out_evidence.send_txid, in_evidence.send_txid)
+        if str(value or "").strip()
+    }
+    receive_txids = {
+        str(value).strip().lower()
+        for value in (out_evidence.receive_txid, in_evidence.receive_txid)
+        if str(value or "").strip()
+    }
     return _ProviderSwapEvidence(
         provider=out_evidence.provider,
         swap_id=out_evidence.swap_id,
@@ -823,6 +1341,42 @@ def _merge_provider_evidence(
         taproot=out_evidence.taproot or in_evidence.taproot,
         cooperative=out_evidence.cooperative or in_evidence.cooperative,
         spend_path=out_evidence.spend_path or in_evidence.spend_path,
+        send_amount_msat=next(iter(send_amounts), None),
+        receive_amount_msat=next(iter(receive_amounts), None),
+        amount_evidence_conflict=(
+            out_evidence.amount_evidence_conflict
+            or in_evidence.amount_evidence_conflict
+            or len(send_amounts) > 1
+            or len(receive_amounts) > 1
+        ),
+        route_evidence_conflict=(
+            out_evidence.route_evidence_conflict
+            or in_evidence.route_evidence_conflict
+            or len(send_txids) > 1
+            or len(receive_txids) > 1
+        ),
+        identity_evidence_conflict=(
+            out_evidence.identity_evidence_conflict
+            or in_evidence.identity_evidence_conflict
+            or out_evidence.provider != in_evidence.provider
+            or out_evidence.swap_id.lower() != in_evidence.swap_id.lower()
+        ),
+        semantic_evidence_conflict=(
+            out_evidence.semantic_evidence_conflict
+            or in_evidence.semantic_evidence_conflict
+            or (
+                bool(out_evidence.flow)
+                and bool(in_evidence.flow)
+                and _normalize_flow_text(out_evidence.flow)
+                != _normalize_flow_text(in_evidence.flow)
+            )
+            or (
+                bool(out_evidence.status)
+                and bool(in_evidence.status)
+                and _normalize_flow_text(out_evidence.status)
+                != _normalize_flow_text(in_evidence.status)
+            )
+        ),
     )
 
 
@@ -922,8 +1476,6 @@ def _build_candidate(
     *,
     confidence: str,
     method: str,
-    tax_country: Optional[str],
-    bitcoin_rail_carrying_value: bool = True,
     default_kind: Optional[str] = None,
     evidence: Optional[_ProviderSwapEvidence] = None,
 ) -> SwapCandidate:
@@ -941,11 +1493,9 @@ def _build_candidate(
     default_policy = (
         POLICY_CARRYING_VALUE
         if out_asset.upper() == in_asset.upper()
-        else default_policy_for(
-            tax_country,
+        else default_ownership_policy_for(
             out_asset,
             in_asset,
-            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
         )
     )
     return SwapCandidate(
@@ -991,6 +1541,52 @@ def _outbound_fee_component_msat(row: Mapping) -> int:
         return 0
 
 
+def _dedupe_candidate_edges(
+    candidates: Sequence[SwapCandidate],
+) -> list[SwapCandidate]:
+    """Keep the strongest evidence method for each identical row edge.
+
+    Conflict cardinality represents alternative counterparties, not the number
+    of evidence labels that happened to support the same out/in pair.
+    """
+
+    method_rank = {
+        METHOD_HTLC_REFUND: 0,
+        METHOD_PAYMENT_HASH: 1,
+        METHOD_PROVIDER_SWAP_ID: 2,
+        METHOD_OWNERSHIP_GRAPH: 3,
+        METHOD_HEURISTIC: 4,
+    }
+    by_edge: dict[tuple[str, str], SwapCandidate] = {}
+    for candidate in candidates:
+        key = (candidate.out_id, candidate.in_id)
+        current = by_edge.get(key)
+        candidate_rank = (
+            0 if candidate.confidence == CONFIDENCE_EXACT else 1,
+            method_rank.get(candidate.method, 99),
+        )
+        current_rank = (
+            0 if current and current.confidence == CONFIDENCE_EXACT else 1,
+            method_rank.get(current.method, 99) if current else 99,
+        )
+        if current is None or candidate_rank < current_rank:
+            by_edge[key] = candidate
+    return list(by_edge.values())
+
+
+def finalize_candidate_conflicts(
+    candidates: Sequence[SwapCandidate],
+) -> list[SwapCandidate]:
+    """Deduplicate edges and stamp conflicts over one complete review set.
+
+    Callers that add evidence sources outside this pure matcher (currently the
+    ownership-graph quarantine bridge) must pass the combined population here
+    before filtering, bulk application, or rule evaluation.
+    """
+
+    return _stamp_conflict_set_ids(_dedupe_candidate_edges(candidates))
+
+
 def _stamp_conflict_set_ids(candidates: Sequence[SwapCandidate]) -> list[SwapCandidate]:
     """Stamp each candidate's ``conflict_set_id`` and ``conflict_size``.
 
@@ -1013,10 +1609,16 @@ def _stamp_conflict_set_ids(candidates: Sequence[SwapCandidate]) -> list[SwapCan
     for candidate in candidates:
         if candidate.confidence == CONFIDENCE_EXACT:
             continue
-        if candidate.out_id in consumed_legs_by_exact:
-            continue
-        if candidate.in_id in consumed_legs_by_exact:
-            continue
+        # Pure amount/time heuristics add no independent identity evidence and
+        # may be pruned when an exact edge owns the same leg. Ownership/provider
+        # review evidence is different: a contradictory edge is itself a reason
+        # the "exact" edge must not auto-apply, so retain it in the global
+        # conflict cluster.
+        if candidate.method == METHOD_HEURISTIC:
+            if candidate.out_id in consumed_legs_by_exact:
+                continue
+            if candidate.in_id in consumed_legs_by_exact:
+                continue
         surviving.append(candidate)
 
     parent: dict[str, str] = {}

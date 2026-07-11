@@ -216,13 +216,25 @@ CREATE TABLE bip329_labels (
 );
 """
 
-_FIXTURE_COLD_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+_FIXTURE_SELF_TRANSFER_TXID = "4" * 64
+_AT_TRANSFER_TXID = "5" * 64
+_AT_ALT_TRANSFER_TXID = "6" * 64
+_AT_MIXED_TRANSFER_TXID = "7" * 64
+
+
+def _typed_onchain_raw(external_id):
+    text = str(external_id or "")
+    if len(text) == 64 and all(char in "0123456789abcdefABCDEF" for char in text):
+        return json.dumps({"txid": text})
+    return "{}"
+
+_FIXTURE_COLD_TRANSFER_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-01T10:00:00Z,cold-funding-1,inbound,BTC,1.00000000,0,60000,Cold acquisition
-2026-02-01T12:00:00Z,onchain-self-transfer-1,outbound,BTC,0.50000000,0.001,65000,Move to hot wallet
+2026-02-01T12:00:00Z,{_FIXTURE_SELF_TRANSFER_TXID},outbound,BTC,0.50000000,0.001,65000,Move to hot wallet
 """
 
-_FIXTURE_HOT_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
-2026-02-01T12:00:00Z,onchain-self-transfer-1,inbound,BTC,0.50000000,0,65000,Receive from cold wallet
+_FIXTURE_HOT_TRANSFER_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-02-01T12:00:00Z,{_FIXTURE_SELF_TRANSFER_TXID},inbound,BTC,0.50000000,0,65000,Receive from cold wallet
 """
 
 _CROSS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
@@ -7896,7 +7908,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "kind": "withdrawal",
                 "description": "Move to hot wallet",
                 "note": None,
-                "external_id": "onchain-self-transfer-1",
+                "external_id": _FIXTURE_SELF_TRANSFER_TXID,
+                "raw_json": _typed_onchain_raw(_FIXTURE_SELF_TRANSFER_TXID),
                 "created_at": "2026-02-01T12:00:00Z",
             },
             {
@@ -7916,7 +7929,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "kind": "deposit",
                 "description": "Receive from cold wallet",
                 "note": None,
-                "external_id": "onchain-self-transfer-1",
+                "external_id": _FIXTURE_SELF_TRANSFER_TXID,
+                "raw_json": _typed_onchain_raw(_FIXTURE_SELF_TRANSFER_TXID),
                 "created_at": "2026-02-01T12:00:00Z",
             },
         ]
@@ -8175,14 +8189,15 @@ class ReviewRegressionTest(unittest.TestCase):
                 "note": None,
                 "description": description,
                 "external_id": external_id,
+                "raw_json": _typed_onchain_raw(external_id),
                 "created_at": occurred_at,
             }
 
         rows = [
             _row("neu-buy", "wallet-a", "inbound", 100_000_000_000, "2024-06-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Vienna Neu buy", external_id="neu-buy"),
             # Same-asset A -> B transfer: shared external_id auto-pairs the two legs into a MOVE.
-            _row("xfer-out", "wallet-a", "outbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="withdrawal", description="Move A->B", external_id="xfer-1"),
-            _row("xfer-in", "wallet-b", "inbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Move A->B", external_id="xfer-1"),
+            _row("xfer-out", "wallet-a", "outbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="withdrawal", description="Move A->B", external_id=_AT_TRANSFER_TXID),
+            _row("xfer-in", "wallet-b", "inbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Move A->B", external_id=_AT_TRANSFER_TXID),
             _row("neu-sell", "wallet-b", "outbound", 30_000_000_000, "2025-03-01T09:00:00Z", fiat_rate=50000, fiat_value=15000, kind="withdrawal", description="Sell from B", external_id="neu-sell"),
         ]
         return profile, TaxEngineLedgerInputs(
@@ -11686,6 +11701,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "note": None,
                 "description": description,
                 "external_id": external_id,
+                "raw_json": _typed_onchain_raw(external_id),
                 "created_at": occurred_at,
             }
 
@@ -11708,7 +11724,7 @@ class ReviewRegressionTest(unittest.TestCase):
                         100_000_000_000,
                         "2024-07-01T10:00:00Z",
                         description="Move A->B",
-                        external_id="xfer-alt",
+                        external_id=_AT_ALT_TRANSFER_TXID,
                     ),
                     _row(
                         "xfer-in",
@@ -11717,7 +11733,7 @@ class ReviewRegressionTest(unittest.TestCase):
                         100_000_000_000,
                         "2024-07-01T10:00:00Z",
                         description="Move A->B",
-                        external_id="xfer-alt",
+                        external_id=_AT_ALT_TRANSFER_TXID,
                     ),
                 ],
                 wallet_refs_by_id=wallet_refs_by_id,
@@ -11794,6 +11810,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "note": None,
                 "description": description,
                 "external_id": external_id,
+                "raw_json": _typed_onchain_raw(external_id),
                 "created_at": occurred_at,
             }
 
@@ -11825,7 +11842,7 @@ class ReviewRegressionTest(unittest.TestCase):
                         50_000_000_000,
                         "2024-07-01T10:00:00Z",
                         description="Move A->B",
-                        external_id="xfer-mixed",
+                        external_id=_AT_MIXED_TRANSFER_TXID,
                     ),
                     _row(
                         "xfer-in",
@@ -11834,7 +11851,7 @@ class ReviewRegressionTest(unittest.TestCase):
                         50_000_000_000,
                         "2024-07-01T10:00:00Z",
                         description="Move A->B",
-                        external_id="xfer-mixed",
+                        external_id=_AT_MIXED_TRANSFER_TXID,
                     ),
                 ],
                 wallet_refs_by_id=wallet_refs_by_id,
@@ -12412,7 +12429,8 @@ class ReviewRegressionTest(unittest.TestCase):
                     "kind": "withdrawal",
                     "description": "Move to hot wallet",
                     "note": None,
-                    "external_id": "onchain-self-transfer-1",
+                    "external_id": _FIXTURE_SELF_TRANSFER_TXID,
+                    "raw_json": _typed_onchain_raw(_FIXTURE_SELF_TRANSFER_TXID),
                     "created_at": "2026-02-01T12:00:00Z",
                 },
                 {
@@ -12432,7 +12450,8 @@ class ReviewRegressionTest(unittest.TestCase):
                     "kind": "deposit",
                     "description": "Receive from cold wallet",
                     "note": None,
-                    "external_id": "onchain-self-transfer-1",
+                    "external_id": _FIXTURE_SELF_TRANSFER_TXID,
+                    "raw_json": _typed_onchain_raw(_FIXTURE_SELF_TRANSFER_TXID),
                     "created_at": "2026-02-01T12:00:00Z",
                 },
             ],

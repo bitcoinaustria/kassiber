@@ -19,6 +19,9 @@ ADDR_C = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
 SCRIPT_A = address_to_scriptpubkey(ADDR_A).hex()
 SCRIPT_B = address_to_scriptpubkey(ADDR_B).hex()
 SCRIPT_C = address_to_scriptpubkey(ADDR_C).hex()
+CONSOL_TXID = "1" * 64
+PARTIAL_TXID = "2" * 64
+AMBIG_TXID = "3" * 64
 
 
 class _FakeElectrumClient:
@@ -2192,39 +2195,51 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual([node["valueSats"] for node in second["inputs"]], [1_200_000, 800_000])
 
     def test_multi_source_consolidation_annotation(self):
-        self._utxo("wallet-a", ADDR_A, "prev-a", 0, amount=51_000_000)
-        self._utxo("wallet-b", ADDR_B, "prev-b", 0, amount=31_000_000)
+        prev_a = "a1" * 32
+        prev_b = "b2" * 32
+        self._utxo("wallet-a", ADDR_A, prev_a, 0, amount=51_000_000)
+        self._utxo("wallet-b", ADDR_B, prev_b, 0, amount=31_000_000)
         self._utxo("wallet-c", ADDR_C, "scan-c", 0, amount=81_000_000)
         raw = {
-            "txid": "consol",
+            "txid": CONSOL_TXID,
             "vin": [
-                {"txid": "prev-a", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 51_000_000}},
-                {"txid": "prev-b", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 31_000_000}},
+                {"txid": prev_a, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 51_000_000}},
+                {"txid": prev_b, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 31_000_000}},
             ],
             "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "scriptpubkey_address": ADDR_C, "value": 81_000_000}],
         }
-        self._tx("a-out", "wallet-a", "outbound", 50_000_000_000, "consol", raw, fee_msat=1_000_000_000)
-        self._tx("b-out", "wallet-b", "outbound", 30_000_000_000, "consol", raw, fee_msat=1_000_000_000)
-        self._tx("c-in", "wallet-c", "inbound", 81_000_000_000, "consol", "{}")
+        self._tx("a-out", "wallet-a", "outbound", 50_000_000_000, CONSOL_TXID, raw, fee_msat=1_000_000_000)
+        self._tx("b-out", "wallet-b", "outbound", 30_000_000_000, CONSOL_TXID, raw, fee_msat=1_000_000_000)
+        self._tx(
+            "c-in",
+            "wallet-c",
+            "inbound",
+            81_000_000_000,
+            CONSOL_TXID,
+            {"Tx Hash": CONSOL_TXID},
+        )
 
         payload = self._graph("a-out")
 
         codes = {annotation["code"] for annotation in payload["annotations"]}
         self.assertIn("multi_source_consolidation", codes)
-        self.assertIn("multi-consol:consol", payload["accounting"]["transferGroupIds"])
+        self.assertIn(
+            f"multi-consol:{CONSOL_TXID}",
+            payload["accounting"]["transferGroupIds"],
+        )
 
     def test_partial_external_residual_annotation(self):
         self._utxo("wallet-a", ADDR_A, "prev-partial", 0, amount=61_000_000)
         self._utxo("wallet-b", ADDR_B, "scan-b", 0, amount=50_000_000)
         raw = {
-            "txid": "partial",
+            "txid": PARTIAL_TXID,
             "vin": [{"txid": "prev-partial", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 61_000_000}}],
             "vout": [
                 {"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000},
                 {"n": 1, "scriptpubkey": "00142222222222222222222222222222222222222222", "value": 10_000_000},
             ],
         }
-        self._tx("partial-out", "wallet-a", "outbound", 60_000_000_000, "partial", raw, fee_msat=1_000_000_000)
+        self._tx("partial-out", "wallet-a", "outbound", 60_000_000_000, PARTIAL_TXID, raw, fee_msat=1_000_000_000)
 
         payload = self._graph("partial-out")
 
@@ -2236,13 +2251,13 @@ class TransactionGraphTest(unittest.TestCase):
         self._utxo("wallet-a", ADDR_A, "prev-ambig", 0, amount=51_000_000)
         self._utxo("wallet-b", ADDR_B, "scan-ambig", 0, amount=50_000_000)
         raw = {
-            "txid": "ambig",
+            "txid": AMBIG_TXID,
             "vin": [{"txid": "prev-ambig", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 51_000_000}}],
             "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000}],
         }
-        self._tx("ambig-out", "wallet-a", "outbound", 50_000_000_000, "ambig", raw, fee_msat=1_000_000_000)
-        self._tx("ambig-in-1", "wallet-b", "inbound", 50_000_000_000, "ambig", "{}")
-        self._tx("ambig-in-2", "wallet-b", "inbound", 50_000_000_000, "ambig", "{}")
+        self._tx("ambig-out", "wallet-a", "outbound", 50_000_000_000, AMBIG_TXID, raw, fee_msat=1_000_000_000)
+        self._tx("ambig-in-1", "wallet-b", "inbound", 50_000_000_000, AMBIG_TXID, "{}")
+        self._tx("ambig-in-2", "wallet-b", "inbound", 50_000_000_000, AMBIG_TXID, "{}")
 
         payload = self._graph("ambig-out")
 
@@ -2251,9 +2266,9 @@ class TransactionGraphTest(unittest.TestCase):
 
     def test_mixed_case_recorded_fanout_is_annotated(self):
         txid = "ABCDEF" + "1" * 58
-        self._tx("fan-out", "wallet-a", "outbound", 80_000_000_000, txid, "{}")
-        self._tx("fan-in-b", "wallet-b", "inbound", 50_000_000_000, txid.lower(), "{}")
-        self._tx("fan-in-c", "wallet-c", "inbound", 30_000_000_000, txid.upper(), "{}")
+        self._tx("fan-out", "wallet-a", "outbound", 80_000_000_000, txid, {"Tx Hash": txid})
+        self._tx("fan-in-b", "wallet-b", "inbound", 50_000_000_000, txid.lower(), {"Tx Hash": txid.lower()})
+        self._tx("fan-in-c", "wallet-c", "inbound", 30_000_000_000, txid.upper(), {"Tx Hash": txid.upper()})
 
         payload = self._graph("fan-out")
 
@@ -2263,8 +2278,22 @@ class TransactionGraphTest(unittest.TestCase):
 
     def test_recorded_one_to_one_transfer_is_annotated(self):
         txid = "abcd" + "2" * 60
-        self._tx("one-out", "wallet-a", "outbound", 50_000_000_000, txid, "{}")
-        self._tx("one-in", "wallet-b", "inbound", 50_000_000_000, txid.upper(), "{}")
+        self._tx(
+            "one-out",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            txid,
+            json.dumps({"txid": txid}),
+        )
+        self._tx(
+            "one-in",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            txid.upper(),
+            json.dumps({"txid": txid.upper()}),
+        )
 
         payload = self._graph("one-out")
 
@@ -2278,9 +2307,10 @@ class TransactionGraphTest(unittest.TestCase):
 
     def test_excluded_rows_are_ignored_for_graph_semantics(self):
         txid = "cdef" + "3" * 60
-        self._tx("excluded-fan-out", "wallet-a", "outbound", 80_000_000_000, txid, "{}")
-        self._tx("excluded-fan-in-b", "wallet-b", "inbound", 50_000_000_000, txid, "{}")
-        self._tx("excluded-fan-in-c", "wallet-c", "inbound", 30_000_000_000, txid, "{}")
+        typed = {"Tx Hash": txid}
+        self._tx("excluded-fan-out", "wallet-a", "outbound", 80_000_000_000, txid, typed)
+        self._tx("excluded-fan-in-b", "wallet-b", "inbound", 50_000_000_000, txid, typed)
+        self._tx("excluded-fan-in-c", "wallet-c", "inbound", 30_000_000_000, txid, typed)
         self.conn.execute(
             "UPDATE transactions SET excluded = 1 WHERE id = ?",
             ("excluded-fan-in-c",),

@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import uuid
 from collections import defaultdict
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache
@@ -36,6 +37,7 @@ from ..backends import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import custody_components as core_custody_components
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
 from ..core import imports as core_imports
@@ -113,11 +115,13 @@ from ..tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
     DEFAULT_TAX_COUNTRY,
     build_tax_policy,
+    cross_asset_carrying_value_supported,
+    recommended_pair_policy,
     require_tax_country_supported_for_profile_mutation,
     require_tax_processing_supported,
 )
 from ..transfers import (
-    cross_asset_carrying_value_supported,
+    bitcoin_network_domain_evidence,
     profile_bitcoin_rail_carrying_value,
 )
 from ..wallet_descriptors import (
@@ -169,6 +173,7 @@ WALLET_KINDS = [
     "coinbase",
     "binance",
     "wasabi",
+    "untracked",
     "custom",
 ]
 
@@ -613,6 +618,66 @@ def _positive_btc_amount_msat(value, flag_name):
     return btc_to_msat(amount)
 
 
+def _transaction_pair_identity_row(conn, row):
+    """Attach wallet rail metadata used by country-neutral identity checks."""
+
+    payload = dict(row)
+    wallet = conn.execute(
+        "SELECT kind, config_json FROM wallets WHERE id = ?",
+        (row["wallet_id"],),
+    ).fetchone()
+    if wallet is not None:
+        payload["wallet_kind"] = wallet["kind"]
+        payload["config_json"] = wallet["config_json"]
+    return payload
+
+
+def _validate_carrying_pair_network(conn, out_row, in_row, policy):
+    """Never carry basis between two known, incompatible Bitcoin networks."""
+
+    if policy != "carrying-value":
+        return
+    out_domain, out_valid = bitcoin_network_domain_evidence(
+        _transaction_pair_identity_row(conn, out_row)
+    )
+    in_domain, in_valid = bitcoin_network_domain_evidence(
+        _transaction_pair_identity_row(conn, in_row)
+    )
+    if not out_valid or not in_valid:
+        raise AppError(
+            "A carrying-value pair has contradictory Bitcoin network metadata.",
+            code="transfer_network_mismatch",
+            hint=(
+                "Correct the wallet/transaction chain and network metadata "
+                "before pairing; conflicting observations cannot carry basis."
+            ),
+            details={
+                "out_transaction_id": out_row["id"],
+                "in_transaction_id": in_row["id"],
+                "out_network_valid": out_valid,
+                "in_network_valid": in_valid,
+            },
+        )
+    if out_domain is None or in_domain is None or out_domain == in_domain:
+        return
+    raise AppError(
+        "A carrying-value pair cannot cross Bitcoin network boundaries "
+        f"({out_domain} -> {in_domain}).",
+        code="transfer_network_mismatch",
+        hint=(
+            "Correct the wallet/transaction network metadata or leave these "
+            "transactions unpaired; mainnet, testnet, signet, and regtest are "
+            "distinct physical value domains."
+        ),
+        details={
+            "out_transaction_id": out_row["id"],
+            "in_transaction_id": in_row["id"],
+            "out_network_domain": out_domain,
+            "in_network_domain": in_domain,
+        },
+    )
+
+
 def create_transaction_pair(
     conn,
     workspace_ref,
@@ -652,13 +717,9 @@ def create_transaction_pair(
         policy = (
             "carrying-value"
             if str(out_row["asset"]).upper() == str(in_row["asset"]).upper()
-            else core_transfer_matching.default_policy_for(
-                str(profile["tax_country"] or ""),
-                out_row["asset"],
-                in_row["asset"],
-                bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
-            )
+            else recommended_pair_policy(profile, out_row["asset"], in_row["asset"])
         )
+    _validate_carrying_pair_network(conn, out_row, in_row, policy)
     if out_row["asset"] == in_row["asset"] and policy == "taxable":
         raise AppError(
             f"Same-asset taxable pairs are not supported yet "
@@ -837,12 +898,7 @@ def create_direct_swap_payout(
         policy = (
             "carrying-value"
             if str(out_row["asset"]).upper() == target_asset
-            else core_transfer_matching.default_policy_for(
-                str(profile["tax_country"] or ""),
-                out_row["asset"],
-                target_asset,
-                bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
-            )
+            else recommended_pair_policy(profile, out_row["asset"], target_asset)
         )
 
     if out_row["asset"] != target_asset and policy == "carrying-value":
@@ -1062,6 +1118,430 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
     return output
 
 
+def _custody_component_leg_inputs(conn, workspace, profile, raw_legs):
+    if not isinstance(raw_legs, list):
+        raise AppError("custody component legs must be a JSON array", code="validation")
+    resolved = []
+    for ordinal, raw in enumerate(raw_legs):
+        if not isinstance(raw, dict):
+            raise AppError(
+                f"custody component leg {ordinal} must be an object",
+                code="validation",
+            )
+        leg = dict(raw)
+        transaction_ref = leg.pop("transaction", None) or leg.pop(
+            "transaction_ref", None
+        )
+        if transaction_ref is not None:
+            transaction = resolve_transaction(conn, profile["id"], transaction_ref)
+            leg["transaction_id"] = transaction["id"]
+            leg.setdefault("wallet_id", transaction["wallet_id"])
+            leg.setdefault("asset", transaction["asset"])
+            leg.setdefault("occurred_at", transaction["occurred_at"])
+        untracked_wallet = leg.pop("untracked_wallet", None)
+        wallet_ref = leg.pop("wallet", None) or leg.pop("wallet_ref", None)
+        if untracked_wallet is not None:
+            if wallet_ref is not None or leg.get("wallet_id"):
+                raise AppError(
+                    f"custody component leg {ordinal} cannot combine untracked_wallet with wallet",
+                    code="validation",
+                )
+            if not isinstance(untracked_wallet, str) or not untracked_wallet.strip():
+                raise AppError(
+                    f"custody component leg {ordinal} untracked_wallet must be a label",
+                    code="validation",
+                )
+            label = untracked_wallet.strip()
+            try:
+                existing_wallet = resolve_wallet(conn, profile["id"], label)
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+                core_wallets.create_wallet(
+                    conn,
+                    workspace["id"],
+                    profile["id"],
+                    label,
+                    "untracked",
+                    commit=False,
+                )
+                existing_wallet = resolve_wallet(conn, profile["id"], label)
+            if str(existing_wallet["kind"] or "").lower() != "untracked":
+                raise AppError(
+                    f"Wallet '{label}' already exists but is not an untracked placeholder",
+                    code="conflict",
+                    hint="Use wallet/wallet_ref for an existing tracked wallet, or choose a distinct untracked_wallet label.",
+                )
+            leg["wallet_id"] = existing_wallet["id"]
+        if wallet_ref is not None:
+            leg["wallet_id"] = resolve_wallet(conn, profile["id"], wallet_ref)["id"]
+        if "amount_btc" in leg:
+            if "amount_msat" in leg:
+                raise AppError(
+                    f"custody component leg {ordinal} cannot set both amount_btc and amount_msat",
+                    code="validation",
+                )
+            leg["amount_msat"] = btc_to_msat(dec(leg.pop("amount_btc")))
+        asset = normalize_asset_code(leg.get("asset") or "BTC")
+        leg["asset"] = asset
+        wallet = (
+            resolve_wallet(conn, profile["id"], leg["wallet_id"])
+            if leg.get("wallet_id")
+            else None
+        )
+        wallet_kind = str(wallet["kind"] if wallet is not None else "").lower()
+        if not leg.get("rail"):
+            if wallet_kind == "untracked":
+                leg["rail"] = "untracked"
+            elif wallet_kind in core_transfer_matching.LIGHTNING_WALLET_KINDS:
+                leg["rail"] = "lightning"
+            elif asset == "LBTC":
+                leg["rail"] = "liquid"
+            else:
+                leg["rail"] = "bitcoin"
+        if not leg.get("exposure"):
+            if asset in {"BTC", "LBTC"}:
+                leg["exposure"] = "bitcoin"
+            else:
+                leg["exposure"] = asset.lower()
+        if not leg.get("conservation_unit"):
+            leg["conservation_unit"] = (
+                "msat" if asset in {"BTC", "LBTC"} else "asset-quantum"
+            )
+        resolved.append(leg)
+    return resolved
+
+
+_CUSTODY_COMPONENT_CREATE_FIELDS = (
+    "component_type",
+    "conservation_mode",
+    "evidence_kind",
+    "evidence_grade",
+    "evidence",
+    "conversion_policy",
+    "conversion_reviewed",
+    "conversion_metadata",
+    "notes",
+    "change_reason",
+    "component_id",
+    "lineage_id",
+    "created_at",
+)
+
+
+def create_custody_component(
+    conn,
+    workspace_ref,
+    profile_ref,
+    spec,
+    *,
+    activate=False,
+    commit=True,
+    include_local_evidence=True,
+):
+    if not isinstance(spec, dict):
+        raise AppError("custody component spec must be a JSON object", code="validation")
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    try:
+        # Leg resolution can create an explicit untracked-wallet placeholder.
+        # Keep it inside the same rollback boundary as component validation so
+        # a failed single create cannot leak a placeholder into a later commit.
+        kwargs = {
+            field: spec[field]
+            for field in _CUSTODY_COMPONENT_CREATE_FIELDS
+            if field in spec
+        }
+        kwargs.setdefault("component_type", "manual_bridge")
+        kwargs["legs"] = _custody_component_leg_inputs(
+            conn, workspace, profile, spec.get("legs")
+        )
+        kwargs["allocations"] = spec.get("allocations") or []
+        component = core_custody_components.create_component(
+            conn,
+            workspace_id=workspace["id"],
+            profile_id=profile["id"],
+            **kwargs,
+        )
+        # The operation argument is authoritative. Embedded JSON must never
+        # override a caller's explicit --draft / activate=false decision.
+        if activate:
+            component = core_custody_components.activate_component(
+                conn, component["id"]
+            )
+        if not include_local_evidence:
+            component = core_custody_components.get_component(
+                conn,
+                component["id"],
+                profile_id=profile["id"],
+                include_local_evidence=False,
+            )
+        if commit:
+            conn.commit()
+        return component
+    except Exception:
+        if commit:
+            conn.rollback()
+        raise
+
+
+def bulk_resolve_custody_components(
+    conn,
+    workspace_ref,
+    profile_ref,
+    specs,
+    *,
+    activate=True,
+    commit=True,
+    include_local_evidence=True,
+):
+    if isinstance(specs, dict):
+        specs = specs.get("components")
+    if not isinstance(specs, list) or not specs:
+        raise AppError(
+            "bulk custody resolution requires a non-empty components array",
+            code="validation",
+        )
+    created = []
+    savepoint = f"custody_components_bulk_{uuid.uuid4().hex}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        for spec in specs:
+            created.append(
+                create_custody_component(
+                    conn,
+                    workspace_ref,
+                    profile_ref,
+                    spec,
+                    activate=activate,
+                    commit=False,
+                    include_local_evidence=include_local_evidence,
+                )
+            )
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    if commit:
+        conn.commit()
+    return {
+        "components": created,
+        "summary": {
+            "count": len(created),
+            "active": sum(
+                item.get("effective_state") == "active" for item in created
+            ),
+            "draft": sum(
+                item.get("effective_state") != "active" for item in created
+            ),
+        },
+    }
+
+
+def list_custody_components(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    state=None,
+    component_type=None,
+    transaction=None,
+    effective_only=False,
+    include_local_evidence=False,
+    limit=200,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    transaction_id = None
+    if transaction is not None:
+        transaction_id = resolve_transaction(conn, profile["id"], transaction)["id"]
+    return core_custody_components.list_components(
+        conn,
+        profile_id=profile["id"],
+        state=state,
+        component_type=component_type,
+        transaction_id=transaction_id,
+        effective_only=effective_only,
+        include_local_evidence=include_local_evidence,
+        limit=int(limit),
+    )
+
+
+def get_custody_component(
+    conn, workspace_ref, profile_ref, component_id, *, include_local_evidence=False
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_custody_components.get_component(
+        conn,
+        component_id,
+        profile_id=profile["id"],
+        include_local_evidence=include_local_evidence,
+    )
+
+
+def activate_custody_component(
+    conn,
+    workspace_ref,
+    profile_ref,
+    component_id,
+    *,
+    include_local_evidence=True,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    core_custody_components.get_component(
+        conn, component_id, profile_id=profile["id"], include_local_evidence=False
+    )
+    try:
+        result = core_custody_components.activate_component(conn, component_id)
+        if not include_local_evidence:
+            result = core_custody_components.get_component(
+                conn,
+                result["id"],
+                profile_id=profile["id"],
+                include_local_evidence=False,
+            )
+        conn.commit()
+        return result
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def update_custody_component(
+    conn,
+    workspace_ref,
+    profile_ref,
+    component_id,
+    spec,
+    *,
+    activate=False,
+    include_local_evidence=True,
+):
+    if not isinstance(spec, dict):
+        raise AppError("custody component revision must be a JSON object", code="validation")
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    existing_component = core_custody_components.get_component(
+        conn, component_id, profile_id=profile["id"], include_local_evidence=True
+    )
+    try:
+        # As on create, resolving revised legs may author an untracked-wallet
+        # placeholder and therefore belongs inside the rollback boundary.
+        allowed = set(_CUSTODY_COMPONENT_CREATE_FIELDS) - {
+            "component_id",
+            "lineage_id",
+        }
+        kwargs = {field: spec[field] for field in allowed if field in spec}
+        if "legs" in spec:
+            raw_legs = spec["legs"]
+            if not include_local_evidence and isinstance(raw_legs, list):
+                # Renderer-safe reads deliberately omit location_ref. When the
+                # UI edits a visible leg, retain that hidden local evidence by
+                # immutable leg id unless the caller explicitly supplied a new
+                # value. New/replaced legs do not inherit anything implicitly.
+                hidden_by_id = {
+                    str(leg["id"]): leg.get("location_ref")
+                    for leg in existing_component["legs"]
+                    if leg.get("location_ref") is not None
+                }
+                preserved_legs = []
+                for raw_leg in raw_legs:
+                    if not isinstance(raw_leg, dict):
+                        preserved_legs.append(raw_leg)
+                        continue
+                    preserved = dict(raw_leg)
+                    leg_id = str(preserved.get("id") or "")
+                    if (
+                        "location_ref" not in preserved
+                        and leg_id in hidden_by_id
+                    ):
+                        preserved["location_ref"] = hidden_by_id[leg_id]
+                    preserved_legs.append(preserved)
+                raw_legs = preserved_legs
+            kwargs["legs"] = _custody_component_leg_inputs(
+                conn, workspace, profile, raw_legs
+            )
+        if "allocations" in spec:
+            kwargs["allocations"] = spec["allocations"]
+        result = core_custody_components.update_component(
+            conn, component_id, **kwargs
+        )
+        if activate:
+            result = core_custody_components.activate_component(conn, result["id"])
+        if not include_local_evidence:
+            result = core_custody_components.get_component(
+                conn,
+                result["id"],
+                profile_id=profile["id"],
+                include_local_evidence=False,
+            )
+        conn.commit()
+        return result
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def supersede_custody_component(
+    conn,
+    workspace_ref,
+    profile_ref,
+    component_id,
+    *,
+    reason=None,
+    include_local_evidence=True,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    core_custody_components.get_component(
+        conn, component_id, profile_id=profile["id"], include_local_evidence=False
+    )
+    try:
+        result = core_custody_components.supersede_component(
+            conn, component_id, reason=reason
+        )
+        if not include_local_evidence:
+            result = core_custody_components.get_component(
+                conn,
+                result["id"],
+                profile_id=profile["id"],
+                include_local_evidence=False,
+            )
+        conn.commit()
+        return result
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def undo_custody_component(
+    conn,
+    workspace_ref,
+    profile_ref,
+    component_id,
+    *,
+    reason="undo",
+    include_local_evidence=True,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    core_custody_components.get_component(
+        conn, component_id, profile_id=profile["id"], include_local_evidence=False
+    )
+    try:
+        result = core_custody_components.undo_supersede(
+            conn, component_id, reason=reason
+        )
+        if not include_local_evidence:
+            result = core_custody_components.get_component(
+                conn,
+                result["id"],
+                profile_id=profile["id"],
+                include_local_evidence=False,
+            )
+        conn.commit()
+        return result
+    except Exception:
+        conn.rollback()
+        raise
+
+
 def _candidate_to_dict(candidate):
     data = {
         "out_id": candidate.out_id,
@@ -1164,9 +1644,11 @@ def _load_matcher_rows(conn, profile_id):
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
             t.payment_hash_source,
             t.swap_refund_funding_txid,
+            t.swap_refund_funding_vout,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
             t.fee, t.kind, t.raw_json, t.excluded,
-            w.label AS wallet_label, w.kind AS wallet_kind
+            w.label AS wallet_label, w.kind AS wallet_kind,
+            w.config_json AS config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ?
@@ -1310,39 +1792,83 @@ def _ownership_review_candidates(conn, profile_id, rows, pair_records):
     )
     candidates = []
     for proof in proofs:
-        out_row = proof.out_row
-        in_row = proof.in_row
-        in_amount_msat = int(in_row["amount"] or 0)
-        candidates.append(
-            core_transfer_matching.SwapCandidate(
-                out_id=str(out_row["id"]),
-                in_id=str(in_row["id"]),
-                out_asset=str(out_row["asset"]),
-                in_asset=str(in_row["asset"]),
-                out_amount_msat=int(proof.owned_amount_msat),
-                in_amount_msat=in_amount_msat,
-                out_wallet_id=str(out_row["wallet_id"]),
-                in_wallet_id=str(in_row["wallet_id"]),
-                out_wallet_label=str(out_row["wallet_label"]),
-                in_wallet_label=str(in_row["wallet_label"]),
-                out_wallet_kind=str(out_row["wallet_kind"] or ""),
-                in_wallet_kind=str(in_row["wallet_kind"] or ""),
-                out_occurred_at=str(out_row["occurred_at"]),
-                in_occurred_at=str(in_row["occurred_at"]),
-                confidence=core_transfer_matching.CONFIDENCE_EXACT,
-                method=core_transfer_matching.METHOD_OWNERSHIP_GRAPH,
-                swap_fee_msat=int(proof.owned_amount_msat) - in_amount_msat,
-                swap_fee_kind="ownership_graph_delta",
-                default_kind=core_transfer_matching.KIND_MANUAL,
-                default_policy=core_transfer_matching.POLICY_CARRYING_VALUE,
-                conflict_set_id=proof.conflict_set_id,
-                conflict_size=proof.conflict_size,
-                evidence_provider="ownership_graph",
-                evidence_id=proof.reason,
-                evidence_kind="owned_output",
-            )
-        )
+        candidates.append(_ownership_review_candidate(proof))
     return candidates
+
+
+def _ownership_review_candidate(proof):
+    """Convert one proof without upgrading its evidence confidence."""
+
+    out_row = proof.out_row
+    in_row = proof.in_row
+    in_amount_msat = int(in_row["amount"] or 0)
+    return core_transfer_matching.SwapCandidate(
+        out_id=str(out_row["id"]),
+        in_id=str(in_row["id"]),
+        out_asset=str(out_row["asset"]),
+        in_asset=str(in_row["asset"]),
+        out_amount_msat=int(proof.owned_amount_msat),
+        in_amount_msat=in_amount_msat,
+        out_wallet_id=str(out_row["wallet_id"]),
+        in_wallet_id=str(in_row["wallet_id"]),
+        out_wallet_label=str(out_row["wallet_label"]),
+        in_wallet_label=str(in_row["wallet_label"]),
+        out_wallet_kind=str(out_row["wallet_kind"] or ""),
+        in_wallet_kind=str(in_row["wallet_kind"] or ""),
+        out_occurred_at=str(out_row["occurred_at"]),
+        in_occurred_at=str(in_row["occurred_at"]),
+        confidence=proof.confidence,
+        method=core_transfer_matching.METHOD_OWNERSHIP_GRAPH,
+        swap_fee_msat=int(proof.owned_amount_msat) - in_amount_msat,
+        swap_fee_kind="ownership_graph_delta",
+        default_kind=core_transfer_matching.KIND_MANUAL,
+        default_policy=core_transfer_matching.POLICY_CARRYING_VALUE,
+        conflict_set_id=proof.conflict_set_id,
+        conflict_size=proof.conflict_size,
+        evidence_provider="ownership_graph",
+        evidence_id=proof.reason,
+        evidence_kind="owned_output",
+    )
+
+
+def _merge_ownership_review_candidates(
+    conn, profile_id, rows, pair_records, candidates
+):
+    """Merge ownership evidence before global conflict stamping.
+
+    Ownership proofs originate from persisted journal blocks rather than the
+    pure swap matcher, but they compete for the same transaction legs.  Keeping
+    them outside the global graph made a provider/hash edge look solo and bulk
+    eligible even while ownership evidence pointed at another destination.
+    """
+
+    ownership_candidates = _ownership_review_candidates(
+        conn, profile_id, rows, pair_records
+    )
+    ownership_pair_keys = {
+        (candidate.out_id, candidate.in_id) for candidate in ownership_candidates
+    }
+    combined = [
+        candidate
+        for candidate in candidates
+        if (candidate.out_id, candidate.in_id) not in ownership_pair_keys
+    ]
+    combined.extend(ownership_candidates)
+    return core_transfer_matching.finalize_candidate_conflicts(combined)
+
+
+def _apply_profile_candidate_policies(candidates, profile):
+    """Attach tax recommendations after country-neutral evidence matching."""
+
+    return [
+        replace(
+            candidate,
+            default_policy=recommended_pair_policy(
+                profile, candidate.out_asset, candidate.in_asset
+            ),
+        )
+        for candidate in candidates
+    ]
 
 
 def suggest_transfer_candidates(
@@ -1383,21 +1909,14 @@ def suggest_transfer_candidates(
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
-        tax_country=str(profile["tax_country"] or ""),
-        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
-    ownership_candidates = _ownership_review_candidates(
-        conn, profile["id"], rows, pair_records
+    candidates = _merge_ownership_review_candidates(
+        conn, profile["id"], rows, pair_records, candidates
     )
-    ownership_pair_keys = {
-        (candidate.out_id, candidate.in_id) for candidate in ownership_candidates
-    }
-    candidates = [
-        candidate
-        for candidate in candidates
-        if (candidate.out_id, candidate.in_id) not in ownership_pair_keys
-    ]
-    candidates.extend(ownership_candidates)
+    # Detection above is deliberately country-neutral. Only after the complete
+    # candidate set and its conflict clusters exist may tax policy recommend how
+    # an already-proven pair should be booked.
+    candidates = _apply_profile_candidate_policies(candidates, profile)
     candidates.sort(
         key=lambda candidate: (
             0 if candidate.confidence == core_transfer_matching.CONFIDENCE_EXACT else 1,
@@ -1489,9 +2008,11 @@ def bulk_pair_transfers(
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
-        tax_country=str(profile["tax_country"] or ""),
-        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
+    candidates = _merge_ownership_review_candidates(
+        conn, profile["id"], rows, pair_records, candidates
+    )
+    candidates = _apply_profile_candidate_policies(candidates, profile)
     if confidence not in ("exact", "strong"):
         raise AppError(
             f"Unsupported confidence '{confidence}'. Use 'exact' or 'strong'.",
@@ -1512,6 +2033,10 @@ def bulk_pair_transfers(
             # a cluster split across filters (e.g. the swap vs transfer tabs)
             # still blocks bulk-pairing of every member.
             if candidate.conflict_size > 1:
+                continue
+            if candidate.method == core_transfer_matching.METHOD_OWNERSHIP_GRAPH:
+                # These cards intentionally require an explicit user decision;
+                # they participate here only to block conflicting auto-pairs.
                 continue
             if confidence == "exact" and candidate.confidence != "exact":
                 continue
@@ -1574,9 +2099,11 @@ def apply_transfer_rules(
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
-        tax_country=str(profile["tax_country"] or ""),
-        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
+    candidates = _merge_ownership_review_candidates(
+        conn, profile["id"], rows, pair_records, candidates
+    )
+    candidates = _apply_profile_candidate_policies(candidates, profile)
     candidates = _filter_transfer_candidates(
         candidates,
         confidence=confidence,
@@ -1585,9 +2112,14 @@ def apply_transfer_rules(
         method=method,
         candidate_type=candidate_type,
     )
+    candidates_for_rules = [
+        candidate
+        for candidate in candidates
+        if candidate.method != core_transfer_matching.METHOD_OWNERSHIP_GRAPH
+    ]
     rules = _load_transfer_rules(conn, profile["id"])
     rules_by_id = {rule.id: rule for rule in rules}
-    rule_matches, remaining = core_swap_rules.apply_rules(candidates, rules)
+    rule_matches, remaining = core_swap_rules.apply_rules(candidates_for_rules, rules)
     applied = []
     try:
         for match in rule_matches:
@@ -1709,11 +2241,10 @@ def list_transfer_rules(conn, workspace_ref, profile_ref):
 
 
 def _default_transfer_rule_policy(profile, predicate):
-    return core_transfer_matching.default_policy_for(
-        str(profile["tax_country"] or ""),
+    return recommended_pair_policy(
+        profile,
         predicate.get("out_asset"),
         predicate.get("in_asset"),
-        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
 
 
@@ -1977,6 +2508,16 @@ def update_transaction_pair(
                 code="validation",
                 hint="Re-run with --policy taxable, or pair only BTC/LBTC rail changes as carrying-value outside Austrian profiles.",
             )
+    out_row = conn.execute(
+        "SELECT * FROM transactions WHERE id = ?",
+        (row["out_transaction_id"],),
+    ).fetchone()
+    in_row = conn.execute(
+        "SELECT * FROM transactions WHERE id = ?",
+        (row["in_transaction_id"],),
+    ).fetchone()
+    if out_row is not None and in_row is not None:
+        _validate_carrying_pair_network(conn, out_row, in_row, new_policy)
     _reject_disallowed_leg_reuse(
         conn,
         profile["id"],
@@ -2004,14 +2545,6 @@ def update_transaction_pair(
         new_fee_msat = row["swap_fee_msat"]
         new_fee_kind = row["swap_fee_kind"]
         if new_kind != row["kind"]:
-            out_row = conn.execute(
-                "SELECT * FROM transactions WHERE id = ?",
-                (row["out_transaction_id"],),
-            ).fetchone()
-            in_row = conn.execute(
-                "SELECT * FROM transactions WHERE id = ?",
-                (row["in_transaction_id"],),
-            ).fetchone()
             if out_row and in_row and _pair_stores_swap_fee(out_row, in_row, new_kind):
                 split_pair = row["out_amount"] is not None
                 swap_fee_out_msat = (
@@ -2173,6 +2706,11 @@ WALLET_KIND_CATALOG = {
         "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
         "config_fields": ["addresses", "backend", "chain", "network", "source_file", "source_format"],
         "requires": ["addresses|source_file"],
+    },
+    "untracked": {
+        "summary": "Owned historical custody with no connected source; used only by reviewed custody components to bridge missing wallets or nodes.",
+        "config_fields": [],
+        "requires": [],
     },
     "coreln": {
         "summary": "Core Lightning node wallet; read-only live sync through a coreln backend.",
@@ -4253,6 +4791,37 @@ def _duplicate_label_warnings(wallet_refs_by_id):
     return warnings
 
 
+def _custody_component_integrity_blockers(
+    conn,
+    profile_id,
+    *,
+    components=None,
+):
+    """Return compact report-blocking facts for authored active revisions."""
+
+    if components is None:
+        components = core_custody_components.iter_authored_active_components(
+            conn,
+            profile_id=profile_id,
+            include_local_evidence=False,
+        )
+    return [
+        {
+            "component_id": component["id"],
+            "lineage_id": component["lineage_id"],
+            "revision": component["revision"],
+            "issue_codes": sorted(
+                {
+                    str(issue.get("code") or "unknown")
+                    for issue in component["validation"]["issues"]
+                }
+            ),
+        }
+        for component in components
+        if component["effective_state"] != "active"
+    ]
+
+
 def build_ledger_state(conn, profile):
     require_tax_processing_supported(profile)
     rows = conn.execute(
@@ -4298,6 +4867,7 @@ def build_ledger_state(conn, profile):
         SELECT
             w.id AS id,
             w.label AS label,
+            w.kind AS kind,
             w.account_id AS wallet_account_id,
             COALESCE(a.code, 'treasury') AS account_code,
             COALESCE(a.label, 'Treasury') AS account_label
@@ -4310,6 +4880,7 @@ def build_ledger_state(conn, profile):
         wallet_refs_by_id[wallet["id"]] = {
             "id": wallet["id"],
             "label": wallet["label"],
+            "kind": wallet["kind"],
             "wallet_account_id": wallet["wallet_account_id"],
             "account_code": wallet["account_code"],
             "account_label": wallet["account_label"],
@@ -4348,9 +4919,21 @@ def build_ledger_state(conn, profile):
     # on-chain rows so the engine suppresses them as non-events.
     channel_records = conn.execute(
         """
-        SELECT txid, tag, wallet_id, channel_id, amount_msat
-        FROM lightning_node_records
-        WHERE profile_id = ? AND record_type = 'channel'
+        SELECT
+            r.txid,
+            r.outpoint,
+            r.tag,
+            r.wallet_id,
+            r.channel_id,
+            r.amount_msat,
+            r.raw_json AS raw_json,
+            w.config_json AS config_json,
+            b.chain AS chain,
+            b.network AS network
+        FROM lightning_node_records r
+        JOIN wallets w ON w.id = r.wallet_id
+        LEFT JOIN backends b ON b.name = r.backend_name
+        WHERE r.profile_id = ? AND r.record_type = 'channel'
         """,
         (profile["id"],),
     ).fetchall()
@@ -4364,6 +4947,10 @@ def build_ledger_state(conn, profile):
                     "closing_txid": record["txid"],
                     "wallet_id": record["wallet_id"],
                     "channel_id": record["channel_id"],
+                    "config_json": record["config_json"],
+                    "raw_json": record["raw_json"],
+                    "chain": record["chain"],
+                    "network": record["network"],
                     # Our settled channel balance at close (bkpr debit); the
                     # gap vs the on-chain receipt books as the close fee.
                     "close_balance_msat": record["amount_msat"],
@@ -4373,8 +4960,13 @@ def build_ledger_state(conn, profile):
             channel_rows.append(
                 {
                     "funding_txid": record["txid"],
+                    "funding_outpoint": record["outpoint"],
                     "wallet_id": record["wallet_id"],
                     "channel_id": record["channel_id"],
+                    "config_json": record["config_json"],
+                    "raw_json": record["raw_json"],
+                    "chain": record["chain"],
+                    "network": record["network"],
                     # Our balance funded into the channel; a recorded outflow
                     # clearly above it means the tx also paid someone external.
                     "funding_amount_msat": record["amount_msat"],
@@ -4386,6 +4978,24 @@ def build_ledger_state(conn, profile):
         rows,
         wallet_refs_by_id,
     )
+    # Internal journal consumption is intentionally unbounded: a long history
+    # of migrations must not silently stop at a UI pagination limit. Load every
+    # *authored* active revision, including incomplete/conflicting revisions
+    # produced transiently by row-wise replication. Projection either emits a
+    # complete synthetic interpretation or fail-closes all known anchors into
+    # an actionable component quarantine.
+    authored_active_custody_components = list(
+        core_custody_components.iter_authored_active_components(
+            conn,
+            profile_id=profile["id"],
+            include_local_evidence=False,
+        )
+    )
+    custody_component_blockers = _custody_component_integrity_blockers(
+        conn,
+        profile["id"],
+        components=authored_active_custody_components,
+    )
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
@@ -4396,6 +5006,7 @@ def build_ledger_state(conn, profile):
             loan_legs=loan_legs,
             channel_roles=channel_roles,
             channel_transfer_pairs=channel_transfer_pairs,
+            authored_active_custody_components=authored_active_custody_components,
         )
     )
     ownership_review_counts = _ownership_review_counts_for_state(
@@ -4415,6 +5026,7 @@ def build_ledger_state(conn, profile):
         "account_holdings": engine_state.account_holdings,
         "wallet_holdings": engine_state.wallet_holdings,
         "ownership_review_counts": ownership_review_counts,
+        "custody_component_blockers": custody_component_blockers,
         "latest_rates": rates,
         "warnings": warnings,
     }
@@ -4697,6 +5309,24 @@ def process_journals(conn, workspace_ref, profile_ref):
         # synthetic payout/split legs of one out row) so two rows never collide
         # on journal_quarantines' PRIMARY KEY and abort the whole run.
         deduped_quarantines = core_tax_events.dedupe_quarantines(state["quarantines"])
+        # A durable custody-component anchor intentionally survives deletion of
+        # its raw transaction so the component fails closed.  Such an anchor is
+        # still useful in the component-level blocker, but it cannot be written
+        # to this transaction-FK table.  Filter against the live profile rows at
+        # the persistence boundary as a final invariant for every quarantine
+        # producer, including replicated/stale evidence.
+        live_transaction_ids = {
+            str(row["id"])
+            for row in conn.execute(
+                "SELECT id FROM transactions WHERE profile_id = ?",
+                (profile["id"],),
+            ).fetchall()
+        }
+        deduped_quarantines = [
+            quarantine
+            for quarantine in deduped_quarantines
+            if str(quarantine["transaction_id"]) in live_transaction_ids
+        ]
         conn.executemany(
             """
             INSERT INTO journal_quarantines(
@@ -4834,6 +5464,15 @@ def process_journals(conn, workspace_ref, profile_ref):
         result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
     if state.get("warnings"):
         result["warnings"] = state["warnings"]
+    if state.get("custody_component_blockers"):
+        # Some integrity failures (notably a replicated active header whose
+        # child rows or anchors have not arrived) have no live transaction FK
+        # and therefore cannot produce journal_quarantines rows. Surface them
+        # explicitly even though the partial journal snapshot is persisted for
+        # inspection; every report gate below rejects it.
+        result["custody_component_blockers"] = state[
+            "custody_component_blockers"
+        ]
     if source_overlap_repair is not None:
         result["source_overlap_repair"] = source_overlap_repair
     if source_overlap_warning is not None:
@@ -5565,6 +6204,20 @@ def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
 
 
 def require_processed_journals(conn, profile):
+    custody_component_blockers = _custody_component_integrity_blockers(
+        conn, profile["id"]
+    )
+    if custody_component_blockers:
+        raise AppError(
+            "Reports are blocked by an incomplete or conflicting custody component.",
+            code="custody_component_incomplete",
+            hint=(
+                "Repair or supersede every authored active component in "
+                "`kassiber transfers components list` before relying on reports."
+            ),
+            details={"components": custody_component_blockers},
+            retryable=False,
+        )
     _, processed_current = _journals_current_for_profile(conn, profile)
     if not processed_current:
         raise AppError("Reports require fresh journals. Run `kassiber journals process` first.")

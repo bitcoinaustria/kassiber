@@ -2597,6 +2597,7 @@ GENERIC_LEDGER_COLUMNS = (
     "Payment Hash",
     "Payment Hash Source",
     "Swap Refund Funding Tx-ID",
+    "Swap Refund Funding Vout",
 )
 
 # Asset codes (normalized via `normalize_asset_code`) treated as the Bitcoin
@@ -2973,6 +2974,14 @@ def normalize_generic_ledger_record(record, index=0):
             "HTLC Funding TxID",
         )
     )
+    swap_refund_funding_vout = str_or_none(
+        _get_cell(
+            sanitized,
+            "Swap Refund Funding Vout",
+            "Refund Funding Vout",
+            "HTLC Funding Vout",
+        )
+    )
 
     return {
         "txid": external_id,
@@ -2996,6 +3005,7 @@ def normalize_generic_ledger_record(record, index=0):
         "payment_hash": payment_hash,
         "payment_hash_source": payment_hash_source or ("generic_ledger" if payment_hash else None),
         "swap_refund_funding_txid": swap_refund_funding_txid,
+        "swap_refund_funding_vout": swap_refund_funding_vout,
         "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
     }
 
@@ -3124,6 +3134,15 @@ _BYO_SWAP_REFUND_FUNDING_TXID = {
         "Refund Funding Tx-ID",
         "Refund Funding TxID",
         "HTLC Funding TxID",
+    )
+}
+_BYO_SWAP_REFUND_FUNDING_VOUT = {
+    _normalized_column_key(n)
+    for n in (
+        "Swap Refund Funding Vout",
+        "Refund Funding Vout",
+        "HTLC Funding Vout",
+        "Funding Output Index",
     )
 }
 _BYO_COUNTERPARTY = {_normalized_column_key(n) for n in ("Counterparty", "Exchange", "Platform", "Payee", "Gegenpartei")}
@@ -3272,6 +3291,7 @@ def infer_ledger_columns(header):
     payment_hash = take(_BYO_PAYMENT_HASH, "payment_hash")
     payment_hash_source = take(_BYO_PAYMENT_HASH_SOURCE, "payment_hash_source")
     swap_refund_funding_txid = take(_BYO_SWAP_REFUND_FUNDING_TXID, "swap_refund_funding_txid")
+    swap_refund_funding_vout = take(_BYO_SWAP_REFUND_FUNDING_VOUT, "swap_refund_funding_vout")
     counterparty = take(_BYO_COUNTERPARTY, "counterparty")
 
     plan = {
@@ -3283,6 +3303,7 @@ def infer_ledger_columns(header):
         "fiat_rate": fiat_rate, "note": note, "txid": txid, "counterparty": counterparty,
         "payment_hash": payment_hash, "payment_hash_source": payment_hash_source,
         "swap_refund_funding_txid": swap_refund_funding_txid,
+        "swap_refund_funding_vout": swap_refund_funding_vout,
         "received_header_asset": _byo_asset_from_header(received),
         "sent_header_asset": _byo_asset_from_header(sent),
         "amount_header_asset": _byo_asset_from_header(amount),
@@ -3430,6 +3451,8 @@ def _byo_passthrough(out, row, plan):
         out["Payment Hash Source"] = str_or_none(row.get(plan["payment_hash_source"]))
     if plan.get("swap_refund_funding_txid"):
         out["Swap Refund Funding Tx-ID"] = str_or_none(row.get(plan["swap_refund_funding_txid"]))
+    if plan.get("swap_refund_funding_vout"):
+        out["Swap Refund Funding Vout"] = str_or_none(row.get(plan["swap_refund_funding_vout"]))
     if plan.get("note"):
         out["Note"] = str_or_none(row.get(plan["note"]))
     if plan.get("counterparty"):

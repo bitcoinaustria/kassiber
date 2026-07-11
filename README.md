@@ -185,7 +185,11 @@ kassiber --machine next-actions
 Paginated envelopes preserve `next_cursor` / `has_more` and also expose the
 same values under `data.page`. High-impact automatic reviews support previews:
 `transfers bulk-pair --dry-run`, `transfers rules apply --dry-run`, and
-`source-funds links bulk-review --dry-run`.
+`transfers components bulk-resolve --dry-run`, and
+`source-funds links bulk-review --dry-run`. Long 1:N/N:1/N:M wallet migrations,
+including missing historical wallets, use the versioned custody-component
+workflow documented in
+[docs/reference/custody-components.md](docs/reference/custody-components.md).
 
 For an encrypted project, enroll prompt-free CLI unlock once on a trusted local
 user account:
