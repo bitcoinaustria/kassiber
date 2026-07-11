@@ -323,24 +323,6 @@ def refund_funding_outpoint_from_tx_mapping(
     return unique[0] if len(unique) == 1 else None
 
 
-def script_matches_payment_hash(script_bytes: bytes, payment_hash_hex: str) -> bool:
-    """Verify whether an HTLC redeem script's hashlock matches a candidate
-    Lightning ``payment_hash``.
-
-    Returns ``True`` iff ``script_bytes`` parses as a recognized HTLC
-    redeem script and ``RIPEMD160(payment_hash) == hashlock160``.
-    """
-    fund = parse_htlc_redeem_script(script_bytes)
-    if fund is None:
-        return False
-    try:
-        payment_hash_bytes = bytes.fromhex(payment_hash_hex)
-    except ValueError:
-        return False
-    if len(payment_hash_bytes) != 32:
-        return False
-    computed = _embit_hashes.ripemd160(payment_hash_bytes)
-    return computed.hex() == fund.hashlock160
 
 
 def _consume_minimal_integer_push(script_bytes: bytes, cursor: int) -> Optional[int]:

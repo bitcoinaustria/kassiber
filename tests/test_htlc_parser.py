@@ -5,7 +5,6 @@ plus matching claim witnesses, then verifies the parser:
 
 * Extracts ``hashlock160`` from a fund-only script.
 * Recovers ``payment_hash`` from a claim witness that reveals the preimage.
-* Verifies an HTLC script against a known Lightning ``payment_hash``.
 * Rejects malformed scripts, wrong-length preimages, and Taproot-shaped
   witnesses cleanly (returns ``None``, no exceptions).
 
@@ -25,7 +24,6 @@ from kassiber.core.htlc_parser import (
     extract_from_refund_witness,
     parse_htlc_redeem_script,
     refund_funding_outpoint_from_tx_mapping,
-    script_matches_payment_hash,
 )
 
 
@@ -231,34 +229,6 @@ class ExtractFromRefundWitnessTests(unittest.TestCase):
         self.assertIsNone(
             refund_funding_outpoint_from_tx_mapping({"vin": [refund_vin, second]})
         )
-
-
-class ScriptMatchesPaymentHashTests(unittest.TestCase):
-    def test_matching_payment_hash_returns_true(self):
-        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
-        script = _build_submarine_redeem_script(hashlock160)
-        payment_hash = hashlib.sha256(_PREIMAGE).hexdigest()
-        self.assertTrue(script_matches_payment_hash(script, payment_hash))
-
-    def test_mismatched_payment_hash_returns_false(self):
-        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
-        script = _build_submarine_redeem_script(hashlock160)
-        unrelated = hashlib.sha256(b"unrelated").hexdigest()
-        self.assertFalse(script_matches_payment_hash(script, unrelated))
-
-    def test_invalid_hex_returns_false(self):
-        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
-        script = _build_submarine_redeem_script(hashlock160)
-        self.assertFalse(script_matches_payment_hash(script, "not-hex"))
-
-    def test_short_payment_hash_returns_false(self):
-        hashlock160 = _embit_hashes.hash160(_PREIMAGE)
-        script = _build_submarine_redeem_script(hashlock160)
-        self.assertFalse(script_matches_payment_hash(script, "aa" * 16))
-
-    def test_non_htlc_script_returns_false(self):
-        payment_hash = hashlib.sha256(_PREIMAGE).hexdigest()
-        self.assertFalse(script_matches_payment_hash(b"\x00\x14" + b"\x00" * 20, payment_hash))
 
 
 if __name__ == "__main__":
