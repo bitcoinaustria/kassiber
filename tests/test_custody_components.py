@@ -13,6 +13,7 @@ from kassiber.core.custody_components import (
     get_component,
     iter_authored_active_components,
     iter_effective_components,
+    list_components,
     list_effective_components,
     reconcile_active_memberships,
     supersede_component,
@@ -409,6 +410,52 @@ class CustodyComponentApiTests(unittest.TestCase):
                 _leg("fee", 1, tx="out", wallet="btc"),
             ],
         )
+
+    def test_component_listing_scans_profile_routes_once(self):
+        for index in range(6):
+            out_id = f"perf-out-{index}"
+            in_id = f"perf-in-{index}"
+            _tx(self.conn, out_id, "btc", "outbound", "BTC", 100)
+            _tx(self.conn, in_id, "btc", "inbound", "BTC", 100)
+            draft = create_component(
+                self.conn,
+                workspace_id="ws",
+                profile_id="profile",
+                component_type="native_transfer",
+                legs=[
+                    _leg("source", 100, tx=out_id, wallet="btc"),
+                    _leg("destination", 100, tx=in_id, wallet="btc"),
+                ],
+            )
+            activate_component(self.conn, draft["id"])
+
+        statements: list[str] = []
+        self.conn.set_trace_callback(statements.append)
+        try:
+            components = list_components(
+                self.conn,
+                profile_id="profile",
+                state="active",
+                limit=1000,
+            )
+        finally:
+            self.conn.set_trace_callback(None)
+
+        normalized = [" ".join(statement.lower().split()) for statement in statements]
+        profile_leg_scans = [
+            statement
+            for statement in normalized
+            if "from custody_component_legs l join custody_components c" in statement
+        ]
+        profile_allocation_scans = [
+            statement
+            for statement in normalized
+            if "from custody_component_allocations a join custody_components c"
+            in statement
+        ]
+        self.assertEqual(len(components), 6)
+        self.assertEqual(len(profile_leg_scans), 1)
+        self.assertEqual(len(profile_allocation_scans), 1)
 
     def test_new_nullable_sync_fields_are_backward_compatible(self):
         transaction = self.conn.execute("SELECT * FROM transactions WHERE id = 'out'").fetchone()

@@ -2217,6 +2217,7 @@ def _db_anchor_validation(
     *,
     allocations: Sequence[Mapping[str, Any]] = (),
     conservation_mode: str = "quantity",
+    profile_route_issues: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate evidence-row direction, scope facts, and complete coverage."""
 
@@ -2487,8 +2488,21 @@ def _db_anchor_validation(
         # active components. Combine the candidate with other authored-active
         # quantity routes in the profile and propagate known domains through
         # their shared wallet locations.
-        other_legs, other_allocations = _other_active_quantity_content(conn, legs)
-        if other_legs:
+        current_component_ids = {
+            str(leg["component_id"])
+            for leg in legs
+            if leg.get("component_id") not in (None, "")
+        }
+        if profile_route_issues is not None:
+            additional_issues.extend(
+                dict(issue)
+                for issue in profile_route_issues
+                if current_component_ids
+                & set(str(item) for item in issue.get("component_ids", ()))
+            )
+        else:
+            other_legs, other_allocations = _other_active_quantity_content(conn, legs)
+        if profile_route_issues is None and other_legs:
             combined_legs = [*legs, *other_legs]
             combined_transaction_rows, combined_wallet_rows = _load_scope_evidence(
                 conn, combined_legs
@@ -2503,11 +2517,6 @@ def _db_anchor_validation(
                 [*allocations, *other_allocations],
                 conservation_mode=conservation_mode,
             )
-            current_component_ids = {
-                str(leg["component_id"])
-                for leg in legs
-                if leg.get("component_id") not in (None, "")
-            }
             additional_issues.extend(
                 issue
                 for issue in _quantity_scope_connectivity_issues(
@@ -2545,11 +2554,75 @@ def _db_anchor_validation(
     return {"valid": not issues, "issues": issues, "transaction_coverage": coverage}
 
 
+def _profile_active_route_issues(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+) -> list[dict[str, Any]]:
+    """Compute cross-component route issues once for a profile operation."""
+
+    legs = [
+        _leg_dict(row)
+        for row in conn.execute(
+            """
+            SELECT l.*
+            FROM custody_component_legs l
+            JOIN custody_components c ON c.id = l.component_id
+            WHERE c.profile_id = ? AND c.state = 'active'
+              AND c.conservation_mode = 'quantity'
+            ORDER BY c.id, l.ordinal, l.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    if not legs:
+        return []
+    allocations = [
+        _allocation_dict(row)
+        for row in conn.execute(
+            """
+            SELECT a.*
+            FROM custody_component_allocations a
+            JOIN custody_components c ON c.id = a.component_id
+            WHERE c.profile_id = ? AND c.state = 'active'
+              AND c.conservation_mode = 'quantity'
+            ORDER BY c.id, a.ordinal, a.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    transaction_rows, wallet_rows = _load_scope_evidence(conn, legs)
+    scoped_legs = _scoped_leg_copies(legs, transaction_rows, wallet_rows)
+    completed_allocations = _allocations_with_component_inference(
+        scoped_legs,
+        allocations,
+        conservation_mode="quantity",
+    )
+    component_ids = {
+        str(leg["component_id"])
+        for leg in scoped_legs
+        if leg.get("component_id") not in (None, "")
+    }
+    return [
+        *_quantity_scope_connectivity_issues(
+            scoped_legs,
+            completed_allocations,
+            conservation_mode="quantity",
+        ),
+        *_cross_component_untracked_continuity_issues(
+            scoped_legs,
+            wallet_rows,
+            current_component_ids=component_ids,
+        ),
+    ]
+
+
 def _materialize_component(
     conn: sqlite3.Connection,
     row: sqlite3.Row,
     *,
     include_local_evidence: bool = True,
+    profile_route_issues: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     legs = [
         _leg_dict(leg)
@@ -2620,6 +2693,7 @@ def _materialize_component(
         legs,
         allocations=allocations,
         conservation_mode=row["conservation_mode"],
+        profile_route_issues=profile_route_issues,
     )
     if anchor_validation["issues"]:
         validation = dict(validation)
@@ -3259,9 +3333,16 @@ def list_components(
         """,
         (*params, limit),
     ).fetchall()
+    profile_route_issues = _profile_active_route_issues(
+        conn,
+        profile_id=profile_id,
+    )
     result = [
         _materialize_component(
-            conn, row, include_local_evidence=include_local_evidence
+            conn,
+            row,
+            include_local_evidence=include_local_evidence,
+            profile_route_issues=profile_route_issues,
         )
         for row in rows
     ]
@@ -3353,9 +3434,16 @@ def iter_authored_active_components(
         """,
         params,
     )
+    profile_route_issues = _profile_active_route_issues(
+        conn,
+        profile_id=profile_id,
+    )
     for row in rows:
         yield _materialize_component(
-            conn, row, include_local_evidence=include_local_evidence
+            conn,
+            row,
+            include_local_evidence=include_local_evidence,
+            profile_route_issues=profile_route_issues,
         )
 
 
@@ -3375,8 +3463,17 @@ def reconcile_active_memberships(
     # Replication reconciliation is an integrity operation, not a paginated UI
     # read. Truncating here would delete valid membership rows for every active
     # component after the first 1,000 in a long migration history.
+    profile_route_issues = _profile_active_route_issues(
+        conn,
+        profile_id=profile_id,
+    )
     active = [
-        _materialize_component(conn, row, include_local_evidence=False)
+        _materialize_component(
+            conn,
+            row,
+            include_local_evidence=False,
+            profile_route_issues=profile_route_issues,
+        )
         for row in conn.execute(
             """
             SELECT * FROM custody_components
