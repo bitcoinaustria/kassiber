@@ -594,6 +594,13 @@ class FetchNodeSnapshotTest(unittest.TestCase):
 
 
 class AdapterContractTest(unittest.TestCase):
+    def test_msat_parser_preserves_large_exact_values(self):
+        self.assertEqual(
+            core_cln._parse_msat("9007199254740993msat"),
+            9_007_199_254_740_993,
+        )
+        self.assertEqual(core_cln._parse_msat("1.5sat"), 1_500)
+
     def test_adapter_rejects_missing_backend(self) -> None:
         adapter = CoreLightningAdapter()
         with self.assertRaises(AppError) as ctx:

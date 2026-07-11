@@ -37,6 +37,7 @@ import sqlite3
 import subprocess
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from ...backends import backend_timeout, backend_value, redact_backend_url
@@ -144,6 +145,8 @@ def _parse_msat(value: Any) -> int:
     if isinstance(value, int):
         return value
     if isinstance(value, float):
+        if not value.is_integer():
+            raise AppError(f"Invalid Core Lightning msat value '{value}'")
         return int(value)
     if isinstance(value, Mapping):
         for key in ("msat", "millisatoshis", "millisatoshi"):
@@ -157,9 +160,12 @@ def _parse_msat(value: Any) -> int:
         if text.endswith(suffix):
             number = text[: -len(suffix)].strip()
             try:
-                return int(float(number) * factor)
-            except ValueError as exc:
+                scaled = Decimal(number) * factor
+            except (InvalidOperation, ValueError) as exc:
                 raise AppError(f"Invalid Core Lightning msat value '{value}'") from exc
+            if not scaled.is_finite() or scaled != scaled.to_integral_value():
+                raise AppError(f"Invalid Core Lightning msat value '{value}'")
+            return int(scaled)
     try:
         return int(text)
     except ValueError as exc:
