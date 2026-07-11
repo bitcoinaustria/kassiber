@@ -121,7 +121,14 @@ export interface TouchIdPassphraseStatus {
   platform: "macos" | "windows" | "linux" | "unsupported";
   available: boolean;
   configured: boolean;
+  stale: boolean;
+  protection?:
+    | "biometry_current_set"
+    | "application_local_authentication"
+    | "legacy_shared"
+    | null;
   reason?: string | null;
+  staleGeneration?: string | null;
 }
 
 export interface TerminalCommandStatus {
@@ -753,6 +760,7 @@ const TOUCH_ID_UNAVAILABLE: TouchIdPassphraseStatus = {
   platform: "unsupported",
   available: false,
   configured: false,
+  stale: false,
   reason: "desktop_only",
 };
 
@@ -771,6 +779,7 @@ export async function touchIdPassphraseStatus(
 export async function storeTouchIdPassphrase(
   passphraseSecret: string,
   dataRoot?: string | null,
+  staleGeneration?: string | null,
 ): Promise<TouchIdPassphraseStatus> {
   if (DAEMON_MODE !== "tauri") {
     return TOUCH_ID_UNAVAILABLE;
@@ -779,6 +788,7 @@ export async function storeTouchIdPassphrase(
   return invoke<TouchIdPassphraseStatus>("touch_id_store_passphrase_command", {
     dataRoot: dataRoot ?? null,
     passphraseSecret,
+    staleGeneration: staleGeneration ?? null,
   });
 }
 

@@ -38,7 +38,7 @@ from kassiber.core import commercial as core_commercial
 from kassiber.core import source_funds as core_source_funds
 from kassiber.log_ring import get_log_ring
 from kassiber.core import freshness as core_freshness
-from kassiber.db import open_db
+from kassiber.db import load_managed_settings, open_db
 from kassiber.daemon_freshness import (
     _auto_process_journals_if_needed,
     _auto_sync_wallets_if_enabled,
@@ -50,6 +50,7 @@ from kassiber.daemon_freshness import (
 from kassiber.backends import DEFAULT_BACKENDS
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import sqlcipher_available
+from kassiber.secrets.unlock_store import DESKTOP_BIOMETRIC_STALE_SETTING
 from kassiber.wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
@@ -706,6 +707,143 @@ class DaemonReportDepthClampTest(unittest.TestCase):
         # explicit default overrides the 8 fallback (used by coverage).
         self.assertEqual(_resolve_report_depth(None, default=16), 16)
         self.assertEqual(_resolve_report_depth(99_999, default=16), _DAEMON_REPORT_DEPTH_CAP)
+
+
+class DaemonForgetCliUnlockTest(unittest.TestCase):
+    def test_marker_failure_still_attempts_every_credential_delete(self):
+        ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
+        with mock.patch.object(
+            daemon_module,
+            "set_cli_unlock_state",
+            side_effect=OSError("settings are read-only"),
+        ), mock.patch.object(
+            daemon_module,
+            "delete_remembered_passphrase",
+            return_value=True,
+        ) as delete_cli, mock.patch.object(
+            daemon_module,
+            "delete_legacy_shared_passphrase",
+            return_value=False,
+        ) as delete_legacy:
+            with self.assertRaises(AppError) as raised:
+                daemon_module.handle_request(
+                    ctx,
+                    {"kind": "ui.secrets.forget_cli_unlock", "request_id": "forget-1"},
+                    mock.Mock(),
+                )
+
+        delete_cli.assert_called_once_with(ctx.data_root)
+        delete_legacy.assert_called_once_with(ctx.data_root)
+        self.assertEqual(raised.exception.code, "remembered_unlock_settings_failed")
+        self.assertTrue(raised.exception.details["cli_credential_deleted"])
+        self.assertFalse(raised.exception.details["legacy_credential_deleted"])
+
+    def test_cli_owned_legacy_delete_failure_quarantines_item(self):
+        ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
+        with mock.patch.object(
+            daemon_module,
+            "cli_remembered_unlock_enabled",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "delete_remembered_passphrase",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "delete_legacy_shared_passphrase",
+            return_value=False,
+        ), mock.patch.object(
+            daemon_module,
+            "set_cli_unlock_state",
+        ) as quarantine:
+            with self.assertRaises(AppError) as raised:
+                daemon_module.handle_request(
+                    ctx,
+                    {"kind": "ui.secrets.forget_cli_unlock", "request_id": "forget-1"},
+                    mock.Mock(),
+                )
+
+        quarantine.assert_called_once_with(
+            ctx.data_root,
+            enabled=False,
+            legacy_quarantined=True,
+        )
+        self.assertEqual(
+            raised.exception.code,
+            "remembered_unlock_legacy_cleanup_failed",
+        )
+
+
+class DaemonPassphraseRotationGuardTest(unittest.TestCase):
+    def _request(self):
+        return {
+            "kind": "ui.secrets.change_passphrase",
+            "request_id": "rotate-1",
+            "args": {
+                "auth_response": {"passphrase_secret": "old-passphrase"},
+                "new_passphrase_secret": "new-passphrase-123",
+            },
+        }
+
+    def test_guard_write_failure_preserves_live_connection(self):
+        connection = mock.Mock()
+        ctx = SimpleNamespace(data_root="/tmp/kassiber-rotate-test", conn=connection)
+        with mock.patch.object(
+            daemon_module,
+            "_database_file_is_encrypted",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "_verify_passphrase_with_backoff",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "mark_desktop_biometric_passphrase_stale",
+            side_effect=OSError("settings are read-only"),
+        ), mock.patch.object(
+            daemon_module,
+            "_stop_freshness_background_worker",
+        ) as stop_worker:
+            with self.assertRaises(OSError):
+                daemon_module.handle_request(ctx, self._request(), mock.Mock())
+
+        stop_worker.assert_not_called()
+        connection.close.assert_not_called()
+        self.assertIs(ctx.conn, connection)
+
+    def test_ambiguous_rekey_failure_keeps_stale_generation(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            ctx = SimpleNamespace(data_root=data_root, conn=None)
+            with mock.patch.object(
+                daemon_module,
+                "_database_file_is_encrypted",
+                return_value=True,
+            ), mock.patch.object(
+                daemon_module,
+                "_verify_passphrase_with_backoff",
+                return_value=True,
+            ), mock.patch(
+                "kassiber.secrets.unlock_store._platform_name",
+                return_value="macos",
+            ), mock.patch.object(
+                daemon_module,
+                "change_database_passphrase",
+                side_effect=AppError(
+                    "verification failed after rekey",
+                    code="rekey_verification_failed",
+                ),
+            ):
+                with self.assertRaises(AppError):
+                    daemon_module.handle_request(ctx, self._request(), mock.Mock())
+
+            self.assertIsInstance(
+                load_managed_settings(data_root).get(
+                    DESKTOP_BIOMETRIC_STALE_SETTING
+                ),
+                str,
+            )
 
 
 class DaemonFreshnessForceFullTest(unittest.TestCase):

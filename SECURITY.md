@@ -192,24 +192,61 @@ exports, or backups can touch that project.
 **OS keychain is not the perimeter.** The SQLCipher passphrase is the
 perimeter. Pick a long passphrase from a password manager and treat
 the loss of that passphrase as data loss — there is no recovery path.
-Desktop macOS builds can optionally remember the database passphrase in
-Keychain behind a local user-presence prompt for Touch ID-style unlock. The CLI
-can separately opt into the same per-data-root item on macOS, Windows user-scope
-Credential Manager, or an available unlocked Linux Secret Service. The CLI opt-in
+Desktop macOS builds can optionally remember the database passphrase in a
+desktop-only Keychain item for Touch ID unlock. Production-entitled builds use
+an item-level `biometryCurrentSet` policy, which invalidates access when enrolled
+fingerprints change. Unsigned/ad-hoc preview builds cannot use the protected
+Keychain and retain an explicit app-level LocalAuthentication check before
+reading their desktop-only item. The CLI separately opts into its own
+per-data-root item on macOS, Windows user-scope Credential Manager, or an
+available unlocked Linux Secret Service. The CLI opt-in
 is a non-secret boolean in managed `config/settings.json`; desktop-only Touch ID
 enrollment leaves it unset. Only the native `keyring` backend for the current
 platform is accepted (including a chainer only when every active child is
 native); environment/config-selected third-party and file backends are rejected.
 There is never a plaintext-file fallback.
 
-CLI credential reads are **not biometric-gated**. On macOS the gate is the
-Keychain item's per-binary ACL prompt, and unsigned/ad-hoc preview binaries may
+`kassiber secrets status` exposes the active CLI boundary as a stable
+`access_policy` code: `macos_keychain_application_acl`,
+`windows_dpapi_user_scope`, `linux_secret_service_session`, or `unsupported`.
+This is public-safe capability metadata, not evidence that the item is
+biometric-gated.
+
+CLI credential reads are **not biometric-gated**. On macOS the CLI item uses the
+Keychain's per-binary access policy, and unsigned/ad-hoc preview binaries may
 prompt again after rebuilds or identity changes. On Windows and Linux, another
 process running as the same user can read the user-scoped item. This matches the
 existing boundary above: a compromised process running as the user is out of
-scope. Revoke the copy with `kassiber secrets forget-unlock` or delete
-`Kassiber Database Passphrase` in the OS credential manager. Revocation does not
+scope. Revoke only the CLI copy with `kassiber secrets forget-unlock`, revoke
+only the desktop copy in Settings, or use **Forget all unlock methods** to remove
+both plus the migration-only legacy item. The current credential names are
+`Kassiber CLI Database Passphrase` and `Kassiber Desktop Biometric Passphrase`;
+`Kassiber Database Passphrase` is legacy migration input only. Revocation does not
 change the SQLCipher key or recover a lost passphrase.
+If verified deletion of a CLI-owned legacy item fails, Kassiber atomically
+disables CLI remembered unlock and sets the non-secret
+`cli_legacy_unlock_quarantined` ownership marker. The CLI will not read or
+migrate that retained value, and the desktop will not claim it. Status exposes
+the quarantine so the user can remove the item manually and retry cleanup.
+
+Desktop passphrase rotation refreshes both enrolled namespaces. A CLI rotation
+cannot rewrite a biometric-protected desktop item without defeating that access
+policy, so both CLI and desktop rotation arm a non-secret
+`desktop_biometric_stale` guard in managed settings before SQLCipher is rekeyed.
+Its value is an opaque generation token, so an older enrollment callback cannot
+clear a newer rotation's guard. Because a post-rekey verification failure is
+ambiguous, the guard stays armed on any rotation error and is compare-and-cleared
+only after the Tauri process successfully refreshes its credential, or cleared
+after verified removal. The desktop therefore requires manual passphrase entry
+and re-enrollment rather than attempting a known-stale biometric copy, including
+after a process crash between rekey and Keychain refresh. A preview build cannot
+replace an existing protected enrollment, and credential removal does not clear
+enrollment markers until the applicable fallback and protected copies have been
+cleaned up successfully.
+Managed-settings reads for this guard fail closed, and Tauri keeps the lexical
+data-root for the settings path even when the Keychain account uses a canonical
+path; a symlinked final `data` directory therefore cannot split the two sides of
+the guard channel.
 
 **Desktop credential stores are a separate boundary, not SQLCipher
 replacement.** Desktop builds can store AI provider API keys in macOS

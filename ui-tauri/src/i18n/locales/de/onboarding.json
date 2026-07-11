@@ -345,7 +345,7 @@
     "recoveryAck": "Mir ist klar, dass es keinen Wiederherstellungspfad für die Passphrase gibt.",
     "recoveryAckDescription": "Geht die Passphrase verloren, kann die SQLCipher-Datenbank nicht geöffnet werden.",
     "touchId": "Mit Touch ID entsperren",
-    "touchIdDescription": "Speichere die Passphrase im macOS-Keychain, damit du statt zu tippen mit Touch ID entsperren kannst. Du kannst sie jederzeit in den Einstellungen entfernen.",
+    "touchIdDescription": "Speichere einen eigenen Desktop-Keychain-Eintrag, damit du statt zu tippen mit Touch ID entsperren kannst. Die gemerkte CLI-Entsperrung wird getrennt eingerichtet.",
     "existingCredentials": "Bestehende Backend-Zugangsdaten",
     "migrateCredentials": "Zugangsdaten aus backends.env in die verschlüsselte DB übernehmen.",
     "migrateCredentialsDescription": "Nützlich beim Upgrade eines bestehenden CLI-Setups. Bei neuen Büchern kann dies bedenkenlos aktiviert bleiben.",

@@ -1284,6 +1284,27 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.secrets.forget_cli_unlock") {
+      return {
+        kind: "ui.secrets.forget_cli_unlock",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          cli_marker_cleared: true,
+          cli_credential_deleted: true,
+          legacy_credential_deleted: true,
+          remembered_unlock: {
+            platform: "unsupported",
+            access_policy: "unsupported",
+            available: false,
+            configured: false,
+            cli_enabled: false,
+            legacy_quarantined: false,
+          },
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.workspace.delete") {
       return {
         kind: "ui.workspace.delete",

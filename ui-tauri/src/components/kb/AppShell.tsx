@@ -106,6 +106,7 @@ import {
   activateImportProject,
   canUseTouchIdPassphraseUnlock,
   clearImportProject,
+  forgetTouchIdPassphrase,
   getTransport,
   isImportProjectActive,
   noteActiveImportProject,
@@ -115,6 +116,7 @@ import {
 } from "@/daemon/transport";
 import type { TouchIdPassphraseStatus } from "@/daemon/transport";
 import {
+  canEnrollTouchIdPassphrase,
   lockScreenConfig,
   shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
@@ -758,6 +760,7 @@ export function AppShell() {
         platform: "macos",
         available: false,
         configured: false,
+        stale: false,
         reason: error instanceof Error ? error.message : String(error),
       };
       setTouchIdStatus(status);
@@ -873,7 +876,11 @@ export function AppShell() {
             touchIdStatusConfigured: touchIdStatus?.configured === true,
           });
           if (shouldRememberWithTouchId) {
-            void storeTouchIdPassphrase(passphrase, touchIdDataRoot)
+            void storeTouchIdPassphrase(
+              passphrase,
+              touchIdDataRoot,
+              touchIdStatus?.staleGeneration ?? null,
+            )
               .then((status) => {
                 setTouchIdStatus(status);
                 if (!status.configured) {
@@ -1000,6 +1007,14 @@ export function AppShell() {
       clearDaemonQueryCache();
       setLocked(true);
     } else if (envelope.error?.code === "touch_id_passphrase_not_found") {
+      setAppLockPolicy({ touchIdUnlock: false });
+      await refreshTouchIdStatus();
+    } else if (envelope.error?.code === "local_auth_denied") {
+      // The Keychain item passed biometric access but no longer opens this
+      // database (for example after a CLI-side passphrase rotation). Remove it
+      // instead of offering a known-stale credential on every lock screen.
+      await forgetTouchIdPassphrase(touchIdDataRoot).catch(() => {});
+      setAppLockPolicy({ touchIdUnlock: false });
       await refreshTouchIdStatus();
     }
     return {
@@ -1016,6 +1031,7 @@ export function AppShell() {
     queryClient,
     refreshTouchIdStatus,
     setIdentity,
+    setAppLockPolicy,
     t,
     touchIdDataRoot,
   ]);
@@ -3212,11 +3228,13 @@ function LockScreen({
   const [submitting, setSubmitting] = React.useState(false);
   const [touchIdSubmitting, setTouchIdSubmitting] = React.useState(false);
   const autoTouchIdPrompted = React.useRef(false);
-  const canEnrollTouchId =
-    touchIdPlatformSupported &&
-    passphraseRequired &&
-    !touchIdEnabled &&
-    touchIdStatus?.available !== false;
+  const canEnrollTouchId = canEnrollTouchIdPassphrase({
+    platformSupported: touchIdPlatformSupported,
+    passphraseRequired,
+    touchIdEnabled,
+    touchIdAvailable: touchIdStatus?.available !== false,
+    touchIdStale: touchIdStatus?.stale === true,
+  });
   const [enrollTouchId, setEnrollTouchId] = React.useState(
     () => touchIdEnabled && canEnrollTouchId,
   );

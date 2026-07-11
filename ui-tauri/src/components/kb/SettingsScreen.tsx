@@ -37,6 +37,7 @@ import {
   type TouchIdPassphraseStatus,
 } from "@/daemon/transport";
 import { confirmAction } from "@/lib/confirmAction";
+import { shouldRefreshTouchIdPassphrase } from "@/lib/appLock";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
@@ -74,6 +75,16 @@ import {
   type ResetBookData,
   type StatusData,
 } from "./settings/SettingsModel";
+
+type ForgetCliUnlockData = {
+  cli_marker_cleared: boolean;
+  cli_credential_deleted: boolean;
+  legacy_credential_deleted: boolean;
+};
+
+type ChangePassphraseData = {
+  desktop_biometric_stale_generation?: string | null;
+};
 
 interface SettingsScreenProps {
   onLock?: () => void;
@@ -136,6 +147,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const [touchIdStatusPending, setTouchIdStatusPending] =
     React.useState(false);
   const touchIdConfigured = touchIdStatus?.configured === true;
+  const touchIdStale = touchIdStatus?.stale === true;
+  const touchIdProtection = touchIdStatus?.protection ?? null;
   const touchIdStatusReason = touchIdStatus?.reason ?? null;
   const deleteWorkspace = useDaemonMutation("ui.workspace.delete", {
     dataMode: "real",
@@ -143,7 +156,10 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const resetBookData = useDaemonMutation<ResetBookData>("ui.profiles.reset_data", {
     dataMode: "real",
   });
-  const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase", {
+  const changePassphrase = useDaemonMutation<ChangePassphraseData>("ui.secrets.change_passphrase", {
+    dataMode: "real",
+  });
+  const forgetCliUnlock = useDaemonMutation<ForgetCliUnlockData>("ui.secrets.forget_cli_unlock", {
     dataMode: "real",
   });
   const backendSettingsQuery = useDaemon<BackendSettingsData>(
@@ -245,6 +261,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         platform: "macos",
         available: false,
         configured: false,
+        stale: false,
         reason: error instanceof Error ? error.message : String(error),
       };
       setTouchIdStatus(status);
@@ -273,6 +290,48 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     },
     [addNotification, setAppLockPolicy, t, touchIdDataRoot],
   );
+
+  const forgetAllSavedUnlockMethods = React.useCallback(async () => {
+    if (!(await confirmAction(t("touchId.forgetAllConfirm")))) return;
+    const errors: string[] = [];
+    try {
+      await forgetTouchIdPassphrase(touchIdDataRoot);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+    try {
+      const envelope = await forgetCliUnlock.mutateAsync({});
+      if (
+        envelope.data?.cli_credential_deleted === false ||
+        envelope.data?.legacy_credential_deleted === false
+      ) {
+        errors.push(t("touchId.forgetAllCredentialWarning"));
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+
+    setAppLockPolicy({ touchIdUnlock: false });
+    await refreshTouchIdStatus();
+    addNotification({
+      title:
+        errors.length === 0
+          ? t("touchId.forgetAllTitle")
+          : t("touchId.forgetAllPartialTitle"),
+      body:
+        errors.length === 0
+          ? t("touchId.forgetAllBody")
+          : errors.join(" "),
+      tone: errors.length === 0 ? "success" : "warning",
+    });
+  }, [
+    addNotification,
+    forgetCliUnlock,
+    refreshTouchIdStatus,
+    setAppLockPolicy,
+    t,
+    touchIdDataRoot,
+  ]);
 
   React.useEffect(() => {
     void refreshTouchIdStatus();
@@ -788,16 +847,22 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     }
 
     try {
-      await changePassphrase.mutateAsync({
+      const envelope = await changePassphrase.mutateAsync({
         auth_response: { passphrase_secret: currentPassphrase },
         new_passphrase_secret: newPassphrase,
       });
       await setSessionUnlockPassphrase(newPassphrase);
-      if (appLockPolicy.touchIdUnlock && touchIdPlatformSupported) {
+      if (
+        shouldRefreshTouchIdPassphrase({
+          platformSupported: touchIdPlatformSupported,
+          touchIdStatusConfigured: touchIdConfigured,
+        })
+      ) {
         try {
           const status = await storeTouchIdPassphrase(
             newPassphrase,
             touchIdDataRoot,
+            envelope.data?.desktop_biometric_stale_generation ?? null,
           );
           setTouchIdStatus(status);
           if (!status.configured) {
@@ -860,6 +925,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       const status = await storeTouchIdPassphrase(
         touchIdEnrollPassphrase,
         touchIdDataRoot,
+        touchIdStatus?.staleGeneration ?? null,
       );
       setTouchIdStatus(status);
       if (!status.configured) {
@@ -967,9 +1033,13 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             setAppLockPolicy={setAppLockPolicy}
             onEnrollTouchId={openTouchIdEnrollment}
             onForgetTouchId={forgetTouchIdUnlock}
+            onForgetAllUnlock={forgetAllSavedUnlockMethods}
+            forgetAllPending={forgetCliUnlock.isPending}
             encryptedWorkspace={encryptedWorkspace}
             touchIdPlatformSupported={touchIdPlatformSupported}
             touchIdConfigured={touchIdConfigured}
+            touchIdStale={touchIdStale}
+            touchIdProtection={touchIdProtection}
             touchIdStatusPending={touchIdStatusPending}
             touchIdStatusReason={touchIdStatusReason}
             onRefreshTouchId={() => void refreshTouchIdStatus()}

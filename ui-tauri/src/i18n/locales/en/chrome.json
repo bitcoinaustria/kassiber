@@ -216,7 +216,7 @@
     "touchIdNotSetUpReason": "Touch ID unlock is not set up: {{reason}}",
     "touchIdNotSetUp": "No Touch ID passphrase is saved for these books. Unlock once with the passphrase to save it again.",
     "useTouchIdNextTime": "Use Touch ID next time",
-    "useTouchIdNextTimeBody": "Save this database passphrase in macOS Keychain behind local user presence.",
+    "useTouchIdNextTimeBody": "Save a desktop-only Keychain entry that Kassiber can use after Touch ID. CLI remembered unlock stays separate.",
     "waitingForTouchId": "Waiting for Touch ID...",
     "unlockWithTouchId": "Unlock with Touch ID",
     "unlocking": "Unlocking...",

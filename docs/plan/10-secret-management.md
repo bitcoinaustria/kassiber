@@ -36,8 +36,8 @@ Out of scope for protection claims:
   process running as the user
 - admin, root, kernel, debugger, memory inspection, swap capture, or a
   compromised OS account
-- production signing, notarization, app attestation, or stronger biometric
-  security claims beyond local user-presence convenience
+- production signing, notarization, or app attestation beyond the implemented
+  protected-Keychain capability detection and preview fallback
 - remote custody, telemetry, crash upload, or outbound secret escrow
 
 Local-first constraints remain unchanged: no telemetry, no remote custody, and
@@ -48,7 +48,7 @@ raw shell, raw filesystem, arbitrary CLI, or generic daemon-dispatch access.
 
 | Secret or sensitive artifact | Entry | Storage | Transport | Reveal | Logs/diagnostics | Backup/restore | Protection level | Gaps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd`, optional desktop Touch ID, optional CLI `remember-unlock` | normally not stored; opt-in per-data-root item in macOS Keychain, Windows Credential Manager, or available unlocked Linux Secret Service | fd/prompt into CLI; CLI credential read only when `cli_remembered_unlock: true`; desktop reads the shared macOS item only after LocalAuthentication succeeds | not revealed | diagnostics redacts passphrase-shaped args and details | required to open backed-up encrypted DB; OS-store copy is not portable backup material | SQLCipher at-rest perimeter only; remembered unlock is convenience | CLI reads are not biometric-gated; biometric reveal gates remain open |
+| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd`, optional desktop Touch ID, optional CLI `remember-unlock` | normally not stored; independent per-data-root desktop and CLI entries in supported OS stores; legacy shared entry is migration-only | fd/prompt into CLI; CLI credential read only when `cli_remembered_unlock: true`; desktop uses item-level `biometryCurrentSet` when entitled and an explicit LocalAuthentication gate in previews | not revealed | diagnostics redacts passphrase-shaped args and details | required to open backed-up encrypted DB; OS-store copies are not portable backup material | SQLCipher at-rest perimeter only; remembered unlock is convenience | CLI reads are not biometric-gated; preview builds cannot claim item-level biometric protection |
 | Backup passphrase / age recipient material | backup CLI prompts/options | not stored by Kassiber | local CLI process | not revealed | diagnostics redaction applies to passphrase-shaped keys/text | user-supplied for each backup/import | external `age` or `pyrage` boundary | no recovery if lost |
 | Backend tokens/auth headers/cookies/basic-auth | backend create/update, dotenv migration | SQLCipher DB `backends` table; older dotenvs may still be migrated | daemon/CLI explicit backend flows | `backends.reveal_token` after passphrase round-trip, or explicit plaintext acknowledgement on plaintext DBs | safe backend views expose presence flags only; diagnostics aggregate credential presence | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | not migrated to OS stores in this PR |
 | Descriptors, xpubs, blinding keys | wallet create/update/import | SQLCipher DB wallet config today | daemon/CLI wallet flows | `wallets.reveal_descriptor` after passphrase round-trip, or explicit plaintext acknowledgement on plaintext DBs | safe wallet views expose state flags only; diagnostics redacts xpub/xprv patterns | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | still in generic wallet config blob |
@@ -128,19 +128,59 @@ descriptors, xpubs, blinding keys, passphrases, or reveal payloads.
 | Windows | user-scope Credential Manager / DPAPI when available | User-scope Credential Manager / DPAPI only. No machine-scope secrets. | "Stored for this Windows user account only." |
 | Linux | `sqlcipher_inline` when Secret Service is missing, locked, headless, or no D-Bus | Use Secret Service only when available and unlocked. No plaintext fallback. | Show a banner when falling back because no reliable desktop secret service is available. |
 
-Desktop remember-unlock remains macOS-specific: first passphrase entry on the
-lock screen can enroll Touch ID for the next unlock, and Settings can verify the
-passphrase and store it immediately. Desktop retrieval requires a
-LocalAuthentication success before reading the per-data-root Keychain item.
+Desktop remember-unlock remains macOS-specific. It writes
+`Kassiber Desktop Biometric Passphrase`, scoped by normalized data-root path.
+Production-entitled builds use a protected-Keychain `biometryCurrentSet` item;
+unsigned/ad-hoc previews fall back to a desktop-only login-Keychain item and an
+explicit LocalAuthentication check. Status names the active protection mode so
+the UI does not overstate the preview fallback.
 
 CLI `remember-unlock` is explicitly opt-in on macOS, Windows, and Linux. It
-verifies the database passphrase, stores the same service/account item used by
-the desktop on macOS, and sets `cli_remembered_unlock: true` in the managed
-settings JSON. A desktop-only item is ignored while that marker is absent.
+verifies the database passphrase, stores `Kassiber CLI Database Passphrase`,
+scoped by the same normalized data-root account, and sets
+`cli_remembered_unlock: true` in managed settings. The desktop entry is never
+read or deleted by CLI-only operations.
 Windows uses user-scope Credential Manager; Linux uses Secret Service only when
 available and unlocked. There is no plaintext fallback. CLI reads are not
-biometric-gated, and passphrase rotation updates the shared item or disables the
-CLI marker and warns if the store rejects the update.
+biometric-gated. Desktop passphrase rotation updates the CLI entry or disables
+the marker and warns if the store rejects the update, then separately refreshes
+the desktop entry. Before desktop or CLI rotation rekeys SQLCipher, the Python
+side arms a non-secret `desktop_biometric_stale` guard in managed settings.
+The value is an opaque generation token. The guard stays armed on any rotation
+error because verification can fail after the key already changed; successful
+Tauri enrollment refresh compare-and-clears only the generation that initiated
+it, while verified removal may clear the current guard. This deliberate
+cross-process channel avoids relying on per-binary Keychain ACLs for marker
+reads, prevents an older callback from clearing a newer rotation, and makes an
+interrupted rotation fail closed. The next desktop session requires passphrase
+entry and re-enrollment instead of attempting a known-stale biometric item.
+
+Existing `Kassiber Database Passphrase` entries migrate conservatively. With a
+CLI marker, the CLI claims and removes the old shared entry; without that marker,
+the desktop claims it after a successful Touch ID unlock. Users who previously
+enabled both against the ambiguous shared entry may need to re-enroll the other
+surface once. Settings exposes **Forget all unlock methods** to delete both
+current entries and any remaining legacy item.
+If deletion of a CLI-owned legacy item cannot be verified, managed settings
+atomically clear `cli_remembered_unlock` and set
+`cli_legacy_unlock_quarantined`. That marker preserves CLI ownership for the
+desktop boundary while CLI load/status refuse to consume or migrate the value.
+The user must remove it manually or retry Forget all before re-enrollment.
+
+Desktop mode transitions preserve a single active credential copy. An
+unsigned/ad-hoc preview refuses to replace an existing protected enrollment,
+and protected-item deletion removes any preview fallback before removing the
+biometric item. Partial cleanup is surfaced instead of clearing enrollment
+markers and reporting success.
+Tauri treats an unreadable or invalid managed settings file as a biometric
+boundary error, not as an absent stale guard. The canonical path remains only
+the native-store account; guard lookup uses the same lexical data-root/state-root
+mapping as Python so a symlinked final data directory cannot bypass it.
+
+CLI status exposes the intended boundary without probing a secret when CLI
+enrollment is disabled: `macos_keychain_application_acl`,
+`windows_dpapi_user_scope`, `linux_secret_service_session`, or `unsupported`.
+These are capability codes, not claims of biometric protection.
 
 ## Rust Secret Store Layer
 
@@ -228,11 +268,10 @@ Desktop:
 1. The daemon starts locked when the DB is SQLCipher-encrypted.
 2. The user supplies the passphrase through the unlock UI or CLI fd path.
 3. The Python daemon holds the unlocked connection for runtime requests.
-4. If the user enabled Touch ID unlock, the desktop shell stores a per-data-root
-   passphrase copy in macOS Keychain either from the first manual lock-screen
-   unlock or from the Settings verification dialog, and can retrieve it after
-   a LocalAuthentication Touch ID prompt on later lock screens. Passphrase
-   rotation updates the stored copy.
+4. If the user enabled Touch ID unlock, the desktop shell stores its own
+   per-data-root copy. Entitled builds let the protected Keychain enforce
+   `biometryCurrentSet`; previews explicitly run LocalAuthentication before
+   reading their desktop-only fallback. Passphrase rotation updates this copy.
 5. A one-shot CLI invocation resolves an explicit fd/cached passphrase first,
    then the OS-store copy only when `cli_remembered_unlock` is true, then the
    existing TTY prompt. A stale copy writes `remembered_unlock_stale` to stderr
