@@ -43,20 +43,20 @@ from kassiber.time_utils import now_iso
 
 class BundleParserValidationTests(unittest.TestCase):
     @staticmethod
-    def _plaintext_bundle(manifest) -> bytes:
+    def _plaintext_bundle(manifest, *, events_bytes: bytes = b"") -> bytes:
         output = BytesIO()
         with tarfile.open(fileobj=output, mode="w") as archive:
             for name, payload in (
                 ("manifest.json", json.dumps(manifest).encode("utf-8")),
-                ("events.jsonl", b""),
+                ("events.jsonl", events_bytes),
             ):
                 info = tarfile.TarInfo(name)
                 info.size = len(payload)
                 archive.addfile(info, BytesIO(payload))
         return output.getvalue()
 
-    def _parse_manifest(self, manifest):
-        plaintext = self._plaintext_bundle(manifest)
+    def _parse_manifest(self, manifest, *, events_bytes: bytes = b""):
+        plaintext = self._plaintext_bundle(manifest, events_bytes=events_bytes)
 
         def decrypt(_source, destination, **_kwargs):
             destination.write(plaintext)
@@ -77,12 +77,20 @@ class BundleParserValidationTests(unittest.TestCase):
             "schema_version": 1,
             "events_sha256": hashlib.sha256(b"").hexdigest(),
             "event_count": 0,
+            "first_seq": 0,
+            "last_seq": 0,
+            "version_vector": {},
             "blob_hmacs": [],
         }
         for field, malformed in (
             ("schema_version", True),
             ("event_count", True),
             ("event_count", "0"),
+            ("first_seq", True),
+            ("first_seq", "0"),
+            ("last_seq", 2**63),
+            ("version_vector", []),
+            ("version_vector", {"replica": True}),
             ("blob_hmacs", {}),
             ("blob_hmacs", [1]),
         ):
@@ -94,6 +102,20 @@ class BundleParserValidationTests(unittest.TestCase):
 
         parsed = self._parse_manifest(baseline)
         self.assertEqual(parsed.events, ())
+
+        for malformed_seq in ({"nested": 1}, True, None, "1", 2**63):
+            with self.subTest(replica_seq=malformed_seq):
+                event = {"replica_seq": malformed_seq}
+                events_bytes = json.dumps(event).encode("utf-8") + b"\n"
+                manifest = baseline | {
+                    "events_sha256": hashlib.sha256(events_bytes).hexdigest(),
+                    "event_count": 1,
+                    "first_seq": 1,
+                    "last_seq": 1,
+                }
+                with self.assertRaises(AppError) as raised:
+                    self._parse_manifest(manifest, events_bytes=events_bytes)
+                self.assertEqual(raised.exception.code, "sync_bundle_invalid")
 
 
 @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")

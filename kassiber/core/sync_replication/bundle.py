@@ -28,6 +28,7 @@ BUNDLE_EVENTS_NAME = "events.jsonl"
 BUNDLE_BLOBS_DIR = "blobs"
 BUNDLE_ALLOWED_TOP_LEVEL = (BUNDLE_MANIFEST_NAME, BUNDLE_EVENTS_NAME, BUNDLE_BLOBS_DIR)
 MAX_BUNDLE_BYTES = 512 * 1024 * 1024
+MAX_SYNC_SEQUENCE = (1 << 63) - 1
 _PYRAGE_BACKEND = AgeBackend(flavor="pyrage")
 
 
@@ -476,6 +477,16 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
             ) from exc
         if not isinstance(event, dict):
             raise AppError("sync event must be a JSON object", code="sync_bundle_invalid")
+        replica_seq = event.get("replica_seq")
+        if (
+            type(replica_seq) is not int
+            or replica_seq < 1
+            or replica_seq > MAX_SYNC_SEQUENCE
+        ):
+            raise AppError(
+                "sync event sequence is invalid",
+                code="sync_bundle_invalid",
+            )
         events.append(event)
     event_count = manifest.get("event_count")
     if type(event_count) is not int or event_count < 0:
@@ -485,6 +496,30 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
             "sync event count does not match the manifest",
             code="sync_bundle_tampered",
             retryable=False,
+        )
+    first_seq = manifest.get("first_seq")
+    last_seq = manifest.get("last_seq")
+    if (
+        type(first_seq) is not int
+        or type(last_seq) is not int
+        or first_seq < 0
+        or last_seq < first_seq
+        or last_seq > MAX_SYNC_SEQUENCE
+        or (events and first_seq < 1)
+    ):
+        raise AppError("sync manifest range is invalid", code="sync_bundle_invalid")
+    version_vector = manifest.get("version_vector")
+    if not isinstance(version_vector, dict) or any(
+        not isinstance(replica_id, str)
+        or not replica_id
+        or type(seq) is not int
+        or seq < 0
+        or seq > MAX_SYNC_SEQUENCE
+        for replica_id, seq in version_vector.items()
+    ):
+        raise AppError(
+            "sync manifest version vector is invalid",
+            code="sync_bundle_invalid",
         )
     blobs = {
         name.split("/", 1)[1]: payload

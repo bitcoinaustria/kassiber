@@ -349,6 +349,13 @@ class S3Transport:
                 code="sync_transport_insecure",
                 hint="Use an https:// S3 endpoint. Plain HTTP is allowed only for localhost testing.",
             )
+        normalized_proxy = str(proxy_url or "").strip() or None
+        if parsed.scheme == "http" and normalized_proxy is not None:
+            raise AppError(
+                "Plain-HTTP loopback S3 endpoints cannot use a proxy",
+                code="sync_transport_insecure",
+                hint="Remove the proxy for local S3 testing, or use an https:// endpoint.",
+            )
         if not bucket or not access_key or not secret_key:
             raise AppError("S3 bucket and credentials are required", code="sync_transport_invalid")
         self.endpoint = endpoint.rstrip("/")
@@ -358,7 +365,7 @@ class S3Transport:
         self.secret_key = secret_key
         self.prefix = prefix.strip("/")
         self.session_token = session_token
-        self.proxy_url = str(proxy_url or "").strip() or None
+        self.proxy_url = normalized_proxy
         self.opener = opener or (
             lambda request, timeout: urlopen_with_proxy(
                 request,

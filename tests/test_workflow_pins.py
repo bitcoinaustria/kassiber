@@ -1,55 +1,47 @@
-import ast
 import re
 import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
+
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
-USES_LINE_RE = re.compile(
-    r"^\s*(?:-\s*)?(?:uses|['\"]uses['\"])\s*:\s*(?P<value>.+?)\s*$"
-)
-USES_TOKEN_RE = re.compile(r"(?:^|[,{\s])(?:uses|['\"]uses['\"])\s*:")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
-def _without_yaml_comment(text: str) -> str:
-    quote: str | None = None
-    escaped = False
-    for index, char in enumerate(text):
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\" and quote == '"':
-            escaped = True
-            continue
-        if quote:
-            if char == quote:
-                quote = None
-            continue
-        if char in {"'", '"'}:
-            quote = char
-        elif char == "#":
-            return text[:index]
-    return text
+def _node_location(workflow: Path, node: Node) -> str:
+    return f"{workflow}:{node.start_mark.line + 1}"
 
 
-def _uses_scalar(raw_value: str, *, location: str) -> str:
-    value = _without_yaml_comment(raw_value).strip()
-    if not value:
-        raise AssertionError(f"{location}: uses value is empty")
-    if value[0] in {"'", '"'}:
-        try:
-            parsed = ast.literal_eval(value)
-        except (SyntaxError, ValueError) as exc:
-            raise AssertionError(f"{location}: uses value is not a valid quoted scalar") from exc
-        if not isinstance(parsed, str):
-            raise AssertionError(f"{location}: uses value must be a string")
-        value = parsed
-    if any(char.isspace() for char in value):
-        raise AssertionError(f"{location}: uses value must be one scalar")
-    return value
+def _collect_uses_nodes(
+    node: Node,
+    *,
+    workflow: Path,
+    references: list[tuple[str, str]],
+) -> None:
+    if isinstance(node, SequenceNode):
+        for child in node.value:
+            _collect_uses_nodes(child, workflow=workflow, references=references)
+        return
+    if not isinstance(node, MappingNode):
+        return
+    for key_node, value_node in node.value:
+        if not isinstance(key_node, ScalarNode):
+            raise AssertionError(
+                f"{_node_location(workflow, key_node)}: complex YAML mapping keys cannot be audited safely"
+            )
+        if key_node.value == "uses":
+            location = _node_location(workflow, key_node)
+            if not isinstance(value_node, ScalarNode) or value_node.tag != "tag:yaml.org,2002:str":
+                raise AssertionError(f"{location}: uses value must be a string")
+            reference = value_node.value.strip()
+            if not reference or any(char.isspace() for char in reference):
+                raise AssertionError(f"{location}: uses value must be one non-empty scalar")
+            references.append((reference, location))
+        _collect_uses_nodes(value_node, workflow=workflow, references=references)
 
 
 def collect_workflow_uses(workflows_root: Path) -> list[tuple[str, str]]:
@@ -62,14 +54,20 @@ def collect_workflow_uses(workflows_root: Path) -> list[tuple[str, str]]:
     if not workflow_files:
         raise AssertionError("no GitHub Actions workflow files were found")
     for workflow in workflow_files:
-        for line_number, line in enumerate(workflow.read_text(encoding="utf-8").splitlines(), start=1):
-            uncommented = _without_yaml_comment(line)
-            match = USES_LINE_RE.match(uncommented)
-            location = f"{workflow}:{line_number}"
-            if match:
-                references.append((_uses_scalar(match.group("value"), location=location), location))
-            elif USES_TOKEN_RE.search(uncommented):
-                raise AssertionError(f"{location}: unsupported uses syntax cannot be audited safely")
+        try:
+            documents = yaml.compose_all(
+                workflow.read_text(encoding="utf-8"),
+                Loader=yaml.SafeLoader,
+            )
+            for document in documents:
+                if document is not None:
+                    _collect_uses_nodes(
+                        document,
+                        workflow=workflow,
+                        references=references,
+                    )
+        except yaml.YAMLError as exc:
+            raise AssertionError(f"{workflow}: workflow YAML is invalid") from exc
     if not references:
         raise AssertionError("no GitHub Actions uses references were found")
     return references
@@ -111,15 +109,37 @@ class WorkflowPinTest(unittest.TestCase):
             )
             assert_workflow_uses_are_pinned(workflows)
 
-    def test_unsupported_inline_uses_syntax_fails_closed(self):
+    def test_inline_explicit_and_escaped_uses_keys_are_audited(self):
         with tempfile.TemporaryDirectory() as temporary:
             workflows = Path(temporary)
-            (workflows / "inline.yml").write_text(
-                "steps:\n  - { uses: actions/checkout@v4 }\n",
+            pinned = "a" * 40
+            workflow = workflows / "adversarial.yml"
+            workflow.write_text(
+                f"steps:\n"
+                f"  - uses: actions/checkout@{pinned}\n"
+                "  - ? uses\n"
+                "    : actions/setup-python@v5\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(AssertionError, "cannot be audited"):
-                collect_workflow_uses(workflows)
+            with self.assertRaisesRegex(AssertionError, "setup-python@v5"):
+                assert_workflow_uses_are_pinned(workflows)
+
+            workflow.write_text(
+                f"steps:\n"
+                f"  - uses: actions/checkout@{pinned}\n"
+                '  - "us\\u0065s": actions/setup-python@v5\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(AssertionError, "setup-python@v5"):
+                assert_workflow_uses_are_pinned(workflows)
+
+            workflow.write_text(
+                f"steps:\n"
+                f"  - uses: actions/checkout@{pinned}\n"
+                f"  - {{ uses: actions/setup-python@{pinned} }}\n",
+                encoding="utf-8",
+            )
+            assert_workflow_uses_are_pinned(workflows)
 
 
 if __name__ == "__main__":

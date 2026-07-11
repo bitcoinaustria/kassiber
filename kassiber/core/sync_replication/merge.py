@@ -14,7 +14,12 @@ from typing import Any, Mapping
 from ...errors import AppError
 from ...time_utils import now_iso
 from ..repo import invalidate_journals
-from .bundle import BUNDLE_MANIFEST_DOMAIN, ParsedBundle, parse_bundle
+from .bundle import (
+    BUNDLE_MANIFEST_DOMAIN,
+    MAX_SYNC_SEQUENCE,
+    ParsedBundle,
+    parse_bundle,
+)
 from .clock import HybridLogicalClock, observe_clock
 from .crypto import (
     canonical_json_bytes,
@@ -310,35 +315,52 @@ def _merge_membership_catalog(
         )
 
 
+_REQUIRED_EVENT_FIELDS = frozenset(
+    {
+        "id", "workspace_id", "profile_id", "replica_id", "replica_seq", "hlc",
+        "author_member_id", "event_type", "entity_table", "entity_key", "payload",
+        "context", "previous_hash", "event_hash", "signature", "created_at",
+    }
+)
+
+
+def _validate_event_shape(event: Mapping[str, Any]) -> None:
+    if set(event) != _REQUIRED_EVENT_FIELDS:
+        raise AppError("sync event shape is invalid", code="sync_bundle_invalid")
+    if (
+        type(event["replica_seq"]) is not int
+        or event["replica_seq"] <= 0
+        or event["replica_seq"] > MAX_SYNC_SEQUENCE
+    ):
+        raise AppError("sync event sequence is invalid", code="sync_bundle_invalid")
+    for field in ("replica_id", "author_member_id", "hlc"):
+        if not isinstance(event[field], str) or not event[field]:
+            raise AppError(f"sync event {field} is invalid", code="sync_bundle_invalid")
+    try:
+        parsed_hlc = HybridLogicalClock.parse(event["hlc"])
+    except ValueError as exc:
+        raise AppError("sync event HLC is invalid", code="sync_bundle_invalid") from exc
+    if parsed_hlc.encode() != event["hlc"]:
+        raise AppError("sync event HLC is invalid", code="sync_bundle_invalid")
+    if not isinstance(event["context"], Mapping) or any(
+        not isinstance(key, str)
+        or type(value) is not int
+        or value < 0
+        or value > MAX_SYNC_SEQUENCE
+        for key, value in event["context"].items()
+    ):
+        raise AppError("sync event version vector is invalid", code="sync_bundle_invalid")
+
+
 def _validate_event_for_book(
     conn: sqlite3.Connection,
     *,
     book,
     event: Mapping[str, Any],
 ) -> None:
-    required = {
-        "id", "workspace_id", "profile_id", "replica_id", "replica_seq", "hlc",
-        "author_member_id", "event_type", "entity_table", "entity_key", "payload",
-        "context", "previous_hash", "event_hash", "signature", "created_at",
-    }
-    if set(event) != required:
-        raise AppError("sync event shape is invalid", code="sync_bundle_invalid")
+    _validate_event_shape(event)
     if event["workspace_id"] != book["workspace_id"] or event["profile_id"] != book["profile_id"]:
         raise AppError("sync event targets another book", code="sync_bundle_tampered")
-    if type(event["replica_seq"]) is not int or event["replica_seq"] <= 0:
-        raise AppError("sync event sequence is invalid", code="sync_bundle_invalid")
-    if not isinstance(event["hlc"], str):
-        raise AppError("sync event HLC is invalid", code="sync_bundle_invalid")
-    parsed_hlc = HybridLogicalClock.parse(event["hlc"])
-    if parsed_hlc.encode() != event["hlc"]:
-        raise AppError("sync event HLC is not canonical", code="sync_bundle_invalid")
-    if not isinstance(event["context"], Mapping) or any(
-        not isinstance(key, str)
-        or type(value) is not int
-        or value < 0
-        for key, value in event["context"].items()
-    ):
-        raise AppError("sync event version vector is invalid", code="sync_bundle_invalid")
     replica = conn.execute(
         "SELECT * FROM sync_replicas WHERE id = ? AND profile_id = ?",
         (event["replica_id"], book["profile_id"]),
@@ -1390,6 +1412,19 @@ def import_bundle(
         raise AppError("local device key is missing", code="sync_identity_incomplete")
     parsed = parse_bundle(ciphertext, age_identity=private_device["age_identity"])
     manifest = parsed.manifest
+    for event in parsed.events:
+        _validate_event_shape(event)
+    first_seq = manifest.get("first_seq")
+    last_seq = manifest.get("last_seq")
+    if (
+        type(first_seq) is not int
+        or type(last_seq) is not int
+        or first_seq < 0
+        or last_seq < first_seq
+        or last_seq > MAX_SYNC_SEQUENCE
+        or (parsed.events and first_seq < 1)
+    ):
+        raise AppError("bundle manifest range is invalid", code="sync_bundle_invalid")
     if (
         manifest.get("book_id") != book["book_id"]
         or manifest.get("workspace_id") != book["workspace_id"]
@@ -1398,12 +1433,12 @@ def import_bundle(
         raise AppError("bundle belongs to another book", code="sync_wrong_book")
     if parsed.events:
         sender = str(manifest.get("sender_replica_id") or "")
-        sequences = [int(event["replica_seq"]) for event in parsed.events]
+        sequences = [event["replica_seq"] for event in parsed.events]
         if any(event["replica_id"] != sender for event in parsed.events):
             raise AppError("bundle mixes replica event streams", code="sync_bundle_tampered")
         if sequences != list(range(sequences[0], sequences[-1] + 1)):
             raise AppError("bundle event sequence is not contiguous", code="sync_bundle_tampered")
-        if sequences[0] != int(manifest["first_seq"]) or sequences[-1] != int(manifest["last_seq"]):
+        if sequences[0] != first_seq or sequences[-1] != last_seq:
             raise AppError("bundle range does not match its events", code="sync_bundle_tampered")
 
     created_files: list[Path] = []

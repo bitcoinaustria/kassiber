@@ -230,6 +230,13 @@ class TransportAdapterTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "sync_transport_insecure")
         S3Transport(endpoint="https://s3.example", **common)
         S3Transport(endpoint="http://127.0.0.1:9000", **common)
+        with self.assertRaisesRegex(AppError, "cannot use a proxy") as proxied:
+            S3Transport(
+                endpoint="http://127.0.0.1:9000",
+                proxy_url="http://proxy.example:8080",
+                **common,
+            )
+        self.assertEqual(proxied.exception.code, "sync_transport_insecure")
 
     def test_plaintext_profile_cannot_store_transport_credentials(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -523,6 +530,42 @@ class MailboxEndToEndTests(unittest.TestCase):
                         transport_id=self.peer_transport["id"],
                     )
                 self.assertEqual(raised.exception.code, "sync_mailbox_head_invalid")
+
+        for created_at in (
+            "0001-01-01T00:00:00+23:59",
+            "9999-12-31T23:59:59-23:59",
+        ):
+            with self.subTest(created_at=created_at):
+                core = {
+                    key: value
+                    for key, value in original.items()
+                    if key not in {"head_hash", "signature"}
+                }
+                core["created_at"] = created_at
+                head_path.write_bytes(_sign_head(self.owner, book=book, core=core))
+                with self.assertRaises(AppError) as raised:
+                    pull_mailbox(
+                        self.peer,
+                        profile_id=self.profile_id,
+                        transport_id=self.peer_transport["id"],
+                    )
+                self.assertEqual(raised.exception.code, "sync_mailbox_head_invalid")
+
+        core = {
+            key: value
+            for key, value in original.items()
+            if key not in {"head_hash", "signature"}
+        }
+        core["first_seq"] = 2**63
+        core["last_seq"] = 2**63
+        head_path.write_bytes(_sign_head(self.owner, book=book, core=core))
+        with self.assertRaises(AppError) as raised:
+            pull_mailbox(
+                self.peer,
+                profile_id=self.profile_id,
+                transport_id=self.peer_transport["id"],
+            )
+        self.assertEqual(raised.exception.code, "sync_mailbox_head_invalid")
 
     def test_invitation_decryption_output_and_ciphertext_are_bounded(self):
         request = create_join_request(

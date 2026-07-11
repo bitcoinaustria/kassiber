@@ -13,7 +13,7 @@ import uuid
 
 from ...errors import AppError
 from ...time_utils import now_iso
-from .bundle import build_bundle
+from .bundle import MAX_SYNC_SEQUENCE, build_bundle
 from .crypto import (
     canonical_json_bytes,
     decode_secret,
@@ -255,7 +255,13 @@ def _parse_head(conn: sqlite3.Connection, *, book, payload: bytes) -> tuple[dict
         raise AppError("mailbox head timestamp is invalid", code="sync_mailbox_head_invalid")
     first_seq = document.get("first_seq")
     last_seq = document.get("last_seq")
-    if type(first_seq) is not int or type(last_seq) is not int or first_seq < 1 or last_seq < first_seq:
+    if (
+        type(first_seq) is not int
+        or type(last_seq) is not int
+        or first_seq < 1
+        or last_seq < first_seq
+        or last_seq > MAX_SYNC_SEQUENCE
+    ):
         raise AppError("mailbox head range is invalid", code="sync_mailbox_head_invalid")
     expected_prefix = mailbox_replica_prefix(book, replica["id"]) + "/bundles/"
     bundle_key = str(document.get("bundle_key") or "")
@@ -311,7 +317,12 @@ def _parse_ack(conn: sqlite3.Connection, *, book, payload: bytes) -> tuple[Any, 
     vector: dict[str, int] = {}
     for opaque, seq in raw_vector.items():
         replica_id = by_hmac.get(str(opaque))
-        if not replica_id or type(seq) is not int or seq < 0:
+        if (
+            not replica_id
+            or type(seq) is not int
+            or seq < 0
+            or seq > MAX_SYNC_SEQUENCE
+        ):
             raise AppError("mailbox acknowledgement vector is invalid", code="sync_ack_invalid")
         vector[replica_id] = seq
     return replica, vector
@@ -464,7 +475,7 @@ def _parse_timestamp(value: str | None) -> datetime | None:
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
-    except ValueError:
+    except (ValueError, OverflowError):
         return None
 
 
