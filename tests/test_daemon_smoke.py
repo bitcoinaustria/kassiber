@@ -5102,6 +5102,35 @@ class DaemonSmokeTest(unittest.TestCase):
             provenance["privacy_receipt"]["cross_book_data_disclosed"]
         )
 
+    def test_ai_provenance_reports_successful_profile_disclosure(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"egress_after_id": 0},
+        )
+        daemon_module._record_ai_tool_usage(
+            runtime,
+            "ui.profiles.snapshot",
+            {
+                "ok": True,
+                "envelope": {
+                    "kind": "ui.profiles.snapshot",
+                    "data": {"workspaces": []},
+                },
+            },
+        )
+
+        provenance = daemon_module._ai_answer_provenance(
+            {"name": "local", "kind": "local"},
+            {"model": "test", "persist": False},
+            runtime,
+        )
+
+        self.assertTrue(
+            provenance["privacy_receipt"]["cross_book_data_disclosed"]
+        )
+
     def test_ai_read_rejects_project_changed_after_turn_started(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-read-scope-") as tmp:
             data_root = Path(tmp) / "original"
@@ -5546,6 +5575,245 @@ class DaemonSmokeTest(unittest.TestCase):
         builder.assert_not_called()
         self.assertFalse(result["ok"])
         self.assertEqual(result["reason"], "validation")
+
+    def test_profiles_snapshot_requires_explicit_cross_book_intent(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"cross_book_read_allowed": False},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-unrequested-profiles",
+            name="ui.profiles.snapshot",
+            arguments={},
+        )
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch("kassiber.daemon.build_profiles_snapshot") as builder,
+        ):
+            result = _execute_ai_tool_on_conn(
+                _execute_read_only_ai_tool,
+                call,
+                runtime,
+                object(),
+            )
+
+        builder.assert_not_called()
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["reason"], "validation")
+
+    def test_profiles_snapshot_is_limited_to_the_frozen_workspace(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={
+                "cross_book_read_allowed": True,
+                "scope_workspace_id": "workspace-a",
+                "scope_profile_id": "profile-a",
+            },
+        )
+        call = ParsedAiToolCall(
+            call_id="call-scoped-profiles",
+            name="ui.profiles.snapshot",
+            arguments={},
+        )
+        raw_snapshot = {
+            "workspaces": [
+                {
+                    "id": "workspace-a",
+                    "name": "Allowed",
+                    "profiles": [{"id": "profile-a", "name": "Current"}],
+                },
+                {
+                    "id": "workspace-b",
+                    "name": "Private other workspace",
+                    "profiles": [{"id": "profile-b", "name": "Other"}],
+                },
+            ],
+            "activeWorkspaceId": "workspace-a",
+            "activeProfileId": "profile-a",
+        }
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon.current_context_snapshot",
+                return_value={
+                    "workspace_id": "workspace-a",
+                    "profile_id": "profile-a",
+                },
+            ),
+            mock.patch(
+                "kassiber.daemon.build_profiles_snapshot",
+                return_value=raw_snapshot,
+            ),
+        ):
+            result = _execute_ai_tool_on_conn(
+                _execute_read_only_ai_tool,
+                call,
+                runtime,
+                object(),
+            )
+
+        self.assertTrue(result["ok"])
+        data = result["envelope"]["data"]
+        self.assertEqual(data["activeWorkspaceId"], "workspace-a")
+        self.assertEqual(
+            [workspace["id"] for workspace in data["workspaces"]],
+            ["workspace-a"],
+        )
+        self.assertNotIn("workspace-b", json.dumps(result, sort_keys=True))
+
+    def test_ai_tool_success_results_do_not_expose_embedded_locations(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-location-result",
+            name="ui.overview.snapshot",
+            arguments={},
+        )
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon._auto_maintain_for_read",
+                return_value={},
+            ),
+            mock.patch(
+                "kassiber.daemon.build_overview_snapshot",
+                return_value={
+                    "message": (
+                        "Read https://private.example/report from "
+                        "/Users/alice/private/report.pdf"
+                    )
+                },
+            ),
+        ):
+            result = _execute_ai_tool_on_conn(
+                _execute_read_only_ai_tool,
+                call,
+                runtime,
+                object(),
+            )
+
+        encoded = json.dumps(result, sort_keys=True)
+        self.assertTrue(result["ok"])
+        self.assertNotIn("private.example", encoded)
+        self.assertNotIn("/Users/alice", encoded)
+        self.assertIn("<redacted-url>", encoded)
+        self.assertIn("<redacted-path>", encoded)
+
+    def test_ai_tool_errors_do_not_echo_local_locations(self):
+        for exception, expected_message in (
+            (
+                AppError(
+                    "Could not read https://private.example/report from "
+                    "/Users/alice/private/report.pdf",
+                    code="validation",
+                ),
+                "Could not read <redacted-url> from <redacted-path>",
+            ),
+            (
+                RuntimeError(
+                    "crash at https://private.example/report in "
+                    "/Users/alice/private/report.pdf"
+                ),
+                "AI tool execution failed unexpectedly",
+            ),
+        ):
+            with self.subTest(exception=type(exception).__name__):
+                runtime = AiToolRuntime(
+                    data_root="/not-used",
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                call = ParsedAiToolCall(
+                    call_id="call-location-error",
+                    name="ui.overview.snapshot",
+                    arguments={},
+                )
+                with (
+                    mock.patch(
+                        "kassiber.daemon._run_scoped_ai_operation",
+                        side_effect=exception,
+                    ),
+                    mock.patch("kassiber.daemon.traceback.print_exc"),
+                    mock.patch("kassiber.daemon._REQUEST_LOGGER.error"),
+                ):
+                    result = _execute_read_only_ai_tool(call, runtime)
+
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["message"], expected_message)
+                encoded = json.dumps(result, sort_keys=True)
+                self.assertNotIn("private.example", encoded)
+                self.assertNotIn("/Users/alice", encoded)
+
+    def test_mutating_ai_tool_unexpected_error_does_not_echo_local_locations(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-mutating-location-error",
+            name="ui.loans.mark",
+            arguments={"txid": "tx-1", "as": "collateral"},
+        )
+        with (
+            mock.patch(
+                "kassiber.daemon._run_scoped_ai_mutation",
+                side_effect=RuntimeError(
+                    "crash at https://private.example/report in "
+                    "/Users/alice/private/report.pdf"
+                ),
+            ),
+            mock.patch("kassiber.daemon.traceback.print_exc"),
+            mock.patch("kassiber.daemon._REQUEST_LOGGER.error"),
+        ):
+            result = _execute_mutating_ai_tool(call, runtime)
+
+        self.assertEqual(
+            result,
+            {
+                "ok": False,
+                "reason": "tool_error",
+                "message": "AI tool execution failed unexpectedly",
+            },
+        )
+
+    def test_skill_reference_result_redacts_embedded_locations(self):
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-skill-reference-location",
+            name="read_skill_reference",
+            arguments={"name": "index"},
+        )
+        with mock.patch(
+            "kassiber.daemon.read_skill_reference",
+            return_value=(
+                "See https://private.example/guide and "
+                "/Users/alice/private/guide.md"
+            ),
+        ):
+            result = _execute_read_only_ai_tool(call, runtime)
+
+        self.assertTrue(result["ok"])
+        encoded = json.dumps(result, sort_keys=True)
+        self.assertNotIn("private.example", encoded)
+        self.assertNotIn("/Users/alice", encoded)
+        self.assertIn("<redacted-url>", encoded)
+        self.assertIn("<redacted-path>", encoded)
 
     def test_transaction_review_context_ai_tool_uses_composite_builder(self):
         task_queue = queue.Queue()

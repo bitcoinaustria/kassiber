@@ -60,6 +60,7 @@ from .ai.tools import (
     TOOL_CAPABILITY_NAMES,
     get_tool,
     read_skill_reference,
+    redact_ai_tool_result,
     redact_tool_arguments,
     summarize_tool_call,
 )
@@ -1719,6 +1720,50 @@ def _redact_evidence_payload_for_ai(value: Any) -> Any:
     if isinstance(value, str) and _screen_context_contains_path_or_url(value):
         return "<redacted>"
     return value
+
+
+def _profiles_snapshot_for_ai(
+    conn: sqlite3.Connection,
+    runtime: AiToolRuntime,
+) -> dict[str, Any]:
+    """Return profiles only inside the workspace frozen for this AI turn."""
+
+    if runtime.maintenance_state.get("cross_book_read_allowed") is not True:
+        raise AppError(
+            "A profile list requires an explicit all-books request",
+            code="validation",
+            retryable=False,
+        )
+    frozen_workspace = runtime.maintenance_state.get("scope_workspace_id")
+    if not isinstance(frozen_workspace, str) or not frozen_workspace:
+        raise AppError(
+            "The AI profile list is missing its original workspace scope",
+            code="stale_context",
+            retryable=False,
+        )
+
+    snapshot = build_profiles_snapshot(conn)
+    raw_workspaces = snapshot.get("workspaces")
+    workspaces = (
+        [
+            workspace
+            for workspace in raw_workspaces
+            if isinstance(workspace, dict) and workspace.get("id") == frozen_workspace
+        ]
+        if isinstance(raw_workspaces, list)
+        else []
+    )
+    if len(workspaces) != 1:
+        raise AppError(
+            "The chat's original workspace is no longer available",
+            code="stale_context",
+            retryable=False,
+        )
+    return {
+        "workspaces": workspaces,
+        "activeWorkspaceId": frozen_workspace,
+        "activeProfileId": snapshot.get("activeProfileId"),
+    }
 
 
 def _evidence_key_is_sensitive(key: Any) -> bool:
@@ -4039,7 +4084,7 @@ def _parse_ai_tool_call(raw: dict[str, Any], index: int) -> ParsedAiToolCall:
 def _tool_result_denied(reason: str, *, message: str | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {"ok": False, "reason": reason}
     if message:
-        result["message"] = message
+        result["message"] = redact_ai_tool_result(message)
     return result
 
 
@@ -4718,13 +4763,15 @@ def _execute_read_only_ai_tool(
                     code="validation",
                     retryable=False,
                 )
-            return {
-                "ok": True,
-                "envelope": build_envelope(
-                    "read_skill_reference",
-                    read_skill_reference(reference_name),
-                ),
-            }
+            return redact_ai_tool_result(
+                {
+                    "ok": True,
+                    "envelope": build_envelope(
+                        "read_skill_reference",
+                        read_skill_reference(reference_name),
+                    ),
+                }
+            )
         if entry.daemon_kind is None:
             return _tool_result_denied("tool_not_allowed")
 
@@ -4823,7 +4870,7 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.backends.list":
                 payload = build_backends_list_snapshot(conn, runtime.runtime_config)
             elif entry.daemon_kind == "ui.profiles.snapshot":
-                payload = build_profiles_snapshot(conn)
+                payload = _profiles_snapshot_for_ai(conn, runtime)
             elif entry.daemon_kind == "ui.reports.capital_gains":
                 payload = build_capital_gains_snapshot(conn)
             elif entry.daemon_kind == "ui.reports.summary":
@@ -5120,7 +5167,7 @@ def _execute_read_only_ai_tool(
         _REQUEST_LOGGER.error("read-only ai tool crashed", exc_info=exc)
         return _tool_result_denied(
             "tool_error",
-            message=str(exc) or exc.__class__.__name__,
+            message="AI tool execution failed unexpectedly",
         )
 
 
@@ -5249,7 +5296,7 @@ def _run_scoped_ai_operation(
             )
         return callback(conn)
 
-    return _run_on_daemon_main_thread(runtime, scoped)
+    return redact_ai_tool_result(_run_on_daemon_main_thread(runtime, scoped))
 
 
 def _run_scoped_ai_mutation(
@@ -5487,12 +5534,16 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
         _REQUEST_LOGGER.error("mutating ai tool crashed", exc_info=exc)
         return _tool_result_denied(
             "tool_error",
-            message=str(exc) or exc.__class__.__name__,
+            message="AI tool execution failed unexpectedly",
         )
 
 
 def _tool_result_content_for_model(result: dict[str, Any]) -> str:
-    return json.dumps(json_ready(redact_tool_arguments(result)), sort_keys=True, separators=(",", ":"))
+    return json.dumps(
+        json_ready(redact_ai_tool_result(result)),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
 
 def _record_ai_tool_usage(
@@ -5696,7 +5747,13 @@ def _ai_answer_provenance(
             "egress_gap": bool(egress.get("gap")),
             "history_intent": validated.get("persist"),
             "hostnames_disclosed_to_model": False,
-            "cross_book_data_disclosed": "ui.workspace.overview.snapshot" in tools_used,
+            "cross_book_data_disclosed": bool(
+                {
+                    "ui.profiles.snapshot",
+                    "ui.workspace.overview.snapshot",
+                }
+                & set(tools_used)
+            ),
         },
     }
 
@@ -6284,7 +6341,7 @@ def _trim_auto_context_value(value: Any, *, depth: int = 0) -> Any:
 
 
 def _auto_context_entry_for_model(entry: dict[str, Any]) -> dict[str, Any]:
-    safe_entry = redact_tool_arguments(entry)
+    safe_entry = redact_ai_tool_result(entry)
     trimmed = _trim_auto_context_value(safe_entry)
     encoded = json.dumps(
         json_ready(trimmed),
@@ -6418,7 +6475,7 @@ def _run_auto_read_tools(
         )
         result = _execute_read_only_ai_tool(call, runtime, planned_auto_read=True)
         _record_ai_tool_usage(runtime, entry.name, result)
-        safe_result = redact_tool_arguments(result)
+        safe_result = redact_ai_tool_result(result)
         out.write(
             _with_request_id(
                 build_envelope(
@@ -6432,7 +6489,7 @@ def _run_auto_read_tools(
             {
                 "tool": entry.name,
                 "arguments": redact_tool_arguments(call.arguments),
-                "result": redact_tool_arguments(result),
+                "result": redact_ai_tool_result(result),
             }
         )
     if context and not cancel_event.is_set():
@@ -6929,7 +6986,7 @@ def _run_ai_chat_tool_loop(
             else:
                 result = _execute_read_only_ai_tool(call, runtime)
             _record_ai_tool_usage(runtime, display_name, result)
-            safe_result = redact_tool_arguments(result)
+            safe_result = redact_ai_tool_result(result)
             out.write(
                 _with_request_id(
                     build_envelope(

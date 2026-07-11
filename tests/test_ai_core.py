@@ -59,6 +59,7 @@ from kassiber.ai.tools import (
     SKILL_REFERENCE_NAMES,
     get_tool,
     read_skill_reference,
+    redact_ai_tool_result,
     redact_tool_arguments,
     summarize_tool_call,
 )
@@ -457,6 +458,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("ui_transactions_review_context", transaction_tools)
         self.assertIn("ui_transactions_metadata_update", transaction_tools)
         self.assertNotIn("ui_documents_create", transaction_tools)
+        self.assertNotIn("ui_profiles_snapshot", transaction_tools)
 
         workspace_tools = {
             tool["function"]["name"]
@@ -466,6 +468,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             )
         }
         self.assertIn("ui_workspace_overview_snapshot", workspace_tools)
+        self.assertIn("ui_profiles_snapshot", workspace_tools)
         self.assertNotIn("ui_loans_mark", workspace_tools)
 
         loan_tools = {
@@ -506,6 +509,39 @@ class ToolCatalogPromptTest(unittest.TestCase):
             [{"role": "user", "content": "What can you do? Show all tools."}]
         )
         self.assertEqual(len(discovery_tools), len(build_openai_tools()))
+
+    def test_ai_tool_result_redacts_embedded_urls_and_absolute_paths(self):
+        payload = {
+            "message": (
+                "Request https://private.example/secret?token=value failed while "
+                "reading /Users/alice/Taxes/private.pdf"
+            ),
+            "nested": [
+                r"C:\Users\Alice\Documents\private.csv",
+                r"\\server\private-share\audit\statement.pdf",
+            ],
+            "asset_route": "BTC/LBTC/swap",
+        }
+
+        redacted = redact_ai_tool_result(payload)
+        encoded = json.dumps(redacted, sort_keys=True)
+
+        for private_value in (
+            "private.example",
+            "/Users/alice",
+            "Alice",
+            "private-share",
+        ):
+            self.assertNotIn(private_value, encoded)
+        self.assertIn("<redacted-url>", encoded)
+        self.assertIn("<redacted-path>", encoded)
+        self.assertEqual(redacted["asset_route"], "BTC/LBTC/swap")
+        # Model-supplied UI routes are not local file paths and remain useful
+        # in consent/screen-context previews.
+        self.assertEqual(
+            redact_tool_arguments({"route": "/transactions"}),
+            {"route": "/transactions"},
+        )
 
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")

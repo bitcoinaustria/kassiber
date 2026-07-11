@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import sys
 from typing import Any, Literal
 
@@ -31,6 +32,18 @@ SENSITIVE_ARGUMENT_KEY_PARTS = (
     "token",
     "wif",
     "xprv",
+)
+
+_AI_TOOL_RESULT_URL_RE = re.compile(
+    r"\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+",
+    re.IGNORECASE,
+)
+# Require at least two path segments so typed UI routes such as
+# ``/transactions`` are not mistaken for local filesystem paths. URLs are
+# removed first, before their slash-delimited paths reach this pattern.
+_AI_TOOL_RESULT_ABSOLUTE_PATH_RE = re.compile(
+    r"(?:[A-Za-z]:[\\/]|[\\/]{2}|~[\\/]|(?<![A-Za-z0-9_])[\\/])"
+    r"[\w@.+ -]+(?:[\\/][\w@.+ -]+)+"
 )
 
 
@@ -458,7 +471,10 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.profiles.snapshot",
-        description="Read workspaces, profiles, and the active profile summary.",
+        description=(
+            "After an explicit all-books request, read profiles in the current "
+            "workspace and the active profile summary."
+        ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
         wire_name="ui_profiles_snapshot",
@@ -2470,7 +2486,6 @@ TOOL_CAPABILITY_NAMES = (
 _CORE_TOOL_NAMES = {
     "status",
     "ui.overview.snapshot",
-    "ui.profiles.snapshot",
     "ui.report.blockers",
     "ui.workspace.health",
     "ui.next_actions",
@@ -2485,7 +2500,7 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
     capabilities: set[str] = set()
     if name in _CORE_TOOL_NAMES:
         capabilities.add("core")
-    if name == "ui.workspace.overview.snapshot":
+    if name in {"ui.profiles.snapshot", "ui.workspace.overview.snapshot"}:
         capabilities.add("workspace")
     if name.startswith(("ui.transactions.", "ui.activity.", "ui.attachments.")):
         capabilities.add("transactions")
@@ -2614,11 +2629,40 @@ def redact_tool_arguments(value: Any) -> Any:
             else:
                 redacted[key_text] = redact_tool_arguments(item)
         return redacted
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [redact_tool_arguments(item) for item in value]
     if isinstance(value, str):
         return redact_secret_text(value)
     return value
+
+
+def redact_ai_tool_result(value: Any) -> Any:
+    """Remove local paths and URLs from provider-bound AI tool results.
+
+    Tool arguments come from the model and use ``redact_tool_arguments`` for
+    secret-safe consent previews. Tool *results* cross the opposite trust
+    boundary: local builders and exception messages can contain filesystem
+    paths or URLs embedded anywhere inside a free-text value. Apply the secret
+    floor first, then recursively scrub those locations before the result can
+    reach either the model or renderer tool chrome.
+    """
+
+    secret_safe = redact_tool_arguments(value)
+
+    def scrub_locations(item: Any) -> Any:
+        if isinstance(item, dict):
+            return {key: scrub_locations(child) for key, child in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [scrub_locations(child) for child in item]
+        if isinstance(item, str):
+            without_urls = _AI_TOOL_RESULT_URL_RE.sub("<redacted-url>", item)
+            return _AI_TOOL_RESULT_ABSOLUTE_PATH_RE.sub(
+                "<redacted-path>",
+                without_urls,
+            )
+        return item
+
+    return scrub_locations(secret_safe)
 
 
 def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:

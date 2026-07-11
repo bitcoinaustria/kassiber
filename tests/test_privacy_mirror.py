@@ -15,11 +15,16 @@ from kassiber.ai.tools import get_tool, openai_tool_definitions
 from kassiber.core import reports as core_reports
 from kassiber.db import open_db, set_setting
 
+from .privacy_assertions import assert_tier3_linkage_identifiers_absent
+
 
 ROOT = Path(__file__).resolve().parent.parent
 MIRROR_KIND = "ui.reports.privacy_mirror"
 PSBT_KIND = "ui.reports.psbt_privacy"
 NOW = "2026-07-01T12:00:00Z"
+SENSITIVE_TXID = "a" * 64
+SENSITIVE_OUTPOINT = f"{SENSITIVE_TXID}:0"
+SENSITIVE_FINGERPRINT = "privacy-fingerprint-1"
 
 
 def _run_cli(data_root: Path, *args: str, machine: bool = True) -> dict | str:
@@ -131,7 +136,6 @@ class PrivacyMirrorTests(unittest.TestCase):
         sensitive_descriptor = "wpkh([abcd1234/84h/0h/0h]xpub661MySecret/0/*)"
         sensitive_address = "bc1qsecretaddress000000000000000000000000"
         sensitive_script = "0014deadbeefcafebabesecretscript"
-        sensitive_txid = "a" * 64
         self.conn.execute(
             """
             INSERT INTO backends(
@@ -220,8 +224,8 @@ class PrivacyMirrorTests(unittest.TestCase):
                 "ws",
                 "pf",
                 "wal",
-                sensitive_txid,
-                "privacy-fingerprint-1",
+                SENSITIVE_TXID,
+                SENSITIVE_FINGERPRINT,
                 NOW,
                 NOW,
                 "outbound",
@@ -265,9 +269,9 @@ class PrivacyMirrorTests(unittest.TestCase):
             (
                 "utxo-sensitive",
                 100_000_000,
-                sensitive_txid,
+                SENSITIVE_TXID,
                 0,
-                f"{sensitive_txid}:0",
+                SENSITIVE_OUTPOINT,
                 NOW,
                 sensitive_address,
                 sensitive_script,
@@ -352,6 +356,18 @@ class PrivacyMirrorTests(unittest.TestCase):
             }
             & _json_keys(payload)
         )
+        assert_tier3_linkage_identifiers_absent(
+            self,
+            payload,
+            forbidden_values=(
+                SENSITIVE_TXID,
+                SENSITIVE_OUTPOINT,
+                SENSITIVE_FINGERPRINT,
+            ),
+        )
+        # The reduced payload keeps useful opaque references even though the
+        # underlying outpoint and transaction id are gone.
+        self.assertTrue(payload["utxo_view"][0]["coin_id"])
 
     def test_privacy_score_is_grounded_bounded_and_explainable(self):
         payload = core_reports.report_privacy_mirror(

@@ -1415,7 +1415,6 @@ def _public_wallet_result(row: Mapping[str, Any]) -> dict[str, Any]:
 def _public_transaction_result(tx: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": tx["id"],
-        "external_id": tx["external_id"],
         "wallet_id": tx["wallet_id"],
         "wallet_label": tx["wallet_label"],
         "occurred_at": tx["occurred_at"],
