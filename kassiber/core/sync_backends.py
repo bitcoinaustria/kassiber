@@ -250,15 +250,6 @@ def _connect_backend_socket(backend, host, port):
     return socket.create_connection((host, port), timeout=timeout)
 
 
-def output_addresses(vout):
-    script = vout.get("scriptPubKey") or {}
-    values = []
-    if script.get("address"):
-        values.append(script["address"])
-    values.extend(script.get("addresses") or [])
-    return normalize_addresses(values)
-
-
 def sanitize_wallet_segment(value):
     text = str(value).strip().lower()
     cleaned = []
