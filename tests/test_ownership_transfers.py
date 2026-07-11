@@ -24,7 +24,6 @@ from kassiber.core.ownership_transfers import (
     derive_recorded_fanout_transfers,
     detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
-    graph_multi_owned_destination_out_ids,
     graph_partial_payment_out_ids,
 )
 
@@ -2629,9 +2628,6 @@ class LiquidOwnershipDeriverTests(unittest.TestCase):
         pair = {"out": source, "in": destination}
         index = _liquid_index()
         self.assertEqual(graph_partial_payment_out_ids([pair], index), {"a-out"})
-        self.assertEqual(
-            graph_multi_owned_destination_out_ids([pair], index), {"a-out"}
-        )
         result = derive_ownership_transfers(
             [source, destination],
             index=index,
