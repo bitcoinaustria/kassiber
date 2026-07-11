@@ -217,6 +217,26 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "validation")
         self.assertEqual(caught.exception.details["max_components"], 50)
 
+    def test_transaction_and_untracked_wallet_error_names_the_real_conflict(self):
+        spec = _component_spec()
+        spec["legs"][0]["untracked_wallet"] = "Missing old wallet"
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.bulk_resolve",
+                {
+                    "workspace": "Main",
+                    "profile": "Book",
+                    "components": [spec],
+                    "activate": False,
+                    "dry_run": True,
+                },
+            )
+
+        self.assertEqual(caught.exception.code, "validation")
+        self.assertIn("transaction with untracked_wallet", str(caught.exception))
+
     def test_full_revision_lifecycle_and_envelope_kinds(self):
         created = _dispatch_json(
             self.conn,

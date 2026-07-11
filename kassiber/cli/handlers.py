@@ -1141,6 +1141,12 @@ def _custody_component_leg_inputs(conn, workspace, profile, raw_legs):
         untracked_wallet = leg.pop("untracked_wallet", None)
         wallet_ref = leg.pop("wallet", None) or leg.pop("wallet_ref", None)
         if untracked_wallet is not None:
+            if transaction_ref is not None:
+                raise AppError(
+                    f"custody component leg {ordinal} cannot combine transaction with untracked_wallet",
+                    code="validation",
+                    hint="Use the imported transaction's wallet, or remove the transaction anchor for an explicit missing-wallet hop.",
+                )
             if wallet_ref is not None or leg.get("wallet_id"):
                 raise AppError(
                     f"custody component leg {ordinal} cannot combine untracked_wallet with wallet",
