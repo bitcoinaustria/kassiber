@@ -369,10 +369,10 @@ def _transfer_actions_for_intra_pairs(
             out_id: source_evidence_by_out_id[out_id][1]
             for out_id in out_rows_by_id
         }
-        pair_by_edge = {
-            (str(pair["out"]["id"]), str(pair["in"]["id"])): pair
-            for pair in ordered_pairs
-        }
+        pair_by_edge: dict[tuple[str, str], Mapping[str, Any]] = {}
+        for pair in ordered_pairs:
+            edge = (str(pair["out"]["id"]), str(pair["in"]["id"]))
+            pair_by_edge.setdefault(edge, pair)
         allocation = allocate_transfer_component_flow_msat(
             source_sent_msat,
             source_explicit_fee_msat,
