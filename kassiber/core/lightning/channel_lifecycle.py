@@ -219,34 +219,35 @@ def _vin_outpoints(row: Any) -> set[tuple[str, int]]:
     return outpoints
 
 
-def _explicit_local_close_outpoints(row: Any) -> set[tuple[str, int]]:
-    """Exact commitment outpoints known to be this node's close outputs.
+def _trusted_local_close_sweeps(
+    row: Any,
+) -> set[tuple[str, tuple[str, int]]]:
+    """Adapter-attested ``(sweep txid, commitment outpoint)`` evidence.
 
-    A commitment output spent by a later inbound transaction is not by itself
-    proof that the receipt is ours: the peer can later spend its output to pay
-    us.  Adapters that can identify the node's local outputs may persist the
-    non-secret outpoint marker in the transaction mapping. Every vin match is
-    accepted only through this explicit evidence boundary; uniqueness is not
-    ownership proof.
+    This evidence belongs to the node adapter's curated lifecycle record, not
+    to a user-importable transaction ``raw_json``.  Requiring both identities
+    means a CSV row cannot suppress an acquisition merely by claiming that it
+    spends a known commitment output.
     """
 
     payload = _raw_mapping(row)
-    values: list[Any] = []
-    for container in (row, payload):
-        for field in (
-            "channel_close_local_outpoint",
-            "channel_close_local_outpoints",
-        ):
-            value = _field(container, field)
-            if isinstance(value, (list, tuple, set)):
-                values.extend(value)
-            elif value not in (None, ""):
-                values.append(value)
-    return {
-        outpoint
-        for value in values
-        if (outpoint := _canonical_outpoint(value)) is not None
-    }
+    provenance = payload.get("_kassiber_provenance")
+    if not isinstance(provenance, Mapping) or provenance.get(
+        "import_source"
+    ) not in {"lnd_adapter"}:
+        return set()
+    values = payload.get("channel_close_local_sweeps")
+    if not isinstance(values, list):
+        return set()
+    evidence: set[tuple[str, tuple[str, int]]] = set()
+    for value in values:
+        if not isinstance(value, Mapping):
+            continue
+        sweep_txid = canonical_txid(value.get("sweep_txid"))
+        outpoint = _canonical_outpoint(value.get("outpoint"))
+        if sweep_txid is not None and outpoint is not None:
+            evidence.add((sweep_txid, outpoint))
+    return evidence
 
 
 def _close_balance_mismatch(received_msat: int, balance_msat: int) -> bool:
@@ -274,6 +275,9 @@ def _close_leg_groups(
     closing_keys: set[LifecycleScope] | Mapping[LifecycleScope, Any],
     close_balance_by_scope: Mapping[LifecycleScope, int],
     tx_rows,
+    local_sweeps_by_scope: Mapping[
+        LifecycleScope, set[tuple[str, tuple[str, int]]]
+    ] | None = None,
 ) -> dict[LifecycleScope, dict[str, Any]]:
     """Group inbound close candidates per scoped close, classified TOGETHER.
 
@@ -314,12 +318,15 @@ def _close_leg_groups(
         if not candidate_keys:
             continue
         sort_key = (str(_field(tx, "occurred_at") or ""), str(_field(tx, "id")))
-        explicit_local = _explicit_local_close_outpoints(tx)
         for candidate_key in candidate_keys:
+            trusted_sweeps = (local_sweeps_by_scope or {}).get(
+                candidate_key, set()
+            )
             local_outpoints = frozenset(
                 outpoint
                 for outpoint in vin_outpoints
-                if outpoint[0] == candidate_key[2] and outpoint in explicit_local
+                if outpoint[0] == candidate_key[2]
+                and (key[2], outpoint) in trusted_sweeps
             )
             candidates.setdefault(candidate_key, []).append(
                 (sort_key, matched_by_txid, local_outpoints, tx)
@@ -433,6 +440,9 @@ def channel_role_map(
     atomic_closing: set[LifecycleScope] = set()
     funding_amount_by_scope: dict[LifecycleScope, int] = {}
     close_balance_by_scope: dict[LifecycleScope, int] = {}
+    local_sweeps_by_scope: dict[
+        LifecycleScope, set[tuple[str, tuple[str, int]]]
+    ] = {}
     for row in channel_rows:
         fund_key = _funding_lifecycle_scope(row)
         if fund_key is not None:
@@ -450,6 +460,9 @@ def channel_role_map(
         close_key = _closing_lifecycle_scope(row)
         if close_key is not None:
             closing.add(close_key)
+            local_sweeps_by_scope.setdefault(close_key, set()).update(
+                _trusted_local_close_sweeps(row)
+            )
             if _requires_atomic_pair(row):
                 atomic_closing.add(close_key)
             balance = int(_field(row, "close_balance_msat") or 0)
@@ -490,7 +503,10 @@ def channel_role_map(
     # commitment tx. All legs of one close are classified TOGETHER.
     if closing:
         for close_key, group in _close_leg_groups(
-            closing, close_balance_by_scope, tx_rows
+            closing,
+            close_balance_by_scope,
+            tx_rows,
+            local_sweeps_by_scope,
         ).items():
             for tx in group["legs"]:
                 tx_id = str(_field(tx, "id"))
@@ -545,6 +561,9 @@ def channel_transfer_pairs(
     ambiguous_funding_scopes: set[LifecycleScope] = set()
     ambiguous_closing_scopes: set[LifecycleScope] = set()
     close_balance_by_scope: dict[LifecycleScope, int] = {}
+    local_sweeps_by_scope: dict[
+        LifecycleScope, set[tuple[str, tuple[str, int]]]
+    ] = {}
     funding_amount_by_scope: dict[LifecycleScope, int] = {}
     strict_funding_scopes: set[LifecycleScope] = set()
     close_funding_by_scope: dict[LifecycleScope, set[LifecycleScope]] = {}
@@ -607,6 +626,9 @@ def channel_transfer_pairs(
                 )
         close_key = _closing_lifecycle_scope(row)
         if close_key is not None:
+            local_sweeps_by_scope.setdefault(close_key, set()).update(
+                _trusted_local_close_sweeps(row)
+            )
             balance = int(_field(row, "close_balance_msat") or 0)
             if _requires_atomic_pair(row) and balance <= 0:
                 closing_wallet_by_scope.pop(close_key, None)
@@ -691,7 +713,10 @@ def channel_transfer_pairs(
     if not eligible_closing_wallet_by_scope:
         return pairs
     for close_key, group in _close_leg_groups(
-        eligible_closing_wallet_by_scope, close_balance_by_scope, tx_rows
+        eligible_closing_wallet_by_scope,
+        close_balance_by_scope,
+        tx_rows,
+        local_sweeps_by_scope,
     ).items():
         if group["mismatch"]:
             # role map flags these legs CHANNEL_CLOSE_MISMATCH for quarantine;

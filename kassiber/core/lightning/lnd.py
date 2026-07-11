@@ -47,6 +47,7 @@ from ...egress_ledger import get_egress_ledger, http_request_bytes_out
 from ...errors import AppError
 from ...msat import msat_to_btc
 from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
+from ...transfers import canonical_txid
 from .. import imports as core_imports
 from ..repo import invalidate_journals
 from .capabilities import LightningCapabilities
@@ -1224,6 +1225,7 @@ def _lnd_channel_record(
     row: Mapping[str, Any],
     amount_msat: int,
     network: str | None = None,
+    local_close_sweeps: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """A ``channel`` metadata record carrying one channel-lifecycle txid.
 
@@ -1235,6 +1237,13 @@ def _lnd_channel_record(
         if str(network or "").strip()
         else {}
     )
+    if local_close_sweeps:
+        observed_scope.update(
+            {
+                "_kassiber_provenance": {"import_source": "lnd_adapter"},
+                "channel_close_local_sweeps": local_close_sweeps,
+            }
+        )
     return {
         "record_type": "channel",
         "external_id": f"channel:{tag}:{_lnd_channel_id(row)}:{txid}",
@@ -1286,7 +1295,7 @@ def lnd_channel_records(
             records_by_id[record["external_id"]] = record
 
     for row in closed_channels:
-        closing = str(row.get("closing_tx_hash") or "").strip()
+        closing = canonical_txid(row.get("closing_tx_hash"))
         if not closing:
             continue
         # Force closes can return an immediate settled part plus timelocked
@@ -1300,10 +1309,49 @@ def lnd_channel_records(
             else _LIFECYCLE_AMOUNT_INCOMPLETE
         )
         record = _lnd_channel_record(
-            "channel_close", closing, row, amount_msat, network
+            "channel_close",
+            closing,
+            row,
+            amount_msat,
+            network,
+            local_close_sweeps=_lnd_local_close_sweeps(row, closing),
         )
         records_by_id[record["external_id"]] = record
     return [records_by_id[key] for key in sorted(records_by_id)]
+
+
+def _lnd_local_close_sweeps(
+    row: Mapping[str, Any], closing_txid: str
+) -> list[dict[str, str]]:
+    """Reduce LND claimed resolutions to non-secret local sweep evidence."""
+
+    evidence: set[tuple[str, str]] = set()
+    for resolution in row.get("resolutions") or ():
+        if not isinstance(resolution, Mapping):
+            continue
+        outcome = str(resolution.get("outcome") or "").strip().upper()
+        if outcome not in {"CLAIMED", "RESOLUTION_OUTCOME_CLAIMED"}:
+            continue
+        sweep_txid = canonical_txid(resolution.get("sweep_txid"))
+        raw_outpoint = str(resolution.get("outpoint") or "").strip()
+        outpoint_txid, separator, vout = raw_outpoint.rpartition(":")
+        if (
+            sweep_txid is None
+            or not separator
+            or canonical_txid(outpoint_txid) != closing_txid
+        ):
+            continue
+        try:
+            output_index = int(vout)
+        except (TypeError, ValueError):
+            continue
+        if output_index < 0:
+            continue
+        evidence.add((sweep_txid, f"{closing_txid}:{output_index}"))
+    return [
+        {"sweep_txid": sweep_txid, "outpoint": outpoint}
+        for sweep_txid, outpoint in sorted(evidence)
+    ]
 
 
 def _persist_lnd_channel_records(

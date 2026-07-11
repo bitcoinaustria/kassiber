@@ -29,6 +29,21 @@ ONE_BTC = 100_000_000_000  # msat
 FEE_MSAT = 100_000_000  # 0.001 BTC
 
 
+def _trusted_lnd_close_evidence(*sweeps: tuple[str, int]) -> str:
+    return json.dumps(
+        {
+            "_kassiber_provenance": {"import_source": "lnd_adapter"},
+            "channel_close_local_sweeps": [
+                {
+                    "sweep_txid": sweep_txid,
+                    "outpoint": f"{CLOSING_TXID}:{vout}",
+                }
+                for sweep_txid, vout in sweeps
+            ],
+        }
+    )
+
+
 class ChannelRoleMapTest(unittest.TestCase):
     def test_funding_outbound_maps_to_channel_open(self) -> None:
         channels = [{"funding_txid": FUNDING_TXID, "closing_txid": CLOSING_TXID}]
@@ -977,7 +992,6 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
             {
                 "txid": sweep_txid,
                 "vin": [{"txid": CLOSING_TXID, "vout": 0}],
-                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
             }
         )
         rows = [
@@ -991,6 +1005,7 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
                 "funding_txid": FUNDING_TXID,
                 "closing_txid": CLOSING_TXID,
                 "wallet_id": "node",
+                "raw_json": _trusted_lnd_close_evidence((sweep_txid, 0)),
             }
         ]
         roles = channel_role_map(channel_rows, rows)
@@ -1369,14 +1384,12 @@ class MultiSweepCloseTest(unittest.TestCase):
             {
                 "txid": "dd" * 32,
                 "vin": [{"txid": CLOSING_TXID, "vout": 0}],
-                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
             }
         )
         sweep_two = json.dumps(
             {
                 "txid": "ee" * 32,
                 "vin": [{"txid": CLOSING_TXID, "vout": 1}],
-                "channel_close_local_outpoint": f"{CLOSING_TXID}:1",
             }
         )
         rows = [
@@ -1393,6 +1406,9 @@ class MultiSweepCloseTest(unittest.TestCase):
                 "closing_txid": CLOSING_TXID,
                 "wallet_id": "node",
                 "close_balance_msat": ONE_BTC,
+                "raw_json": _trusted_lnd_close_evidence(
+                    ("dd" * 32, 0), ("ee" * 32, 1)
+                ),
             }
         ]
         roles = channel_role_map(channel_rows, rows)
@@ -1422,7 +1438,6 @@ class MultiSweepCloseTest(unittest.TestCase):
             {
                 "txid": "dd" * 32,
                 "vin": [{"txid": CLOSING_TXID, "vout": 0}],
-                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
             }
         )
         peer_payment = json.dumps(
@@ -1444,6 +1459,7 @@ class MultiSweepCloseTest(unittest.TestCase):
                 "closing_txid": CLOSING_TXID,
                 "wallet_id": "node",
                 "close_balance_msat": ONE_BTC,
+                "raw_json": _trusted_lnd_close_evidence(("dd" * 32, 0)),
             }
         ]
         roles = channel_role_map(channel_rows, rows)
@@ -1493,6 +1509,37 @@ class MultiSweepCloseTest(unittest.TestCase):
         self.assertEqual(roles["local-sweep"], CHANNEL_CLOSE_MISMATCH)
         self.assertFalse([pair for pair in pairs if pair["kind"] == CHANNEL_CLOSE])
 
+    def test_user_transaction_marker_cannot_attest_a_local_sweep(self) -> None:
+        sweep_txid = "ee" * 32
+        rows = [
+            _row(
+                "local-sweep",
+                "inbound",
+                70_000_000_000,
+                "2025-08-01T00:00:00Z",
+                external_id=sweep_txid,
+            )
+        ]
+        rows[0]["raw_json"] = json.dumps(
+            {
+                "txid": sweep_txid,
+                "vin": [{"txid": CLOSING_TXID, "vout": 0}],
+                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
+            }
+        )
+        channel_rows = [
+            {
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": 70_000_000_000,
+            }
+        ]
+
+        self.assertEqual(
+            channel_role_map(channel_rows, rows)["local-sweep"],
+            CHANNEL_CLOSE_MISMATCH,
+        )
+
     def test_competing_vin_matches_select_only_exact_local_outpoint(self) -> None:
         peer_payment = json.dumps(
             {"txid": "dd" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 1}]}
@@ -1501,7 +1548,6 @@ class MultiSweepCloseTest(unittest.TestCase):
             {
                 "txid": "ee" * 32,
                 "vin": [{"txid": CLOSING_TXID, "vout": 0}],
-                "channel_close_local_outpoint": f"{CLOSING_TXID}:0",
             }
         )
         rows = [
@@ -1535,6 +1581,7 @@ class MultiSweepCloseTest(unittest.TestCase):
                 "closing_txid": CLOSING_TXID,
                 "wallet_id": "node",
                 "close_balance_msat": 70_000_000_000,
+                "raw_json": _trusted_lnd_close_evidence(("ee" * 32, 0)),
             }
         ]
 

@@ -822,6 +822,44 @@ class LndTransactionImportTest(unittest.TestCase):
             )
         )
 
+    def test_claimed_force_close_resolutions_become_trusted_sweep_evidence(self) -> None:
+        closing_txid = "bb" * 32
+        sweep_txid = "cc" * 32
+        records = core_lnd.lnd_channel_records(
+            [],
+            [
+                {
+                    "channel_point": "aa" * 32 + ":0",
+                    "open_initiator": "INITIATOR_LOCAL",
+                    "closing_tx_hash": closing_txid,
+                    "settled_balance": "1000",
+                    "resolutions": [
+                        {
+                            "outcome": "RESOLUTION_OUTCOME_CLAIMED",
+                            "outpoint": f"{closing_txid}:2",
+                            "sweep_txid": sweep_txid,
+                        },
+                        {
+                            "outcome": "RESOLUTION_OUTCOME_UNCLAIMED",
+                            "outpoint": f"{closing_txid}:3",
+                            "sweep_txid": "dd" * 32,
+                        },
+                    ],
+                }
+            ],
+            network="regtest",
+        )
+
+        close = next(row for row in records if row["tag"] == "channel_close")
+        raw = json.loads(close["raw_json"])
+        self.assertEqual(
+            raw["_kassiber_provenance"], {"import_source": "lnd_adapter"}
+        )
+        self.assertEqual(
+            raw["channel_close_local_sweeps"],
+            [{"outpoint": f"{closing_txid}:2", "sweep_txid": sweep_txid}],
+        )
+
     def test_channel_network_scope_is_persisted_and_updated(self) -> None:
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(Path(data_root) / "data")
