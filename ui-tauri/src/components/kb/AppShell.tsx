@@ -136,6 +136,7 @@ import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
+import { RouteErrorBoundary } from "@/components/AppErrorBoundary";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
 import { appWorkflowHotkeyAction } from "@/lib/appWorkflowHotkeys";
@@ -1719,7 +1720,9 @@ export function AppShell() {
                                       : "pb-[240px]",
                         )}
                       >
-                        <Outlet />
+                        <RouteErrorBoundary>
+                          <Outlet />
+                        </RouteErrorBoundary>
                       </main>
                       {isAssistantRoute || assistantDockSuppressed ? null : (
                         <AssistantDock
@@ -1737,7 +1740,9 @@ export function AppShell() {
                       tabIndex={-1}
                       className={appMainClassName}
                     >
-                      <Outlet />
+                      <RouteErrorBoundary>
+                        <Outlet />
+                      </RouteErrorBoundary>
                     </main>
                   )
                 )}

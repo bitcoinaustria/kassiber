@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { OverviewDashboard } from "@/components/overview-dashboard/OverviewDashboard";
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
+import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
 import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
 import { isDaemonDataMode, useUiStore } from "@/store/ui";
 
@@ -40,7 +41,7 @@ export function Overview() {
 
   const snapshot =
     hasLiveOverview && data.data
-      ? data.data
+      ? normalizeOverviewSnapshot(data.data)
       : shouldUseMockOverview
         ? MOCK_OVERVIEW
         : data?.data;

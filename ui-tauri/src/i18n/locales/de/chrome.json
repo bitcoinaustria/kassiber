@@ -1,7 +1,11 @@
 {
   "errorBoundary": {
+    "overview": "Zur Übersicht",
     "reload": "Neu laden",
-    "details": "Details werden unter Entwicklerwerkzeuge → Protokoll aufgezeichnet."
+    "copy": "Diagnose kopieren",
+    "copied": "Diagnose kopiert",
+    "copyFailed": "Diagnose konnte nicht kopiert werden. Nach dem Neuladen Entwicklerwerkzeuge → Protokoll öffnen.",
+    "details": "Der Fehler und die letzten redigierten Protokolle sind über „Diagnose kopieren“ verfügbar."
   },
   "shell": {
     "skipToContent": "Zum Hauptinhalt springen",

@@ -6,6 +6,7 @@ import {
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
+import { normalizeQuarantineSnapshot } from "@/lib/normalizeUiSnapshots";
 
 const QUARANTINE_LIMIT = 100;
 
@@ -31,7 +32,7 @@ export function Quarantine() {
     );
   }
 
-  const snapshot = data.data;
+  const snapshot = normalizeQuarantineSnapshot(data.data);
 
   return (
     <QuarantineDashboard

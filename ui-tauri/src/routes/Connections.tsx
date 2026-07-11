@@ -19,6 +19,7 @@ import { useDaemon } from "@/daemon/client";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { connectionCategoryLabel } from "@/lib/connectionDisplay";
 import { useCurrency } from "@/lib/currency";
+import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
 
@@ -58,7 +59,7 @@ export function Connections() {
     return <ScreenSkeleton titleWidth="w-32" metricCount={3} />;
   }
 
-  const snapshot = data.data;
+  const snapshot = normalizeOverviewSnapshot(data.data);
   const connections: Connection[] = snapshot.connections;
   const totalBtc = snapshot.connections.reduce((s, c) => s + c.balance, 0);
   const filteredConnections = connections.filter(

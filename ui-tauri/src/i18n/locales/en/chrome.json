@@ -1,7 +1,11 @@
 {
   "errorBoundary": {
+    "overview": "Go to overview",
     "reload": "Reload",
-    "details": "Details are recorded under Developer tools → Logs."
+    "copy": "Copy diagnostics",
+    "copied": "Diagnostics copied",
+    "copyFailed": "Could not copy diagnostics. Open Developer tools → Logs after reloading.",
+    "details": "The error and recent redacted logs are available through Copy diagnostics."
   },
   "shell": {
     "skipToContent": "Skip to main content",
