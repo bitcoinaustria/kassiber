@@ -6,15 +6,17 @@ import base64
 import hashlib
 import ipaddress
 import json
+import math
 import mimetypes
 import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import uuid
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -22,6 +24,7 @@ from urllib.parse import urlparse
 from ..ai.client import ai_client_for_locator
 from ..ai.providers import get_ai_provider_api_key_for_use, resolve_ai_provider
 from ..errors import AppError
+from ..msat import MSAT_PER_BTC
 from ..time_utils import now_iso, parse_timestamp
 from ..util import str_or_none
 from . import attachments as core_attachments
@@ -43,6 +46,12 @@ PDF_RENDER_MAX_DIMENSION = 2400
 MAX_RENDERED_PDF_PAGE_BYTES = 24 * 1024 * 1024
 MAX_RENDERED_PDF_TOTAL_BYTES = 96 * 1024 * 1024
 MAX_RENDERED_PDF_PIXELS = PDF_RENDER_MAX_DIMENSION * PDF_RENDER_MAX_DIMENSION
+MAX_DECIMAL_INPUT_CHARS = 512
+MAX_DECIMAL_RENDER_CHARS = 512
+MAX_SQLITE_INT64 = 2**63 - 1
+MIN_STORABLE_BTC = Decimal("0.00000000001")
+MAX_STORABLE_BTC = Decimal("92233720.36854775807")
+MAX_FIAT_FLOAT = Decimal(str(sys.float_info.max))
 DOCUMENT_IMPORT_FORMAT = "document_import"
 SUPPORTED_DOCUMENT_ASSETS = frozenset({"BTC", "LBTC"})
 _OCR_CONFIDENCE_FIELDS = frozenset(
@@ -65,14 +74,18 @@ _STRUCTURAL_ROW_FLAGS = frozenset(
         "invalid_date",
         "missing_direction",
         "missing_amount",
+        "amount_not_representable",
         "unsupported_asset",
         "non_positive_amount",
         "invalid_fee",
         "negative_fee",
+        "fee_not_representable",
         "invalid_fiat_value",
         "non_positive_fiat_value",
+        "fiat_value_out_of_range",
         "invalid_fiat_rate",
         "non_positive_fiat_rate",
+        "fiat_rate_out_of_range",
         "missing_fiat_currency",
         "fiat_currency_mismatch",
         "invalid_source_page",
@@ -694,7 +707,10 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 def _decimal_or_none(value: Any) -> Decimal | None:
     if value in (None, ""):
         return None
-    text = str(value).strip().replace("\u00a0", "").replace(" ", "")
+    text = str(value).strip()
+    if len(text) > MAX_DECIMAL_INPUT_CHARS:
+        return None
+    text = text.replace("\u00a0", "").replace(" ", "")
     if "," in text and "." in text:
         if text.rfind(",") > text.rfind("."):
             text = text.replace(".", "").replace(",", ".")
@@ -718,18 +734,66 @@ def _decimal_or_none(value: Any) -> Decimal | None:
     return number
 
 
+def _plain_decimal_text(number: Decimal) -> str | None:
+    """Render a Decimal without context rounding or exponent amplification."""
+
+    if number == 0:
+        return "0"
+    sign, digits, exponent = number.as_tuple()
+    digit_count = len(digits)
+    if exponent >= 0:
+        rendered_length = digit_count + exponent + sign
+    else:
+        decimal_position = digit_count + exponent
+        rendered_length = (
+            digit_count + 1 + sign
+            if decimal_position > 0
+            else 2 + (-decimal_position) + digit_count + sign
+        )
+    if rendered_length > MAX_DECIMAL_RENDER_CHARS:
+        return None
+    rendered = format(number, "f")
+    if "." in rendered:
+        rendered = rendered.rstrip("0").rstrip(".")
+    if rendered in {"-0", "+0"}:
+        return "0"
+    return rendered
+
+
 def _decimal_text(value: Any) -> str | None:
     number = _decimal_or_none(value)
     if number is None:
         return None
-    return format(number.normalize(), "f")
+    return _plain_decimal_text(number)
 
 
 def _signed_decimal_text(value: Any) -> str | None:
-    number = _decimal_or_none(value)
-    if number is None:
-        return None
-    return format(number.normalize(), "f")
+    return _decimal_text(value)
+
+
+def _is_exact_bounded_msat(number: Decimal) -> bool:
+    """Return whether a BTC value survives the INTEGER-msat boundary exactly."""
+
+    if number < 0 or number > MAX_STORABLE_BTC:
+        return False
+    if number == 0:
+        return True
+    if number < MIN_STORABLE_BTC:
+        return False
+    with localcontext() as context:
+        context.prec = max(50, len(number.as_tuple().digits) + 16)
+        scaled = number * MSAT_PER_BTC
+        integral = scaled.to_integral_value()
+    return scaled == integral and integral <= MAX_SQLITE_INT64
+
+
+def _is_storable_fiat(number: Decimal) -> bool:
+    """Keep legacy SQLite REAL pricing finite and non-zero when populated."""
+
+    if number <= 0 or number > MAX_FIAT_FLOAT:
+        return False
+    converted = float(number)
+    return math.isfinite(converted) and converted > 0
 
 
 def _confidence(value: Any) -> Decimal:
@@ -953,6 +1017,7 @@ def _draft_row(
     amount_value = explicit_crypto_amount
     if amount_value in (None, "") and asset:
         amount_value = raw.get("amount")
+    amount_present = amount_value not in (None, "")
     amount_btc = _signed_decimal_text(amount_value)
     amount_number = _decimal_or_none(amount_value)
     if asset is None and explicit_crypto_amount not in (None, ""):
@@ -973,6 +1038,11 @@ def _draft_row(
     fiat_rate_number = _decimal_or_none(raw_fiat_rate)
     fiat_value = _decimal_text(raw_fiat_value)
     fiat_rate = _decimal_text(raw_fiat_rate)
+    amount_display = (
+        amount_btc
+        if amount_btc is not None
+        else (str(amount_value).strip()[:128] if amount_present else None)
+    )
     fee_display = (
         fee_btc
         if fee_btc is not None
@@ -1022,18 +1092,26 @@ def _draft_row(
         flags.append("unsupported_asset")
     if amount_number is not None and amount_number <= 0:
         flags.append("non_positive_amount")
+    elif amount_number is not None and not _is_exact_bounded_msat(amount_number):
+        flags.append("amount_not_representable")
     if fee_present and fee_number is None:
         flags.append("invalid_fee")
     elif fee_number is not None and fee_number < 0:
         flags.append("negative_fee")
+    elif fee_number is not None and not _is_exact_bounded_msat(fee_number):
+        flags.append("fee_not_representable")
     if fiat_value_present and fiat_value_number is None:
         flags.append("invalid_fiat_value")
     elif fiat_value_number is not None and fiat_value_number <= 0:
         flags.append("non_positive_fiat_value")
+    elif fiat_value_number is not None and not _is_storable_fiat(fiat_value_number):
+        flags.append("fiat_value_out_of_range")
     if fiat_rate_present and fiat_rate_number is None:
         flags.append("invalid_fiat_rate")
     elif fiat_rate_number is not None and fiat_rate_number <= 0:
         flags.append("non_positive_fiat_rate")
+    elif fiat_rate_number is not None and not _is_storable_fiat(fiat_rate_number):
+        flags.append("fiat_rate_out_of_range")
     has_fiat_fact = fiat_value_present or fiat_rate_present
     if has_fiat_fact and not fiat_currency:
         flags.append("missing_fiat_currency")
@@ -1067,8 +1145,14 @@ def _draft_row(
         + "-001"
     )
     fiat_values_valid = (
-        (not fiat_value_present or (fiat_value_number is not None and fiat_value_number > 0))
-        and (not fiat_rate_present or (fiat_rate_number is not None and fiat_rate_number > 0))
+        (
+            not fiat_value_present
+            or (fiat_value_number is not None and _is_storable_fiat(fiat_value_number))
+        )
+        and (
+            not fiat_rate_present
+            or (fiat_rate_number is not None and _is_storable_fiat(fiat_rate_number))
+        )
         and (not has_fiat_fact or bool(fiat_currency))
         and (
             not fiat_currency
@@ -1083,8 +1167,16 @@ def _draft_row(
         and amount_btc
         and amount_number is not None
         and amount_number > 0
+        and _is_exact_bounded_msat(amount_number)
         and asset in SUPPORTED_DOCUMENT_ASSETS
-        and (not fee_present or (fee_number is not None and fee_number >= 0))
+        and (
+            not fee_present
+            or (
+                fee_number is not None
+                and fee_number >= 0
+                and _is_exact_bounded_msat(fee_number)
+            )
+        )
         and fiat_values_valid
     ):
         import_record = {
@@ -1123,7 +1215,7 @@ def _draft_row(
             "occurred_at": occurred_at,
             "direction": direction,
             "asset": asset,
-            "amount_btc": amount_btc,
+            "amount_btc": amount_display,
             "fee_btc": fee_display or "0",
             "fee_defaulted": not fee_present,
             "fiat_currency": fiat_currency,
@@ -1430,10 +1522,28 @@ def _import_record_from_draft_row(
         or asset not in SUPPORTED_DOCUMENT_ASSETS
         or amount_number is None
         or amount_number <= 0
+        or not _is_exact_bounded_msat(amount_number)
+        or amount is None
         or fee_number is None
         or fee_number < 0
-        or (fiat_value_present and (fiat_value_number is None or fiat_value_number <= 0))
-        or (fiat_rate_present and (fiat_rate_number is None or fiat_rate_number <= 0))
+        or not _is_exact_bounded_msat(fee_number)
+        or fee is None
+        or (
+            fiat_value_present
+            and (
+                fiat_value_number is None
+                or not _is_storable_fiat(fiat_value_number)
+                or _decimal_text(raw_fiat_value) is None
+            )
+        )
+        or (
+            fiat_rate_present
+            and (
+                fiat_rate_number is None
+                or not _is_storable_fiat(fiat_rate_number)
+                or _decimal_text(raw_fiat_rate) is None
+            )
+        )
         or (has_fiat_fact and not fiat_currency)
         or (
             fiat_currency

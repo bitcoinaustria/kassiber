@@ -807,10 +807,51 @@ class DocumentImportTest(unittest.TestCase):
         self.assertEqual(invalid_fee["record"]["fee_btc"], "1,234")
         self.assertIsNone(invalid_fee["import_record"])
 
+        sub_msat_amount = draft_row(amount_btc="0.000000000001")
+        self.assertEqual(sub_msat_amount["status"], "quarantined")
+        self.assertIn("amount_not_representable", sub_msat_amount["flags"])
+        self.assertIsNone(sub_msat_amount["import_record"])
+
+        one_msat_amount = draft_row(amount_btc="0.00000000001")
+        self.assertEqual(one_msat_amount["status"], "ready")
+        self.assertEqual(one_msat_amount["import_record"]["amount"], "0.00000000001")
+
+        sub_msat_fee = draft_row(fee_btc="0.000000000001")
+        self.assertIn("fee_not_representable", sub_msat_fee["flags"])
+        self.assertIsNone(sub_msat_fee["import_record"])
+
+        over_sqlite_msat = draft_row(amount_btc="92233720.36854775808")
+        self.assertIn("amount_not_representable", over_sqlite_msat["flags"])
+        self.assertIsNone(over_sqlite_msat["import_record"])
+
+        max_sqlite_msat = draft_row(amount_btc="92233720.36854775807")
+        self.assertEqual(max_sqlite_msat["status"], "ready")
+
+        huge_amount_exponent = draft_row(amount_btc="1e1000000")
+        self.assertIn("amount_not_representable", huge_amount_exponent["flags"])
+        self.assertLessEqual(
+            len(huge_amount_exponent["record"]["amount_btc"]),
+            128,
+        )
+        self.assertIsNone(huge_amount_exponent["import_record"])
+
         negative_fiat = draft_row(fiat_value="-500")
         self.assertIn("non_positive_fiat_value", negative_fiat["flags"])
         self.assertEqual(negative_fiat["record"]["fiat_value"], "-500")
         self.assertIsNone(negative_fiat["import_record"])
+
+        infinite_fiat = draft_row(fiat_value=float("inf"))
+        self.assertIn("invalid_fiat_value", infinite_fiat["flags"])
+        self.assertIsNone(infinite_fiat["import_record"])
+
+        huge_fiat_rate = draft_row(fiat_rate="1e1000")
+        self.assertIn("fiat_rate_out_of_range", huge_fiat_rate["flags"])
+        self.assertEqual(huge_fiat_rate["record"]["fiat_rate"], "1e1000")
+        self.assertIsNone(huge_fiat_rate["import_record"])
+
+        underflowing_fiat = draft_row(fiat_value="1e-1000")
+        self.assertIn("fiat_value_out_of_range", underflowing_fiat["flags"])
+        self.assertIsNone(underflowing_fiat["import_record"])
 
         missing_currency = draft_row(fiat_currency=None)
         self.assertIn("missing_fiat_currency", missing_currency["flags"])
@@ -829,6 +870,28 @@ class DocumentImportTest(unittest.TestCase):
                 expected_fiat_currency="EUR",
             )
         )
+
+        for invalid_numeric_row in (
+            sub_msat_amount,
+            sub_msat_fee,
+            over_sqlite_msat,
+            huge_amount_exponent,
+            infinite_fiat,
+            huge_fiat_rate,
+            underflowing_fiat,
+        ):
+            forged_numeric_row = {
+                **invalid_numeric_row,
+                "status": "ready",
+                "flags": [],
+            }
+            self.assertIsNone(
+                document_import._import_record_from_draft_row(
+                    forged_numeric_row,
+                    source_hash=source_hash,
+                    expected_fiat_currency="EUR",
+                )
+            )
 
         records, skipped = document_import._import_records_from_rows(
             [invalid_fee],
