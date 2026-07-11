@@ -1752,21 +1752,24 @@ def _ui_swap_matching_payload_from_conn(
                 f"{kind} limit must be an integer between 1 and 1000",
                 code="validation",
             )
+        components = list_custody_components(
+            conn,
+            workspace,
+            profile,
+            state=args.get("state"),
+            component_type=args.get("component_type"),
+            transaction=args.get("transaction"),
+            effective_only=exact_bool("effective_only"),
+            # The renderer gets the privacy-safe projection. Local evidence
+            # and location references stay behind the daemon boundary.
+            include_local_evidence=False,
+            limit=limit + 1,
+        )
         return _ui_exact_integer_payload(
             {
-                "components": list_custody_components(
-                    conn,
-                    workspace,
-                    profile,
-                    state=args.get("state"),
-                    component_type=args.get("component_type"),
-                    transaction=args.get("transaction"),
-                    effective_only=exact_bool("effective_only"),
-                    # The renderer gets the privacy-safe projection. Local evidence
-                    # and location references stay behind the daemon boundary.
-                    include_local_evidence=False,
-                    limit=limit,
-                )
+                "components": components[:limit],
+                "has_more": len(components) > limit,
+                "limit": limit,
             }
         )
     if kind == "ui.transfers.components.get":

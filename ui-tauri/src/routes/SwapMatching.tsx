@@ -648,7 +648,11 @@ interface CustodyComponent {
   };
 }
 
-type CustodyComponentListEnvelope = { components: CustodyComponent[] };
+type CustodyComponentListEnvelope = {
+  components: CustodyComponent[];
+  has_more?: boolean;
+  limit?: number;
+};
 
 interface CustodyBulkResolveResult {
   components: CustodyComponent[];
@@ -909,7 +913,7 @@ function CustodyComponentResolver() {
 
   const componentQuery = useDaemon<CustodyComponentListEnvelope>(
     "ui.transfers.components.list",
-    { limit: 200 },
+    { limit: 1000 },
   );
   const previewMutation =
     useDaemonMutation<CustodyBulkResolveResult>(
@@ -1200,6 +1204,13 @@ function CustodyComponentResolver() {
           <CardDescription>{t("swap.components.listDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
+          {componentQuery.data?.data?.has_more ? (
+            <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-100">
+              {t("swap.components.moreAvailable", {
+                count: componentQuery.data.data.limit ?? 1000,
+              })}
+            </div>
+          ) : null}
           {componentQuery.isLoading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="animate-spin" />

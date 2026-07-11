@@ -27,6 +27,7 @@
       "savedSummary": "{{count}} Komponenten gespeichert: {{active}} aktiv, {{draft}} Entwurf.",
       "listTitle": "Verwahrungskomponenten",
       "listDescription": "Versionierte Interpretationen, die derzeit für dieses Buch erfasst sind. Eine verfasst aktive Komponente bleibt für die Buchhaltung ein Entwurf, wenn ihr vollständiger Nachweissatz nicht mehr gültig ist.",
+      "moreAvailable": "Die neuesten {{count}} Komponenten werden angezeigt. In diesem Buch gibt es weitere; grenze die Prüfung ein, um ältere Revisionen zu sehen.",
       "loading": "Verwahrungskomponenten werden geladen…",
       "loadFailed": "Verwahrungskomponenten konnten nicht geladen werden: {{error}}",
       "empty": "Noch keine Verwahrungskomponenten. Starte oben mit der Vorschau eines Migrationsstapels.",

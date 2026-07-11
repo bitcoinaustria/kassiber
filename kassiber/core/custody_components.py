@@ -3301,9 +3301,9 @@ def list_components(
     include_local_evidence: bool = True,
     limit: int = 200,
 ) -> list[dict[str, Any]]:
-    if type(limit) is not int or not 1 <= limit <= 1000:
+    if type(limit) is not int or not 1 <= limit <= 1001:
         raise _error(
-            "limit must be between 1 and 1000",
+            "limit must be between 1 and 1001",
             "custody_component_validation",
             details={"limit": limit},
         )

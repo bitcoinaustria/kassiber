@@ -27,6 +27,7 @@
       "savedSummary": "Saved {{count}} components: {{active}} active, {{draft}} draft.",
       "listTitle": "Custody components",
       "listDescription": "Versioned interpretations currently recorded for this book. An authored active component remains a draft for accounting if its complete evidence set no longer validates.",
+      "moreAvailable": "Showing the newest {{count}} components. More exist in this book; narrow the review scope to inspect older revisions.",
       "loading": "Loading custody components…",
       "loadFailed": "Could not load custody components: {{error}}",
       "empty": "No custody components yet. Preview a migration batch above to start.",

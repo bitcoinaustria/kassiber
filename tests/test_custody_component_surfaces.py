@@ -743,6 +743,8 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                 [item["id"] for item in listed["data"]["components"]],
                 [component_id],
             )
+            self.assertFalse(listed["data"]["has_more"])
+            self.assertEqual(listed["data"]["limit"], 200)
 
             invalid = _request(
                 proc,
