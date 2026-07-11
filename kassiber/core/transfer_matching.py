@@ -1002,6 +1002,8 @@ def _refund_funding_reference(row: Mapping) -> tuple[str, int | None, bool]:
             )
             return txid, vout, proof
     except (TypeError, ValueError):
+        # Malformed legacy metadata is not proof. Ignore it so the canonical
+        # witness-derived recovery path below can still establish the link.
         pass
     if recovered is not None and normalize_group_txid(recovered[0]) == normalize_group_txid(txid):
         return (
