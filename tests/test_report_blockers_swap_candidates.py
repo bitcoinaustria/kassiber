@@ -116,7 +116,44 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         return open_db(Path(tmp.name) / "data")
 
-    def test_provider_evidence_swap_candidate_blocks_reports(self):
+    def test_header_only_active_custody_component_blocks_reports(self):
+        conn = self._with_conn()
+        try:
+            _seed_book(conn, tax_country="generic")
+            conn.execute(
+                """
+                INSERT INTO custody_components(
+                    id, lineage_id, workspace_id, profile_id, revision,
+                    component_type, conservation_mode, state, activated_at,
+                    created_at
+                ) VALUES(
+                    'partial-component', 'partial-lineage', 'ws', 'pf', 1,
+                    'manual_bridge', 'quantity', 'active', ?, ?
+                )
+                """,
+                (NOW, NOW),
+            )
+            conn.commit()
+
+            snapshot = build_report_blockers_snapshot(conn)
+
+            blocker = next(
+                item
+                for item in snapshot["blockers"]
+                if item["id"] == "custody_component_integrity"
+            )
+            self.assertEqual(blocker["severity"], "blocking")
+            self.assertEqual(
+                blocker["components"][0]["id"], "partial-component"
+            )
+            self.assertEqual(blocker["components"][0]["known_anchor_count"], 0)
+            self.assertIn(
+                "no_legs", blocker["components"][0]["issue_codes"]
+            )
+        finally:
+            conn.close()
+
+    def test_route_only_provider_candidate_stays_strong_and_blocks_reports(self):
         conn = self._with_conn()
         try:
             _seed_book(conn)
@@ -157,7 +194,7 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
 
             blocker = next(item for item in payload["blockers"] if item["id"] == "unreviewed_swap_candidates")
             self.assertFalse(payload["ready"])
-            self.assertEqual(blocker["counts"], {"total": 1, "exact": 1, "strong": 0})
+            self.assertEqual(blocker["counts"], {"total": 1, "exact": 0, "strong": 1})
             self.assertEqual(blocker["routes"][0]["method"], "provider_swap_id")
             self.assertEqual(blocker["routes"][0]["default_kind"], "chain-swap")
             self.assertNotIn("swap-chain", json.dumps(blocker))
@@ -227,7 +264,7 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_chain_script_payment_hash_blocks_even_for_lightning_wallet_kind(self):
+    def test_chain_script_only_hash_still_blocks_but_is_not_exact(self):
         conn = self._with_conn()
         try:
             _seed_book(conn)
@@ -258,8 +295,8 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
             payload = build_report_blockers_snapshot(conn)
 
             blocker = next(item for item in payload["blockers"] if item["id"] == "unreviewed_swap_candidates")
-            self.assertEqual(blocker["counts"], {"total": 1, "exact": 1, "strong": 0})
-            self.assertEqual(blocker["routes"][0]["method"], "payment_hash")
+            self.assertEqual(blocker["counts"], {"total": 1, "exact": 0, "strong": 1})
+            self.assertEqual(blocker["routes"][0]["method"], "heuristic")
         finally:
             conn.close()
 

@@ -575,6 +575,9 @@ supports `coinjoin` and `whirlpool` kinds for user-reviewed same-asset
 ownership hops, including reviewed one-to-many / many-to-one same-asset links.
 Cross-asset and layer-transition links remain one-to-one. The AI may propose
 these pairings, but the write still requires explicit user consent.
+The desktop/CLI custody-component resolver handles 1:N, N:1, N:M, multi-hop,
+and missing-wallet histories atomically; those authored component mutations are
+not generic AI pairing shortcuts.
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,

@@ -27,6 +27,7 @@ from ..wallet_descriptors import (
     SCRIPT_TYPE_BRANCH_BASE,
     normalize_asset_code,
     normalize_chain,
+    normalize_network,
 )
 from .onchain import parse_vin_outpoints
 from .source_funds_assembly import build_owned_outpoint_index
@@ -878,13 +879,17 @@ def build_privacy_linkage_graph(
             (),
             {},
         )
-        limitations.append(
-            {
-                "code": "no_owned_bitcoin_outputs",
-                "message": "No owned Bitcoin UTXO inventory rows are available for this profile.",
-                "evidence_level": EVIDENCE_UNKNOWN,
-            }
-        )
+        if not any(
+            limitation.get("code") == "mixed_bitcoin_networks_require_selection"
+            for limitation in limitations
+        ):
+            limitations.append(
+                {
+                    "code": "no_owned_bitcoin_outputs",
+                    "message": "No owned Bitcoin UTXO inventory rows are available for this profile.",
+                    "evidence_level": EVIDENCE_UNKNOWN,
+                }
+            )
         return PrivacyLinkageGraph({}, (), (), adversary_views, (), (), (), tuple(limitations))
 
     tx_facts = _load_spend_facts(conn, profile_id, nodes, outpoint_to_node, limitations)
@@ -1508,16 +1513,52 @@ def _load_owned_output_nodes(
     limitations: list[dict[str, Any]],
 ) -> tuple[dict[str, OwnedOutputNode], dict[tuple[str, int], OwnedOutputNode]]:
     owned_index = build_owned_outpoint_index(conn, profile_id)
+    network_select = (
+        "network"
+        if "network" in _table_columns(conn, "wallet_utxos")
+        else "NULL AS network"
+    )
     rows = conn.execute(
-        """
+        f"""
         SELECT wallet_id, txid, vout, amount, address, script_pubkey,
-               branch_label, branch_index, spent_by, asset, chain
+               branch_label, branch_index, spent_by, asset, chain,
+               {network_select}
         FROM wallet_utxos
         WHERE profile_id = ?
         ORDER BY txid ASC, vout ASC, wallet_id ASC
         """,
         (profile_id,),
     ).fetchall()
+    bitcoin_networks: set[str] = set()
+    for row in rows:
+        if (
+            _normalize_chain_or_none(row["chain"]) != "bitcoin"
+            or normalize_asset_code(row["asset"]) != "BTC"
+        ):
+            continue
+        try:
+            bitcoin_networks.add(normalize_network("bitcoin", row["network"]))
+        except ValueError:
+            continue
+    if len(bitcoin_networks) > 1:
+        # The privacy API currently has no target-network argument, and raw
+        # transaction/PSBT evidence does not always identify its network.
+        # Flattening several networks into txid:vout graph identifiers would
+        # let identical outpoints overwrite or cross-link.  Fail closed until
+        # the caller can select one network explicitly.
+        limitations.append(
+            {
+                "code": "mixed_bitcoin_networks_require_selection",
+                "message": (
+                    "Privacy linkage was not computed because this profile "
+                    "contains Bitcoin outputs from more than one network and "
+                    "the privacy API has no target-network selection."
+                ),
+                "evidence_level": EVIDENCE_EXACT,
+                "evidence": {"network_count": len(bitcoin_networks)},
+            }
+        )
+        return {}, {}
     nodes: dict[str, OwnedOutputNode] = {}
     outpoint_to_node: dict[tuple[str, int], OwnedOutputNode] = {}
     ignored_non_bitcoin = 0
@@ -1526,14 +1567,19 @@ def _load_owned_output_nodes(
         outpoint = _outpoint(row["txid"], row["vout"])
         if outpoint is None:
             continue
-        info = owned_index.get(outpoint)
-        if not info or info.get("ambiguous"):
-            ambiguous += 1
-            continue
         asset = normalize_asset_code(row["asset"])
         chain = _normalize_chain_or_none(row["chain"])
         if chain != "bitcoin" or asset != "BTC":
             ignored_non_bitcoin += 1
+            continue
+        try:
+            network = normalize_network(chain, row["network"])
+        except ValueError:
+            ambiguous += 1
+            continue
+        info = owned_index.get((chain, network, outpoint[0], outpoint[1]))
+        if not info or info.get("ambiguous"):
+            ambiguous += 1
             continue
         address = _str_or_none(row["address"])
         script = _str_or_none(row["script_pubkey"])

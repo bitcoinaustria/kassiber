@@ -69,6 +69,31 @@ describe("mock daemon transaction resolver", () => {
   });
 });
 
+describe("mock daemon custody component bulk resolution", () => {
+  it("mirrors draft dry-run intent and batch cardinality", async () => {
+    const preview = await mockDaemon.invoke<{
+      components: Array<{ state: string; effective_state: string }>;
+      summary: { count: number; active: number; draft: number };
+      dry_run?: boolean;
+    }>({
+      kind: "ui.transfers.components.bulk_resolve",
+      args: {
+        components: [{ legs: [] }, { legs: [] }],
+        activate: false,
+        dry_run: true,
+      },
+    });
+
+    expect(preview.data).toMatchObject({
+      dry_run: true,
+      summary: { count: 2, active: 0, draft: 2 },
+    });
+    expect(preview.data?.components).toHaveLength(2);
+    expect(preview.data?.components.every((component) => component.state === "draft"))
+      .toBe(true);
+  });
+});
+
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
     const list = await mockDaemon.invoke<{

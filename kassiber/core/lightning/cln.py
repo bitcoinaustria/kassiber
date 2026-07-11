@@ -23,8 +23,9 @@ The adapter is the discard boundary for Tier-1 sensitive fields:
   so the DB never holds a complete log of "X paid Y through me" patterns.
 
 Persistence (the optional ``sync_core_lightning_wallet`` entry point) stores
-only the curated shapes returned by this module — there is no ``raw_json``
-column for full RPC dumps.
+only the curated shapes returned by this module. ``raw_json`` is never a full
+RPC dump; channel lifecycle rows use it only for the node-observed Bitcoin
+chain/network scope needed to prevent cross-network identity collisions.
 """
 
 from __future__ import annotations
@@ -1237,7 +1238,11 @@ def _balance_snapshot_records(
 
 
 def _channel_record(
-    tag: str, txid: str, account: str | None, amount_msat: int = 0
+    tag: str,
+    txid: str,
+    account: str | None,
+    amount_msat: int = 0,
+    network: str | None = None,
 ) -> dict[str, Any]:
     """A ``channel`` metadata record carrying one channel-lifecycle txid.
 
@@ -1249,13 +1254,30 @@ def _channel_record(
     (bookkeeper ``debit_msat``) so the engine can book the close fee — the gap
     between that balance and what the on-chain wallet actually received.
     """
+    # A single multifundchannel transaction creates one bookkeeper account per
+    # channel.  The txid identifies the whole L1 transaction, not an individual
+    # channel, so persistence identity must include the account as well.  The
+    # lifecycle engine deliberately aggregates amounts back by txid when it
+    # validates and materializes the one atomic on-chain MOVE.
+    account_identity = account or txid
+    observed_scope = (
+        {"chain": "bitcoin", "network": str(network).strip()}
+        if str(network or "").strip()
+        else {}
+    )
     return {
         "record_type": "channel",
-        "external_id": _stable_hash(("channel", tag, txid)),
+        "external_id": _stable_hash(
+            ("channel", tag, txid, account_identity)
+        ),
         "occurred_at": UNKNOWN_OCCURRED_AT,
-        "account": account,
+        "account": account_identity,
         "peer_id": None,
-        "channel_id": account,
+        # Mark modern CLN bookkeeper evidence as atomic/amount-bearing at the
+        # shared lifecycle boundary. A zero-amount snapshot fallback must never
+        # suppress an L1 funding row: it proves the txid, not how much of a
+        # multifund/co-payment transaction entered our channel.
+        "channel_id": f"coreln:{account_identity}",
         "direction": "",
         "amount_msat": int(amount_msat or 0),
         "fee_msat": 0,
@@ -1265,7 +1287,10 @@ def _channel_record(
         "payment_hash": None,
         "txid": txid,
         "outpoint": None,
-        "raw_json": "{}",
+        # Curated physical scope only — never persist the raw RPC channel or
+        # bookkeeper payload. This keeps regtest lifecycle identities scoped
+        # even when backend/wallet configuration is intentionally blank.
+        "raw_json": json.dumps(observed_scope, sort_keys=True),
     }
 
 
@@ -1277,20 +1302,13 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
     events (``listpeerchannels`` does not retain a channel once fully closed, so
     ``bkpr-listaccountevents`` is the reliable source for the closing tx).
     """
-    open_txids: dict[str, str | None] = {}
-    close_txids: dict[str, str | None] = {}
-    open_balance_msat: dict[str, int] = {}
-    close_balance_msat: dict[str, int] = {}
-    for channel in snapshot.channels:
-        outpoint = _channel_funding_outpoint(channel)
-        funding_txid = outpoint.split(":", 1)[0] if outpoint else None
-        if funding_txid:
-            account = (
-                str_or_none(channel.get("channel_id"))
-                or _channel_short_id(channel)
-                or funding_txid
-            )
-            open_txids.setdefault(funding_txid, account)
+    # Key lifecycle evidence by (whole transaction, channel account).  A CLN
+    # multifundchannel open legitimately repeats the funding txid for several
+    # accounts; txid-only dicts and external ids silently retained whichever
+    # channel happened to arrive first.
+    observed_network = str(getattr(snapshot, "network", "") or "").strip()
+    open_amount_by_key: dict[tuple[str, str], int] = {}
+    close_amount_by_key: dict[tuple[str, str], int] = {}
     for event in snapshot.account_events:
         tag = (str_or_none(event.get("tag")) or "").lower()
         outpoint = str_or_none(event.get("outpoint"))
@@ -1300,37 +1318,82 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
         if not txid:
             continue
         account = str_or_none(event.get("account")) or txid
+        key = (txid, account)
         if tag == "channel_open":
-            open_txids.setdefault(txid, account)
             # Our balance funded into the channel account. The engine uses it
             # to detect a funding tx that ALSO paid an external recipient
             # (recorded outflow >> funded amount) instead of suppressing the
             # whole row as a non-event.
             funded = _parse_msat(event.get("credit_msat"))
-            if funded > 0:
-                # A batched open funds several channel accounts from one tx:
-                # sum our per-channel contributions per funding txid.
-                open_balance_msat[txid] = open_balance_msat.get(txid, 0) + funded
+            open_amount_by_key[key] = open_amount_by_key.get(key, 0) + max(
+                funded, 0
+            )
         elif tag == "channel_close":
-            close_txids.setdefault(txid, account)
             # Our settled balance leaving the channel account. The engine
             # books the gap between this and the on-chain receipt as the
             # close fee (commitment + sweep fees), instead of stranding it.
             balance = _parse_msat(event.get("debit_msat"))
-            if balance > 0:
-                close_balance_msat[txid] = close_balance_msat.get(txid, 0) + balance
+            close_amount_by_key[key] = close_amount_by_key.get(key, 0) + max(
+                balance, 0
+            )
+
+    # listpeerchannels remains useful before bkpr has emitted/returned an open
+    # event. Prefer an existing bookkeeper account key when its account matches
+    # either channel identifier; otherwise retain a zero-amount channel record.
+    # Zero is intentionally incomplete evidence for mismatch accounting, but it
+    # still preserves the channel identity and funding anchor for later syncs.
+    event_keys_by_txid: dict[str, set[tuple[str, str]]] = {}
+    for key in open_amount_by_key:
+        event_keys_by_txid.setdefault(key[0], set()).add(key)
+    snapshot_channels_by_txid: dict[str, list[Mapping[str, Any]]] = {}
+    for channel in snapshot.channels:
+        outpoint = _channel_funding_outpoint(channel)
+        funding_txid = outpoint.split(":", 1)[0] if outpoint else None
+        if funding_txid:
+            snapshot_channels_by_txid.setdefault(funding_txid, []).append(channel)
+    for funding_txid, channels in sorted(snapshot_channels_by_txid.items()):
+        event_keys = event_keys_by_txid.get(funding_txid, set())
+        for channel in channels:
+            aliases = {
+                value
+                for value in (
+                    str_or_none(channel.get("channel_id")),
+                    _channel_short_id(channel),
+                )
+                if value
+            }
+            if any(account in aliases for _txid, account in event_keys):
+                continue
+            # With exactly one channel and one bkpr account for this tx, they
+            # are the same lifecycle even if CLN changed identifier shape
+            # across RPC versions. Keep the bookkeeper account because closes
+            # use that same stable account identity.
+            if len(channels) == 1 and len(event_keys) == 1:
+                continue
+            account = next(
+                (
+                    value
+                    for value in (
+                        str_or_none(channel.get("channel_id")),
+                        _channel_short_id(channel),
+                    )
+                    if value
+                ),
+                funding_txid,
+            )
+            open_amount_by_key.setdefault((funding_txid, account), 0)
 
     records: list[dict[str, Any]] = []
-    for txid, account in sorted(open_txids.items()):
+    for (txid, account), amount_msat in sorted(open_amount_by_key.items()):
         records.append(
             _channel_record(
-                "channel_open", txid, account, open_balance_msat.get(txid, 0)
+                "channel_open", txid, account, amount_msat, observed_network
             )
         )
-    for txid, account in sorted(close_txids.items()):
+    for (txid, account), amount_msat in sorted(close_amount_by_key.items()):
         records.append(
             _channel_record(
-                "channel_close", txid, account, close_balance_msat.get(txid, 0)
+                "channel_close", txid, account, amount_msat, observed_network
             )
         )
     return records
@@ -1383,11 +1446,38 @@ def _upsert_lightning_record(
     profile: Mapping[str, Any],
     wallet: Mapping[str, Any],
     backend: Mapping[str, Any],
-    sync_id: str,
+    sync_id: str | None,
     node_id: str,
     record: Mapping[str, Any],
     timestamp: str,
 ) -> tuple[bool, bool]:
+    if (
+        record.get("record_type") == "channel"
+        and record.get("tag")
+        and record.get("txid")
+    ):
+        # Before lifecycle identity included the channel account, CLN stored
+        # exactly one first-wins row under hash(channel, tag, txid). Remove that
+        # obsolete row as soon as any account-aware replacement arrives, or an
+        # upgraded book would retain the aggregate legacy amount alongside all
+        # new per-channel amounts and double-count the whole-tx mismatch check.
+        legacy_external_id = _stable_hash(
+            ("channel", record.get("tag"), record.get("txid"))
+        )
+        if legacy_external_id != record.get("external_id"):
+            conn.execute(
+                """
+                DELETE FROM lightning_node_records
+                WHERE profile_id = ? AND wallet_id = ? AND backend_name = ?
+                  AND record_type = 'channel' AND external_id = ?
+                """,
+                (
+                    profile["id"],
+                    wallet["id"],
+                    backend["name"],
+                    legacy_external_id,
+                ),
+            )
     record_id = _record_id(
         profile["id"],
         wallet["id"],
@@ -1396,7 +1486,8 @@ def _upsert_lightning_record(
         record["external_id"],
     )
     existing = conn.execute(
-        "SELECT amount_msat, fee_msat, status FROM lightning_node_records WHERE id = ?",
+        "SELECT amount_msat, fee_msat, status, raw_json"
+        " FROM lightning_node_records WHERE id = ?",
         (record_id,),
     ).fetchone()
     conn.execute(
@@ -1424,6 +1515,7 @@ def _upsert_lightning_record(
             txid = excluded.txid,
             outpoint = excluded.outpoint,
             sync_id = excluded.sync_id,
+            raw_json = excluded.raw_json,
             updated_at = excluded.updated_at
         """,
         (
@@ -1449,9 +1541,10 @@ def _upsert_lightning_record(
             record.get("txid"),
             record.get("outpoint"),
             sync_id,
-            # raw_json kept empty by design — opsec policy bans full RPC
-            # payloads on disk. The column stays for schema compatibility.
-            "{}",
+            # Adapter records retain only explicitly curated metadata. Channel
+            # lifecycle rows use this for observed Bitcoin chain/network scope;
+            # no raw RPC payload is ever persisted.
+            str(record.get("raw_json") or "{}"),
             timestamp,
             timestamp,
         ),
@@ -1462,6 +1555,8 @@ def _upsert_lightning_record(
         int(existing["amount_msat"] or 0) != int(record.get("amount_msat") or 0)
         or int(existing["fee_msat"] or 0) != int(record.get("fee_msat") or 0)
         or str(existing["status"] or "") != str(record.get("status") or "")
+        or str(existing["raw_json"] or "{}")
+        != str(record.get("raw_json") or "{}")
     )
     return False, changed
 
@@ -1545,6 +1640,74 @@ def _record_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _daily_routing_income_imports(
+    records: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Promote only earned routing fees, aggregated once per UTC day.
+
+    ``forward_day.amount_msat`` is forwarded principal and must never enter the
+    operator's income or holdings.  The fee column is the only economic gain.
+    Aggregating across channels before import also keeps the transaction ledger
+    from becoming a per-channel routing history.
+    """
+    fee_by_day: dict[str, int] = {}
+    for record in records:
+        if record.get("record_type") != "forward_day":
+            continue
+        if (record.get("status") or "").lower() != "settled":
+            continue
+        fee_msat = max(0, int(record.get("fee_msat") or 0))
+        if fee_msat <= 0:
+            continue
+        occurred_at = str(record.get("occurred_at") or "")
+        if len(occurred_at) < 10 or occurred_at == UNKNOWN_OCCURRED_AT:
+            continue
+        day = occurred_at[:10]
+        fee_by_day[day] = fee_by_day.get(day, 0) + fee_msat
+    return [
+        {
+            "id": f"cln:routing:{day}",
+            # Daily privacy aggregation cannot retain the exact last forward
+            # timestamp. End-of-day is the conservative boundary: earned fees
+            # never become available to an earlier same-day disposal.
+            "occurred_at": f"{day}T23:59:59Z",
+            "confirmed_at": f"{day}T23:59:59Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": msat_to_btc(fee_msat),
+            "fee": 0,
+            "kind": "routing_income",
+            "description": f"Lightning routing fees ({day})",
+            "counterparty": None,
+            "payment_hash": None,
+            "payment_hash_source": None,
+            "raw_json": "{}",
+        }
+        for day, fee_msat in sorted(fee_by_day.items())
+    ]
+
+
+def _stamp_lightning_import_network(
+    records: list[dict[str, Any]], network: str
+) -> list[dict[str, Any]]:
+    """Attach getinfo-observed network scope to curated ledger records."""
+
+    if not str(network or "").strip():
+        return records
+    stamped = []
+    for record in records:
+        item = dict(record)
+        raw = item.get("raw_json")
+        try:
+            payload = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = {}
+        payload.update({"chain": "lightning", "network": network})
+        item["raw_json"] = json.dumps(payload, sort_keys=True)
+        stamped.append(item)
+    return stamped
+
+
 def sync_core_lightning_wallet(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -1609,6 +1772,10 @@ def sync_core_lightning_wallet(
         import_record = _record_to_import(record)
         if import_record is not None:
             import_records.append(import_record)
+    import_records.extend(_daily_routing_income_imports(records))
+    import_records = _stamp_lightning_import_network(
+        import_records, snapshot.network
+    )
     import_outcome = core_imports.insert_wallet_records(
         conn,
         profile,

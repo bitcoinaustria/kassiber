@@ -175,6 +175,111 @@ class InferOutboundRegimesTest(unittest.TestCase):
             },
         )
 
+    def test_many_to_one_uses_generic_source_fee_attribution_for_lot_flows(self):
+        rows = [
+            _row(
+                "buy-alt-a",
+                "wallet-a",
+                "inbound",
+                50_000_000,
+                occurred_at="2020-06-01T00:00:00Z",
+            ),
+            _row(
+                "buy-neu-b",
+                "wallet-b",
+                "inbound",
+                50_000_000,
+                occurred_at="2024-06-01T00:00:00Z",
+            ),
+            _row(
+                "source-a",
+                "wallet-a",
+                "outbound",
+                50_000_000,
+                fee=0,
+                occurred_at="2025-01-01T00:00:00Z",
+            ),
+            _row(
+                "source-b",
+                "wallet-b",
+                "outbound",
+                40_000_000,
+                fee=10_000_000,
+                occurred_at="2025-01-01T00:00:00Z",
+            ),
+            _row(
+                "destination",
+                "wallet-c",
+                "inbound",
+                90_000_000,
+                occurred_at="2025-01-01T00:00:00Z",
+            ),
+            _row(
+                "sell-c-neu",
+                "wallet-c",
+                "outbound",
+                45_000_000,
+                occurred_at="2025-06-01T00:00:00Z",
+            ),
+            _row(
+                "sell-c-after",
+                "wallet-c",
+                "outbound",
+                1_000_000,
+                occurred_at="2025-06-02T00:00:00Z",
+            ),
+        ]
+        pairs = [
+            {"out": rows[2], "in": rows[4], "pair_id": "source-a-pair"},
+            {"out": rows[3], "in": rows[4], "pair_id": "source-b-pair"},
+        ]
+        transfer_flows = {}
+
+        regimes = infer_outbound_regimes(rows, pairs, transfer_flows)
+
+        self.assertEqual(
+            transfer_flows[("source-a", "destination")],
+            {
+                "out": {REGIME_ALT: 50_000_000, REGIME_NEU: 0},
+                "in": {REGIME_ALT: 50_000_000, REGIME_NEU: 0},
+            },
+        )
+        self.assertEqual(
+            transfer_flows[("source-b", "destination")],
+            {
+                "out": {REGIME_ALT: 0, REGIME_NEU: 50_000_000},
+                "in": {REGIME_ALT: 0, REGIME_NEU: 40_000_000},
+            },
+        )
+        self.assertEqual(regimes["source-a"], REGIME_ALT)
+        self.assertEqual(regimes["source-b"], REGIME_NEU)
+        self.assertEqual(regimes["sell-c-neu"], REGIME_NEU)
+        self.assertEqual(regimes["sell-c-after"], REGIME_ALT)
+
+    def test_many_to_many_transfer_uses_same_reroutable_flow_as_booking(self):
+        rows = [
+            _row("buy-alt-a", "wallet-a", "inbound", 60_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-neu-b", "wallet-b", "inbound", 40_000_000, occurred_at="2024-06-01T00:00:00Z"),
+            _row("nm-out-a", "wallet-a", "outbound", 60_000_000, occurred_at="2025-01-01T00:00:00Z"),
+            _row("nm-out-b", "wallet-b", "outbound", 40_000_000, occurred_at="2025-01-01T00:00:00Z"),
+            _row("nm-in-c", "wallet-c", "inbound", 40_000_000, occurred_at="2025-01-01T00:00:00Z"),
+            _row("nm-in-d", "wallet-d", "inbound", 60_000_000, occurred_at="2025-01-01T00:00:00Z"),
+            _row("sell-c", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-01T00:00:00Z"),
+            _row("sell-d", "wallet-d", "outbound", 10_000_000, occurred_at="2025-06-01T00:00:00Z"),
+        ]
+        intra_pairs = [
+            {"out": rows[2], "in": rows[4], "pair_id": "nm-1"},
+            {"out": rows[2], "in": rows[5], "pair_id": "nm-2"},
+            {"out": rows[3], "in": rows[4], "pair_id": "nm-3"},
+        ]
+
+        regimes = infer_outbound_regimes(rows, intra_pairs)
+
+        self.assertEqual(regimes["nm-out-a"], REGIME_ALT)
+        self.assertEqual(regimes["nm-out-b"], REGIME_NEU)
+        self.assertEqual(regimes["sell-c"], REGIME_NEU)
+        self.assertEqual(regimes["sell-d"], REGIME_ALT)
+
     def test_manual_component_ignores_derived_pair_sharing_a_leg(self):
         rows = [
             _row("buy-alt-a", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),

@@ -4350,6 +4350,43 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.transfers.components.bulk_resolve") {
+      const args = (req.args ?? {}) as {
+        components?: unknown;
+        activate?: unknown;
+        dry_run?: unknown;
+      };
+      const specs = Array.isArray(args.components) ? args.components : [];
+      const activate = args.activate !== false;
+      const base = structuredClone(
+        fixtures["ui.transfers.components.bulk_resolve"],
+      ) as {
+        components: Array<Record<string, unknown>>;
+      };
+      const template = base.components[0] ?? {};
+      const components = specs.map((_, index) => ({
+        ...structuredClone(template),
+        id: `custody:mock-bulk-${index + 1}`,
+        lineage_id: `custody:mock-bulk-${index + 1}`,
+        state: activate ? "active" : "draft",
+        effective_state: activate ? "active" : "draft",
+      }));
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          components,
+          summary: {
+            count: components.length,
+            active: activate ? components.length : 0,
+            draft: activate ? 0 : components.length,
+          },
+          ...(args.dry_run === true ? { dry_run: true } : {}),
+        } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

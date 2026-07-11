@@ -28,12 +28,13 @@ _LIQUID_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-03-14T17:32:00Z,liquid-claim-1,inbound,LBTC,0.000995,0,40000,Boltz claim
 """
 
-_COLD_TO_HOT_OUT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
-2026-03-15T10:00:00Z,cold-hot-txid,outbound,BTC,0.10000000,0.00001000,40000,Move monthly spend to hot wallet
+_COLD_HOT_TXID = "f" * 64
+_COLD_TO_HOT_OUT_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-15T10:00:00Z,{_COLD_HOT_TXID},outbound,BTC,0.09999000,0.00001000,40000,Move monthly spend to hot wallet
 """
 
-_COLD_TO_HOT_IN_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
-2026-03-15T10:05:00Z,cold-hot-txid,inbound,BTC,0.09999000,0,40000,Receive monthly spend from cold wallet
+_COLD_TO_HOT_IN_CSV = f"""date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-15T10:05:00Z,{_COLD_HOT_TXID},inbound,BTC,0.09999000,0,40000,Receive monthly spend from cold wallet
 """
 
 _BTC_TRANSFER_OUT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description

@@ -178,6 +178,37 @@ class NormalizeImportRecordTests(unittest.TestCase):
         self.assertIsNone(normalized["payment_hash"])
         self.assertIsNone(normalized["payment_hash_source"])
 
+    def test_native_node_adapter_stamps_reserved_provenance(self):
+        normalized = normalize_import_record(
+            self._record(
+                kind="lnd_invoice",
+                payment_hash_source="lnd",
+                raw_json="{}",
+            ),
+            source_label="lnd",
+        )
+
+        self.assertEqual(
+            json.loads(normalized["raw_json"])["_kassiber_provenance"],
+            {"import_source": "lnd"},
+        )
+
+    def test_generic_import_cannot_copy_reserved_native_provenance(self):
+        normalized = normalize_import_record(
+            self._record(
+                kind="lnd_invoice",
+                payment_hash_source="lnd",
+                raw_json=json.dumps(
+                    {
+                        "_kassiber_provenance": {"import_source": "lnd"},
+                    }
+                ),
+            ),
+            source_label="generic-ledger",
+        )
+
+        self.assertNotIn("_kassiber_provenance", json.loads(normalized["raw_json"]))
+
 
 class InsertPersistsPaymentHashTests(unittest.TestCase):
     def test_phoenix_import_writes_column(self):

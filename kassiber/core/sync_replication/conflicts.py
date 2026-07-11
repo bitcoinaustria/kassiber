@@ -15,6 +15,28 @@ from .events import author_event
 from .schema_allowlist import SYNC_TABLE_MAP
 
 
+def _require_mutable_conflict_field(conflict, spec) -> None:
+    if not spec.immutable_fields:
+        return
+    field = str(conflict["field"])
+    if field != "__exists__" and field not in spec.immutable_fields:
+        return
+    raise AppError(
+        "custody revision conflicts cannot rewrite authored economic facts in place",
+        code="sync_conflict_requires_revision",
+        hint=(
+            "Keep the signed revision for audit, supersede it when needed, and "
+            "create a new custody component revision with the corrected facts."
+        ),
+        details={
+            "entity_table": conflict["entity_table"],
+            "entity_key": conflict["entity_key"],
+            "field": field,
+        },
+        retryable=False,
+    )
+
+
 def list_conflicts(conn: sqlite3.Connection, *, profile_id: str, include_resolved: bool = False) -> list[dict[str, Any]]:
     where = "profile_id = ?" if include_resolved else "profile_id = ? AND status = 'open'"
     rows = conn.execute(
@@ -115,6 +137,7 @@ def apply_resolution_event(
     spec = SYNC_TABLE_MAP.get(conflict["entity_table"])
     if not spec:
         raise AppError("conflict table is outside sync allowlist", code="sync_schema_forbidden")
+    _require_mutable_conflict_field(conflict, spec)
 
     mutated = False
     if conflict["field"] == "__exists__":
@@ -207,6 +230,10 @@ def resolve_conflict(
     ).fetchone()
     if not conflict:
         raise AppError("open sync conflict was not found", code="not_found")
+    spec = SYNC_TABLE_MAP.get(conflict["entity_table"])
+    if not spec:
+        raise AppError("conflict table is outside sync allowlist", code="sync_schema_forbidden")
+    _require_mutable_conflict_field(conflict, spec)
     value, chosen_event_id = _resolved_value(
         conflict,
         source_event_id=source_event_id,
@@ -241,6 +268,14 @@ def resolve_conflict(
         created_files=[],
     )
     if mutated:
+        if conflict["entity_table"] in {
+            "custody_components",
+            "custody_component_legs",
+            "custody_component_allocations",
+        }:
+            from ..custody_components import reconcile_active_memberships
+
+            reconcile_active_memberships(conn, profile_id=profile_id)
         invalidate_journals(conn, profile_id)
     return {
         "conflict_id": conflict["id"],

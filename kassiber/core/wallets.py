@@ -58,6 +58,7 @@ WALLET_KINDS = [
     "binance",
     "wasabi",
     "samourai",
+    "untracked",
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
@@ -532,7 +533,17 @@ def parse_wallet_config(args):
     return config
 
 
-def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=None, config=None):
+def create_wallet(
+    conn,
+    workspace_ref,
+    profile_ref,
+    label,
+    kind,
+    account_ref=None,
+    config=None,
+    *,
+    commit=True,
+):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     account = resolve_account(conn, profile["id"], account_ref or "treasury")
     normalized_kind = normalize_wallet_kind(kind)
@@ -561,7 +572,8 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
             code="conflict",
             hint="Choose a different wallet label or update the existing wallet.",
         ) from exc
-    conn.commit()
+    if commit:
+        conn.commit()
     created = fetch_wallet_with_account(conn, wallet_id)
     return wallet_row_to_dict(created)
 
@@ -785,6 +797,11 @@ WALLET_KIND_CATALOG = {
         "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
         "config_fields": ["addresses", "backend", "chain", "network", "source_file", "source_format"],
         "requires": ["addresses|source_file"],
+    },
+    "untracked": {
+        "summary": "Owned historical custody with no connected source; used only by reviewed custody components to bridge missing wallets or nodes.",
+        "config_fields": [],
+        "requires": [],
     },
     "silent-payment": {
         "summary": "Watch-only BIP352/BIP392 Silent Payments receive source; uses an explicit SP-capable backend or local scanner.",

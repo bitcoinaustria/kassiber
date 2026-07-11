@@ -120,6 +120,63 @@ class LiquidElectrumSyncTest(unittest.TestCase):
         self.assertEqual(payload["source"], "unit-test")
         self.assertEqual(payload["component"]["net_sats"], -1000)
         self.assertEqual(payload["component"]["fee_sats"], 19)
+        # Historical ownership replay is based on persisted valued legs, not
+        # the current UTXO set (this prevout is already spent by definition).
+        self.assertEqual(payload["chain"], "liquid")
+        self.assertEqual(payload["ownership_graph_version"], 1)
+        self.assertEqual(payload["vin"][0]["txid"], "11" * 32)
+        self.assertEqual(payload["vin"][0]["prevout"]["value_sats"], 1000)
+        self.assertEqual(payload["vin"][0]["prevout"]["asset_id"], policy_asset_id)
+        self.assertEqual(payload["vin"][0]["prevout"]["role"], "owned")
+        self.assertEqual(payload["vout"][0]["role"], "fee")
+        self.assertEqual(payload["vout"][0]["value_sats"], 19)
+        self.assertEqual(payload["vout"][1]["role"], "external")
+        self.assertEqual(payload["vout"][1]["value_sats"], 500)
+
+    def test_destination_only_issued_asset_observer_is_not_charged_lbtc_fee(self):
+        policy_asset_id = default_policy_asset_id("liquidv1")
+        issued_asset_id = "22" * 32
+        tracked_script = "0014cafebabe"
+        current_tx = _FakeTx(
+            vin=[_FakeInput("33" * 32, 0)],
+            vout=[
+                _FakeOutput("", 19, policy_asset_id),
+                _FakeOutput(tracked_script, 500, issued_asset_id),
+            ],
+        )
+        prev_tx = _FakeTx(
+            vin=[], vout=[_FakeOutput("51", 1000, policy_asset_id)]
+        )
+
+        with patch(
+            "kassiber.core.sync_backends.liquid_output_amount_asset_id",
+            side_effect=lambda output, plan, target=None: (
+                output.fake_value_sats,
+                output.fake_asset_id,
+            ),
+        ):
+            records = record_components_from_liquid_tx(
+                txid="44" * 32,
+                occurred_at="2026-01-01T00:00:00Z",
+                tx=current_tx,
+                descriptor_plan=object(),
+                tracked_scripts={
+                    tracked_script: {
+                        "branch_index": 0,
+                        "address_index": 0,
+                        "script_pubkey": tracked_script,
+                        "address": "lq1issued",
+                    }
+                },
+                backend_name="liquid",
+                policy_asset_id=policy_asset_id,
+                prev_tx_lookup=lambda _txid: prev_tx,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["direction"], "inbound")
+        self.assertEqual(records[0]["asset"], issued_asset_id)
+        self.assertEqual(records[0]["fee"], 0)
 
     def test_electrum_records_for_liquid_wallet(self):
         policy_asset_id = default_policy_asset_id("liquidv1")

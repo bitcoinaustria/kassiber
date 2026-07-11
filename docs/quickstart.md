@@ -105,12 +105,14 @@ For CSV / JSON imports (BTCPay, Phoenix, River, Bull Bitcoin, Coinfinity,
 ## 3. Pair transfers and swaps
 
 Same-chain self-transfers between two wallets in the same book are detected
-automatically. Lightning, Liquid peg-in/peg-out, and submarine-swap legs need
-review before reports are trusted.
+automatically. Source-qualified, unique, equal-principal Lightning payments
+between owned nodes (including circular same-node payments) are automatic too.
+Liquid peg-in/peg-out, submarine-swap, and incomplete Lightning/channel
+evidence stays in review before reports are trusted.
 
 ```bash
-# Surface unpaired candidates (exact via Lightning payment_hash, redacted
-# provider swap id, or HTLC refund link; strong via time + amount):
+# Surface unpaired candidates (exact only from complete cryptographic/whole-row
+# evidence; incomplete provider metadata and time + amount remain strong):
 python3 -m kassiber transfers suggest
 
 # Auto-apply every solo exact match without further review:
@@ -124,19 +126,40 @@ python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
   --kind submarine-swap --policy carrying-value
 ```
 
+For 1:N, N:1, N:M, or multi-wallet histories with missing intermediate
+wallets, use the atomic custody-component resolver instead of forcing a chain
+of ambiguous pairs:
+
+```bash
+python3 -m kassiber transfers components bulk-resolve \
+  --file migrations.json --dry-run
+python3 -m kassiber transfers components bulk-resolve \
+  --file migrations.json
+```
+
+The same workflow is available under **Swap Matching → Close gaps**. See
+[reference/custody-components.md](reference/custody-components.md) for the JSON
+contract, `untracked_wallet` placeholders, allocation rules, and audit model.
+
 For a failed swap that refunds the same asset back to the same wallet, pair the
 send and refund legs with `--policy carrying-value` (use `--kind swap-refund` to
-label it). Kassiber books the round trip as a same-wallet transfer and realizes
-only the shortfall / network fee as the transfer fee, rather than treating the
-send as a sale and the refund as a fresh acquisition. When the refund is swept
-on-chain through a Boltz HTLC, chain sync links it to its funding send
-automatically and `transfers suggest` surfaces it as an exact `swap-refund`
-candidate — even within a single wallet.
+label it) when the imported principal and separately evidenced fees conserve.
+Kassiber then avoids treating the send as a sale and the refund as a fresh
+acquisition. For different physical transactions, an explicit reviewed pair can
+allocate a bounded refund shortfall as its fee. A residual inside one physical
+txid, or any multi-leg/ambiguous shortfall, is never guessed; close that with a
+custody component containing an explicit fee/external leg.
+When the refund is swept on-chain through a Boltz HTLC, chain sync links it to
+its funding send automatically and `transfers suggest` surfaces it as an exact
+`swap-refund` candidate when the funding outpoint and whole-row evidence are
+unique — even within a single wallet. Legacy txid-only or batched witness
+evidence remains a manual-review candidate.
 
 Boltz v2 cooperative Taproot key-path spends do not reveal swap scripts or
-preimages on-chain. Kassiber treats them as exact only when imported
-provider/client metadata links both legs by a redacted swap id; chain-only
-rows stay in the heuristic/manual review lane.
+preimages on-chain. Provider evidence is exact only for a unique 1:1 provider
+key with canonical send/receive route txids and explicit integer-msat
+principals covering both complete rows. Route-only or ID-only metadata stays
+strong/manual; chain-only rows stay in the heuristic/manual review lane.
 
 For a direct swap payout where the provider pays an external recipient and
 no owned inbound leg exists:
@@ -253,16 +276,17 @@ python3 -m kassiber --machine reports source-funds \
   --planned-destination "Exchange or broker" \
   --planned-note "Pre-disclosure before expected bank proceeds"
 
-# Seed target-scoped suggestions from existing transfers, pairs, and
-# one-to-one provider/import ids. Broad heuristics need
+# Seed target-scoped suggestions from canonical transfers, reviewed pairs, and
+# provider/import hints. Provider ids and broad heuristics need
 # --include-broad-hints.
 python3 -m kassiber source-funds suggest \
   --target-transaction <txid-or-id>
 
-# Bulk-accept deterministic links (transaction input/output structure,
-# Lightning payment hashes, same-external-id hops, reviewed
-# transaction_pairs, one-to-one per-transaction provider/import ids) for
-# this target path; broad and weak matches stay manual.
+# Bulk-accept deterministic links (canonical scoped transaction identity with
+# equal whole-row principal,
+# transaction input/output structure, source-qualified equal-principal
+# Lightning hashes, and reviewed transaction_pairs) for this target path;
+# provider ids and weak matches stay manual.
 python3 -m kassiber source-funds links bulk-review \
   --target-transaction <target-txid-or-id>
 
@@ -279,8 +303,9 @@ python3 -m kassiber source-funds recipients create \
   --label "Relationship bank" --kind bank \
   --default-reveal-mode standard
 
-# Auto-assemble everything provable from local evidence (tx inputs/outputs
-# of synced wallets, Lightning payment hashes, platform ids, reviewed pairs).
+# Auto-assemble everything provable from local evidence (scoped tx
+# inputs/outputs of synced wallets, source-qualified Lightning hashes, and
+# reviewed pairs). Provider/platform ids remain manual suggestions.
 python3 -m kassiber source-funds assemble \
   --target-transaction <target-txid-or-id>
 

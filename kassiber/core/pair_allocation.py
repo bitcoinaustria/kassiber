@@ -2,14 +2,15 @@
 
 Every consumer that walks a manual multi-pair component — tax booking,
 per-country regime inference, any future country module — MUST use the
-same leg order and the same allocator: the allocator is greedy (the fee
-lands on the first legs), so two consumers walking different orders book
-the fee on different legs and silently drift apart. This module is the
-single country-agnostic source of truth for both.
+same leg order and the same allocator. Source-level fees preserve recorded
+evidence; only an unexplained residual is routed by the deterministic flow.
+Within one source's fan-out, the fee is then split in canonical leg order.
+This module is the single country-agnostic source of truth for both.
 """
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Mapping, Sequence
 
 
@@ -42,6 +43,26 @@ def ordered_pair_component(
 #: LND's REST fallback stores sat-truncated values (up to 999 msat under the
 #: true amount) while a CLN partner leg is msat-exact.
 SUB_SAT_MSAT = 1000
+
+
+def outbound_transfer_evidence_msat(
+    row: Mapping[str, Any],
+) -> tuple[int, int, bool]:
+    """Return ``(sent, explicit_fee, has_implicit_fee)`` for an outbound row.
+
+    Most backends report principal in ``amount`` and the miner/routing fee in
+    ``fee``. Net-delta imports instead set ``amount_includes_fee``; for those,
+    ``amount`` is already the total sent and any gap to the receipt is implicit.
+    Keeping this interpretation here prevents booking and country-specific lot
+    tracking from drifting on mixed-source components.
+    """
+
+    amount_msat = int(_field(row, "amount") or 0)
+    fee_msat = int(_field(row, "fee") or 0)
+    has_implicit_fee = bool(_field(row, "amount_includes_fee"))
+    if has_implicit_fee:
+        return amount_msat, 0, True
+    return amount_msat + fee_msat, max(0, fee_msat), False
 
 
 def clamped_receipt_msat(sent_msat: int, received_msat: int) -> int:
@@ -94,6 +115,218 @@ def allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
     if remaining and allocated:
         allocated[-1] += remaining
     return allocated
+
+
+def allocate_bipartite_flow_msat(
+    supplies: Mapping[str, int],
+    demands: Mapping[str, int],
+    edges: Sequence[tuple[str, str]],
+) -> list[tuple[str, str, int]] | None:
+    """Find a deterministic exact flow over reviewed source/destination edges.
+
+    A custody component is a small bipartite transportation graph. A greedy
+    edge walk is not correct here: it can consume a constrained destination
+    with a flexible source and report an otherwise feasible component as
+    unbalanced. This is an Edmonds-Karp max-flow with stable insertion-order
+    traversal, so it can reroute earlier allocations through residual edges and
+    still produces reproducible audit output.
+
+    ``None`` means the reviewed edge set cannot satisfy every positive supply
+    and demand exactly. Unknown endpoints are ignored; duplicate edges are
+    coalesced. Zero-valued legs are valid but do not appear in the result.
+    """
+
+    normalized_supplies = {str(key): int(value) for key, value in supplies.items()}
+    normalized_demands = {str(key): int(value) for key, value in demands.items()}
+    if any(value < 0 for value in normalized_supplies.values()) or any(
+        value < 0 for value in normalized_demands.values()
+    ):
+        return None
+    total_supply = sum(normalized_supplies.values())
+    if total_supply != sum(normalized_demands.values()):
+        return None
+    if total_supply == 0:
+        return []
+
+    source = ("root", "source")
+    sink = ("root", "sink")
+    capacity: dict[tuple[tuple[str, str], tuple[str, str]], int] = {}
+    residual: dict[tuple[tuple[str, str], tuple[str, str]], int] = {}
+    adjacency: dict[tuple[str, str], list[tuple[str, str]]] = {}
+
+    def add_edge(left: tuple[str, str], right: tuple[str, str], limit: int) -> None:
+        adjacency.setdefault(left, [])
+        adjacency.setdefault(right, [])
+        if right not in adjacency[left]:
+            adjacency[left].append(right)
+        if left not in adjacency[right]:
+            adjacency[right].append(left)
+        capacity[(left, right)] = capacity.get((left, right), 0) + max(0, limit)
+        residual[(left, right)] = residual.get((left, right), 0) + max(0, limit)
+        residual.setdefault((right, left), 0)
+
+    for out_id, amount in normalized_supplies.items():
+        add_edge(source, ("out", out_id), amount)
+    for in_id, amount in normalized_demands.items():
+        add_edge(("in", in_id), sink, amount)
+
+    reviewed_edges: list[tuple[str, str]] = []
+    seen_edges: set[tuple[str, str]] = set()
+    for raw_out_id, raw_in_id in edges:
+        edge = (str(raw_out_id), str(raw_in_id))
+        if (
+            edge in seen_edges
+            or edge[0] not in normalized_supplies
+            or edge[1] not in normalized_demands
+        ):
+            continue
+        seen_edges.add(edge)
+        reviewed_edges.append(edge)
+        add_edge(("out", edge[0]), ("in", edge[1]), total_supply)
+
+    max_flow = 0
+    while max_flow < total_supply:
+        parent: dict[tuple[str, str], tuple[str, str] | None] = {source: None}
+        queue = deque([source])
+        while queue and sink not in parent:
+            node = queue.popleft()
+            for neighbor in adjacency.get(node, ()):
+                if neighbor in parent or residual.get((node, neighbor), 0) <= 0:
+                    continue
+                parent[neighbor] = node
+                queue.append(neighbor)
+                if neighbor == sink:
+                    break
+        if sink not in parent:
+            break
+
+        increment = total_supply - max_flow
+        node = sink
+        while parent[node] is not None:
+            previous = parent[node]
+            increment = min(increment, residual[(previous, node)])
+            node = previous
+        node = sink
+        while parent[node] is not None:
+            previous = parent[node]
+            residual[(previous, node)] -= increment
+            residual[(node, previous)] = residual.get((node, previous), 0) + increment
+            node = previous
+        max_flow += increment
+
+    if max_flow != total_supply:
+        return None
+
+    result: list[tuple[str, str, int]] = []
+    for out_id, in_id in reviewed_edges:
+        left = ("out", out_id)
+        right = ("in", in_id)
+        amount = capacity[(left, right)] - residual[(left, right)]
+        if amount > 0:
+            result.append((out_id, in_id, amount))
+    return result
+
+
+def allocate_transfer_component_flow_msat(
+    source_sent_msat: Mapping[str, int],
+    source_explicit_fee_msat: Mapping[str, int],
+    destination_amount_msat: Mapping[str, int],
+    edges: Sequence[tuple[str, str]],
+    *,
+    implicit_fee_source_ids: Sequence[str] = (),
+) -> tuple[list[tuple[str, str, int]], dict[str, int]] | None:
+    """Allocate a reviewed multi-source transfer without moving recorded fees.
+
+    Each source's explicit fee is a lower bound: it stays attached to the
+    outbound row that reported it. Only the aggregate gap left after those
+    explicit fees is unexplained and therefore eligible for deterministic
+    allocation. Rows whose amount explicitly includes an unknown fee are tried
+    first for that residual; the max-flow residual graph can still reroute the
+    fee when an allowed custody edge makes that necessary.
+
+    This is ownership/accounting plumbing, not tax policy. Country-specific
+    consumers reuse the returned principal flows so their downstream lot state
+    cannot disagree with the generic transfer journal.
+
+    Returns ``(principal_edge_flows, total_fee_by_source)``. ``None`` means the
+    reviewed graph, amounts, or explicit fee evidence cannot conserve exactly.
+    """
+
+    sent = {
+        str(source_id): int(amount)
+        for source_id, amount in source_sent_msat.items()
+    }
+    destinations = {
+        str(destination_id): int(amount)
+        for destination_id, amount in destination_amount_msat.items()
+    }
+    if any(amount < 0 for amount in sent.values()) or any(
+        amount < 0 for amount in destinations.values()
+    ):
+        return None
+
+    normalized_explicit = {
+        str(source_id): int(fee or 0)
+        for source_id, fee in source_explicit_fee_msat.items()
+    }
+    explicit = {
+        source_id: normalized_explicit.get(source_id, 0) for source_id in sent
+    }
+    if any(fee < 0 or fee > sent[source_id] for source_id, fee in explicit.items()):
+        return None
+    if any(source_id not in sent for source_id in normalized_explicit):
+        return None
+
+    aggregate_fee = sum(sent.values()) - sum(destinations.values())
+    explicit_total = sum(explicit.values())
+    unexplained_fee = aggregate_fee - explicit_total
+    if aggregate_fee < 0 or unexplained_fee < 0:
+        return None
+
+    remaining_supply = {
+        source_id: sent[source_id] - explicit[source_id] for source_id in sent
+    }
+    implicit_ids = {str(source_id) for source_id in implicit_fee_source_ids}
+    source_order = [source_id for source_id in sent if source_id in implicit_ids]
+    source_order.extend(
+        source_id for source_id in sent if source_id not in implicit_ids
+    )
+    ordered_supply = {
+        source_id: remaining_supply[source_id] for source_id in source_order
+    }
+
+    fee_sink = "__kassiber_unexplained_transfer_fee__"
+    while fee_sink in destinations:
+        fee_sink += "_"
+    augmented_demands = {fee_sink: unexplained_fee, **destinations}
+    # Fee edges come first so genuinely implicit-fee rows absorb the residual
+    # before principal allocation. Edmonds-Karp can undo that choice through
+    # reverse edges if a constrained reviewed destination needs the source.
+    augmented_edges = [
+        *((source_id, fee_sink) for source_id in source_order),
+        *(
+            (str(source_id), str(destination_id))
+            for source_id, destination_id in edges
+        ),
+    ]
+    allocated = allocate_bipartite_flow_msat(
+        ordered_supply,
+        augmented_demands,
+        augmented_edges,
+    )
+    if allocated is None:
+        return None
+
+    total_fee_by_source = dict(explicit)
+    principal_flows: list[tuple[str, str, int]] = []
+    for source_id, destination_id, amount in allocated:
+        if destination_id == fee_sink:
+            total_fee_by_source[source_id] += amount
+        else:
+            principal_flows.append((source_id, destination_id, amount))
+
+    return principal_flows, total_fee_by_source
+
 
 def pair_record_id(pair) -> str | None:
     """Stable review-record id of a pair (manual/bulk/rule pairing), or None."""

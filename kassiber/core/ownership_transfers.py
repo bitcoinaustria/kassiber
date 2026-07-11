@@ -1,14 +1,16 @@
 """Address-ownership self-transfer deriver.
 
 ``kassiber.transfers.detect_intra_transfers`` pairs a self-transfer only when
-two wallets independently recorded a row that shares the *same* on-chain txid
-(``external_id``). That misses the cases users actually hit:
+two wallets independently recorded a row in the same canonical
+``(chain, network, txid, asset)`` scope. That misses the cases users actually
+hit:
 
 * the destination wallet never recorded a row (it was not synced for that
   period) — the source outbound then looks like a disposal;
 * the two wallets' rows carry different/missing txids (CSV imports);
 * one transaction fans out to two or more owned wallets (1->N), which the
-  conservative 1-out/1-in detector skips and the journal pipeline quarantines.
+  conservative 1-out/1-in detector skips; and
+* several owned wallets fund one consolidation transaction (N->1).
 
 This module closes those by reading the *actual transaction graph*: for an
 on-chain Bitcoin outbound whose full ``vin``/``vout`` are stored in
@@ -20,15 +22,17 @@ leg — proven deterministically, with no amount/time heuristic.
 Scope (intentionally conservative — anything outside falls through to the
 existing row-matching + quarantine behavior, never mis-booked):
 
-* **Single-source only.** When more than one owned wallet contributed inputs
-  to the spend, per-wallet sync double-counts the network fee (each wallet's
-  outbound row carries the whole ``fee``), so the amounts are unreliable. Such
-  transactions are declined and left for the existing fan-out quarantine.
-* **Bitcoin graph shape.** The split needs per-output values; Esplora,
-  Core-derived, and current Electrum/Fulcrum sync rows carry enough graph data.
-  Legacy graphless Electrum rows, Liquid component rows, and CSV imports parse
-  to ``None`` and are skipped (this is also what cleanly excludes cross-asset
-  pegs).
+* **Graph-proven source ownership.** Single-source spends can become 1:1 or
+  1:N moves (with any external residual kept as a real disposal). Multi-source
+  N:1 consolidations are handled first when every input, destination and shared
+  fee conserves exactly. Mixed-owner/PayJoin/CoinJoin and ambiguous N:M graphs
+  are never guessed; they stay reviewable and can be closed with an explicit
+  custody component.
+* **Rail-scoped valued graph.** Bitcoin rows usually carry the whole graph.
+  Liquid rows persist the non-secret valued inputs/outputs each wallet can
+  unblind and the deriver merges those observations only within one canonical
+  ``(chain, network, txid)`` scope. Assets conserve independently by Liquid
+  asset id. An owned confidential leg that remains unknown is blocked.
 * **Owned outputs only.** External recipients and OP_RETURN are never legs;
   the residual ``amount - Σ(legs)`` stays on the source as a real disposal.
 
@@ -57,9 +61,15 @@ from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
-from ..transfers import normalize_group_txid
+from ..transfers import canonical_txid, normalize_group_txid, onchain_transfer_scope
 from ..wallet_descriptors import normalize_chain, normalize_network
-from .onchain import parse_valued_tx, stored_tx_mapping
+from .onchain import (
+    exact_onchain_fee_msat_from_parsed,
+    merge_ownership_txs,
+    parse_ownership_tx,
+    parse_valued_tx,
+    stored_tx_mapping,
+)
 
 
 SATS_TO_MSAT = 1000
@@ -115,6 +125,7 @@ class OwnershipReviewProof:
     owned_amount_msat: int
     reason: str
     conflict_set_id: str
+    confidence: str
     conflict_size: int = 1
 
 
@@ -273,15 +284,19 @@ def derive_ownership_review_proofs(
         ):
             unavailable_leg_ids |= {out_id, in_id}
     inbound_by_wallet: dict[str, list[Mapping[str, Any]]] = {}
-    groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    groups: dict[tuple[Any, ...], list[Mapping[str, Any]]] = {}
     for row in rows:
         if _get(row, "direction") == "inbound" and int(_get(row, "amount") or 0) > 0:
             inbound_by_wallet.setdefault(str(_get(row, "wallet_id")), []).append(row)
-        external_id = _get(row, "external_id")
-        if external_id:
-            groups.setdefault(
-                (normalize_group_txid(str(external_id)), _get(row, "asset")), []
-            ).append(row)
+        row_scope = onchain_transfer_scope(row)
+        legacy_review_key = (
+            "unscoped_review",
+            normalize_group_txid(str(_get(row, "external_id") or "")),
+            str(_get(row, "asset") or "").upper(),
+        )
+        groups.setdefault(legacy_review_key, []).append(row)
+        if row_scope is not None:
+            groups.setdefault(("physical", *row_scope), []).append(row)
 
     proofs: list[OwnershipReviewProof] = []
     for source_id, reason in sorted(blocked_reasons_by_row_id.items()):
@@ -297,21 +312,20 @@ def derive_ownership_review_proofs(
             continue
         parsed = _parse_onchain_tx(_get(source, "raw_json"))
         destinations: dict[str, int] = {}
+        source_scope: tuple[str, str, str, str] | None = None
         if parsed is not None:
             source_wallet_id = str(_get(source, "wallet_id"))
-            chain_network = _source_chain_network(
-                parsed["inputs"], index, source_wallet_id
+            source_scope = _ownership_onchain_scope(
+                source, index=index, parsed=parsed
             )
+            if source_scope is None:
+                continue
+            physical_scope = (source_scope[0], source_scope[1])
             ambiguous = False
             for output in parsed["outputs"]:
-                matches = index.lookup_script(output["script"])
-                if chain_network is not None:
-                    matches = [
-                        match
-                        for match in matches
-                        if _norm_chain_network(match.chain, match.network)
-                        == chain_network
-                    ]
+                matches = _matches_in_physical_scope(
+                    index.lookup_script(output["script"]), physical_scope
+                )
                 owner_ids = {str(match.wallet_id) for match in matches}
                 if source_wallet_id in owner_ids:
                     continue
@@ -326,9 +340,15 @@ def derive_ownership_review_proofs(
             if ambiguous:
                 continue
         elif reason == "owned_fanout_unresolved":
+            source_scope = onchain_transfer_scope(source)
             group_key = (
-                normalize_group_txid(str(_get(source, "external_id") or "")),
-                _get(source, "asset"),
+                ("physical", *source_scope)
+                if source_scope is not None
+                else (
+                    "unscoped_review",
+                    normalize_group_txid(str(_get(source, "external_id") or "")),
+                    str(_get(source, "asset") or "").upper(),
+                )
             )
             group = groups.get(group_key, [])
             positive_outs = [
@@ -352,6 +372,7 @@ def derive_ownership_review_proofs(
                     )
 
         txid = str((parsed or {}).get("txid") or _get(source, "external_id") or "")
+        source_scope = source_scope or onchain_transfer_scope(source)
         for destination_wallet_id, owned_amount_msat in sorted(destinations.items()):
             available = [
                 inbound
@@ -361,32 +382,50 @@ def derive_ownership_review_proofs(
                 and str(_get(inbound, "id")) not in unavailable_leg_ids
                 and (source_id, str(_get(inbound, "id"))) not in active_pairs
             ]
-            compatible = [
-                inbound
-                for inbound in available
-                if _amounts_compatible(
-                    int(_get(inbound, "amount") or 0), owned_amount_msat
-                )
-                and not _is_provably_different_onchain_tx(
+            compatible: list[tuple[Mapping[str, Any], str]] = []
+            exact: list[tuple[Mapping[str, Any], str]] = []
+            for inbound in available:
+                inbound_amount_msat = int(_get(inbound, "amount") or 0)
+                if not _amounts_compatible(inbound_amount_msat, owned_amount_msat):
+                    continue
+                inbound_scope = onchain_transfer_scope(inbound)
+                if (
+                    source_scope is not None
+                    and inbound_scope is not None
+                    and source_scope != inbound_scope
+                ):
+                    continue
+                if _is_provably_different_onchain_tx(
                     _get(inbound, "external_id"), txid
-                )
-            ]
-            same_txid = [
-                inbound
-                for inbound in available
-                if normalize_group_txid(str(_get(inbound, "external_id") or ""))
-                == normalize_group_txid(txid)
-                and _amounts_compatible(
-                    int(_get(inbound, "amount") or 0), owned_amount_msat
-                )
-            ]
-            candidates = same_txid or compatible
+                ):
+                    continue
+
+                # ``exact`` is deliberately a whole-row statement: accepting a
+                # transaction-pair link consumes both real rows.  A graph output
+                # that merely resembles one provider/import row by amount is still
+                # valuable review evidence, but it cannot prove that row is the
+                # complete destination leg.  Require the source graph, canonical
+                # chain/network/txid equality, and exact coverage of both rows.
+                confidence = "strong"
+                if (
+                    parsed is not None
+                    and reason != "ownership_transfer_source_ambiguous"
+                    and source_scope is not None
+                    and inbound_scope == source_scope
+                    and int(_get(source, "amount") or 0) == owned_amount_msat
+                    and inbound_amount_msat == owned_amount_msat
+                ):
+                    confidence = "exact"
+                    exact.append((inbound, confidence))
+                else:
+                    compatible.append((inbound, confidence))
+            candidates = exact or compatible
             if not candidates:
                 continue
             conflict_set_id = (
                 f"ownership-review:{source_id}:{destination_wallet_id}"
             )
-            for inbound in candidates:
+            for inbound, confidence in candidates:
                 proofs.append(
                     OwnershipReviewProof(
                         out_row=source,
@@ -394,6 +433,7 @@ def derive_ownership_review_proofs(
                         owned_amount_msat=owned_amount_msat,
                         reason=reason,
                         conflict_set_id=conflict_set_id,
+                        confidence=confidence,
                         conflict_size=len(candidates),
                     )
                 )
@@ -426,8 +466,48 @@ def derive_ownership_transfers(
     """
     result = OwnershipDeriveResult()
     if index is None:
+        # The journal skips building the descriptor ownership index for a
+        # profile whose imports contain no vout graph at all.  Different wallet
+        # rows still prove that the receipt is profile-owned, and Liquid's
+        # separately recorded miner fee makes any amount shortfall unsafe to
+        # auto-pair.  Preserve that blocker even in the index-free fast path.
+        for row in rows:
+            if (
+                _get(row, "direction") != "outbound"
+                or not _row_is_liquid(row)
+                or str(_get(row, "id")) in already_paired_ids
+            ):
+                continue
+            row_scope = onchain_transfer_scope(row)
+            if row_scope is None:
+                continue
+            same_tx_ins = [
+                candidate
+                for candidate in rows
+                if _get(candidate, "direction") == "inbound"
+                and str(_get(candidate, "wallet_id")) != str(_get(row, "wallet_id"))
+                and str(_get(candidate, "asset") or "").upper()
+                == str(_get(row, "asset") or "").upper()
+                and onchain_transfer_scope(candidate) == row_scope
+            ]
+            owned_receipts_msat = sum(
+                int(_get(candidate, "amount") or 0) for candidate in same_tx_ins
+            )
+            if same_tx_ins and owned_receipts_msat != int(_get(row, "amount") or 0):
+                _block_source(
+                    result,
+                    row,
+                    "liquid_transfer_graph_incomplete",
+                    {
+                        "required_for": "ownership_transfer_review",
+                        "wallet": _get(row, "wallet_label") or _get(row, "wallet_id"),
+                        "asset": _get(row, "asset"),
+                        "external_id": _get(row, "external_id"),
+                        "row_amount_msat": int(_get(row, "amount") or 0),
+                        "owned_receipts_msat": owned_receipts_msat,
+                    },
+                )
         return result
-
     inbound_by_wallet: dict[str, list[Mapping[str, Any]]] = {}
     for row in rows:
         if _get(row, "direction") != "inbound":
@@ -439,8 +519,9 @@ def derive_ownership_transfers(
             continue
         inbound_by_wallet.setdefault(str(_get(row, "wallet_id")), []).append(row)
     consumed_in_ids: set[str] = set()
+    parsed_by_row_id = _profile_parsed_transactions(rows, index)
     parsed_by_out_id: dict[str, Optional[dict[str, Any]]] = {}
-    source_groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    source_groups: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = {}
     for row in rows:
         if _get(row, "direction") != "outbound":
             continue
@@ -449,15 +530,12 @@ def derive_ownership_transfers(
             continue
         if int(_get(row, "amount") or 0) <= 0:
             continue
-        parsed = _parse_onchain_tx(_get(row, "raw_json"))
+        parsed = parsed_by_row_id.get(source_id)
         parsed_by_out_id[source_id] = parsed
-        group_txid = (parsed or {}).get("txid") or _get(row, "external_id")
-        if not group_txid:
+        scope = _ownership_onchain_scope(row, index=index, parsed=parsed)
+        if parsed is None or scope is None:
             continue
-        source_groups.setdefault(
-            (normalize_group_txid(str(group_txid)), _get(row, "asset")),
-            [],
-        ).append(row)
+        source_groups.setdefault(scope, []).append(row)
     duplicate_source_groups = {
         key: group for key, group in source_groups.items() if len(group) > 1
     }
@@ -474,36 +552,118 @@ def derive_ownership_transfers(
             continue
         parsed = parsed_by_out_id.get(source_id)
         if parsed is None:
+            # A graphless Liquid 1:1 row is safe as a MOVE only when its
+            # non-fee amount exactly equals the owned receipt.  Any shortfall
+            # could be an external payment and must never be relabelled as a
+            # transfer fee merely because the txid matches.
+            if _row_is_liquid(row):
+                row_scope = onchain_transfer_scope(row)
+                same_tx_ins = [
+                    candidate
+                    for candidate in rows
+                    if _get(candidate, "direction") == "inbound"
+                    and str(_get(candidate, "wallet_id"))
+                    != str(_get(row, "wallet_id"))
+                    and str(_get(candidate, "asset") or "").upper()
+                    == str(_get(row, "asset") or "").upper()
+                    and row_scope is not None
+                    and onchain_transfer_scope(candidate) == row_scope
+                ]
+                if same_tx_ins and sum(
+                    int(_get(candidate, "amount") or 0)
+                    for candidate in same_tx_ins
+                ) != int(_get(row, "amount") or 0):
+                    _block_source(
+                        result,
+                        row,
+                        "liquid_transfer_graph_incomplete",
+                        {
+                            "required_for": "ownership_transfer_review",
+                            "wallet": _get(row, "wallet_label") or _get(row, "wallet_id"),
+                            "asset": _get(row, "asset"),
+                            "external_id": _get(row, "external_id"),
+                            "row_amount_msat": int(_get(row, "amount") or 0),
+                            "owned_receipts_msat": sum(
+                                int(_get(candidate, "amount") or 0)
+                                for candidate in same_tx_ins
+                            ),
+                        },
+                    )
             continue
+        group_key = _ownership_onchain_scope(row, index=index, parsed=parsed)
+        if group_key is None:
+            # A readable payload whose transaction identity is only a provider
+            # record id is useful review evidence, but not an automatic L1 MOVE.
+            continue
+        physical_scope = (group_key[0], group_key[1])
         source_wallet_id = str(_get(row, "wallet_id"))
-        # Constrain ownership to the source's own chain/network. The same
-        # scriptpubkey hex is shared by mainnet and testnet siblings of one key
-        # (and by a reused-key Liquid wallet), so an unfiltered script match can
-        # route a real BTC payment into a wrong-chain wallet as a phantom MOVE.
-        source_chain_network = _source_chain_network(
-            parsed["inputs"], index, source_wallet_id
-        )
+        component_inputs, component_inputs_complete = _component_inputs(parsed, row)
+        if parsed.get("evidence_conflicts") or not component_inputs_complete:
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_asset_evidence_incomplete",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "evidence_conflicts": list(parsed.get("evidence_conflicts") or ()),
+                },
+            )
+            continue
+
+        # The canonical transaction group is authoritative.  Input ownership
+        # evidence may be missing for an old spent output, but evidence that is
+        # present must never point exclusively at another physical network.
+        # Failing closed here prevents a same-txid/outpoint collision from
+        # authorizing a carrying-value MOVE on the wrong chain.
+        if _source_input_scope_contradicts(
+            component_inputs,
+            index,
+            source_wallet_id,
+            physical_scope,
+        ):
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_source_ambiguous",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "canonical_chain": physical_scope[0],
+                    "canonical_network": physical_scope[1],
+                    "scope_conflict": True,
+                },
+            )
+            continue
 
         # Aggregate owned outputs per destination wallet — sync records one
         # inbound row per wallet per tx, so a wallet receiving two outputs in
         # the same tx must pair as a single leg of their combined value.
         by_dest: dict[str, dict[str, Any]] = {}
         ambiguous_output = False
+        incomplete_owned_output = False
         for output in parsed["outputs"]:
-            matches = index.lookup_script(output["script"])
-            if source_chain_network is not None:
-                matches = [
-                    match
-                    for match in matches
-                    if _norm_chain_network(match.chain, match.network)
-                    == source_chain_network
-                ]
+            matches = _matches_in_physical_scope(
+                index.lookup_script(output["script"]), physical_scope
+            )
             if not matches:
                 # External recipient, OP_RETURN, or a same-script-hex collision
                 # on another chain/network — never an owned leg; folded into the
                 # residual disposal.
                 continue
             owner_ids = {str(match.wallet_id) for match in matches}
+            asset_relation = _leg_asset_relation(output, parsed, row)
+            if asset_relation == "different":
+                continue
+            if asset_relation == "unknown" or output.get("value_sats") is None:
+                # Public script ownership says this is ours, but the profile
+                # lacks the value/asset needed to conserve this component.
+                incomplete_owned_output = True
+                break
             if source_wallet_id in owner_ids:
                 # The source wallet also owns this script -> change back to self.
                 # (Matches the sync amount model, which excludes change.)
@@ -522,6 +682,20 @@ def derive_ownership_transfers(
             )
             slot["value_sats"] += int(output["value_sats"])
             slot["min_n"] = min(slot["min_n"], output["n"])
+        if incomplete_owned_output:
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_asset_evidence_incomplete",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "missing": "owned_output_value_or_asset",
+                },
+            )
+            continue
         if ambiguous_output:
             _block_source(
                 result,
@@ -538,7 +712,11 @@ def derive_ownership_transfers(
         if not by_dest:
             continue  # ordinary outbound payment — leave on the disposal path
         if not _inputs_are_single_source_or_recorded_source(
-            parsed["inputs"], index, source_wallet_id, row
+            component_inputs,
+            index,
+            source_wallet_id,
+            row,
+            physical_scope=physical_scope,
         ):
             _block_source(
                 result,
@@ -552,10 +730,6 @@ def derive_ownership_transfers(
                 },
             )
             continue
-        group_key = (
-            normalize_group_txid(str(parsed.get("txid") or _get(row, "external_id"))),
-            _get(row, "asset"),
-        )
         duplicate_group = duplicate_source_groups.get(group_key)
         if duplicate_group is not None:
             _block_source(
@@ -576,8 +750,38 @@ def derive_ownership_transfers(
         source_amount_msat = int(_get(row, "amount") or 0)
         source_fee_msat = int(_get(row, "fee") or 0)
         source_total_msat = source_amount_msat
-        if not _get(row, "amount_includes_fee"):
+        fee_inclusive = bool(_get(row, "amount_includes_fee"))
+        exact_folded_fee_msat: int | None = None
+        if fee_inclusive:
+            exact_folded_fee_msat = exact_onchain_fee_msat_from_parsed(
+                parsed, asset=str(_get(row, "asset") or "")
+            )
+            source_fee_msat = exact_folded_fee_msat or 0
+        else:
             source_total_msat += source_fee_msat
+        conserves, conservation_detail = _liquid_source_conserves(
+            parsed,
+            row,
+            index,
+            source_wallet_id,
+            component_inputs,
+            source_total_msat,
+            physical_scope,
+        )
+        if not conserves:
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_conservation_mismatch",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    **conservation_detail,
+                },
+            )
+            continue
         legs_value_msat = sum(slot["value_sats"] * SATS_TO_MSAT for slot in by_dest.values())
         # The owned legs cannot exceed what the row says left the wallet. Some
         # Core rows carry a net amount (owned outputs minus fee) plus a fee
@@ -600,7 +804,43 @@ def derive_ownership_transfers(
             )
             continue
 
-        txid = str(parsed.get("txid") or _get(row, "external_id") or source_id)
+        folded_gap_msat = max(0, source_total_msat - legs_value_msat)
+        if fee_inclusive and folded_gap_msat > 0:
+            if exact_folded_fee_msat is None:
+                _block_source(
+                    result,
+                    row,
+                    "ownership_transfer_fee_evidence_incomplete",
+                    {
+                        "required_for": "complete_transfer_component",
+                        "wallet": _get(row, "wallet_label") or source_wallet_id,
+                        "asset": _get(row, "asset"),
+                        "external_id": _get(row, "external_id"),
+                        "folded_gap_msat": folded_gap_msat,
+                        "missing": "exact_network_fee",
+                    },
+                )
+                continue
+            if exact_folded_fee_msat > folded_gap_msat:
+                _block_source(
+                    result,
+                    row,
+                    "ownership_transfer_conservation_mismatch",
+                    {
+                        "required_for": "complete_transfer_component",
+                        "wallet": _get(row, "wallet_label") or source_wallet_id,
+                        "asset": _get(row, "asset"),
+                        "external_id": _get(row, "external_id"),
+                        "folded_gap_msat": folded_gap_msat,
+                        "exact_network_fee_msat": exact_folded_fee_msat,
+                    },
+                )
+                continue
+
+        # ``parsed.txid`` may retain a provider/import label while the canonical
+        # external id supplied the validated physical scope. Every automatic id
+        # and destination reuse decision must use that canonical scope member.
+        txid = group_key[2]
         transfer_group_id = f"owned-derive:{txid}" if len(by_dest) > 1 else None
         fee_budget_msat = min(
             source_fee_msat,
@@ -634,6 +874,7 @@ def derive_ownership_transfers(
                 consumed_in_ids,
                 already_paired_ids,
                 asset=_get(row, "asset"),
+                onchain_scope=group_key,
             )
             if decision == "decline":
                 # The destination has an ambiguous match (>=2 equal-value
@@ -726,8 +967,9 @@ def derive_recorded_fanout_transfers(
     ``vin``/``vout``). Liquid output amounts are confidential, so a Liquid spend
     carries no per-output graph — and a CSV import may carry none either. But
     when every leg of the fan-out *was* synced, the rows themselves are enough:
-    a group of rows sharing one ``(external_id, asset)`` across two or more of
-    the profile's wallets is, by construction, all owned, and the sync amount
+    a group of rows sharing one canonical ``(chain, network, txid, asset)``
+    scope across two or more profile wallets is, by construction, all owned,
+    and the sync amount
     model conserves value (an outbound's ``amount`` excludes change and the fee,
     so ``out.amount == sum(in.amount)`` for a pure fan-out on both Bitcoin and
     Liquid). ``detect_intra_transfers`` only pairs the clean 1-out/1-in shape, so
@@ -749,23 +991,16 @@ def derive_recorded_fanout_transfers(
     fan-out is not decomposed twice.
     """
     result = OwnershipDeriveResult()
-    groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    groups: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = {}
     for row in rows:
-        external_id = _get(row, "external_id")
-        if not external_id:
+        scope = onchain_transfer_scope(row)
+        if scope is None:
             continue
         if str(_get(row, "id")).startswith(_SYNTHETIC_ID_PREFIXES):
             continue
-        # Normalize txid casing so a source synced lowercase and a destination
-        # imported uppercase (CSV) land in the same group — matching every other
-        # self-transfer path (detect_intra_transfers, _owned_fanout_row_ids,
-        # derive_multi_source_consolidations). Without this a mixed-case fan-out
-        # the decomposer should split is instead stuck in the fan-out quarantine.
-        groups.setdefault(
-            (normalize_group_txid(str(external_id)), _get(row, "asset")), []
-        ).append(row)
+        groups.setdefault(scope, []).append(row)
 
-    for (external_id, asset), group in groups.items():
+    for (_chain, _network, txid, asset), group in groups.items():
         # Count the group's TRUE source rows first — every positive outbound,
         # paired or not. The consolidation guard must reflect how many wallets
         # actually funded the spend; filtering already_paired_ids first would let
@@ -805,7 +1040,7 @@ def derive_recorded_fanout_transfers(
             continue  # a destination was not synced — amounts don't conserve
 
         out_fee = int(_get(out_row, "fee") or 0)
-        transfer_group_id = f"recorded-fanout:{external_id}"
+        transfer_group_id = f"recorded-fanout:{txid}"
         legs = sorted(
             dest_ins,
             key=lambda row: (int(_get(row, "amount") or 0), str(_get(row, "id"))),
@@ -822,8 +1057,8 @@ def derive_recorded_fanout_transfers(
                 out_row,
                 amount=leg_msat,
                 fee=out_fee if position == 0 else 0,
-                row_id=f"recorded-fanout:{external_id}:out:{_get(in_row, 'id')}",
-                external_id=f"recorded-fanout:{external_id}:out:{_get(in_row, 'id')}",
+                row_id=f"recorded-fanout:{txid}:out:{_get(in_row, 'id')}",
+                external_id=f"recorded-fanout:{txid}:out:{_get(in_row, 'id')}",
                 kind="self_transfer_out",
                 journal_transaction_id=str(_get(out_row, "id")),
             )
@@ -888,10 +1123,10 @@ def derive_multi_source_consolidations(
       or more destinations) likewise.
     * **All inputs owned by the contributing wallets.** A foreign input
       (payjoin/coinjoin, unwatched coins) makes the amount/fee math unreliable.
-    * **Readable esplora graph + a single shared fee.** Liquid (confidential
-      outputs) and graphless CSV imports parse to ``None`` and are skipped; a
-      fee that differs across contributors means at least one row is not the
-      node's whole-tx fee, so decline.
+    * **Readable locally-valued graph + a single shared fee.** Bitcoin uses its
+      ordinary graph; Liquid merges the complementary legs persisted by each
+      wallet. Graphless CSV imports are skipped. A fee that differs across
+      contributors means at least one row is not the whole-tx fee, so decline.
     * **Exact conservation.** A mismatch means a sync gap or stale graph.
 
     Runs *before* :func:`derive_ownership_transfers`; the caller must feed every
@@ -902,19 +1137,20 @@ def derive_multi_source_consolidations(
     result = OwnershipDeriveResult()
     if index is None:
         return result
+    parsed_by_row_id = _profile_parsed_transactions(rows, index)
 
-    groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    groups: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = {}
     for row in rows:
-        external_id = _get(row, "external_id")
-        if not external_id:
+        parsed = parsed_by_row_id.get(str(_get(row, "id")))
+        scope = _ownership_onchain_scope(row, index=index, parsed=parsed)
+        if scope is None:
             continue
         if str(_get(row, "id")).startswith(_SYNTHETIC_ID_PREFIXES):
             continue
-        groups.setdefault(
-            (normalize_group_txid(str(external_id)), _get(row, "asset")), []
-        ).append(row)
+        groups.setdefault(scope, []).append(row)
 
-    for (_txid_key, asset), group in groups.items():
+    for (_chain, _network, txid_key, asset), group in groups.items():
+        physical_scope = (_chain, _network)
         senders = [
             row
             for row in group
@@ -930,31 +1166,40 @@ def derive_multi_source_consolidations(
 
         parsed = None
         for row in senders:
-            parsed = _parse_onchain_tx(_get(row, "raw_json"))
+            parsed = parsed_by_row_id.get(str(_get(row, "id")))
             if parsed is not None:
                 break
         if parsed is None:
-            continue  # Liquid / CSV — no readable graph; leave to quarantine
+            continue  # CSV / legacy graphless record — leave to quarantine
+        component_inputs, component_complete = _component_inputs(parsed, senders[0])
+        if not component_complete or parsed.get("evidence_conflicts"):
+            continue
 
         fees = {int(_get(row, "fee") or 0) for row in senders}
         if len(fees) != 1:
             continue  # contributors disagree on the fee — not all the node's
         fee = next(iter(fees))
 
-        chain_network = _source_chain_network(
-            parsed["inputs"], index, str(_get(senders[0], "wallet_id"))
-        )
         dest_value: dict[str, int] = {}
         external_sats = 0
         ambiguous = False
         for output in parsed["outputs"]:
-            matches = index.lookup_script(output["script"])
-            if chain_network is not None:
-                matches = [
-                    match
-                    for match in matches
-                    if _norm_chain_network(match.chain, match.network) == chain_network
-                ]
+            matches = _matches_in_physical_scope(
+                index.lookup_script(output["script"]), physical_scope
+            )
+            relation = _leg_asset_relation(output, parsed, senders[0])
+            if relation == "different":
+                continue
+            if relation == "unknown":
+                # The confidential output may carry this component.  A pure
+                # N->1 consolidation cannot be proven until its asset is known.
+                ambiguous = True
+                break
+            if output.get("role") == "fee":
+                continue
+            if output.get("value_sats") is None:
+                ambiguous = True
+                break
             if not matches:
                 external_sats += int(output["value_sats"])
                 continue
@@ -976,11 +1221,19 @@ def derive_multi_source_consolidations(
         out_c_msat = out_c_sats * SATS_TO_MSAT
 
         input_owner_ids = set().union(
-            *(_input_owner_ids(index, entry) for entry in parsed["inputs"])
+            *(
+                _input_owner_ids(index, entry, physical_scope=physical_scope)
+                for entry in component_inputs
+            )
         )
         if not sender_wallets <= input_owner_ids:
             continue  # every claimed sender must actually fund at least one input
-        if not _inputs_owned_by(parsed["inputs"], index, sender_wallets):
+        if not _inputs_owned_by(
+            component_inputs,
+            index,
+            sender_wallets,
+            physical_scope=physical_scope,
+        ):
             continue  # a foreign input makes the recorded amounts unreliable
 
         n = len(senders)
@@ -991,7 +1244,7 @@ def derive_multi_source_consolidations(
         # Destination-receipt reconciliation. The legs credit ``out_C`` to the
         # destination, so any *existing* recorded receipt of these same coins
         # must be removed to avoid double-counting. That is only safe when the
-        # receipt sits in this spend's own (external_id, asset) group — then it
+        # receipt sits in this spend's own canonical transaction group — then it
         # is unambiguously this transaction and we drop it below. Two cases force
         # a decline back to the single-source deriver's conservative block:
         #   * a same-group destination receipt whose recorded value disagrees
@@ -1023,13 +1276,11 @@ def derive_multi_source_consolidations(
         # recorded outside the window (double-count). An unrelated deposit of a
         # different magnitude — at any time — must not look like this receipt.
         # Compare against the PARSED graph txid, not the group key: senders may be
-        # grouped by an imported provider id (`_txid_key`) while the destination
-        # recorded its receipt under the real on-chain txid, so keying on
-        # `_txid_key` would treat the real receipt as a "different" tx and
-        # double-count it. Skip receipts already handled elsewhere
+        # Compare to the parsed graph txid as a defense in depth; provider row
+        # ids never define this automatic group. Skip receipts handled elsewhere
         # (`already_paired_ids`) — an unrelated, separately-paired same-amount
         # deposit must not false-decline this consolidation.
-        graph_txid = normalize_group_txid(str(parsed.get("txid") or _txid_key))
+        graph_txid = canonical_txid(parsed.get("txid")) or txid_key
         has_external_receipt = any(
             _get(r, "direction") == "inbound"
             and str(_get(r, "wallet_id")) == dest_wallet_id
@@ -1062,7 +1313,7 @@ def derive_multi_source_consolidations(
             key=lambda row: (-int(_get(row, "amount") or 0), str(_get(row, "wallet_id"))),
         )
         bearer_id = str(_get(senders_sorted[0], "id"))
-        txid = str(parsed.get("txid") or _txid_key)
+        txid = str(canonical_txid(parsed.get("txid")) or txid_key)
         transfer_group_id = f"multi-consol:{txid}"
 
         leg_pairs: list[dict[str, Any]] = []
@@ -1151,53 +1402,115 @@ def graph_partial_payment_out_ids(
       that owned-to-others value — i.e. the remainder left to a non-owned
       recipient.
 
-    Graphless rows (CSV / Liquid) and pure self-transfers (no external residual)
-    are left to ``detect_intra_transfers``.
+    Pure self-transfers are left to ``detect_intra_transfers``. A graphless
+    Liquid shortfall is withheld even without an ownership index because its
+    miner fee is already stored separately; restoring it would hide an external
+    payment as a fee.
     """
-    if index is None:
-        return set()
     flagged: set[str] = set()
     for pair in pairs:
         out_row = pair.get("out") if hasattr(pair, "get") else pair["out"]
+        in_row = pair.get("in") if hasattr(pair, "get") else pair["in"]
         if out_row is None:
             continue
-        parsed = _parse_onchain_tx(_get(out_row, "raw_json"))
+        # On Liquid, amount excludes the separately recorded network fee.  A
+        # smaller owned receipt therefore proves that something besides the
+        # fee left the wallet, even when legacy raw_json lacks valued outputs.
+        if (
+            _row_is_liquid(out_row)
+            and in_row is not None
+            and int(_get(out_row, "amount") or 0)
+            != int(_get(in_row, "amount") or 0)
+        ):
+            flagged.add(str(_get(out_row, "id")))
+            continue
+        if index is None:
+            continue
+        observations = [
+            parsed
+            for candidate in (out_row, in_row)
+            if candidate is not None
+            and (
+                parsed := _parse_onchain_tx(
+                    _get(candidate, "raw_json"), allow_partial=True
+                )
+            )
+            is not None
+        ]
+        parsed = merge_ownership_txs(observations)
         if parsed is None:
             continue
+        own_parsed = _parse_onchain_tx(_get(out_row, "raw_json"), allow_partial=True)
+        if own_parsed is not None:
+            parsed["component"] = dict(own_parsed.get("component") or {})
+        canonical_scope = _ownership_onchain_scope(
+            out_row,
+            index=index,
+            parsed=own_parsed or parsed,
+        )
+        if canonical_scope is None:
+            continue
+        physical_scope = (canonical_scope[0], canonical_scope[1])
         source_wallet_id = str(_get(out_row, "wallet_id"))
+        component_inputs, component_complete = _component_inputs(parsed, out_row)
+        if not component_complete or parsed.get("evidence_conflicts"):
+            flagged.add(str(_get(out_row, "id")))
+            continue
         if not _inputs_are_single_source_or_recorded_source(
-            parsed["inputs"], index, source_wallet_id, out_row
+            component_inputs,
+            index,
+            source_wallet_id,
+            out_row,
+            physical_scope=physical_scope,
         ):
             continue
-        chain_network = _source_chain_network(
-            parsed["inputs"], index, source_wallet_id
-        )
         owned_to_others_sats = 0
         owned_dest_wallets: set[str] = set()
         for output in parsed["outputs"]:
-            matches = index.lookup_script(output["script"])
-            if chain_network is not None:
-                matches = [
-                    match
-                    for match in matches
-                    if _norm_chain_network(match.chain, match.network) == chain_network
-                ]
+            matches = _matches_in_physical_scope(
+                index.lookup_script(output["script"]), physical_scope
+            )
             if not matches:
                 continue  # external recipient / OP_RETURN
             owner_ids = {str(match.wallet_id) for match in matches}
+            relation = _leg_asset_relation(output, parsed, out_row)
+            if relation == "different":
+                continue
+            if relation == "unknown" or output.get("value_sats") is None:
+                flagged.add(str(_get(out_row, "id")))
+                owned_dest_wallets.add("__incomplete__")
+                continue
             if source_wallet_id in owner_ids:
                 continue  # change back to self
             owned_to_others_sats += int(output["value_sats"])
             owned_dest_wallets |= owner_ids
         owned_to_others_msat = owned_to_others_sats * SATS_TO_MSAT
         amount_msat = int(_get(out_row, "amount") or 0)
+        principal_capacity_msat = amount_msat
+        if _get(out_row, "amount_includes_fee"):
+            exact_fee_msat = exact_onchain_fee_msat_from_parsed(
+                parsed,
+                asset=str(_get(out_row, "asset") or ""),
+            )
+            if exact_fee_msat is None:
+                # The folded gap could be either the miner fee or an external
+                # recipient.  Give the evidence-aware deriver first refusal; if
+                # it cannot prove the fee, the restored pair fails closed in tax
+                # normalization instead of absorbing the gap.
+                if amount_msat != owned_to_others_msat:
+                    flagged.add(str(_get(out_row, "id")))
+                continue
+            principal_capacity_msat -= exact_fee_msat
         # Withhold so the ownership deriver re-derives this spend when EITHER it
         # also paid a non-owned recipient (external residual) OR it fanned out to
         # two or more owned wallets. In the fan-out case detect_intra_transfers
         # pairs only the single destination that recorded a same-txid inbound,
         # leaving the other owned legs to be absorbed as a (taxable) MOVE fee —
         # so the deriver must decompose the full 1->N fan-out instead.
-        external_residual = owned_to_others_msat > 0 and amount_msat > owned_to_others_msat
+        external_residual = (
+            owned_to_others_msat > 0
+            and principal_capacity_msat > owned_to_others_msat
+        )
         if external_residual or len(owned_dest_wallets) >= 2:
             flagged.add(str(_get(out_row, "id")))
     return flagged
@@ -1216,34 +1529,75 @@ def graph_multi_owned_destination_out_ids(
     inflating holdings. Single-owned-destination partial payments keep the old
     restore path.
     """
-    if index is None:
-        return set()
     flagged: set[str] = set()
     for pair in pairs:
         out_row = pair.get("out") if hasattr(pair, "get") else pair["out"]
+        in_row = pair.get("in") if hasattr(pair, "get") else pair["in"]
         if out_row is None:
             continue
-        parsed = _parse_onchain_tx(_get(out_row, "raw_json"))
+        # Also mark an unsafe graphless Liquid shortfall.  The engine uses this
+        # set as its "do not restore the original 1:1 pair" guard; restoring it
+        # would swallow the shortfall as an implied fee.
+        if (
+            _row_is_liquid(out_row)
+            and in_row is not None
+            and int(_get(out_row, "amount") or 0)
+            != int(_get(in_row, "amount") or 0)
+        ):
+            flagged.add(str(_get(out_row, "id")))
+            continue
+        if index is None:
+            continue
+        observations = [
+            parsed
+            for candidate in (out_row, in_row)
+            if candidate is not None
+            and (
+                parsed := _parse_onchain_tx(
+                    _get(candidate, "raw_json"), allow_partial=True
+                )
+            )
+            is not None
+        ]
+        parsed = merge_ownership_txs(observations)
         if parsed is None:
             continue
+        own_parsed = _parse_onchain_tx(_get(out_row, "raw_json"), allow_partial=True)
+        if own_parsed is not None:
+            parsed["component"] = dict(own_parsed.get("component") or {})
+        canonical_scope = _ownership_onchain_scope(
+            out_row,
+            index=index,
+            parsed=own_parsed or parsed,
+        )
+        if canonical_scope is None:
+            continue
+        physical_scope = (canonical_scope[0], canonical_scope[1])
         source_wallet_id = str(_get(out_row, "wallet_id"))
+        component_inputs, component_complete = _component_inputs(parsed, out_row)
+        if not component_complete or parsed.get("evidence_conflicts"):
+            flagged.add(str(_get(out_row, "id")))
+            continue
         if not _inputs_are_single_source_or_recorded_source(
-            parsed["inputs"], index, source_wallet_id, out_row
+            component_inputs,
+            index,
+            source_wallet_id,
+            out_row,
+            physical_scope=physical_scope,
         ):
             continue
-        chain_network = _source_chain_network(
-            parsed["inputs"], index, source_wallet_id
-        )
         owned_dest_wallets: set[str] = set()
         for output in parsed["outputs"]:
-            matches = index.lookup_script(output["script"])
-            if chain_network is not None:
-                matches = [
-                    match
-                    for match in matches
-                    if _norm_chain_network(match.chain, match.network) == chain_network
-                ]
+            matches = _matches_in_physical_scope(
+                index.lookup_script(output["script"]), physical_scope
+            )
             owner_ids = {str(match.wallet_id) for match in matches}
+            relation = _leg_asset_relation(output, parsed, out_row)
+            if relation == "different":
+                continue
+            if relation == "unknown" or output.get("value_sats") is None:
+                flagged.add(str(_get(out_row, "id")))
+                continue
             if source_wallet_id in owner_ids:
                 continue
             if len(owner_ids) == 1:
@@ -1265,46 +1619,48 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     confirmed it is the on-chain winner and the others are losers; otherwise (none
     or several confirmed) every conflicting txid is returned so the whole conflict
     surfaces for review rather than being mis-booked. Returns ALL rows (out and in
-    legs) of every loser txid, identified by normalized ``external_id``.
+    legs) of every losing physical transaction. Provider/import ids without a
+    canonical chain identity never participate.
 
     This is the self-transfer-scoped slice of the broader RBF/reorg canonicalization
     pass; it is purely a quarantine signal and never books anything.
     """
-    row_txid: dict[str, str] = {}
-    txid_confirmed: dict[str, bool] = {}
-    outpoint_txids: dict[str, set[str]] = {}
+    PhysicalKey = tuple[str, str, str]
+    row_txid: dict[str, PhysicalKey] = {}
+    txid_confirmed: dict[PhysicalKey, bool] = {}
+    outpoint_txids: dict[tuple[str, str, str], set[PhysicalKey]] = {}
     for row in rows:
-        parsed = _parse_onchain_tx(_get(row, "raw_json"))
+        parsed = _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
         # A synthetic split / direct-payout leg keeps the REAL transaction in
         # raw_json but renames external_id (e.g. "cross-split:..."), so prefer the
         # parsed graph txid and fall back to external_id. Keying every leg this way
         # ensures a losing transaction's synthetic legs are quarantined too — not
         # just the rows whose external_id literally equals the txid.
-        txid = normalize_group_txid(
-            str((parsed.get("txid") if parsed else None) or _get(row, "external_id") or "")
-        )
-        if not txid:
+        scope = _physical_onchain_scope(row)
+        if scope is None:
             continue
-        row_txid[str(_get(row, "id"))] = txid
+        physical = scope[:3]
+        row_txid[str(_get(row, "id"))] = physical
         # Confirmation can land on ANY leg of a transaction — when wallets sync at
         # different times a destination inbound may be confirmed while the source's
         # outbound row is still unconfirmed — so fold every row's state into the
         # per-txid confirmation, not just outbound rows.
-        txid_confirmed[txid] = txid_confirmed.get(txid, False) or bool(
+        txid_confirmed[physical] = txid_confirmed.get(physical, False) or bool(
             _get(row, "confirmed_at")
         )
-        if parsed is not None:
-            # Collect input outpoints from ANY leg carrying the graph, not just
-            # outbound rows: a conflict whose loser was synced only as a
-            # destination INBOUND still has the full vin in its raw_json. Keying
-            # only off outbound rows would miss it and let the loser inbound book
-            # as a phantom acquisition.
-            for entry in parsed["inputs"]:
-                outpoint = entry.get("outpoint")
-                if outpoint:
-                    outpoint_txids.setdefault(outpoint, set()).add(txid)
+        # Collect input outpoints from ANY leg carrying the graph, not just
+        # outbound rows: a conflict whose loser was synced only as a
+        # destination INBOUND still has the full vin in its raw_json. Chain and
+        # network remain part of the key because identical transaction bytes can
+        # exist on two Bitcoin networks.
+        for entry in (parsed or {}).get("inputs", ()):
+            outpoint = _canonical_outpoint(entry.get("outpoint"))
+            if outpoint:
+                outpoint_txids.setdefault(
+                    (physical[0], physical[1], outpoint), set()
+                ).add(physical)
 
-    loser_txids: set[str] = set()
+    loser_txids: set[PhysicalKey] = set()
     for txids in outpoint_txids.values():
         if len(txids) < 2:
             continue  # one transaction owns this outpoint — no conflict
@@ -1325,8 +1681,9 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     transactions out of tax booking until any synced leg proves confirmation.
     """
 
-    row_txid: dict[str, str] = {}
-    txid_state: dict[str, tuple[bool, bool]] = {}
+    PhysicalKey = tuple[str, str, str]
+    row_txid: dict[str, PhysicalKey] = {}
+    txid_state: dict[PhysicalKey, tuple[bool, bool]] = {}
     for row in rows:
         payload = stored_tx_mapping(_get(row, "raw_json"), allow_nested=True)
         if payload is None:
@@ -1336,14 +1693,13 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
             status.get("confirmed"), bool
         ):
             continue
-        txid = normalize_group_txid(
-            str(payload.get("txid") or _get(row, "external_id") or "")
-        )
-        if not txid:
+        scope = _physical_onchain_scope(row)
+        if scope is None:
             continue
-        row_txid[str(_get(row, "id"))] = txid
-        _explicit, confirmed = txid_state.get(txid, (False, False))
-        txid_state[txid] = (True, confirmed or bool(status["confirmed"]))
+        physical = scope[:3]
+        row_txid[str(_get(row, "id"))] = physical
+        _explicit, confirmed = txid_state.get(physical, (False, False))
+        txid_state[physical] = (True, confirmed or bool(status["confirmed"]))
     pending_txids = {
         txid
         for txid, (explicit, confirmed) in txid_state.items()
@@ -1352,17 +1708,317 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     # Include graphless sibling legs sharing the same txid once any leg supplied
     # the explicit mempool state.
     for row in rows:
-        txid = normalize_group_txid(str(_get(row, "external_id") or ""))
-        if txid in pending_txids:
-            row_txid[str(_get(row, "id"))] = txid
+        scope = _physical_onchain_scope(row)
+        if scope is not None and scope[:3] in pending_txids:
+            row_txid[str(_get(row, "id"))] = scope[:3]
     return {row_id for row_id, txid in row_txid.items() if txid in pending_txids}
 
 
 # -- internals --------------------------------------------------------------
 
 
+def _physical_onchain_scope(
+    row: Mapping[str, Any],
+) -> tuple[str, str, str, str] | None:
+    """Canonical physical scope, including synthetic rows' retained graph.
+
+    Synthetic journal rows correctly opt out of automatic transfer grouping:
+    they are allocations, not new observations. Conflict and pending safety is
+    different; every synthetic leg retaining a real anchor graph must be held
+    with that physical transaction. Re-evaluate only identity with a neutral id.
+    """
+
+    scope = onchain_transfer_scope(row)
+    if scope is not None:
+        return scope
+    if not str(_get(row, "id") or "").startswith(_SYNTHETIC_ID_PREFIXES):
+        return None
+    probe = dict(row)
+    probe["id"] = f"physical-anchor:{_get(row, 'id')}"
+    return onchain_transfer_scope(probe)
+
+
+def _canonical_outpoint(value: Any) -> str | None:
+    """Return ``<canonical txid>:<nonnegative vout>`` or ``None``."""
+
+    txid_text, separator, vout_text = str(value or "").strip().rpartition(":")
+    txid = canonical_txid(txid_text)
+    if not separator or txid is None:
+        return None
+    try:
+        vout = int(vout_text)
+    except (TypeError, ValueError):
+        return None
+    return f"{txid}:{vout}" if vout >= 0 else None
+
+
+def _parsed_chain_network_for_row(
+    parsed: Mapping[str, Any], index: Any, row: Mapping[str, Any]
+) -> Optional[tuple[str, str]]:
+    """Resolve an evidence scope without defaulting an unknown Liquid network."""
+
+    wallet_id = str(_get(row, "wallet_id") or "")
+    inferred = _source_chain_network(parsed.get("inputs") or (), index, wallet_id)
+    if inferred is None:
+        # An inbound-only observation may not know any prevout, but its owned
+        # destination script still stamps the correct chain/network.
+        output_scopes: set[tuple[str, str]] = set()
+        for output in parsed.get("outputs") or ():
+            for match in index.lookup_script(output.get("script")):
+                if str(match.wallet_id) == wallet_id:
+                    output_scopes.add(
+                        _norm_chain_network(match.chain, match.network)
+                    )
+        if len(output_scopes) == 1:
+            inferred = next(iter(output_scopes))
+
+    config = stored_tx_mapping(
+        _get(row, "config_json") or _get(row, "wallet_config_json")
+    ) or {}
+    raw_chains = [parsed.get("chain"), config.get("chain")]
+    explicit_chains: set[str] = set()
+    for value in raw_chains:
+        if not str(value or "").strip():
+            continue
+        try:
+            explicit_chains.add(normalize_chain(value))
+        except ValueError:
+            return None
+    if len(explicit_chains) > 1:
+        return None
+    explicit_chain = next(iter(explicit_chains), None)
+
+    network_chain = explicit_chain or (inferred[0] if inferred is not None else None)
+    if network_chain is None:
+        asset = str(_get(row, "asset") or "").strip().upper()
+        network_chain = "liquid" if asset in {"LBTC", "L-BTC"} else "bitcoin"
+    raw_networks = [parsed.get("network"), config.get("network")]
+    explicit_networks: set[str] = set()
+    for value in raw_networks:
+        if not str(value or "").strip():
+            continue
+        try:
+            explicit_networks.add(normalize_network(network_chain, value))
+        except ValueError:
+            return None
+    if len(explicit_networks) > 1:
+        return None
+    explicit_network = next(iter(explicit_networks), None)
+
+    if inferred is not None:
+        if explicit_chain is not None and explicit_chain != inferred[0]:
+            return None
+        if explicit_network is not None and explicit_network != inferred[1]:
+            return None
+        return inferred
+    if explicit_chain is not None and explicit_network is not None:
+        return explicit_chain, explicit_network
+    # Bitcoin's historical blank metadata means mainnet.  Liquid blanks are
+    # not defaulted here: an elementsregtest observation must never merge with
+    # liquidv1 solely because the txid happened to match.
+    if explicit_chain == "bitcoin":
+        return _norm_chain_network(explicit_chain, explicit_network)
+    return None
+
+
+def _profile_parsed_transactions(
+    rows: Sequence[Mapping[str, Any]], index: Any
+) -> dict[str, dict[str, Any]]:
+    """Merge per-wallet observations inside strict chain/network/txid scopes."""
+
+    parsed_rows: dict[str, dict[str, Any]] = {}
+    keys: dict[str, tuple[str, str, str]] = {}
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        row_id = str(_get(row, "id"))
+        parsed = _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
+        if parsed is None:
+            continue
+        scope = _ownership_onchain_scope(row, index=index, parsed=parsed)
+        if scope is None:
+            continue
+        parsed_rows[row_id] = parsed
+        key = (scope[0], scope[1], scope[2])
+        parsed["chain"], parsed["network"] = key[0], key[1]
+        keys[row_id] = key
+        groups.setdefault(key, []).append(parsed)
+    result: dict[str, dict[str, Any]] = {}
+    for row_id, parsed in parsed_rows.items():
+        key = keys.get(row_id)
+        if key is None:
+            result[row_id] = parsed
+            continue
+        # Put the row's own observation first so its per-asset ``component``
+        # metadata remains authoritative while legs are filled from siblings.
+        merged = merge_ownership_txs([parsed, *groups[key]]) or parsed
+        merged["component"] = dict(parsed.get("component") or {})
+        merged["chain"], merged["network"] = key[0], key[1]
+        result[row_id] = merged
+    return result
+
+
+def _ownership_onchain_scope(
+    row: Mapping[str, Any],
+    *,
+    index: Any,
+    parsed: Mapping[str, Any] | None = None,
+) -> tuple[str, str, str, str] | None:
+    """Canonical row scope, allowing the owned index to identify its network."""
+
+    parsed = parsed or _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
+    canonical_scope = onchain_transfer_scope(row)
+    if canonical_scope is not None:
+        return canonical_scope
+    if parsed is not None and index is not None:
+        raw_parsed_txid = str(parsed.get("txid") or "").strip()
+        parsed_txid = canonical_txid(raw_parsed_txid)
+        if raw_parsed_txid and parsed_txid is None:
+            return None
+        external_txid = canonical_txid(_get(row, "external_id"))
+        if parsed_txid and external_txid and parsed_txid != external_txid:
+            return None
+        txid = parsed_txid or external_txid
+        chain_network = _parsed_chain_network_for_row(parsed, index, row)
+        if txid is not None and chain_network is not None:
+            asset_id, display_asset = _component_asset(parsed, row)
+            normalized_display_asset = display_asset.replace("L-BTC", "LBTC")
+            if (
+                normalized_display_asset == "BTC"
+                and chain_network[0] != "bitcoin"
+            ) or (
+                normalized_display_asset == "LBTC"
+                and chain_network[0] != "liquid"
+            ):
+                return None
+            if chain_network[0] == "liquid":
+                if canonical_txid(asset_id) is None:
+                    return None
+                asset_identity = str(asset_id).lower()
+            else:
+                asset_identity = normalized_display_asset
+            return (chain_network[0], chain_network[1], txid, asset_identity)
+    return None
+
+
+def _component_asset(parsed: Mapping[str, Any], row: Mapping[str, Any]) -> tuple[str | None, str]:
+    component = parsed.get("component")
+    component = component if isinstance(component, Mapping) else {}
+    asset_id = str(component.get("asset_id") or "").strip().lower() or None
+    asset = str(component.get("asset") or _get(row, "asset") or "").strip().upper()
+    return asset_id, asset
+
+
+def _leg_asset_relation(
+    leg: Mapping[str, Any], parsed: Mapping[str, Any], row: Mapping[str, Any]
+) -> str:
+    """Return ``same``, ``different``, or ``unknown`` for one component leg."""
+
+    if str(parsed.get("chain") or "").lower() != "liquid":
+        return "same"
+    component_id, component_asset = _component_asset(parsed, row)
+    leg_id = str(leg.get("asset_id") or "").strip().lower() or None
+    leg_asset = str(leg.get("asset") or "").strip().upper()
+    if component_id is not None and leg_id is not None:
+        return "same" if component_id == leg_id else "different"
+    if component_id is not None:
+        return "unknown"
+    if component_asset and leg_asset:
+        return "same" if component_asset == leg_asset else "different"
+    return "unknown"
+
+
+def _component_inputs(
+    parsed: Mapping[str, Any], row: Mapping[str, Any]
+) -> tuple[list[Mapping[str, Any]], bool]:
+    inputs = list(parsed.get("inputs") or ())
+    if str(parsed.get("chain") or "").lower() != "liquid":
+        return inputs, True
+    selected: list[Mapping[str, Any]] = []
+    complete = True
+    for entry in inputs:
+        relation = _leg_asset_relation(entry, parsed, row)
+        if relation == "same":
+            selected.append(entry)
+        elif relation == "unknown":
+            # An unidentified confidential input might carry this component;
+            # excluding it would make per-asset conservation fictitious.
+            complete = False
+    return selected, complete and bool(selected)
+
+
+def _liquid_source_conserves(
+    parsed: Mapping[str, Any],
+    row: Mapping[str, Any],
+    index: Any,
+    source_wallet_id: str,
+    component_inputs: Sequence[Mapping[str, Any]],
+    source_total_msat: int,
+    physical_scope: tuple[str, str],
+) -> tuple[bool, dict[str, Any]]:
+    """Prove the wallet row's net outflow from historical valued Liquid legs."""
+
+    if str(parsed.get("chain") or "").lower() != "liquid":
+        return True, {}
+    if any(entry.get("value_sats") is None for entry in component_inputs):
+        return False, {"missing": "input_value_or_asset"}
+    input_sats = sum(int(entry["value_sats"]) for entry in component_inputs)
+    change_sats = 0
+    for output in parsed.get("outputs") or ():
+        owner_ids = {
+            str(match.wallet_id)
+            for match in _matches_in_physical_scope(
+                index.lookup_script(output.get("script")), physical_scope
+            )
+        }
+        if source_wallet_id not in owner_ids:
+            continue
+        relation = _leg_asset_relation(output, parsed, row)
+        if relation == "different":
+            continue
+        if relation == "unknown" or output.get("value_sats") is None:
+            return False, {"missing": "owned_change_value_or_asset"}
+        change_sats += int(output["value_sats"])
+    expected_msat = (input_sats - change_sats) * SATS_TO_MSAT
+    return expected_msat == source_total_msat, {
+        "input_sats": input_sats,
+        "change_sats": change_sats,
+        "expected_outflow_msat": expected_msat,
+        "row_total_outflow_msat": source_total_msat,
+    }
+
+
+def _raw_mapping(raw_json: Any) -> Mapping[str, Any]:
+    return stored_tx_mapping(raw_json) or {}
+
+
+def _row_is_liquid(row: Mapping[str, Any]) -> bool:
+    raw = _raw_mapping(_get(row, "raw_json"))
+    component = raw.get("component")
+    return (
+        str(raw.get("chain") or "").strip().lower() == "liquid"
+        or (isinstance(component, Mapping) and bool(component.get("asset_id")))
+        or str(_get(row, "asset") or "").strip().upper() in {"LBTC", "L-BTC"}
+    )
+
+
+def _matches_in_physical_scope(
+    matches: Sequence[Any], physical_scope: tuple[str, str]
+) -> list[Any]:
+    """Only ownership evidence from one canonical chain/network domain."""
+
+    return [
+        match
+        for match in matches
+        if _norm_chain_network(match.chain, match.network) == physical_scope
+    ]
+
+
 def _inputs_owned_by(
-    inputs: Sequence[Mapping[str, Any]], index: Any, owner_set: set[str]
+    inputs: Sequence[Mapping[str, Any]],
+    index: Any,
+    owner_set: set[str],
+    *,
+    physical_scope: tuple[str, str],
 ) -> bool:
     """True only when every input is owned, and owned solely by ``owner_set``.
 
@@ -1375,14 +2031,18 @@ def _inputs_owned_by(
     if not inputs:
         return False
     for entry in inputs:
-        owners = _input_owner_ids(index, entry)
+        owners = _input_owner_ids(index, entry, physical_scope=physical_scope)
         if not owners or not owners <= owner_set:
             return False
     return True
 
 
 def _inputs_are_single_source(
-    inputs: Sequence[Mapping[str, Any]], index: Any, source_wallet_id: str
+    inputs: Sequence[Mapping[str, Any]],
+    index: Any,
+    source_wallet_id: str,
+    *,
+    physical_scope: tuple[str, str],
 ) -> bool:
     """True only when the source wallet owns every input.
 
@@ -1396,7 +2056,7 @@ def _inputs_are_single_source(
     if not inputs:
         return False
     for entry in inputs:
-        owners = _input_owner_ids(index, entry)
+        owners = _input_owner_ids(index, entry, physical_scope=physical_scope)
         if not owners or source_wallet_id not in owners:
             return False
     return True
@@ -1407,6 +2067,8 @@ def _inputs_are_single_source_or_recorded_source(
     index: Any,
     source_wallet_id: str,
     row: Mapping[str, Any],
+    *,
+    physical_scope: tuple[str, str],
 ) -> bool:
     """Accept a single-input outbound row when historical input ownership is absent.
 
@@ -1417,7 +2079,12 @@ def _inputs_are_single_source_or_recorded_source(
     because the wallet was first inventoried after that output was already
     spent). Keep multi-input spends on the strict index-only path.
     """
-    if _inputs_are_single_source(inputs, index, source_wallet_id):
+    if _inputs_are_single_source(
+        inputs,
+        index,
+        source_wallet_id,
+        physical_scope=physical_scope,
+    ):
         return True
     if (
         len(inputs) != 1
@@ -1432,11 +2099,18 @@ def _inputs_are_single_source_or_recorded_source(
     prev_txid = str(outpoint).split(":", 1)[0].lower()
     return any(
         str(wallet_id) == source_wallet_id
-        for wallet_id, _wallet_label in index.txid_wallets.get(prev_txid, set())
+        for wallet_id, _wallet_label in _lookup_txid_wallets(
+            index, prev_txid, physical_scope=physical_scope
+        )
     )
 
 
-def _input_owner_ids(index: Any, entry: Mapping[str, Any]) -> set[str]:
+def _input_owner_ids(
+    index: Any,
+    entry: Mapping[str, Any],
+    *,
+    physical_scope: tuple[str, str],
+) -> set[str]:
     """All owned-wallet ids for an input (outpoint inventory wins; else script).
 
     The outpoint inventory is unambiguous (one wallet per UTXO); only the
@@ -1445,10 +2119,17 @@ def _input_owner_ids(index: Any, entry: Mapping[str, Any]) -> set[str]:
     """
     outpoint = entry.get("outpoint")
     if outpoint:
-        matches = _lookup_outpoint(index, outpoint)
+        matches = _lookup_outpoint(
+            index, outpoint, physical_scope=physical_scope
+        )
         if matches:
             return {str(match.wallet_id) for match in matches}
-    return {str(match.wallet_id) for match in index.lookup_script(entry.get("script"))}
+    return {
+        str(match.wallet_id)
+        for match in _matches_in_physical_scope(
+            index.lookup_script(entry.get("script")), physical_scope
+        )
+    }
 
 
 def _norm_chain_network(chain: Any, network: Any) -> tuple[str, str]:
@@ -1484,43 +2165,140 @@ def _source_chain_network(
 ) -> Optional[tuple[str, str]]:
     """Canonical ``(chain, network)`` of the source wallet, from its owned inputs.
 
-    Used to reject output matches on a different chain/network (the same
-    scriptpubkey hex is produced by mainnet/testnet siblings of one key, or a
-    reused-key Liquid wallet). Returns ``None`` when no input resolves to the
-    source wallet — the spend is then left to the single-source guard, which
-    blocks it, so no chain filtering is needed.
+    This is used only while recovering a scope for legacy graph rows that lack
+    explicit network metadata.  Multiple source scopes are ambiguous and return
+    ``None``; accounting paths with a canonical row group use that group directly.
     """
+    scopes: set[tuple[str, str]] = set()
     for entry in inputs:
+        matches: list[Any] = []
         outpoint = entry.get("outpoint")
         if outpoint:
-            for match in _lookup_outpoint(index, outpoint):
-                if str(match.wallet_id) == source_wallet_id:
-                    return _norm_chain_network(match.chain, match.network)
-        for match in index.lookup_script(entry.get("script")):
+            matches = _lookup_outpoint(index, outpoint)
+        if not matches:
+            matches = list(index.lookup_script(entry.get("script")))
+        for match in matches:
             if str(match.wallet_id) == source_wallet_id:
-                return _norm_chain_network(match.chain, match.network)
-    return None
+                scopes.add(_norm_chain_network(match.chain, match.network))
+    return next(iter(scopes)) if len(scopes) == 1 else None
 
 
-def _lookup_outpoint(index: Any, outpoint: Any) -> list[Any]:
+def _source_input_scope_contradicts(
+    inputs: Sequence[Mapping[str, Any]],
+    index: Any,
+    source_wallet_id: str,
+    physical_scope: tuple[str, str],
+) -> bool:
+    """Whether present source evidence points only outside ``physical_scope``.
+
+    Missing historical ownership remains eligible for the deliberately narrow
+    one-input recorded-source fallback.  Known ownership on another network is
+    different: it contradicts the canonical transaction group and must fail
+    closed instead of being treated as merely missing.
+    """
+
+    for entry in inputs:
+        matches: list[Any] = []
+        outpoint = entry.get("outpoint")
+        if outpoint:
+            matches = _lookup_outpoint(index, outpoint)
+        if not matches:
+            matches = list(index.lookup_script(entry.get("script")))
+        source_matches = [
+            match
+            for match in matches
+            if str(match.wallet_id) == source_wallet_id
+        ]
+        if source_matches and not _matches_in_physical_scope(
+            source_matches, physical_scope
+        ):
+            return True
+
+    if len(inputs) != 1 or not inputs[0].get("outpoint"):
+        return False
+    prev_txid = str(inputs[0]["outpoint"]).split(":", 1)[0].lower()
+    unscoped = _lookup_txid_wallets(index, prev_txid)
+    if not any(str(wallet_id) == source_wallet_id for wallet_id, _ in unscoped):
+        return False
+    scoped = _lookup_txid_wallets(
+        index, prev_txid, physical_scope=physical_scope
+    )
+    return not any(str(wallet_id) == source_wallet_id for wallet_id, _ in scoped)
+
+
+def _lookup_outpoint(
+    index: Any,
+    outpoint: Any,
+    *,
+    physical_scope: tuple[str, str] | None = None,
+) -> list[Any]:
     if hasattr(index, "lookup_outpoint"):
-        return list(index.lookup_outpoint(outpoint))
+        if physical_scope is None:
+            return list(index.lookup_outpoint(outpoint))
+        try:
+            return list(
+                index.lookup_outpoint(
+                    outpoint,
+                    chain=physical_scope[0],
+                    network=physical_scope[1],
+                )
+            )
+        except TypeError:
+            return _matches_in_physical_scope(
+                list(index.lookup_outpoint(outpoint)), physical_scope
+            )
     value = getattr(index, "by_outpoint", {}).get(str(outpoint or "").lower())
     if value is None:
         return []
-    return value if isinstance(value, list) else [value]
+    matches = value if isinstance(value, list) else [value]
+    if physical_scope is not None:
+        return _matches_in_physical_scope(matches, physical_scope)
+    return matches
 
 
-def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
-    """Parse stored Bitcoin tx JSON into inputs + valued outputs.
+def _lookup_txid_wallets(
+    index: Any,
+    txid: Any,
+    *,
+    physical_scope: tuple[str, str] | None = None,
+) -> set[tuple[str, str]]:
+    if hasattr(index, "lookup_txid_wallets"):
+        if physical_scope is None:
+            return set(index.lookup_txid_wallets(txid))
+        try:
+            return set(
+                index.lookup_txid_wallets(
+                    txid,
+                    chain=physical_scope[0],
+                    network=physical_scope[1],
+                )
+            )
+        except TypeError:
+            # An older/fake index cannot prove the physical network of its txid
+            # claim.  Never promote that untyped claim into accounting evidence.
+            return set()
+    if physical_scope is not None:
+        return set()
+    return set(
+        getattr(index, "txid_wallets", {}).get(str(txid or "").lower(), set())
+    )
 
-    Returns ``None`` for anything without a usable ``vin``/``vout`` carrying
-    per-output values: legacy Electrum decode rows that were stored before
-    graph normalization, Liquid (no vin/vout), and every CSV import. That
-    ``None`` is exactly the clean skip for cross-asset pegs and non-on-chain
-    sources.
+
+def _parse_onchain_tx(
+    raw_json: Any, *, allow_partial: bool = False
+) -> Optional[dict[str, Any]]:
+    """Parse stored Bitcoin/Liquid graph evidence.
+
+    The default preserves the historical strict contract used by Bitcoin
+    callers: every output must be valued.  Ownership reconstruction opts into
+    ``allow_partial`` because a foreign confidential Liquid output can remain
+    unknown while locally owned legs are filled from another wallet's stored
+    observation.  Policy code must explicitly block an owned unknown leg.
     """
-    return parse_valued_tx(raw_json)
+
+    if not allow_partial:
+        return parse_valued_tx(raw_json)
+    return parse_ownership_tx(raw_json)
 
 
 def _resolve_destination_inbound(
@@ -1531,6 +2309,7 @@ def _resolve_destination_inbound(
     already_paired_ids: set[str],
     *,
     asset: Any,
+    onchain_scope: tuple[str, str, str, str],
 ) -> tuple[str, Optional[Mapping[str, Any]]]:
     """Decide how to represent one destination leg.
 
@@ -1549,14 +2328,13 @@ def _resolve_destination_inbound(
     Decision order (candidates are the destination's same-asset, unpaired,
     unconsumed inbound rows):
 
-    1. A row sharing this spend's on-chain txid is unambiguously this leg → reuse.
-    2. Exactly one exact-value candidate that is not provably a *different*
-       on-chain transaction and is within the time window → reuse it.
-    3. Two or more such exact-value candidates → ambiguous → decline.
-    4. No exact reuse, but the destination has some other in-window inbound that
-       is not provably a different on-chain transaction (a near/off-value row
-       that might be this very leg) → decline rather than fabricate a duplicate.
-    5. Otherwise the destination is genuinely empty for this leg → synthesize.
+    1. One exact-value row in the same canonical chain/network/txid/asset scope
+       is unambiguously this leg → reuse.
+    2. Two or more such rows → ambiguous → decline.
+    3. No exact reuse, but the destination has another amount-compatible inbound
+       that is not provably a different on-chain transaction → decline rather
+       than fabricate a duplicate.
+    4. Otherwise the destination is genuinely empty for this leg → synthesize.
     """
     asset_key = str(asset or "").upper()
 
@@ -1572,11 +2350,10 @@ def _resolve_destination_inbound(
     ]
 
     exact = [row for row in available if int(_get(row, "amount") or 0) == leg_msat]
-    txid_key = normalize_group_txid(txid)
     same_txid = [
         row
         for row in exact
-        if normalize_group_txid(str(_get(row, "external_id") or "")) == txid_key
+        if onchain_transfer_scope(row) == onchain_scope
     ]
     if len(same_txid) == 1:
         return ("reuse", same_txid[0])
