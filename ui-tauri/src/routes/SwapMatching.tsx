@@ -840,7 +840,7 @@ function custodyBackendIssueText(
     code as keyof typeof CUSTODY_BACKEND_ISSUE_KEYS
   ];
   return key
-    ? t(key, issue)
+    ? t(key)
     : t("swap.components.backendIssue.unknown", {
         code: code || t("swap.components.unknownIssue"),
       });
