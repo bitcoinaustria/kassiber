@@ -181,6 +181,7 @@ def backfill_profile_transaction_graphs(
     *,
     allow_public_lookup: bool = False,
     limit: int = 50,
+    wallet_id: str | None = None,
 ) -> dict[str, Any]:
     """Persist missing Bitcoin vin/vout evidence after explicit consent.
 
@@ -199,17 +200,19 @@ def backfill_profile_transaction_graphs(
     if type(limit) is not int or not 1 <= limit <= 100:
         raise AppError("graph backfill limit must be between 1 and 100", code="validation")
 
-    rows = conn.execute(
-        """
+    sql = """
         SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
                w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND upper(t.asset) = 'BTC'
-        ORDER BY t.occurred_at, t.id
-        """,
-        (profile_id,),
-    ).fetchall()
+    """
+    params: list[Any] = [profile_id]
+    if wallet_id is not None:
+        sql += " AND t.wallet_id = ?"
+        params.append(wallet_id)
+    sql += " ORDER BY t.occurred_at, t.id"
+    rows = conn.execute(sql, params).fetchall()
     attempted = enriched = already_complete = failed = 0
     transaction_ids: list[str] = []
     for row in rows:
@@ -254,6 +257,7 @@ def backfill_profile_transaction_graphs(
     conn.commit()
     return {
         "profile_id": profile_id,
+        "wallet_id": wallet_id,
         "attempted": attempted,
         "enriched": enriched,
         "already_complete": already_complete,

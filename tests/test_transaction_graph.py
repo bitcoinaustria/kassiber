@@ -2866,6 +2866,44 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(stored["_kassiber_graph_backfill"]["version"], 1)
         self.assertNotIn("url", json.dumps(stored).lower())
 
+    def test_graph_backfill_wallet_scope_does_not_disclose_other_wallet_txids(self):
+        txid_a = "ab" * 32
+        txid_b = "bc" * 32
+        self._tx("backfill-a", "wallet-a", "outbound", 1_000_000, txid_a, {})
+        self._tx("backfill-b", "wallet-b", "outbound", 1_000_000, txid_b, {})
+        fetched = {
+            "vin": [
+                {
+                    "txid": "cd" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 2_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 1_000}],
+        }
+
+        with patch.object(
+            tg, "_enrich_graph_raw", return_value=fetched
+        ) as enrich:
+            result = tg.backfill_profile_transaction_graphs(
+                self.conn,
+                "profile-1",
+                {},
+                allow_public_lookup=True,
+                wallet_id="wallet-a",
+            )
+
+        self.assertEqual(result["enriched"], 1)
+        self.assertEqual(result["wallet_id"], "wallet-a")
+        self.assertEqual(enrich.call_count, 1)
+        self.assertEqual(enrich.call_args.args[1]["id"], "backfill-a")
+        untouched = json.loads(
+            self.conn.execute(
+                "SELECT raw_json FROM transactions WHERE id = 'backfill-b'"
+            ).fetchone()["raw_json"]
+        )
+        self.assertEqual(untouched, {})
+
 
 if __name__ == "__main__":
     unittest.main()

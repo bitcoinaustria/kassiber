@@ -665,6 +665,7 @@ function ConnectionDetailView({
     await ownershipBackfill.mutateAsync({
       allowPublicLookup: true,
       limit: 50,
+      wallet: connection.id,
     });
   };
   const utxoTransactionQuery = useDaemon<{

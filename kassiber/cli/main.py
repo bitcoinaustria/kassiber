@@ -1463,6 +1463,7 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_backfill_graphs = wallets_sub.add_parser("backfill-graphs")
     wallets_backfill_graphs.add_argument("--workspace")
     wallets_backfill_graphs.add_argument("--profile")
+    wallets_backfill_graphs.add_argument("--wallet")
     wallets_backfill_graphs.add_argument("--limit", type=int, default=50)
     wallets_backfill_graphs.add_argument(
         "--allow-public-lookup",
@@ -3353,6 +3354,9 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
         if args.wallets_command == "backfill-graphs":
             _, profile = resolve_scope(conn, args.workspace, args.profile)
+            wallet_id = None
+            if args.wallet:
+                wallet_id = resolve_wallet(conn, profile["id"], args.wallet)["id"]
             return emit(
                 args,
                 core_transaction_graph.backfill_profile_transaction_graphs(
@@ -3361,6 +3365,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.runtime_config,
                     allow_public_lookup=args.allow_public_lookup,
                     limit=args.limit,
+                    wallet_id=wallet_id,
                 ),
             )
         if args.wallets_command == "update":

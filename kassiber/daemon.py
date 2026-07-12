@@ -13588,7 +13588,7 @@ def handle_request(
 
     if kind == "ui.wallets.ownership_backfill":
         args = _coerce_args_dict(request_id, request.get("args"))
-        unknown = sorted(set(args) - {"allowPublicLookup", "limit"})
+        unknown = sorted(set(args) - {"allowPublicLookup", "limit", "wallet"})
         if unknown:
             raise AppError(
                 "ownership graph backfill received unsupported fields",
@@ -13602,6 +13602,11 @@ def handle_request(
                 retryable=False,
             )
         _, profile = resolve_scope(ctx.conn, None, None)
+        wallet_id = None
+        if args.get("wallet"):
+            wallet_id = core_resolve_wallet(
+                ctx.conn, profile["id"], args["wallet"]
+            )["id"]
         return (
             _with_request_id(
                 build_envelope(
@@ -13612,6 +13617,7 @@ def handle_request(
                         ctx.runtime_config,
                         allow_public_lookup=True,
                         limit=args.get("limit", 50),
+                        wallet_id=wallet_id,
                     ),
                 ),
                 request_id,
