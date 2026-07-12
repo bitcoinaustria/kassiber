@@ -1681,14 +1681,25 @@ def _apply_contiguous_event(
     elif event["event_type"] == "conflict.resolve":
         from .conflicts import apply_resolution_event
 
-        mutated = apply_resolution_event(
-            conn,
-            book=book,
-            event=event,
-            parsed=parsed,
-            attachments_root=attachments_root,
-            created_files=created_files,
-        )
+        try:
+            mutated = apply_resolution_event(
+                conn,
+                book=book,
+                event=event,
+                parsed=parsed,
+                attachments_root=attachments_root,
+                created_files=created_files,
+            )
+        except AppError as exc:
+            conn.execute("DELETE FROM sync_events WHERE id = ?", (event["id"],))
+            return _reject_contiguous_event(
+                conn,
+                book=book,
+                replica=replica,
+                event=event,
+                reason=exc.code or "sync_conflict_resolution_invalid",
+                details={"message": str(exc)},
+            )
         custody_touched = bool(
             mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
         )

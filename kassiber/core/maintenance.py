@@ -9,6 +9,7 @@ from typing import Any
 from ..db import resolve_attachments_root
 from ..errors import AppError
 from .repo import current_context_snapshot
+from .sync_replication.events import sync_enabled
 
 
 def _count_where(
@@ -112,6 +113,12 @@ def reset_current_profile_data(
             "No current book is selected.",
             code="state_not_ready",
             hint="Select a books set and book before resetting book data.",
+        )
+    if sync_enabled(conn, profile_id):
+        raise AppError(
+            "Book data cannot be reset while cross-device sync is enabled.",
+            code="sync_reset_requires_disable",
+            hint="Disable replication for this book before resetting its local data.",
         )
 
     attachments_root = _attachments_root_path(data_root)

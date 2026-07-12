@@ -369,6 +369,7 @@
     "provider_payment_id": "Provider-Zahlungs-ID",
     "provider_exchange_order_id": "Provider-Börsenauftrags-ID",
     "provider_ledger_id": "Provider-Ledger-ID",
+    "provider_id": "Anbieter-ID",
     "manual": "Manuell"
   },
   "toast": {

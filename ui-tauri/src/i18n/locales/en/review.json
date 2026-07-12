@@ -86,7 +86,9 @@
       },
       "authoredSource": {
         "user": "User",
-        "ai_tool": "AI-assisted"
+        "ai_tool": "AI-assisted",
+        "cli": "CLI",
+        "gui": "Desktop"
       },
       "audit": {
         "mode": "Mode: {{mode}}",

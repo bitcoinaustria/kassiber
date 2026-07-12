@@ -369,6 +369,7 @@
     "provider_payment_id": "Provider payment id",
     "provider_exchange_order_id": "Provider exchange order id",
     "provider_ledger_id": "Provider ledger id",
+    "provider_id": "Provider id",
     "manual": "Manual"
   },
   "toast": {

@@ -1407,7 +1407,12 @@ def _persist_lnd_channel_records(
             ON CONFLICT(profile_id, wallet_id, backend_name, record_type, external_id)
             DO UPDATE SET txid = excluded.txid, outpoint = excluded.outpoint,
                           channel_id = excluded.channel_id,
-                          amount_msat = excluded.amount_msat,
+                          amount_msat = CASE
+                              WHEN excluded.amount_msat < 0
+                                   AND lightning_node_records.amount_msat >= 0
+                              THEN lightning_node_records.amount_msat
+                              ELSE excluded.amount_msat
+                          END,
                           tag = excluded.tag, status = excluded.status,
                           raw_json = excluded.raw_json,
                           updated_at = excluded.updated_at
