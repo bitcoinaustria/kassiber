@@ -913,6 +913,24 @@ class OwnershipDeriverTests(unittest.TestCase):
         )
         self.assertEqual(result.derived_pairs, [])
 
+    def test_recorded_source_fallback_rejects_co_owned_txid(self):
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="real-txid", input_scripts=[SCRIPT["EXT"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        previous_txid = json.loads(out["raw_json"])["vin"][0]["txid"]
+        index = OwnedIndex()
+        index.note_txid(previous_txid, "A", "A", chain="bitcoin", network="mainnet")
+        index.note_txid(previous_txid, "C", "C", chain="bitcoin", network="mainnet")
+        index.add_script(SCRIPT["B"], _match("B", "B"))
+
+        result = derive_ownership_transfers(
+            [out], index=index, wallet_refs_by_id=_refs("B"), already_paired_ids=set()
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+
     def test_unresolvable_input_declined(self):
         # We watch only the recipient: the spend's inputs are not ours, so we
         # cannot prove this is our outbound. Declined.

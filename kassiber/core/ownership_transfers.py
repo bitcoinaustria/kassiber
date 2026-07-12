@@ -550,9 +550,22 @@ def derive_ownership_transfers(
         if parsed is None or scope is None:
             continue
         source_groups.setdefault(scope, []).append(row)
-    duplicate_source_groups = {
-        key: group for key, group in source_groups.items() if len(group) > 1
-    }
+    duplicate_source_groups: dict[str, list[Mapping[str, Any]]] = {}
+    for group in source_groups.values():
+        economic_rows: dict[tuple[int, int, bool], list[Mapping[str, Any]]] = {}
+        for source_row in group:
+            economic_rows.setdefault(
+                (
+                    int(_get(source_row, "amount") or 0),
+                    int(_get(source_row, "fee") or 0),
+                    bool(_get(source_row, "amount_includes_fee")),
+                ),
+                [],
+            ).append(source_row)
+        for repeated in economic_rows.values():
+            if len(repeated) > 1:
+                for source_row in repeated:
+                    duplicate_source_groups[str(_get(source_row, "id"))] = repeated
 
     for row in rows:
         source_id = str(_get(row, "id"))
@@ -725,6 +738,22 @@ def derive_ownership_transfers(
             continue
         if not by_dest:
             continue  # ordinary outbound payment — leave on the disposal path
+        duplicate_group = duplicate_source_groups.get(source_id)
+        if duplicate_group is not None:
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_duplicate_outbound",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "outbound_count": len(duplicate_group),
+                    "outbound_ids": sorted(str(_get(item, "id")) for item in duplicate_group),
+                },
+            )
+            continue
         if not _inputs_are_single_source_or_recorded_source(
             component_inputs,
             index,
@@ -744,23 +773,6 @@ def derive_ownership_transfers(
                 },
             )
             continue
-        duplicate_group = duplicate_source_groups.get(group_key)
-        if duplicate_group is not None:
-            _block_source(
-                result,
-                row,
-                "ownership_transfer_duplicate_outbound",
-                {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
-                    "outbound_count": len(duplicate_group),
-                    "outbound_ids": sorted(str(_get(item, "id")) for item in duplicate_group),
-                },
-            )
-            continue
-
         source_amount_msat = int(_get(row, "amount") or 0)
         source_fee_msat = int(_get(row, "fee") or 0)
         source_total_msat = source_amount_msat
@@ -2070,13 +2082,19 @@ def _inputs_are_single_source_or_recorded_source(
     outpoint = inputs[0].get("outpoint")
     if not outpoint:
         return False
+    # The recorded-row fallback is only for genuinely absent historical
+    # ownership. Any resolved owner set that failed the strict check above is
+    # conflicting or co-owned evidence and must remain manual.
+    if _input_owner_ids(index, inputs[0], physical_scope=physical_scope):
+        return False
     prev_txid = str(outpoint).split(":", 1)[0].lower()
-    return any(
-        str(wallet_id) == source_wallet_id
+    recorded_owners = {
+        str(wallet_id)
         for wallet_id, _wallet_label in _lookup_txid_wallets(
             index, prev_txid, physical_scope=physical_scope
         )
-    )
+    }
+    return recorded_owners == {source_wallet_id}
 
 
 def _input_owner_ids(
