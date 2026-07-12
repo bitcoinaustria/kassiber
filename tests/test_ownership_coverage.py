@@ -6,7 +6,11 @@ from kassiber.core.ownership_coverage import (
     assess_profile_ownership_coverage,
     attest_profile_wallet_universe,
 )
-from kassiber.core.wallets import _validated_wallet_config
+from kassiber.core.wallets import (
+    _ownership_material_identity_snapshot,
+    _sync_material_config_json,
+    _validated_wallet_config,
+)
 from kassiber.errors import AppError
 
 
@@ -150,6 +154,27 @@ class OwnershipCoverageTests(unittest.TestCase):
                 },
             )
         self.assertEqual(raised.exception.code, "validation")
+
+    def test_coverage_metadata_does_not_change_wallet_material_identity(self):
+        original = {"descriptor": "wpkh(xpub/example/*)", "gap_limit": 20}
+        covered = {
+            **original,
+            "ownership_scan_to_index": 81,
+            "ownership_policy": {
+                "complete": True,
+                "evidence": "wallet_export",
+                "branch_last_issued": {"0": 81},
+            },
+        }
+
+        self.assertEqual(
+            _ownership_material_identity_snapshot(original),
+            _ownership_material_identity_snapshot(covered),
+        )
+        self.assertEqual(
+            _sync_material_config_json(original),
+            _sync_material_config_json(covered),
+        )
 
     def test_multisig_policy_is_supported_and_grouped(self):
         conn = _conn()

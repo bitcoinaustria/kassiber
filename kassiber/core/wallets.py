@@ -689,6 +689,7 @@ def _sync_material_config_json(config):
     sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_HISTORY_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY, None)
+    sync_config.pop(OWNERSHIP_POLICY_CONFIG_KEY, None)
     return json.dumps(sync_config, sort_keys=True)
 
 
@@ -707,6 +708,24 @@ def _ownership_material_snapshot(config):
         for field in _OWNERSHIP_MATERIAL_FIELDS
         if config.get(field) not in (None, "", [])
     }
+
+
+def _ownership_material_identity_snapshot(config):
+    """Script policy identity, excluding coverage and scan bookkeeping.
+
+    Coverage declarations describe existing material; changing them must not
+    manufacture a retired policy or clear the wallet's synced inventory.
+    Gap/scan depths likewise change discovery effort, not script identity.
+    """
+
+    snapshot = _ownership_material_snapshot(config)
+    for field in (
+        OWNERSHIP_POLICY_CONFIG_KEY,
+        OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
+        "gap_limit",
+    ):
+        snapshot.pop(field, None)
+    return snapshot
 
 
 def _historic_scan_floor(conn, wallet_id):
@@ -1061,6 +1080,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
     original_ownership_material = _ownership_material_snapshot(config)
+    original_ownership_identity = _ownership_material_identity_snapshot(config)
     original_sync_material_json = _sync_material_config_json(config)
     for field in clear_fields:
         if field not in config:
@@ -1077,7 +1097,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config[key] = value
 
     config = _validated_wallet_config(wallet["kind"], config)
-    if _ownership_material_snapshot(config) != original_ownership_material:
+    if _ownership_material_identity_snapshot(config) != original_ownership_identity:
         _archive_ownership_material(
             conn,
             wallet["id"],
