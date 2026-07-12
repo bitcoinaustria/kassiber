@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import queue
 import subprocess
 import sys
@@ -10,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, TextIO
 
 from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
-from ..ai.tools import TOOL_CATALOG, tool_capabilities
+from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from .termrender import MarkdownStreamRenderer, render_envelope_table
@@ -218,7 +219,14 @@ class _DaemonChatClient:
             )
         line = json.dumps(payload, separators=(",", ":")) + "\n"
         if record and self._transcript is not None:
-            self._transcript.write(line)
+            transcript_payload = dict(payload)
+            transcript_args = transcript_payload.get("args")
+            if isinstance(transcript_args, dict) and "timeout_seconds" in transcript_args:
+                transcript_payload["args"] = dict(transcript_args)
+                transcript_payload["args"].pop("timeout_seconds", None)
+            self._transcript.write(
+                json.dumps(transcript_payload, separators=(",", ":")) + "\n"
+            )
         self._proc.stdin.write(line)
         self._proc.stdin.flush()
 
@@ -329,7 +337,7 @@ def _timeout_seconds(args: Any) -> float:
             details={"timeout": raw},
             retryable=False,
         ) from None
-    if timeout <= 0 or timeout > MAX_CHAT_TIMEOUT_SECONDS:
+    if not math.isfinite(timeout) or timeout <= 0 or timeout > MAX_CHAT_TIMEOUT_SECONDS:
         raise AppError(
             "chat timeout must be greater than 0 and at most 3600 seconds",
             code="validation",
@@ -696,7 +704,7 @@ def _render_turn_footer(terminal: dict[str, Any], chrome: TextIO) -> None:
 
 def _active_tool_catalog(args: Any) -> list[Any]:
     if getattr(args, "tool_profile", "core") == "core":
-        return [entry for entry in TOOL_CATALOG if "core" in tool_capabilities(entry)]
+        return [entry for entry in TOOL_CATALOG if entry.name in CORE_TOOL_NAMES]
     return list(TOOL_CATALOG)
 
 

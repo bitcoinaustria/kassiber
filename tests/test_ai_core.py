@@ -619,6 +619,16 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertNotIn("ui_connections_node_snapshot", tool_names)
         self.assertLess(len(tool_names), len(build_openai_tools(profile="full")))
 
+        discovery_names = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "What can you do?"}],
+                profile="core",
+            )
+        }
+        self.assertNotIn("ui_source_funds_sources_create", discovery_names)
+        self.assertNotIn("ui_connections_node_snapshot", discovery_names)
+
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")
         self.assertEqual(

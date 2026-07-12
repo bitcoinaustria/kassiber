@@ -440,6 +440,46 @@ finally:
             )
         )
 
+    def test_duplicate_mutating_call_id_is_denied_without_second_consent(self):
+        duplicate = _tool_call_message(
+            "ui_journals_process", call_id="duplicate-call"
+        )
+        first_call = duplicate["choices"][0]["message"]["tool_calls"][0]
+        duplicate["choices"][0]["message"]["tool_calls"].append(
+            json.loads(json.dumps(first_call))
+        )
+        server = _start_tool_chat_server(
+            [
+                duplicate,
+                _chat_completion_response(
+                    {"role": "assistant", "content": "Handled duplicate."}
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                payload = _run_json(
+                    data_root,
+                    "chat",
+                    "--provider",
+                    "tool-local",
+                    "--allow-tool",
+                    "ui_journals_process",
+                    "Process journals",
+                )
+        finally:
+            _stop_server(server)
+
+        duplicate_results = [
+            item
+            for item in payload["data"]["tool_calls"]
+            if item.get("call_id") == "duplicate-call"
+        ]
+        self.assertEqual(len(duplicate_results), 1)
+        self.assertEqual(duplicate_results[0].get("reason"), "duplicate_tool_call_id")
+
     def test_chat_default_core_tool_profile_keeps_provider_schema_small(self):
         server = _start_tool_chat_server(
             [
@@ -539,6 +579,9 @@ finally:
             _timeout_seconds(_chat_namespace("/tmp", timeout_seconds=0))
         with self.assertRaises(AppError):
             _timeout_seconds(_chat_namespace("/tmp", timeout_seconds=7200))
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value), self.assertRaises(AppError):
+                _timeout_seconds(_chat_namespace("/tmp", timeout_seconds=value))
 
     def test_chat_rendered_pipe_keeps_stdout_clean(self):
         server = _start_tool_chat_server(
@@ -779,6 +822,13 @@ finally:
         # Outbound ai.chat request (has args) and the terminal record (has data).
         self.assertTrue(
             any(r.get("kind") == "ai.chat" and "args" in r for r in records)
+        )
+        self.assertFalse(
+            any(
+                isinstance(r.get("args"), dict)
+                and "timeout_seconds" in r["args"]
+                for r in records
+            )
         )
         self.assertTrue(
             any(

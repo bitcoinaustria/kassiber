@@ -4172,7 +4172,7 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             details={"timeout_seconds": raw_timeout_seconds},
             retryable=False,
         ) from None
-    if timeout_seconds <= 0 or timeout_seconds > 3600:
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0 or timeout_seconds > 3600:
         raise AppError(
             "ai.chat timeout_seconds must be greater than 0 and at most 3600",
             code="validation",
@@ -7101,7 +7101,7 @@ def _run_auto_read_tools(
         entry = get_tool(call.name)
         if entry is None or entry.kind_class != "read_only":
             continue
-        if advertised and entry.provider_name not in advertised:
+        if entry.provider_name not in advertised:
             continue
         out.write(
             _with_request_id(
@@ -7545,10 +7545,13 @@ def _run_ai_chat_tool_loop(
                 "tool_calls": tool_calls,
             }
         )
+        seen_call_ids: set[str] = set()
         for index, raw_tool_call in enumerate(tool_calls):
             if not isinstance(raw_tool_call, dict):
                 continue
             call = _parse_ai_tool_call(raw_tool_call, index)
+            duplicate_call_id = call.call_id in seen_call_ids
+            seen_call_ids.add(call.call_id)
             entry = get_tool(call.name)
             advertised = entry is not None and _ai_tool_is_advertised(entry, runtime)
             kind_class = entry.kind_class if entry is not None else "unknown"
@@ -7558,6 +7561,7 @@ def _run_ai_chat_tool_loop(
             needs_consent = (
                 entry is not None
                 and advertised
+                and not duplicate_call_id
                 and entry.kind_class == "mutating"
                 and not call.argument_error
                 and not active_chat.consent.has_session_allow(tool_session_name)
@@ -7582,7 +7586,9 @@ def _run_ai_chat_tool_loop(
             if cancel_event.is_set():
                 finish_reason = "cancelled"
                 break
-            if entry is not None and not advertised:
+            if duplicate_call_id:
+                result = _tool_result_denied("duplicate_tool_call_id")
+            elif entry is not None and not advertised:
                 result = _tool_result_denied("tool_not_advertised")
             elif entry is not None and entry.kind_class == "mutating" and not call.argument_error:
                 if needs_consent:

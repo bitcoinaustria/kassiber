@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ..errors import AppError
-from .tools import openai_tool_definitions, select_tool_capabilities
+from .tools import CORE_TOOL_NAMES, openai_tool_definitions, select_tool_capabilities
 
 
 SystemPromptKind = Literal["kassiber", "raw"] | None
@@ -106,4 +106,5 @@ def build_openai_tools(
             if profile == "full"
             else select_tool_capabilities(selected_messages, screen_context)
         ),
+        allowed_names=CORE_TOOL_NAMES if profile == "core" else None,
     )
