@@ -217,6 +217,46 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "validation")
         self.assertEqual(caught.exception.details["max_components"], 50)
 
+    def test_bulk_resolution_retry_reuses_deterministic_draft_ids(self):
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "components": [_component_spec()],
+            "activate": False,
+            "dry_run": False,
+        }
+
+        first = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.bulk_resolve", args
+        )
+        second = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.bulk_resolve", args
+        )
+
+        self.assertEqual(first["components"][0]["id"], second["components"][0]["id"])
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            1,
+        )
+
+    def test_bulk_resolution_bounds_legs_per_component(self):
+        spec = _component_spec()
+        spec["legs"] = [dict(spec["legs"][0]) for _ in range(257)]
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.bulk_resolve",
+                {
+                    "workspace": "Main",
+                    "profile": "Book",
+                    "components": [spec],
+                    "activate": False,
+                    "dry_run": True,
+                },
+            )
+
+        self.assertEqual(caught.exception.details["max_legs"], 256)
+
     def test_transaction_and_untracked_wallet_error_names_the_real_conflict(self):
         spec = _component_spec()
         spec["legs"][0]["untracked_wallet"] = "Missing old wallet"
