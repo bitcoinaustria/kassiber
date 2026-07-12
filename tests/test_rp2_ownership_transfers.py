@@ -60,12 +60,25 @@ def _match(wallet_id, label):
     return OwnedMatch(wallet_id, label, "", "bitcoin", "main", "", None, None, "derived")
 
 
+class _ProvenCoverage:
+    def is_policy_proven(self, _chain, _network):
+        return True
+
+    def tier_for(self, _chain, _network):
+        return "proven"
+
+
+def _with_proven_coverage(index):
+    index.coverage = _ProvenCoverage()
+    return index
+
+
 def _fanout_index():
     index = OwnedIndex()
     index.add_script(SCRIPT_A, _match("A", "Cold"))
     index.add_script(SCRIPT_B, _match("B", "Hot"))
     index.add_script(SCRIPT_C, _match("C", "Savings"))
-    return index
+    return _with_proven_coverage(index)
 
 
 def _physical_txid(label):
@@ -420,6 +433,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
+        _with_proven_coverage(index)
         state = build_tax_engine(PROFILE).build_ledger_state(
             TaxEngineLedgerInputs(
                 rows=self._rows(),
@@ -1779,6 +1793,7 @@ class PartialPaymentWithholdingEngineTest(unittest.TestCase):
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
+        _with_proven_coverage(index)
         # A spends 0.5 to B (own) + 0.002 to an external recipient + 0.0001 fee.
         # The external leg (0.002) is under the swap-fee ceiling for a 0.502
         # outbound, so without the withhold it is absorbed as a MOVE fee.

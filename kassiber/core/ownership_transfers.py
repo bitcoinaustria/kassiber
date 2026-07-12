@@ -865,6 +865,41 @@ def derive_ownership_transfers(
                 )
                 continue
 
+        unmatched_principal_msat = max(0, folded_gap_msat - source_fee_msat)
+        coverage = getattr(index, "coverage", None)
+        policy_proven = bool(
+            coverage is not None
+            and coverage.is_policy_proven(physical_scope[0], physical_scope[1])
+        )
+        if unmatched_principal_msat > 0 and not policy_proven:
+            scope_tier = (
+                coverage.tier_for(physical_scope[0], physical_scope[1])
+                if coverage is not None
+                else "unknown"
+            )
+            _block_source(
+                result,
+                row,
+                "ownership_coverage_incomplete",
+                {
+                    "required_for": "ownership_coverage_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "canonical_chain": physical_scope[0],
+                    "canonical_network": physical_scope[1],
+                    "policy_tier": scope_tier,
+                    "unmatched_principal_msat": unmatched_principal_msat,
+                    "repair_actions": [
+                        "import_complete_wallet_policy",
+                        "import_last_issued_branch_bounds",
+                        "extend_ownership_derivation",
+                        "review_external_payout",
+                    ],
+                },
+            )
+            continue
+
         # ``parsed.txid`` may retain a provider/import label while the canonical
         # external id supplied the validated physical scope. Every automatic id
         # and destination reuse decision must use that canonical scope member.

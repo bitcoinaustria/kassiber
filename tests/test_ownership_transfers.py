@@ -40,6 +40,14 @@ SATS = 1000  # msat per sat
 _TXID_ALIASES = {}
 
 
+class _ProvenCoverage:
+    def is_policy_proven(self, _chain, _network):
+        return True
+
+    def tier_for(self, _chain, _network):
+        return "proven"
+
+
 def _physical_txid(value):
     text = str(value)
     if len(text) == 64 and all(char in "0123456789abcdefABCDEF" for char in text):
@@ -68,6 +76,7 @@ def _index(owned_scripts):
     index = OwnedIndex()
     for script, (wallet_id, label) in owned_scripts.items():
         index.add_script(script, _match(wallet_id, label))
+    index.coverage = _ProvenCoverage()
     return index
 
 
@@ -672,6 +681,28 @@ class OwnershipDeriverTests(unittest.TestCase):
             + result.out_row_overrides["a-out"]["fee"]
         )
         self.assertEqual(total_out, (70_000_000 + 1000) * SATS)
+
+    def test_unproven_policy_quarantines_unmatched_owned_spend_residual(self):
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=70_000_000, fee_sats=1000,
+            txid="coverage-gap", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["EXT"], 20_000_000)],
+        )
+        index = _index({SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")})
+        index.coverage = None
+
+        result = derive_ownership_transfers(
+            [out], index=index, wallet_refs_by_id=_refs("B"), already_paired_ids=set()
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            ["ownership_coverage_incomplete"],
+        )
+        detail = result.blocked_sources[0]["detail"]
+        self.assertEqual(detail["policy_tier"], "unknown")
+        self.assertEqual(detail["unmatched_principal_msat"], 20_000_000 * SATS)
 
     def test_fee_inclusive_graph_allocates_exact_fee_and_external_residual(self):
         out = _outbound(
@@ -2238,6 +2269,7 @@ def _liquid_index():
     index.add_script(SCRIPT["A"], _liquid_match("A", "A"))
     index.add_script(SCRIPT["B"], _liquid_match("B", "B"))
     index.add_script(SCRIPT["C"], _liquid_match("C", "C"))
+    index.coverage = _ProvenCoverage()
     return index
 
 
