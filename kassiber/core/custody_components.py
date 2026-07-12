@@ -3324,21 +3324,26 @@ def list_components(
             "WHERE l.component_id = c.id AND l.transaction_id = ?)"
         )
         params.append(transaction_id)
+    query_limit = "" if effective_only else "LIMIT ?"
+    query_params: tuple[Any, ...] = (
+        tuple(params) if effective_only else (*params, limit)
+    )
     rows = conn.execute(
         f"""
         SELECT c.* FROM custody_components c
         WHERE {' AND '.join(where)}
         ORDER BY c.created_at DESC, c.revision DESC, c.id DESC
-        LIMIT ?
+        {query_limit}
         """,
-        (*params, limit),
-    ).fetchall()
+        query_params,
+    )
     profile_route_issues = _profile_active_route_issues(
         conn,
         profile_id=profile_id,
     )
-    result = [
-        _materialize_component(
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        item = _materialize_component(
             conn,
             row,
             include_local_evidence=include_local_evidence,
@@ -3349,9 +3354,12 @@ def list_components(
                 profile_route_issues if row["state"] == "active" else None
             ),
         )
-        for row in rows
-    ]
-    return [item for item in result if item["effective_state"] == "active"] if effective_only else result
+        if effective_only and item["effective_state"] != "active":
+            continue
+        result.append(item)
+        if len(result) == limit:
+            break
+    return result
 
 
 def list_effective_components(

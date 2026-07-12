@@ -347,6 +347,30 @@ class CustodyComponentApiTests(unittest.TestCase):
         self.assertEqual(len(profile_leg_scans), 1)
         self.assertEqual(len(profile_allocation_scans), 1)
 
+    def test_effective_listing_filters_before_applying_limit(self):
+        active = self._balanced_component()
+        activate_component(self.conn, active["id"])
+        create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="native_transfer",
+            legs=[
+                _leg("source", 60, tx="other-out", wallet="btc"),
+                _leg("destination", 60, tx="in-1", wallet="btc"),
+            ],
+            created_at="2026-01-02T00:00:00Z",
+        )
+
+        components = list_components(
+            self.conn,
+            profile_id="profile",
+            effective_only=True,
+            limit=1,
+        )
+
+        self.assertEqual([item["id"] for item in components], [active["id"]])
+
     def test_new_nullable_sync_fields_are_backward_compatible(self):
         transaction = self.conn.execute("SELECT * FROM transactions WHERE id = 'out'").fetchone()
         tx_payload = serialize_row(
