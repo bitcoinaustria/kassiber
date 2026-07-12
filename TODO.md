@@ -1108,7 +1108,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     while the report still quarantines it. Deterministic self-transfer
     suppression now always uses the journal defaults; caller flags widen
     heuristic candidate generation only.
-  - [ ] **Self-transfer change on an un-indexed script booked as a phantom
+  - [x] **Self-transfer change on an un-indexed script booked as a phantom
     external disposal (P1, round-2 deep audit).** A pure self-transfer A→B whose
     change returns to a source script the `OwnedIndex` does not contain (change
     branch past the derive ceiling, an un-indexed address-list change address, or
@@ -1118,18 +1118,16 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     reconciliation, and the deriver folds the change into the external bucket and
     books the residual (`~341-349`) as a real disposal — silent over-taxation +
     holdings loss, strictly worse than the deriver-off `transfer_fee_implausible`
-    quarantine. ASSESSED + deferred deliberately (the only round-2 P1 left open):
-    a deriver-only guard cannot distinguish un-indexed change from a real external
-    payment (the graph residual is identical either way), and quarantining large
-    residuals would regress legitimate large partial payments (`test_mixed_spend_books_move_and_residual_without_phantom_fee`).
-    Mitigation landed without a residual heuristic: wallet descriptor/xpub/
-    address material is privately archived on migration and remains in the
-    ownership index, inventory-derived historic floors survive the migration,
-    and a bounded per-wallet `ownership_scan_to_index` can raise journal depth
-    above 500 (hard-capped at 20,000). Residual risk remains for genuinely
-    unknown address-list change or scripts beyond the configured ceiling. Do not
-    close this last edge with a generic large-residual quarantine: that regresses
-    legitimate partial payments.
+    quarantine. Fixed with an explicit profile-wide ownership coverage contract:
+    wallet exports/user attestations declare policy-set completeness and
+    last-issued branch bounds, sync checkpoints retain actual derived-through
+    indices, and coverage is reported honestly as unknown/assumed/proven.
+    When a graph has an owned destination plus unmatched principal, the deriver
+    may call that residual external only under proven policy coverage; otherwise
+    the whole source quarantines as `ownership_coverage_incomplete` with guided
+    repair actions. Proven partial payments still decompose normally. A bounded,
+    explicit graph-backfill action reuses configured backend rate limits/cache
+    and requires acknowledgement that txids may be disclosed.
   - [x] **Whole-row direct-swap-payout disposal lost to a same-txid auto-pair
     hijack (P2, round-2 deep audit).** A reviewed whole-row taxable direct payout
     whose out tx shares a txid with another owned wallet's recorded inbound was

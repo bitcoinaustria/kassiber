@@ -238,6 +238,12 @@ Quarantine causes typically include:
     (stale RBF / re-org `raw_json`)
   - `_ambiguous_output` — an output is owned by two different wallets
   - `_destination_missing_ref` — the destination wallet has no account ref
+- `ownership_coverage_incomplete` — a transaction has a proven owned destination
+  plus unmatched principal, but Kassiber cannot prove that every relevant
+  receive/change policy is indexed. Inspect `wallets coverage`, import an
+  authoritative wallet export or branch bounds with `wallets coverage-set`, and
+  optionally run the consented `wallets backfill-graphs` action. A gap-limit
+  scan alone remains `assumed`; it is never promoted to proof.
 - `pending_onchain_confirmation` — a chain sync payload explicitly reports the
   transaction as mempool/unconfirmed. It is held out of tax booking until a
   synced leg proves confirmation; graphless CSV/provider rows are unaffected.

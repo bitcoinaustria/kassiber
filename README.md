@@ -237,6 +237,14 @@ Wallet script migrations retain a private ownership-history archive so old
 receive/change scripts still resolve; unusually deep histories can opt into a
 bounded `ownership_scan_to_index` through wallet config.
 
+`kassiber wallets coverage` reports watch-only policy and backend-history
+coverage separately as `unknown`, `assumed`, or `proven`. Use `wallets
+coverage-set --wallet <wallet> --complete --evidence wallet_export
+--branch-last-issued 0=<index> --branch-last-issued 1=<index>` only with bounds
+from an authoritative wallet export. For graph-poor historic imports,
+`wallets backfill-graphs --allow-public-lookup` performs a bounded fetch through
+configured backends; the explicit flag acknowledges txid-linkage privacy risk.
+
 Exchange and wallet imports include Bitcoin-focused CSV/API paths for River,
 Bull Bitcoin, Coinfinity, 21bitcoin, Pocket Bitcoin, Strike, Ledger Live,
 Kraken, Coinbase, and Binance. Exact exchange executions are stored as pricing
