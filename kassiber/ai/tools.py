@@ -86,6 +86,47 @@ SKILL_REFERENCE_NAMES = (
     "wallets-backends",
 )
 
+TOOL_PROFILE_NAMES = ("core", "full")
+
+CORE_TOOL_NAMES = frozenset(
+    {
+        "status",
+        "ui.overview.snapshot",
+        "ui.transactions.list",
+        "ui.transactions.extremes",
+        "ui.transactions.search",
+        "ui.wallets.list",
+        "ui.wallets.identify",
+        "ui.backends.list",
+        "ui.profiles.snapshot",
+        "ui.reports.capital_gains",
+        "ui.reports.summary",
+        "ui.reports.balance_sheet",
+        "ui.reports.portfolio_summary",
+        "ui.reports.tax_summary",
+        "ui.reports.balance_history",
+        "ui.journals.snapshot",
+        "ui.journals.quarantine",
+        "ui.journals.transfers.list",
+        "ui.rates.summary",
+        "ui.rates.coverage",
+        "ui.rates.rebuild",
+        "ui.report.blockers",
+        "ui.audit.changes_since_last_answer",
+        "ui.maintenance.settings",
+        "ui.workspace.health",
+        "ui.next_actions",
+        "read_skill_reference",
+        "ui.wallets.sync",
+        "ui.journals.process",
+        "ui.maintenance.run",
+        "ui.transfers.suggest",
+        "ui.transfers.review_context",
+        "ui.transfers.list",
+        "ui.transfers.rules.list",
+    }
+)
+
 
 _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
     "type": "object",

@@ -949,6 +949,17 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("--temperature", type=float)
     chat.add_argument("--max-tokens", type=int)
     chat.add_argument(
+        "--timeout",
+        dest="timeout_seconds",
+        type=float,
+        default=120.0,
+        metavar="SECONDS",
+        help=(
+            "Maximum seconds to wait for daemon startup or provider stream "
+            "activity. This is local transport control and is not sent in the prompt."
+        ),
+    )
+    chat.add_argument(
         "--reasoning-effort",
         choices=("auto", "low", "medium", "high"),
         default="auto",
@@ -959,6 +970,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=8,
         help="Maximum daemon tool-loop iterations for one assistant turn.",
+    )
+    chat.add_argument(
+        "--tool-profile",
+        choices=("core", "full"),
+        default="core",
+        help=(
+            "Tool schema to expose to the model: core keeps common accounting "
+            "tools small for local models; full exposes the complete specialist catalog."
+        ),
     )
     chat.add_argument(
         "--no-tools",

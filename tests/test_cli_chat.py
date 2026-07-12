@@ -10,6 +10,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
+from kassiber.errors import AppError
+from kassiber.secrets.migration import migrate_plaintext_to_encrypted
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -436,6 +439,106 @@ finally:
                 for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
             )
         )
+
+    def test_chat_default_core_tool_profile_keeps_provider_schema_small(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "ok"},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                payload = _run_json(
+                    data_root,
+                    "chat",
+                    "--provider",
+                    "tool-local",
+                    "Summarise report blockers",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(payload["data"]["message"]["content"], "ok")
+        tool_names = {
+            tool["function"]["name"]
+            for tool in server.requests[0].get("tools", [])  # type: ignore[attr-defined]
+        }
+        self.assertIn("ui_reports_summary", tool_names)
+        self.assertIn("ui_journals_process", tool_names)
+        self.assertNotIn("ui_source_funds_sources_create", tool_names)
+        self.assertNotIn("ui_connections_node_snapshot", tool_names)
+        self.assertNotIn("timeout_seconds", server.requests[0])  # type: ignore[attr-defined]
+
+    def test_chat_full_tool_profile_exposes_specialist_catalog(self):
+        server = _start_tool_chat_server(
+            [
+                _chat_completion_response(
+                    {"role": "assistant", "content": "ok"},
+                ),
+            ]
+        )
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_provider(data_root, f"http://127.0.0.1:{server.server_port}/v1")
+                payload = _run_json(
+                    data_root,
+                    "chat",
+                    "--provider",
+                    "tool-local",
+                    "--tool-profile",
+                    "full",
+                    "Preview source funds",
+                )
+        finally:
+            _stop_server(server)
+
+        self.assertEqual(payload["data"]["message"]["content"], "ok")
+        tool_names = {
+            tool["function"]["name"]
+            for tool in server.requests[0].get("tools", [])  # type: ignore[attr-defined]
+        }
+        self.assertIn("ui_source_funds_sources_create", tool_names)
+        self.assertIn("ui_connections_node_snapshot", tool_names)
+
+    def test_chat_locked_encrypted_database_fails_before_model_request(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_provider(data_root, "http://127.0.0.1:9/v1")
+            migrate_plaintext_to_encrypted(
+                data_root / "kassiber.sqlite3",
+                "correct horse battery staple",
+            )
+
+            result = _run(
+                data_root,
+                "--machine",
+                "chat",
+                "--provider",
+                "tool-local",
+                "--model",
+                "test-model",
+                "What changed?",
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "passphrase_required")
+        self.assertIn("--db-passphrase-fd", payload["error"]["hint"])
+
+    def test_chat_timeout_validation_is_local(self):
+        from kassiber.cli.chat import _timeout_seconds
+
+        self.assertEqual(_timeout_seconds(_chat_namespace("/tmp", timeout_seconds=7)), 7.0)
+        with self.assertRaises(AppError):
+            _timeout_seconds(_chat_namespace("/tmp", timeout_seconds=0))
+        with self.assertRaises(AppError):
+            _timeout_seconds(_chat_namespace("/tmp", timeout_seconds=7200))
 
     def test_chat_rendered_pipe_keeps_stdout_clean(self):
         server = _start_tool_chat_server(
@@ -1055,8 +1158,10 @@ def _chat_namespace(data_root, **overrides):
         system=None,
         temperature=None,
         max_tokens=None,
+        timeout_seconds=120.0,
         reasoning_effort="auto",
         tool_loop_max_iterations=8,
+        tool_profile="core",
         no_tools=False,
         yes=False,
         allow_tool=None,
@@ -1131,8 +1236,10 @@ class CliChatReplTest(unittest.TestCase):
                     system=None,
                     temperature=None,
                     max_tokens=None,
+                    timeout_seconds=120.0,
                     reasoning_effort="auto",
                     tool_loop_max_iterations=8,
+                    tool_profile="core",
                     no_tools=False,
                     yes=False,
                     allow_tool=None,

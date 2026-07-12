@@ -87,6 +87,7 @@ def build_openai_tools(
     messages: list[dict[str, Any]] | None = None,
     *,
     screen_context: dict[str, Any] | None = None,
+    profile: str = "core",
 ) -> list[dict[str, Any]]:
     """Build a capability-scoped catalog for the current turn.
 
@@ -95,7 +96,13 @@ def build_openai_tools(
     context so smaller local models do not have to choose among every schema.
     """
 
+    if profile not in {"core", "full"}:
+        raise AppError("unknown AI tool profile", code="validation")
     return openai_tool_definitions(
         include_mutating=True,
-        capabilities=select_tool_capabilities(messages, screen_context),
+        capabilities=(
+            None
+            if profile == "full"
+            else select_tool_capabilities(messages, screen_context)
+        ),
     )

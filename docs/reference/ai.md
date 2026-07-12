@@ -191,6 +191,18 @@ were auto-refreshed — the same provenance the desktop Assistant records.
 `--system "..."` replaces the built-in Kassiber system prompt with a raw one
 (`system_prompt_kind="raw"`).
 
+CLI chat defaults to `--tool-profile core`, a reduced schema for small local
+models that covers common accounting, wallet, transaction, report, journal,
+rate, readiness, and read-only swap-review workflows. Use
+`--tool-profile full` when the model needs the specialist catalog, such as
+source-of-funds editing, Lightning node snapshots, saved views, or advanced
+swap mutations.
+
+Use `--timeout SECONDS` for harnesses or local models that need a shorter or
+longer wait. It caps daemon startup and provider stream inactivity (default
+120 seconds). The value is local transport control only: Kassiber does not put
+it in system prompts, user messages, tool schemas, tool results, or transcripts.
+
 Omit the prompt for REPL mode, which has line editing and in-session history
 on real terminals, and these commands:
 
@@ -237,6 +249,18 @@ that chat session without prompting. Prefer the narrower
 tool. Machine and `--stream-json` runs never prompt interactively even on a
 TTY; there, and without a TTY in rendered mode, unapproved mutating tools are
 denied and the denial is fed back to the model as `user_denied`.
+
+If the local database is SQLCipher-encrypted and the CLI cannot unlock it,
+`kassiber chat` fails with `passphrase_required` before contacting the model.
+Headless scripts should pass the global `--db-passphrase-fd <FD>` flag from a
+parent process. The passphrase is consumed by the local daemon only; it is not
+embedded in prompts or tool output.
+
+Test the assistant/tool path through the CLI, not only through the desktop GUI:
+`tests/test_cli_chat.py` pins the daemon-backed chat loop, consent behavior,
+locked-database handling, timeout controls, and `core`/`full` tool profiles.
+Live backend checks should also be CLI-first, with explicit user-approved
+endpoints and a fresh temporary data root.
 
 ## Chat history
 

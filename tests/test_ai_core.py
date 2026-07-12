@@ -608,6 +608,20 @@ class ToolCatalogPromptTest(unittest.TestCase):
             {"route": "/transactions"},
         )
 
+    def test_core_tool_profile_keeps_common_accounting_tools_only(self):
+        tool_names = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(profile="core")
+            if tool.get("type") == "function"
+        }
+        self.assertIn("status", tool_names)
+        self.assertIn("ui_reports_summary", tool_names)
+        self.assertIn("ui_journals_process", tool_names)
+        self.assertIn("ui_transfers_review_context", tool_names)
+        self.assertNotIn("ui_source_funds_sources_create", tool_names)
+        self.assertNotIn("ui_connections_node_snapshot", tool_names)
+        self.assertLess(len(tool_names), len(build_openai_tools(profile="full")))
+
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")
         self.assertEqual(
