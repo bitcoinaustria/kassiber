@@ -1107,6 +1107,62 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             )
         self.assertEqual("sync_conflict_requires_revision", caught.exception.code)
 
+        resolved = resolve_conflict(
+            self.owner,
+            profile_id=self.profile["id"],
+            conflict_id=conflict_id,
+            custom_value=component["component_type"],
+            use_custom_value=True,
+        )
+        self.assertEqual("resolved", resolved["status"])
+        self.assertEqual(
+            component["component_type"],
+            get_component(self.owner, component["id"])["component_type"],
+        )
+
+    def test_existence_conflict_holds_active_component_until_acknowledged(self):
+        component = self._create_component(active=True)
+        event_ids = [
+            row["id"]
+            for row in self.owner.execute(
+                "SELECT id FROM sync_events WHERE profile_id = ? ORDER BY replica_seq LIMIT 2",
+                (self.profile["id"],),
+            ).fetchall()
+        ]
+        conflict_id = str(uuid.uuid4())
+        self.owner.execute(
+            """
+            INSERT INTO sync_conflicts(
+                id, workspace_id, profile_id, entity_table, entity_key, field,
+                local_event_id, remote_event_id, local_value_json,
+                remote_value_json, status, created_at
+            ) VALUES(?, ?, ?, 'custody_components', ?, '__exists__',
+                     ?, ?, 'false', 'true', 'open', ?)
+            """,
+            (
+                conflict_id,
+                self.workspace["id"],
+                self.profile["id"],
+                json.dumps([component["id"]], separators=(",", ":")),
+                event_ids[0],
+                event_ids[1],
+                NOW,
+            ),
+        )
+        reconcile_active_memberships(self.owner, profile_id=self.profile["id"])
+        self.assertEqual("draft", get_component(self.owner, component["id"])["effective_state"])
+
+        resolved = resolve_conflict(
+            self.owner,
+            profile_id=self.profile["id"],
+            conflict_id=conflict_id,
+            custom_value=True,
+            use_custom_value=True,
+        )
+
+        self.assertEqual("resolved", resolved["status"])
+        self.assertEqual("active", get_component(self.owner, component["id"])["effective_state"])
+
 
 if __name__ == "__main__":
     unittest.main()

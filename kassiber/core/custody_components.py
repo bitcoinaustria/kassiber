@@ -1782,7 +1782,7 @@ def _replicated_lineage_issues(
           AND status = 'open'
           AND field IN (
               'state', 'activated_at', 'superseded_by_component_id',
-              'superseded_at'
+              'superseded_at', '__exists__'
           )
         ORDER BY field, id
         """,
