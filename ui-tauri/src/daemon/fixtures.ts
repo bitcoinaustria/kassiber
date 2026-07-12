@@ -62,6 +62,7 @@ const MOCK_CUSTODY_COMPONENT = {
   evidence_grade: "reviewed",
   conversion_policy: null,
   conversion_reviewed: false,
+  authored_source: "user",
   notes: "Migration from the old hot wallet into cold storage.",
   created_at: "2026-03-12T11:05:00Z",
   activated_at: "2026-03-12T11:06:00Z",

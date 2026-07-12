@@ -84,8 +84,13 @@
         "quantity": "Mengenerhaltung",
         "conversion": "Geprüfte Umwandlung"
       },
+      "authoredSource": {
+        "user": "Benutzer",
+        "ai_tool": "KI-unterstützt"
+      },
       "audit": {
         "mode": "Modus: {{mode}}",
+        "authoredSource": "Erstellt von: {{source}}",
         "evidence": "Nachweis: {{kind}} · {{grade}}",
         "policy": "Regel: {{policy}}",
         "reviewed": "Geprüft: {{value}}",

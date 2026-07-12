@@ -84,8 +84,13 @@
         "quantity": "Quantity conservation",
         "conversion": "Reviewed conversion"
       },
+      "authoredSource": {
+        "user": "User",
+        "ai_tool": "AI-assisted"
+      },
       "audit": {
         "mode": "Mode: {{mode}}",
+        "authoredSource": "Authored by: {{source}}",
         "evidence": "Evidence: {{kind}} · {{grade}}",
         "policy": "Policy: {{policy}}",
         "reviewed": "Reviewed: {{value}}",

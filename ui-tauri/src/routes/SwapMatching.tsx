@@ -636,6 +636,7 @@ interface CustodyComponent {
   evidence_grade: string | null;
   conversion_policy: string | null;
   conversion_reviewed: boolean;
+  authored_source: string;
   notes: string | null;
   created_at: string;
   activated_at: string | null;
@@ -1267,6 +1268,14 @@ function CustodyComponentResolver() {
                             {t("swap.components.audit.mode", {
                               mode: t(
                                 `swap.components.mode.${component.conservation_mode}`,
+                              ),
+                            })}
+                          </Badge>
+                          <Badge variant="outline">
+                            {t("swap.components.audit.authoredSource", {
+                              source: t(
+                                `swap.components.authoredSource.${component.authored_source}`,
+                                { defaultValue: component.authored_source },
                               ),
                             })}
                           </Badge>
