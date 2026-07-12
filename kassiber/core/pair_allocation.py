@@ -39,6 +39,23 @@ def ordered_pair_component(
     )
 
 
+def first_pair_by_edge(
+    ordered_pairs: Sequence[Mapping[str, Mapping[str, Any]]],
+) -> dict[tuple[str, str], Mapping[str, Mapping[str, Any]]]:
+    """Return the canonical first pair for every duplicate directed edge.
+
+    Booking and country-specific lot movement must select the same record when
+    legacy/manual data repeats an edge. Keeping the rule here prevents dict
+    construction style from silently changing one consumer to last-wins.
+    """
+
+    result: dict[tuple[str, str], Mapping[str, Mapping[str, Any]]] = {}
+    for pair in ordered_pairs:
+        edge = (str(pair["out"]["id"]), str(pair["in"]["id"]))
+        result.setdefault(edge, pair)
+    return result
+
+
 #: Below one satoshi, a receipt "excess" can only be representation noise:
 #: LND's REST fallback stores sat-truncated values (up to 999 msat under the
 #: true amount) while a CLN partner leg is msat-exact.

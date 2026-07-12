@@ -10,6 +10,7 @@ from kassiber.core.tax_events import (
     dedupe_quarantines,
     normalize_tax_asset_inputs,
 )
+from kassiber.core.pair_allocation import first_pair_by_edge
 
 
 def _row(
@@ -88,6 +89,18 @@ def _row(
 
 
 class NormalizeTaxAssetInputsTest(unittest.TestCase):
+    def test_duplicate_transfer_edges_are_canonically_first_wins(self):
+        first = {
+            "out": {"id": "out", "description": "first"},
+            "in": {"id": "in"},
+        }
+        second = {
+            "out": {"id": "out", "description": "second"},
+            "in": {"id": "in"},
+        }
+
+        self.assertIs(first_pair_by_edge([first, second])[("out", "in")], first)
+
     def setUp(self):
         self.profile = {"id": "profile-1", "workspace_id": "workspace-1"}
         self.wallet_refs_by_id = {

@@ -25,6 +25,7 @@ from .pair_allocation import (
     clamped_component_receipts_msat,
     clamped_receipt_msat,
     connected_pair_components,
+    first_pair_by_edge,
     is_component_member,
     outbound_transfer_evidence_msat,
     ordered_pair_component,
@@ -1409,11 +1410,7 @@ def _build_manual_multi_pair_transfers(
                 out_id: source_evidence_by_out_id[out_id][1]
                 for out_id in out_rows_by_id
             }
-            pair_by_edge: dict[tuple[str, str], Mapping[str, Any]] = {}
-            for pair in ordered_pairs:
-                out_id = str(pair["out"]["id"])
-                in_id = str(pair["in"]["id"])
-                pair_by_edge.setdefault((out_id, in_id), pair)
+            pair_by_edge = first_pair_by_edge(ordered_pairs)
             allocation = allocate_transfer_component_flow_msat(
                 source_sent_msat,
                 source_explicit_fee_msat,
