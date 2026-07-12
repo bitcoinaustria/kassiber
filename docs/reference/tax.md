@@ -223,6 +223,10 @@ Quarantine causes typically include:
 - ambiguous or unsupported tax semantics
 - `owned_fanout_unresolved` — a fan-out / consolidation across owned wallets that
   no derivation pass could resolve (e.g. a destination wasn't synced)
+- `unscoped_transfer_review` — an unmatched same-import/provider group has no
+  canonical Bitcoin `(chain, network, txid)` scope. Import labels alone cannot
+  carry basis; connect the missing wallet evidence or resolve the complete
+  custody component explicitly.
 - `ownership_transfer_*` — the address-ownership deriver proved a self-transfer
   but could not split it safely; review and pair manually, sync the destination,
   or review the consolidation:
@@ -243,6 +247,10 @@ Quarantine causes typically include:
   graphless imports using `confirmed_at` alone.
 - `conflicting_spend` — transactions share a prevout. Sync and verify which txid
   won; this is not a normal carrying-value pairing or bulk-pair action.
+  Conflict detection requires stored input outpoints. Graphless CSV/provider
+  rows without `vin`/prevout evidence cannot be recognized as stale RBF or
+  double-spend siblings; verify or resync them from a chain-backed wallet before
+  treating competing histories as settled.
 
 ## Rates and tax input quality
 
