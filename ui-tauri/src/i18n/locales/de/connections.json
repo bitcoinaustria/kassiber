@@ -107,6 +107,9 @@
         "wildcard_branch_bounds_missing": "zuletzt ausgegebene Receive-/Change-Grenzen importieren",
         "historic_policy_coverage_missing": "archivierte Wallet-Policies bestätigen",
         "declared_policy_not_fully_derived": "lokale Ownership-Ableitung erweitern",
+        "wallet_policy_derivation_incomplete": "eine nicht indexierbare aktuelle oder archivierte Wallet-Policy reparieren",
+        "silent_payment_full_history_not_proven": "einen privaten vollständigen Silent-Payments-Verlaufsscan abschließen",
+        "historic_silent_payment_scan_not_proven": "den archivierten Silent-Payments-Hop mit einer auditierten Custody-Komponente auflösen",
         "backend_history_not_proven": "privaten vollständigen Verlaufsscan ausführen",
         "wallet_universe_not_attested": "bestätigen, dass alle relevanten realen Wallets hinzugefügt wurden"
       }

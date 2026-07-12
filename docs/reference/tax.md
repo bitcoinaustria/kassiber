@@ -244,6 +244,10 @@ Quarantine causes typically include:
   authoritative wallet export or branch bounds with `wallets coverage-set`, and
   optionally run the consented `wallets backfill-graphs` action. A gap-limit
   scan alone remains `assumed`; it is never promoted to proof.
+  Silent Payments policy coverage additionally requires a completed,
+  non-degraded full-history scan. A later wallet checkpoint cannot prove a
+  retired Silent Payments policy; resolve that missing hop with audited custody
+  evidence instead.
 - `pending_onchain_confirmation` — a chain sync payload explicitly reports the
   transaction as mempool/unconfirmed. It is held out of tax booking until a
   synced leg proves confirmation; graphless CSV/provider rows are unaffected.
