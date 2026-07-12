@@ -424,6 +424,53 @@ class CustodyComponentApiTests(unittest.TestCase):
         leg_payload.pop("anchor_transaction_id")
         validate_wire_row("custody_component_legs", leg_payload)
 
+    def test_component_evidence_carries_typed_per_rail_coverage(self):
+        component = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="native_transfer",
+            legs=[
+                _leg("source", 100, tx="out", wallet="btc"),
+                _leg("destination", 100, tx="in-1", wallet="btc"),
+            ],
+            evidence={
+                "rail_coverage": {
+                    "0": {
+                        "tier": "proven",
+                        "evidence": "descriptor_rescan",
+                        "observed_from": "2025-01-01T00:00:00Z",
+                        "observed_to": "2026-01-01T00:00:00Z",
+                        "limitations": [],
+                    },
+                    "1": {
+                        "tier": "assumed",
+                        "evidence": "provider_export",
+                        "limitations": ["history_window_unknown"],
+                    },
+                }
+            },
+        )
+
+        coverage = component["evidence"]["rail_coverage"]
+        self.assertEqual(coverage["0"]["tier"], "proven")
+        self.assertEqual(coverage["1"]["tier"], "assumed")
+
+    def test_component_rejects_coverage_for_missing_leg(self):
+        with self.assertRaises(AppError) as raised:
+            create_component(
+                self.conn,
+                workspace_id="ws",
+                profile_id="profile",
+                component_type="native_transfer",
+                legs=[
+                    _leg("source", 100, tx="out", wallet="btc"),
+                    _leg("destination", 100, tx="in-1", wallet="btc"),
+                ],
+                evidence={"rail_coverage": {"9": {"tier": "proven"}}},
+            )
+        self.assertEqual(raised.exception.code, "custody_component_validation")
+
     def test_component_header_created_at_must_be_a_timestamp(self):
         with self.assertRaises(AppError) as caught:
             create_component(

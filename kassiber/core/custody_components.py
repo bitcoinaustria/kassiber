@@ -223,6 +223,71 @@ def _json_text(value: Any, field: str) -> str:
     return json.dumps(_json_object(value, field), sort_keys=True, separators=(",", ":"))
 
 
+def _normalized_component_evidence(
+    value: Any,
+    legs: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    evidence = _json_object(value, "evidence")
+    raw_coverage = evidence.get("rail_coverage")
+    if raw_coverage is None:
+        return evidence
+    if not isinstance(raw_coverage, Mapping):
+        raise _error(
+            "evidence.rail_coverage must be an object keyed by leg ordinal",
+            "custody_component_validation",
+        )
+    valid_ordinals = {str(int(leg["ordinal"])) for leg in legs}
+    normalized: dict[str, Any] = {}
+    for raw_ordinal, raw_attestation in raw_coverage.items():
+        ordinal = str(raw_ordinal)
+        if ordinal not in valid_ordinals:
+            raise _error(
+                "rail coverage references a missing leg ordinal",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        if not isinstance(raw_attestation, Mapping):
+            raise _error(
+                "each rail coverage attestation must be an object",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        tier = _required_text(raw_attestation.get("tier"), "tier", token=True)
+        if tier not in {"unknown", "assumed", "proven"}:
+            raise _error(
+                "rail coverage tier is not supported",
+                "custody_component_validation",
+                details={"ordinal": ordinal, "tier": tier},
+            )
+        observed_from = _optional_text(raw_attestation.get("observed_from"), "observed_from")
+        observed_to = _optional_text(raw_attestation.get("observed_to"), "observed_to")
+        if observed_from is not None:
+            observed_from = parse_timestamp(observed_from)
+        if observed_to is not None:
+            observed_to = parse_timestamp(observed_to)
+        raw_limitations = raw_attestation.get("limitations") or []
+        if not isinstance(raw_limitations, list):
+            raise _error(
+                "rail coverage limitations must be a list",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        normalized[ordinal] = {
+            "tier": tier,
+            "evidence": _optional_text(
+                raw_attestation.get("evidence"), "evidence", token=True
+            ),
+            "observed_from": observed_from,
+            "observed_to": observed_to,
+            "limitations": [
+                _required_text(item, "limitation", token=True)
+                for item in raw_limitations
+            ],
+        }
+    evidence["rail_coverage"] = dict(sorted(normalized.items(), key=lambda item: int(item[0])))
+    return evidence
+
+
 @contextmanager
 def _savepoint(conn: sqlite3.Connection):
     """Provide nested atomicity without committing the caller's transaction."""
@@ -2817,6 +2882,7 @@ def create_component(
     conservation_mode = _normalize_mode(conservation_mode)
     normalized_legs = normalize_legs(legs)
     normalized_allocations = normalize_allocations(allocations, normalized_legs)
+    normalized_evidence = _normalized_component_evidence(evidence, normalized_legs)
     component_id = _optional_text(component_id, "component_id") or str(uuid.uuid4())
     lineage_id = _optional_text(lineage_id, "lineage_id") or component_id
     timestamp = parse_timestamp(created_at) if created_at is not None else _now_iso()
@@ -2866,7 +2932,7 @@ def create_component(
                 conservation_mode,
                 _optional_text(evidence_kind, "evidence_kind", token=True),
                 _optional_text(evidence_grade, "evidence_grade", token=True),
-                _json_text(evidence, "evidence"),
+                _json_text(normalized_evidence, "evidence"),
                 _optional_text(conversion_policy, "conversion_policy", token=True),
                 int(conversion_reviewed),
                 _json_text(conversion_metadata, "conversion_metadata"),
@@ -3041,7 +3107,11 @@ def update_component(
     new_mode = old["conservation_mode"] if conservation_mode is _UNSET else _normalize_mode(conservation_mode)
     new_evidence_kind = old["evidence_kind"] if evidence_kind is _UNSET else _optional_text(evidence_kind, "evidence_kind", token=True)
     new_evidence_grade = old["evidence_grade"] if evidence_grade is _UNSET else _optional_text(evidence_grade, "evidence_grade", token=True)
-    new_evidence_json = old["evidence_json"] if evidence is _UNSET else _json_text(evidence, "evidence")
+    raw_evidence = old["evidence_json"] if evidence is _UNSET else evidence
+    new_evidence_json = _json_text(
+        _normalized_component_evidence(raw_evidence, normalized_legs),
+        "evidence",
+    )
     new_policy = old["conversion_policy"] if conversion_policy is _UNSET else _optional_text(conversion_policy, "conversion_policy", token=True)
     if conversion_reviewed is _UNSET:
         new_reviewed = bool(old["conversion_reviewed"])
