@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from kassiber.cli.main import build_parser, main
+from kassiber.cli.main import build_parser, dispatch, main
 from kassiber.envelope import build_envelope, derive_kind
 
 
@@ -20,6 +21,21 @@ def _run(*args: str):
 
 
 class CliAgentContractTests(unittest.TestCase):
+    def test_exchange_sync_dispatch_uses_runtime_config(self):
+        args = build_parser().parse_args(
+            ["wallets", "sync-kraken", "--backend", "kraken-live"]
+        )
+        runtime_config = object()
+        args.runtime_config = runtime_config
+        with (
+            patch("kassiber.cli.main.import_exchange_api", return_value={"ok": True}) as sync,
+            patch("kassiber.cli.main.emit", return_value=0),
+        ):
+            dispatch(object(), args)
+
+        self.assertIs(sync.call_args.args[1], runtime_config)
+        self.assertEqual(sync.call_args.kwargs["expected_backend_kind"], "kraken")
+
     def test_command_catalog_is_machine_readable_and_filterable(self):
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"

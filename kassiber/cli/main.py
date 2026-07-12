@@ -3454,7 +3454,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             expected_kind = args.wallets_command.removeprefix("sync-")
             payload = import_exchange_api(
                 conn,
-                runtime_config,
+                args.runtime_config,
                 args.workspace,
                 args.profile,
                 args.backend,
