@@ -365,6 +365,41 @@ class OwnershipCoverageTests(unittest.TestCase):
         self.assertEqual(after.policy_tier, "proven")
         self.assertEqual(after.history_tier, "proven")
 
+    def test_retired_silent_payment_policy_cannot_borrow_current_scan_proof(self):
+        conn = _conn()
+        _wallet(
+            conn,
+            "vault",
+            "Vault",
+            {
+                "addresses": ["bc1qcurrent"],
+                "ownership_policy": {
+                    "complete": True,
+                    "evidence": "wallet_export",
+                    "branch_last_issued": {},
+                },
+                "ownership_history": [
+                    {
+                        "sp_descriptor": "sp(spscan1qretired)",
+                        "sp_full_history": True,
+                        "ownership_policy": {
+                            "complete": True,
+                            "evidence": "wallet_export",
+                            "branch_last_issued": {},
+                        },
+                    }
+                ],
+            },
+        )
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+
+        wallet = assess_profile_ownership_coverage(conn, "profile").wallets[0]
+
+        self.assertEqual(wallet.policy_tier, "unknown")
+        self.assertIn(
+            "historic_silent_payment_scan_not_proven", wallet.limitations
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -287,6 +287,7 @@ def _assess_wallet(
     ]]
     declarations: list[dict[str, Any]] = []
     bounds: dict[str, int] = {}
+    historic_silent_policy_unproven = False
     for ordinal, policy_config in enumerate(policy_configs):
         try:
             declaration = normalize_policy_declaration(
@@ -321,6 +322,13 @@ def _assess_wallet(
                 if ordinal == 0
                 else "attest_retired_wallet_policies"
             )
+        if ordinal > 0 and policy_config.get("sp_descriptor"):
+            # A later wallet checkpoint cannot prove an earlier Silent
+            # Payments scan. Until scan evidence is archived per policy, keep
+            # the whole real-world wallet policy set fail-closed.
+            historic_silent_policy_unproven = True
+            limitations.append("historic_silent_payment_scan_not_proven")
+            repairs.append("author_manual_custody_component")
 
     current_declaration = declarations[0] if declarations else {}
     complete = bool(declarations) and all(
@@ -374,12 +382,19 @@ def _assess_wallet(
             repairs.append("run_private_full_history_scan")
 
     policy_tier = TIER_UNKNOWN
-    if complete and not missing_bounds and derivation_complete and silent_policy_proven and not any(
-        item in limitations
-        for item in (
-            "wildcard_branch_bounds_missing",
-            "historic_policy_coverage_missing",
-            "wallet_policy_set_not_declared_complete",
+    if (
+        complete
+        and not missing_bounds
+        and derivation_complete
+        and silent_policy_proven
+        and not historic_silent_policy_unproven
+        and not any(
+            item in limitations
+            for item in (
+                "wildcard_branch_bounds_missing",
+                "historic_policy_coverage_missing",
+                "wallet_policy_set_not_declared_complete",
+            )
         )
     ):
         policy_tier = (
