@@ -71,6 +71,7 @@ BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
 WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
 OWNERSHIP_HISTORY_CONFIG_KEY = "ownership_history"
 OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
+OWNERSHIP_POLICY_CONFIG_KEY = "ownership_policy"
 MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
 _OWNERSHIP_HISTORY_LIMIT = 8
 _OWNERSHIP_MATERIAL_FIELDS = (
@@ -79,6 +80,7 @@ _OWNERSHIP_MATERIAL_FIELDS = (
     "xpub",
     "script_types",
     OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
+    OWNERSHIP_POLICY_CONFIG_KEY,
     "addresses",
     "chain",
     "network",
@@ -105,6 +107,7 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "samourai",
     "descriptor_source",
     OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
+    OWNERSHIP_POLICY_CONFIG_KEY,
     "synthesize_change",
     "script_types",
     *silent_payments.SAFE_CONFIG_FIELDS,
@@ -580,6 +583,23 @@ def create_wallet(
 
 def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
+    if OWNERSHIP_POLICY_CONFIG_KEY in config:
+        from .ownership_coverage import normalize_policy_declaration
+
+        try:
+            config[OWNERSHIP_POLICY_CONFIG_KEY] = normalize_policy_declaration(
+                config[OWNERSHIP_POLICY_CONFIG_KEY]
+            )
+        except ValueError as exc:
+            raise AppError(str(exc), code="validation") from exc
+        declared_bounds = config[OWNERSHIP_POLICY_CONFIG_KEY].get(
+            "branch_last_issued", {}
+        )
+        if declared_bounds:
+            config[OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY] = max(
+                int(config.get(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY) or 0),
+                max(int(value) for value in declared_bounds.values()),
+            )
     if OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY in config:
         try:
             ownership_scan_to_index = int(

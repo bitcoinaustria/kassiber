@@ -1,0 +1,305 @@
+"""Profile-wide watch-only ownership coverage assessment.
+
+Coverage is derived from authored wallet-policy declarations plus disposable
+sync checkpoints.  It is not a second transaction ledger.  The accounting
+boundary cares about two distinct questions:
+
+* policy coverage: can every script belonging to this real-world wallet be
+  recognized by the profile-wide ownership index?
+* history coverage: did a backend actually scan that policy over the declared
+  historical interval?
+
+Only policy coverage is needed to call an unmatched output external in a
+transaction graph that is already present.  History coverage remains visible
+for diagnostics/backfill and must never be inferred from a gap limit alone.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass
+from typing import Any, Mapping, Sequence
+
+from ..wallet_descriptors import normalize_chain, normalize_network
+from .freshness import SOURCE_ONCHAIN, source_key
+from .wallets import OWNERSHIP_HISTORY_CONFIG_KEY, wallet_is_deprecated
+
+POLICY_CONFIG_KEY = "ownership_policy"
+TIER_UNKNOWN = "unknown"
+TIER_ASSUMED = "assumed"
+TIER_PROVEN = "proven"
+TIERS = (TIER_UNKNOWN, TIER_ASSUMED, TIER_PROVEN)
+
+EVIDENCE_USER_ATTESTED = "user_attested"
+EVIDENCE_WALLET_EXPORT = "wallet_export"
+EVIDENCE_BACKEND_REPORTED = "backend_reported"
+EVIDENCE_KINDS = {
+    EVIDENCE_USER_ATTESTED,
+    EVIDENCE_WALLET_EXPORT,
+    EVIDENCE_BACKEND_REPORTED,
+}
+
+
+@dataclass(frozen=True)
+class WalletOwnershipCoverage:
+    wallet_id: str
+    wallet_label: str
+    chain: str
+    network: str
+    policy_tier: str
+    history_tier: str
+    complete: bool
+    evidence: str
+    branch_last_issued: Mapping[str, int]
+    derived_through: Mapping[str, int]
+    limitations: tuple[str, ...]
+    repair_actions: tuple[str, ...]
+
+    def to_safe_dict(self) -> dict[str, Any]:
+        return {
+            "wallet_id": self.wallet_id,
+            "wallet_label": self.wallet_label,
+            "chain": self.chain,
+            "network": self.network,
+            "policy_tier": self.policy_tier,
+            "history_tier": self.history_tier,
+            "complete": self.complete,
+            "evidence": self.evidence,
+            "branch_last_issued": dict(sorted(self.branch_last_issued.items())),
+            "derived_through": dict(sorted(self.derived_through.items())),
+            "limitations": list(self.limitations),
+            "repair_actions": list(self.repair_actions),
+        }
+
+
+@dataclass(frozen=True)
+class ProfileOwnershipCoverage:
+    profile_id: str
+    wallets: tuple[WalletOwnershipCoverage, ...]
+
+    def tier_for(self, chain: str, network: str) -> str:
+        relevant = [
+            wallet.policy_tier
+            for wallet in self.wallets
+            if wallet.chain == chain and wallet.network == network
+        ]
+        if not relevant:
+            return TIER_UNKNOWN
+        return min(relevant, key=TIERS.index)
+
+    def is_policy_proven(self, chain: str, network: str) -> bool:
+        return self.tier_for(chain, network) == TIER_PROVEN
+
+    def to_safe_dict(self) -> dict[str, Any]:
+        scopes = sorted({(wallet.chain, wallet.network) for wallet in self.wallets})
+        return {
+            "profile_id": self.profile_id,
+            "scopes": [
+                {"chain": chain, "network": network, "policy_tier": self.tier_for(chain, network)}
+                for chain, network in scopes
+            ],
+            "wallets": [wallet.to_safe_dict() for wallet in self.wallets],
+        }
+
+
+def normalize_policy_declaration(value: Any) -> dict[str, Any]:
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("ownership_policy must be an object")
+    complete = value.get("complete")
+    if type(complete) is not bool:
+        raise ValueError("ownership_policy.complete must be a boolean")
+    evidence = str(value.get("evidence") or EVIDENCE_USER_ATTESTED).strip().lower()
+    if evidence not in EVIDENCE_KINDS:
+        raise ValueError("ownership_policy.evidence is not supported")
+    raw_bounds = value.get("branch_last_issued") or {}
+    if not isinstance(raw_bounds, Mapping):
+        raise ValueError("ownership_policy.branch_last_issued must be an object")
+    bounds: dict[str, int] = {}
+    for branch, raw_index in raw_bounds.items():
+        try:
+            index = int(raw_index)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("ownership policy branch bounds must be integers") from exc
+        if index < 0 or index > 20_000:
+            raise ValueError("ownership policy branch bounds must be between 0 and 20000")
+        bounds[str(int(branch))] = index
+    return {
+        "complete": complete,
+        "evidence": evidence,
+        "branch_last_issued": dict(sorted(bounds.items())),
+    }
+
+
+def assess_profile_ownership_coverage(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallets: Sequence[Mapping[str, Any]] | None = None,
+    *,
+    derived_through_by_wallet: Mapping[str, Mapping[str, int]] | None = None,
+) -> ProfileOwnershipCoverage:
+    if wallets is None:
+        wallets = conn.execute(
+            "SELECT id, label, kind, config_json FROM wallets WHERE profile_id = ? ORDER BY label",
+            (profile_id,),
+        ).fetchall()
+    assessed: list[WalletOwnershipCoverage] = []
+    for wallet in wallets:
+        config = _json_object(wallet["config_json"])
+        if wallet_is_deprecated(config) or not _has_onchain_ownership_material(config):
+            continue
+        assessed.append(
+            _assess_wallet(
+                conn,
+                profile_id,
+                wallet,
+                config,
+                (derived_through_by_wallet or {}).get(str(wallet["id"])),
+            )
+        )
+    return ProfileOwnershipCoverage(profile_id=profile_id, wallets=tuple(assessed))
+
+
+def _assess_wallet(conn, profile_id, wallet, config, derived_override) -> WalletOwnershipCoverage:
+    chain = normalize_chain(config.get("chain"))
+    network = normalize_network(chain, config.get("network"))
+    declaration = normalize_policy_declaration(config.get(POLICY_CONFIG_KEY))
+    complete = bool(declaration.get("complete"))
+    evidence = str(declaration.get("evidence") or "")
+    bounds = dict(declaration.get("branch_last_issued") or {})
+    limitations: list[str] = []
+    repairs: list[str] = []
+
+    if not complete:
+        limitations.append("wallet_policy_set_not_declared_complete")
+        repairs.append("declare_complete_wallet_policy_set")
+    if _has_wildcard_policy(config) and not bounds:
+        limitations.append("wildcard_branch_bounds_missing")
+        repairs.append("import_last_issued_branch_bounds")
+    if config.get(OWNERSHIP_HISTORY_CONFIG_KEY) and not all(
+        isinstance(item, Mapping) and item.get(POLICY_CONFIG_KEY)
+        for item in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
+    ):
+        limitations.append("historic_policy_coverage_missing")
+        repairs.append("attest_retired_wallet_policies")
+
+    checkpoint = _checkpoint(conn, profile_id, str(wallet["id"]))
+    derived = _int_map(derived_override)
+    if not derived:
+        derived = _int_map(checkpoint.get("ownership_derived_through"))
+    if not derived:
+        derived = _int_map(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
+    if not derived:
+        highest = _int_map(checkpoint.get("highest_used"))
+        gap = int(config.get("gap_limit") or 0)
+        derived = {branch: index + gap for branch, index in highest.items()}
+
+    missing_bounds = [
+        branch for branch, last_issued in bounds.items()
+        if int(derived.get(branch, -1)) < int(last_issued)
+    ]
+    if missing_bounds:
+        limitations.append("declared_policy_not_fully_derived")
+        repairs.append("extend_ownership_derivation")
+
+    policy_tier = TIER_UNKNOWN
+    if complete and not missing_bounds and not any(
+        item in limitations
+        for item in ("wildcard_branch_bounds_missing", "historic_policy_coverage_missing")
+    ):
+        policy_tier = (
+            TIER_ASSUMED if evidence == EVIDENCE_USER_ATTESTED else TIER_PROVEN
+        )
+
+    history_tier = _history_tier(config, checkpoint, policy_tier)
+    if history_tier != TIER_PROVEN:
+        limitations.append("backend_history_not_proven")
+        repairs.append("run_private_full_history_scan")
+
+    return WalletOwnershipCoverage(
+        wallet_id=str(wallet["id"]),
+        wallet_label=str(wallet["label"]),
+        chain=chain,
+        network=network,
+        policy_tier=policy_tier,
+        history_tier=history_tier,
+        complete=complete,
+        evidence=evidence,
+        branch_last_issued=bounds,
+        derived_through=derived,
+        limitations=tuple(dict.fromkeys(limitations)),
+        repair_actions=tuple(dict.fromkeys(repairs)),
+    )
+
+
+def _history_tier(config, checkpoint, policy_tier):
+    if policy_tier == TIER_UNKNOWN or not checkpoint:
+        return TIER_UNKNOWN
+    backend = checkpoint.get("backend") if isinstance(checkpoint.get("backend"), Mapping) else {}
+    kind = str(backend.get("kind") or "")
+    if kind == "bitcoinrpc" and config.get("birthday") and checkpoint.get("bitcoinrpc_last_block"):
+        return TIER_PROVEN if policy_tier == TIER_PROVEN else TIER_ASSUMED
+    if kind in {"esplora", "electrum"} and checkpoint.get("highest_used"):
+        return TIER_ASSUMED
+    return TIER_UNKNOWN
+
+
+def _checkpoint(conn, profile_id, wallet_id):
+    try:
+        row = conn.execute(
+            "SELECT checkpoint_json FROM freshness_source_states WHERE profile_id = ? AND source_key = ?",
+            (profile_id, source_key(SOURCE_ONCHAIN, wallet_id)),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        # Pure-engine callers intentionally use a minimal schema.
+        return {}
+    return _json_object(row["checkpoint_json"] if row else None)
+
+
+def _has_onchain_ownership_material(config):
+    return bool(
+        config.get("descriptor")
+        or config.get("xpub")
+        or config.get("addresses")
+        or config.get("sp_descriptor")
+        or config.get(OWNERSHIP_HISTORY_CONFIG_KEY)
+    )
+
+
+def _has_wildcard_policy(config):
+    return bool(config.get("xpub") or "*" in str(config.get("descriptor") or "") or "*" in str(config.get("change_descriptor") or ""))
+
+
+def _json_object(value):
+    if isinstance(value, Mapping):
+        return dict(value)
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return dict(parsed) if isinstance(parsed, Mapping) else {}
+
+
+def _int_map(value):
+    if not isinstance(value, Mapping):
+        return {}
+    output = {}
+    for key, raw in value.items():
+        try:
+            parsed = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            output[str(int(key))] = parsed
+    return output
+
+
+__all__ = [
+    "POLICY_CONFIG_KEY",
+    "ProfileOwnershipCoverage",
+    "WalletOwnershipCoverage",
+    "assess_profile_ownership_coverage",
+    "normalize_policy_declaration",
+]

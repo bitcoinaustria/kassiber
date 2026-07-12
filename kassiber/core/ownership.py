@@ -47,6 +47,7 @@ from .wallets import (
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
 )
+from .ownership_coverage import ProfileOwnershipCoverage, assess_profile_ownership_coverage
 
 # Default per-branch derivation ceiling for an interactive reconciliation run.
 # Owned candidates at low indices resolve instantly via the cheap tiers; only
@@ -165,6 +166,7 @@ class OwnedIndex:
     by_outpoint: dict[str, list[OwnedMatch]] = field(default_factory=dict)
     txid_wallets: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
     scanned_depth: dict[str, dict[str, int]] = field(default_factory=dict)
+    coverage: ProfileOwnershipCoverage | None = None
     # A txid/outpoint is not a globally unique physical identity: the same
     # 32-byte txid (and therefore the same ``txid:vout`` spelling) can exist on
     # independent Bitcoin or Liquid networks.  Keep the legacy unscoped maps
@@ -719,6 +721,12 @@ def build_owned_index(
                 warnings.append(
                     f"Wallet '{wallet['label']}': descriptor not scanned ({exc.code})"
                 )
+    index.coverage = assess_profile_ownership_coverage(
+        conn,
+        profile_id,
+        wallets,
+        derived_through_by_wallet=index.scanned_depth,
+    )
     return index, warnings
 
 
@@ -906,11 +914,12 @@ def _derive_wallet_into_index(
         index.add_address(target.address, match)
         if target.unconfidential_address:
             index.add_address(target.unconfidential_address, match)
-        depth[target.branch_label] = max(depth.get(target.branch_label, -1), target.address_index)
+        branch_key = str(target.branch_index)
+        depth[branch_key] = max(depth.get(branch_key, -1), target.address_index)
     current_depth = index.scanned_depth.setdefault(wallet_id, {})
-    for branch_label, address_index in depth.items():
-        current_depth[branch_label] = max(
-            current_depth.get(branch_label, -1), address_index
+    for branch_key, address_index in depth.items():
+        current_depth[branch_key] = max(
+            current_depth.get(branch_key, -1), address_index
         )
 
 
