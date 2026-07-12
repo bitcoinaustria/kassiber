@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aiToolAllowsSessionConsent,
   applyAiChatDeltaToMessage,
   applyAiChatStreamRecordToMessage,
   applyToolConsentResponseToMessage,
@@ -328,6 +329,16 @@ describe("AI stream reducer helpers", () => {
       call_id: "call_1",
       decision: "allow_session",
     });
+  });
+
+  it("requires per-call consent for quarantine and custody resolution", () => {
+    expect(aiToolAllowsSessionConsent("ui.wallets.sync")).toBe(true);
+    expect(
+      aiToolAllowsSessionConsent("ui.journals.quarantine.resolve"),
+    ).toBe(false);
+    expect(
+      aiToolAllowsSessionConsent("ui.transfers.components.bulk_resolve"),
+    ).toBe(false);
   });
 
   it("builds a targeted daemon cancel request for active chats", () => {

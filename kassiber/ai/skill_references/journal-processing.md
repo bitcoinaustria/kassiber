@@ -80,6 +80,13 @@ kassiber journals quarantine resolve price-override --transaction <transaction-i
 kassiber journals quarantine resolve exclude --transaction <transaction-id>
 ```
 
+In chat, first read `ui.transactions.review_context` (and
+`ui.transfers.review_context` for ownership or rail questions). The consented
+`ui.journals.quarantine.resolve` tool is deliberately limited to reviewed price
+overrides and explicit exclusions. It reprocesses by default and reports
+whether the quarantine actually cleared. Never invent a rate, and never use an
+exclusion to conceal a transfer or custody gap.
+
 Clear quarantine state only when the workflow truly calls for it:
 
 ```bash
@@ -99,12 +106,21 @@ kassiber transfers unpair --pair-id <pair-id>
 
 Use `journals transfers list` to inspect the current computed transfer audit directly. It surfaces same-asset transfer matches with exact sent / received / fee amounts, plus any stored cross-asset pair links, so you do not need to infer pairing from `journals process` counts or from journal rows.
 
-Same-asset carrying-value pairs are supported. Cross-asset `--policy carrying-value` pairs are supported for Austrian books: Kassiber emits reviewed swap markers and rp2's native Austrian multi-asset path carries basis. Cross-asset `--policy taxable` pairs stay on the normal SELL + BUY path.
+Same-asset carrying-value pairs are supported. Reviewed BTC ↔ LBTC rail changes may carry value on every profile while `bitcoin_rail_carrying_value` is enabled. Austrian policy additionally supports reviewed carrying-value treatment for other eligible crypto conversions. Cross-asset `--policy taxable` pairs stay on the normal SELL + BUY path.
 
 Auto-detection is intentionally conservative: Kassiber only auto-pairs
-same-asset cross-wallet transfers that share the same `external_id`.
-For BTC ↔ LBTC swaps, the operator or AI helper must identify the pair
-and call `kassiber transfers pair` explicitly.
+rows with canonical scoped transaction identity, owned script/outpoint evidence,
+or source-qualified Lightning evidence. Arbitrary provider/import ids never
+establish ownership. For BTC ↔ LBTC swaps, review the surfaced pair or create
+an explicit custody component when the route is incomplete.
+
+Use `transfers components bulk-resolve --dry-run` for 1:N, N:1, N:M,
+multi-hop migrations, or missing intermediate wallets. Represent missing owned
+custody with `untracked_wallet`; genuine N:M requires explicit allocations.
+Activate only after exact anchor coverage and conservation pass atomically.
+In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
+then `ui.transfers.components.bulk_resolve` with `dry_run=true` before asking
+for consent to write the final component set.
 
 If `kassiber --machine journals transfers list` reports
 `summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.

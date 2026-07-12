@@ -236,6 +236,28 @@ describe("daemon mutation invalidation scope", () => {
     ]);
   });
 
+  it("keeps custody component refreshes targeted", () => {
+    for (const kind of [
+      "ui.transfers.components.bulk_resolve",
+      "ui.transfers.components.update",
+      "ui.transfers.components.activate",
+      "ui.transfers.components.supersede",
+      "ui.transfers.components.undo",
+    ]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
+        expect.arrayContaining([
+          "ui.review.badges",
+          "ui.transfers.components.list",
+        ]),
+      );
+    }
+    expect(
+      invalidatedDaemonQueryKindsForMutation(
+        "ui.transfers.components.activate",
+      ),
+    ).toContain("ui.journals.snapshot");
+  });
+
   it("keeps unaudited mutations on broad daemon invalidation", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.transactions.metadata.update"),

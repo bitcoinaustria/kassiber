@@ -15,6 +15,68 @@ from .events import author_event
 from .schema_allowlist import SYNC_TABLE_MAP
 
 
+def _is_immutable_conflict(conflict, spec) -> bool:
+    if not spec.immutable_fields:
+        return False
+    field = str(conflict["field"])
+    return field == "__exists__" or field in spec.immutable_fields
+
+
+def _materialized_conflict_value(conn, *, profile_id: str, conflict, spec) -> Any:
+    from .merge import _mapped_id
+
+    try:
+        wire_pk = json.loads(conflict["entity_key"])
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError("conflict entity key is invalid", code="sync_conflict_invalid") from exc
+    if not isinstance(wire_pk, list) or len(wire_pk) != len(spec.primary_key):
+        raise AppError("conflict entity key is invalid", code="sync_conflict_invalid")
+    local_pk = tuple(
+        _mapped_id(
+            conn,
+            profile_id=profile_id,
+            table=spec.table,
+            wire_id=item,
+        )
+        for item in wire_pk
+    )
+    where = " AND ".join(f"{column} = ?" for column in spec.primary_key)
+    row = conn.execute(f"SELECT * FROM {spec.table} WHERE {where}", local_pk).fetchone()
+    if conflict["field"] == "__exists__":
+        return row is not None
+    if row is None:
+        raise AppError("conflicted row no longer exists", code="sync_conflict_invalid")
+    value = row[conflict["field"]]
+    if conflict["field"] in spec.json_columns and value is not None:
+        value = json.loads(value)
+    return value
+
+
+def _require_immutable_resolution_matches_materialized(
+    conn, *, profile_id: str, conflict, spec, value: Any
+) -> None:
+    if not _is_immutable_conflict(conflict, spec):
+        return
+    if _materialized_conflict_value(
+        conn, profile_id=profile_id, conflict=conflict, spec=spec
+    ) == value:
+        return
+    raise AppError(
+        "custody revision conflicts cannot rewrite authored economic facts in place",
+        code="sync_conflict_requires_revision",
+        hint=(
+            "Acknowledge the currently materialized signed fact to close this "
+            "conflict, then create a new custody component revision if it is wrong."
+        ),
+        details={
+            "entity_table": conflict["entity_table"],
+            "entity_key": conflict["entity_key"],
+            "field": conflict["field"],
+        },
+        retryable=False,
+    )
+
+
 def list_conflicts(conn: sqlite3.Connection, *, profile_id: str, include_resolved: bool = False) -> list[dict[str, Any]]:
     where = "profile_id = ?" if include_resolved else "profile_id = ? AND status = 'open'"
     rows = conn.execute(
@@ -115,9 +177,21 @@ def apply_resolution_event(
     spec = SYNC_TABLE_MAP.get(conflict["entity_table"])
     if not spec:
         raise AppError("conflict table is outside sync allowlist", code="sync_schema_forbidden")
+    _require_immutable_resolution_matches_materialized(
+        conn,
+        profile_id=book["profile_id"],
+        conflict=conflict,
+        spec=spec,
+        value=value,
+    )
 
     mutated = False
-    if conflict["field"] == "__exists__":
+    if _is_immutable_conflict(conflict, spec):
+        # Immutable authored facts are never rewritten. Matching the current
+        # materialization is an audited acknowledgement that closes the row;
+        # a different outcome requires a new signed custody revision.
+        mutated = False
+    elif conflict["field"] == "__exists__":
         if not isinstance(value, bool):
             raise AppError("row-existence resolution must be boolean", code="sync_conflict_invalid")
         if value:
@@ -207,10 +281,20 @@ def resolve_conflict(
     ).fetchone()
     if not conflict:
         raise AppError("open sync conflict was not found", code="not_found")
+    spec = SYNC_TABLE_MAP.get(conflict["entity_table"])
+    if not spec:
+        raise AppError("conflict table is outside sync allowlist", code="sync_schema_forbidden")
     value, chosen_event_id = _resolved_value(
         conflict,
         source_event_id=source_event_id,
         custom_value=custom_value,
+    )
+    _require_immutable_resolution_matches_materialized(
+        conn,
+        profile_id=profile_id,
+        conflict=conflict,
+        spec=spec,
+        value=value,
     )
     event = author_event(
         conn,
@@ -241,6 +325,14 @@ def resolve_conflict(
         created_files=[],
     )
     if mutated:
+        if conflict["entity_table"] in {
+            "custody_components",
+            "custody_component_legs",
+            "custody_component_allocations",
+        }:
+            from ..custody_components import reconcile_active_memberships
+
+            reconcile_active_memberships(conn, profile_id=profile_id)
         invalidate_journals(conn, profile_id)
     return {
         "conflict_id": conflict["id"],

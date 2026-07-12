@@ -1,4 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
   ArrowUp,
@@ -30,6 +31,7 @@ import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 import { formatBtc, formatEur, hiddenSensitiveClassName } from "./format";
 
 interface WalletsTableProps {
+  balanceSharesOverlap?: boolean;
   connections: Connection[];
   currency: Currency;
   hideSensitive: boolean;
@@ -131,6 +133,7 @@ function taxFreeBalanceIsCurrent(
 }
 
 export function WalletsTable({
+  balanceSharesOverlap = false,
   connections,
   currency,
   hideSensitive,
@@ -267,6 +270,7 @@ export function WalletsTable({
                 <WalletRow
                   key={connection.id}
                   connection={connection}
+                  balanceSharesOverlap={balanceSharesOverlap}
                   totalBtc={totalBtc}
                   priceEur={priceEur}
                   hideSensitive={hideSensitive}
@@ -339,6 +343,7 @@ function SortableHead({
 }
 
 interface WalletRowProps {
+  balanceSharesOverlap: boolean;
   connection: Connection;
   currency: Currency;
   hideSensitive: boolean;
@@ -350,6 +355,7 @@ interface WalletRowProps {
 }
 
 function WalletRow({
+  balanceSharesOverlap,
   connection,
   currency,
   hideSensitive,
@@ -359,6 +365,7 @@ function WalletRow({
   showTaxFreeColumn,
   totalBtc,
 }: WalletRowProps) {
+  const { t } = useTranslation("connections");
   const isBackend = connection.role === "backend";
   const pct = totalBtc > 0 ? (connection.balance / totalBtc) * 100 : 0;
   const isEur = currency === "eur";
@@ -374,10 +381,12 @@ function WalletRow({
   const compositionTitle = isBackend
     ? "First-party infrastructure"
     : hideSensitive
-    ? "Wallet share hidden"
-    : pct < 0.1
-      ? "<0.1% of total balance"
-      : `${pct.toFixed(pct < 10 ? 1 : 0)}% of total balance`;
+      ? "Wallet share hidden"
+      : balanceSharesOverlap
+        ? t("table.balanceOverlap")
+        : pct < 0.1
+          ? "<0.1% of total balance"
+          : `${pct.toFixed(pct < 10 ? 1 : 0)}% of total balance`;
 
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === "Enter" || event.key === " ") {

@@ -4,6 +4,7 @@ import type {
   AiToolConsentDecision,
   AiToolConsentRequest,
 } from "@/daemon/stream";
+import { aiToolAllowsSessionConsent } from "@/daemon/stream";
 import {
   Confirmation,
   ConfirmationAction,
@@ -72,14 +73,16 @@ export function ToolConsentDialog({
               <XCircle aria-hidden="true" />
               Deny
             </ConfirmationAction>
-            <ConfirmationAction
-              type="button"
-              variant="secondary"
-              onClick={() => void onDecision("allow_session")}
-            >
-              <ShieldCheck aria-hidden="true" />
-              Allow this session
-            </ConfirmationAction>
+            {request && aiToolAllowsSessionConsent(request.name) ? (
+              <ConfirmationAction
+                type="button"
+                variant="secondary"
+                onClick={() => void onDecision("allow_session")}
+              >
+                <ShieldCheck aria-hidden="true" />
+                Allow this session
+              </ConfirmationAction>
+            ) : null}
             <ConfirmationAction
               type="button"
               onClick={() => void onDecision("allow_once")}

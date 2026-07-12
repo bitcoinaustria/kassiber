@@ -301,6 +301,44 @@ def _psbt(
 
 
 class PrivacyLinkageTests(unittest.TestCase):
+    def test_mixed_network_outpoint_collision_fails_closed(self):
+        conn = _conn()
+        try:
+            conn.execute("ALTER TABLE wallet_utxos ADD COLUMN network TEXT")
+            shared_txid = _txid("10")
+            _insert_utxo(
+                conn,
+                wallet_id="main-wallet",
+                txid=shared_txid,
+                address="bc1qmaincollision",
+            )
+            conn.execute(
+                "UPDATE wallet_utxos SET network = 'main' "
+                "WHERE wallet_id = 'main-wallet'"
+            )
+            _insert_utxo(
+                conn,
+                wallet_id="regtest-wallet",
+                txid=shared_txid,
+                address="bcrt1qregtestcollision",
+            )
+            conn.execute(
+                "UPDATE wallet_utxos SET network = 'regtest' "
+                "WHERE wallet_id = 'regtest-wallet'"
+            )
+
+            graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        finally:
+            conn.close()
+
+        self.assertEqual(graph.nodes, {})
+        self.assertEqual(graph.edges, ())
+        limitation_codes = {
+            limitation["code"] for limitation in graph.limitations
+        }
+        self.assertIn("mixed_bitcoin_networks_require_selection", limitation_codes)
+        self.assertNotIn("no_owned_bitcoin_outputs", limitation_codes)
+
     def test_already_linked_consolidation_does_not_score_cioh_again(self):
         conn = _conn()
         try:

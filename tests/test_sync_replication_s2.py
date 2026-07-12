@@ -851,8 +851,8 @@ class SyncBundleReplayTests(unittest.TestCase):
             workspace=self.workspace,
             profile=self.profile,
             tx=tx,
-            source="gui",
-            reason="reviewed",
+            source="ai_tool",
+            reason="AI-assisted quarantine resolution reviewed by operator",
             changed_at=now_iso(),
             changed_fields=["excluded"],
             before_state={"excluded": False},
@@ -875,6 +875,11 @@ class SyncBundleReplayTests(unittest.TestCase):
         ).fetchone()
         self.assertIsNotNone(remote_history)
         self.assertTrue(remote_history["sync_signature"])
+        self.assertEqual(remote_history["source"], "ai_tool")
+        self.assertEqual(
+            remote_history["reason"],
+            "AI-assisted quarantine resolution reviewed by operator",
+        )
         self.assertEqual(
             self.peer.execute(
                 "SELECT after_value FROM transaction_edit_fields WHERE event_id = ?",
@@ -882,6 +887,62 @@ class SyncBundleReplayTests(unittest.TestCase):
             ).fetchone()[0],
             "true",
         )
+
+    def test_transaction_history_missing_anchor_is_rejected_without_wedging_replica(self):
+        self._join_peer("editor")
+        _, tx_id, _, _ = self._insert_wallet_transaction_attachment()
+        initial = build_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            attachments_root=self.attachments_a,
+        )
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=initial.ciphertext,
+            attachments_root=self.attachments_b,
+        )
+        self.peer.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+
+        tx = self.owner.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        history_id = append_event(
+            self.owner,
+            workspace=self.workspace,
+            profile=self.profile,
+            tx=tx,
+            source="gui",
+            reason="edit after remote deletion",
+            changed_at=now_iso(),
+            changed_fields=["notes"],
+            before_state={"notes": None},
+            after_state={"notes": "reviewed"},
+        )
+        bundle = build_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            attachments_root=self.attachments_a,
+        )
+        result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+            attachments_root=self.attachments_b,
+        )
+
+        self.assertEqual(result.rejected_events, 1)
+        self.assertIsNone(
+            self.peer.execute(
+                "SELECT 1 FROM transaction_edit_events WHERE id = ?", (history_id,)
+            ).fetchone()
+        )
+        rejected = self.peer.execute(
+            "SELECT * FROM sync_rejected_events WHERE reason = 'sync_dependency_missing'"
+        ).fetchone()
+        self.assertIsNotNone(rejected)
+        replica = self.peer.execute(
+            "SELECT * FROM sync_replicas WHERE id = ?", (rejected["replica_id"],)
+        ).fetchone()
+        self.assertEqual(replica["last_seq"], rejected["replica_seq"])
 
     def test_full_snapshot_preserves_nullable_edit_history_values(self):
         self._join_peer("editor")

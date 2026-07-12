@@ -22,6 +22,7 @@ from kassiber.core.wallets import wallet_policy_asset_id
 from kassiber.db import open_db
 from kassiber.msat import btc_to_msat
 from kassiber.time_utils import timestamp_to_iso
+from kassiber.transfers import onchain_transfer_scope
 from kassiber.wallet_descriptors import default_policy_asset_id
 
 
@@ -120,6 +121,63 @@ class LiquidElectrumSyncTest(unittest.TestCase):
         self.assertEqual(payload["source"], "unit-test")
         self.assertEqual(payload["component"]["net_sats"], -1000)
         self.assertEqual(payload["component"]["fee_sats"], 19)
+        # Historical ownership replay is based on persisted valued legs, not
+        # the current UTXO set (this prevout is already spent by definition).
+        self.assertEqual(payload["chain"], "liquid")
+        self.assertEqual(payload["ownership_graph_version"], 1)
+        self.assertEqual(payload["vin"][0]["txid"], "11" * 32)
+        self.assertEqual(payload["vin"][0]["prevout"]["value_sats"], 1000)
+        self.assertEqual(payload["vin"][0]["prevout"]["asset_id"], policy_asset_id)
+        self.assertEqual(payload["vin"][0]["prevout"]["role"], "owned")
+        self.assertEqual(payload["vout"][0]["role"], "fee")
+        self.assertEqual(payload["vout"][0]["value_sats"], 19)
+        self.assertEqual(payload["vout"][1]["role"], "external")
+        self.assertEqual(payload["vout"][1]["value_sats"], 500)
+
+    def test_destination_only_issued_asset_observer_is_not_charged_lbtc_fee(self):
+        policy_asset_id = default_policy_asset_id("liquidv1")
+        issued_asset_id = "22" * 32
+        tracked_script = "0014cafebabe"
+        current_tx = _FakeTx(
+            vin=[_FakeInput("33" * 32, 0)],
+            vout=[
+                _FakeOutput("", 19, policy_asset_id),
+                _FakeOutput(tracked_script, 500, issued_asset_id),
+            ],
+        )
+        prev_tx = _FakeTx(
+            vin=[], vout=[_FakeOutput("51", 1000, policy_asset_id)]
+        )
+
+        with patch(
+            "kassiber.core.sync_backends.liquid_output_amount_asset_id",
+            side_effect=lambda output, plan, target=None: (
+                output.fake_value_sats,
+                output.fake_asset_id,
+            ),
+        ):
+            records = record_components_from_liquid_tx(
+                txid="44" * 32,
+                occurred_at="2026-01-01T00:00:00Z",
+                tx=current_tx,
+                descriptor_plan=object(),
+                tracked_scripts={
+                    tracked_script: {
+                        "branch_index": 0,
+                        "address_index": 0,
+                        "script_pubkey": tracked_script,
+                        "address": "lq1issued",
+                    }
+                },
+                backend_name="liquid",
+                policy_asset_id=policy_asset_id,
+                prev_tx_lookup=lambda _txid: prev_tx,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["direction"], "inbound")
+        self.assertEqual(records[0]["asset"], issued_asset_id)
+        self.assertEqual(records[0]["fee"], 0)
 
     def test_electrum_records_for_liquid_wallet(self):
         policy_asset_id = default_policy_asset_id("liquidv1")
@@ -542,6 +600,54 @@ class LiquidAssetBackfillTest(unittest.TestCase):
             ).fetchone()
             self.assertIsNone(profile["last_processed_at"])
             self.assertEqual(profile["last_processed_tx_count"], 0)
+        finally:
+            conn.close()
+
+    def test_open_db_enriches_legacy_liquid_scope_from_wallet_config(self):
+        txid = "ab" * 32
+        conn = open_db(str(self.data_root))
+        try:
+            self._seed_minimal_schema(conn)
+            conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id = ?",
+                (json.dumps({"chain": "liquid", "network": "liquidv1"}), "wal-1"),
+            )
+            self._insert_tx(conn, "legacy-liquid", "LBTC")
+            conn.execute(
+                "UPDATE transactions SET external_id = ?, raw_json = ? WHERE id = ?",
+                (
+                    txid,
+                    json.dumps(
+                        {
+                            "txid": txid.upper(),
+                            "network": "main",
+                            "asset": default_policy_asset_id("liquidv1"),
+                        }
+                    ),
+                    "legacy-liquid",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        conn = open_db(str(self.data_root))
+        try:
+            row = conn.execute(
+                "SELECT t.*, w.config_json, w.kind AS wallet_kind "
+                "FROM transactions t JOIN wallets w ON w.id = t.wallet_id "
+                "WHERE t.id = ?",
+                ("legacy-liquid",),
+            ).fetchone()
+            self.assertEqual(
+                onchain_transfer_scope(row),
+                (
+                    "liquid",
+                    "liquidv1",
+                    txid,
+                    default_policy_asset_id("liquidv1"),
+                ),
+            )
         finally:
             conn.close()
 

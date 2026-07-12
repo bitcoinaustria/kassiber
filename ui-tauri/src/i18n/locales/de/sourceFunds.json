@@ -359,13 +359,17 @@
     "rejected": "Abgelehnt"
   },
   "method": {
-    "same_external_id": "Gleiche externe id",
+    "same_external_id": "Veraltete externe ID (manuell)",
+    "same_onchain_scope": "Kanonische On-Chain-Transaktion",
     "transaction_pair": "Transaktionspaar",
-    "provider_trade_id": "Provider-Trade-id",
-    "provider_order_id": "Provider-Order-id",
-    "provider_payment_id": "Provider-Payment-id",
-    "provider_exchange_order_id": "Provider-Exchange-Order-id",
-    "provider_ledger_id": "Provider-Ledger-id",
+    "utxo_spend": "UTXO-Ausgabe",
+    "payment_hash": "Lightning-Zahlungs-Hash",
+    "provider_trade_id": "Provider-Trade-ID",
+    "provider_order_id": "Provider-Order-ID",
+    "provider_payment_id": "Provider-Zahlungs-ID",
+    "provider_exchange_order_id": "Provider-Börsenauftrags-ID",
+    "provider_ledger_id": "Provider-Ledger-ID",
+    "provider_id": "Anbieter-ID",
     "manual": "Manuell"
   },
   "toast": {

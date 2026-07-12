@@ -141,6 +141,40 @@ class CoreMaintenanceTest(unittest.TestCase):
                     assistant_content="old answer",
                     commit=True,
                 )
+                component_id = "reset-custody-component"
+                conn.execute(
+                    """
+                    INSERT INTO custody_components(
+                        id, lineage_id, workspace_id, profile_id, revision,
+                        component_type, expected_leg_count,
+                        expected_allocation_count, created_at
+                    ) VALUES(?, ?, ?, ?, 1, 'transfer', 1, 0, ?)
+                    """,
+                    (
+                        component_id,
+                        "reset-custody-lineage",
+                        workspace_id,
+                        profile_id,
+                        "2026-01-01T10:00:00Z",
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO custody_component_legs(
+                        id, component_id, workspace_id, profile_id, ordinal,
+                        role, rail, asset, exposure, conservation_unit,
+                        amount_msat, created_at
+                    ) VALUES(?, ?, ?, ?, 0, 'source', 'bitcoin', 'BTC',
+                             'asset', 'BTC', 1000, ?)
+                    """,
+                    (
+                        "reset-custody-leg",
+                        component_id,
+                        workspace_id,
+                        profile_id,
+                        "2026-01-01T10:00:00Z",
+                    ),
+                )
 
                 payload = maintenance.reset_current_profile_data(conn, str(data_root))
 
@@ -150,6 +184,8 @@ class CoreMaintenanceTest(unittest.TestCase):
                 self.assertGreaterEqual(payload["preserved"]["backends"], 1)
                 self.assertEqual(payload["preserved"]["rates_cache"], 1)
                 self.assertEqual(payload["removed"]["transactions"], 1)
+                self.assertEqual(payload["removed"]["custody_components"], 1)
+                self.assertEqual(payload["removed"]["custody_component_legs"], 1)
                 self.assertGreaterEqual(payload["removed"]["journal_entries"], 1)
                 self.assertEqual(payload["removed"]["attachments"], 1)
                 self.assertEqual(payload["removed"]["attachment_files"], 1)
@@ -170,6 +206,10 @@ class CoreMaintenanceTest(unittest.TestCase):
                     "ai_chat_sessions",
                     "ai_chat_messages",
                     "tags",
+                    "custody_components",
+                    "custody_component_legs",
+                    "custody_component_allocations",
+                    "custody_component_purge_authorizations",
                 ):
                     count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                     self.assertEqual(count, 0, table)

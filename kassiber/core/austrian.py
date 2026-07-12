@@ -23,9 +23,12 @@ from zoneinfo import ZoneInfo
 
 from .pair_allocation import (
     allocate_fee_msat,
+    allocate_transfer_component_flow_msat,
     clamped_component_receipts_msat,
     connected_pair_components,
+    first_pair_by_edge,
     is_component_member,
+    outbound_transfer_evidence_msat,
     ordered_pair_component,
 )
 
@@ -306,14 +309,12 @@ def _transfer_actions_for_intra_pairs(
         transfer_row_ids.update(group_row_ids)
 
         trigger_by_out_id = all(row_id in (row_ids or set()) for row_id in out_rows_by_id)
-        if len(out_rows_by_id) > 1 and len(in_rows_by_id) > 1:
-            # The tax normalizer quarantines these as ambiguous; inference must
-            # not also treat their legs as ordinary acquisitions/disposals.
-            continue
-
+        source_evidence_by_out_id = {
+            out_id: outbound_transfer_evidence_msat(row)
+            for out_id, row in out_rows_by_id.items()
+        }
         total_sent_msat = sum(
-            _row_msat(row, "amount") + _row_msat(row, "fee")
-            for row in out_rows_by_id.values()
+            evidence[0] for evidence in source_evidence_by_out_id.values()
         )
         received_amounts_by_in_id = {
             row_id: _row_msat(row, "amount")
@@ -357,24 +358,70 @@ def _transfer_actions_for_intra_pairs(
                 )
             continue
 
-        sent_amounts = [
-            _row_msat(pair["out"], "amount") + _row_msat(pair["out"], "fee")
-            for pair in ordered_pairs
-        ]
-        fee_allocations = allocate_fee_msat(fee_msat, sent_amounts)
-        for pair, sent_msat, fee_allocation in zip(
-            ordered_pairs, sent_amounts, fee_allocations
+        # Matching remains country-neutral. This downstream classifier consumes
+        # the exact generic multi-source allocation solely to move Austrian
+        # Alt/Neu availability between wallets without inventing different lots.
+        ordered_out_ids = list(out_rows_by_id)
+        source_sent_msat = {
+            out_id: source_evidence_by_out_id[out_id][0]
+            for out_id in out_rows_by_id
+        }
+        source_explicit_fee_msat = {
+            out_id: source_evidence_by_out_id[out_id][1]
+            for out_id in out_rows_by_id
+        }
+        pair_by_edge = first_pair_by_edge(ordered_pairs)
+        allocation = allocate_transfer_component_flow_msat(
+            source_sent_msat,
+            source_explicit_fee_msat,
+            adjusted_received_by_in_id,
+            list(pair_by_edge),
+            implicit_fee_source_ids=[
+                out_id
+                for out_id, evidence in source_evidence_by_out_id.items()
+                if evidence[2]
+            ],
+        )
+        if allocation is None:
+            # Generic booking emits manual_multi_pair_unbalanced for the same rows.
+            continue
+        allocated, source_fee_allocations = allocation
+        source_principal = {out_id: 0 for out_id in ordered_out_ids}
+        for out_id, _in_id, principal_msat in allocated:
+            source_principal[out_id] += principal_msat
+        if any(
+            source_sent_msat[out_id] > 0 and principal_msat <= 0
+            for out_id, principal_msat in source_principal.items()
         ):
-            received_msat = sent_msat - fee_allocation
-            if received_msat <= 0:
-                continue
-            out_row = pair["out"]
-            in_row = pair["in"]
-            action_in = _copy_row_with_amount(in_row, amount_msat=received_msat)
-            trigger_id = str(out_row["id"]) if trigger_by_out_id else str(in_row["id"])
-            actions_by_trigger_id[trigger_id].append(
-                (out_row, action_in, str(out_row["id"]))
+            continue
+
+        flows_by_source: dict[str, list[tuple[str, int]]] = defaultdict(list)
+        for out_id, in_id, principal_msat in allocated:
+            flows_by_source[out_id].append((in_id, principal_msat))
+        for out_id in ordered_out_ids:
+            source_flows = flows_by_source.get(out_id, [])
+            fee_parts = allocate_fee_msat(
+                source_fee_allocations.get(out_id, 0),
+                [principal for _in_id, principal in source_flows],
             )
+            for (in_id, principal_msat), fee_allocation in zip(
+                source_flows, fee_parts
+            ):
+                pair = pair_by_edge[(out_id, in_id)]
+                out_row = pair["out"]
+                in_row = pair["in"]
+                action_out = _copy_row_with_amount(
+                    out_row,
+                    amount_msat=principal_msat,
+                    fee_msat=fee_allocation,
+                )
+                action_in = _copy_row_with_amount(
+                    in_row, amount_msat=principal_msat
+                )
+                trigger_id = out_id if trigger_by_out_id else in_id
+                actions_by_trigger_id[trigger_id].append(
+                    (action_out, action_in, out_id)
+                )
 
     return actions_by_trigger_id, transfer_row_ids
 

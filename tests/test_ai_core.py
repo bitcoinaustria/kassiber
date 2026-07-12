@@ -209,6 +209,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_connections_node_snapshot",
             "ui_journals_snapshot",
             "ui_journals_quarantine",
+            "ui_journals_quarantine_resolve",
             "ui_journals_events_list",
             "ui_journals_transfers_list",
             "ui_journals_process",
@@ -236,12 +237,14 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transfers_review_context",
             "ui_transfers_list",
             "ui_transfers_payouts_list",
+            "ui_transfers_components_list",
             "ui_transfers_rules_list",
             "ui_saved_views_list",
             "ui_transfers_pair",
             "ui_transfers_payouts_create",
             "ui_transfers_payouts_delete",
             "ui_transfers_update",
+            "ui_transfers_components_bulk_resolve",
             "ui_transfers_unpair",
             "ui_transfers_bulk_pair",
             "ui_transfers_dismiss",
@@ -326,6 +329,62 @@ class ToolCatalogPromptTest(unittest.TestCase):
         )
         self.assertEqual(get_tool("ui_journals_events_list").kind_class, "read_only")
         self.assertEqual(get_tool("ui_journals_quarantine").kind_class, "read_only")
+        self.assertEqual(
+            get_tool("ui_journals_quarantine_resolve").kind_class,
+            "mutating",
+        )
+        self.assertEqual(get_tool("ui_transfers_components_list").kind_class, "read_only")
+        self.assertEqual(
+            get_tool("ui_transfers_components_bulk_resolve").kind_class,
+            "mutating",
+        )
+        component_schema = get_tool("ui_transfers_components_bulk_resolve").parameters[
+            "properties"
+        ]["components"]["items"]
+        self.assertFalse(component_schema["additionalProperties"])
+        leg_properties = component_schema["properties"]["legs"]["items"]["properties"]
+        self.assertIn("untracked_wallet", leg_properties)
+        self.assertIn("valuation_unit", leg_properties)
+        self.assertIn("valuation_amount", leg_properties)
+        self.assertNotIn("location_ref", leg_properties)
+        self.assertNotIn("wallet_id", leg_properties)
+        valid_component_arguments = {
+            "components": [
+                {
+                    "component_type": "manual_bridge",
+                    "legs": [
+                        {
+                            "id": "source",
+                            "role": "source",
+                            "transaction": "out-tx",
+                            "amount_msat": "10000000000000001",
+                            "valuation_unit": "eur-cent",
+                            "valuation_amount": "5000001",
+                        },
+                        {
+                            "id": "destination",
+                            "role": "destination",
+                            "untracked_wallet": "Missing owned wallet",
+                            "amount_msat": "10000000000000001",
+                            "valuation_unit": "eur-cent",
+                            "valuation_amount": "5000001",
+                        },
+                    ],
+                }
+            ],
+            "dry_run": True,
+        }
+        daemon_runtime._validate_ai_tool_arguments(
+            get_tool("ui_transfers_components_bulk_resolve"),
+            valid_component_arguments,
+        )
+        invalid_component_arguments = json.loads(json.dumps(valid_component_arguments))
+        invalid_component_arguments["components"][0]["legs"][0]["location_ref"] = "/tmp/private"
+        with self.assertRaisesRegex(AppError, "unsupported field"):
+            daemon_runtime._validate_ai_tool_arguments(
+                get_tool("ui_transfers_components_bulk_resolve"),
+                invalid_component_arguments,
+            )
         self.assertEqual(get_tool("ui_rates_summary").kind_class, "read_only")
         self.assertEqual(get_tool("ui_rates_coverage").name, "ui.rates.coverage")
         self.assertEqual(get_tool("ui_rates_rebuild").name, "ui.rates.rebuild")
@@ -607,6 +666,33 @@ class ToolCatalogPromptTest(unittest.TestCase):
         )
         journal_tool = get_tool("ui.journals.process")
         self.assertEqual(summarize_tool_call(journal_tool, {}), "Process journals")
+        quarantine_tool = get_tool("ui.journals.quarantine.resolve")
+        self.assertEqual(
+            summarize_tool_call(
+                quarantine_tool,
+                {"transaction": "tx-1", "action": "price_override"},
+            ),
+            "Apply reviewed price to tx-1",
+        )
+        self.assertEqual(
+            summarize_tool_call(
+                quarantine_tool,
+                {"transaction": "tx-1", "action": "exclude"},
+            ),
+            "Exclude tx-1 from accounting",
+        )
+        components_tool = get_tool("ui.transfers.components.bulk_resolve")
+        component_properties = components_tool.parameters["properties"]["components"][
+            "items"
+        ]["properties"]
+        self.assertNotIn("conversion_reviewed", component_properties)
+        self.assertEqual(
+            summarize_tool_call(
+                components_tool,
+                {"components": [{}, {}], "dry_run": True},
+            ),
+            "Preview 2 gap-resolution components",
+        )
         rates_tool = get_tool("ui.rates.rebuild")
         self.assertEqual(
             summarize_tool_call(rates_tool, {"pair": "BTC-EUR"}),

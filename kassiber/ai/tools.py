@@ -148,6 +148,104 @@ _LOAN_MARK_TYPES = (
     "principal-repaid",
 )
 _DIRECT_PAYOUT_ASSETS = ("BTC", "LBTC", "LNBTC")
+_CUSTODY_COMPONENT_TYPES = (
+    "native_transfer",
+    "channel_lifecycle",
+    "peg",
+    "swap",
+    "refund",
+    "manual_bridge",
+)
+_CUSTODY_LEG_ROLES = (
+    "source",
+    "destination",
+    "fee",
+    "external",
+    "retained",
+    "unresolved",
+)
+_EXACT_NONNEGATIVE_INTEGER_SCHEMA: dict[str, Any] = {
+    "type": ["integer", "string"],
+    "description": "Exact non-negative integer, using a decimal string outside JSON's safe integer range.",
+}
+_CUSTODY_COMPONENT_SPEC_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["component_type", "legs"],
+    "properties": {
+        "component_type": {"type": "string", "enum": list(_CUSTODY_COMPONENT_TYPES)},
+        "conservation_mode": {
+            "type": "string",
+            "enum": ["quantity", "conversion"],
+            "description": "Defaults to quantity. Conversion requires separately reviewed conversion evidence.",
+        },
+        "evidence_kind": {"type": "string"},
+        "evidence_grade": {"type": "string"},
+        "notes": {"type": "string"},
+        "change_reason": {"type": "string"},
+        "conversion_policy": {"type": "string"},
+        "conversion_metadata": {"type": "object"},
+        "legs": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["id", "role", "amount_msat"],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Stable component-local leg id used by explicit allocations.",
+                    },
+                    "role": {"type": "string", "enum": list(_CUSTODY_LEG_ROLES)},
+                    "transaction": {
+                        "type": "string",
+                        "description": "Imported transaction id, txid, or external id anchoring this leg.",
+                    },
+                    "wallet": {"type": "string"},
+                    "untracked_wallet": {
+                        "type": "string",
+                        "description": "Explicit label for a missing owned-wallet hop; never use for an external party.",
+                    },
+                    "amount_msat": dict(_EXACT_NONNEGATIVE_INTEGER_SCHEMA),
+                    "valuation_unit": {
+                        "type": "string",
+                        "description": "Reviewed conversion valuation unit; supply together with valuation_amount.",
+                    },
+                    "valuation_amount": dict(_EXACT_NONNEGATIVE_INTEGER_SCHEMA),
+                    "asset": {"type": "string"},
+                    "rail": {"type": "string"},
+                    "chain": {"type": "string"},
+                    "network": {"type": "string"},
+                    "exposure": {"type": "string"},
+                    "conservation_unit": {"type": "string"},
+                    "occurred_at": {"type": "string"},
+                    "notes": {"type": "string"},
+                },
+            },
+        },
+        "allocations": {
+            "type": "array",
+            "description": "Required for genuine N:M; edges must cover each source and sink exactly once in aggregate.",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "source_leg_id",
+                    "sink_leg_id",
+                    "source_amount_msat",
+                    "sink_amount_msat",
+                ],
+                "properties": {
+                    "source_leg_id": {"type": "string"},
+                    "sink_leg_id": {"type": "string"},
+                    "source_amount_msat": dict(_EXACT_NONNEGATIVE_INTEGER_SCHEMA),
+                    "sink_amount_msat": dict(_EXACT_NONNEGATIVE_INTEGER_SCHEMA),
+                },
+            },
+        },
+    },
+}
 _REVIEW_WORKLIST_CATEGORIES = (
     "readiness",
     "quarantine",
@@ -728,7 +826,11 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.journals.quarantine",
-        description="Read quarantine counts and a bounded recent list of quarantined transactions.",
+        description=(
+            "Read quarantine counts and a bounded recent list of quarantined transactions. "
+            "Before resolving an item, read ui.transactions.review_context and, for ownership "
+            "or swap gaps, ui.transfers.review_context."
+        ),
         parameters={
             "type": "object",
             "additionalProperties": False,
@@ -745,6 +847,58 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_journals_quarantine",
         daemon_kind="ui.journals.quarantine",
         summary_template="Read journal quarantine",
+    ),
+    ToolEntry(
+        name="ui.journals.quarantine.resolve",
+        description=(
+            "Resolve one currently quarantined transaction after explicit consent, then "
+            "reprocess journals by default and report whether it actually cleared. "
+            "Use price_override only with user-reviewed pricing evidence; never invent a "
+            "rate or fiat value. Use exclude only when the user explicitly confirms the "
+            "transaction is outside the book. Ownership, transfer, swap, missing-wallet, "
+            "and N:M quarantines must be repaired with the transfer/custody tools instead."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction", "action", "reason"],
+            "properties": {
+                "transaction": {
+                    "type": "string",
+                    "description": "Internal transaction id or public txid currently in quarantine.",
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["price_override", "exclude"],
+                },
+                "fiat_rate": {
+                    "type": ["string", "number"],
+                    "description": (
+                        "Reviewed fiat price per BTC-style unit for price_override; "
+                        "do not also provide fiat_value."
+                    ),
+                },
+                "fiat_value": {
+                    "type": ["string", "number"],
+                    "description": (
+                        "Reviewed total fiat value for price_override; do not also provide fiat_rate."
+                    ),
+                },
+                "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Audit reason stored in transaction edit history.",
+                },
+                "reprocess": {
+                    "type": "boolean",
+                    "description": "Rebuild journals and verify the result. Defaults to true.",
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_journals_quarantine_resolve",
+        daemon_kind="ui.journals.quarantine.resolve",
+        summary_template="Resolve quarantined transaction",
     ),
     ToolEntry(
         name="ui.journals.events.list",
@@ -1469,6 +1623,75 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_transfers_payouts_list",
         daemon_kind="ui.transfers.payouts.list",
         summary_template="Read direct swap payouts",
+    ),
+    ToolEntry(
+        name="ui.transfers.components.list",
+        description=(
+            "Read privacy-safe custody components for the active profile. Use this before "
+            "authoring a missing-wallet, 1:N, N:1, N:M, Liquid, or Lightning quarantine "
+            "repair so the AI does not duplicate an existing reviewed interpretation."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "state": {
+                    "type": "string",
+                    "enum": ["draft", "active", "superseded"],
+                },
+                "component_type": {
+                    "type": "string",
+                    "enum": list(_CUSTODY_COMPONENT_TYPES),
+                },
+                "transaction": {"type": "string"},
+                "effective_only": {"type": "boolean"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transfers_components_list",
+        daemon_kind="ui.transfers.components.list",
+        summary_template="Read custody components",
+    ),
+    ToolEntry(
+        name="ui.transfers.components.bulk_resolve",
+        description=(
+            "Validate or atomically author one or more reviewed custody components after "
+            "explicit consent. This is the quarantine repair path for missing wallets and "
+            "1:N, N:1, or explicit N:M custody flows that cannot be represented by one pair. "
+            "Prefer dry_run=true first. Activation remains fail-closed: every anchor, amount, "
+            "fee, network, asset, chronology, and allocation must conserve exactly. The result "
+            "omits local-only evidence and location references."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["components"],
+            "properties": {
+                "components": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
+                    "description": "Custody component specifications using the documented typed leg/allocation contract.",
+                },
+                "activate": {
+                    "type": "boolean",
+                    "description": (
+                        "Activate complete quantity-conserving components. Defaults to true. "
+                        "Conversion components must remain drafts for separate human review."
+                    ),
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Validate and return an exact preview without writing. Defaults to false.",
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_components_bulk_resolve",
+        daemon_kind="ui.transfers.components.bulk_resolve",
+        summary_template="Resolve custody gaps in bulk",
     ),
     ToolEntry(
         name="ui.transfers.payouts.create",
@@ -2678,6 +2901,16 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Refresh all watch-only sources"
     if tool.name == "ui.journals.process":
         return "Process journals"
+    if tool.name == "ui.journals.quarantine.resolve":
+        target = arguments.get("transaction")
+        transaction = (
+            target.strip()
+            if isinstance(target, str) and target.strip()
+            else "quarantined transaction"
+        )
+        if arguments.get("action") == "exclude":
+            return f"Exclude {transaction} from accounting"
+        return f"Apply reviewed price to {transaction}"
     if tool.name == "ui.rates.rebuild":
         pair = arguments.get("pair")
         if isinstance(pair, str) and pair.strip():
@@ -2810,6 +3043,13 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
             if isinstance(pair, str) and pair.strip()
             else "Update reviewed transfer pair"
         )
+    if tool.name == "ui.transfers.components.bulk_resolve":
+        components = arguments.get("components")
+        count = len(components) if isinstance(components, list) else 0
+        noun = "component" if count == 1 else "components"
+        if arguments.get("dry_run") is True:
+            return f"Preview {count or 'custody'} gap-resolution {noun}"
+        return f"Create {count or 'custody'} gap-resolution {noun}"
     if tool.name == "ui.reports.export":
         report = arguments.get("report")
         export_format = arguments.get("format")
@@ -2844,7 +3084,8 @@ ui.workspace.overview.snapshot (only after an explicit all-books request),
 ui.transactions.list, ui.transactions.extremes, ui.transactions.search,
 ui.journals.quarantine, ui.journals.events.list,
 ui.journals.transfers.list, ui.review.worklist, ui.loans.list,
-ui.transfers.review_context, ui.transfers.payouts.list, ui.rates.summary,
+ui.transfers.review_context, ui.transfers.payouts.list,
+ui.transfers.components.list, ui.rates.summary,
 ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
 ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
 ui.reports.portfolio_summary, ui.reports.tax_summary, ui.reports.balance_history,
@@ -2867,12 +3108,20 @@ ui.reports.privacy_hygiene for privacy posture configuration questions, and
 ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
+For a price-only quarantine, use ui.journals.quarantine.resolve only after the
+user has reviewed a rate or total fiat value. Exclusion requires explicit user
+confirmation. Never use that tool to hide an ownership or custody gap.
 For Boltz/submarine swap, peg, and Bitcoin rail questions, read
 ui.transfers.review_context first; use ui.transfers.suggest/list for focused
 candidate or pair follow-ups. Treat Bitcoin swaps as carrying-value candidates
 only when both legs are known owned-wallet legs; swap-routed payments or
 receipts should remain unpaired. Read swap-matching when review policy,
 confidence bands, or pairing workflow matters.
+For missing wallets, multi-hop migrations, or 1:N/N:1/N:M self-custody gaps,
+read ui.transfers.components.list and the relevant transaction/transfer review
+context, then validate ui.transfers.components.bulk_resolve with dry_run=true.
+Ask for consent before the final atomic write; exact conservation and complete
+anchor coverage are mandatory, and tax policy is downstream of custody proof.
 For source-of-funds/provenance questions, read source-funds links and preview
 before proposing writes. Source-funds AI write tools require user consent,
 support non-CoinJoin link types, and write evidence records only; they do not

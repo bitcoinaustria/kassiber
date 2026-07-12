@@ -47,6 +47,7 @@ from ...egress_ledger import get_egress_ledger, http_request_bytes_out
 from ...errors import AppError
 from ...msat import msat_to_btc
 from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
+from ...transfers import canonical_txid
 from .. import imports as core_imports
 from ..repo import invalidate_journals
 from .capabilities import LightningCapabilities
@@ -63,6 +64,8 @@ LND_MAX_PAGE_SIZE = 1000
 LND_DEFAULT_WINDOW_DAYS = 30
 # Daily seconds shorthand for forwarding-window math.
 _SECONDS_PER_DAY = 86_400
+_LND_CHANNEL_ID_PREFIX = "lnd:"
+_LIFECYCLE_AMOUNT_INCOMPLETE = -1
 
 
 # ---------------------------------------------------------------------------
@@ -642,7 +645,10 @@ def _chains_to_network(info: Mapping[str, Any]) -> str:
     for entry in chains:
         if isinstance(entry, Mapping) and entry.get("network"):
             return _normalize_network(entry.get("network"))
-    return _normalize_network(info.get("testnet"))
+    legacy_testnet = info.get("testnet")
+    if isinstance(legacy_testnet, bool):
+        return "testnet" if legacy_testnet else "mainnet"
+    return _normalize_network(legacy_testnet)
 
 
 class LndAdapter:
@@ -965,8 +971,9 @@ def _lnd_payment_import(payment: Mapping[str, Any]) -> dict[str, Any] | None:
 def lnd_import_records(
     invoices: list[Mapping[str, Any]],
     payments: list[Mapping[str, Any]],
+    forwards: list[Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build the wallet-transaction import rows for an LND sync (pure)."""
+    """Build LND ledger rows, including daily fee-only routing income."""
     records: list[dict[str, Any]] = []
     for invoice in invoices:
         record = _lnd_invoice_import(invoice)
@@ -976,7 +983,183 @@ def lnd_import_records(
         record = _lnd_payment_import(payment)
         if record is not None:
             records.append(record)
+    records.extend(_lnd_routing_income_imports(forwards or []))
     return records
+
+
+def _stamp_lightning_import_network(
+    records: list[dict[str, Any]], network: str
+) -> list[dict[str, Any]]:
+    """Attach adapter-observed network scope to curated ledger records."""
+
+    if not str(network or "").strip():
+        return records
+    stamped = []
+    for record in records:
+        item = dict(record)
+        raw = item.get("raw_json")
+        try:
+            payload = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = {}
+        payload.update({"chain": "lightning", "network": network})
+        item["raw_json"] = json.dumps(payload, sort_keys=True)
+        stamped.append(item)
+    return stamped
+
+
+def _lnd_routing_income_imports(
+    forwards: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Aggregate settled forwarding revenue to one fee-only row per UTC day.
+
+    Forwarded principal is never income and is intentionally discarded at this
+    boundary.  Daily aggregation prevents the accounting ledger from becoming
+    a reconstructable per-payment routing graph.
+    """
+    fee_by_day: dict[str, int] = {}
+    for row in forwards:
+        raw_ts = _int(row.get("timestamp"))
+        if raw_ts <= 0:
+            raw_ts = _int(row.get("timestamp_ns")) // 1_000_000_000
+        occurred_at = _timestamp(raw_ts)
+        if not occurred_at:
+            continue
+        fee_msat = _int(row.get("fee_msat"))
+        if fee_msat <= 0:
+            fee_msat = _msat(row.get("fee"), sats=True)
+        if fee_msat <= 0:
+            continue
+        day = occurred_at[:10]
+        fee_by_day[day] = fee_by_day.get(day, 0) + fee_msat
+    return [
+        {
+            "id": f"lnd:routing:{day}",
+            # Preserve daily aggregation privacy while ensuring fee inventory
+            # is never made available before the forwards that earned it.
+            "occurred_at": f"{day}T23:59:59Z",
+            "confirmed_at": f"{day}T23:59:59Z",
+            "direction": "inbound",
+            "asset": "BTC",
+            "amount": msat_to_btc(fee_msat),
+            "fee": 0,
+            "kind": "routing_income",
+            "description": f"Lightning routing fees ({day})",
+            "counterparty": None,
+            "payment_hash": None,
+            "payment_hash_source": None,
+            "raw_json": "{}",
+        }
+        for day, fee_msat in sorted(fee_by_day.items())
+    ]
+
+
+def _fetch_lnd_forwarding_history(client: "LndRestClient") -> list[dict[str, Any]]:
+    """Read the full forwarding history with offset pagination.
+
+    The raw rows live only in memory and are immediately reduced to daily fee
+    totals by :func:`_lnd_routing_income_imports`.
+    """
+    offset = 0
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, ...]] = set()
+    while True:
+        payload = client.post(
+            "/v1/switch",
+            {
+                "start_time": "0",
+                "index_offset": str(offset),
+                "num_max_events": LND_MAX_PAGE_SIZE,
+            },
+        )
+        page = [
+            row
+            for row in (payload.get("forwarding_events") or [])
+            if isinstance(row, dict)
+        ]
+        for row in page:
+            key = (
+                str(row.get("timestamp_ns") or row.get("timestamp") or ""),
+                str(row.get("chan_id_in") or ""),
+                str(row.get("chan_id_out") or ""),
+                str(row.get("amt_in_msat") or row.get("amt_in") or ""),
+                str(row.get("amt_out_msat") or row.get("amt_out") or ""),
+                str(row.get("fee_msat") or row.get("fee") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+        next_offset = _int(
+            payload.get("last_offset_index") or payload.get("last_index_offset")
+        )
+        if not page or next_offset <= offset or len(page) < LND_MAX_PAGE_SIZE:
+            break
+        offset = next_offset
+    return rows
+
+
+def _fetch_lnd_payments(client: "LndRestClient") -> list[dict[str, Any]]:
+    """Read the complete payment history in stable payment-index order."""
+    return _fetch_lnd_indexed_history(
+        client,
+        path="/v1/payments",
+        rows_key="payments",
+        page_size_key="max_payments",
+        fixed_params={"include_incomplete": "false"},
+        identity_fields=("payment_index", "payment_hash"),
+    )
+
+
+def _fetch_lnd_invoices(client: "LndRestClient") -> list[dict[str, Any]]:
+    """Read the complete invoice history in stable add-index order."""
+    return _fetch_lnd_indexed_history(
+        client,
+        path="/v1/invoices",
+        rows_key="invoices",
+        page_size_key="num_max_invoices",
+        fixed_params={},
+        identity_fields=("add_index", "r_hash"),
+    )
+
+
+def _fetch_lnd_indexed_history(
+    client: "LndRestClient",
+    *,
+    path: str,
+    rows_key: str,
+    page_size_key: str,
+    fixed_params: Mapping[str, Any],
+    identity_fields: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    """Page an LND list endpoint without a long-history truncation ceiling."""
+    offset = 0
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, ...]] = set()
+    while True:
+        payload = client.get(
+            path,
+            params={
+                **fixed_params,
+                "index_offset": str(offset),
+                page_size_key: LND_MAX_PAGE_SIZE,
+                "reversed": "false",
+            },
+        )
+        page = [row for row in (payload.get(rows_key) or []) if isinstance(row, dict)]
+        for row in page:
+            identity = tuple(str(row.get(field) or "") for field in identity_fields)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            rows.append(row)
+        next_offset = _int(
+            payload.get("last_index_offset") or payload.get("last_offset_index")
+        )
+        if not page or next_offset <= offset:
+            break
+        offset = next_offset
+    return rows
 
 
 def _lnd_funding_txid(row: Mapping[str, Any]) -> str | None:
@@ -986,41 +1169,201 @@ def _lnd_funding_txid(row: Mapping[str, Any]) -> str | None:
     return channel_point.split(":", 1)[0] or None
 
 
-def _lnd_channel_record(tag: str, txid: str) -> dict[str, Any]:
+def _lnd_local_initiator(row: Mapping[str, Any]) -> bool | None:
+    if "initiator" in row:
+        return _is_truthy(row.get("initiator"))
+    value = str(row.get("open_initiator") or "").strip().upper()
+    if value in {"INITIATOR_LOCAL", "LOCAL"}:
+        return True
+    if value in {"INITIATOR_REMOTE", "REMOTE"}:
+        return False
+    return None
+
+
+def _lnd_channel_id(row: Mapping[str, Any]) -> str:
+    # The funding outpoint is stable across the open/closed REST resources and
+    # cannot collide with a CLN account id in a multi-node profile.
+    channel_point = str(row.get("channel_point") or "").strip()
+    fallback = str(row.get("chan_id") or row.get("channel_id") or "").strip()
+    return f"{_LND_CHANNEL_ID_PREFIX}{channel_point or fallback}"
+
+
+def _lnd_local_funding_sat(
+    row: Mapping[str, Any],
+    *,
+    local_initiator: bool | None,
+    allow_capacity_inference: bool = True,
+) -> int:
+    """Return ordinary single-funded local capacity, or zero if ambiguous.
+
+    Stock LND's Channel and ChannelCloseSummary payloads expose ``capacity``
+    and the initiator, not the synthetic local-contribution fields used by
+    older Kassiber tests. For a locally initiated, single-funded channel the
+    capacity is the exact funding output. Explicit contribution evidence wins;
+    visible push/remote/dual-funding markers deliberately fail closed because
+    capacity would then overstate the operator's owned channel principal.
+    """
+
+    explicit = _int(
+        row.get("local_funding_amount_sat") or row.get("local_contribution_sat")
+    )
+    if explicit > 0:
+        return explicit
+    # ChannelCloseSummary has no push-at-open field. Capacity alone therefore
+    # cannot distinguish owned principal from sats disposed to the peer when
+    # the channel opened. Only live Channel rows may use this inference.
+    if not allow_capacity_inference:
+        return 0
+    if local_initiator is not True:
+        return 0
+    if _int(row.get("push_amount_sat") or row.get("push_sat")) > 0:
+        return 0
+    if _int(
+        row.get("remote_funding_amount_sat") or row.get("remote_contribution_sat")
+    ) > 0:
+        return 0
+    if _is_truthy(row.get("is_dual_funded") or row.get("dual_funded")):
+        return 0
+    return _int(row.get("capacity"))
+
+
+def _lnd_channel_record(
+    tag: str,
+    txid: str,
+    row: Mapping[str, Any],
+    amount_msat: int,
+    network: str | None = None,
+    local_close_sweeps: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """A ``channel`` metadata record carrying one channel-lifecycle txid.
 
     Mirrors the Core Lightning channel record shape so the tax engine's
     channel-lifecycle netting is adapter-agnostic. Not a wallet transaction.
     """
+    observed_scope = (
+        {"chain": "bitcoin", "network": str(network).strip()}
+        if str(network or "").strip()
+        else {}
+    )
+    if local_close_sweeps:
+        observed_scope.update(
+            {
+                "_kassiber_provenance": {"import_source": "lnd_adapter"},
+                "channel_close_local_sweeps": local_close_sweeps,
+            }
+        )
     return {
         "record_type": "channel",
-        "external_id": f"channel:{tag}:{txid}",
+        "external_id": f"channel:{tag}:{_lnd_channel_id(row)}:{txid}",
         "tag": tag,
         "txid": txid,
+        "outpoint": str(row.get("channel_point") or "") or None,
+        "channel_id": _lnd_channel_id(row),
+        "amount_msat": int(amount_msat),
+        "status": "complete" if amount_msat > 0 else "incomplete",
+        # Curated physical scope only — never persist the raw REST channel
+        # payload. Lifecycle matching must still work when backend/wallet
+        # configuration omits a network, especially on regtest.
+        "raw_json": json.dumps(observed_scope, sort_keys=True),
     }
 
 
 def lnd_channel_records(
     open_channels: list[Mapping[str, Any]],
     closed_channels: list[Mapping[str, Any]],
+    *,
+    network: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Build channel funding/closing records from LND open + closed channels."""
-    open_txids: dict[str, None] = {}
-    close_txids: dict[str, None] = {}
-    for row in open_channels:
-        txid = _lnd_funding_txid(row)
-        if txid:
-            open_txids.setdefault(txid, None)
-    for row in closed_channels:
+    """Build amount-bearing, channel-linked LND lifecycle evidence.
+
+    Stock LND exposes ``capacity`` plus the funding initiator. That proves the
+    ordinary locally initiated, single-funded output amount; explicit local
+    contribution evidence takes precedence. Visible push, remote-contribution,
+    or dual-funding markers stay incomplete so lifecycle classification fails
+    closed instead of claiming the full capacity as owned principal.
+    Remote-funded openings are not local on-chain outflows.
+    """
+    records_by_id: dict[str, dict[str, Any]] = {}
+    for row, allow_capacity_inference in (
+        *((row, True) for row in open_channels),
+        *((row, False) for row in closed_channels),
+    ):
         funding = _lnd_funding_txid(row)
-        if funding:
-            open_txids.setdefault(funding, None)
-        closing = str(row.get("closing_tx_hash") or "") or None
-        if closing:
-            close_txids.setdefault(closing, None)
-    records = [_lnd_channel_record("channel_open", txid) for txid in sorted(open_txids)]
-    records += [_lnd_channel_record("channel_close", txid) for txid in sorted(close_txids)]
-    return records
+        local_initiator = _lnd_local_initiator(row)
+        if funding and local_initiator is not False:
+            local_contribution_sat = _lnd_local_funding_sat(
+                row,
+                local_initiator=local_initiator,
+                allow_capacity_inference=allow_capacity_inference,
+            )
+            amount_msat = (
+                local_contribution_sat * 1000
+                if local_initiator is True and local_contribution_sat > 0
+                else _LIFECYCLE_AMOUNT_INCOMPLETE
+            )
+            record = _lnd_channel_record(
+                "channel_open", funding, row, amount_msat, network
+            )
+            records_by_id[record["external_id"]] = record
+
+    for row in closed_channels:
+        closing = canonical_txid(row.get("closing_tx_hash"))
+        if not closing:
+            continue
+        # Force closes can return an immediate settled part plus timelocked
+        # outputs swept later.  Both remain our node balance at close.
+        close_balance_sat = _int(row.get("settled_balance")) + _int(
+            row.get("time_locked_balance")
+        )
+        amount_msat = (
+            close_balance_sat * 1000
+            if close_balance_sat > 0
+            else _LIFECYCLE_AMOUNT_INCOMPLETE
+        )
+        record = _lnd_channel_record(
+            "channel_close",
+            closing,
+            row,
+            amount_msat,
+            network,
+            local_close_sweeps=_lnd_local_close_sweeps(row, closing),
+        )
+        records_by_id[record["external_id"]] = record
+    return [records_by_id[key] for key in sorted(records_by_id)]
+
+
+def _lnd_local_close_sweeps(
+    row: Mapping[str, Any], closing_txid: str
+) -> list[dict[str, str]]:
+    """Reduce LND claimed resolutions to non-secret local sweep evidence."""
+
+    evidence: set[tuple[str, str]] = set()
+    for resolution in row.get("resolutions") or ():
+        if not isinstance(resolution, Mapping):
+            continue
+        outcome = str(resolution.get("outcome") or "").strip().upper()
+        if outcome not in {"CLAIMED", "RESOLUTION_OUTCOME_CLAIMED"}:
+            continue
+        sweep_txid = canonical_txid(resolution.get("sweep_txid"))
+        raw_outpoint = str(resolution.get("outpoint") or "").strip()
+        outpoint_txid, separator, vout = raw_outpoint.rpartition(":")
+        if (
+            sweep_txid is None
+            or not separator
+            or canonical_txid(outpoint_txid) != closing_txid
+        ):
+            continue
+        try:
+            output_index = int(vout)
+        except (TypeError, ValueError):
+            continue
+        if output_index < 0:
+            continue
+        evidence.add((sweep_txid, f"{closing_txid}:{output_index}"))
+    return [
+        {"sweep_txid": sweep_txid, "outpoint": outpoint}
+        for sweep_txid, outpoint in sorted(evidence)
+    ]
 
 
 def _persist_lnd_channel_records(
@@ -1033,6 +1376,24 @@ def _persist_lnd_channel_records(
 ) -> None:
     for record in records:
         external_id = str(record["external_id"])
+        # Early lifecycle builds keyed LND rows only by tag + transaction id.
+        # Remove that obsolete identity before writing the channel-aware row or
+        # upgrades retain two records for the same physical open/close.
+        legacy_external_id = f"channel:{record['tag']}:{record['txid']}"
+        if legacy_external_id != external_id:
+            conn.execute(
+                """
+                DELETE FROM lightning_node_records
+                WHERE profile_id = ? AND wallet_id = ? AND backend_name = ?
+                  AND record_type = 'channel' AND external_id = ?
+                """,
+                (
+                    profile["id"],
+                    wallet["id"],
+                    backend["name"],
+                    legacy_external_id,
+                ),
+            )
         record_id = f"{wallet['id']}:{backend['name']}:channel:{external_id}"
         conn.execute(
             """
@@ -1041,10 +1402,20 @@ def _persist_lnd_channel_records(
                 record_type, external_id, occurred_at, account, peer_id, channel_id,
                 direction, amount_msat, fee_msat, tag, status, currency, payment_hash,
                 txid, outpoint, sync_id, raw_json, first_seen_at, updated_at
-            ) VALUES(?, ?, ?, ?, ?, NULL, 'channel', ?, ?, NULL, NULL, NULL,
-                     '', 0, 0, ?, '', 'bc', NULL, ?, NULL, NULL, '{}', ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, NULL, 'channel', ?, ?, NULL, NULL, ?,
+                     '', ?, 0, ?, ?, 'bc', NULL, ?, ?, NULL, ?, ?, ?)
             ON CONFLICT(profile_id, wallet_id, backend_name, record_type, external_id)
-            DO UPDATE SET txid = excluded.txid, tag = excluded.tag, updated_at = excluded.updated_at
+            DO UPDATE SET txid = excluded.txid, outpoint = excluded.outpoint,
+                          channel_id = excluded.channel_id,
+                          amount_msat = CASE
+                              WHEN excluded.amount_msat < 0
+                                   AND lightning_node_records.amount_msat >= 0
+                              THEN lightning_node_records.amount_msat
+                              ELSE excluded.amount_msat
+                          END,
+                          tag = excluded.tag, status = excluded.status,
+                          raw_json = excluded.raw_json,
+                          updated_at = excluded.updated_at
             """,
             (
                 record_id,
@@ -1054,8 +1425,13 @@ def _persist_lnd_channel_records(
                 backend["name"],
                 external_id,
                 UNKNOWN_OCCURRED_AT,
+                record.get("channel_id"),
+                int(record.get("amount_msat") or 0),
                 str(record["tag"]),
+                str(record.get("status") or ""),
                 str(record["txid"]),
+                record.get("outpoint"),
+                str(record.get("raw_json") or "{}"),
                 timestamp,
                 timestamp,
             ),
@@ -1092,26 +1468,22 @@ def sync_lnd_wallet(
     if client is None:
         client = LndRestClient(backend)
 
-    payments_payload = client.get(
-        "/v1/payments",
-        params={"include_incomplete": "false", "max_payments": LND_MAX_PAGE_SIZE},
-    )
+    node_info = client.get("/v1/getinfo")
+    node_network = _chains_to_network(node_info)
+
     payments = [
         _sanitize_payment(row)
-        for row in (payments_payload.get("payments") or [])
-        if isinstance(row, dict)
+        for row in _fetch_lnd_payments(client)
     ]
-    invoices_payload = client.get(
-        "/v1/invoices",
-        params={"num_max_invoices": LND_MAX_PAGE_SIZE},
-    )
     invoices = [
         _sanitize_invoice(row)
-        for row in (invoices_payload.get("invoices") or [])
-        if isinstance(row, dict)
+        for row in _fetch_lnd_invoices(client)
     ]
 
-    import_records = lnd_import_records(invoices, payments)
+    forwards = _fetch_lnd_forwarding_history(client)
+    import_records = _stamp_lightning_import_network(
+        lnd_import_records(invoices, payments, forwards), node_network
+    )
     import_outcome = core_imports.insert_wallet_records(
         conn,
         profile,
@@ -1134,7 +1506,11 @@ def sync_lnd_wallet(
         for row in (client.get("/v1/channels/closed").get("channels") or [])
         if isinstance(row, dict)
     ]
-    channel_records = lnd_channel_records(open_channels, closed_channels)
+    channel_records = lnd_channel_records(
+        open_channels,
+        closed_channels,
+        network=node_network,
+    )
     _persist_lnd_channel_records(conn, profile, wallet, backend, channel_records, now_iso())
 
     invalidate_journals(conn, profile["id"])
@@ -1151,6 +1527,7 @@ def sync_lnd_wallet(
             "skipped": import_outcome["skipped"],
         },
         "channels": {"records": len(channel_records)},
+        "routing": {"forward_events_aggregated": len(forwards)},
     }
 
 

@@ -33,6 +33,34 @@ import { MOCK_OVERVIEW } from "@/mocks/seed";
 import { WalletsMetricGrid } from "./WalletsMetricGrid";
 
 describe("wallets metric grid", () => {
+  it("explains that quarantine affects accounting, not wallet custody", () => {
+    const html = renderToStaticMarkup(
+      createElement(WalletsMetricGrid, {
+        balanceSummary: {
+          totalBtc: 1.236,
+          status: "quarantines",
+          source: "mixed",
+          needsJournals: false,
+          quarantines: 3,
+          chainWalletCount: 1,
+          bookWalletCount: 1,
+          transactionWalletCount: 0,
+          duplicateOutpointAdjustmentBtc: 0,
+        },
+        connections: MOCK_OVERVIEW.connections,
+        currency: "btc",
+        hideSensitive: false,
+        isSyncing: false,
+        priceEur: MOCK_OVERVIEW.priceEur,
+        totalBtc: 1.236,
+      }),
+    );
+
+    expect(html).toContain("Wallet balance");
+    expect(html).toContain("3 quarantines");
+    expect(html).toContain("accounting view may change after review");
+  });
+
   it("shows the daemon tax-free balance on the wallets overview", () => {
     const html = renderToStaticMarkup(
       createElement(WalletsMetricGrid, {

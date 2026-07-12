@@ -51,6 +51,11 @@ export interface Connection {
   paymentMethodId?: string | null;
   /** balance in BTC (float) */
   balance: number;
+  balanceSource?: "chain" | "books" | "transactions";
+  bookBalance?: number;
+  chainBalance?: number | null;
+  chainLastSeenAt?: string | null;
+  chainActiveCount?: number | null;
   status: ConnectionStatus;
   syncMode?: string;
   syncSource?: string;
@@ -352,6 +357,17 @@ export interface OverviewSnapshot {
   /** dated portfolio points from the daemon, using real source dates/rates */
   portfolioSeries?: PortfolioPoint[];
   fiat: FiatSnapshot;
+  balanceSummary?: {
+    totalBtc: number;
+    status: "current" | "needs_journals" | "quarantines" | string;
+    source: "chain" | "books" | "transactions" | "mixed" | string;
+    needsJournals: boolean;
+    quarantines: number;
+    chainWalletCount: number;
+    bookWalletCount: number;
+    transactionWalletCount: number;
+    duplicateOutpointAdjustmentBtc: number;
+  };
   taxFreeBalance?: TaxFreeBalanceSnapshot | null;
   status?: {
     workspace: string | null;

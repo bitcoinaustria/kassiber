@@ -4,12 +4,142 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any
+from typing import Any, Mapping
 
 from ...errors import AppError
 from .crypto import canonical_json_bytes, sha256_hex
 from .events import AuthoredEvent, author_event
-from .schema_allowlist import SYNC_TABLES, iter_rows, row_key, serialize_row
+from .schema_allowlist import (
+    REFERENCE_TABLES,
+    SYNC_TABLES,
+    TableSpec,
+    iter_rows,
+    row_key,
+    serialize_row,
+)
+
+
+def _mapped_id(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    table: str,
+    wire_id: Any,
+) -> Any:
+    row = conn.execute(
+        "SELECT local_id FROM sync_id_map "
+        "WHERE profile_id = ? AND entity_table = ? AND wire_id = ?",
+        (profile_id, table, str(wire_id)),
+    ).fetchone()
+    return row["local_id"] if row else wire_id
+
+
+def preferred_wire_id(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    table: str,
+    local_id: Any,
+) -> Any:
+    """Return the authored identity a local deduplicated row should retain.
+
+    Choose the lexicographically smallest live identity, independent of which
+    replica authored it or when this device observed it. If capture has not
+    established row state yet, use the same deterministic ordering across all
+    known aliases. This prevents device-relative alias preferences from
+    re-authoring equivalent rows back and forth forever.
+    """
+
+    if local_id is None:
+        return None
+    local_text = str(local_id)
+    aliases = {
+        local_text,
+        *(
+            str(row["wire_id"])
+            for row in conn.execute(
+                "SELECT wire_id FROM sync_id_map "
+                "WHERE profile_id = ? AND entity_table = ? AND local_id = ?",
+                (profile_id, table, local_text),
+            ).fetchall()
+        ),
+    }
+    live: list[str] = []
+    for alias in aliases:
+        key = json.dumps([alias], ensure_ascii=True, separators=(",", ":"))
+        state = conn.execute(
+            """
+            SELECT s.updated_at, e.replica_id
+            FROM sync_row_state s
+            LEFT JOIN sync_events e ON e.id = s.last_event_id
+            WHERE s.profile_id = ? AND s.entity_table = ?
+              AND s.entity_key = ? AND s.tombstoned = 0
+            """,
+            (profile_id, table, key),
+        ).fetchone()
+        if state:
+            live.append(alias)
+    if live:
+        return min(live)
+    return min(aliases)
+
+
+def _wire_payload(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    spec: TableSpec,
+    row: Mapping[str, Any],
+    hmac_key_b64: str,
+) -> dict[str, Any]:
+    payload = serialize_row(spec, row, hmac_key_b64=hmac_key_b64)
+    if len(spec.primary_key) == 1:
+        primary_key = spec.primary_key[0]
+        payload[primary_key] = preferred_wire_id(
+            conn,
+            profile_id=profile_id,
+            table=spec.table,
+            local_id=row[primary_key],
+        )
+    for column, referenced_table in REFERENCE_TABLES.items():
+        if column not in payload or row[column] is None:
+            continue
+        payload[column] = preferred_wire_id(
+            conn,
+            profile_id=profile_id,
+            table=referenced_table,
+            local_id=row[column],
+        )
+    return payload
+
+
+def _materialized_alias_exists(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    spec: TableSpec,
+    entity_key: str,
+) -> bool:
+    if len(spec.primary_key) != 1:
+        return False
+    try:
+        values = json.loads(entity_key)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(values, list) or len(values) != 1:
+        return False
+    local_id = _mapped_id(
+        conn,
+        profile_id=profile_id,
+        table=spec.table,
+        wire_id=values[0],
+    )
+    return bool(
+        conn.execute(
+            f"SELECT 1 FROM {spec.table} WHERE {spec.primary_key[0]} = ?",
+            (local_id,),
+        ).fetchone()
+    )
 
 
 def _json_load_nullable(value: Any) -> Any:
@@ -138,7 +268,14 @@ def capture_local_changes(conn: sqlite3.Connection, *, profile_id: str) -> list[
     for spec in SYNC_TABLES:
         current_keys: set[str] = set()
         for row in iter_rows(conn, spec, profile_id=profile_id):
-            key = row_key(spec, row)
+            payload = _wire_payload(
+                conn,
+                profile_id=profile_id,
+                spec=spec,
+                row=row,
+                hmac_key_b64=book["hmac_key_b64"],
+            )
+            key = row_key(spec, payload)
             current_keys.add(key)
             is_soft_deleted = bool(spec.soft_delete_column and row[spec.soft_delete_column])
             existing = conn.execute(
@@ -161,7 +298,6 @@ def capture_local_changes(conn: sqlite3.Connection, *, profile_id: str) -> list[
                     )
                 continue
 
-            payload = serialize_row(spec, row, hmac_key_b64=book["hmac_key_b64"])
             digest = sha256_hex(canonical_json_bytes(payload))
             if existing and not existing["tombstoned"] and existing["row_hash"] == digest:
                 continue
@@ -228,6 +364,15 @@ def capture_local_changes(conn: sqlite3.Connection, *, profile_id: str) -> list[
             key = previous["entity_key"]
             if key in current_keys:
                 continue
+            if _materialized_alias_exists(
+                conn,
+                profile_id=profile_id,
+                spec=spec,
+                entity_key=key,
+            ):
+                # Another authored wire identity maps to the same deduplicated
+                # local row. It is an alias, not a missing row/tombstone.
+                continue
             emitted.append(
                 _record_tombstone(
                     conn,
@@ -260,8 +405,14 @@ def capture_full_snapshot(conn: sqlite3.Connection, *, profile_id: str) -> list[
         for row in iter_rows(conn, spec, profile_id=profile_id):
             if spec.soft_delete_column and row[spec.soft_delete_column]:
                 continue
-            key = row_key(spec, row)
-            payload = serialize_row(spec, row, hmac_key_b64=book["hmac_key_b64"])
+            payload = _wire_payload(
+                conn,
+                profile_id=profile_id,
+                spec=spec,
+                row=row,
+                hmac_key_b64=book["hmac_key_b64"],
+            )
+            key = row_key(spec, payload)
             digest = sha256_hex(canonical_json_bytes(payload))
             event = author_event(
                 conn,
@@ -353,8 +504,18 @@ def capture_full_snapshot(conn: sqlite3.Connection, *, profile_id: str) -> list[
             entity_table="transaction_edit_events",
             entity_key=history["id"],
             payload={
-                "transaction_id": history["transaction_id"],
-                "wallet_id": history["wallet_id"],
+                "transaction_id": preferred_wire_id(
+                    conn,
+                    profile_id=profile_id,
+                    table="transactions",
+                    local_id=history["transaction_id"],
+                ),
+                "wallet_id": preferred_wire_id(
+                    conn,
+                    profile_id=profile_id,
+                    table="wallets",
+                    local_id=history["wallet_id"],
+                ),
                 "transaction_external_id": history["transaction_external_id"],
                 "transaction_occurred_at": history["transaction_occurred_at"],
                 "source": history["source"],
@@ -382,14 +543,27 @@ def capture_full_snapshot(conn: sqlite3.Connection, *, profile_id: str) -> list[
 def authored_state_digest(conn: sqlite3.Connection, *, profile_id: str) -> str:
     """Deterministic digest used by convergence tests and diagnostics."""
 
+    book = conn.execute(
+        "SELECT hmac_key_b64 FROM sync_books WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchone()
+    if not book:
+        raise AppError("sync is disabled", code="sync_disabled", retryable=False)
     rows: list[dict[str, Any]] = []
     for spec in SYNC_TABLES:
         for row in iter_rows(conn, spec, profile_id=profile_id):
+            payload = _wire_payload(
+                conn,
+                profile_id=profile_id,
+                spec=spec,
+                row=row,
+                hmac_key_b64=book["hmac_key_b64"],
+            )
             rows.append(
                 {
                     "table": spec.table,
-                    "key": row_key(spec, row),
-                    "row": {column: row[column] for column in spec.columns},
+                    "key": row_key(spec, payload),
+                    "row": payload,
                 }
             )
     rows.sort(key=lambda item: (item["table"], item["key"]))

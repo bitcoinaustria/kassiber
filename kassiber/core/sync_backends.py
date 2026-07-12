@@ -36,6 +36,7 @@ from ..proxy import (
 from ..redaction import redact_operational_text
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
 from ..time_utils import iso_to_unix
+from ..transfers import canonical_txid
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
     SCRIPT_TYPE_BRANCH_BASE,
@@ -247,15 +248,6 @@ def _connect_backend_socket(backend, host, port):
             ),
         )
     return socket.create_connection((host, port), timeout=timeout)
-
-
-def output_addresses(vout):
-    script = vout.get("scriptPubKey") or {}
-    values = []
-    if script.get("address"):
-        values.append(script["address"])
-    values.extend(script.get("addresses") or [])
-    return normalize_addresses(values)
 
 
 def sanitize_wallet_segment(value):
@@ -1519,32 +1511,73 @@ def _extract_payment_hash_from_witnesses(witness_lists):
     """Opportunistically recover a Lightning payment_hash from spend witnesses.
 
     ``witness_lists`` is an iterable where each element is the witness item
-    sequence for one transaction input (bytes-like values). The first input
-    whose witness shape matches a known Boltz HTLC claim wins; the rest
-    short-circuit. Returns the recovered ``payment_hash`` (64-char hex) or
-    ``None`` when no input reveals an HTLC claim.
+    sequence for one transaction input (bytes-like values). Returns the
+    recovered ``payment_hash`` only when exactly one input reveals a known
+    Boltz HTLC claim. A batched claim is not whole-row evidence for either
+    payment and therefore returns ``None``.
     """
+    matches = []
     for witness_items in witness_lists:
         if not witness_items:
             continue
         extraction = htlc_parser.extract_from_claim_witness(witness_items)
         if extraction is not None and extraction.payment_hash:
-            return extraction.payment_hash
-    return None
+            matches.append(extraction.payment_hash)
+    return matches[0] if len(matches) == 1 else None
 
 
-def _payment_hash_fields(payment_hash):
+def _extract_unique_claim_payment_hash_outpoint(
+    vins,
+    witness_items_fn,
+    prev_txid_fn=None,
+    prev_vout_fn=None,
+):
+    """Return ``(payment_hash, funding_txid, funding_vout)`` for one claim.
+
+    Exact payment-hash matching consumes a whole transaction row. It is safe
+    only when the transaction has exactly one economic input and that input
+    both reveals the HTLC preimage and names a canonical funding outpoint.
+    Missing outpoint identity, batched claims, and a claim mixed with an
+    ordinary wallet input fail closed instead of assigning an aggregate row to
+    one witness.
+    """
+
+    vins = list(vins)
+    if len(vins) != 1:
+        return None
+    if prev_txid_fn is None:
+        prev_txid_fn = _vin_prev_txid
+    if prev_vout_fn is None:
+        prev_vout_fn = _vin_prev_vout
+    matches = []
+    for vin in vins:
+        items = witness_items_fn(vin)
+        if not items:
+            continue
+        extraction = htlc_parser.extract_from_claim_witness(items)
+        if extraction is None or not extraction.payment_hash:
+            continue
+        funding_txid = canonical_txid(prev_txid_fn(vin))
+        funding_vout = prev_vout_fn(vin)
+        if funding_txid is None or type(funding_vout) is not int or funding_vout < 0:
+            return None
+        matches.append((extraction.payment_hash, funding_txid, funding_vout))
+    return matches[0] if len(matches) == 1 else None
+
+
+def _payment_hash_fields(claim_evidence):
     """Build the payment-hash entries that should appear on a sync record.
 
-    Returns an empty dict when ``payment_hash`` is falsy so callers can
-    splat the result with ``**`` without polluting records that did not
-    surface an HTLC claim.
+    Returns an empty dict unless the hash came from exactly one canonical claim
+    outpoint, so callers can splat the result without promoting ambiguous
+    whole-row evidence.
     """
-    if not payment_hash:
+    if not claim_evidence:
         return {}
+    payment_hash, _funding_txid, _funding_vout = claim_evidence
     return {
         "payment_hash": payment_hash,
-        "payment_hash_source": "chain_script",
+        "payment_hash_source": "chain_script_unique_outpoint",
     }
 
 
@@ -1554,6 +1587,42 @@ def _vin_prev_txid(vin):
         txid = vin.get("txid")
         return str(txid) if txid else None
     return None
+
+
+def _vin_prev_vout(vin):
+    """Prevout index of a decoded dict-shaped vin."""
+    if not isinstance(vin, dict):
+        return None
+    value = vin.get("vout")
+    return value if type(value) is int and value >= 0 else None
+
+
+def _extract_refund_funding_outpoint(
+    vins,
+    witness_items_fn,
+    prev_txid_fn=_vin_prev_txid,
+    prev_vout_fn=_vin_prev_vout,
+):
+    """Exact funding outpoint when exactly one HTLC refund vin is present.
+
+    A transaction can batch multiple timeout sweeps. A single transaction row
+    cannot represent that as one exact link, so return ``None`` rather than
+    silently selecting the first refund input.
+    """
+    matches = []
+    for vin in vins:
+        items = witness_items_fn(vin)
+        if not items:
+            continue
+        extraction = htlc_parser.extract_from_refund_witness(items)
+        if extraction is None:
+            continue
+        prev_txid = prev_txid_fn(vin)
+        prev_vout = prev_vout_fn(vin)
+        if prev_txid and prev_vout is not None:
+            matches.append((prev_txid, prev_vout))
+    unique = list(dict.fromkeys(matches))
+    return unique[0] if len(unique) == 1 else None
 
 
 def _extract_refund_funding_txid(vins, witness_items_fn, prev_txid_fn=_vin_prev_txid):
@@ -1586,7 +1655,7 @@ def _extract_refund_funding_txid(vins, witness_items_fn, prev_txid_fn=_vin_prev_
     return None
 
 
-def _swap_refund_fields(funding_txid):
+def _swap_refund_fields(funding_txid, funding_vout=None):
     """Swap-refund link entries for a sync record, splattable with ``**``.
 
     Empty dict when there is no link so records that are not HTLC refunds stay
@@ -1594,7 +1663,10 @@ def _swap_refund_fields(funding_txid):
     """
     if not funding_txid:
         return {}
-    return {"swap_refund_funding_txid": funding_txid}
+    fields = {"swap_refund_funding_txid": funding_txid}
+    if type(funding_vout) is int and funding_vout >= 0:
+        fields["swap_refund_funding_vout"] = funding_vout
+    return fields
 
 
 def _esplora_witness_items(vin_entry):
@@ -1660,10 +1732,10 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
     block_time = (tx.get("status") or {}).get("block_time")
     occurred_at = timestamp_to_iso(block_time)
     confirmed_at = timestamp_to_iso(block_time, default=None)
-    payment_hash = _extract_payment_hash_from_witnesses(
-        _esplora_witness_items(vin) for vin in tx.get("vin", [])
+    claim_evidence = _extract_unique_claim_payment_hash_outpoint(
+        tx.get("vin", []), _esplora_witness_items
     )
-    swap_refund_funding_txid = _extract_refund_funding_txid(
+    swap_refund_funding_outpoint = _extract_refund_funding_outpoint(
         tx.get("vin", []), _esplora_witness_items
     )
     return {
@@ -1680,8 +1752,8 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         "description": f"Synced from {backend_name}",
         "counterparty": None,
         "raw_json": json.dumps(tx, sort_keys=True),
-        **_payment_hash_fields(payment_hash),
-        **_swap_refund_fields(swap_refund_funding_txid),
+        **_payment_hash_fields(claim_evidence),
+        **_swap_refund_fields(*(swap_refund_funding_outpoint or (None, None))),
     }
 
 
@@ -1720,6 +1792,13 @@ def liquid_input_txid(vin):
     raise AppError("Unsupported Liquid input txid encoding while decoding transaction")
 
 
+def liquid_input_vout(vin):
+    value = getattr(vin, "vout", None)
+    if type(value) is int and value >= 0:
+        return value
+    return None
+
+
 def record_components_from_liquid_tx(
     txid,
     occurred_at,
@@ -1731,33 +1810,75 @@ def record_components_from_liquid_tx(
     prev_tx_lookup,
     raw_json_context=None,
     confirmed_at=None,
+    network=None,
 ):
     net_sats = defaultdict(int)
     fee_sats = defaultdict(int)
-    for output in tx.vout:
+    stored_vout = []
+    for output_index, output in enumerate(tx.vout):
         script_hex = output.script_pubkey.data.hex()
+        stored_output = {
+            "n": output_index,
+            "scriptpubkey": script_hex,
+        }
         if script_hex == "":
             value_sats, asset_id = liquid_output_amount_asset_id(output, descriptor_plan, target=None)
             fee_sats[asset_id] += value_sats
+            stored_output.update(
+                {
+                    "value_sats": value_sats,
+                    "asset_id": asset_id,
+                    "asset": liquid_asset_code(asset_id, policy_asset_id),
+                    "role": "fee",
+                }
+            )
+            stored_vout.append(stored_output)
             continue
         target = tracked_scripts.get(script_hex)
         if not target:
+            # An explicit/unconfidential foreign output is safe to retain.  A
+            # confidential foreign output cannot be unblinded with this
+            # wallet's key and deliberately remains script-only; another owned
+            # wallet may contribute its value when profile observations merge.
+            try:
+                value_sats, asset_id = liquid_output_amount_asset_id(
+                    output, descriptor_plan, target=None
+                )
+            except AppError:
+                pass
+            else:
+                stored_output.update(
+                    {
+                        "value_sats": value_sats,
+                        "asset_id": asset_id,
+                        "asset": liquid_asset_code(asset_id, policy_asset_id),
+                        "role": "external",
+                    }
+                )
+            stored_vout.append(stored_output)
             continue
         value_sats, asset_id = liquid_output_amount_asset_id(output, descriptor_plan, target=target)
         net_sats[asset_id] += value_sats
-    # Structured input outpoints for the stored record so source-of-funds
-    # assembly can join Liquid spends against owned outputs offline, the
-    # same way esplora/electrum bitcoin records allow.
-    vin_outpoints = [
-        {"txid": liquid_input_txid(vin), "vout": getattr(vin, "vout", None)}
-        for vin in tx.vin
-        if getattr(vin, "vout", None) is not None
-    ]
+        stored_output.update(
+            {
+                "value_sats": value_sats,
+                "asset_id": asset_id,
+                "asset": liquid_asset_code(asset_id, policy_asset_id),
+                "role": "owned",
+            }
+        )
+        stored_vout.append(stored_output)
+    # Persist valued historical prevouts, not just today's UTXO inventory.
+    # This evidence survives after the input is spent and is sufficient for an
+    # offline journal replay without descriptor/blinding secrets.
+    stored_vin = []
+    has_owned_input = False
     for vin in tx.vin:
         prev_txid = liquid_input_txid(vin)
         prev_vout = getattr(vin, "vout", None)
         if prev_vout is None:
             continue
+        stored_input = {"txid": prev_txid, "vout": prev_vout}
         prev_tx = prev_tx_lookup(prev_txid)
         if prev_vout >= len(prev_tx.vout):
             raise AppError(f"Liquid prevout index {prev_vout} is out of range for transaction {prev_txid}")
@@ -1765,26 +1886,63 @@ def record_components_from_liquid_tx(
         script_hex = prev_output.script_pubkey.data.hex()
         target = tracked_scripts.get(script_hex)
         if not target:
+            stored_prevout = {"scriptpubkey": script_hex, "role": "external"}
+            try:
+                value_sats, asset_id = liquid_output_amount_asset_id(
+                    prev_output, descriptor_plan, target=None
+                )
+            except AppError:
+                pass
+            else:
+                stored_prevout.update(
+                    {
+                        "value_sats": value_sats,
+                        "asset_id": asset_id,
+                        "asset": liquid_asset_code(asset_id, policy_asset_id),
+                    }
+                )
+            stored_input["prevout"] = stored_prevout
+            stored_vin.append(stored_input)
             continue
         value_sats, asset_id = liquid_output_amount_asset_id(prev_output, descriptor_plan, target=target)
+        has_owned_input = True
         net_sats[asset_id] -= value_sats
-    payment_hash = _extract_payment_hash_from_witnesses(
-        _liquid_witness_items(vin) for vin in tx.vin
+        stored_input["prevout"] = {
+            "scriptpubkey": script_hex,
+            "value_sats": value_sats,
+            "asset_id": asset_id,
+            "asset": liquid_asset_code(asset_id, policy_asset_id),
+            "role": "owned",
+        }
+        stored_vin.append(stored_input)
+    claim_evidence = _extract_unique_claim_payment_hash_outpoint(
+        tx.vin,
+        _liquid_witness_items,
+        prev_txid_fn=liquid_input_txid,
+        prev_vout_fn=liquid_input_vout,
     )
-    payment_hash_fields = _payment_hash_fields(payment_hash)
+    payment_hash_fields = _payment_hash_fields(claim_evidence)
     # Liquid vins are embit objects, so the refund link needs the embit-aware
     # witness + prevout-txid helpers rather than the dict-shaped defaults.
+    swap_refund_outpoint = _extract_refund_funding_outpoint(
+        tx.vin,
+        _liquid_witness_items,
+        prev_txid_fn=liquid_input_txid,
+        prev_vout_fn=liquid_input_vout,
+    )
     swap_refund_fields = _swap_refund_fields(
-        _extract_refund_funding_txid(
-            tx.vin, _liquid_witness_items, prev_txid_fn=liquid_input_txid
-        )
+        *(swap_refund_outpoint or (None, None))
     )
     records = []
-    all_assets = sorted(set(net_sats) | set(fee_sats))
+    # The explicit fee output is transaction-global evidence, but only wallets
+    # that own a funding input paid it. A destination-only observer must not get
+    # a synthetic policy-asset fee row (especially on issued-asset receipts).
+    accounted_fee_sats = fee_sats if has_owned_input else {}
+    all_assets = sorted(set(net_sats) | set(accounted_fee_sats))
     for asset_id in all_assets:
         asset_code = liquid_asset_code(asset_id, policy_asset_id)
         net_value = dec(net_sats.get(asset_id, 0), default="0")
-        fee_value = dec(fee_sats.get(asset_id, 0), default="0")
+        fee_value = dec(accounted_fee_sats.get(asset_id, 0), default="0")
         if net_value == 0 and fee_value == 0:
             continue
         if net_value > 0:
@@ -1824,7 +1982,11 @@ def record_components_from_liquid_tx(
                         {
                             **(raw_json_context or {}),
                             "txid": txid,
-                            "vin": vin_outpoints,
+                            "chain": "liquid",
+                            "network": network or "",
+                            "ownership_graph_version": 1,
+                            "vin": stored_vin,
+                            "vout": stored_vout,
                             "component": {
                                 "asset_id": asset_id,
                                 "asset": asset_code,
@@ -2020,6 +2182,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
                     liquid_tx_lookup,
                     {"tx": tx, "raw_hex": raw_hex},
                     confirmed_at=timestamp_to_iso((tx.get("status") or {}).get("block_time"), default=None),
+                    network=sync_state.network,
                 )
             )
         else:
@@ -3343,10 +3506,10 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         kind = "withdrawal" if amount > 0 else "fee"
     occurred_at = _backend_time_to_iso(height)
     confirmed_at = None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at
-    payment_hash = _extract_payment_hash_from_witnesses(
-        _esplora_witness_items(vin) for vin in tx.get("vin", [])
+    claim_evidence = _extract_unique_claim_payment_hash_outpoint(
+        tx.get("vin", []), _esplora_witness_items
     )
-    swap_refund_funding_txid = _extract_refund_funding_txid(
+    swap_refund_funding_outpoint = _extract_refund_funding_outpoint(
         tx.get("vin", []), _esplora_witness_items
     )
     stored_graph = json_ready(tx)
@@ -3365,8 +3528,8 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         "description": f"Synced from {backend_name}",
         "counterparty": None,
         "raw_json": json.dumps(stored_graph, sort_keys=True),
-        **_payment_hash_fields(payment_hash),
-        **_swap_refund_fields(swap_refund_funding_txid),
+        **_payment_hash_fields(claim_evidence),
+        **_swap_refund_fields(*(swap_refund_funding_outpoint or (None, None))),
     }
 
 
@@ -3606,6 +3769,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                             },
                         },
                         confirmed_at=None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at,
+                        network=sync_state.network,
                     )
                 )
             else:

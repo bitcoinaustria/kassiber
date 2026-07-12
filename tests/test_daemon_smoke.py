@@ -30,6 +30,7 @@ from kassiber.daemon import (
     _effective_ai_chat_tools_enabled,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
+    _validate_ai_custody_conversion_boundary,
 )
 from kassiber import daemon as daemon_module
 from kassiber.ai import tools as ai_tools
@@ -1016,6 +1017,33 @@ class DaemonFreshnessForceFullTest(unittest.TestCase):
         self.assertEqual(results[0]["code"], "backend_timeout")
         self.assertEqual(results[0]["details"], {"phase": "backend_fetch"})
         self.assertTrue(results[0]["retryable"])
+
+
+class AiCustodyConversionBoundaryTest(unittest.TestCase):
+    def test_ai_conversion_must_remain_a_draft(self):
+        with self.assertRaises(AppError) as raised:
+            _validate_ai_custody_conversion_boundary(
+                [{"conservation_mode": "conversion"}], activate=True
+            )
+        self.assertEqual(raised.exception.code, "interaction_required")
+
+    def test_ai_cannot_self_attest_conversion_review(self):
+        with self.assertRaises(AppError) as raised:
+            _validate_ai_custody_conversion_boundary(
+                [
+                    {
+                        "conservation_mode": "conversion",
+                        "conversion_reviewed": True,
+                    }
+                ],
+                activate=False,
+            )
+        self.assertEqual(raised.exception.code, "interaction_required")
+
+    def test_ai_quantity_component_can_activate(self):
+        _validate_ai_custody_conversion_boundary(
+            [{"conservation_mode": "quantity"}], activate=True
+        )
 
 
 class DaemonSmokeTest(unittest.TestCase):
@@ -4931,6 +4959,27 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertEqual(decision, "allow_once")
         self.assertFalse(consent.record("call_1", "deny"))
 
+    def test_high_impact_ai_tools_never_gain_session_consent(self):
+        consent = AiToolConsentState()
+        for index, tool_name in enumerate(
+            (
+                "ui.journals.quarantine.resolve",
+                "ui.transfers.components.bulk_resolve",
+            ),
+            1,
+        ):
+            call_id = f"call_{index}"
+            consent.expect(call_id)
+            self.assertTrue(consent.record(call_id, "allow_session"))
+            decision = consent.wait(
+                call_id=call_id,
+                tool_name=tool_name,
+                cancel_event=threading.Event(),
+                timeout=0.01,
+            )
+            self.assertEqual(decision, "allow_once")
+            self.assertFalse(consent.has_session_allow(tool_name))
+
     def test_ai_chat_accepts_typed_screen_context_and_rejects_sensitive_filters(self):
         base = {
             "model": "local-model",
@@ -6243,10 +6292,58 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         payload_mock.assert_called_once_with(
             conn_marker,
-            {"transaction": "tx-1", "note": "reviewed", "source": "ai"},
-            default_source="ai",
+            {"transaction": "tx-1", "note": "reviewed", "source": "ai_tool"},
+            default_source="ai_tool",
         )
         self.assertTrue(results[0]["ok"])
+
+    def test_quarantine_ai_tool_records_ai_tool_source(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        arguments = {
+            "transaction": "tx-1",
+            "action": "exclude",
+            "reason": "User confirmed it is outside this book",
+        }
+        call = ParsedAiToolCall(
+            call_id="call-quarantine",
+            name="ui.journals.quarantine.resolve",
+            arguments=arguments,
+        )
+        results = []
+
+        with (
+            mock.patch("kassiber.daemon._assert_ai_runtime_database_scope"),
+            mock.patch(
+                "kassiber.daemon._quarantine_resolution_payload",
+                return_value={"transaction_id": "tx-1", "cleared": True},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(
+            conn_marker,
+            arguments,
+            default_source="ai_tool",
+        )
+        self.assertTrue(results[0]["ok"])
+        self.assertEqual(
+            results[0]["envelope"]["kind"],
+            "ui.journals.quarantine.resolve",
+        )
 
     def test_ai_mutation_rejects_book_changed_while_waiting_for_consent(self):
         task_queue = queue.Queue()
@@ -6370,6 +6467,7 @@ class DaemonSmokeTest(unittest.TestCase):
             conn_marker,
             "ui.transfers.suggest",
             {"confidence": "exact"},
+            authored_source="ai_tool",
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.suggest")
@@ -6414,6 +6512,7 @@ class DaemonSmokeTest(unittest.TestCase):
             conn_marker,
             "ui.transfers.pair",
             {"tx_out": "out-1", "tx_in": "in-1"},
+            authored_source="ai_tool",
         )
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.pair")
@@ -6493,6 +6592,13 @@ class DaemonSmokeTest(unittest.TestCase):
                         tool_name,
                         arguments,
                         data_root=runtime.data_root,
+                    )
+                elif handler_name == "_ui_swap_matching_payload_from_conn":
+                    handler_mock.assert_called_once_with(
+                        conn_marker,
+                        tool_name,
+                        arguments,
+                        authored_source="ai_tool",
                     )
                 else:
                     handler_mock.assert_called_once_with(

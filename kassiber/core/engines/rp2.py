@@ -18,16 +18,22 @@ from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
 from ...transfers import (
     apply_manual_pairs,
+    bitcoin_network_domain_evidence,
     detect_intra_transfers,
     is_bitcoin_rail_pair,
-    normalize_group_txid,
+    onchain_transfer_scope,
 )
 from .. import pricing
+from ..custody_journal import (
+    component_member_row_ids,
+    failed_component_ids,
+    force_block_components,
+    project_effective_components,
+)
 from ..ownership_transfers import (
     derive_profile_transfers,
     detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
-    graph_multi_owned_destination_out_ids,
     graph_partial_payment_out_ids,
 )
 from ..austrian import (
@@ -2310,6 +2316,104 @@ def _generic_bitcoin_rail_pair_quarantines(
     return quarantines
 
 
+def _partition_network_compatible_carrying_pairs(
+    profile: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    pair_records: Sequence[Mapping[str, Any]],
+) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]], set[str]]:
+    """Fail closed for persisted carrying-value pairs across known networks.
+
+    The command boundary rejects new mismatches, but replicated or historical
+    rows can predate that guard.  Journal construction must independently stop
+    them from carrying real basis between mainnet/testnet/signet/regtest.
+    """
+
+    rows_by_id = {str(_row_get(row, "id")): row for row in rows}
+    accepted: list[Mapping[str, Any]] = []
+    quarantines: list[dict[str, Any]] = []
+    rejected_row_ids: set[str] = set()
+    for record in pair_records:
+        if str(_row_get(record, "policy") or "") != "carrying-value":
+            accepted.append(record)
+            continue
+        out_id = str(_row_get(record, "out_transaction_id") or "")
+        in_id = str(_row_get(record, "in_transaction_id") or "")
+        out_row = rows_by_id.get(out_id)
+        in_row = rows_by_id.get(in_id)
+        if out_row is None or in_row is None:
+            accepted.append(record)
+            continue
+        out_domain, out_valid = bitcoin_network_domain_evidence(out_row)
+        in_domain, in_valid = bitcoin_network_domain_evidence(in_row)
+        if (
+            out_valid
+            and in_valid
+            and (
+                out_domain is None
+                or in_domain is None
+                or out_domain == in_domain
+            )
+        ):
+            accepted.append(record)
+            continue
+        detail = {
+            "pair_id": str(_row_get(record, "id") or ""),
+            "out_transaction_id": out_id,
+            "in_transaction_id": in_id,
+            "out_network_domain": out_domain,
+            "in_network_domain": in_domain,
+            "out_network_valid": out_valid,
+            "in_network_valid": in_valid,
+            "required_for": "carrying_value_pair",
+        }
+        rejected_row_ids.update((out_id, in_id))
+        quarantines.extend(
+            build_tax_quarantine(
+                profile,
+                row,
+                "transfer_network_mismatch",
+                detail,
+            )
+            for row in (out_row, in_row)
+        )
+    # Pair records form an economic component. If one edge is rejected, every
+    # edge touching either blocked leg must fail closed too; otherwise removing
+    # the shared row can leave an earlier accepted edge with one missing leg and
+    # book its survivor as a standalone disposal/acquisition.
+    while rejected_row_ids:
+        remaining: list[Mapping[str, Any]] = []
+        expanded = False
+        for record in accepted:
+            out_id = str(_row_get(record, "out_transaction_id") or "")
+            in_id = str(_row_get(record, "in_transaction_id") or "")
+            if not ({out_id, in_id} & rejected_row_ids):
+                remaining.append(record)
+                continue
+            newly_blocked = {out_id, in_id} - rejected_row_ids
+            rejected_row_ids.update((out_id, in_id))
+            expanded = expanded or bool(newly_blocked)
+            detail = {
+                "pair_id": str(_row_get(record, "id") or ""),
+                "out_transaction_id": out_id,
+                "in_transaction_id": in_id,
+                "required_for": "complete_pair_component",
+            }
+            quarantines.extend(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "transfer_pair_dependency_blocked",
+                    detail,
+                )
+                for row_id in (out_id, in_id)
+                if (row := rows_by_id.get(row_id)) is not None
+            )
+        accepted = remaining
+        if not expanded:
+            break
+    return accepted, quarantines, rejected_row_ids
+
+
 def _apply_generic_bitcoin_rail_carry_values(
     profile: Mapping[str, Any],
     rows_for_engine: list[Mapping[str, Any]],
@@ -2430,10 +2534,44 @@ class GenericRP2TaxEngine:
         self.profile = profile
 
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
-        if not inputs.rows:
+        custody_projection = project_effective_components(
+            self.profile,
+            inputs.rows,
+            inputs.wallet_refs_by_id,
+            inputs.manual_pair_records,
+            inputs.authored_active_custody_components or (),
+        )
+        projected_rows = list(custody_projection.rows)
+        blocked_custody_anchor_rows = list(custody_projection.blocked_anchor_rows)
+        projected_manual_pairs = list(custody_projection.manual_pair_records)
+        (
+            projected_manual_pairs,
+            pair_network_quarantines,
+            pair_network_blocked_row_ids,
+        ) = _partition_network_compatible_carrying_pairs(
+            self.profile,
+            projected_rows,
+            projected_manual_pairs,
+        )
+        if pair_network_blocked_row_ids:
+            projected_rows = [
+                row
+                for row in projected_rows
+                if str(_row_get(row, "id")) not in pair_network_blocked_row_ids
+            ]
+        projected_payout_records = [
+            record
+            for record in inputs.direct_payout_records
+            if str(record["out_transaction_id"])
+            not in custody_projection.claimed_transaction_ids
+        ]
+        if not projected_rows and not blocked_custody_anchor_rows:
             return TaxEngineLedgerResult(
                 entries=[],
-                quarantines=[],
+                quarantines=[
+                    *custody_projection.quarantines,
+                    *pair_network_quarantines,
+                ],
                 intra_audit=[],
                 cross_asset_pairs=[],
                 direct_swap_payouts=[],
@@ -2450,10 +2588,13 @@ class GenericRP2TaxEngine:
             blocked_payout_row_ids,
         ) = _direct_payout_synthetic_rows(
             self.profile,
-            inputs.rows,
-            inputs.direct_payout_records,
+            projected_rows,
+            projected_payout_records,
         )
-        wallet_labels = {row["wallet_label"] for row in rows_for_engine}
+        wallet_labels = {
+            row["wallet_label"]
+            for row in [*rows_for_engine, *blocked_custody_anchor_rows]
+        }
         # The ownership deriver can route a MOVE into a wallet that recorded no
         # rows (sync gap); declare every profile wallet as an RP2 exchange so the
         # synthesized destination leg lands on a known account.
@@ -2462,9 +2603,15 @@ class GenericRP2TaxEngine:
             for ref in inputs.wallet_refs_by_id.values()
             if ref.get("label")
         }
-        assets = {row["asset"] for row in rows_for_engine}
+        assets = {
+            row["asset"] for row in [*rows_for_engine, *blocked_custody_anchor_rows]
+        }
         entries: list[dict[str, Any]] = []
-        quarantines: list[dict[str, Any]] = list(payout_quarantines)
+        quarantines: list[dict[str, Any]] = [
+            *custody_projection.quarantines,
+            *pair_network_quarantines,
+            *payout_quarantines,
+        ]
         intra_audit_all: list[dict[str, Any]] = []
         account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
@@ -2481,7 +2628,7 @@ class GenericRP2TaxEngine:
             # outbound carries the pegged portion into the cross-asset pair.
             rows_for_engine, split_pair_records, split_out_id_to_real = _apply_cross_asset_splits(
                 rows_for_engine,
-                inputs.manual_pair_records,
+                projected_manual_pairs,
             )
             auto_pairs, auto_matched_ids = detect_intra_transfers(rows_for_engine)
             if auto_pairs:
@@ -2508,15 +2655,12 @@ class GenericRP2TaxEngine:
             withheld_partial_payment_ids = graph_partial_payment_out_ids(
                 auto_pairs, inputs.owned_index
             )
-            withheld_multi_owned_destination_ids = graph_multi_owned_destination_out_ids(
-                auto_pairs, inputs.owned_index
-            )
-            # Keep the withheld pairs so a partial payment the ownership deriver
-            # cannot actually re-derive (an ambiguous / blocked source) can be
-            # ROLLED BACK to its original self-transfer pair below. Withholding
-            # unconditionally would otherwise orphan the legs — the source books
-            # a full disposal and the destination a phantom acquisition, with no
-            # quarantine — strictly worse than the fee-absorbing MOVE it replaced.
+            # Keep withheld pairs only so a false-positive withhold can be rolled
+            # back. A source that the graph deriver BLOCKS is never restored: the
+            # graph has already proved that the row pair is not a complete MOVE
+            # (external value, another owned destination, or incomplete fee/value
+            # evidence). Restoring that pair would silently relabel the unknown
+            # principal as a transfer fee.
             withheld_pairs_by_out_id: dict[str, Mapping[str, Any]] = {}
             if withheld_partial_payment_ids:
                 kept_auto_pairs = []
@@ -2538,7 +2682,7 @@ class GenericRP2TaxEngine:
             for record in split_pair_records:
                 already_paired_ids.add(str(record["out_transaction_id"]))
                 already_paired_ids.add(str(record["in_transaction_id"]))
-            input_rows_by_id = {str(row["id"]): row for row in inputs.rows}
+            input_rows_by_id = {str(row["id"]): row for row in projected_rows}
             # Whole-row direct-payout sources are already decomposed by
             # _direct_payout_synthetic_rows. Partial payouts leave a reduced
             # real source row in rows_for_engine for the remainder, and that
@@ -2546,7 +2690,7 @@ class GenericRP2TaxEngine:
             blocked_payout_id_set = {str(rid) for rid in blocked_payout_row_ids}
             direct_payout_claimed_ids: set[str] = set()
             direct_payout_suppressed_in_ids: set[str] = set()
-            for record in inputs.direct_payout_records:
+            for record in projected_payout_records:
                 out_id = str(record["out_transaction_id"])
                 out_row = input_rows_by_id.get(out_id)
                 if out_row is None:
@@ -2657,21 +2801,18 @@ class GenericRP2TaxEngine:
             if consolidation_drop_ids:
                 already_paired_ids |= consolidation_drop_ids
             rows_for_engine = ownership_derivation.rows_after_consolidation
-            # Roll back any withheld partial-payment pair the deriver could NOT
-            # re-derive (it neither dropped the source nor overrode it to a
-            # residual disposal — typically an ambiguous owned output or an
-            # ambiguous destination). Restoring the original detect_intra
-            # self-transfer pair returns to the safe pre-withhold behavior (a
-            # MOVE that may absorb a small external leg as fee, or a
-            # transfer_fee_implausible quarantine for a large one) instead of
-            # orphaning the legs into a phantom disposal + phantom acquisition.
+            # Restore a withheld pair only when the ownership pass found no
+            # blocker and no decomposition was required. Once graph evidence
+            # blocks the source, the original pair is provably incomplete and
+            # must remain withheld; otherwise an external/missing-wallet leg
+            # would be silently relabelled as a MOVE fee.
             restored_withheld_out_ids: set[str] = set()
             blocked_source_ids = {
                 str(_row_get(blocked.get("row") or {}, "id"))
                 for blocked in ownership_result.blocked_sources
                 if blocked.get("row") is not None
             }
-            multi_owned_withheld_blocks: set[str] = set()
+            unsafe_withheld_blocks: set[str] = set()
             if withheld_pairs_by_out_id:
                 handled_withheld = ownership_result.dropped_out_ids | {
                     str(out_id) for out_id in ownership_result.out_row_overrides
@@ -2679,11 +2820,8 @@ class GenericRP2TaxEngine:
                 for out_id in withheld_pairs_by_out_id:
                     if out_id in handled_withheld:
                         continue
-                    if (
-                        out_id in blocked_source_ids
-                        and out_id in withheld_multi_owned_destination_ids
-                    ):
-                        multi_owned_withheld_blocks.add(out_id)
+                    if out_id in blocked_source_ids:
+                        unsafe_withheld_blocks.add(out_id)
                         continue
                     restored_withheld_out_ids.add(out_id)
             # A blocked source is a proven self-transfer the deriver could not
@@ -2694,22 +2832,31 @@ class GenericRP2TaxEngine:
             # wallet whenever the destination receipt was recorded under a
             # different external_id (CSV / separate sync) or not at all. The one
             # case we skip the quarantine is when a recorded destination shares
-            # the spend's (external_id, asset) group from another wallet: the
+            # the spend's canonical on-chain scope from another wallet: the
             # existing owned-fanout guard already holds back and quarantines that
             # whole balanced group, so a second quarantine would be redundant.
             if ownership_result.blocked_sources:
-                inbound_group_wallets: dict[tuple[Any, Any], set[str]] = {}
-                group_row_ids: dict[tuple[Any, Any], set[str]] = {}
+                inbound_group_wallets: dict[
+                    tuple[str, str, str, str], set[str]
+                ] = {}
+                group_row_ids: dict[tuple[str, str, str, str], set[str]] = {}
+                group_positive_directions: dict[
+                    tuple[str, str, str, str], tuple[int, int]
+                ] = {}
                 for candidate in rows_for_engine:
-                    if not _row_get(candidate, "external_id"):
+                    candidate_key = onchain_transfer_scope(candidate)
+                    if candidate_key is None:
                         continue
-                    candidate_key = (
-                        normalize_group_txid(str(_row_get(candidate, "external_id"))),
-                        _row_get(candidate, "asset"),
-                    )
                     group_row_ids.setdefault(candidate_key, set()).add(
                         str(_row_get(candidate, "id"))
                     )
+                    outs, ins = group_positive_directions.get(candidate_key, (0, 0))
+                    if int(_row_get(candidate, "amount") or 0) > 0:
+                        if _row_get(candidate, "direction") == "outbound":
+                            outs += 1
+                        elif _row_get(candidate, "direction") == "inbound":
+                            ins += 1
+                    group_positive_directions[candidate_key] = (outs, ins)
                     if _row_get(candidate, "direction") == "inbound":
                         inbound_group_wallets.setdefault(candidate_key, set()).add(
                             str(_row_get(candidate, "wallet_id"))
@@ -2721,19 +2868,23 @@ class GenericRP2TaxEngine:
                         continue
                     row_id = str(_row_get(row, "id"))
                     source_wallet_id = str(_row_get(row, "wallet_id"))
-                    group_key = (
-                        normalize_group_txid(str(_row_get(row, "external_id") or "")),
-                        _row_get(row, "asset"),
-                    )
+                    group_key = onchain_transfer_scope(row)
                     # The owned-fanout guard only holds a group NO pair touches
                     # (a paired leg means "handled elsewhere" to it). A blocked
                     # source in a partially-paired group would book a standalone
                     # disposal with neither guard nor quarantine — so the
                     # suppression premise requires both a recorded cross-wallet
                     # destination AND a pair-free group.
-                    fanout_holds = any(
+                    positive_outs, positive_ins = group_positive_directions.get(
+                        group_key, (0, 0)
+                    )
+                    fanout_holds = (
+                        group_key is not None
+                        and (positive_outs > 1 or positive_ins > 1)
+                        and any(
                         wallet_id != source_wallet_id
                         for wallet_id in inbound_group_wallets.get(group_key, ())
+                        )
                     ) and not any(
                         member_id in already_paired_ids
                         for member_id in group_row_ids.get(group_key, ())
@@ -2741,7 +2892,7 @@ class GenericRP2TaxEngine:
                     # A restored withheld pair is re-paired as a self-transfer
                     # below, so its source must not also be quarantined here.
                     if (
-                        (not fanout_holds or row_id in multi_owned_withheld_blocks)
+                        (not fanout_holds or row_id in unsafe_withheld_blocks)
                         and row_id not in restored_withheld_out_ids
                     ):
                         surfaced_blocks.append(blocked)
@@ -2768,7 +2919,20 @@ class GenericRP2TaxEngine:
                 + consolidation_result.derived_pairs
                 + ownership_result.derived_pairs
                 + fanout_result.derived_pairs
-                + list(inputs.channel_transfer_pairs or ())
+                + [
+                    pair
+                    for pair in (inputs.channel_transfer_pairs or ())
+                    if str(
+                        _row_get(pair.get("out"), "journal_transaction_id")
+                        or _row_get(pair.get("out"), "id")
+                    )
+                    not in custody_projection.claimed_transaction_ids
+                    and str(
+                        _row_get(pair.get("in"), "journal_transaction_id")
+                        or _row_get(pair.get("in"), "id")
+                    )
+                    not in custody_projection.claimed_transaction_ids
+                ]
             )
             # The engine carries the synthetic split leg (so it can mark the
             # cross-asset swap-out without touching the self-transfer remainder),
@@ -2812,62 +2976,154 @@ class GenericRP2TaxEngine:
             quarantines.extend(generic_rail_carry.quarantines)
             blocked_generic_rail_row_ids = generic_rail_carry.blocked_row_ids
             rows_for_engine = list(generic_rail_carry.rows)
-            rows_by_asset = defaultdict(list)
-            for row in rows_for_engine:
-                rows_by_asset[row["asset"]].append(row)
-
-            # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
-            # runs here so the country's cross-asset validator can see every asset's
-            # markers before any accounting.
-            prepared_by_asset = _prepare_assets(
-                self.profile,
-                rows_by_asset,
-                inputs.wallet_refs_by_id,
-                pairs_by_asset,
-                configuration,
-                excluded_row_ids=blocked_payout_row_ids | blocked_generic_rail_row_ids,
-                loan_leg_by_transaction_id=loan_leg_by_transaction_id,
-            )
-            swap_link_by_row_id, quarantined_row_ids, swap_quarantines = _select_at_cross_asset_swap_links(
-                self.profile,
-                engine_cross_asset_pairs,
-                rows_for_engine,
-                prepared_by_asset,
-            )
-            quarantines.extend(swap_quarantines)
+            # Invalid/conflicting authored-active components keep their raw
+            # anchors outside every matching/derivation path above. Add them
+            # back only at the normalization boundary as forced-block rows:
+            # they cannot book, while their timestamps contaminate later lot
+            # provenance until the component is repaired or superseded.
+            rows_for_engine.extend(blocked_custody_anchor_rows)
             payout_synthetic_ids = {
                 synthetic_id
                 for pair in payout_pairs
                 for synthetic_id in (str(pair["in_id"]), f"{pair['pair_id']}:out")
             }
-            selected_payout_synthetic_ids = {
-                synthetic_id
-                for pair in payout_pairs
-                if str(pair["in_id"]) in swap_link_by_row_id
-                or (
-                    _profile_str(self.profile, "tax_country").lower() != "at"
-                    and pair.get("policy") == "carrying-value"
-                    and is_bitcoin_rail_pair(pair.get("out_asset"), pair.get("in_asset"))
-                )
-                for synthetic_id in (str(pair["in_id"]), f"{pair['pair_id']}:out")
-            }
-            excluded_row_ids = (
-                blocked_payout_row_ids
-                | blocked_generic_rail_row_ids
-                | quarantined_row_ids
-                | (payout_synthetic_ids - selected_payout_synthetic_ids)
+            # Custody atomicity spans assets. Normalization enforces it inside one
+            # asset, then this fixed point propagates any member failure across
+            # BTC/LBTC (or future multi-rail assets) before RP2 computes anything.
+            # Forced members remain in normalization as quarantines so their
+            # timestamps contaminate later lot provenance; simply excluding them
+            # would let dependent disposals book against an incomplete basis.
+            failed_custody_ids = failed_component_ids(
+                rows_for_engine, generic_rail_carry.quarantines
             )
-            if swap_link_by_row_id or excluded_row_ids:
+            if failed_custody_ids:
+                rows_for_engine = force_block_components(
+                    rows_for_engine,
+                    failed_custody_ids,
+                    reason="bitcoin_rail_carry_member_blocked",
+                )
+            swap_link_by_row_id: dict[str, str] = {}
+            quarantined_row_ids: set[str] = set()
+            swap_quarantines: list[dict[str, Any]] = []
+            prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]] = []
+            excluded_row_ids: set[str] = set()
+            max_component_passes = max(
+                1, len(inputs.authored_active_custody_components or ()) + 1
+            )
+            for _custody_pass in range(max_component_passes):
+                failed_member_ids = component_member_row_ids(
+                    rows_for_engine, failed_custody_ids
+                )
+                active_blocked_generic_ids = (
+                    blocked_generic_rail_row_ids - failed_member_ids
+                )
+                active_cross_asset_pairs = [
+                    pair
+                    for pair in engine_cross_asset_pairs
+                    if str(pair.get("component_id") or "") not in failed_custody_ids
+                ]
+                rows_by_asset = defaultdict(list)
+                for row in rows_for_engine:
+                    rows_by_asset[row["asset"]].append(row)
+                # Phase 1 has no swap markers. It discovers missing price/basis,
+                # quantity, fee, and per-asset transfer failures safely.
                 prepared_by_asset = _prepare_assets(
                     self.profile,
                     rows_by_asset,
                     inputs.wallet_refs_by_id,
                     pairs_by_asset,
                     configuration,
-                    at_swap_link_by_row_id=swap_link_by_row_id,
-                    excluded_row_ids=excluded_row_ids,
+                    excluded_row_ids=(
+                        blocked_payout_row_ids | active_blocked_generic_ids
+                    ),
                     loan_leg_by_transaction_id=loan_leg_by_transaction_id,
                 )
+                swap_link_by_row_id, quarantined_row_ids, swap_quarantines = (
+                    _select_at_cross_asset_swap_links(
+                        self.profile,
+                        active_cross_asset_pairs,
+                        rows_for_engine,
+                        prepared_by_asset,
+                    )
+                )
+                selected_payout_synthetic_ids = {
+                    synthetic_id
+                    for pair in payout_pairs
+                    if str(pair["in_id"]) in swap_link_by_row_id
+                    or (
+                        _profile_str(self.profile, "tax_country").lower() != "at"
+                        and pair.get("policy") == "carrying-value"
+                        and is_bitcoin_rail_pair(
+                            pair.get("out_asset"), pair.get("in_asset")
+                        )
+                    )
+                    for synthetic_id in (
+                        str(pair["in_id"]),
+                        f"{pair['pair_id']}:out",
+                    )
+                }
+                excluded_row_ids = (
+                    blocked_payout_row_ids
+                    | active_blocked_generic_ids
+                    | quarantined_row_ids
+                    | (payout_synthetic_ids - selected_payout_synthetic_ids)
+                )
+                final_prepared = prepared_by_asset
+                if swap_link_by_row_id or excluded_row_ids:
+                    final_prepared = _prepare_assets(
+                        self.profile,
+                        rows_by_asset,
+                        inputs.wallet_refs_by_id,
+                        pairs_by_asset,
+                        configuration,
+                        at_swap_link_by_row_id=swap_link_by_row_id,
+                        excluded_row_ids=excluded_row_ids,
+                        loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+                    )
+                phase_quarantines = [
+                    quarantine
+                    for normalized, prepared in final_prepared
+                    for quarantine in (
+                        *normalized.quarantines,
+                        *prepared.quarantines,
+                    )
+                ]
+                newly_failed = failed_component_ids(
+                    rows_for_engine,
+                    [*phase_quarantines, *swap_quarantines],
+                ) - failed_custody_ids
+                if not newly_failed:
+                    prepared_by_asset = final_prepared
+                    break
+                # Preserve the first concrete failure; the next pass adds the
+                # component-wide blocker rows for every sibling anchor.
+                newly_failed_anchors = {
+                    str(anchor_id)
+                    for row in rows_for_engine
+                    if str(_row_get(row, "custody_component_id") or "")
+                    in newly_failed
+                    for anchor_id in (
+                        _row_get(row, "custody_component_anchor_ids") or ()
+                    )
+                }
+                quarantines.extend(
+                    quarantine
+                    for quarantine in [*phase_quarantines, *swap_quarantines]
+                    if str(quarantine["transaction_id"]) in newly_failed_anchors
+                )
+                failed_custody_ids.update(newly_failed)
+                rows_for_engine = force_block_components(
+                    rows_for_engine,
+                    newly_failed,
+                    reason="component_member_blocked",
+                )
+            else:
+                raise AppError(
+                    "Custody-component atomicity did not converge",
+                    code="custody_component_atomicity",
+                    hint="Review overlapping or chained component anchors.",
+                )
+            quarantines.extend(swap_quarantines)
 
             # Phase 2: cross-asset validation via the country hook. Catches invariants
             # (e.g. Austrian `at_swap_link` marker must appear on two different assets)

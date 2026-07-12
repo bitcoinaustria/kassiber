@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -95,6 +96,9 @@ def _tax_row(
     fee: int | None = None,
     fiat_rate: int | None = None,
 ):
+    physical_txid = hashlib.sha256(
+        f"samourai-test:{external_id}".encode()
+    ).hexdigest()
     return {
         "id": tx_id,
         "wallet_id": f"wallet-{section}",
@@ -108,7 +112,14 @@ def _tax_row(
         "kind": "whirlpool",
         "description": tx_id,
         "note": None,
-        "external_id": external_id,
+        "external_id": physical_txid,
+        "raw_json": json.dumps(
+            {
+                "Tx Hash": physical_txid,
+                "chain": "bitcoin",
+                "network": "main",
+            }
+        ),
         "config_json": _wallet_config(section),
     }
 
@@ -836,6 +847,7 @@ class SamouraiImportTest(unittest.TestCase):
                         NOW,
                     ),
                 )
+            mix_txid = hashlib.sha256(b"samourai-test:mix-round").hexdigest()
             for tx_id, wallet_id, direction in (
                 ("premix-out", "wallet-premix", "outbound"),
                 ("postmix-in", "wallet-postmix", "inbound"),
@@ -853,7 +865,7 @@ class SamouraiImportTest(unittest.TestCase):
                         "ws-1",
                         "profile-1",
                         wallet_id,
-                        "mix-round",
+                        mix_txid,
                         f"fp-{tx_id}",
                         "2026-02-01T00:00:00Z",
                         direction,
@@ -862,7 +874,13 @@ class SamouraiImportTest(unittest.TestCase):
                         "EUR",
                         60_000,
                         30,
-                        "{}",
+                        json.dumps(
+                            {
+                                "Tx Hash": mix_txid,
+                                "chain": "bitcoin",
+                                "network": "main",
+                            }
+                        ),
                         NOW,
                     ),
                 )

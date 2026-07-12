@@ -12,7 +12,7 @@ import uuid
 from typing import Any, Mapping
 
 from ...errors import AppError
-from ...time_utils import now_iso
+from ...time_utils import now_iso, parse_timestamp
 from ..repo import invalidate_journals
 from .bundle import (
     BUNDLE_MANIFEST_DOMAIN,
@@ -39,7 +39,21 @@ from .membership import (
     _legacy_member_record_core,
     _member_record_core,
 )
-from .schema_allowlist import SYNC_TABLE_MAP, TableSpec, validate_wire_row
+from .schema_allowlist import (
+    REFERENCE_TABLES,
+    SYNC_TABLE_MAP,
+    TableSpec,
+    validate_wire_row,
+)
+
+
+_CUSTODY_COMPONENT_TABLES = frozenset(
+    {
+        "custody_components",
+        "custody_component_legs",
+        "custody_component_allocations",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -435,6 +449,17 @@ def _validate_event_for_book(
     _validate_event_shape(event)
     if event["workspace_id"] != book["workspace_id"] or event["profile_id"] != book["profile_id"]:
         raise AppError("sync event targets another book", code="sync_bundle_tampered")
+    if int(event["context"].get(str(event["replica_id"]), -1)) != int(
+        event["replica_seq"]
+    ) - 1:
+        raise AppError(
+            "sync event version vector does not match its replica sequence",
+            code="sync_bundle_invalid",
+        )
+    # A valid signer can reference a replica whose membership catalog has not
+    # arrived on this device yet. Signature validation below still authenticates
+    # the event author; the causal gate stores the event as pending until every
+    # referenced replica and signed prefix becomes known.
     replica = conn.execute(
         "SELECT * FROM sync_replicas WHERE id = ? AND profile_id = ?",
         (event["replica_id"], book["profile_id"]),
@@ -447,6 +472,34 @@ def _validate_event_for_book(
         raise AppError("event author is not bound to its replica", code="sync_signature_invalid")
     if not verify_event(event, member["signing_public_key_b64"]):
         raise AppError("sync event signature is invalid", code="sync_signature_invalid")
+
+
+def _causal_dependencies_satisfied(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    event: Mapping[str, Any],
+) -> bool:
+    """Return whether every signed version-vector prerequisite was observed.
+
+    Per-replica sequence contiguity is necessary but not sufficient: an event
+    may reference a transaction or custody header authored by another replica.
+    Deferring it until that replica's signed prefix has been replayed makes
+    import independent of mailbox/bundle ordering without guessing from FK
+    failures.
+    """
+
+    observed = {
+        str(row["id"]): int(row["last_seq"] or 0)
+        for row in conn.execute(
+            "SELECT id, last_seq FROM sync_replicas WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchall()
+    }
+    return all(
+        replica_id in observed and observed[replica_id] >= int(required_seq)
+        for replica_id, required_seq in event["context"].items()
+    )
 
 
 def _store_event(conn: sqlite3.Connection, event: Mapping[str, Any]) -> None:
@@ -547,26 +600,6 @@ def _create_conflict(
         ),
     )
     return bool(cursor.rowcount)
-
-
-_REFERENCE_TABLES: Mapping[str, str] = {
-    "account_id": "accounts",
-    "wallet_id": "wallets",
-    "transaction_id": "transactions",
-    "out_transaction_id": "transactions",
-    "in_transaction_id": "transactions",
-    "from_transaction_id": "transactions",
-    "to_transaction_id": "transactions",
-    "target_transaction_id": "transactions",
-    "copied_from_transaction_id": "transactions",
-    "tag_id": "tags",
-    "attachment_id": "attachments",
-    "copied_from_attachment_id": "attachments",
-    "document_id": "external_documents",
-    "from_source_id": "source_funds_sources",
-    "source_id": "source_funds_sources",
-    "case_id": "source_funds_cases",
-}
 
 
 def _mapped_id(conn, *, profile_id: str, table: str, wire_id: Any) -> Any:
@@ -693,7 +726,7 @@ def _prepare_actual_row(
         actual["stored_relpath"] = destination.relative_to(root).as_posix()
         actual["sha256"] = raw_sha
 
-    for column, referenced_table in _REFERENCE_TABLES.items():
+    for column, referenced_table in REFERENCE_TABLES.items():
         if column in actual and actual[column] is not None:
             actual[column] = _mapped_id(
                 conn,
@@ -701,6 +734,71 @@ def _prepare_actual_row(
                 table=referenced_table,
                 wire_id=actual[column],
             )
+    if spec.table == "custody_component_legs":
+        # Live FKs are intentionally retractable while the immutable anchor
+        # survives. A peer may receive an older/live authored leg after its
+        # importer has already removed that transaction or wallet. Materialize
+        # the same retracted shape SQLite's ON DELETE SET NULL would have
+        # produced locally instead of wedging the replica stream on the FK or
+        # scope trigger forever.
+        transaction_id = actual.get("transaction_id")
+        if transaction_id is not None and not conn.execute(
+            "SELECT 1 FROM transactions "
+            "WHERE id = ? AND workspace_id = ? AND profile_id = ?",
+            (transaction_id, book["workspace_id"], profile_id),
+        ).fetchone():
+            actual["transaction_id"] = None
+        wallet_id = actual.get("wallet_id")
+        if wallet_id is not None and not conn.execute(
+            "SELECT 1 FROM wallets "
+            "WHERE id = ? AND workspace_id = ? AND profile_id = ?",
+            (wallet_id, book["workspace_id"], profile_id),
+        ).fetchone():
+            actual["wallet_id"] = None
+    missing_optional_columns = [
+        column for column in spec.optional_columns if column not in wire_row
+    ]
+    if missing_optional_columns:
+        where = " AND ".join(f"{column} = ?" for column in spec.primary_key)
+        local_pk = tuple(actual[column] for column in spec.primary_key)
+        existing_optional = conn.execute(
+            f"SELECT {', '.join(sorted(missing_optional_columns))} "
+            f"FROM {spec.table} WHERE {where}",
+            local_pk,
+        ).fetchone()
+        if existing_optional:
+            for column in missing_optional_columns:
+                actual[column] = existing_optional[column]
+    if (
+        spec.table == "custody_component_legs"
+        and "anchor_transaction_id" not in wire_row
+    ):
+        # Bundles signed before the durable anchor column existed omit it. On
+        # insert derive the anchor from the then-live transaction; on update
+        # retain the already materialized anchor instead of interpreting the
+        # absent additive field as an in-place rewrite to NULL.
+        existing_anchor = conn.execute(
+            "SELECT anchor_transaction_id FROM custody_component_legs WHERE id = ?",
+            (actual["id"],),
+        ).fetchone()
+        actual["anchor_transaction_id"] = (
+            existing_anchor["anchor_transaction_id"]
+            if existing_anchor
+            else actual.get("transaction_id")
+        )
+    if spec.table == "custody_components" and (
+        "expected_leg_count" not in wire_row
+        or "expected_allocation_count" not in wire_row
+    ):
+        existing_commitment = conn.execute(
+            "SELECT expected_leg_count, expected_allocation_count "
+            "FROM custody_components WHERE id = ?",
+            (actual["id"],),
+        ).fetchone()
+        if existing_commitment:
+            for field in ("expected_leg_count", "expected_allocation_count"):
+                if field not in wire_row:
+                    actual[field] = existing_commitment[field]
     if spec.table == "source_funds_link_attachments" and actual.get("link_id") is not None:
         actual["link_id"] = _mapped_id(
             conn, profile_id=profile_id, table="source_funds_links", wire_id=actual["link_id"]
@@ -999,6 +1097,42 @@ def _entity_pk(spec: TableSpec, event: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(str(value) for value in values)
 
 
+def _has_other_active_alias(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    spec: TableSpec,
+    entity_key: str,
+    local_pk: tuple[Any, ...],
+) -> bool:
+    if len(spec.primary_key) != 1 or len(local_pk) != 1:
+        return False
+    rows = conn.execute(
+        """
+        SELECT entity_key FROM sync_row_state
+        WHERE profile_id = ? AND entity_table = ?
+          AND entity_key != ? AND tombstoned = 0
+        """,
+        (profile_id, spec.table, entity_key),
+    ).fetchall()
+    for row in rows:
+        try:
+            values = json.loads(row["entity_key"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(values, list) or len(values) != 1:
+            continue
+        alias_local_id = _mapped_id(
+            conn,
+            profile_id=profile_id,
+            table=spec.table,
+            wire_id=values[0],
+        )
+        if str(alias_local_id) == str(local_pk[0]):
+            return True
+    return False
+
+
 def _apply_row_delete(conn, *, book, event: Mapping[str, Any]) -> tuple[bool, int]:
     spec = SYNC_TABLE_MAP.get(str(event["entity_table"]))
     if not spec:
@@ -1037,19 +1171,27 @@ def _apply_row_delete(conn, *, book, event: Mapping[str, Any]) -> tuple[bool, in
         _mapped_id(
             conn,
             profile_id=book["profile_id"],
-            table=spec.table,
+            table=REFERENCE_TABLES.get(column, spec.table),
             wire_id=value,
         )
-        for value in wire_pk
+        for column, value in zip(spec.primary_key, wire_pk, strict=True)
     )
     where = " AND ".join(f"{column} = ?" for column in spec.primary_key)
-    if spec.soft_delete_column:
-        conn.execute(
-            f"UPDATE {spec.table} SET {spec.soft_delete_column} = ? WHERE {where}",
-            (event["created_at"], *local_pk),
-        )
-    else:
-        conn.execute(f"DELETE FROM {spec.table} WHERE {where}", local_pk)
+    preserve_alias = _has_other_active_alias(
+        conn,
+        profile_id=book["profile_id"],
+        spec=spec,
+        entity_key=key,
+        local_pk=local_pk,
+    )
+    if not preserve_alias:
+        if spec.soft_delete_column:
+            conn.execute(
+                f"UPDATE {spec.table} SET {spec.soft_delete_column} = ? WHERE {where}",
+                (event["created_at"], *local_pk),
+            )
+        else:
+            conn.execute(f"DELETE FROM {spec.table} WHERE {where}", local_pk)
     _write_field_state(
         conn,
         profile_id=book["profile_id"],
@@ -1220,6 +1362,208 @@ def _event_role_rejection(conn, member, replica, event: Mapping[str, Any]) -> st
     return None
 
 
+def _immutable_revision_rejection(
+    conn: sqlite3.Connection,
+    *,
+    book,
+    event: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Detect an attempted in-place rewrite of an authored custody revision.
+
+    Component lifecycle fields may evolve, but economic/header evidence and
+    every leg/allocation value are append-only. Live transaction/wallet FKs may
+    become NULL when an anchored row is retracted; a transaction may reconnect
+    only to the durable anchor identity if that exact row is restored.
+    """
+
+    spec = SYNC_TABLE_MAP.get(str(event["entity_table"]))
+    if not spec or not spec.immutable_fields:
+        return None
+    if event["event_type"] == "row.delete":
+        wire_pk = _entity_pk(spec, event)
+        local_pk = tuple(
+            _mapped_id(
+                conn,
+                profile_id=book["profile_id"],
+                table=spec.table,
+                wire_id=value,
+            )
+            for value in wire_pk
+        )
+        where = " AND ".join(f"{column} = ?" for column in spec.primary_key)
+        existing = conn.execute(
+            f"SELECT * FROM {spec.table} WHERE {where}",
+            local_pk,
+        ).fetchone()
+        if not existing:
+            # A parent profile/component tombstone may already have cascaded
+            # this authored row. Its explicit child tombstone is then a safe,
+            # idempotent audit fence rather than an erasure.
+            return None
+        parent_alive = (
+            conn.execute(
+                "SELECT 1 FROM profiles WHERE id = ?",
+                (existing["profile_id"],),
+            ).fetchone()
+            if spec.table == "custody_components"
+            else conn.execute(
+                "SELECT 1 FROM custody_components WHERE id = ?",
+                (existing["component_id"],),
+            ).fetchone()
+        )
+        if parent_alive:
+            return {
+                "event_id": event["id"],
+                "replica_seq": event["replica_seq"],
+                "entity_table": spec.table,
+                "entity_key": event["entity_key"],
+                "operation": "delete",
+                "required_action": "supersede_custody_revision",
+            }
+        return None
+    if event["event_type"] != "row.upsert":
+        return None
+    payload = event.get("payload") or {}
+    wire_row = payload.get("row") if isinstance(payload, Mapping) else None
+    if not isinstance(wire_row, Mapping):
+        return None
+    spec = validate_wire_row(str(event["entity_table"]), wire_row)
+
+    wire_pk = tuple(wire_row[column] for column in spec.primary_key)
+    local_pk = tuple(
+        _mapped_id(
+            conn,
+            profile_id=book["profile_id"],
+            table=spec.table,
+            wire_id=value,
+        )
+        for value in wire_pk
+    )
+    where = " AND ".join(f"{column} = ?" for column in spec.primary_key)
+    existing = conn.execute(
+        f"SELECT * FROM {spec.table} WHERE {where}",
+        local_pk,
+    ).fetchone()
+    if not existing:
+        if spec.table in {
+            "custody_component_legs",
+            "custody_component_allocations",
+        }:
+            component_id = _mapped_id(
+                conn,
+                profile_id=book["profile_id"],
+                table="custody_components",
+                wire_id=wire_row.get("component_id"),
+            )
+            count_field, child_table = (
+                ("expected_leg_count", "custody_component_legs")
+                if spec.table == "custody_component_legs"
+                else ("expected_allocation_count", "custody_component_allocations")
+            )
+            component = conn.execute(
+                f"SELECT {count_field} AS expected FROM custody_components WHERE id = ?",
+                (component_id,),
+            ).fetchone()
+            if component and component["expected"] is not None:
+                actual_count = int(
+                    conn.execute(
+                        f"SELECT COUNT(*) FROM {child_table} WHERE component_id = ?",
+                        (component_id,),
+                    ).fetchone()[0]
+                )
+                if actual_count >= int(component["expected"]):
+                    return {
+                        "event_id": event["id"],
+                        "replica_seq": event["replica_seq"],
+                        "entity_table": spec.table,
+                        "entity_key": event["entity_key"],
+                        "operation": "append",
+                        "expected_count": int(component["expected"]),
+                        "actual_count": actual_count,
+                        "required_action": "create_new_custody_revision",
+                    }
+        return None
+
+    changed_fields: list[str] = []
+    for field in sorted(spec.immutable_fields):
+        # Additive fields omitted by an older signed bundle do not rewrite the
+        # locally materialized value.
+        if field not in wire_row:
+            continue
+        incoming = wire_row[field]
+        referenced_table = REFERENCE_TABLES.get(field)
+        if referenced_table and incoming is not None:
+            incoming = _mapped_id(
+                conn,
+                profile_id=book["profile_id"],
+                table=referenced_table,
+                wire_id=incoming,
+            )
+        previous = existing[field]
+        if previous == incoming:
+            continue
+        if spec.table == "custody_component_legs" and field == "transaction_id":
+            if incoming is None or (
+                previous is None
+                and incoming == existing["anchor_transaction_id"]
+            ):
+                continue
+        if spec.table == "custody_component_legs" and field == "wallet_id":
+            if incoming is None:
+                continue
+        changed_fields.append(field)
+
+    if not changed_fields:
+        return None
+    return {
+        "event_id": event["id"],
+        "replica_seq": event["replica_seq"],
+        "entity_table": spec.table,
+        "entity_key": event["entity_key"],
+        "immutable_fields": changed_fields,
+        "required_action": "create_new_custody_revision",
+    }
+
+
+def _reject_contiguous_event(
+    conn: sqlite3.Connection,
+    *,
+    book,
+    replica,
+    event: Mapping[str, Any],
+    reason: str,
+    details: Mapping[str, Any] | None = None,
+) -> tuple[str, int, int, bool]:
+    conn.execute(
+        """
+        INSERT INTO sync_rejected_events(
+            profile_id, replica_id, replica_seq, event_hash, reason, received_at
+        ) VALUES(?, ?, ?, ?, ?, ?)
+        """,
+        (
+            book["profile_id"], event["replica_id"], event["replica_seq"],
+            event["event_hash"], reason, now_iso(),
+        ),
+    )
+    notice_details = {
+        "event_id": event["id"],
+        "replica_seq": event["replica_seq"],
+    }
+    if details:
+        notice_details.update(details)
+    _notice(
+        conn,
+        profile_id=book["profile_id"],
+        code=reason,
+        severity="blocking",
+        replica_id=str(event["replica_id"]),
+        member_id=str(event["author_member_id"]),
+        details=notice_details,
+    )
+    _advance_replica(conn, replica=replica, event=event)
+    return "rejected", 0, 0, False
+
+
 def _advance_replica(conn, *, replica, event: Mapping[str, Any]) -> None:
     conn.execute(
         """
@@ -1241,7 +1585,7 @@ def _apply_contiguous_event(
     parsed: ParsedBundle,
     attachments_root: Path | None,
     created_files: list[Path],
-) -> tuple[str, int, int]:
+) -> tuple[str, int, int, bool]:
     replica = conn.execute("SELECT * FROM sync_replicas WHERE id = ?", (event["replica_id"],)).fetchone()
     expected_seq = int(replica["last_seq"] or 0) + 1
     if int(event["replica_seq"]) != expected_seq:
@@ -1255,31 +1599,68 @@ def _apply_contiguous_event(
     member = conn.execute("SELECT * FROM sync_members WHERE id = ?", (event["author_member_id"],)).fetchone()
     rejection = _event_role_rejection(conn, member, replica, event)
     if rejection:
-        conn.execute(
-            """
-            INSERT INTO sync_rejected_events(
-                profile_id, replica_id, replica_seq, event_hash, reason, received_at
-            ) VALUES(?, ?, ?, ?, ?, ?)
-            """,
-            (
-                book["profile_id"], event["replica_id"], event["replica_seq"],
-                event["event_hash"], rejection, now_iso(),
-            ),
+        return _reject_contiguous_event(
+            conn,
+            book=book,
+            replica=replica,
+            event=event,
+            reason=rejection,
         )
-        _notice(
+    immutable_rejection = _immutable_revision_rejection(
+        conn,
+        book=book,
+        event=event,
+    )
+    if immutable_rejection:
+        return _reject_contiguous_event(
+            conn,
+            book=book,
+            replica=replica,
+            event=event,
+            reason="custody_revision_immutable",
+            details=immutable_rejection,
+        )
+    if (
+        event["event_type"] == "row.upsert"
+        and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+    ):
+        wire_row = (event.get("payload") or {}).get("row") or {}
+        try:
+            parse_timestamp(wire_row.get("created_at"))
+        except AppError:
+            return _reject_contiguous_event(
+                conn,
+                book=book,
+                replica=replica,
+                event=event,
+                reason="custody_revision_timestamp_invalid",
+                details={"entity_table": event["entity_table"]},
+            )
+    if event["event_type"] == "transaction.edit":
+        payload = event.get("payload") or {}
+        transaction_id = _mapped_id(
             conn,
             profile_id=book["profile_id"],
-            code=rejection,
-            severity="blocking",
-            replica_id=str(event["replica_id"]),
-            member_id=str(event["author_member_id"]),
-            details={"event_id": event["id"], "replica_seq": event["replica_seq"]},
+            table="transactions",
+            wire_id=payload.get("transaction_id"),
         )
-        _advance_replica(conn, replica=replica, event=event)
-        return "rejected", 0, 0
+        transaction_exists = transaction_id and conn.execute(
+            "SELECT 1 FROM transactions WHERE id = ? AND profile_id = ?",
+            (transaction_id, book["profile_id"]),
+        ).fetchone()
+        if not transaction_exists:
+            return _reject_contiguous_event(
+                conn,
+                book=book,
+                replica=replica,
+                event=event,
+                reason="sync_dependency_missing",
+                details={"transaction_id": payload.get("transaction_id")},
+            )
     _store_event(conn, event)
     mutated = False
     conflicts = 0
+    custody_touched = False
     if event["event_type"] == "row.upsert":
         mutated, conflicts = _apply_row_upsert(
             conn,
@@ -1289,18 +1670,38 @@ def _apply_contiguous_event(
             attachments_root=attachments_root,
             created_files=created_files,
         )
+        custody_touched = bool(
+            mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+        )
     elif event["event_type"] == "row.delete":
         mutated, conflicts = _apply_row_delete(conn, book=book, event=event)
+        custody_touched = bool(
+            mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+        )
     elif event["event_type"] == "conflict.resolve":
         from .conflicts import apply_resolution_event
 
-        mutated = apply_resolution_event(
-            conn,
-            book=book,
-            event=event,
-            parsed=parsed,
-            attachments_root=attachments_root,
-            created_files=created_files,
+        try:
+            mutated = apply_resolution_event(
+                conn,
+                book=book,
+                event=event,
+                parsed=parsed,
+                attachments_root=attachments_root,
+                created_files=created_files,
+            )
+        except AppError as exc:
+            conn.execute("DELETE FROM sync_events WHERE id = ?", (event["id"],))
+            return _reject_contiguous_event(
+                conn,
+                book=book,
+                replica=replica,
+                event=event,
+                reason=exc.code or "sync_conflict_resolution_invalid",
+                details={"message": str(exc)},
+            )
+        custody_touched = bool(
+            mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
         )
     elif event["event_type"] == "membership.revoke":
         member_id = str((event.get("payload") or {}).get("member_id") or "")
@@ -1352,7 +1753,7 @@ def _apply_contiguous_event(
             details={"event_type": event["event_type"]},
         )
     _advance_replica(conn, replica=replica, event=event)
-    return "applied", int(mutated), conflicts
+    return "applied", int(mutated), conflicts, custody_touched
 
 
 def _known_event_hash(conn, *, profile_id: str, replica_id: str, replica_seq: int):
@@ -1393,6 +1794,23 @@ def _queue_pending(conn, *, profile_id: str, event: Mapping[str, Any], bundle_ha
     return True
 
 
+def _store_pending_blobs(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    parsed: ParsedBundle,
+) -> None:
+    for content_hmac, blob in parsed.blobs.items():
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO sync_pending_blobs(
+                profile_id, bundle_hash, content_hmac, payload
+            ) VALUES(?, ?, ?, ?)
+            """,
+            (profile_id, parsed.bundle_hash, content_hmac, blob),
+        )
+
+
 def _drain_pending(
     conn,
     *,
@@ -1400,7 +1818,7 @@ def _drain_pending(
     parsed: ParsedBundle,
     attachments_root: Path | None,
     created_files: list[Path],
-) -> tuple[int, int, int, int]:
+) -> tuple[int, int, int, int, bool]:
     stored_blobs = {
         row["content_hmac"]: bytes(row["payload"])
         for row in conn.execute(
@@ -1415,6 +1833,7 @@ def _drain_pending(
         blobs=stored_blobs | dict(parsed.blobs),
     )
     applied = rejected = mutations = conflicts = 0
+    custody_touched = False
     while True:
         progressed = False
         replicas = conn.execute(
@@ -1433,7 +1852,21 @@ def _drain_pending(
             if not pending:
                 continue
             event = json.loads(pending["event_json"])
-            status, row_mutations, made_conflicts = _apply_contiguous_event(
+            if not _causal_dependencies_satisfied(
+                conn,
+                profile_id=book["profile_id"],
+                event=event,
+            ):
+                # Another replica's contiguous prefix is still missing. Keep
+                # scanning: a later replica in this pass may satisfy it, after
+                # which the outer loop retries deterministically.
+                continue
+            (
+                status,
+                row_mutations,
+                made_conflicts,
+                touched_custody,
+            ) = _apply_contiguous_event(
                 conn,
                 book=book,
                 event=event,
@@ -1449,6 +1882,7 @@ def _drain_pending(
             rejected += status == "rejected"
             mutations += row_mutations
             conflicts += made_conflicts
+            custody_touched = custody_touched or touched_custody
             progressed = True
         if not progressed:
             break
@@ -1462,7 +1896,7 @@ def _drain_pending(
         """,
         (book["profile_id"], book["profile_id"]),
     )
-    return applied, rejected, mutations, conflicts
+    return applied, rejected, mutations, conflicts, custody_touched
 
 
 def import_bundle(
@@ -1516,6 +1950,7 @@ def import_bundle(
 
     created_files: list[Path] = []
     applied = duplicates = pending_count = rejected = mutations = conflicts = 0
+    custody_touched = False
     try:
         manifest_signature = manifest.get("manifest_signature")
         sender_member_id = str(manifest.get("sender_member_id") or "")
@@ -1660,16 +2095,19 @@ def import_bundle(
                 (event["replica_id"],),
             ).fetchone()
             expected = int(replica["last_seq"] or 0) + 1
-            if int(event["replica_seq"]) > expected:
-                for content_hmac, blob in parsed.blobs.items():
-                    conn.execute(
-                        """
-                        INSERT OR IGNORE INTO sync_pending_blobs(
-                            profile_id, bundle_hash, content_hmac, payload
-                        ) VALUES(?, ?, ?, ?)
-                        """,
-                        (profile_id, parsed.bundle_hash, content_hmac, blob),
-                    )
+            if int(event["replica_seq"]) > expected or (
+                int(event["replica_seq"]) == expected
+                and not _causal_dependencies_satisfied(
+                    conn,
+                    profile_id=profile_id,
+                    event=event,
+                )
+            ):
+                _store_pending_blobs(
+                    conn,
+                    profile_id=profile_id,
+                    parsed=parsed,
+                )
                 pending_count += int(
                     _queue_pending(
                         conn,
@@ -1681,7 +2119,12 @@ def import_bundle(
                 continue
             if int(event["replica_seq"]) < expected:
                 raise AppError("replica history is missing a known sequence", code="sync_replica_fork")
-            status, row_mutations, made_conflicts = _apply_contiguous_event(
+            (
+                status,
+                row_mutations,
+                made_conflicts,
+                touched_custody,
+            ) = _apply_contiguous_event(
                 conn,
                 book=book,
                 event=event,
@@ -1693,6 +2136,7 @@ def import_bundle(
             rejected += status == "rejected"
             mutations += row_mutations
             conflicts += made_conflicts
+            custody_touched = custody_touched or touched_custody
 
         drained = _drain_pending(
             conn,
@@ -1705,6 +2149,7 @@ def import_bundle(
         rejected += drained[1]
         mutations += drained[2]
         conflicts += drained[3]
+        custody_touched = custody_touched or drained[4]
         if not already:
             conn.execute(
                 """
@@ -1719,6 +2164,15 @@ def import_bundle(
                     manifest.get("prior_bundle_hash"), now_iso(),
                 ),
             )
+        if custody_touched:
+            # Memberships are a local derived uniqueness guard and are never
+            # replicated.  Rebuild only after the whole replay batch (including
+            # drained events) so reordered headers/legs and concurrent active
+            # revisions are evaluated atomically.  Invalid authored rows stay
+            # visible but receive no effective membership.
+            from ..custody_components import reconcile_active_memberships
+
+            reconcile_active_memberships(conn, profile_id=profile_id)
         if mutations or conflicts:
             invalidate_journals(conn, profile_id)
         remote_hlcs = [str(event["hlc"]) for event in parsed.events]

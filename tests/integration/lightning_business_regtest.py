@@ -541,12 +541,28 @@ def _assert_db_state(data_root: Path) -> dict[str, int]:
         if int(tx_count) < 5:
             raise AssertionError(f"expected synced CLN invoice transactions, got {tx_count}")
 
-        raw_leaks = conn.execute(
-            "SELECT COUNT(*) AS count FROM lightning_node_records"
-            " WHERE raw_json != '{}' AND record_type != 'forward_day'"
-        ).fetchone()["count"]
-        if int(raw_leaks) != 0:
-            raise AssertionError("Lightning raw RPC payloads leaked into persistence")
+        persisted_payloads = conn.execute(
+            "SELECT record_type, tag, raw_json FROM lightning_node_records "
+            "WHERE record_type != 'forward_day'"
+        ).fetchall()
+        for row in persisted_payloads:
+            try:
+                payload = json.loads(row["raw_json"] or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise AssertionError(
+                    "Lightning persistence contains invalid raw_json"
+                ) from exc
+            allowed_keys = set()
+            if row["record_type"] == "channel":
+                allowed_keys = {"chain", "network"}
+                if row["tag"] == "channel_close":
+                    allowed_keys.update(
+                        {"_kassiber_provenance", "channel_close_local_sweeps"}
+                    )
+            if not isinstance(payload, dict) or not set(payload).issubset(allowed_keys):
+                raise AssertionError(
+                    "Lightning raw RPC payloads leaked into persistence"
+                )
         return counts
     finally:
         conn.close()

@@ -69,9 +69,12 @@ from .cli.handlers import (
     _attachment_hooks,
     _metadata_hooks,
     _report_hooks,
+    activate_custody_component,
     auto_price_transactions_from_rates_cache,
     apply_transfer_rules,
+    bulk_resolve_custody_components,
     bulk_pair_transfers,
+    create_custody_component,
     create_direct_swap_payout,
     create_saved_view_cli,
     create_transaction_pair,
@@ -81,6 +84,7 @@ from .cli.handlers import (
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
+    get_custody_component,
     invalidate_journals,
     loans_link,
     loans_mark,
@@ -89,14 +93,20 @@ from .cli.handlers import (
     import_into_wallet,
     list_saved_views_cli,
     list_direct_swap_payouts,
+    list_custody_components,
     list_transaction_pairs,
     list_transfer_rules,
     process_journals,
+    resolve_quarantine_exclude,
+    resolve_quarantine_price_override,
     resolve_scope,
     resolve_transaction,
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
+    supersede_custody_component,
+    undo_custody_component,
+    update_custody_component,
     update_transaction_pair,
 )
 from .core import audit_package as core_audit_package
@@ -386,6 +396,7 @@ SUPPORTED_KINDS = (
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.resolve",
     "ui.journals.transfers.list",
     "ui.journals.process",
     "ui.transfers.suggest",
@@ -399,6 +410,14 @@ SUPPORTED_KINDS = (
     "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.components.list",
+    "ui.transfers.components.get",
+    "ui.transfers.components.create",
+    "ui.transfers.components.update",
+    "ui.transfers.components.activate",
+    "ui.transfers.components.supersede",
+    "ui.transfers.components.undo",
+    "ui.transfers.components.bulk_resolve",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
@@ -605,6 +624,7 @@ MAX_DOCUMENT_IMPORT_SESSIONS = 8
 # cases.save, and coverage. The transactions cap is coverage-specific.
 _DAEMON_REPORT_DEPTH_CAP = 32
 _COVERAGE_MAX_TRANSACTIONS_CAP = 50_000
+_CUSTODY_BULK_COMPONENT_CAP = 50
 
 
 def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
@@ -614,6 +634,12 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
         resolved = default
     return min(resolved, _DAEMON_REPORT_DEPTH_CAP)
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
+AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
+    {
+        "ui.journals.quarantine.resolve",
+        "ui.transfers.components.bulk_resolve",
+    }
+)
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
 PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET"
@@ -651,7 +677,10 @@ class AiToolConsentState:
 
     def has_session_allow(self, tool_name: str) -> bool:
         with self._condition:
-            return tool_name in self._allow_session
+            return (
+                tool_name not in AI_TOOL_ONCE_ONLY_CONSENT
+                and tool_name in self._allow_session
+            )
 
     def wait(
         self,
@@ -673,6 +702,8 @@ class AiToolConsentState:
                     decision = self._decisions.pop(call_id, None)
                     if decision is not None:
                         if decision == "allow_session":
+                            if tool_name in AI_TOOL_ONCE_ONLY_CONSENT:
+                                return "allow_once"
                             self._allow_session.add(tool_name)
                         return decision
                     remaining = deadline - time.monotonic()
@@ -1651,13 +1682,258 @@ def _write_records_csv(
     }
 
 
+_JAVASCRIPT_MAX_SAFE_INTEGER = (1 << 53) - 1
+
+
+def _ui_exact_integer_payload(value: Any) -> Any:
+    """Return a JSON shape whose integers survive a JavaScript round trip.
+
+    JSON has no integer type and ``JSON.parse`` coerces every numeric token to
+    a binary64 number.  Custody components are revision inputs, so silently
+    rounding one msat would author different evidence.  Preserve the existing
+    numeric representation inside JavaScript's exact range and use a decimal
+    string only outside it.  Applying this recursively also protects derived
+    validation totals carried by the same component boundary.
+    """
+
+    if type(value) is int:
+        return (
+            value
+            if -_JAVASCRIPT_MAX_SAFE_INTEGER <= value <= _JAVASCRIPT_MAX_SAFE_INTEGER
+            else str(value)
+        )
+    if isinstance(value, dict):
+        return {key: _ui_exact_integer_payload(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_ui_exact_integer_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [_ui_exact_integer_payload(item) for item in value]
+    return value
+
+
+def _validate_ai_custody_conversion_boundary(
+    components: list[dict[str, Any]], *, activate: bool
+) -> None:
+    """Keep conversion review independent from the proposing AI tool."""
+
+    conversions = [
+        index
+        for index, component in enumerate(components)
+        if str(component.get("conservation_mode") or "quantity") == "conversion"
+    ]
+    if not conversions:
+        return
+    self_attested = [
+        index
+        for index in conversions
+        if components[index].get("conversion_reviewed") is True
+    ]
+    if self_attested:
+        raise AppError(
+            "AI-authored conversion components cannot attest their own review",
+            code="interaction_required",
+            hint="Create the conversion as a draft, then review and activate it in Custody Review.",
+            details={"component_indexes": self_attested},
+        )
+    if activate:
+        raise AppError(
+            "AI-authored conversion components require separate human review before activation",
+            code="interaction_required",
+            hint="Retry with activate=false, then review and activate the draft in Custody Review.",
+            details={"component_indexes": conversions},
+        )
+
+
 def _ui_swap_matching_payload_from_conn(
     conn: sqlite3.Connection,
     kind: str,
     args: dict[str, Any],
+    *,
+    authored_source: str = "gui",
 ) -> dict[str, Any]:
     workspace = args.get("workspace")
     profile = args.get("profile")
+
+    def exact_bool(name: str, default: bool = False) -> bool:
+        value = args.get(name, default)
+        if type(value) is not bool:
+            raise AppError(
+                f"{kind} {name} must be a boolean", code="validation"
+            )
+        return value
+
+    def component_id() -> str:
+        value = args.get("component_id")
+        if not isinstance(value, str) or not value.strip():
+            raise AppError(
+                f"{kind} requires component_id", code="validation"
+            )
+        return value.strip()
+
+    def component_spec() -> dict[str, Any]:
+        value = args.get("spec", args.get("component"))
+        if not isinstance(value, dict):
+            raise AppError(
+                f"{kind} requires a JSON object in spec", code="validation"
+            )
+        return value
+
+    if kind == "ui.transfers.components.list":
+        limit = args.get("limit", 200)
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise AppError(
+                f"{kind} limit must be an integer between 1 and 1000",
+                code="validation",
+            )
+        components = list_custody_components(
+            conn,
+            workspace,
+            profile,
+            state=args.get("state"),
+            component_type=args.get("component_type"),
+            transaction=args.get("transaction"),
+            effective_only=exact_bool("effective_only"),
+            # The renderer gets the privacy-safe projection. Local evidence
+            # and location references stay behind the daemon boundary.
+            include_local_evidence=False,
+            limit=limit + 1,
+        )
+        return _ui_exact_integer_payload(
+            {
+                "components": components[:limit],
+                "has_more": len(components) > limit,
+                "limit": limit,
+            }
+        )
+    if kind == "ui.transfers.components.get":
+        return _ui_exact_integer_payload(
+            get_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.create":
+        return _ui_exact_integer_payload(
+            create_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_spec(),
+                activate=exact_bool("activate"),
+                include_local_evidence=False,
+                authored_source=authored_source,
+            )
+        )
+    if kind == "ui.transfers.components.update":
+        return _ui_exact_integer_payload(
+            update_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                component_spec(),
+                activate=exact_bool("activate"),
+                include_local_evidence=False,
+                authored_source=authored_source,
+            )
+        )
+    if kind == "ui.transfers.components.activate":
+        return _ui_exact_integer_payload(
+            activate_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.supersede":
+        reason = args.get("reason")
+        if reason is not None and not isinstance(reason, str):
+            raise AppError(f"{kind} reason must be text", code="validation")
+        return _ui_exact_integer_payload(
+            supersede_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                reason=reason,
+                include_local_evidence=False,
+            )
+        )
+    if kind == "ui.transfers.components.undo":
+        reason = args.get("reason", "undo")
+        if not isinstance(reason, str):
+            raise AppError(f"{kind} reason must be text", code="validation")
+        return _ui_exact_integer_payload(
+            undo_custody_component(
+                conn,
+                workspace,
+                profile,
+                component_id(),
+                reason=reason,
+                include_local_evidence=False,
+                authored_source=authored_source,
+            )
+        )
+    if kind == "ui.transfers.components.bulk_resolve":
+        components = args.get("components")
+        if not isinstance(components, list) or not components or not all(
+            isinstance(item, dict) for item in components
+        ):
+            raise AppError(
+                f"{kind} requires a non-empty components array of JSON objects",
+                code="validation",
+            )
+        if len(components) > _CUSTODY_BULK_COMPONENT_CAP:
+            raise AppError(
+                f"{kind} accepts at most {_CUSTODY_BULK_COMPONENT_CAP} components",
+                code="validation",
+                details={
+                    "count": len(components),
+                    "max_components": _CUSTODY_BULK_COMPONENT_CAP,
+                },
+            )
+        activate = exact_bool("activate", True)
+        dry_run = exact_bool("dry_run")
+        if authored_source == "ai_tool":
+            _validate_ai_custody_conversion_boundary(components, activate=activate)
+        if not dry_run:
+            return _ui_exact_integer_payload(
+                bulk_resolve_custody_components(
+                    conn,
+                    workspace,
+                    profile,
+                    components,
+                    activate=activate,
+                    include_local_evidence=False,
+                    authored_source=authored_source,
+                )
+            )
+
+        conn.execute("SAVEPOINT daemon_custody_component_preview")
+        try:
+            preview = bulk_resolve_custody_components(
+                conn,
+                workspace,
+                profile,
+                components,
+                activate=activate,
+                commit=False,
+                include_local_evidence=False,
+                authored_source=authored_source,
+            )
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
+            conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
+            raise
+        conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
+        conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
+        preview["dry_run"] = True
+        return _ui_exact_integer_payload(preview)
 
     if kind == "ui.transfers.suggest":
         return suggest_transfer_candidates(
@@ -5310,6 +5586,7 @@ def _execute_read_only_ai_tool(
                     conn,
                     entry.daemon_kind,
                     call.arguments,
+                    authored_source="ai_tool",
                 )
             else:
                 return _tool_result_denied("tool_not_allowed")
@@ -5500,6 +5777,135 @@ def _run_scoped_ai_mutation(
     return _run_scoped_ai_operation(runtime, callback)
 
 
+def _quarantine_resolution_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+    *,
+    default_source: str,
+) -> dict[str, Any]:
+    """Apply one narrow, audited quarantine decision and verify its effect.
+
+    Transfer/custody interpretation deliberately stays in its own typed tools;
+    this endpoint only exposes the two generic resolutions already available in
+    the CLI. AI calls are consent-gated by the catalog and stamped as AI edits.
+    """
+
+    allowed = {
+        "transaction",
+        "action",
+        "fiat_rate",
+        "fiat_value",
+        "reason",
+        "reprocess",
+    }
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.journals.quarantine.resolve received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    transaction = args.get("transaction")
+    action = args.get("action")
+    reason = args.get("reason")
+    if not isinstance(transaction, str) or not transaction.strip():
+        raise AppError(
+            "ui.journals.quarantine.resolve requires a transaction",
+            code="validation",
+            retryable=False,
+        )
+    if action not in {"price_override", "exclude"}:
+        raise AppError(
+            "ui.journals.quarantine.resolve action is invalid",
+            code="validation",
+            details={"allowed": ["price_override", "exclude"]},
+            retryable=False,
+        )
+    if not isinstance(reason, str) or not reason.strip():
+        raise AppError(
+            "ui.journals.quarantine.resolve requires an audit reason",
+            code="validation",
+            retryable=False,
+        )
+    reprocess = args.get("reprocess", True)
+    if type(reprocess) is not bool:
+        raise AppError(
+            "ui.journals.quarantine.resolve reprocess must be boolean",
+            code="validation",
+            retryable=False,
+        )
+
+    if action == "price_override":
+        if args.get("fiat_rate") is None and args.get("fiat_value") is None:
+            raise AppError(
+                "price_override requires fiat_rate or fiat_value from reviewed evidence",
+                code="validation",
+                retryable=False,
+            )
+        if args.get("fiat_rate") is not None and args.get("fiat_value") is not None:
+            raise AppError(
+                "price_override accepts either fiat_rate or fiat_value, not both",
+                code="validation",
+                retryable=False,
+            )
+        resolution = resolve_quarantine_price_override(
+            conn,
+            None,
+            None,
+            transaction.strip(),
+            fiat_rate=args.get("fiat_rate"),
+            fiat_value=args.get("fiat_value"),
+            source=default_source,
+            reason=reason.strip(),
+        )
+    else:
+        if args.get("fiat_rate") is not None or args.get("fiat_value") is not None:
+            raise AppError(
+                "exclude does not accept fiat_rate or fiat_value",
+                code="validation",
+                retryable=False,
+            )
+        resolution = resolve_quarantine_exclude(
+            conn,
+            None,
+            None,
+            transaction.strip(),
+            source=default_source,
+            reason=reason.strip(),
+        )
+
+    journal_process = _journals_process_payload(conn) if reprocess else None
+    remaining = conn.execute(
+        """
+        SELECT reason, detail_json, created_at
+        FROM journal_quarantines
+        WHERE transaction_id = ?
+        """,
+        (resolution["transaction_id"],),
+    ).fetchone()
+    remaining_payload = None
+    if remaining is not None:
+        try:
+            detail = json.loads(remaining["detail_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            detail = {}
+        remaining_payload = {
+            "reason": remaining["reason"],
+            "detail": detail if isinstance(detail, dict) else {},
+            "created_at": remaining["created_at"],
+        }
+    return {
+        "transaction_id": resolution["transaction_id"],
+        "action": action,
+        "resolution": resolution,
+        "reprocessed": reprocess,
+        "journal_process": journal_process,
+        "cleared": remaining_payload is None,
+        "remaining_quarantine": remaining_payload,
+    }
+
+
 def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -> dict[str, Any]:
     if call.argument_error:
         return _tool_result_denied(call.argument_error)
@@ -5591,6 +5997,16 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_scoped_ai_mutation(runtime, _execute)
+        if entry.daemon_kind == "ui.journals.quarantine.resolve":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _quarantine_resolution_payload(
+                    conn,
+                    call.arguments,
+                    default_source="ai_tool",
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_scoped_ai_mutation(runtime, _execute)
         if entry.daemon_kind == "ui.rates.rebuild":
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _rates_rebuild_payload(conn, call.arguments)
@@ -5624,8 +6040,8 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _transaction_metadata_update_payload(
                     conn,
-                    {**call.arguments, "source": "ai"},
-                    default_source="ai",
+                    {**call.arguments, "source": "ai_tool"},
+                    default_source="ai_tool",
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -5634,8 +6050,8 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _transaction_history_revert_payload(
                     conn,
-                    {**call.arguments, "source": "ai"},
-                    default_source="ai",
+                    {**call.arguments, "source": "ai_tool"},
+                    default_source="ai_tool",
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -5712,6 +6128,7 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                     conn,
                     entry.daemon_kind,
                     call.arguments,
+                    authored_source="ai_tool",
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -13588,6 +14005,22 @@ def handle_request(
                 build_envelope(
                     "ui.journals.quarantine",
                     build_journals_quarantine_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.journals.quarantine.resolve":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.journals.quarantine.resolve",
+                    _quarantine_resolution_payload(
+                        _require_conn(ctx),
+                        _coerce_args_dict(request_id, request.get("args")),
+                        default_source="gui",
+                    ),
                 ),
                 request_id,
             ),

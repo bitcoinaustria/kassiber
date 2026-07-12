@@ -8,6 +8,7 @@ regression (P1 fix #1), and the read-only RPC allowlist.
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from collections.abc import Mapping
@@ -365,9 +366,9 @@ class FetchNodeSnapshotTest(unittest.TestCase):
             for payload in (core_cln._record_to_import(record) for record in records)
             if payload is not None
         ]
-        # The invoice income row and the completed outbound pay are imported as
-        # wallet transactions; the routed forwarding event is NOT (it is already
-        # in the routing aggregate — the P1 double-count guard).
+        # The invoice income row and the completed outbound pay are imported by
+        # the per-record mapper. A bkpr `routed` event is NOT imported here; the
+        # separate daily routing reducer promotes listforwards fees exactly once.
         kinds = sorted(payload["kind"] for payload in import_payloads)
         self.assertEqual(kinds, ["cln_invoice", "cln_pay"])
         routed_payment_id = "11" * 32
@@ -384,6 +385,36 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         # source either — it should only contribute to the aggregate.
         forward_day_rows = [r for r in records if r["record_type"] == "forward_day"]
         self.assertEqual(len(forward_day_rows), 1)
+
+    def test_daily_routing_income_promotes_fee_not_forwarded_principal(self) -> None:
+        from kassiber.msat import msat_to_btc
+
+        records = [
+            {
+                "record_type": "forward_day",
+                "occurred_at": "2026-05-18T00:00:00Z",
+                "status": "settled",
+                "channel_id": "1x1x1",
+                "amount_msat": 900_000_000,
+                "fee_msat": 7_000,
+            },
+            {
+                "record_type": "forward_day",
+                "occurred_at": "2026-05-18T00:00:00Z",
+                "status": "settled",
+                "channel_id": "2x2x2",
+                "amount_msat": 800_000_000,
+                "fee_msat": 5_000,
+            },
+        ]
+        imports = core_cln._daily_routing_income_imports(records)
+        self.assertEqual(len(imports), 1)
+        self.assertEqual(imports[0]["id"], "cln:routing:2026-05-18")
+        self.assertEqual(imports[0]["kind"], "routing_income")
+        self.assertEqual(imports[0]["amount"], msat_to_btc(12_000))
+        self.assertEqual(imports[0]["fee"], 0)
+        self.assertNotIn("900000000", repr(imports[0]))
+        self.assertNotIn("800000000", repr(imports[0]))
 
     def test_channel_lifecycle_records_funding_and_closing_txids(self) -> None:
         from types import SimpleNamespace
@@ -403,7 +434,11 @@ class FetchNodeSnapshotTest(unittest.TestCase):
             {"account": "wallet", "tag": "onchain_fee", "txid": "cc" * 32},
         ]
         records = core_cln._channel_lifecycle_records(
-            SimpleNamespace(channels=[channel], account_events=account_events)
+            SimpleNamespace(
+                channels=[channel],
+                account_events=account_events,
+                network="regtest",
+            )
         )
         by_tag = {rec["tag"]: rec for rec in records}
         self.assertEqual(set(by_tag), {"channel_open", "channel_close"})
@@ -414,6 +449,10 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         # Channel metadata records are NOT wallet transactions.
         for rec in records:
             self.assertEqual(rec["record_type"], "channel")
+            self.assertEqual(
+                json.loads(rec["raw_json"]),
+                {"chain": "bitcoin", "network": "regtest"},
+            )
             self.assertIsNone(core_cln._record_to_import(rec))
 
     def test_channel_records_carry_amounts_through_the_sanitizer(self) -> None:
@@ -456,6 +495,82 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         self.assertEqual(by_tag["channel_open"]["amount_msat"], 100_000_000_000)
         self.assertEqual(by_tag["channel_close"]["amount_msat"], 99_900_000_000)
 
+    def test_multifund_lifecycle_keeps_one_record_per_channel_account(self) -> None:
+        # multifundchannel creates several channel accounts backed by the same
+        # funding transaction. Both the in-memory reshape and persistence key
+        # must retain every account; the lifecycle layer aggregates their
+        # amounts back to one whole-L1-transaction check later.
+        from types import SimpleNamespace
+
+        funding_txid = "aa" * 32
+        closing_txid = "bb" * 32
+        channels = [
+            {
+                "channel_id": "channel-a",
+                "short_channel_id": "742x1x0",
+                "funding": {"txid": funding_txid, "outnum": 0},
+            },
+            {
+                "channel_id": "channel-b",
+                "short_channel_id": "742x2x0",
+                "funding": {"txid": funding_txid, "outnum": 1},
+            },
+        ]
+        account_events = [
+            {
+                "account": "channel-a",
+                "tag": "channel_open",
+                "txid": funding_txid,
+                "credit_msat": "60000000000msat",
+            },
+            {
+                "account": "channel-b",
+                "tag": "channel_open",
+                "txid": funding_txid,
+                "credit_msat": "40000000000msat",
+            },
+            {
+                "account": "channel-a",
+                "tag": "channel_close",
+                "txid": closing_txid,
+                "debit_msat": "59900000000msat",
+            },
+            {
+                "account": "channel-b",
+                "tag": "channel_close",
+                "txid": closing_txid,
+                "debit_msat": "39900000000msat",
+            },
+        ]
+
+        records = core_cln._channel_lifecycle_records(
+            SimpleNamespace(channels=channels, account_events=account_events)
+        )
+        opens = [record for record in records if record["tag"] == "channel_open"]
+        closes = [record for record in records if record["tag"] == "channel_close"]
+
+        self.assertEqual(
+            {"coreln:channel-a": 60_000_000_000, "coreln:channel-b": 40_000_000_000},
+            {record["channel_id"]: record["amount_msat"] for record in opens},
+        )
+        self.assertEqual(
+            {"coreln:channel-a": 59_900_000_000, "coreln:channel-b": 39_900_000_000},
+            {record["channel_id"]: record["amount_msat"] for record in closes},
+        )
+        self.assertEqual({funding_txid}, {record["txid"] for record in opens})
+        self.assertEqual({closing_txid}, {record["txid"] for record in closes})
+        self.assertEqual(4, len({record["external_id"] for record in records}))
+
+    def test_import_network_scope_is_stamped_from_getinfo(self) -> None:
+        stamped = core_cln._stamp_lightning_import_network(
+            [{"id": "row", "raw_json": "{}"}], "regtest"
+        )
+
+        self.assertEqual(
+            json.loads(stamped[0]["raw_json"]),
+            {"chain": "lightning", "network": "regtest"},
+        )
+
     def test_outbound_pay_promoted_with_principal_and_routing_fee(self) -> None:
         # The completed listpays row (amount_msat=40000, amount_sent_msat=40500)
         # becomes an outbound cln_pay: principal 40000 msat, routing fee 500 msat.
@@ -479,6 +594,13 @@ class FetchNodeSnapshotTest(unittest.TestCase):
 
 
 class AdapterContractTest(unittest.TestCase):
+    def test_msat_parser_preserves_large_exact_values(self):
+        self.assertEqual(
+            core_cln._parse_msat("9007199254740993msat"),
+            9_007_199_254_740_993,
+        )
+        self.assertEqual(core_cln._parse_msat("1.5sat"), 1_500)
+
     def test_adapter_rejects_missing_backend(self) -> None:
         adapter = CoreLightningAdapter()
         with self.assertRaises(AppError) as ctx:
@@ -590,6 +712,144 @@ class PersistenceIdempotenceTest(unittest.TestCase):
         ).fetchone()
         self.assertEqual(rows["c"], 1)
 
+    def test_routing_income_is_idempotent_across_syncs(self) -> None:
+        rpc = _rpc(_canned_payloads())
+        for _ in range(2):
+            core_cln.sync_core_lightning_wallet(
+                self.conn,
+                self.profile,
+                self.wallet,
+                self.backend,
+                self._hooks(),
+                rpc_call=rpc,
+            )
+        rows = self.conn.execute(
+            "SELECT amount, fee FROM transactions"
+            " WHERE wallet_id = ? AND kind = 'routing_income'",
+            (self.wallet["id"],),
+        ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertGreater(rows[0]["amount"], 0)
+        self.assertEqual(rows[0]["fee"], 0)
+
+    def test_multifund_channel_accounts_do_not_collide_in_persistence(self) -> None:
+        funding_txid = "dd" * 32
+        channels = [
+            {
+                "peer_id": "02" + "11" * 32,
+                "private": False,
+                "channel_id": "channel-a",
+                "short_channel_id": "800x1x0",
+                "state": "CHANNELD_NORMAL",
+                "total_msat": "60000000000msat",
+                "to_us_msat": "60000000000msat",
+                "their_amount_msat": "0msat",
+                "opener": "local",
+                "funding": {"txid": funding_txid, "outnum": 0},
+            },
+            {
+                "peer_id": "02" + "22" * 32,
+                "private": False,
+                "channel_id": "channel-b",
+                "short_channel_id": "800x2x0",
+                "state": "CHANNELD_NORMAL",
+                "total_msat": "40000000000msat",
+                "to_us_msat": "40000000000msat",
+                "their_amount_msat": "0msat",
+                "opener": "local",
+                "funding": {"txid": funding_txid, "outnum": 1},
+            },
+        ]
+        payloads = _canned_payloads(
+            {
+                "listpeerchannels": {"channels": channels},
+                "bkpr-listaccountevents": {
+                    "events": [
+                        {
+                            "account": "channel-a",
+                            "tag": "channel_open",
+                            "txid": funding_txid,
+                            "credit_msat": "60000000000msat",
+                        },
+                        {
+                            "account": "channel-b",
+                            "tag": "channel_open",
+                            "txid": funding_txid,
+                            "credit_msat": "40000000000msat",
+                        },
+                    ]
+                },
+            }
+        )
+        legacy_external_id = core_cln._stable_hash(
+            ("channel", "channel_open", funding_txid)
+        )
+        core_cln._upsert_lightning_record(
+            self.conn,
+            self.profile,
+            self.wallet,
+            self.backend,
+            None,
+            "legacy-node",
+            {
+                "record_type": "channel",
+                "external_id": legacy_external_id,
+                "occurred_at": "0001-01-01T00:00:00Z",
+                "account": "channel-a",
+                "channel_id": "channel-a",
+                "direction": "",
+                # The old first-wins row could contain the whole tx amount.
+                "amount_msat": 100_000_000_000,
+                "fee_msat": 0,
+                "tag": "channel_open",
+                "status": "",
+                "currency": "bc",
+                "payment_hash": None,
+                "txid": funding_txid,
+                "outpoint": None,
+            },
+            "2026-01-01T00:00:00Z",
+        )
+        for _ in range(2):
+            core_cln.sync_core_lightning_wallet(
+                self.conn,
+                self.profile,
+                self.wallet,
+                self.backend,
+                self._hooks(),
+                rpc_call=_rpc(payloads),
+            )
+
+        rows = self.conn.execute(
+            """
+            SELECT external_id, channel_id, txid, amount_msat, raw_json
+            FROM lightning_node_records
+            WHERE wallet_id = ? AND record_type = 'channel'
+              AND tag = 'channel_open'
+            ORDER BY channel_id
+            """,
+            (self.wallet["id"],),
+        ).fetchall()
+        self.assertEqual(2, len(rows))
+        self.assertEqual(
+            ["coreln:channel-a", "coreln:channel-b"],
+            [row["channel_id"] for row in rows],
+        )
+        self.assertEqual(
+            [60_000_000_000, 40_000_000_000],
+            [row["amount_msat"] for row in rows],
+        )
+        self.assertEqual({funding_txid}, {row["txid"] for row in rows})
+        self.assertEqual(2, len({row["external_id"] for row in rows}))
+        self.assertNotIn(legacy_external_id, {row["external_id"] for row in rows})
+        self.assertTrue(
+            all(
+                json.loads(row["raw_json"])
+                == {"chain": "bitcoin", "network": "bitcoin"}
+                for row in rows
+            )
+        )
+
     def test_no_raw_rpc_payload_persisted(self) -> None:
         rpc = _rpc(_canned_payloads())
         core_cln.sync_core_lightning_wallet(
@@ -602,11 +862,18 @@ class PersistenceIdempotenceTest(unittest.TestCase):
         )
         # The opsec policy requires that raw RPC payloads never land on disk.
         rows = self.conn.execute(
-            "SELECT raw_json FROM lightning_node_records"
+            "SELECT record_type, raw_json FROM lightning_node_records"
         ).fetchall()
         self.assertTrue(rows, "expected at least one row")
         for row in rows:
-            self.assertEqual(row["raw_json"], "{}")
+            payload = json.loads(row["raw_json"])
+            if row["record_type"] == "channel":
+                self.assertEqual(
+                    payload,
+                    {"chain": "bitcoin", "network": "bitcoin"},
+                )
+            else:
+                self.assertEqual(payload, {})
 
 
 class RebalanceCostFormulaTest(unittest.TestCase):

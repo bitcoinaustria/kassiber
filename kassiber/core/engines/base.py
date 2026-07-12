@@ -32,6 +32,12 @@ class TaxEngineLedgerInputs:
     # MOVE (and a cooperative close can become node -> on-chain-wallet). The role
     # map above remains a fallback for unmatched lifecycle rows.
     channel_transfer_pairs: Sequence[Mapping[str, Any]] = ()
+    # Fully-materialized authored-active custody components. The handler owns
+    # the DB boundary and deliberately includes locally incomplete/conflicting
+    # revisions: projection must claim their known raw anchors and quarantine
+    # them fail-closed instead of letting those anchors book independently.
+    # Effective revisions project normally.
+    authored_active_custody_components: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True)

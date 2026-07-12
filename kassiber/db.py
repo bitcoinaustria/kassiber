@@ -32,7 +32,13 @@ from .fingerprints import make_transaction_fingerprint
 from .msat import btc_to_msat, dec, msat_to_btc
 from .secrets import sqlcipher as secrets_sqlcipher
 from .tax_policy import DEFAULT_LONG_TERM_DAYS, DEFAULT_TAX_COUNTRY
-from .wallet_descriptors import LIQUID_POLICY_ASSET_IDS, normalize_asset_code
+from .wallet_descriptors import (
+    LIQUID_POLICY_ASSET_IDS,
+    default_policy_asset_id,
+    normalize_asset_code,
+    normalize_chain,
+    normalize_network,
+)
 
 
 APP_NAME = "kassiber"
@@ -180,6 +186,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     payment_hash TEXT,
     payment_hash_source TEXT,
     swap_refund_funding_txid TEXT,
+    swap_refund_funding_vout INTEGER,
     created_at TEXT NOT NULL
 );
 
@@ -793,6 +800,7 @@ CREATE TABLE IF NOT EXISTS transaction_pairs (
     confidence_at_pair TEXT,
     pair_source TEXT,
     out_amount INTEGER,
+    component_id TEXT REFERENCES custody_components(id) ON DELETE SET NULL,
     deleted_at TEXT,
     created_at TEXT NOT NULL
 );
@@ -814,6 +822,7 @@ CREATE TABLE IF NOT EXISTS direct_swap_payouts (
     swap_fee_msat INTEGER,
     swap_fee_kind TEXT,
     out_amount INTEGER,
+    component_id TEXT REFERENCES custody_components(id) ON DELETE SET NULL,
     deleted_at TEXT,
     created_at TEXT NOT NULL
 );
@@ -1407,6 +1416,281 @@ CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
 """
 
 
+# Custody components are the authored, atomic interpretation layer above raw
+# imported transactions.  The schema intentionally uses open TEXT identifiers
+# for rails, chains, networks, assets, exposures and conservation units: adding
+# another Bitcoin layer must not require a table rebuild.  Roles and lifecycle
+# states are closed because they carry conservation/activation semantics.
+#
+# ``evidence_json``, ``conversion_metadata_json`` and leg ``location_ref`` are
+# local-only detail.  The replication allowlist projects privacy-safe summary
+# fields and transaction/wallet anchors, never these arbitrary JSON/ref values.
+CUSTODY_COMPONENT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS custody_components (
+    id TEXT PRIMARY KEY,
+    lineage_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    component_type TEXT NOT NULL,
+    conservation_mode TEXT NOT NULL DEFAULT 'quantity'
+        CHECK (conservation_mode IN ('quantity', 'conversion')),
+    state TEXT NOT NULL DEFAULT 'draft'
+        CHECK (state IN ('draft', 'active', 'superseded')),
+    evidence_kind TEXT,
+    evidence_grade TEXT,
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    conversion_policy TEXT,
+    conversion_reviewed INTEGER NOT NULL DEFAULT 0
+        CHECK (conversion_reviewed IN (0, 1)),
+    conversion_metadata_json TEXT NOT NULL DEFAULT '{}',
+    expected_leg_count INTEGER CHECK (expected_leg_count >= 0),
+    expected_allocation_count INTEGER CHECK (expected_allocation_count >= 0),
+    authored_source TEXT DEFAULT 'user',
+    notes TEXT,
+    change_reason TEXT,
+    -- Revision links are authored identifiers, not immediate relational
+    -- dependencies.  A sync snapshot can replay two mutually-linked headers
+    -- in either order, and concurrent replicas can legitimately retain two
+    -- competing revisions until review.  Application validation checks the
+    -- links after replay; an immediate self-FK would reject valid evidence.
+    supersedes_component_id TEXT,
+    superseded_by_component_id TEXT,
+    activated_at TEXT,
+    superseded_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- These are lookup indexes, deliberately not uniqueness constraints.  Local
+-- mutation APIs still serialize revisions, while replication must preserve
+-- concurrent drafts/actives so the conflict is visible and reviewable.
+CREATE INDEX IF NOT EXISTS idx_custody_components_lineage_active
+    ON custody_components(profile_id, lineage_id) WHERE state = 'active';
+
+CREATE INDEX IF NOT EXISTS idx_custody_components_lineage_draft
+    ON custody_components(profile_id, lineage_id) WHERE state = 'draft';
+
+CREATE INDEX IF NOT EXISTS idx_custody_components_lineage_revision
+    ON custody_components(profile_id, lineage_id, revision, id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_components_profile_state
+    ON custody_components(profile_id, state, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_custody_components_supersedes
+    ON custody_components(supersedes_component_id)
+    WHERE supersedes_component_id IS NOT NULL;
+
+-- A book reset preserves the profile row, so delete-immutability cannot use
+-- profile absence as its authorization signal. This local-only guard is
+-- populated and cleared inside the reset transaction; it is not replicated.
+CREATE TABLE IF NOT EXISTS custody_component_purge_authorizations (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS custody_component_legs (
+    id TEXT PRIMARY KEY,
+    component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    role TEXT NOT NULL
+        CHECK (role IN ('source', 'destination', 'fee', 'external',
+                        'retained', 'unresolved')),
+    rail TEXT NOT NULL,
+    chain TEXT,
+    network TEXT,
+    asset TEXT NOT NULL,
+    exposure TEXT NOT NULL,
+    conservation_unit TEXT NOT NULL,
+    amount_msat INTEGER NOT NULL
+        CHECK (typeof(amount_msat) = 'integer' AND amount_msat >= 0),
+    valuation_unit TEXT,
+    valuation_amount INTEGER
+        CHECK (valuation_amount IS NULL OR
+               (typeof(valuation_amount) = 'integer' AND valuation_amount >= 0)),
+    occurred_at TEXT,
+    transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+    -- Durable evidence identity. ``transaction_id`` is a live FK and becomes
+    -- NULL when an importer retracts a row; this copy must survive so the
+    -- component becomes invalid instead of masquerading as a transactionless
+    -- manual leg.
+    anchor_transaction_id TEXT,
+    wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+    location_ref TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (component_id, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_component_legs_component
+    ON custody_component_legs(component_id, ordinal, id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_component_legs_profile_transaction
+    ON custody_component_legs(profile_id, transaction_id)
+    WHERE transaction_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_custody_component_legs_profile_wallet
+    ON custody_component_legs(profile_id, wallet_id)
+    WHERE wallet_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS custody_component_allocations (
+    id TEXT PRIMARY KEY,
+    component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    source_leg_id TEXT NOT NULL REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+    sink_leg_id TEXT NOT NULL REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+    source_amount_msat INTEGER NOT NULL
+        CHECK (typeof(source_amount_msat) = 'integer' AND source_amount_msat >= 0),
+    sink_amount_msat INTEGER NOT NULL
+        CHECK (typeof(sink_amount_msat) = 'integer' AND sink_amount_msat >= 0),
+    created_at TEXT NOT NULL,
+    UNIQUE (component_id, ordinal),
+    UNIQUE (component_id, source_leg_id, sink_leg_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_allocations_component
+    ON custody_component_allocations(component_id, ordinal, id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_allocations_source
+    ON custody_component_allocations(source_leg_id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_allocations_sink
+    ON custody_component_allocations(sink_leg_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_allocation_scope_insert
+BEFORE INSERT ON custody_component_allocations
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1
+        FROM custody_components c
+        JOIN custody_component_legs source ON source.id = NEW.source_leg_id
+        JOIN custody_component_legs sink ON sink.id = NEW.sink_leg_id
+        WHERE c.id = NEW.component_id
+          AND c.workspace_id = NEW.workspace_id
+          AND c.profile_id = NEW.profile_id
+          AND source.component_id = c.id
+          AND sink.component_id = c.id
+          AND source.role = 'source'
+          AND sink.role != 'source'
+    ) THEN RAISE(ABORT, 'custody_allocation_scope_or_role_mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_allocation_scope_update
+BEFORE UPDATE OF component_id, workspace_id, profile_id, source_leg_id, sink_leg_id
+ON custody_component_allocations
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1
+        FROM custody_components c
+        JOIN custody_component_legs source ON source.id = NEW.source_leg_id
+        JOIN custody_component_legs sink ON sink.id = NEW.sink_leg_id
+        WHERE c.id = NEW.component_id
+          AND c.workspace_id = NEW.workspace_id
+          AND c.profile_id = NEW.profile_id
+          AND source.component_id = c.id
+          AND sink.component_id = c.id
+          AND source.role = 'source'
+          AND sink.role != 'source'
+    ) THEN RAISE(ABORT, 'custody_allocation_scope_or_role_mismatch') END;
+END;
+
+-- Derived local guard used by atomic activation.  Multiple legs in one
+-- component may anchor the same transaction (for example principal + fee),
+-- while one transaction can belong to at most one effective active component.
+-- This table is rebuilt/validated from components and is never replicated.
+CREATE TABLE IF NOT EXISTS custody_component_transaction_memberships (
+    component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (component_id, transaction_id),
+    UNIQUE (profile_id, transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_memberships_component
+    ON custody_component_transaction_memberships(component_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_component_scope_insert
+BEFORE INSERT ON custody_component_legs
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1 FROM custody_components c
+        WHERE c.id = NEW.component_id
+          AND c.workspace_id = NEW.workspace_id
+          AND c.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_leg_component_scope_mismatch') END;
+    SELECT CASE WHEN NEW.transaction_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.id = NEW.transaction_id
+          AND t.workspace_id = NEW.workspace_id
+          AND t.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_leg_transaction_scope_mismatch') END;
+    SELECT CASE WHEN NEW.wallet_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM wallets w
+        WHERE w.id = NEW.wallet_id
+          AND w.workspace_id = NEW.workspace_id
+          AND w.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_leg_wallet_scope_mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_component_scope_update
+BEFORE UPDATE OF component_id, workspace_id, profile_id, transaction_id, wallet_id
+ON custody_component_legs
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1 FROM custody_components c
+        WHERE c.id = NEW.component_id
+          AND c.workspace_id = NEW.workspace_id
+          AND c.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_leg_component_scope_mismatch') END;
+    SELECT CASE WHEN NEW.transaction_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.id = NEW.transaction_id
+          AND t.workspace_id = NEW.workspace_id
+          AND t.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_leg_transaction_scope_mismatch') END;
+    SELECT CASE WHEN NEW.wallet_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM wallets w
+        WHERE w.id = NEW.wallet_id
+          AND w.workspace_id = NEW.workspace_id
+          AND w.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_leg_wallet_scope_mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_component_memberships_supersede
+AFTER UPDATE OF state ON custody_components
+WHEN OLD.state = 'active' AND NEW.state != 'active'
+BEGIN
+    DELETE FROM custody_component_transaction_memberships
+    WHERE component_id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_component_memberships_leg_delete
+AFTER DELETE ON custody_component_legs
+WHEN OLD.transaction_id IS NOT NULL
+BEGIN
+    DELETE FROM custody_component_transaction_memberships
+    WHERE component_id = OLD.component_id
+      AND transaction_id = OLD.transaction_id
+      AND NOT EXISTS (
+          SELECT 1 FROM custody_component_legs l
+          WHERE l.component_id = OLD.component_id
+            AND l.transaction_id = OLD.transaction_id
+      );
+END;
+
+CREATE INDEX IF NOT EXISTS idx_transaction_pairs_component
+    ON transaction_pairs(component_id) WHERE component_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_component
+    ON direct_swap_payouts(component_id) WHERE component_id IS NOT NULL;
+"""
+
+SCHEMA += CUSTODY_COMPONENT_SCHEMA
+
+
 def ensure_data_root(data_root):
     """Create `data_root` (and any missing parents) and return it as `Path`."""
     path = Path(data_root).expanduser()
@@ -1649,6 +1933,18 @@ def _preflight_schema_index_columns(conn):
     }
     if columns and "capital_gains_type" not in columns:
         conn.execute("ALTER TABLE journal_tax_summary ADD COLUMN capital_gains_type TEXT")
+    # The custody schema is appended to SCHEMA and creates compatibility
+    # indexes over these columns.  Add them before executescript reaches those
+    # indexes when opening a pre-component database.
+    for table in ("transaction_pairs", "direct_swap_payouts"):
+        table_columns = {
+            row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if table_columns and "component_id" not in table_columns:
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN component_id TEXT "
+                "REFERENCES custody_components(id) ON DELETE SET NULL"
+            )
 
 
 def open_db(data_root, *, passphrase=None, require_existing_schema=False):
@@ -1925,9 +2221,253 @@ def ensure_schema_compat(conn):
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
+    added_leg_commitment = _ensure_column_no_commit(
+        conn, "custody_components", "expected_leg_count", "INTEGER"
+    )
+    added_allocation_commitment = _ensure_column_no_commit(
+        conn, "custody_components", "expected_allocation_count", "INTEGER"
+    )
+    added_authored_source = _ensure_column_no_commit(
+        conn, "custody_components", "authored_source", "TEXT DEFAULT 'user'"
+    )
+    if added_leg_commitment:
+        conn.execute(
+            "UPDATE custody_components SET expected_leg_count = "
+            "(SELECT COUNT(*) FROM custody_component_legs l "
+            " WHERE l.component_id = custody_components.id) "
+            "WHERE expected_leg_count IS NULL"
+        )
+    if added_allocation_commitment:
+        conn.execute(
+            "UPDATE custody_components SET expected_allocation_count = "
+            "(SELECT COUNT(*) FROM custody_component_allocations a "
+            " WHERE a.component_id = custody_components.id) "
+            "WHERE expected_allocation_count IS NULL"
+        )
+    if added_authored_source:
+        conn.execute(
+            "UPDATE custody_components SET authored_source = 'user' "
+            "WHERE authored_source IS NULL OR authored_source = ''"
+        )
+    if added_leg_commitment or added_allocation_commitment or added_authored_source:
+        conn.commit()
+    ensure_column(conn, "custody_component_legs", "occurred_at", "TEXT")
+    ensure_column(conn, "custody_component_legs", "anchor_transaction_id", "TEXT")
+    conn.execute(
+        "UPDATE custody_component_legs "
+        "SET anchor_transaction_id = transaction_id "
+        "WHERE anchor_transaction_id IS NULL AND transaction_id IS NOT NULL"
+    )
+    _ensure_custody_revision_immutability_triggers(conn)
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
     _ensure_transaction_graph_cache_schema(conn)
+
+
+def _ensure_custody_revision_immutability_triggers(conn):
+    """Keep authored custody economics append-only below every API surface.
+
+    Component lifecycle columns are intentionally mutable. Transaction and
+    wallet FKs on legs may be cleared by ``ON DELETE SET NULL``; an exact
+    transaction anchor may reconnect if the same transaction row is restored.
+    All other changes require a newly-authored component revision.
+    """
+
+    for trigger in (
+        "trg_custody_component_revision_immutable",
+        "trg_custody_component_leg_revision_immutable",
+        "trg_custody_component_allocation_revision_immutable",
+        "trg_custody_component_revision_delete_immutable",
+        "trg_custody_component_leg_revision_delete_immutable",
+        "trg_custody_component_allocation_revision_delete_immutable",
+        "trg_custody_component_leg_count_commitment",
+        "trg_custody_component_allocation_count_commitment",
+    ):
+        conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_revision_immutable
+        BEFORE UPDATE ON custody_components
+        WHEN OLD.id IS NOT NEW.id
+          OR OLD.lineage_id IS NOT NEW.lineage_id
+          OR OLD.workspace_id IS NOT NEW.workspace_id
+          OR OLD.profile_id IS NOT NEW.profile_id
+          OR OLD.revision IS NOT NEW.revision
+          OR OLD.component_type IS NOT NEW.component_type
+          OR OLD.conservation_mode IS NOT NEW.conservation_mode
+          OR OLD.evidence_kind IS NOT NEW.evidence_kind
+          OR OLD.evidence_grade IS NOT NEW.evidence_grade
+          OR OLD.evidence_json IS NOT NEW.evidence_json
+          OR OLD.conversion_policy IS NOT NEW.conversion_policy
+          OR OLD.conversion_reviewed IS NOT NEW.conversion_reviewed
+          OR OLD.conversion_metadata_json IS NOT NEW.conversion_metadata_json
+          OR OLD.expected_leg_count IS NOT NEW.expected_leg_count
+          OR OLD.expected_allocation_count IS NOT NEW.expected_allocation_count
+          OR OLD.authored_source IS NOT NEW.authored_source
+          OR OLD.notes IS NOT NEW.notes
+          OR OLD.supersedes_component_id IS NOT NEW.supersedes_component_id
+          OR OLD.created_at IS NOT NEW.created_at
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_revision_immutable');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_leg_revision_immutable
+        BEFORE UPDATE ON custody_component_legs
+        WHEN OLD.id IS NOT NEW.id
+          OR OLD.component_id IS NOT NEW.component_id
+          OR OLD.workspace_id IS NOT NEW.workspace_id
+          OR OLD.profile_id IS NOT NEW.profile_id
+          OR OLD.ordinal IS NOT NEW.ordinal
+          OR OLD.role IS NOT NEW.role
+          OR OLD.rail IS NOT NEW.rail
+          OR OLD.chain IS NOT NEW.chain
+          OR OLD.network IS NOT NEW.network
+          OR OLD.asset IS NOT NEW.asset
+          OR OLD.exposure IS NOT NEW.exposure
+          OR OLD.conservation_unit IS NOT NEW.conservation_unit
+          OR OLD.amount_msat IS NOT NEW.amount_msat
+          OR OLD.valuation_unit IS NOT NEW.valuation_unit
+          OR OLD.valuation_amount IS NOT NEW.valuation_amount
+          OR OLD.occurred_at IS NOT NEW.occurred_at
+          OR OLD.anchor_transaction_id IS NOT NEW.anchor_transaction_id
+          OR OLD.location_ref IS NOT NEW.location_ref
+          OR OLD.notes IS NOT NEW.notes
+          OR OLD.created_at IS NOT NEW.created_at
+          OR NOT (
+              OLD.transaction_id IS NEW.transaction_id
+              OR NEW.transaction_id IS NULL
+              OR (
+                  OLD.transaction_id IS NULL
+                  AND NEW.transaction_id IS OLD.anchor_transaction_id
+              )
+          )
+          OR NOT (
+              OLD.wallet_id IS NEW.wallet_id
+              OR NEW.wallet_id IS NULL
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_leg_revision_immutable');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_revision_delete_immutable
+        BEFORE DELETE ON custody_components
+        WHEN EXISTS (
+            SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM custody_component_purge_authorizations authorization
+            WHERE authorization.profile_id = OLD.profile_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_revision_delete_immutable');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_leg_revision_delete_immutable
+        BEFORE DELETE ON custody_component_legs
+        WHEN EXISTS (
+            SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM custody_component_purge_authorizations authorization
+            WHERE authorization.profile_id = OLD.profile_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_leg_revision_delete_immutable');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_allocation_revision_delete_immutable
+        BEFORE DELETE ON custody_component_allocations
+        WHEN EXISTS (
+            SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM custody_component_purge_authorizations authorization
+            WHERE authorization.profile_id = OLD.profile_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_allocation_revision_delete_immutable');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_leg_count_commitment
+        BEFORE INSERT ON custody_component_legs
+        WHEN NOT EXISTS (
+            SELECT 1 FROM custody_component_legs current WHERE current.id = NEW.id
+        )
+        AND
+        (
+            SELECT c.expected_leg_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        ) IS NOT NULL
+        AND (
+            SELECT COUNT(*) FROM custody_component_legs l
+            WHERE l.component_id = NEW.component_id
+        ) >= (
+            SELECT c.expected_leg_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_leg_count_commitment');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_allocation_count_commitment
+        BEFORE INSERT ON custody_component_allocations
+        WHEN NOT EXISTS (
+            SELECT 1 FROM custody_component_allocations current WHERE current.id = NEW.id
+        )
+        AND
+        (
+            SELECT c.expected_allocation_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        ) IS NOT NULL
+        AND (
+            SELECT COUNT(*) FROM custody_component_allocations a
+            WHERE a.component_id = NEW.component_id
+        ) >= (
+            SELECT c.expected_allocation_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_allocation_count_commitment');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_allocation_revision_immutable
+        BEFORE UPDATE ON custody_component_allocations
+        WHEN OLD.id IS NOT NEW.id
+          OR OLD.component_id IS NOT NEW.component_id
+          OR OLD.workspace_id IS NOT NEW.workspace_id
+          OR OLD.profile_id IS NOT NEW.profile_id
+          OR OLD.ordinal IS NOT NEW.ordinal
+          OR OLD.source_leg_id IS NOT NEW.source_leg_id
+          OR OLD.sink_leg_id IS NOT NEW.sink_leg_id
+          OR OLD.source_amount_msat IS NOT NEW.source_amount_msat
+          OR OLD.sink_amount_msat IS NOT NEW.sink_amount_msat
+          OR OLD.created_at IS NOT NEW.created_at
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_allocation_revision_immutable');
+        END
+        """
+    )
 
 
 def _decode_json_object(raw_json):
@@ -2575,6 +3115,7 @@ def _ensure_swap_matching_schema(conn):
     # Links an inbound HTLC refund back to its on-chain funding (lockup) txid so
     # the matcher can pair a failed swap's send + refund even within one wallet.
     ensure_column(conn, "transactions", "swap_refund_funding_txid", "TEXT")
+    ensure_column(conn, "transactions", "swap_refund_funding_vout", "INTEGER")
     ensure_column(conn, "transaction_pairs", "swap_fee_msat", "INTEGER")
     ensure_column(conn, "transaction_pairs", "swap_fee_kind", "TEXT")
     ensure_column(conn, "transaction_pairs", "confidence_at_pair", "TEXT")
@@ -2584,6 +3125,12 @@ def _ensure_swap_matching_schema(conn):
     # the spend is split between a same-asset self-transfer and a peg. NULL means
     # the whole out leg is paired (the default / existing behavior).
     ensure_column(conn, "transaction_pairs", "out_amount", "INTEGER")
+    ensure_column(
+        conn,
+        "transaction_pairs",
+        "component_id",
+        "TEXT REFERENCES custody_components(id) ON DELETE SET NULL",
+    )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_transactions_payment_hash "
         "ON transactions(payment_hash) WHERE payment_hash IS NOT NULL"
@@ -2606,6 +3153,10 @@ def _ensure_swap_matching_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_profile_active "
         "ON transaction_pairs(profile_id) WHERE deleted_at IS NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_component "
+        "ON transaction_pairs(component_id) WHERE component_id IS NOT NULL"
     )
     _clear_stale_same_asset_swap_fees(conn)
     conn.commit()
@@ -2666,12 +3217,19 @@ def _ensure_direct_swap_payout_schema(conn):
             swap_fee_msat INTEGER,
             swap_fee_kind TEXT,
             out_amount INTEGER,
+            component_id TEXT REFERENCES custody_components(id) ON DELETE SET NULL,
             deleted_at TEXT,
             created_at TEXT NOT NULL
         )
         """
     )
     ensure_column(conn, "direct_swap_payouts", "out_amount", "INTEGER")
+    ensure_column(
+        conn,
+        "direct_swap_payouts",
+        "component_id",
+        "TEXT REFERENCES custody_components(id) ON DELETE SET NULL",
+    )
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out "
         "ON direct_swap_payouts(profile_id, out_transaction_id) WHERE deleted_at IS NULL"
@@ -2679,6 +3237,10 @@ def _ensure_direct_swap_payout_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active "
         "ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_component "
+        "ON direct_swap_payouts(component_id) WHERE component_id IS NOT NULL"
     )
     conn.commit()
 
@@ -2755,6 +3317,11 @@ def _migrate_legacy_transaction_pairs_uniques(conn):
     table_sql = (row["sql"] if hasattr(row, "keys") else row[0]) or ""
     if "UNIQUE (profile_id, out_transaction_id)" not in table_sql:
         return
+    legacy_columns = {
+        column["name"]
+        for column in conn.execute("PRAGMA table_info(transaction_pairs)").fetchall()
+    }
+    component_select = "component_id" if "component_id" in legacy_columns else "NULL"
     previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
@@ -2770,17 +3337,18 @@ def _migrate_legacy_transaction_pairs_uniques(conn):
                 kind TEXT NOT NULL DEFAULT 'manual',
                 policy TEXT NOT NULL DEFAULT 'carrying-value',
                 notes TEXT,
+                component_id TEXT REFERENCES custody_components(id) ON DELETE SET NULL,
                 created_at TEXT NOT NULL
             )
             """
         )
         conn.execute(
-            """
+            f"""
             INSERT INTO transaction_pairs
             (id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-             kind, policy, notes, created_at)
+             kind, policy, notes, component_id, created_at)
             SELECT id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                   kind, policy, notes, created_at
+                   kind, policy, notes, {component_select}, created_at
             FROM transaction_pairs_legacy
             """
         )
@@ -2950,6 +3518,17 @@ def _migrate_msat_columns(conn):
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
         if migrate_transactions:
+            # The custody leg scope triggers query ``transactions``. SQLite
+            # validates trigger bodies while the legacy REAL table is dropped /
+            # renamed, even with foreign keys disabled, so suspend only those
+            # derived guards for the atomic rebuild and restore the idempotent
+            # custody schema afterward.
+            conn.executescript(
+                """
+                DROP TRIGGER IF EXISTS trg_custody_component_scope_insert;
+                DROP TRIGGER IF EXISTS trg_custody_component_scope_update;
+                """
+            )
             conn.executescript(
                 """
                 BEGIN;
@@ -3138,6 +3717,8 @@ def _migrate_msat_columns(conn):
                 """
             )
         _recreate_msat_migration_indexes(conn)
+        if migrate_transactions:
+            conn.executescript(CUSTODY_COMPONENT_SCHEMA)
     except Exception:
         conn.rollback()
         raise
@@ -3199,9 +3780,7 @@ def _backfill_liquid_asset_codes(conn):
         """,
         policy_asset_hexes,
     ).fetchall()
-    affected_profile_ids = sorted({row["profile_id"] for row in affected_rows})
-    if not affected_profile_ids:
-        return
+    affected_profile_ids = {row["profile_id"] for row in affected_rows}
     for row in affected_rows:
         fingerprint = _backfilled_transaction_fingerprint(row, "LBTC")
         collision = conn.execute(
@@ -3215,6 +3794,82 @@ def _backfill_liquid_asset_codes(conn):
                 "UPDATE transactions SET asset = 'LBTC', fingerprint = ? WHERE id = ?",
                 (fingerprint, row["id"]),
             )
+    legacy_rows = conn.execute(
+        f"""
+        SELECT t.id, t.profile_id, t.external_id, t.asset, t.raw_json,
+               w.config_json
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE upper(replace(t.asset, '-', '')) = 'LBTC'
+           OR lower(t.asset) IN ({placeholders})
+        """,
+        policy_asset_hexes,
+    ).fetchall()
+    for row in legacy_rows:
+        try:
+            raw = json.loads(row["raw_json"] or "{}")
+            config = json.loads(row["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(raw, dict) or not isinstance(config, dict):
+            continue
+        try:
+            if normalize_chain(config.get("chain")) != "liquid":
+                continue
+            network = normalize_network("liquid", config.get("network"))
+        except ValueError:
+            continue
+        explicit_policy_asset = normalize_asset_code(config.get("policy_asset"))
+        if explicit_policy_asset == "LBTC":
+            explicit_policy_asset = ""
+        asset_id = explicit_policy_asset or default_policy_asset_id(network)
+        asset_id = normalize_asset_code(asset_id)
+        if len(asset_id) != 64:
+            continue
+        txid = str(raw.get("txid") or row["external_id"] or "").strip().lower()
+        if len(txid) != 64 or any(char not in "0123456789abcdef" for char in txid):
+            continue
+        # Never overwrite contradictory evidence. This migration only fills the
+        # identity fields emitted by current Liquid sync for legacy observations
+        # whose wallet config proves the missing network and policy asset.
+        expected = {
+            "txid": txid,
+            "chain": "liquid",
+            "network": network,
+            "asset_id": asset_id,
+            "asset": "LBTC",
+        }
+        existing_txid = str(raw.get("txid") or "").strip().lower()
+        existing_chain = str(raw.get("chain") or "").strip()
+        existing_network = str(raw.get("network") or "").strip()
+        existing_asset_id = normalize_asset_code(raw.get("asset_id"))
+        existing_asset = normalize_asset_code(raw.get("asset"))
+        try:
+            chain_conflicts = bool(existing_chain) and normalize_chain(existing_chain) != "liquid"
+            network_conflicts = bool(existing_network) and normalize_network(
+                "liquid", existing_network
+            ) != network
+        except ValueError:
+            continue
+        if (
+            (existing_txid and existing_txid != txid)
+            or chain_conflicts
+            or network_conflicts
+            or (existing_asset_id and existing_asset_id != asset_id)
+            or (existing_asset and existing_asset not in {"LBTC", asset_id})
+        ):
+            continue
+        updated_raw = {**raw, **expected}
+        if updated_raw == raw:
+            continue
+        conn.execute(
+            "UPDATE transactions SET raw_json = ? WHERE id = ?",
+            (json.dumps(updated_raw, sort_keys=True), row["id"]),
+        )
+        affected_profile_ids.add(row["profile_id"])
+    affected_profile_ids = sorted(affected_profile_ids)
+    if not affected_profile_ids:
+        return
     profile_placeholders = ",".join("?" for _ in affected_profile_ids)
     conn.execute(
         f"UPDATE profiles "

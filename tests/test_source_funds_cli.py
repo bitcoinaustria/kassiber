@@ -385,7 +385,7 @@ class SourceFundsCliTest(unittest.TestCase):
         codes = {finding["code"] for finding in report["findings"]}
         self.assertIn("privacy_hop_unresolved", codes)
 
-    def test_privacy_boundary_import_skips_same_external_id_suggestion(self):
+    def test_privacy_boundary_import_skips_same_onchain_scope_suggestion(self):
         self._init_default_workspace()
         self._write_csv(
             "privacy-out.csv",
@@ -422,7 +422,7 @@ class SourceFundsCliTest(unittest.TestCase):
             [
                 link
                 for link in suggested
-                if link["method"] == "same_external_id"
+                if link["method"] == "same_onchain_scope"
                 and link["to_transaction_id"] == target_id
             ]
         )
@@ -498,7 +498,7 @@ class SourceFundsCliTest(unittest.TestCase):
             "Default",
         )
         methods = {row["method"] for row in suggested["data"]["links"]}
-        self.assertIn("same_external_id", methods)
+        self.assertNotIn("same_onchain_scope", methods)
         self.assertIn("transaction_pair", methods)
         self.assertTrue(any(row["link_type"] == "swap" for row in suggested["data"]["links"]))
 
@@ -522,23 +522,21 @@ class SourceFundsCliTest(unittest.TestCase):
             "--dry-run",
         )["data"]
         self.assertTrue(preview["dry_run"])
-        self.assertGreaterEqual(preview["reviewed"], 1)
+        self.assertEqual(preview["reviewed"], 0)
 
-        bulk_reviewed_links = []
-        for target_id in (cold_in_tx_id, privacy_in_tx_id, swap_in_tx_id):
-            bulk_reviewed = self.cli(
-                "source-funds",
-                "links",
-                "bulk-review",
-                "--workspace",
-                "Sof",
-                "--profile",
-                "Default",
-                "--target-transaction",
-                target_id,
-            )["data"]
-            bulk_reviewed_links.extend(bulk_reviewed["links"])
-        self.assertGreaterEqual(len(bulk_reviewed_links), 3)
+        bulk_reviewed = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            swap_in_tx_id,
+        )["data"]
+        bulk_reviewed_links = bulk_reviewed["links"]
+        self.assertEqual(len(bulk_reviewed_links), 1)
         self.assertTrue(
             all(link["allocation_policy"] == "explicit" for link in bulk_reviewed_links)
         )
@@ -603,6 +601,41 @@ class SourceFundsCliTest(unittest.TestCase):
             "--explanation",
             "Reviewed exchange statement ties the withdrawal to the purchase source.",
         )
+        for from_id, to_id, explanation in (
+            (
+                exchange_tx_id,
+                cold_in_tx_id,
+                "Reviewed exchange withdrawal into the owned cold wallet.",
+            ),
+            (
+                cold_out_tx_id,
+                privacy_in_tx_id,
+                "Reviewed cold-wallet transfer into the owned privacy wallet.",
+            ),
+        ):
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-transaction",
+                from_id,
+                "--to-transaction",
+                to_id,
+                "--type",
+                "self_transfer",
+                "--allocation-amount",
+                "0.15000000",
+                "--from-amount",
+                "0.15000000",
+                "--allocation-policy",
+                "explicit",
+                "--explanation",
+                explanation,
+            )
         self.cli(
             "source-funds",
             "links",
@@ -712,27 +745,7 @@ class SourceFundsCliTest(unittest.TestCase):
             "Default",
         )["data"]
         for link in links:
-            if link["method"] == "same_external_id":
-                self.cli(
-                    "source-funds",
-                    "links",
-                    "review",
-                    "--workspace",
-                    "Sof",
-                    "--profile",
-                    "Default",
-                    "--link",
-                    link["id"],
-                    "--state",
-                    "reviewed",
-                    "--allocation-amount",
-                    "0.15000000",
-                    "--from-amount",
-                    "0.15000000",
-                    "--allocation-policy",
-                    "explicit",
-                )
-            elif link["state"] == "suggested" and link["id"] != privacy_review_link["id"]:
+            if link["state"] == "suggested" and link["id"] != privacy_review_link["id"]:
                 self.cli(
                     "source-funds",
                     "links",
@@ -1257,7 +1270,12 @@ class SourceFundsCliTest(unittest.TestCase):
             wallet_a, workspace_id, profile_id = ids["Chain A"]
             wallet_b = ids["Chain B"][0]
             # T's inputs, as chain sync stores them on every leg's raw_json.
-            vin_json = json.dumps({"vin": [{"txid": self.P_TXID, "vout": 0}]})
+            vin_json = json.dumps(
+                {
+                    "txid": self.T_TXID,
+                    "vin": [{"txid": self.P_TXID, "vout": 0}],
+                }
+            )
             conn.execute(
                 "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
                 (vin_json, self.T_TXID),
@@ -1304,7 +1322,7 @@ class SourceFundsCliTest(unittest.TestCase):
             target_id,
         )["data"]
         self.assertEqual(result["auto_reviewed"], 2)
-        # The same-txid leg hop may be claimed by same_external_id (equally
+        # The same-txid leg hop may be claimed by same_onchain_scope (equally
         # exact, runs first); the parent hop is only provable from the UTXO
         # structure.
         self.assertEqual(sum(result["methods"].values()), 2)
@@ -1414,8 +1432,9 @@ class SourceFundsCliTest(unittest.TestCase):
 
     def test_assemble_multi_parent_consolidation_covers_exactly(self):
         """Two parents feeding one spend must be sized as a group: per-edge
-        capping would over-cover the spend leg by the fee and block export
-        with ambiguous_allocation."""
+        capping would over-cover the spend leg by the fee. The exact-sum
+        pro-rata proposal still needs review because Bitcoin does not identify
+        which parent paid the fee."""
         p1, p2, tt = "11" * 32, "22" * 32, "33" * 32
         self._init_default_workspace()
         self._write_csv(
@@ -1434,7 +1453,12 @@ class SourceFundsCliTest(unittest.TestCase):
         self._create_wallet_and_import("Multi B", "multi-b.csv")
         conn = self._db()
         try:
-            vin_json = json.dumps({"vin": [{"txid": p1, "vout": 0}, {"txid": p2, "vout": 0}]})
+            vin_json = json.dumps(
+                {
+                    "txid": tt,
+                    "vin": [{"txid": p1, "vout": 0}, {"txid": p2, "vout": 0}],
+                }
+            )
             conn.execute("UPDATE transactions SET raw_json = ? WHERE external_id = ?", (vin_json, tt))
             self._insert_utxos(
                 conn,
@@ -1452,7 +1476,7 @@ class SourceFundsCliTest(unittest.TestCase):
             "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
             "--target-transaction", target_id,
         )["data"]
-        self.assertEqual(result["auto_reviewed"], 3)
+        self.assertEqual(result["auto_reviewed"], 1)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
@@ -1464,6 +1488,21 @@ class SourceFundsCliTest(unittest.TestCase):
         # 0.799 split pro-rata over 0.3 + 0.5 contributed: exact-sum group sizing.
         self.assertEqual(parent_allocs, [0.2996250, 0.4993750])
         self.assertAlmostEqual(sum(parent_allocs), 0.799, places=8)
+        parent_links = [
+            link
+            for link in links
+            if link["method"] == "utxo_spend"
+            and link["to_transaction_id"] == self._tx_id("Multi A", tt)
+        ]
+        self.assertTrue(all(link["confidence"] == "strong" for link in parent_links))
+        self.assertTrue(all(link["requires_review"] for link in parent_links))
+        for link in parent_links:
+            self.cli(
+                "source-funds", "links", "review",
+                "--workspace", "Sof", "--profile", "Default",
+                "--link", link["id"], "--state", "reviewed",
+                "--allocation-policy", "explicit",
+            )
         source = self.cli(
             "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
             "--type", "fiat_purchase", "--label", "Multi root", "--asset", "BTC",
@@ -1506,7 +1545,12 @@ class SourceFundsCliTest(unittest.TestCase):
         self._create_wallet_and_import("Shared C", "shared-c.csv")
         conn = self._db()
         try:
-            vin_json = json.dumps({"vin": [{"txid": p1, "vout": 0}, {"txid": p2, "vout": 0}]})
+            vin_json = json.dumps(
+                {
+                    "txid": tt,
+                    "vin": [{"txid": p1, "vout": 0}, {"txid": p2, "vout": 0}],
+                }
+            )
             conn.execute("UPDATE transactions SET raw_json = ? WHERE external_id = ?", (vin_json, tt))
             self._insert_utxos(
                 conn,
@@ -1525,7 +1569,7 @@ class SourceFundsCliTest(unittest.TestCase):
             "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
             "--target-transaction", target_id,
         )["data"]
-        self.assertGreaterEqual(result["methods"].get("utxo_spend", 0), 4)
+        self.assertEqual(result["methods"].get("utxo_spend", 0), 2)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
@@ -1539,6 +1583,22 @@ class SourceFundsCliTest(unittest.TestCase):
         )
         self.assertEqual(target_allocs, [0.2996250, 0.4993750])
         self.assertAlmostEqual(sum(target_allocs), 0.799, places=8)
+        target_links = [
+            link
+            for link in links
+            if link["method"] == "utxo_spend"
+            and link["from_transaction_id"] in spend_rows
+            and link["to_transaction_id"] == target_id
+        ]
+        self.assertTrue(all(link["confidence"] == "strong" for link in target_links))
+        self.assertTrue(all(link["requires_review"] for link in target_links))
+        for link in target_links:
+            self.cli(
+                "source-funds", "links", "review",
+                "--workspace", "Sof", "--profile", "Default",
+                "--link", link["id"], "--state", "reviewed",
+                "--allocation-policy", "explicit",
+            )
 
         source = self.cli(
             "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
@@ -1556,6 +1616,169 @@ class SourceFundsCliTest(unittest.TestCase):
         blockers = {item["code"] for item in report["explain_gates"]["blockers"]}
         self.assertNotIn("ambiguous_allocation", blockers)
         self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+
+    def test_multi_source_multi_destination_utxo_allocations_require_review(self):
+        """Bitcoin inputs do not identify a source wallet for each output.
+
+        A deterministic 2x2 pro-rata allocation is useful as a proposal, but
+        it must remain suggested until a person confirms it.
+        """
+        p1, p2, tt = "81" * 32, "82" * 32, "83" * 32
+        self._init_default_workspace()
+        self._write_csv(
+            "matrix-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T09:00:00Z,{p1},inbound,BTC,0.60000000,0,50000,A parent\n"
+            f"2026-05-02T09:00:00Z,{tt},outbound,BTC,0.60000000,0,50000,A contributes\n",
+        )
+        self._write_csv(
+            "matrix-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T10:00:00Z,{p2},inbound,BTC,0.40000000,0,50000,B parent\n"
+            f"2026-05-02T09:00:00Z,{tt},outbound,BTC,0.40000000,0,50000,B contributes\n",
+        )
+        self._write_csv(
+            "matrix-c.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{tt},inbound,BTC,0.70000000,0,50000,C receives\n",
+        )
+        self._write_csv(
+            "matrix-d.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{tt},inbound,BTC,0.30000000,0,50000,D receives\n",
+        )
+        for label, filename in (
+            ("Matrix A", "matrix-a.csv"),
+            ("Matrix B", "matrix-b.csv"),
+            ("Matrix C", "matrix-c.csv"),
+            ("Matrix D", "matrix-d.csv"),
+        ):
+            self._create_wallet_and_import(label, filename)
+        with self._db() as conn:
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
+                (
+                    json.dumps(
+                        {
+                            "txid": tt,
+                            "vin": [
+                                {"txid": p1, "vout": 0},
+                                {"txid": p2, "vout": 0},
+                            ],
+                        }
+                    ),
+                    tt,
+                ),
+            )
+            self._insert_utxos(
+                conn,
+                [
+                    ("Matrix A", p1, 0, 60_000_000_000),
+                    ("Matrix B", p2, 0, 40_000_000_000),
+                    ("Matrix C", tt, 0, 70_000_000_000),
+                ],
+            )
+            conn.commit()
+
+        # With only C's output known, the missing 0.3 BTC is a fee/external/
+        # unknown-output residual. Bitcoin cannot identify which source funded
+        # that residual, so even this apparent N:1 topology needs review.
+        suggested = self.cli(
+            "source-funds", "suggest", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        self.assertGreaterEqual(suggested["inserted"], 4)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        spend_ids = {self._tx_id("Matrix A", tt), self._tx_id("Matrix B", tt)}
+        destination_ids = {self._tx_id("Matrix C", tt), self._tx_id("Matrix D", tt)}
+        initial_c_links = [
+            link
+            for link in links
+            if link["method"] == "utxo_spend"
+            and link["from_transaction_id"] in spend_ids
+            and link["to_transaction_id"] == self._tx_id("Matrix C", tt)
+        ]
+        self.assertEqual(len(initial_c_links), 2)
+        self.assertTrue(all(link["confidence"] == "strong" for link in initial_c_links))
+        self.assertTrue(all(link["requires_review"] for link in initial_c_links))
+
+        # Discovering D later changes the live evidence into a genuine 2x2
+        # matrix. Bulk review must re-derive topology and refuse the now-stale
+        # exact C links even before suggestions are refreshed.
+        with self._db() as conn:
+            wallet_d = conn.execute(
+                "SELECT id, workspace_id, profile_id FROM wallets WHERE label = 'Matrix D'"
+            ).fetchone()
+            conn.execute(
+                """
+                INSERT INTO wallet_utxos(
+                    id, workspace_id, profile_id, wallet_id, chain, network,
+                    asset, amount, txid, vout, outpoint, confirmation_status,
+                    first_seen_at, last_seen_at
+                ) VALUES('utxo-matrix-d', ?, ?, ?, 'bitcoin', 'main', 'BTC', ?, ?, 1, ?,
+                         'confirmed', '2026-05-02T10:00:00Z', '2026-05-02T10:00:00Z')
+                """,
+                (
+                    wallet_d["workspace_id"],
+                    wallet_d["profile_id"],
+                    wallet_d["id"],
+                    30_000_000_000,
+                    tt,
+                    f"{tt}:1",
+                ),
+            )
+            conn.commit()
+
+        reviewed = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            self._tx_id("Matrix C", tt),
+        )["data"]
+        self.assertEqual(reviewed["reviewed"], 2)
+        self.assertEqual(reviewed["skipped"], 2)
+
+        refreshed = self.cli(
+            "source-funds", "suggest", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        self.assertGreaterEqual(refreshed["inserted"], 4)
+        links_after_refresh = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        matrix_links = [
+            link
+            for link in links_after_refresh
+            if link["method"] == "utxo_spend"
+            and link["from_transaction_id"] in spend_ids
+            and link["to_transaction_id"] in destination_ids
+        ]
+        self.assertEqual(len(matrix_links), 4)
+        self.assertEqual(
+            sorted(link["allocation_amount_msat"] for link in matrix_links),
+            [12_000_000_000, 18_000_000_000, 28_000_000_000, 42_000_000_000],
+        )
+        self.assertTrue(all(link["confidence"] == "strong" for link in matrix_links))
+        self.assertTrue(all(link["requires_review"] for link in matrix_links))
+
+        strong_review = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            self._tx_id("Matrix D", tt),
+        )["data"]
+        self.assertEqual(strong_review["reviewed"], 0)
+        self.assertEqual(strong_review["skipped"], 2)
 
     def test_assemble_apportions_split_receive_parent_requirements(self):
         """A single spender funding multiple owned receive legs must split
@@ -1585,7 +1808,12 @@ class SourceFundsCliTest(unittest.TestCase):
         try:
             conn.execute(
                 "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
-                (json.dumps({"vin": [{"txid": p1, "vout": 0}]}), tt),
+                (
+                    json.dumps(
+                        {"txid": tt, "vin": [{"txid": p1, "vout": 0}]}
+                    ),
+                    tt,
+                ),
             )
             self._insert_utxos(
                 conn,
@@ -1646,11 +1874,21 @@ class SourceFundsCliTest(unittest.TestCase):
             conn.execute("UPDATE transactions SET amount = 0 WHERE external_id = ?", (cc,))
             conn.execute(
                 "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
-                (json.dumps({"vin": [{"txid": pp, "vout": 0}]}), cc),
+                (
+                    json.dumps(
+                        {"txid": cc, "vin": [{"txid": pp, "vout": 0}]}
+                    ),
+                    cc,
+                ),
             )
             conn.execute(
                 "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
-                (json.dumps({"vin": [{"txid": cc, "vout": 0}]}), ss),
+                (
+                    json.dumps(
+                        {"txid": ss, "vin": [{"txid": cc, "vout": 0}]}
+                    ),
+                    ss,
+                ),
             )
             self._insert_utxos(
                 conn,
@@ -1723,11 +1961,21 @@ class SourceFundsCliTest(unittest.TestCase):
         try:
             conn.execute(
                 "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
-                (json.dumps({"vin": [{"txid": pp, "vout": 0}]}), cc),
+                (
+                    json.dumps(
+                        {"txid": cc, "vin": [{"txid": pp, "vout": 0}]}
+                    ),
+                    cc,
+                ),
             )
             conn.execute(
                 "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
-                (json.dumps({"vin": [{"txid": cc, "vout": 1}]}), ss),
+                (
+                    json.dumps(
+                        {"txid": ss, "vin": [{"txid": cc, "vout": 1}]}
+                    ),
+                    ss,
+                ),
             )
             self._insert_utxos(
                 conn,
@@ -1784,9 +2032,20 @@ class SourceFundsCliTest(unittest.TestCase):
         conn = self._db()
         try:
             conn.execute(
-                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'core_lightning' "
+                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'core_lightning', "
+                "kind = CASE direction WHEN 'outbound' THEN 'cln_pay' ELSE 'cln_invoice' END, "
+                "raw_json = ? "
                 "WHERE external_id IN ('ln-send-1', 'ln-recv-1')",
-                (payment_hash,),
+                (
+                    payment_hash,
+                    json.dumps(
+                        {
+                            "_kassiber_provenance": {"import_source": "core-lightning"},
+                            "chain": "lightning",
+                            "network": "main",
+                        }
+                    ),
+                ),
             )
             conn.commit()
         finally:
@@ -1829,9 +2088,20 @@ class SourceFundsCliTest(unittest.TestCase):
         conn = self._db()
         try:
             conn.execute(
-                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'core_lightning' "
+                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'core_lightning', "
+                "kind = CASE direction WHEN 'outbound' THEN 'cln_pay' ELSE 'cln_invoice' END, "
+                "raw_json = ? "
                 "WHERE external_id IN ('ln-send-small', 'ln-recv-large')",
-                (payment_hash,),
+                (
+                    payment_hash,
+                    json.dumps(
+                        {
+                            "_kassiber_provenance": {"import_source": "core-lightning"},
+                            "chain": "lightning",
+                            "network": "main",
+                        }
+                    ),
+                ),
             )
             conn.commit()
         finally:
@@ -3735,11 +4005,13 @@ class SourceFundsCliTest(unittest.TestCase):
 
     def test_bulk_review_is_target_scoped(self):
         self._init_default_workspace()
+        first_txid = "11" * 32
+        second_txid = "22" * 32
         for wallet, csv_name, txid, direction in [
-            ("First Out", "first-out.csv", "pair-one", "outbound"),
-            ("First In", "first-in.csv", "pair-one", "inbound"),
-            ("Second Out", "second-out.csv", "pair-two", "outbound"),
-            ("Second In", "second-in.csv", "pair-two", "inbound"),
+            ("First Out", "first-out.csv", first_txid, "outbound"),
+            ("First In", "first-in.csv", first_txid, "inbound"),
+            ("Second Out", "second-out.csv", second_txid, "outbound"),
+            ("Second In", "second-in.csv", second_txid, "inbound"),
         ]:
             self._write_csv(
                 csv_name,
@@ -3748,8 +4020,8 @@ class SourceFundsCliTest(unittest.TestCase):
             )
             self._create_wallet_and_import(wallet, csv_name)
         self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")
-        first_target = self._tx_id("First In", "pair-one")
-        second_target = self._tx_id("Second In", "pair-two")
+        first_target = self._tx_id("First In", first_txid)
+        second_target = self._tx_id("Second In", second_txid)
         reviewed = self.cli(
             "source-funds",
             "links",
@@ -3768,8 +4040,9 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(first_link["state"], "reviewed")
         self.assertEqual(second_link["state"], "suggested")
 
-    def test_bulk_review_skips_same_external_id_when_third_row_appears(self):
+    def test_bulk_review_skips_same_onchain_scope_when_third_row_appears(self):
         self._init_default_workspace()
+        txid = "33" * 32
         for wallet, csv_name, direction in [
             ("Pair Out", "stale-pair-out.csv", "outbound"),
             ("Pair In", "stale-pair-in.csv", "inbound"),
@@ -3777,10 +4050,10 @@ class SourceFundsCliTest(unittest.TestCase):
             self._write_csv(
                 csv_name,
                 "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-                f"2026-03-01T09:00:00Z,stale-pair,{direction},BTC,0.10000000,0,50000,{wallet}\n",
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
             )
             self._create_wallet_and_import(wallet, csv_name)
-        target_id = self._tx_id("Pair In", "stale-pair")
+        target_id = self._tx_id("Pair In", txid)
         suggested = self.cli(
             "source-funds",
             "suggest",
@@ -3791,11 +4064,20 @@ class SourceFundsCliTest(unittest.TestCase):
             "--target-transaction",
             target_id,
         )["data"]["links"]
-        self.assertEqual(len([link for link in suggested if link["method"] == "same_external_id"]), 1)
+        self.assertEqual(
+            len(
+                [
+                    link
+                    for link in suggested
+                    if link["method"] == "same_onchain_scope"
+                ]
+            ),
+            1,
+        )
         self._write_csv(
             "stale-third-in.csv",
             "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-            "2026-03-01T09:05:00Z,stale-pair,inbound,BTC,0.10000000,0,50000,Third matching row\n",
+            f"2026-03-01T09:05:00Z,{txid},inbound,BTC,0.10000000,0,50000,Third matching row\n",
         )
         self._create_wallet_and_import("Pair Third", "stale-third-in.csv")
         reviewed = self.cli(
@@ -3812,6 +4094,78 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(reviewed["reviewed"], 0)
         link = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"][0]
         self.assertEqual(link["state"], "suggested")
+
+    def test_arbitrary_shared_import_id_is_not_a_physical_link(self):
+        self._init_default_workspace()
+        for wallet, csv_name, direction in (
+            ("Import Out", "import-id-out.csv", "outbound"),
+            ("Import In", "import-id-in.csv", "inbound"),
+        ):
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,provider-batch,{direction},BTC,0.10000000,0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            self._tx_id("Import In", "provider-batch"),
+        )["data"]["links"]
+
+        self.assertFalse(
+            [link for link in suggested if link["method"] == "same_onchain_scope"]
+        )
+
+    def test_same_onchain_scope_partial_rows_stay_manual(self):
+        self._init_default_workspace()
+        txid = "aa" * 32
+        for wallet, csv_name, direction, amount in (
+            ("Partial Out", "partial-scope-out.csv", "outbound", "0.10010000"),
+            ("Partial In", "partial-scope-in.csv", "inbound", "0.10000000"),
+        ):
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,{amount},0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        target_id = self._tx_id("Partial In", txid)
+
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]["links"]
+        link = next(
+            link for link in suggested if link["method"] == "same_onchain_scope"
+        )
+        self.assertEqual(link["confidence"], "strong")
+
+        reviewed = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertEqual(reviewed["reviewed"], 0)
+        self.assertEqual(reviewed["skipped"], 1)
 
     def test_bulk_review_skips_transaction_pair_when_pair_row_deleted(self):
         self._init_default_workspace()
@@ -4027,11 +4381,13 @@ class SourceFundsCliTest(unittest.TestCase):
 
     def test_suggest_links_with_target_does_not_write_unrelated_suggestions(self):
         self._init_default_workspace()
+        first_txid = "44" * 32
+        second_txid = "55" * 32
         for wallet, csv_name, txid, direction in [
-            ("First Out", "first-out.csv", "pair-one", "outbound"),
-            ("First In", "first-in.csv", "pair-one", "inbound"),
-            ("Second Out", "second-out.csv", "pair-two", "outbound"),
-            ("Second In", "second-in.csv", "pair-two", "inbound"),
+            ("First Out", "first-out.csv", first_txid, "outbound"),
+            ("First In", "first-in.csv", first_txid, "inbound"),
+            ("Second Out", "second-out.csv", second_txid, "outbound"),
+            ("Second In", "second-in.csv", second_txid, "inbound"),
         ]:
             self._write_csv(
                 csv_name,
@@ -4039,8 +4395,8 @@ class SourceFundsCliTest(unittest.TestCase):
                 f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
             )
             self._create_wallet_and_import(wallet, csv_name)
-        first_target = self._tx_id("First In", "pair-one")
-        second_target = self._tx_id("Second In", "pair-two")
+        first_target = self._tx_id("First In", first_txid)
+        second_target = self._tx_id("Second In", second_txid)
         suggested = self.cli(
             "source-funds",
             "suggest",
@@ -4058,11 +4414,13 @@ class SourceFundsCliTest(unittest.TestCase):
 
     def test_suggest_links_caps_writes_per_call(self):
         self._init_default_workspace()
+        first_txid = "66" * 32
+        second_txid = "77" * 32
         for wallet, csv_name, txid, direction in [
-            ("First Out", "cap-first-out.csv", "cap-one", "outbound"),
-            ("First In", "cap-first-in.csv", "cap-one", "inbound"),
-            ("Second Out", "cap-second-out.csv", "cap-two", "outbound"),
-            ("Second In", "cap-second-in.csv", "cap-two", "inbound"),
+            ("First Out", "cap-first-out.csv", first_txid, "outbound"),
+            ("First In", "cap-first-in.csv", first_txid, "inbound"),
+            ("Second Out", "cap-second-out.csv", second_txid, "outbound"),
+            ("Second In", "cap-second-in.csv", second_txid, "inbound"),
         ]:
             self._write_csv(
                 csv_name,
@@ -4395,7 +4753,7 @@ class SourceFundsCliTest(unittest.TestCase):
         )["data"]
         self.assertEqual(reviewed["reviewed"], 0)
 
-    def test_provider_trade_id_one_to_one_still_bulk_reviews(self):
+    def test_provider_trade_id_one_to_one_stays_manual(self):
         self._seed_provider_rows(
             out_rows=[("trade-out", "0.10000000", "trade-1")],
             in_rows=[("trade-in", "0.10000000", "trade-1")],
@@ -4416,8 +4774,8 @@ class SourceFundsCliTest(unittest.TestCase):
             "--target-transaction",
             self._tx_id("Provider In", "trade-in"),
         )["data"]
-        self.assertEqual(reviewed["reviewed"], 1)
-        self.assertEqual(reviewed["links"][0]["method"], "provider_trade_id")
+        self.assertEqual(reviewed["reviewed"], 0)
+        self.assertEqual(reviewed["skipped"], 1)
 
     def test_bulk_review_skips_provider_trade_id_when_imports_made_it_n_to_m(self):
         self._seed_provider_rows(

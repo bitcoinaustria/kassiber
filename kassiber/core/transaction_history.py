@@ -378,12 +378,30 @@ def append_event(
     # and its signed replication event share the caller's SQL transaction.
     from .sync_replication.events import author_event, sync_enabled
 
+    wire_transaction_id = tx["id"]
+    wire_wallet_id = _row_get(tx, "wallet_id")
     if sync_enabled(conn, profile["id"]):
+        from .sync_replication.capture import capture_local_changes, preferred_wire_id
+
+        wire_transaction_id = preferred_wire_id(
+            conn,
+            profile_id=profile["id"],
+            table="transactions",
+            local_id=tx["id"],
+        )
+        wire_wallet_id = preferred_wire_id(
+            conn,
+            profile_id=profile["id"],
+            table="wallets",
+            local_id=wire_wallet_id,
+        )
         # A metadata event may be the first synced mutation of a newly imported
         # transaction. Capture the dependency-ordered workspace/profile/wallet/
         # transaction rows first so replay never sees history before its FK
         # anchors.
-        sync_row_key = json.dumps([str(tx["id"])], ensure_ascii=True, separators=(",", ":"))
+        sync_row_key = json.dumps(
+            [str(wire_transaction_id)], ensure_ascii=True, separators=(",", ":")
+        )
         has_transaction_anchor = conn.execute(
             """
             SELECT 1 FROM sync_row_state
@@ -393,8 +411,6 @@ def append_event(
             (profile["id"], sync_row_key),
         ).fetchone()
         if not has_transaction_anchor:
-            from .sync_replication.capture import capture_local_changes
-
             capture_local_changes(conn, profile_id=profile["id"])
 
     sync_event = author_event(
@@ -404,8 +420,8 @@ def append_event(
         entity_table="transaction_edit_events",
         entity_key=event_id,
         payload={
-            "transaction_id": tx["id"],
-            "wallet_id": _row_get(tx, "wallet_id"),
+            "transaction_id": wire_transaction_id,
+            "wallet_id": wire_wallet_id,
             "transaction_external_id": _row_get(tx, "external_id"),
             "transaction_occurred_at": _row_get(tx, "occurred_at"),
             "source": normalize_source(source),
