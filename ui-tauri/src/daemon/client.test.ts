@@ -237,11 +237,20 @@ describe("daemon mutation invalidation scope", () => {
   });
 
   it("keeps custody component refreshes targeted", () => {
-    expect(
-      invalidatedDaemonQueryKindsForMutation(
-        "ui.transfers.components.bulk_resolve",
-      ),
-    ).toContain("ui.transfers.components.list");
+    for (const kind of [
+      "ui.transfers.components.bulk_resolve",
+      "ui.transfers.components.update",
+      "ui.transfers.components.activate",
+      "ui.transfers.components.supersede",
+      "ui.transfers.components.undo",
+    ]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
+        expect.arrayContaining([
+          "ui.review.badges",
+          "ui.transfers.components.list",
+        ]),
+      );
+    }
     expect(
       invalidatedDaemonQueryKindsForMutation(
         "ui.transfers.components.activate",
