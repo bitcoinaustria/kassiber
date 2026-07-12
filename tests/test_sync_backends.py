@@ -67,6 +67,21 @@ class _DummySocket:
 
 
 class SyncBackendsTest(unittest.TestCase):
+    def test_ownership_derived_through_is_branch_scoped(self):
+        state = SimpleNamespace(
+            targets=[
+                {"branch_index": 0, "address_index": 2},
+                {"branch_index": 0, "address_index": 7},
+                {"branch_index": 1, "address_index": 4},
+                {"branch_index": None, "address_index": None},
+            ]
+        )
+
+        self.assertEqual(
+            sb.ownership_derived_through(state),
+            {"0": 7, "1": 4},
+        )
+
     def test_sync_wallet_from_backend_raises_for_unknown_backend_kind(self):
         wallet = {"label": "Watch", "config_json": "{}"}
         target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}

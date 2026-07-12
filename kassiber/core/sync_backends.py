@@ -509,6 +509,21 @@ def sync_target_from_derived(target):
     }
 
 
+def ownership_derived_through(sync_state):
+    """Highest locally derived target per public wallet-policy branch."""
+
+    depths = {}
+    for target in sync_state.targets:
+        try:
+            branch = str(int(target.get("branch_index")))
+            index = int(target.get("address_index"))
+        except (TypeError, ValueError):
+            continue
+        if index >= 0:
+            depths[branch] = max(depths.get(branch, -1), index)
+    return dict(sorted(depths.items()))
+
+
 def scriptpubkey_scripthash(script_pubkey_hex):
     return hashlib.sha256(bytes.fromhex(script_pubkey_hex)).digest()[::-1].hex()
 
@@ -2201,6 +2216,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             "backend": _backend_identity(backend, sync_state),
             "esplora_scripthashes": dict(sorted(next_stats.items())),
             "highest_used": dict(sorted(highest_used.items())),
+            "ownership_derived_through": ownership_derived_through(sync_state),
         }
     )
     return records, {
@@ -3119,6 +3135,9 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
                 sorted(descriptor_range_ends.items())
             )
             next_checkpoint["highest_used"] = dict(sorted(highest_used.items()))
+        next_checkpoint["ownership_derived_through"] = ownership_derived_through(
+            effective_sync_state
+        )
         meta["freshness_checkpoint"] = next_checkpoint
     return records, meta
 
@@ -3803,6 +3822,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             "electrum_known_txids": dict(sorted(next_known_txids.items())),
             "electrum_scripthash_statuses": dict(sorted(next_statuses.items())),
             "highest_used": dict(sorted(highest_used.items())),
+            "ownership_derived_through": ownership_derived_through(sync_state),
         }
     )
     return records, {
