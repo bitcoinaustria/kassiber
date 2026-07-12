@@ -550,6 +550,10 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
 }
 
 function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
+  const { t } = useTranslation("sourceFunds");
+  const methodLabel = (method: string) =>
+    t(`method.${method}`, { defaultValue: pretty(method) });
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
