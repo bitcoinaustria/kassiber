@@ -241,7 +241,8 @@ bounded `ownership_scan_to_index` through wallet config.
 coverage separately as `unknown`, `assumed`, or `proven`. Use `wallets
 coverage-set --wallet <wallet> --complete --evidence wallet_export
 --branch-last-issued 0=<index> --branch-last-issued 1=<index>` only with bounds
-from an authoritative wallet export. For graph-poor historic imports,
+from an authoritative wallet export. Add `--all-wallets-added` only after every
+relevant real-world wallet is represented in the profile. For graph-poor historic imports,
 `wallets backfill-graphs --allow-public-lookup` performs a bounded fetch through
 configured backends; the explicit flag acknowledges txid-linkage privacy risk.
 

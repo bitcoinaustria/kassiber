@@ -2,7 +2,10 @@ import json
 import sqlite3
 import unittest
 
-from kassiber.core.ownership_coverage import assess_profile_ownership_coverage
+from kassiber.core.ownership_coverage import (
+    assess_profile_ownership_coverage,
+    attest_profile_wallet_universe,
+)
 from kassiber.core.wallets import _validated_wallet_config
 from kassiber.errors import AppError
 
@@ -18,6 +21,17 @@ def _conn():
         CREATE TABLE freshness_source_states(
             profile_id TEXT, source_key TEXT, checkpoint_json TEXT
         );
+        CREATE TABLE profiles(
+            id TEXT PRIMARY KEY,
+            last_processed_at TEXT,
+            last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
+            journal_input_version INTEGER NOT NULL DEFAULT 0,
+            ownership_review_counts_json TEXT
+        );
+        CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO profiles(id, last_processed_at, last_processed_tx_count,
+                             journal_input_version, ownership_review_counts_json)
+        VALUES('profile', '2026-01-01T00:00:00Z', 3, 7, '{}');
         """
     )
     return conn
@@ -48,6 +62,9 @@ class OwnershipCoverageTests(unittest.TestCase):
         )
 
         coverage = assess_profile_ownership_coverage(conn, "profile")
+        self.assertFalse(coverage.is_policy_proven("bitcoin", "main"))
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+        coverage = assess_profile_ownership_coverage(conn, "profile")
 
         self.assertTrue(coverage.is_policy_proven("bitcoin", "main"))
         self.assertEqual(coverage.wallets[0].history_tier, "unknown")
@@ -68,9 +85,23 @@ class OwnershipCoverageTests(unittest.TestCase):
             },
         )
 
+        attest_profile_wallet_universe(conn, "profile", complete=True)
         coverage = assess_profile_ownership_coverage(conn, "profile")
 
         self.assertEqual(coverage.tier_for("bitcoin", "main"), "assumed")
+
+    def test_wallet_universe_attestation_invalidates_journals(self):
+        conn = _conn()
+
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+
+        profile = conn.execute(
+            "SELECT * FROM profiles WHERE id = 'profile'"
+        ).fetchone()
+        self.assertIsNone(profile["last_processed_at"])
+        self.assertEqual(profile["last_processed_tx_count"], 0)
+        self.assertEqual(profile["journal_input_version"], 8)
+        self.assertIsNone(profile["ownership_review_counts_json"])
 
     def test_wildcard_policy_needs_branch_bounds(self):
         conn = _conn()

@@ -239,6 +239,8 @@ interface OwnershipCoverageData {
     policy_assumed: number;
     policy_proven: number;
     all_policy_proven: boolean;
+    wallet_universe_complete: boolean;
+    effective_policy_proven: boolean;
   };
   wallets: Array<{
     wallet_id: string;
@@ -1578,13 +1580,17 @@ function ConnectionDetailView({
               {t("detail.ownershipCoverage.title")}
               <Badge
                 variant={
-                  ownershipCoverageQuery.data.data.wallets[0].policy_tier === "proven"
+                  ownershipCoverageQuery.data.data.summary.effective_policy_proven
                     ? "default"
                     : "secondary"
                 }
               >
                 {t(
-                  `detail.ownershipCoverage.tier.${ownershipCoverageQuery.data.data.wallets[0].policy_tier}`,
+                  `detail.ownershipCoverage.tier.${
+                    ownershipCoverageQuery.data.data.summary.wallet_universe_complete
+                      ? ownershipCoverageQuery.data.data.wallets[0].policy_tier
+                      : "unknown"
+                  }`,
                 )}
               </Badge>
             </CardTitle>
@@ -1603,6 +1609,11 @@ function ConnectionDetailView({
                 )}
               </span>
             </div>
+            {!ownershipCoverageQuery.data.data.summary.wallet_universe_complete ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-500/5 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:text-amber-300">
+                {t("detail.ownershipCoverage.limitation.wallet_universe_not_attested")}
+              </div>
+            ) : null}
             {ownershipCoverageQuery.data.data.wallets[0].limitations.length > 0 ? (
               <div className="rounded-lg border border-amber-300 bg-amber-500/5 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:text-amber-300">
                 {t("detail.ownershipCoverage.repair")}: {ownershipCoverageQuery.data.data.wallets[0].limitations

@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import kassiber.core.transaction_graph as tg
+from kassiber.core.ownership_coverage import attest_profile_wallet_universe
 from kassiber.backends import DEFAULT_BACKENDS, create_db_backend
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
@@ -121,10 +122,36 @@ class TransactionGraphTest(unittest.TestCase):
                 INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
                 VALUES(?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (wallet_id, "ws-1", "profile-1", "acct-1", label, "custom", "{}", NOW),
+                (
+                    wallet_id,
+                    "ws-1",
+                    "profile-1",
+                    "acct-1",
+                    label,
+                    "custom",
+                    json.dumps(
+                        {
+                            # Establish finite policy coverage without changing
+                            # graph ownership; individual tests add authoritative
+                            # UTXOs for the addresses they exercise.
+                            "addresses": [f"coverage-policy-{wallet_id}"],
+                            "chain": "bitcoin",
+                            "network": "main",
+                            "ownership_policy": {
+                                "complete": True,
+                                "evidence": "wallet_export",
+                                "branch_last_issued": {},
+                            },
+                        }
+                    ),
+                    NOW,
+                ),
             )
         set_setting(conn, "context_workspace", "ws-1")
         set_setting(conn, "context_profile", "profile-1")
+        attest_profile_wallet_universe(
+            conn, "profile-1", complete=True, commit=False
+        )
         conn.commit()
 
     def _utxo(

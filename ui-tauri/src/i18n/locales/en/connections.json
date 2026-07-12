@@ -107,7 +107,8 @@
         "wildcard_branch_bounds_missing": "import last-issued receive/change bounds",
         "historic_policy_coverage_missing": "attest archived wallet policies",
         "declared_policy_not_fully_derived": "extend local ownership derivation",
-        "backend_history_not_proven": "run a private full-history scan"
+        "backend_history_not_proven": "run a private full-history scan",
+        "wallet_universe_not_attested": "attest that every relevant real-world wallet has been added"
       }
     },
     "samourai": {

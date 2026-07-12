@@ -23,10 +23,13 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from ..wallet_descriptors import normalize_chain, normalize_network
+from ..db import get_setting, set_setting
 from .freshness import SOURCE_ONCHAIN, source_key
+from .repo import invalidate_journals
 from .wallets import OWNERSHIP_HISTORY_CONFIG_KEY, wallet_is_deprecated
 
 POLICY_CONFIG_KEY = "ownership_policy"
+PROFILE_UNIVERSE_SETTING_PREFIX = "ownership.policy_universe.profile."
 TIER_UNKNOWN = "unknown"
 TIER_ASSUMED = "assumed"
 TIER_PROVEN = "proven"
@@ -82,8 +85,12 @@ class WalletOwnershipCoverage:
 class ProfileOwnershipCoverage:
     profile_id: str
     wallets: tuple[WalletOwnershipCoverage, ...]
+    universe_complete: bool = False
+    universe_evidence: str = ""
 
     def tier_for(self, chain: str, network: str) -> str:
+        if not self.universe_complete:
+            return TIER_UNKNOWN
         relevant = [
             wallet.policy_tier
             for wallet in self.wallets
@@ -100,6 +107,8 @@ class ProfileOwnershipCoverage:
         scopes = sorted({(wallet.chain, wallet.network) for wallet in self.wallets})
         return {
             "profile_id": self.profile_id,
+            "universe_complete": self.universe_complete,
+            "universe_evidence": self.universe_evidence,
             "scopes": [
                 {"chain": chain, "network": network, "policy_tier": self.tier_for(chain, network)}
                 for chain, network in scopes
@@ -168,7 +177,13 @@ def assess_profile_ownership_coverage(
                 (derived_through_by_wallet or {}).get(str(wallet["id"])),
             )
         )
-    return ProfileOwnershipCoverage(profile_id=profile_id, wallets=tuple(assessed))
+    universe = _profile_universe_declaration(conn, profile_id)
+    return ProfileOwnershipCoverage(
+        profile_id=profile_id,
+        wallets=tuple(assessed),
+        universe_complete=bool(universe.get("complete")),
+        universe_evidence=str(universe.get("evidence") or ""),
+    )
 
 
 def build_ownership_coverage_snapshot(
@@ -195,10 +210,44 @@ def build_ownership_coverage_snapshot(
             "policy_assumed": counts[TIER_ASSUMED],
             "policy_proven": counts[TIER_PROVEN],
             "all_policy_proven": bool(wallets) and counts[TIER_PROVEN] == len(wallets),
+            "wallet_universe_complete": coverage.universe_complete,
+            "effective_policy_proven": bool(wallets)
+            and coverage.universe_complete
+            and counts[TIER_PROVEN] == len(wallets),
         },
         "wallets": [wallet.to_safe_dict() for wallet in wallets],
-        "repair_actions": list(dict.fromkeys(repairs)),
+        "repair_actions": list(
+            dict.fromkeys(
+                (["attest_all_relevant_wallets_added"] if not coverage.universe_complete else [])
+                + repairs
+            )
+        ),
     }
+
+
+def attest_profile_wallet_universe(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    complete: bool,
+    evidence: str = EVIDENCE_USER_ATTESTED,
+    commit: bool = True,
+) -> dict[str, Any]:
+    if type(complete) is not bool:
+        raise ValueError("wallet universe completeness must be a boolean")
+    evidence = str(evidence or "").strip().lower()
+    if evidence not in EVIDENCE_KINDS:
+        raise ValueError("wallet universe evidence is not supported")
+    value = {"complete": complete, "evidence": evidence}
+    set_setting(
+        conn,
+        f"{PROFILE_UNIVERSE_SETTING_PREFIX}{profile_id}",
+        json.dumps(value, sort_keys=True),
+    )
+    invalidate_journals(conn, profile_id)
+    if commit:
+        conn.commit()
+    return value
 
 
 def _assess_wallet(conn, profile_id, wallet, config, derived_override) -> WalletOwnershipCoverage:
@@ -300,6 +349,14 @@ def _checkpoint(conn, profile_id, wallet_id):
     return _json_object(row["checkpoint_json"] if row else None)
 
 
+def _profile_universe_declaration(conn, profile_id):
+    try:
+        raw = get_setting(conn, f"{PROFILE_UNIVERSE_SETTING_PREFIX}{profile_id}")
+    except sqlite3.OperationalError:
+        return {}
+    return _json_object(raw)
+
+
 def _has_onchain_ownership_material(config):
     return bool(
         config.get("descriptor")
@@ -358,6 +415,7 @@ __all__ = [
     "ProfileOwnershipCoverage",
     "WalletOwnershipCoverage",
     "assess_profile_ownership_coverage",
+    "attest_profile_wallet_universe",
     "build_ownership_coverage_snapshot",
     "normalize_policy_declaration",
 ]
