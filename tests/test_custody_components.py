@@ -1743,6 +1743,21 @@ class CustodyComponentApiTests(unittest.TestCase):
         with self.assertRaises(AppError):
             activate_component(self.conn, second["id"])
 
+        listed = next(
+            item
+            for item in list_components(self.conn, profile_id="profile", limit=1000)
+            if item["id"] == second["id"]
+        )
+        detailed = get_component(self.conn, second["id"])
+        self.assertEqual(
+            detailed["validation"]["activatable"],
+            listed["validation"]["activatable"],
+        )
+        self.assertEqual(
+            {issue["code"] for issue in detailed["validation"]["issues"]},
+            {issue["code"] for issue in listed["validation"]["issues"]},
+        )
+
         # Replication can deliver an authored-active header without going
         # through local activation. Both routes must then become ineffective
         # instead of letting arrival order choose which network wins.

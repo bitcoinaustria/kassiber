@@ -3342,7 +3342,12 @@ def list_components(
             conn,
             row,
             include_local_evidence=include_local_evidence,
-            profile_route_issues=profile_route_issues,
+            # The shared precompute contains authored-active routes only. A
+            # draft must be evaluated as the one candidate layered onto that
+            # graph, matching get_component/activation semantics exactly.
+            profile_route_issues=(
+                profile_route_issues if row["state"] == "active" else None
+            ),
         )
         for row in rows
     ]
