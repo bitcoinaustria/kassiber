@@ -5,6 +5,7 @@ import unittest
 from kassiber.core.ownership_coverage import (
     assess_profile_ownership_coverage,
     attest_profile_wallet_universe,
+    clear_profile_wallet_universe_attestation,
 )
 from kassiber.core.wallets import (
     _ownership_material_identity_snapshot,
@@ -106,6 +107,16 @@ class OwnershipCoverageTests(unittest.TestCase):
         self.assertEqual(profile["last_processed_tx_count"], 0)
         self.assertEqual(profile["journal_input_version"], 8)
         self.assertIsNone(profile["ownership_review_counts_json"])
+
+    def test_wallet_universe_attestation_can_be_revoked(self):
+        conn = _conn()
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+
+        changed = clear_profile_wallet_universe_attestation(conn, "profile")
+
+        self.assertTrue(changed)
+        coverage = assess_profile_ownership_coverage(conn, "profile")
+        self.assertFalse(coverage.universe_complete)
 
     def test_wildcard_policy_needs_branch_bounds(self):
         conn = _conn()

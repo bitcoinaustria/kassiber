@@ -1446,8 +1446,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     wallets_coverage_set.add_argument(
         "--all-wallets-added",
-        action="store_true",
-        help="Attest that every relevant real-world wallet is represented in this profile.",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Attest or revoke whether every relevant real-world wallet is "
+            "represented in this profile."
+        ),
     )
     wallets_coverage_set.add_argument(
         "--branch-last-issued",
@@ -3331,11 +3335,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     }
                 },
             )
-            if args.all_wallets_added:
+            if args.all_wallets_added is not None:
                 core_ownership_coverage.attest_profile_wallet_universe(
                     conn,
                     updated["profile_id"],
-                    complete=True,
+                    complete=args.all_wallets_added,
                     evidence="user_attested",
                 )
             return emit(

@@ -581,6 +581,12 @@ def create_wallet(
             code="conflict",
             hint="Choose a different wallet label or update the existing wallet.",
         ) from exc
+    if _ownership_material_identity_snapshot(config):
+        from .ownership_coverage import clear_profile_wallet_universe_attestation
+
+        clear_profile_wallet_universe_attestation(
+            conn, profile["id"], commit=False
+        )
     if commit:
         conn.commit()
     created = fetch_wallet_with_account(conn, wallet_id)
@@ -1103,7 +1109,13 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config[key] = value
 
     config = _validated_wallet_config(wallet["kind"], config)
-    if _ownership_material_identity_snapshot(config) != original_ownership_identity:
+    ownership_identity_changed = (
+        _ownership_material_identity_snapshot(config) != original_ownership_identity
+    )
+    deprecated_changed = wallet_is_deprecated(config) != wallet_is_deprecated(
+        json.loads(wallet["config_json"] or "{}")
+    )
+    if ownership_identity_changed:
         _archive_ownership_material(
             conn,
             wallet["id"],
@@ -1137,6 +1149,12 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             commit=False,
         )
         _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
+    if ownership_identity_changed or deprecated_changed:
+        from .ownership_coverage import clear_profile_wallet_universe_attestation
+
+        clear_profile_wallet_universe_attestation(
+            conn, profile["id"], commit=False
+        )
     invalidate_journals(conn, profile["id"])
     conn.commit()
     updated = fetch_wallet_with_account(conn, wallet["id"])
@@ -1154,7 +1172,14 @@ def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
             hint="Use --cascade to remove the wallet and all associated transactions/journal entries.",
             details={"transactions": tx_count},
         )
+    wallet_config = json.loads(wallet["config_json"] or "{}")
     conn.execute("DELETE FROM wallets WHERE id = ?", (wallet["id"],))
+    if _ownership_material_identity_snapshot(wallet_config):
+        from .ownership_coverage import clear_profile_wallet_universe_attestation
+
+        clear_profile_wallet_universe_attestation(
+            conn, profile["id"], commit=False
+        )
     invalidate_journals(conn, profile["id"])
     conn.commit()
     return {

@@ -252,6 +252,26 @@ def attest_profile_wallet_universe(
     return value
 
 
+def clear_profile_wallet_universe_attestation(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    commit: bool = True,
+) -> bool:
+    """Revoke the universe claim after an ownership-topology change."""
+
+    cursor = conn.execute(
+        "DELETE FROM settings WHERE key = ?",
+        (f"{PROFILE_UNIVERSE_SETTING_PREFIX}{profile_id}",),
+    )
+    changed = bool(cursor.rowcount)
+    if changed:
+        invalidate_journals(conn, profile_id)
+    if commit:
+        conn.commit()
+    return changed
+
+
 def _assess_wallet(
     conn, profile_id, wallet, config, derived_override, derivation_complete
 ) -> WalletOwnershipCoverage:
@@ -490,5 +510,6 @@ __all__ = [
     "assess_profile_ownership_coverage",
     "attest_profile_wallet_universe",
     "build_ownership_coverage_snapshot",
+    "clear_profile_wallet_universe_attestation",
     "normalize_policy_declaration",
 ]
