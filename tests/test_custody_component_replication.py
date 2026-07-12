@@ -19,6 +19,7 @@ from kassiber.core.custody_components import (
     update_component,
 )
 from kassiber.core.sync_replication.bundle import build_bundle
+from kassiber.core.sync_replication.capture import preferred_wire_id
 from kassiber.core.sync_replication.conflicts import resolve_conflict
 from kassiber.core.sync_replication.events import author_event
 from kassiber.core.sync_replication.identity import enable_sync
@@ -626,6 +627,49 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         source = next(leg for leg in remote["legs"] if leg["role"] == "source")
         self.assertEqual(out_id, source["transaction_id"])
         self.assertEqual(out_id, source["anchor_transaction_id"])
+
+        expected_alias = preferred_wire_id(
+            self.owner,
+            profile_id=self.profile["id"],
+            table="transactions",
+            local_id=out_id,
+        )
+        convergence_bundle = build_bundle(
+            self.owner, profile_id=self.profile["id"]
+        )
+        self.assertIsNotNone(convergence_bundle)
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=convergence_bundle.ciphertext,
+        )
+        self.assertEqual(
+            expected_alias,
+            preferred_wire_id(
+                self.peer,
+                profile_id=self.profile["id"],
+                table="transactions",
+                local_id=peer_out_id,
+            ),
+        )
+        peer_convergence_bundle = build_bundle(
+            self.peer, profile_id=self.profile["id"]
+        )
+        self.assertIsNotNone(peer_convergence_bundle)
+        import_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            ciphertext=peer_convergence_bundle.ciphertext,
+        )
+        self.assertEqual(
+            expected_alias,
+            preferred_wire_id(
+                self.owner,
+                profile_id=self.profile["id"],
+                table="transactions",
+                local_id=out_id,
+            ),
+        )
 
         # A bundle authored by the pre-fix capture path could contain local B
         # followed by a false tombstone for imported A. Replay must retire only
