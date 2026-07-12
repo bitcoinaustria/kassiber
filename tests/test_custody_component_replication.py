@@ -946,6 +946,38 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         }
         self.assertIn("anchor_transaction_retracted", validation_codes)
 
+    def test_retracted_wallet_syncs_nullable_leg_without_erasing_anchor(self):
+        self._join_peer()
+        component = self._create_component(active=False)
+        self._sync_owner_to_peer()
+        source = component["legs"][0]
+
+        self.owner.execute("DELETE FROM wallets WHERE id = ?", (source["wallet_id"],))
+        bundle = build_bundle(self.owner, profile_id=self.profile["id"])
+        self.assertIsNotNone(bundle)
+        result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+
+        self.assertEqual(0, result.rejected_events)
+        remote = self.peer.execute(
+            "SELECT transaction_id, anchor_transaction_id, wallet_id "
+            "FROM custody_component_legs WHERE id = ?",
+            (source["id"],),
+        ).fetchone()
+        self.assertIsNone(remote["transaction_id"])
+        self.assertIsNone(remote["wallet_id"])
+        self.assertEqual(source["transaction_id"], remote["anchor_transaction_id"])
+        self.assertIn(
+            "anchor_transaction_retracted",
+            {
+                issue["code"]
+                for issue in get_component(self.peer, component["id"])["validation"]["issues"]
+            },
+        )
+
     def test_live_remote_leg_does_not_wedge_peer_with_retracted_anchor(self):
         self._join_peer()
         wallet_id, out_id, in_id = self._insert_wallet_and_transactions()
