@@ -174,8 +174,6 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transfers.bulk_pair",
   "ui.transfers.dismiss",
   "ui.transfers.components.list",
-  "ui.transfers.components.get",
-  "ui.transfers.components.create",
   "ui.transfers.components.update",
   "ui.transfers.components.activate",
   "ui.transfers.components.supersede",
