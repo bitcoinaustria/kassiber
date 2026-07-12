@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ..errors import AppError
-from .tools import openai_tool_definitions, select_tool_capabilities
+from .tools import CORE_TOOL_NAMES, openai_tool_definitions, select_tool_capabilities
 
 
 SystemPromptKind = Literal["kassiber", "raw"] | None
@@ -87,6 +87,7 @@ def build_openai_tools(
     messages: list[dict[str, Any]] | None = None,
     *,
     screen_context: dict[str, Any] | None = None,
+    profile: str | None = None,
 ) -> list[dict[str, Any]]:
     """Build a capability-scoped catalog for the current turn.
 
@@ -95,7 +96,15 @@ def build_openai_tools(
     context so smaller local models do not have to choose among every schema.
     """
 
+    if profile not in {None, "core", "full"}:
+        raise AppError("unknown AI tool profile", code="validation")
+    selected_messages = [] if profile == "core" and messages is None else messages
     return openai_tool_definitions(
         include_mutating=True,
-        capabilities=select_tool_capabilities(messages, screen_context),
+        capabilities=(
+            None
+            if profile == "full"
+            else select_tool_capabilities(selected_messages, screen_context)
+        ),
+        allowed_names=CORE_TOOL_NAMES if profile == "core" else None,
     )

@@ -31,6 +31,8 @@ kassiber chat "Summarise report blockers and suggest next actions."
 kassiber chat
 kassiber chat --allow-tool ui.journals.process "Refresh journals, then summarize blockers."
 kassiber chat --yes "Sync allowed wallets and summarize what changed."
+kassiber chat --tool-profile full "Work on source-of-funds links."
+kassiber chat --timeout 300 "Use a slow local model for report blockers."
 kassiber chat --stream-json "List my largest outbound transactions."
 kassiber --machine chat "How many transactions are missing prices?"
 printf 'Explain these journal blockers:\n%s\n' "$BLOCKERS" | kassiber chat -
@@ -50,15 +52,19 @@ and Ctrl-C cancels the current turn. For scripts, `--allow-tool
 <daemon-tool-name>` approves only that tool; `--yes` approves all mutating
 tools for the chat session. `--machine` emits a single final `chat` envelope;
 `--stream-json` emits the raw daemon stream records as NDJSON (both one-shot
-only); `chat -` reads the one-shot prompt from stdin. Neither machine mode
-ever prompts for consent; unapproved mutating tool requests are denied and
-fed back to the model. On a TTY, markdown renders with ANSI styling and tool
-results draw deterministic tables from the daemon envelope (`--plain`
-disables both). With piped stdout the raw answer is the only thing on
-stdout (chrome moves to stderr), so `kassiber chat "..." > answer.txt` is
-clean. Use `--no-tools` for a provider-only exchange without the tool loop,
-and `--transcript <path>` to keep a plaintext NDJSON audit log of the
-session's daemon records.
+only); `chat -` reads the one-shot prompt from stdin. CLI chat defaults to
+`--tool-profile core`, which keeps common accounting/report/readiness tools
+small for local models; use `--tool-profile full` for specialist source-funds,
+Lightning, saved-view, or advanced swap flows. `--timeout SECONDS` caps daemon
+startup and provider stream inactivity without adding the value to prompts,
+tool output, or transcripts. Neither machine mode ever prompts for consent;
+unapproved mutating tool requests are denied and fed back to the model. On a
+TTY, markdown renders with ANSI styling and tool results draw deterministic
+tables from the daemon envelope (`--plain` disables both). With piped stdout the
+raw answer is the only thing on stdout (chrome moves to stderr), so `kassiber
+chat "..." > answer.txt` is clean. Use `--no-tools` for a provider-only
+exchange without the tool loop, and `--transcript <path>` to keep a plaintext
+NDJSON audit log of the session's daemon records.
 
 ## Fast paths
 

@@ -39,7 +39,6 @@ from ..redaction import provider_error_body_preview
 
 
 DEFAULT_TIMEOUT_SECONDS = 120
-DEFAULT_INACTIVITY_TIMEOUT_SECONDS = 90
 SSE_DONE_SENTINEL = "[DONE]"
 CLI_DEFAULT_MODEL = "default"
 REASONING_EFFORTS = {"low", "medium", "high", "max"}
@@ -708,7 +707,7 @@ class OpenAICompatClient:
             method="POST",
             body=json.dumps(body).encode("utf-8"),
             accept_sse=True,
-            timeout=DEFAULT_INACTIVITY_TIMEOUT_SECONDS,
+            timeout=self.timeout,
         )
         try:
             with response:

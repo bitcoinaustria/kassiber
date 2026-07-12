@@ -41,7 +41,7 @@ from .ai import (
     set_db_ai_provider_api_key,
     update_db_ai_provider,
 )
-from .ai.client import ai_client_for_locator
+from .ai.client import DEFAULT_TIMEOUT_SECONDS, ai_client_for_locator
 from .ai.prompt import (
     build_chat_messages,
     build_openai_tools,
@@ -59,6 +59,7 @@ from .ai.providers import (
 )
 from .ai.tools import (
     TOOL_CAPABILITY_NAMES,
+    TOOL_PROFILE_NAMES,
     get_tool,
     read_skill_reference,
     redact_ai_tool_result,
@@ -4150,6 +4151,34 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat tools_enabled must be a boolean",
             code="validation",
         )
+    tool_profile = args.get("tool_profile", "full")
+    if not isinstance(tool_profile, str) or tool_profile not in TOOL_PROFILE_NAMES:
+        raise AppError(
+            "ai.chat tool_profile must be core or full",
+            code="validation",
+            details={
+                "tool_profile": tool_profile,
+                "supported": list(TOOL_PROFILE_NAMES),
+            },
+            retryable=False,
+        )
+    raw_timeout_seconds = args.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
+    try:
+        timeout_seconds = float(raw_timeout_seconds)
+    except (TypeError, ValueError):
+        raise AppError(
+            "ai.chat timeout_seconds must be a number",
+            code="validation",
+            details={"timeout_seconds": raw_timeout_seconds},
+            retryable=False,
+        ) from None
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0 or timeout_seconds > 3600:
+        raise AppError(
+            "ai.chat timeout_seconds must be greater than 0 and at most 3600",
+            code="validation",
+            details={"timeout_seconds": raw_timeout_seconds},
+            retryable=False,
+        )
     raw_loop_limit = args.get("tool_loop_max_iterations", 8)
     try:
         tool_loop_max_iterations = int(raw_loop_limit)
@@ -4203,6 +4232,8 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "messages": cleaned,
         "options": options or {},
         "tools_enabled": tools_enabled,
+        "tool_profile": tool_profile,
+        "timeout_seconds": timeout_seconds,
         "tool_loop_max_iterations": tool_loop_max_iterations,
         "system_prompt_kind": system_prompt_kind,
         "system_prompt": system_prompt,
@@ -7058,6 +7089,7 @@ def _run_auto_read_tools(
         label="Reading local context",
     )
     context: list[dict[str, Any]] = []
+    advertised = set(runtime.maintenance_state.get("advertised_tools") or ())
     for index, planned_call in enumerate(planned, start=1):
         if cancel_event.is_set():
             return
@@ -7068,6 +7100,8 @@ def _run_auto_read_tools(
         )
         entry = get_tool(call.name)
         if entry is None or entry.kind_class != "read_only":
+            continue
+        if entry.provider_name not in advertised:
             continue
         out.write(
             _with_request_id(
@@ -7448,6 +7482,7 @@ def _run_ai_chat_tool_loop(
     tools = build_openai_tools(
         validated["messages"],
         screen_context=screen_context if isinstance(screen_context, dict) else None,
+        profile=validated["tool_profile"],
     )
     runtime.maintenance_state["advertised_tools"] = [
         function["function"]["name"]
@@ -7510,10 +7545,13 @@ def _run_ai_chat_tool_loop(
                 "tool_calls": tool_calls,
             }
         )
+        seen_call_ids: set[str] = set()
         for index, raw_tool_call in enumerate(tool_calls):
             if not isinstance(raw_tool_call, dict):
                 continue
             call = _parse_ai_tool_call(raw_tool_call, index)
+            duplicate_call_id = call.call_id in seen_call_ids
+            seen_call_ids.add(call.call_id)
             entry = get_tool(call.name)
             advertised = entry is not None and _ai_tool_is_advertised(entry, runtime)
             kind_class = entry.kind_class if entry is not None else "unknown"
@@ -7523,10 +7561,13 @@ def _run_ai_chat_tool_loop(
             needs_consent = (
                 entry is not None
                 and advertised
+                and not duplicate_call_id
                 and entry.kind_class == "mutating"
                 and not call.argument_error
                 and not active_chat.consent.has_session_allow(tool_session_name)
             )
+            if needs_consent:
+                active_chat.consent.expect(call.call_id)
             out.write(
                 _with_request_id(
                     build_envelope(
@@ -7545,11 +7586,12 @@ def _run_ai_chat_tool_loop(
             if cancel_event.is_set():
                 finish_reason = "cancelled"
                 break
-            if entry is not None and not advertised:
+            if duplicate_call_id:
+                result = _tool_result_denied("duplicate_tool_call_id")
+            elif entry is not None and not advertised:
                 result = _tool_result_denied("tool_not_advertised")
             elif entry is not None and entry.kind_class == "mutating" and not call.argument_error:
                 if needs_consent:
-                    active_chat.consent.expect(call.call_id)
                     out.write(
                         _with_request_id(
                             build_envelope(
@@ -7661,6 +7703,7 @@ def _run_ai_chat_stream(
             client = ai_client_for_locator(
                 base_url=provider_snapshot["base_url"],
                 api_key=provider_snapshot.get("api_key"),
+                timeout=validated["timeout_seconds"],
             )
             _write_ai_chat_status(
                 out,

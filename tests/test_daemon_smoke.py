@@ -5042,6 +5042,11 @@ class DaemonSmokeTest(unittest.TestCase):
             )
         self.assertEqual(path_raised.exception.code, "validation")
 
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(timeout=value), self.assertRaises(AppError) as timeout_raised:
+                _ai_chat_args({**base, "timeout_seconds": value})
+            self.assertEqual(timeout_raised.exception.code, "validation")
+
     def test_document_import_preserves_explicit_empty_row_selection(self):
         self.assertEqual(
             daemon_module._document_import_selected_row_ids(

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import queue
 import subprocess
 import sys
 import threading
@@ -9,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, TextIO
 
 from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
-from ..ai.tools import TOOL_CATALOG
+from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from .termrender import MarkdownStreamRenderer, render_envelope_table
@@ -27,6 +29,8 @@ _FINISH_NOTICES = {
     ),
     "length": "Stopped at the provider token limit; raise --max-tokens for longer answers.",
 }
+DEFAULT_CHAT_TIMEOUT_SECONDS = 120.0
+MAX_CHAT_TIMEOUT_SECONDS = 3600.0
 _REPL_HELP = (
     "Commands:\n"
     "  /help             show this help\n"
@@ -78,9 +82,14 @@ class _DaemonChatClient:
         self._stderr_tail = ""
         self._stderr_lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
+        self._stdout_queue: queue.Queue[str | None] = queue.Queue()
+        self._stdout_thread: threading.Thread | None = None
         self._allow_passphrase_prompt = (
             sys.stdin.isatty() and not bool(getattr(args, "non_interactive", False))
         )
+        self._pass_fds: tuple[int, ...] = ()
+        self._duplicated_fd: int | None = None
+        self._read_timeout_seconds = _timeout_seconds(args)
         command = self._daemon_command(args)
         self._proc = subprocess.Popen(
             command,
@@ -97,6 +106,13 @@ class _DaemonChatClient:
                 daemon=True,
             )
             self._stderr_thread.start()
+        if self._proc.stdout is not None:
+            self._stdout_thread = threading.Thread(
+                target=self._drain_stdout,
+                name="kassiber-daemon-stdout-reader",
+                daemon=True,
+            )
+            self._stdout_thread.start()
         try:
             ready = self.read()
         except AppError:
@@ -183,6 +199,17 @@ class _DaemonChatClient:
         with self._stderr_lock:
             return self._stderr_tail
 
+    def _drain_stdout(self) -> None:
+        stream = self._proc.stdout
+        if stream is None:
+            self._stdout_queue.put(None)
+            return
+        try:
+            for line in stream:
+                self._stdout_queue.put(line)
+        finally:
+            self._stdout_queue.put(None)
+
     def send(self, payload: dict[str, Any], *, record: bool = True) -> None:
         if self._proc.stdin is None:
             raise AppError(
@@ -192,19 +219,35 @@ class _DaemonChatClient:
             )
         line = json.dumps(payload, separators=(",", ":")) + "\n"
         if record and self._transcript is not None:
-            self._transcript.write(line)
+            transcript_payload = dict(payload)
+            transcript_args = transcript_payload.get("args")
+            if isinstance(transcript_args, dict) and "timeout_seconds" in transcript_args:
+                transcript_payload["args"] = dict(transcript_args)
+                transcript_payload["args"].pop("timeout_seconds", None)
+            self._transcript.write(
+                json.dumps(transcript_payload, separators=(",", ":")) + "\n"
+            )
         self._proc.stdin.write(line)
         self._proc.stdin.flush()
 
-    def read(self, *, record: bool = True) -> dict[str, Any]:
-        if self._proc.stdout is None:
+    def read(
+        self, *, record: bool = True, timeout: float | None = None
+    ) -> dict[str, Any]:
+        wait_seconds = self._read_timeout_seconds if timeout is None else timeout
+        try:
+            line = self._stdout_queue.get(timeout=wait_seconds)
+        except queue.Empty:
             raise AppError(
-                "daemon output stream is closed",
-                code="daemon_closed",
-                retryable=False,
-            )
-        line = self._proc.stdout.readline()
-        if line == "":
+                "timed out waiting for daemon response",
+                code="daemon_timeout",
+                hint=(
+                    "Increase `kassiber chat --timeout <seconds>` if the "
+                    "selected local model or harness needs longer."
+                ),
+                details={"timeout_seconds": wait_seconds},
+                retryable=True,
+            ) from None
+        if line is None:
             stderr = self._stderr_snapshot()
             raise AppError(
                 "daemon exited before chat completed",
@@ -249,6 +292,8 @@ class _DaemonChatClient:
             self._proc.stderr.close()
         if self._stderr_thread is not None:
             self._stderr_thread.join(timeout=1)
+        if self._stdout_thread is not None:
+            self._stdout_thread.join(timeout=1)
 
 
 def _split_tool_names(values: Iterable[str] | None) -> set[str]:
@@ -279,6 +324,29 @@ def _chat_options(args: Any) -> dict[str, Any] | None:
     return options or None
 
 
+def _timeout_seconds(args: Any) -> float:
+    raw = getattr(args, "timeout_seconds", DEFAULT_CHAT_TIMEOUT_SECONDS)
+    if raw is None:
+        return DEFAULT_CHAT_TIMEOUT_SECONDS
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        raise AppError(
+            "chat timeout must be a number of seconds",
+            code="validation",
+            details={"timeout": raw},
+            retryable=False,
+        ) from None
+    if not math.isfinite(timeout) or timeout <= 0 or timeout > MAX_CHAT_TIMEOUT_SECONDS:
+        raise AppError(
+            "chat timeout must be greater than 0 and at most 3600 seconds",
+            code="validation",
+            details={"timeout": raw},
+            retryable=False,
+        )
+    return timeout
+
+
 def _resolve_prompt(args: Any) -> str | None:
     prompt = getattr(args, "prompt", None)
     prompt_flag = getattr(args, "prompt_text", None)
@@ -303,6 +371,8 @@ def _build_chat_args(
         "model": args.model,
         "messages": messages,
         "tools_enabled": tools_enabled,
+        "tool_profile": getattr(args, "tool_profile", "core"),
+        "timeout_seconds": _timeout_seconds(args),
         "tool_loop_max_iterations": getattr(args, "tool_loop_max_iterations", 8),
         "persist": False if getattr(args, "incognito", False) else "auto",
         "session_id": session_id,
@@ -341,11 +411,29 @@ def _error_from_envelope(record: dict[str, Any], *, message: str, code: str) -> 
     )
 
 
+def _auth_required_error(record: dict[str, Any]) -> AppError:
+    data = record.get("data") if isinstance(record.get("data"), dict) else {}
+    label = data.get("label")
+    scope = data.get("scope")
+    return AppError(
+        str(label) if isinstance(label, str) and label else "database unlock required",
+        code="passphrase_required",
+        hint=(
+            "Run the command with `--db-passphrase-fd <FD>` from a parent "
+            "process, or use an interactive terminal to unlock Kassiber first."
+        ),
+        details={"scope": scope} if scope else None,
+        retryable=False,
+    )
+
+
 def _read_control_response(client: _DaemonChatClient, request_id: str) -> dict[str, Any]:
     while True:
         record = client.read()
         if record.get("request_id") != request_id:
             continue
+        if record.get("kind") == "auth_required":
+            raise _auth_required_error(record)
         if record.get("kind") == "error":
             raise _error_from_envelope(
                 record, message="daemon request failed", code="daemon_request_failed"
@@ -530,6 +618,57 @@ def _send_cancel(client: _DaemonChatClient, target_request_id: str) -> str:
     return request_id
 
 
+def _decide_and_send_consent(
+    client: _DaemonChatClient,
+    args: Any,
+    *,
+    request_id: str,
+    call_id: str,
+    name: str,
+    data: dict[str, Any],
+    stdin: TextIO,
+    chrome: TextIO,
+    session_allowed: set[str] | None,
+    control_requests: set[str],
+) -> str | None:
+    decision = _policy_decision(args, name, stdin)
+    if decision is None and session_allowed is not None and name in session_allowed:
+        # Daemon-side allow_session only spans one ai.chat request; carry the
+        # user's "session" answer across REPL turns here.
+        decision = "allow_session"
+    if decision is None:
+        decision = _interactive_consent(
+            name=name,
+            summary=str(data.get("summary") or name),
+            arguments_preview=data.get("arguments_preview")
+            or data.get("arguments")
+            or {},
+            stdin=stdin,
+            out=chrome,
+        )
+        if decision == "allow_session" and session_allowed is not None:
+            session_allowed.add(name)
+    if decision == "cancel":
+        control_requests.add(_send_cancel(client, request_id))
+    elif decision in _CONSENT_DECISIONS:
+        control_requests.add(
+            _send_consent(
+                client,
+                target_request_id=request_id,
+                call_id=call_id,
+                decision=decision,
+            )
+        )
+    else:
+        raise AppError(
+            "invalid consent decision",
+            code="validation",
+            details={"decision": decision},
+            retryable=False,
+        )
+    return decision
+
+
 def _drain_until_terminal(client: _DaemonChatClient, request_id: str) -> dict[str, Any]:
     while True:
         record = client.read()
@@ -563,9 +702,17 @@ def _render_turn_footer(terminal: dict[str, Any], chrome: TextIO) -> None:
         _write_dim("— " + " · ".join(parts) + "\n", chrome)
 
 
-def _render_tool_listing(out: TextIO) -> None:
-    width = max(len(entry.name) for entry in TOOL_CATALOG)
-    for entry in sorted(TOOL_CATALOG, key=lambda e: (e.kind_class, e.name)):
+def _active_tool_catalog(args: Any) -> list[Any]:
+    if getattr(args, "tool_profile", "core") == "core":
+        return [entry for entry in TOOL_CATALOG if entry.name in CORE_TOOL_NAMES]
+    return list(TOOL_CATALOG)
+
+
+def _render_tool_listing(args: Any, out: TextIO) -> None:
+    catalog = _active_tool_catalog(args)
+    width = max(len(entry.name) for entry in catalog)
+    _write(f"Tool profile: {getattr(args, 'tool_profile', 'core')}\n", out)
+    for entry in sorted(catalog, key=lambda e: (e.kind_class, e.name)):
         consent = (
             "mutating (asks consent)"
             if entry.kind_class == "mutating"
@@ -718,6 +865,7 @@ def _stream_turn_records(
     session_allowed: set[str] | None,
     markdown: MarkdownStreamRenderer | None,
 ) -> ChatTurnResult:
+    consented_calls: set[str] = set()
     try:
         while True:
             record = client.read()
@@ -733,6 +881,8 @@ def _stream_turn_records(
                 continue
             if stream_out is not None:
                 _write(json.dumps(record, separators=(",", ":")) + "\n", stream_out)
+            if kind == "auth_required":
+                raise _auth_required_error(record)
             if kind == "error":
                 raise _error_from_envelope(record, message="chat failed", code="chat_failed")
             data = record.get("data") if isinstance(record.get("data"), dict) else {}
@@ -767,44 +917,45 @@ def _stream_turn_records(
                     if render:
                         suffix = " (needs consent)" if data.get("needs_consent") else ""
                         _write(f"\nTool: {data.get('name', 'unknown')}{suffix}\n", chrome)
+                    name = data.get("name")
+                    if (
+                        data.get("needs_consent")
+                        and isinstance(name, str)
+                        and call_id not in consented_calls
+                    ):
+                        _decide_and_send_consent(
+                            client,
+                            args,
+                            request_id=request_id,
+                            call_id=call_id,
+                            name=name,
+                            data=data,
+                            stdin=stdin,
+                            chrome=chrome,
+                            session_allowed=session_allowed,
+                            control_requests=control_requests,
+                        )
+                        consented_calls.add(call_id)
             elif kind == "ai.chat.tool_consent_required":
                 call_id = data.get("call_id")
                 name = data.get("name")
                 if not isinstance(call_id, str) or not isinstance(name, str):
                     continue
-                decision = _policy_decision(args, name, stdin)
-                if decision is None and session_allowed is not None and name in session_allowed:
-                    # Daemon-side allow_session only spans one ai.chat request;
-                    # carry the user's "session" answer across REPL turns here.
-                    decision = "allow_session"
-                if decision is None:
-                    decision = _interactive_consent(
-                        name=name,
-                        summary=str(data.get("summary") or name),
-                        arguments_preview=data.get("arguments_preview") or {},
-                        stdin=stdin,
-                        out=chrome,
-                    )
-                    if decision == "allow_session" and session_allowed is not None:
-                        session_allowed.add(name)
-                if decision == "cancel":
-                    control_requests.add(_send_cancel(client, request_id))
-                elif decision in _CONSENT_DECISIONS:
-                    control_requests.add(
-                        _send_consent(
-                            client,
-                            target_request_id=request_id,
-                            call_id=call_id,
-                            decision=decision,
-                        )
-                    )
-                else:
-                    raise AppError(
-                        "invalid consent decision",
-                        code="validation",
-                        details={"decision": decision},
-                        retryable=False,
-                    )
+                if call_id in consented_calls:
+                    continue
+                _decide_and_send_consent(
+                    client,
+                    args,
+                    request_id=request_id,
+                    call_id=call_id,
+                    name=name,
+                    data=data,
+                    stdin=stdin,
+                    chrome=chrome,
+                    session_allowed=session_allowed,
+                    control_requests=control_requests,
+                )
+                consented_calls.add(call_id)
             elif kind == "ai.chat.tool_result":
                 call_id = data.get("call_id")
                 if isinstance(call_id, str):
@@ -1024,7 +1175,7 @@ def _run_repl(
             if command == "/help":
                 _write(_REPL_HELP, output_stream)
             elif command == "/tools":
-                _render_tool_listing(output_stream)
+                _render_tool_listing(args, output_stream)
             elif command == "/model":
                 _handle_model_command(args, arg, output_stream)
             elif command == "/provider":
