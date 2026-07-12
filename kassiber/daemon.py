@@ -7089,6 +7089,7 @@ def _run_auto_read_tools(
         label="Reading local context",
     )
     context: list[dict[str, Any]] = []
+    advertised = set(runtime.maintenance_state.get("advertised_tools") or ())
     for index, planned_call in enumerate(planned, start=1):
         if cancel_event.is_set():
             return
@@ -7099,6 +7100,8 @@ def _run_auto_read_tools(
         )
         entry = get_tool(call.name)
         if entry is None or entry.kind_class != "read_only":
+            continue
+        if advertised and entry.provider_name not in advertised:
             continue
         out.write(
             _with_request_id(
