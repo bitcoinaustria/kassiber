@@ -213,6 +213,27 @@ class OwnershipCoverageTests(unittest.TestCase):
             _sync_material_config_json(covered),
         )
 
+    def test_archived_policy_remains_part_of_wallet_material_identity(self):
+        history_only = {
+            "ownership_history": [
+                {
+                    "descriptor": "wpkh(xpub/retired/*)",
+                    "ownership_policy": {
+                        "complete": True,
+                        "evidence": "wallet_export",
+                        "branch_last_issued": {"0": 25},
+                    },
+                }
+            ]
+        }
+
+        identity = _ownership_material_identity_snapshot(history_only)
+
+        self.assertEqual(
+            identity["ownership_history"][0]["descriptor"],
+            "wpkh(xpub/retired/*)",
+        )
+
     def test_multisig_policy_is_supported_and_grouped(self):
         conn = _conn()
         _wallet(

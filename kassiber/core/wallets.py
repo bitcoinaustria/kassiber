@@ -737,6 +737,21 @@ def _ownership_material_identity_snapshot(config):
         "gap_limit",
     ):
         snapshot.pop(field, None)
+    history = []
+    for item in (config or {}).get(OWNERSHIP_HISTORY_CONFIG_KEY, []):
+        if not isinstance(item, dict):
+            continue
+        historic = _ownership_material_snapshot(item)
+        for field in (
+            OWNERSHIP_POLICY_CONFIG_KEY,
+            OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
+            "gap_limit",
+        ):
+            historic.pop(field, None)
+        if historic:
+            history.append(historic)
+    if history:
+        snapshot[OWNERSHIP_HISTORY_CONFIG_KEY] = history
     return snapshot
 
 
