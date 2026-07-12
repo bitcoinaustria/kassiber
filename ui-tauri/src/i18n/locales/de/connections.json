@@ -92,6 +92,11 @@
       "description": "Ob Kassiber beweisen kann, dass die vollständige Watch-only-Policy dieser Wallet indexiert ist. Eine Gap-Limit-Suche gilt nur als angenommene Abdeckung.",
       "history": "Backend-Verlaufsabdeckung",
       "repair": "Bevor nicht zugeordnete Outputs als extern gelten dürfen",
+      "backfill": "Transaktionsgraphen nachladen",
+      "backfilling": "Wird nachgeladen…",
+      "backfillHint": "Fehlende Bitcoin-Input-/Output-Nachweise von einem konfigurierten Backend abrufen.",
+      "backfillConfirm": "Dabei können Transaktions-IDs an konfigurierte Lookup-Backends offengelegt werden. Begrenztes Nachladen fortsetzen?",
+      "backfillResult": "{{enriched}} von {{attempted}} versuchten Zeilen angereichert.",
       "tier": {
         "unknown": "Unbekannt",
         "assumed": "Angenommen",

@@ -34,7 +34,7 @@ from .ownership_transfers import (
     derive_profile_transfers,
     derive_recorded_fanout_transfers,
 )
-from .repo import current_context_snapshot
+from .repo import current_context_snapshot, invalidate_journals
 from .sync import normalize_backend_kind
 from .sync_backends import (
     ElectrumClient,
@@ -171,6 +171,99 @@ def build_transaction_graph_snapshot(
             "profile": context["profile_label"] or None,
         },
         "swapRoute": swap_route,
+    }
+
+
+def backfill_profile_transaction_graphs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    runtime_config: Mapping[str, Any] | None,
+    *,
+    allow_public_lookup: bool = False,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Persist missing Bitcoin vin/vout evidence after explicit consent.
+
+    Backend selection, per-host throttling, timeout behavior, and response
+    caching remain owned by the existing graph lookup. This writes normalized
+    evidence into the transaction anchor, not a second graph ledger.
+    """
+
+    if allow_public_lookup is not True:
+        raise AppError(
+            "transaction graph backfill requires explicit public lookup consent",
+            code="interaction_required",
+            hint="Retry with allow_public_lookup=true after reviewing the txid linkage warning.",
+            retryable=False,
+        )
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise AppError("graph backfill limit must be between 1 and 100", code="validation")
+
+    rows = conn.execute(
+        """
+        SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND upper(t.asset) = 'BTC'
+        ORDER BY t.occurred_at, t.id
+        """,
+        (profile_id,),
+    ).fetchall()
+    attempted = enriched = already_complete = failed = 0
+    transaction_ids: list[str] = []
+    for row in rows:
+        raw = _json_obj(_row_get(row, "raw_json"))
+        txid = _txid_from_row(row)
+        if not _looks_like_txid(txid):
+            continue
+        if _bitcoin_current_graph_has_required_prevouts(raw):
+            already_complete += 1
+            continue
+        if attempted >= limit:
+            break
+        attempted += 1
+        fetched = _enrich_graph_raw(
+            conn,
+            row,
+            raw,
+            runtime_config,
+            allow_public_lookup=True,
+        )
+        if not _bitcoin_current_graph_has_required_prevouts(fetched):
+            failed += 1
+            continue
+        merged = {
+            **raw,
+            **dict(fetched),
+            "_kassiber_graph_backfill": {
+                "version": 1,
+                "method": "consented_backend_lookup",
+                "fetched_at": now_iso(),
+            },
+        }
+        merged.pop("_graphLookupWarning", None)
+        conn.execute(
+            "UPDATE transactions SET raw_json = ? WHERE id = ? AND profile_id = ?",
+            (json.dumps(json_ready(merged), sort_keys=True), row["id"], profile_id),
+        )
+        enriched += 1
+        transaction_ids.append(str(row["id"]))
+    if enriched:
+        invalidate_journals(conn, profile_id)
+    conn.commit()
+    return {
+        "profile_id": profile_id,
+        "attempted": attempted,
+        "enriched": enriched,
+        "already_complete": already_complete,
+        "failed": failed,
+        "limit": limit,
+        "transaction_ids": transaction_ids,
+        "privacy": {
+            "public_lookup_used": attempted > 0,
+            "warning": "Transaction ids may have been disclosed to configured lookup backends.",
+        },
     }
 
 

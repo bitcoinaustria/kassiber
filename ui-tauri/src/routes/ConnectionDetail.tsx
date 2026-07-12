@@ -249,6 +249,12 @@ interface OwnershipCoverageData {
   }>;
 }
 
+interface OwnershipBackfillResult {
+  attempted: number;
+  enriched: number;
+  failed: number;
+}
+
 function walletDescriptorMaterialFromReveal(
   data: RevealDescriptorResult | undefined,
 ) {
@@ -649,6 +655,16 @@ function ConnectionDetailView({
     { wallet: connection.id },
     { retry: retryRetryableDaemonError },
   );
+  const ownershipBackfill = useDaemonMutation<OwnershipBackfillResult>(
+    "ui.wallets.ownership_backfill",
+  );
+  const runOwnershipBackfill = async () => {
+    if (!window.confirm(t("detail.ownershipCoverage.backfillConfirm"))) return;
+    await ownershipBackfill.mutateAsync({
+      allowPublicLookup: true,
+      limit: 50,
+    });
+  };
   const utxoTransactionQuery = useDaemon<{
     transaction?: OverviewSnapshot["txs"][number] | null;
   }>(
@@ -1598,6 +1614,28 @@ function ConnectionDetailView({
                   .join(" · ")}
               </div>
             ) : null}
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <span className="text-xs text-muted-foreground">
+                {ownershipBackfill.data?.data
+                  ? t("detail.ownershipCoverage.backfillResult", {
+                      enriched: ownershipBackfill.data.data.enriched,
+                      attempted: ownershipBackfill.data.data.attempted,
+                    })
+                  : t("detail.ownershipCoverage.backfillHint")}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={ownershipBackfill.isPending}
+                onClick={() => void runOwnershipBackfill()}
+              >
+                <RefreshCw className="mr-2 size-3.5" aria-hidden="true" />
+                {ownershipBackfill.isPending
+                  ? t("detail.ownershipCoverage.backfilling")
+                  : t("detail.ownershipCoverage.backfill")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}

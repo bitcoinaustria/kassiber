@@ -276,6 +276,13 @@ export function daemonMutationKey(dataMode: DataMode, kind: string) {
 }
 
 const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
+  "ui.wallets.ownership_backfill": [
+    "ui.wallets.ownership_coverage",
+    "ui.wallets.utxos",
+    "ui.transactions.graph",
+    "ui.journals.quarantine",
+    "ui.review.badges",
+  ],
   "ui.transfers.components.bulk_resolve": [
     "ui.activity.history",
     "ui.activity.stale",

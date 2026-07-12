@@ -288,6 +288,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.review.badges",
     "ui.wallets.utxos",
     "ui.wallets.ownership_coverage",
+    "ui.wallets.ownership_backfill",
     "ui.privacy_hygiene.snapshot",
     "ui.loans.list",
     "ui.loans.link",

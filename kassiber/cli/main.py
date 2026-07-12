@@ -130,6 +130,7 @@ from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — regist
 from ..core import metadata as core_metadata
 from ..core import ownership as core_ownership
 from ..core import ownership_coverage as core_ownership_coverage
+from ..core import transaction_graph as core_transaction_graph
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import samourai as core_samourai
@@ -1449,6 +1450,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="BRANCH=INDEX",
         help="Authoritative last-issued derivation index; repeat per branch.",
+    )
+    wallets_backfill_graphs = wallets_sub.add_parser("backfill-graphs")
+    wallets_backfill_graphs.add_argument("--workspace")
+    wallets_backfill_graphs.add_argument("--profile")
+    wallets_backfill_graphs.add_argument("--limit", type=int, default=50)
+    wallets_backfill_graphs.add_argument(
+        "--allow-public-lookup",
+        action="store_true",
+        help="Acknowledge that transaction ids may be disclosed to configured lookup backends.",
     )
 
     wallets_update = wallets_sub.add_parser("update")
@@ -3324,6 +3334,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         conn, updated["profile_id"], wallet_id=updated["id"]
                     ),
                 },
+            )
+        if args.wallets_command == "backfill-graphs":
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(
+                args,
+                core_transaction_graph.backfill_profile_transaction_graphs(
+                    conn,
+                    profile["id"],
+                    args.runtime_config,
+                    allow_public_lookup=args.allow_public_lookup,
+                    limit=args.limit,
+                ),
             )
         if args.wallets_command == "update":
             config_updates = {}

@@ -325,6 +325,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.list",
     "ui.wallets.utxos",
     "ui.wallets.ownership_coverage",
+    "ui.wallets.ownership_backfill",
     "ui.privacy_hygiene.snapshot",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
@@ -13578,6 +13579,39 @@ def handle_request(
                     kind,
                     core_ownership_coverage.build_ownership_coverage_snapshot(
                         ctx.conn, profile["id"], wallet_id=wallet_id
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.ownership_backfill":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        unknown = sorted(set(args) - {"allowPublicLookup", "limit"})
+        if unknown:
+            raise AppError(
+                "ownership graph backfill received unsupported fields",
+                code="validation",
+                details={"unknown": unknown},
+            )
+        if args.get("allowPublicLookup") is not True:
+            raise AppError(
+                "ownership graph backfill requires explicit public lookup consent",
+                code="interaction_required",
+                retryable=False,
+            )
+        _, profile = resolve_scope(ctx.conn, None, None)
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    core_transaction_graph.backfill_profile_transaction_graphs(
+                        ctx.conn,
+                        profile["id"],
+                        ctx.runtime_config,
+                        allow_public_lookup=True,
+                        limit=args.get("limit", 50),
                     ),
                 ),
                 request_id,

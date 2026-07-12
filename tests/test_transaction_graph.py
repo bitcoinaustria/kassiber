@@ -2788,6 +2788,57 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertNotIn("valueSats", overflow)
         self.assertNotIn("valueBtc", overflow)
 
+    def test_graph_backfill_requires_consent_and_persists_normalized_evidence(self):
+        txid = "ab" * 32
+        complete_existing = json.dumps(
+            {
+                "vin": [],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 1}],
+            }
+        )
+        self.conn.execute(
+            "UPDATE transactions SET raw_json = ?", (complete_existing,)
+        )
+        self._tx("backfill-row", "wallet-a", "outbound", 1_000_000, txid, {})
+        fetched = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "cd" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 2_000},
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_B, "value": 1_000},
+            ],
+        }
+
+        with self.assertRaises(AppError) as raised:
+            tg.backfill_profile_transaction_graphs(
+                self.conn, "profile-1", {}, allow_public_lookup=False
+            )
+        self.assertEqual(raised.exception.code, "interaction_required")
+
+        with patch.object(tg, "_enrich_graph_raw", return_value=fetched):
+            result = tg.backfill_profile_transaction_graphs(
+                self.conn,
+                "profile-1",
+                {},
+                allow_public_lookup=True,
+                limit=1,
+            )
+
+        self.assertEqual(result["enriched"], 1)
+        stored = json.loads(
+            self.conn.execute(
+                "SELECT raw_json FROM transactions WHERE id = 'backfill-row'"
+            ).fetchone()["raw_json"]
+        )
+        self.assertEqual(stored["txid"], txid)
+        self.assertEqual(stored["_kassiber_graph_backfill"]["version"], 1)
+        self.assertNotIn("url", json.dumps(stored).lower())
+
 
 if __name__ == "__main__":
     unittest.main()

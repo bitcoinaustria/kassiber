@@ -92,6 +92,11 @@
       "description": "Whether Kassiber can prove that this wallet's complete watch-only policy is indexed. Gap-limit discovery alone is only assumed coverage.",
       "history": "Backend history coverage",
       "repair": "Before unmatched outputs can be treated as external",
+      "backfill": "Backfill transaction graphs",
+      "backfilling": "Backfilling…",
+      "backfillHint": "Fetch missing Bitcoin input/output evidence from a configured backend.",
+      "backfillConfirm": "This can disclose transaction ids to configured lookup backends. Continue with a bounded graph backfill?",
+      "backfillResult": "Enriched {{enriched}} of {{attempted}} attempted rows.",
       "tier": {
         "unknown": "Unknown",
         "assumed": "Assumed",
