@@ -1,0 +1,18 @@
+{
+  "backend" : "AppKit.NSView.cacheDisplay-own-window-detail",
+  "build" : "1248",
+  "bundle_id" : "at.bitcoinaustria.kassiber.native",
+  "byte_count" : 200648,
+  "captured_at" : "2026-07-12T05:54:27Z",
+  "commit" : "f8978672457f-dirty",
+  "executable_sha256" : "48ef0cc209b8ca3da519a05f3884854c952f73145b10b62c2f36022986f65b03",
+  "file" : "assistant-de.png",
+  "height" : 1800,
+  "language" : "de-AT",
+  "product" : "kassiber_native",
+  "schema_version" : 1,
+  "screen" : "assistant",
+  "sha256" : "23ac98819c4ddc094359dcf30e72a7534c721f4c0c43bcc34119c2cbcd319ddb",
+  "version" : "0.22.55",
+  "width" : 2388
+}

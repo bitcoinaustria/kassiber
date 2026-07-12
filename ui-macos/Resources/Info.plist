@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleDisplayName</key><string>kassiber_native</string>
+    <key>CFBundleExecutable</key><string>kassiber_native</string>
+    <key>CFBundleIdentifier</key><string>at.bitcoinaustria.kassiber.native</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleGetInfoString</key><string>Local-first Bitcoin accounting. AGPL-3.0-only.</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>CFBundleURLName</key><string>at.bitcoinaustria.kassiber.native</string>
+            <key>CFBundleURLSchemes</key>
+            <array><string>kassiber</string></array>
+        </dict>
+    </array>
+    <key>CFBundleName</key><string>kassiber_native</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array><string>MacOSX</string></array>
+    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>15.0</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.finance</string>
+    <key>NSHumanReadableCopyright</key><string>Copyright © Bitcoin Austria. AGPL-3.0-only.</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <!-- SUFeedURL and SUPublicEDKey are intentionally absent until release infrastructure exists. -->
+</dict>
+</plist>

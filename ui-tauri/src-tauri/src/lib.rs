@@ -286,6 +286,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.identify_onchain",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
+    // AddConnectionDialog exposes the existing Bull Bitcoin wallet importer;
+    // keep the compiled privilege boundary in lockstep with that real callsite.
+    "ui.connections.bullbitcoin_wallet.create",
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
