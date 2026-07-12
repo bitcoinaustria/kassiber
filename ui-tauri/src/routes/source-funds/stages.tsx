@@ -402,8 +402,11 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
 /* ------------------------------------------------------------------ */
 
 export function TraceStage({ state }: { state: SourceFundsCaseState }) {
+  const { t } = useTranslation("sourceFunds");
   const assembled = state.assembleLinks.data?.data;
   const gaps: SourceFundsFinding[] = [...state.blockers, ...state.warnings];
+  const methodLabel = (method: string) =>
+    t(`method.${method}`, { defaultValue: pretty(method) });
 
   const dispatchGapAction = (action: string, gap: SourceFundsFinding) => {
     if (action === "open_source_creator") {
@@ -464,7 +467,7 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
           </span>
           <span className="text-xs text-muted-foreground">
             {Object.entries(assembled.methods)
-              .map(([method, count]) => `${pretty(method)} ×${count}`)
+              .map(([method, count]) => `${methodLabel(method)} ×${count}`)
               .join(" · ") || "no new evidence this run"}
           </span>
           {assembled.awaiting_manual_review > 0 && (
@@ -614,7 +617,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                     </span>
                     <span className="font-medium">{pretty(link.link_type)}</span>
                     <span className="text-muted-foreground">
-                      {pretty(link.method)}
+                      {methodLabel(link.method)}
                     </span>
                   </div>
                   <div className="mt-2 grid gap-1 text-xs text-muted-foreground">

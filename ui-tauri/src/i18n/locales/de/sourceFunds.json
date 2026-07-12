@@ -358,6 +358,19 @@
     "reviewed": "Geprüft",
     "rejected": "Abgelehnt"
   },
+  "method": {
+    "same_external_id": "Veraltete externe ID (manuell)",
+    "same_onchain_scope": "Kanonische On-Chain-Transaktion",
+    "transaction_pair": "Transaktionspaar",
+    "utxo_spend": "UTXO-Ausgabe",
+    "payment_hash": "Lightning-Zahlungs-Hash",
+    "provider_trade_id": "Provider-Trade-ID",
+    "provider_order_id": "Provider-Order-ID",
+    "provider_payment_id": "Provider-Zahlungs-ID",
+    "provider_exchange_order_id": "Provider-Börsenauftrags-ID",
+    "provider_ledger_id": "Provider-Ledger-ID",
+    "manual": "Manuell"
+  },
   "toast": {
     "suggestionsUpdated": "Vorschläge aktualisiert",
     "evidenceMatched": "Nachweis zugeordnet",

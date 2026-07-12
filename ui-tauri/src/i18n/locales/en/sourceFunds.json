@@ -358,6 +358,19 @@
     "reviewed": "Reviewed",
     "rejected": "Rejected"
   },
+  "method": {
+    "same_external_id": "Legacy external id (manual)",
+    "same_onchain_scope": "Canonical on-chain transaction",
+    "transaction_pair": "Transaction pair",
+    "utxo_spend": "UTXO spend",
+    "payment_hash": "Lightning payment hash",
+    "provider_trade_id": "Provider trade id",
+    "provider_order_id": "Provider order id",
+    "provider_payment_id": "Provider payment id",
+    "provider_exchange_order_id": "Provider exchange order id",
+    "provider_ledger_id": "Provider ledger id",
+    "manual": "Manual"
+  },
   "toast": {
     "suggestionsUpdated": "Suggestions updated",
     "evidenceMatched": "Evidence matched",
