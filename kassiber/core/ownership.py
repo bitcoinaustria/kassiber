@@ -47,7 +47,11 @@ from .wallets import (
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
 )
-from .ownership_coverage import ProfileOwnershipCoverage, assess_profile_ownership_coverage
+from .ownership_coverage import (
+    ProfileOwnershipCoverage,
+    assess_profile_ownership_coverage,
+    normalize_policy_declaration,
+)
 
 # Default per-branch derivation ceiling for an interactive reconciliation run.
 # Owned candidates at low indices resolve instantly via the cheap tiers; only
@@ -166,6 +170,7 @@ class OwnedIndex:
     by_outpoint: dict[str, list[OwnedMatch]] = field(default_factory=dict)
     txid_wallets: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
     scanned_depth: dict[str, dict[str, int]] = field(default_factory=dict)
+    policy_derivation_complete: dict[str, bool] = field(default_factory=dict)
     coverage: ProfileOwnershipCoverage | None = None
     # A txid/outpoint is not a globally unique physical identity: the same
     # 32-byte txid (and therefore the same ``txid:vout`` spelling) can exist on
@@ -658,6 +663,8 @@ def build_owned_index(
 
     for wallet in wallets:
         config = _wallet_config(wallet)
+        wallet_id = str(wallet["id"])
+        index.policy_derivation_complete[wallet_id] = True
         account = _account_label(wallet)
         try:
             configured_scan_to_index = int(
@@ -699,6 +706,8 @@ def build_owned_index(
                 index.add_address(address, match)
                 index.add_script(_script_hex_for_address(address), match)
             if not derive or not has_descriptor_sync_material(dict(ownership_config)):
+                if not derive and has_descriptor_sync_material(dict(ownership_config)):
+                    index.policy_derivation_complete[wallet_id] = False
                 continue
             try:
                 history_floor = int(ownership_config.get("scan_to_index") or 0)
@@ -706,18 +715,32 @@ def build_owned_index(
                 warnings.append(
                     f"Wallet '{wallet['label']}': historic scan floor is invalid"
                 )
+                index.policy_derivation_complete[wallet_id] = False
                 continue
+            try:
+                policy = normalize_policy_declaration(
+                    ownership_config.get("ownership_policy")
+                )
+                declared_floor = max(
+                    policy.get("branch_last_issued", {}).values(), default=0
+                )
+            except ValueError:
+                declared_floor = 0
+                index.policy_derivation_complete[wallet_id] = False
             try:
                 _derive_wallet_into_index(
                     index,
                     wallet,
                     ownership_config,
                     account,
-                    scan_to_index=max(wallet_scan_to_index, history_floor),
+                    scan_to_index=max(
+                        wallet_scan_to_index, history_floor, declared_floor
+                    ),
                     highest_used=highest_used.get(str(wallet["id"]), {}),
                     source="derived_history" if is_history else "derived",
                 )
             except AppError as exc:
+                index.policy_derivation_complete[wallet_id] = False
                 warnings.append(
                     f"Wallet '{wallet['label']}': descriptor not scanned ({exc.code})"
                 )
@@ -726,6 +749,7 @@ def build_owned_index(
         profile_id,
         wallets,
         derived_through_by_wallet=index.scanned_depth,
+        derivation_complete_by_wallet=index.policy_derivation_complete,
     )
     return index, warnings
 

@@ -203,6 +203,110 @@ class OwnershipCoverageTests(unittest.TestCase):
         self.assertEqual(coverage.policy_shape, "multisig_descriptor")
         self.assertEqual(coverage.policy_set_id, "family-vault")
 
+    def test_incomplete_historic_wildcard_policy_blocks_proof(self):
+        conn = _conn()
+        _wallet(
+            conn,
+            "vault",
+            "Vault",
+            {
+                "addresses": ["bc1qcurrent"],
+                "ownership_policy": {
+                    "complete": True,
+                    "evidence": "wallet_export",
+                    "branch_last_issued": {},
+                },
+                "ownership_history": [
+                    {"descriptor": "wpkh(xpub/old/*)", "scan_to_index": 50}
+                ],
+            },
+        )
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+
+        wallet = assess_profile_ownership_coverage(conn, "profile").wallets[0]
+
+        self.assertEqual(wallet.policy_tier, "unknown")
+        self.assertIn("historic_policy_coverage_missing", wallet.limitations)
+
+    def test_failed_historic_derivation_blocks_aggregated_depth_proof(self):
+        conn = _conn()
+        _wallet(
+            conn,
+            "vault",
+            "Vault",
+            {
+                "descriptor": "wpkh(xpub/current/*)",
+                "ownership_policy": {
+                    "complete": True,
+                    "evidence": "wallet_export",
+                    "branch_last_issued": {"0": 20},
+                },
+                "ownership_history": [
+                    {
+                        "descriptor": "wpkh(xpub/old/*)",
+                        "ownership_policy": {
+                            "complete": True,
+                            "evidence": "wallet_export",
+                            "branch_last_issued": {"0": 10},
+                        },
+                    }
+                ],
+            },
+        )
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+
+        wallet = assess_profile_ownership_coverage(
+            conn,
+            "profile",
+            derived_through_by_wallet={"vault": {"0": 20}},
+            derivation_complete_by_wallet={"vault": False},
+        ).wallets[0]
+
+        self.assertEqual(wallet.policy_tier, "unknown")
+        self.assertIn("wallet_policy_derivation_incomplete", wallet.limitations)
+
+    def test_silent_payment_requires_completed_full_history_scan(self):
+        conn = _conn()
+        _wallet(
+            conn,
+            "silent",
+            "Silent",
+            {
+                "sp_descriptor": "sp(spscan1qexample)",
+                "sp_full_history": True,
+                "ownership_policy": {
+                    "complete": True,
+                    "evidence": "wallet_export",
+                    "branch_last_issued": {},
+                },
+            },
+        )
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+
+        before = assess_profile_ownership_coverage(conn, "profile").wallets[0]
+        self.assertEqual(before.policy_tier, "unknown")
+        conn.execute(
+            "INSERT INTO freshness_source_states VALUES(?, ?, ?)",
+            (
+                "profile",
+                "onchain_wallet:silent",
+                json.dumps(
+                    {
+                        "backend": {"kind": "custom"},
+                        "silent_payment": {
+                            "scan_complete": True,
+                            "degraded": False,
+                            "full_history": True,
+                        },
+                    }
+                ),
+            ),
+        )
+
+        after = assess_profile_ownership_coverage(conn, "profile").wallets[0]
+        self.assertEqual(after.policy_tier, "proven")
+        self.assertEqual(after.history_tier, "proven")
+
 
 if __name__ == "__main__":
     unittest.main()

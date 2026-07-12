@@ -157,6 +157,7 @@ def assess_profile_ownership_coverage(
     wallets: Sequence[Mapping[str, Any]] | None = None,
     *,
     derived_through_by_wallet: Mapping[str, Mapping[str, int]] | None = None,
+    derivation_complete_by_wallet: Mapping[str, bool] | None = None,
 ) -> ProfileOwnershipCoverage:
     if wallets is None:
         wallets = conn.execute(
@@ -175,6 +176,7 @@ def assess_profile_ownership_coverage(
                 wallet,
                 config,
                 (derived_through_by_wallet or {}).get(str(wallet["id"])),
+                (derivation_complete_by_wallet or {}).get(str(wallet["id"]), True),
             )
         )
     universe = _profile_universe_declaration(conn, profile_id)
@@ -250,29 +252,65 @@ def attest_profile_wallet_universe(
     return value
 
 
-def _assess_wallet(conn, profile_id, wallet, config, derived_override) -> WalletOwnershipCoverage:
+def _assess_wallet(
+    conn, profile_id, wallet, config, derived_override, derivation_complete
+) -> WalletOwnershipCoverage:
     chain = normalize_chain(config.get("chain"))
     network = normalize_network(chain, config.get("network"))
-    declaration = normalize_policy_declaration(config.get(POLICY_CONFIG_KEY))
-    complete = bool(declaration.get("complete"))
-    evidence = str(declaration.get("evidence") or "")
-    policy_set_id = str(declaration.get("policy_set_id") or str(wallet["id"]))
-    bounds = dict(declaration.get("branch_last_issued") or {})
     limitations: list[str] = []
     repairs: list[str] = []
+    policy_configs = [config, *[
+        item for item in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
+        if isinstance(item, Mapping)
+    ]]
+    declarations: list[dict[str, Any]] = []
+    bounds: dict[str, int] = {}
+    for ordinal, policy_config in enumerate(policy_configs):
+        try:
+            declaration = normalize_policy_declaration(
+                policy_config.get(POLICY_CONFIG_KEY)
+            )
+        except ValueError:
+            declaration = {}
+        declarations.append(declaration)
+        if not declaration.get("complete"):
+            limitation = (
+                "wallet_policy_set_not_declared_complete"
+                if ordinal == 0
+                else "historic_policy_coverage_missing"
+            )
+            limitations.append(limitation)
+            repairs.append(
+                "declare_complete_wallet_policy_set"
+                if ordinal == 0
+                else "attest_retired_wallet_policies"
+            )
+        policy_bounds = dict(declaration.get("branch_last_issued") or {})
+        for branch, index in policy_bounds.items():
+            bounds[branch] = max(bounds.get(branch, -1), int(index))
+        if _has_wildcard_policy(policy_config) and not policy_bounds:
+            limitations.append(
+                "wildcard_branch_bounds_missing"
+                if ordinal == 0
+                else "historic_policy_coverage_missing"
+            )
+            repairs.append(
+                "import_last_issued_branch_bounds"
+                if ordinal == 0
+                else "attest_retired_wallet_policies"
+            )
 
-    if not complete:
-        limitations.append("wallet_policy_set_not_declared_complete")
-        repairs.append("declare_complete_wallet_policy_set")
-    if _has_wildcard_policy(config) and not bounds:
-        limitations.append("wildcard_branch_bounds_missing")
-        repairs.append("import_last_issued_branch_bounds")
-    if config.get(OWNERSHIP_HISTORY_CONFIG_KEY) and not all(
-        isinstance(item, Mapping) and item.get(POLICY_CONFIG_KEY)
-        for item in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
-    ):
-        limitations.append("historic_policy_coverage_missing")
-        repairs.append("attest_retired_wallet_policies")
+    current_declaration = declarations[0] if declarations else {}
+    complete = bool(declarations) and all(
+        declaration.get("complete") for declaration in declarations
+    )
+    evidence_tiers = [
+        str(declaration.get("evidence") or "") for declaration in declarations
+    ]
+    evidence = str(current_declaration.get("evidence") or "")
+    policy_set_id = str(
+        current_declaration.get("policy_set_id") or str(wallet["id"])
+    )
 
     checkpoint = _checkpoint(conn, profile_id, str(wallet["id"]))
     derived = _int_map(derived_override)
@@ -292,14 +330,40 @@ def _assess_wallet(conn, profile_id, wallet, config, derived_override) -> Wallet
     if missing_bounds:
         limitations.append("declared_policy_not_fully_derived")
         repairs.append("extend_ownership_derivation")
+    if not derivation_complete:
+        limitations.append("wallet_policy_derivation_incomplete")
+        repairs.append("repair_wallet_policy_derivation")
+
+    silent_policy_proven = True
+    if config.get("sp_descriptor"):
+        silent_checkpoint = (
+            checkpoint.get("silent_payment")
+            if isinstance(checkpoint.get("silent_payment"), Mapping)
+            else {}
+        )
+        silent_policy_proven = bool(
+            config.get("sp_full_history")
+            and silent_checkpoint.get("full_history")
+            and silent_checkpoint.get("scan_complete")
+            and not silent_checkpoint.get("degraded")
+        )
+        if not silent_policy_proven:
+            limitations.append("silent_payment_full_history_not_proven")
+            repairs.append("run_private_full_history_scan")
 
     policy_tier = TIER_UNKNOWN
-    if complete and not missing_bounds and not any(
+    if complete and not missing_bounds and derivation_complete and silent_policy_proven and not any(
         item in limitations
-        for item in ("wildcard_branch_bounds_missing", "historic_policy_coverage_missing")
+        for item in (
+            "wildcard_branch_bounds_missing",
+            "historic_policy_coverage_missing",
+            "wallet_policy_set_not_declared_complete",
+        )
     ):
         policy_tier = (
-            TIER_ASSUMED if evidence == EVIDENCE_USER_ATTESTED else TIER_PROVEN
+            TIER_ASSUMED
+            if EVIDENCE_USER_ATTESTED in evidence_tiers
+            else TIER_PROVEN
         )
 
     history_tier = _history_tier(config, checkpoint, policy_tier)
@@ -330,6 +394,15 @@ def _history_tier(config, checkpoint, policy_tier):
         return TIER_UNKNOWN
     backend = checkpoint.get("backend") if isinstance(checkpoint.get("backend"), Mapping) else {}
     kind = str(backend.get("kind") or "")
+    if config.get("sp_descriptor"):
+        silent = (
+            checkpoint.get("silent_payment")
+            if isinstance(checkpoint.get("silent_payment"), Mapping)
+            else {}
+        )
+        if silent.get("scan_complete") and not silent.get("degraded"):
+            return TIER_PROVEN if silent.get("full_history") else TIER_ASSUMED
+        return TIER_UNKNOWN
     if kind == "bitcoinrpc" and config.get("birthday") and checkpoint.get("bitcoinrpc_last_block"):
         return TIER_PROVEN if policy_tier == TIER_PROVEN else TIER_ASSUMED
     if kind in {"esplora", "electrum"} and checkpoint.get("highest_used"):

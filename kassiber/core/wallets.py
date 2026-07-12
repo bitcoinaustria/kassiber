@@ -86,6 +86,12 @@ _OWNERSHIP_MATERIAL_FIELDS = (
     "network",
     "gap_limit",
     "synthesize_change",
+    silent_payments.CONFIG_DESCRIPTOR,
+    silent_payments.CONFIG_MATERIAL_FORMAT,
+    silent_payments.CONFIG_SCAN_MODE,
+    silent_payments.CONFIG_SCAN_START_HEIGHT,
+    silent_payments.CONFIG_SCAN_START_DATE,
+    silent_payments.CONFIG_FULL_HISTORY,
 )
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
