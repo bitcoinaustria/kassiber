@@ -1620,6 +1620,27 @@ def _apply_contiguous_event(
             reason="custody_revision_immutable",
             details=immutable_rejection,
         )
+    if event["event_type"] == "transaction.edit":
+        payload = event.get("payload") or {}
+        transaction_id = _mapped_id(
+            conn,
+            profile_id=book["profile_id"],
+            table="transactions",
+            wire_id=payload.get("transaction_id"),
+        )
+        transaction_exists = transaction_id and conn.execute(
+            "SELECT 1 FROM transactions WHERE id = ? AND profile_id = ?",
+            (transaction_id, book["profile_id"]),
+        ).fetchone()
+        if not transaction_exists:
+            return _reject_contiguous_event(
+                conn,
+                book=book,
+                replica=replica,
+                event=event,
+                reason="sync_dependency_missing",
+                details={"transaction_id": payload.get("transaction_id")},
+            )
     _store_event(conn, event)
     mutated = False
     conflicts = 0
