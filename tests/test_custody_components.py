@@ -1027,6 +1027,36 @@ class CustodyComponentApiTests(unittest.TestCase):
             {issue["code"] for issue in report["issues"]},
         )
 
+    def test_allocation_rejects_backward_route_beyond_two_days(self):
+        report = validate_conservation(
+            [
+                {
+                    **_leg(
+                        "source",
+                        100,
+                        wallet="btc",
+                        occurred_at="2026-01-04T01:00:01Z",
+                    ),
+                    "id": "source",
+                },
+                {
+                    **_leg(
+                        "destination",
+                        100,
+                        wallet="liquid",
+                        occurred_at="2026-01-02T01:00:00Z",
+                    ),
+                    "id": "destination",
+                },
+            ]
+        )
+
+        self.assertFalse(report["activatable"])
+        self.assertIn(
+            "allocation_chronology_mismatch",
+            {issue["code"] for issue in report["issues"]},
+        )
+
     def test_location_continuity_accepts_bounded_evidence_clock_skew(self):
         report = validate_conservation(
             [

@@ -57,7 +57,7 @@ AUTHORED_SOURCES = frozenset({"user", "cli", "gui", "ai_tool"})
 # stamp completion after the receiving chain transaction. Custody components are
 # reviewed exact allocations, so tolerate bounded evidence-clock skew while
 # still rejecting materially reversed routes.
-CUSTODY_CHRONOLOGY_SKEW_TOLERANCE = timedelta(days=7)
+CUSTODY_CHRONOLOGY_SKEW_TOLERANCE = timedelta(hours=48)
 LEG_ROLES = frozenset(
     {"source", "destination", "fee", "external", "retained", "unresolved"}
 )
