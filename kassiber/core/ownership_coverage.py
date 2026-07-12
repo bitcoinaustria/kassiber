@@ -214,8 +214,10 @@ def build_ownership_coverage_snapshot(
             "all_policy_proven": bool(wallets) and counts[TIER_PROVEN] == len(wallets),
             "wallet_universe_complete": coverage.universe_complete,
             "effective_policy_proven": bool(wallets)
-            and coverage.universe_complete
-            and counts[TIER_PROVEN] == len(wallets),
+            and all(
+                coverage.is_policy_proven(wallet.chain, wallet.network)
+                for wallet in wallets
+            ),
         },
         "wallets": [wallet.to_safe_dict() for wallet in wallets],
         "repair_actions": list(

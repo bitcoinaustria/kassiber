@@ -5,6 +5,7 @@ import unittest
 from kassiber.core.ownership_coverage import (
     assess_profile_ownership_coverage,
     attest_profile_wallet_universe,
+    build_ownership_coverage_snapshot,
     clear_profile_wallet_universe_attestation,
 )
 from kassiber.core.wallets import (
@@ -117,6 +118,31 @@ class OwnershipCoverageTests(unittest.TestCase):
         self.assertTrue(changed)
         coverage = assess_profile_ownership_coverage(conn, "profile")
         self.assertFalse(coverage.universe_complete)
+
+    def test_filtered_wallet_summary_respects_other_policies_in_scope(self):
+        conn = _conn()
+        for wallet_id, evidence in (("proven", "wallet_export"), ("assumed", "user_attested")):
+            _wallet(
+                conn,
+                wallet_id,
+                wallet_id.title(),
+                {
+                    "addresses": [f"bc1q{wallet_id}"],
+                    "ownership_policy": {
+                        "complete": True,
+                        "evidence": evidence,
+                        "branch_last_issued": {},
+                    },
+                },
+            )
+        attest_profile_wallet_universe(conn, "profile", complete=True)
+
+        snapshot = build_ownership_coverage_snapshot(
+            conn, "profile", wallet_id="proven"
+        )
+
+        self.assertTrue(snapshot["summary"]["all_policy_proven"])
+        self.assertFalse(snapshot["summary"]["effective_policy_proven"])
 
     def test_wildcard_policy_needs_branch_bounds(self):
         conn = _conn()
