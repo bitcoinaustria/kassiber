@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import json
-import os
-import select
+import queue
 import subprocess
 import sys
 import threading
@@ -82,6 +81,8 @@ class _DaemonChatClient:
         self._stderr_tail = ""
         self._stderr_lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
+        self._stdout_queue: queue.Queue[str | None] = queue.Queue()
+        self._stdout_thread: threading.Thread | None = None
         self._allow_passphrase_prompt = (
             sys.stdin.isatty() and not bool(getattr(args, "non_interactive", False))
         )
@@ -104,6 +105,13 @@ class _DaemonChatClient:
                 daemon=True,
             )
             self._stderr_thread.start()
+        if self._proc.stdout is not None:
+            self._stdout_thread = threading.Thread(
+                target=self._drain_stdout,
+                name="kassiber-daemon-stdout-reader",
+                daemon=True,
+            )
+            self._stdout_thread.start()
         try:
             ready = self.read()
         except AppError:
@@ -190,6 +198,17 @@ class _DaemonChatClient:
         with self._stderr_lock:
             return self._stderr_tail
 
+    def _drain_stdout(self) -> None:
+        stream = self._proc.stdout
+        if stream is None:
+            self._stdout_queue.put(None)
+            return
+        try:
+            for line in stream:
+                self._stdout_queue.put(line)
+        finally:
+            self._stdout_queue.put(None)
+
     def send(self, payload: dict[str, Any], *, record: bool = True) -> None:
         if self._proc.stdin is None:
             raise AppError(
@@ -206,31 +225,21 @@ class _DaemonChatClient:
     def read(
         self, *, record: bool = True, timeout: float | None = None
     ) -> dict[str, Any]:
-        if self._proc.stdout is None:
-            raise AppError(
-                "daemon output stream is closed",
-                code="daemon_closed",
-                retryable=False,
-            )
         wait_seconds = self._read_timeout_seconds if timeout is None else timeout
-        if wait_seconds is not None:
-            try:
-                ready, _, _ = select.select([self._proc.stdout], [], [], wait_seconds)
-            except (OSError, ValueError):
-                ready = [self._proc.stdout]
-            if not ready:
-                raise AppError(
-                    "timed out waiting for daemon response",
-                    code="daemon_timeout",
-                    hint=(
-                        "Increase `kassiber chat --timeout <seconds>` if the "
-                        "selected local model or harness needs longer."
-                    ),
-                    details={"timeout_seconds": wait_seconds},
-                    retryable=True,
-                )
-        line = self._proc.stdout.readline()
-        if line == "":
+        try:
+            line = self._stdout_queue.get(timeout=wait_seconds)
+        except queue.Empty:
+            raise AppError(
+                "timed out waiting for daemon response",
+                code="daemon_timeout",
+                hint=(
+                    "Increase `kassiber chat --timeout <seconds>` if the "
+                    "selected local model or harness needs longer."
+                ),
+                details={"timeout_seconds": wait_seconds},
+                retryable=True,
+            ) from None
+        if line is None:
             stderr = self._stderr_snapshot()
             raise AppError(
                 "daemon exited before chat completed",
@@ -275,6 +284,8 @@ class _DaemonChatClient:
             self._proc.stderr.close()
         if self._stderr_thread is not None:
             self._stderr_thread.join(timeout=1)
+        if self._stdout_thread is not None:
+            self._stdout_thread.join(timeout=1)
 
 
 def _split_tool_names(values: Iterable[str] | None) -> set[str]:
