@@ -1297,6 +1297,42 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
         self.assertEqual(detail["required_for"], "complete_transfer_component")
 
+    def test_graphless_scoped_pair_does_not_absorb_subthreshold_external_payment(self):
+        # A canonical txid gives these imports a physical scope, but without
+        # vin/vout evidence even a 1,000-sat gap could be a co-payment. The fee
+        # plausibility band must not turn it into an untaxed transfer fee.
+        out_row = _row(
+            "graphless-small-out",
+            "wallet-a",
+            "outbound",
+            100_000_000,
+            external_id="graphless-small",
+        )
+        in_row = _row(
+            "graphless-small-in",
+            "wallet-b",
+            "inbound",
+            99_000_000,
+            external_id="graphless-small",
+        )
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(len(inputs.quarantines), 2)
+        self.assertTrue(
+            all(
+                quarantine["reason"] == "transfer_fee_implausible"
+                for quarantine in inputs.quarantines
+            )
+        )
+
     def test_btcpay_fee_inclusive_self_transfer_books_with_correct_fee(self):
         # The BTCPay row is graphless, but the node-backed receipt retained the
         # complete valued transaction and proves the 3,000-sat miner fee.
