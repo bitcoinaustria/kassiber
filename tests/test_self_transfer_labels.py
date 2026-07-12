@@ -20,7 +20,7 @@ def _conn_with_two_blank_description_transfers():
         );
         CREATE TABLE transactions (
           id TEXT PRIMARY KEY, profile_id TEXT, wallet_id TEXT,
-          external_id TEXT, asset TEXT, direction TEXT, amount INTEGER,
+          external_id TEXT, kind TEXT, asset TEXT, direction TEXT, amount INTEGER,
           payment_hash TEXT, payment_hash_source TEXT, raw_json TEXT,
           excluded INTEGER DEFAULT 0
         );
@@ -64,14 +64,15 @@ def _conn_with_two_blank_description_transfers():
     for tx_id, wallet_id, direction, amount, physical_txid in legs:
         conn.execute(
             "INSERT INTO transactions("
-            "id, profile_id, wallet_id, external_id, asset, direction, amount, "
+            "id, profile_id, wallet_id, external_id, kind, asset, direction, amount, "
             "payment_hash, payment_hash_source, raw_json, excluded"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
             (
                 tx_id,
                 "p1",
                 wallet_id,
                 physical_txid,
+                "onchain",
                 "BTC",
                 direction,
                 amount,
@@ -125,6 +126,30 @@ class SelfTransferLabelTests(unittest.TestCase):
         self.assertEqual(labels["tb"], "A")
         self.assertEqual(labels["tc"], "D")
         self.assertEqual(labels["td"], "C")
+
+    def test_stale_journal_fallback_uses_native_lightning_payment_hash(self):
+        conn = _conn_with_two_blank_description_transfers()
+        payment_hash = "11" * 32
+        provenance = json.dumps(
+            {"_kassiber_provenance": {"import_source": "lnd"}}
+        )
+        conn.execute(
+            "UPDATE transactions SET external_id = 'ln-out', kind = 'lnd_pay', "
+            "payment_hash = ?, payment_hash_source = 'lnd', raw_json = ? WHERE id = 'ta'",
+            (payment_hash, provenance),
+        )
+        conn.execute(
+            "UPDATE transactions SET external_id = 'ln-in', kind = 'lnd_invoice', "
+            "payment_hash = ?, payment_hash_source = 'lnd', raw_json = ? WHERE id = 'tb'",
+            (payment_hash, provenance),
+        )
+
+        labels = _self_transfer_legs_by_transaction(
+            conn, {"id": "p1"}, journals_current=False
+        )
+
+        self.assertEqual(labels["ta"], "B")
+        self.assertEqual(labels["tb"], "A")
 
 
 if __name__ == "__main__":

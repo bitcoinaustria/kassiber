@@ -2727,6 +2727,7 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         SELECT
             t.id AS id,
             t.external_id AS external_id,
+            t.kind AS kind,
             t.asset AS asset,
             t.direction AS direction,
             t.amount AS amount,
