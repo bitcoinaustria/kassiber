@@ -764,7 +764,7 @@ def detect_unscoped_transfer_review_ids(rows):
         if not external_id:
             continue
         asset = str(_row_field(row, "asset") or "").strip().upper()
-        groups[(external_id, asset)].append(row)
+        groups[(normalize_group_txid(external_id), asset)].append(row)
 
     review_ids = set()
     for group in groups.values():

@@ -1763,6 +1763,34 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             {"o", "i"},
         )
 
+    def test_unscoped_review_folds_mixed_case_txid(self):
+        txid = "cd" * 32
+        out_row = _row(
+            "o", "wallet-a", "outbound", 50_000_000_000,
+            external_id=txid.upper(), canonical_external=False,
+        )
+        in_row = _row(
+            "i", "wallet-b", "inbound", 50_000_000_000,
+            external_id=txid.lower(), canonical_external=False,
+        )
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [],
+        )
+
+        self.assertEqual(
+            {q["transaction_id"] for q in inputs.quarantines},
+            {"o", "i"},
+        )
+        self.assertEqual(
+            {q["reason"] for q in inputs.quarantines},
+            {"unscoped_transfer_review"},
+        )
+
     def test_canonical_shaped_provider_fallback_is_not_a_txid(self):
         from kassiber.transfers import detect_intra_transfers
 
