@@ -120,6 +120,33 @@ class OwnershipCoverageTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "validation")
 
+    def test_multisig_policy_is_supported_and_grouped(self):
+        conn = _conn()
+        _wallet(
+            conn,
+            "vault",
+            "Vault",
+            {
+                "descriptor": "wsh(sortedmulti(2,xpubA/0/*,xpubB/0/*))",
+                "ownership_policy": {
+                    "complete": True,
+                    "evidence": "wallet_export",
+                    "policy_set_id": "family-vault",
+                    "branch_last_issued": {"0": 12},
+                },
+            },
+        )
+
+        coverage = assess_profile_ownership_coverage(
+            conn,
+            "profile",
+            derived_through_by_wallet={"vault": {"0": 12}},
+        ).wallets[0]
+
+        self.assertEqual(coverage.policy_tier, "proven")
+        self.assertEqual(coverage.policy_shape, "multisig_descriptor")
+        self.assertEqual(coverage.policy_set_id, "family-vault")
+
 
 if __name__ == "__main__":
     unittest.main()

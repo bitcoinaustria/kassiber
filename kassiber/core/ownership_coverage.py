@@ -17,6 +17,7 @@ for diagnostics/backfill and must never be inferred from a gap limit alone.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
@@ -51,6 +52,8 @@ class WalletOwnershipCoverage:
     history_tier: str
     complete: bool
     evidence: str
+    policy_set_id: str
+    policy_shape: str
     branch_last_issued: Mapping[str, int]
     derived_through: Mapping[str, int]
     limitations: tuple[str, ...]
@@ -66,6 +69,8 @@ class WalletOwnershipCoverage:
             "history_tier": self.history_tier,
             "complete": self.complete,
             "evidence": self.evidence,
+            "policy_set_id": self.policy_set_id,
+            "policy_shape": self.policy_shape,
             "branch_last_issued": dict(sorted(self.branch_last_issued.items())),
             "derived_through": dict(sorted(self.derived_through.items())),
             "limitations": list(self.limitations),
@@ -126,9 +131,13 @@ def normalize_policy_declaration(value: Any) -> dict[str, Any]:
         if index < 0 or index > 20_000:
             raise ValueError("ownership policy branch bounds must be between 0 and 20000")
         bounds[str(int(branch))] = index
+    policy_set_id = str(value.get("policy_set_id") or "").strip().lower()
+    if policy_set_id and not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", policy_set_id):
+        raise ValueError("ownership_policy.policy_set_id must be a stable token")
     return {
         "complete": complete,
         "evidence": evidence,
+        "policy_set_id": policy_set_id,
         "branch_last_issued": dict(sorted(bounds.items())),
     }
 
@@ -198,6 +207,7 @@ def _assess_wallet(conn, profile_id, wallet, config, derived_override) -> Wallet
     declaration = normalize_policy_declaration(config.get(POLICY_CONFIG_KEY))
     complete = bool(declaration.get("complete"))
     evidence = str(declaration.get("evidence") or "")
+    policy_set_id = str(declaration.get("policy_set_id") or str(wallet["id"]))
     bounds = dict(declaration.get("branch_last_issued") or {})
     limitations: list[str] = []
     repairs: list[str] = []
@@ -257,6 +267,8 @@ def _assess_wallet(conn, profile_id, wallet, config, derived_override) -> Wallet
         history_tier=history_tier,
         complete=complete,
         evidence=evidence,
+        policy_set_id=policy_set_id,
+        policy_shape=_policy_shape(config),
         branch_last_issued=bounds,
         derived_through=derived,
         limitations=tuple(dict.fromkeys(limitations)),
@@ -300,6 +312,21 @@ def _has_onchain_ownership_material(config):
 
 def _has_wildcard_policy(config):
     return bool(config.get("xpub") or "*" in str(config.get("descriptor") or "") or "*" in str(config.get("change_descriptor") or ""))
+
+
+def _policy_shape(config):
+    descriptor = str(config.get("descriptor") or "").lower()
+    if "sortedmulti(" in descriptor or "multi(" in descriptor:
+        return "multisig_descriptor"
+    if config.get("xpub"):
+        return "multi_script_xpub" if len(config.get("script_types") or []) > 1 else "single_key_xpub"
+    if config.get("sp_descriptor"):
+        return "silent_payment"
+    if descriptor:
+        return "descriptor"
+    if config.get("addresses"):
+        return "finite_addresses"
+    return "unknown"
 
 
 def _json_object(value):
