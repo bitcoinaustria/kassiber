@@ -471,6 +471,30 @@ class CustodyComponentApiTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "custody_component_validation")
 
+    def test_component_rejects_reversed_rail_coverage_window(self):
+        with self.assertRaises(AppError) as raised:
+            create_component(
+                self.conn,
+                workspace_id="ws",
+                profile_id="profile",
+                component_type="native_transfer",
+                legs=[
+                    _leg("source", 100, tx="out", wallet="btc"),
+                    _leg("destination", 100, tx="in-1", wallet="btc"),
+                ],
+                evidence={
+                    "rail_coverage": {
+                        "0": {
+                            "tier": "proven",
+                            "observed_from": "2026-01-01T00:00:00Z",
+                            "observed_to": "2025-01-01T00:00:00Z",
+                        }
+                    }
+                },
+            )
+
+        self.assertEqual(raised.exception.code, "custody_component_validation")
+
     def test_component_header_created_at_must_be_a_timestamp(self):
         with self.assertRaises(AppError) as caught:
             create_component(

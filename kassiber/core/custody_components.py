@@ -265,6 +265,16 @@ def _normalized_component_evidence(
             observed_from = parse_timestamp(observed_from)
         if observed_to is not None:
             observed_to = parse_timestamp(observed_to)
+        if (
+            observed_from is not None
+            and observed_to is not None
+            and observed_from > observed_to
+        ):
+            raise _error(
+                "rail coverage observed_from must not be after observed_to",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
         raw_limitations = raw_attestation.get("limitations") or []
         if not isinstance(raw_limitations, list):
             raise _error(
