@@ -1480,6 +1480,13 @@ CREATE INDEX IF NOT EXISTS idx_custody_components_supersedes
     ON custody_components(supersedes_component_id)
     WHERE supersedes_component_id IS NOT NULL;
 
+-- A book reset preserves the profile row, so delete-immutability cannot use
+-- profile absence as its authorization signal. This local-only guard is
+-- populated and cleared inside the reset transaction; it is not replicated.
+CREATE TABLE IF NOT EXISTS custody_component_purge_authorizations (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS custody_component_legs (
     id TEXT PRIMARY KEY,
     component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
@@ -2353,6 +2360,10 @@ def _ensure_custody_revision_immutability_triggers(conn):
         WHEN EXISTS (
             SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM custody_component_purge_authorizations authorization
+            WHERE authorization.profile_id = OLD.profile_id
+        )
         BEGIN
             SELECT RAISE(ABORT, 'custody_component_revision_delete_immutable');
         END
@@ -2365,6 +2376,10 @@ def _ensure_custody_revision_immutability_triggers(conn):
         WHEN EXISTS (
             SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM custody_component_purge_authorizations authorization
+            WHERE authorization.profile_id = OLD.profile_id
+        )
         BEGIN
             SELECT RAISE(ABORT, 'custody_component_leg_revision_delete_immutable');
         END
@@ -2376,6 +2391,10 @@ def _ensure_custody_revision_immutability_triggers(conn):
         BEFORE DELETE ON custody_component_allocations
         WHEN EXISTS (
             SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM custody_component_purge_authorizations authorization
+            WHERE authorization.profile_id = OLD.profile_id
         )
         BEGIN
             SELECT RAISE(ABORT, 'custody_component_allocation_revision_delete_immutable');

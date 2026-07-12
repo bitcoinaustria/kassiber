@@ -129,6 +129,15 @@ def reset_current_profile_data(
     )
     removed = {
         "transactions": _count_profile_rows(conn, "transactions", profile_id),
+        "custody_components": _count_profile_rows(
+            conn, "custody_components", profile_id
+        ),
+        "custody_component_legs": _count_profile_rows(
+            conn, "custody_component_legs", profile_id
+        ),
+        "custody_component_allocations": _count_profile_rows(
+            conn, "custody_component_allocations", profile_id
+        ),
         "transaction_tags": _count_sql(
             conn,
             """
@@ -261,6 +270,17 @@ def reset_current_profile_data(
     }
 
     with conn:
+        conn.execute(
+            "INSERT INTO custody_component_purge_authorizations(profile_id) VALUES(?)",
+            (profile_id,),
+        )
+        conn.execute(
+            "DELETE FROM custody_components WHERE profile_id = ?", (profile_id,)
+        )
+        conn.execute(
+            "DELETE FROM custody_component_purge_authorizations WHERE profile_id = ?",
+            (profile_id,),
+        )
         # These child-row deletes are explicit so the reset response can report
         # per-table counts; profile deletion would otherwise cascade them.
         conn.execute(
