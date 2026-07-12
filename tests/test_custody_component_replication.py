@@ -1139,6 +1139,57 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         self.assertEqual(leg["transaction_id"], preserved["transaction_id"])
         self.assertEqual(leg["transaction_id"], preserved["anchor_transaction_id"])
 
+    def test_replicated_custody_revision_rejects_invalid_created_at(self):
+        self._join_peer()
+        component = self._create_component(active=False)
+        self._sync_owner_to_peer()
+        row = self.peer.execute(
+            "SELECT * FROM custody_components WHERE id = ?", (component["id"],)
+        ).fetchone()
+        spec = SYNC_TABLE_MAP["custody_components"]
+        book = self.peer.execute(
+            "SELECT hmac_key_b64 FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+        wire_row = serialize_row(spec, row, hmac_key_b64=book["hmac_key_b64"])
+        wire_row["id"] = str(uuid.uuid4())
+        wire_row["lineage_id"] = wire_row["id"]
+        wire_row["created_at"] = "not-a-timestamp"
+        event = author_event(
+            self.peer,
+            profile_id=self.profile["id"],
+            event_type="row.upsert",
+            entity_table="custody_components",
+            entity_key=json.dumps([wire_row["id"]], separators=(",", ":")),
+            payload={"row": wire_row},
+        )
+        self.assertIsNotNone(event)
+        bundle = build_bundle(self.peer, profile_id=self.profile["id"])
+        result = import_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+
+        self.assertEqual(1, result.rejected_events)
+        rejected = self.owner.execute(
+            "SELECT * FROM sync_rejected_events "
+            "WHERE reason = 'custody_revision_timestamp_invalid' AND event_hash = ?",
+            (event.event_hash,),
+        ).fetchone()
+        self.assertIsNotNone(rejected)
+        replica = self.owner.execute(
+            "SELECT * FROM sync_replicas WHERE id = ?", (rejected["replica_id"],)
+        ).fetchone()
+        self.assertGreaterEqual(replica["last_seq"], rejected["replica_seq"])
+        self.assertEqual(
+            0,
+            self.owner.execute(
+                "SELECT COUNT(*) FROM sync_pending_events WHERE replica_id = ?",
+                (rejected["replica_id"],),
+            ).fetchone()[0],
+        )
+
     def test_legacy_immutable_conflict_requires_a_new_revision(self):
         component = self._create_component(active=False)
         bundle = build_bundle(self.owner, profile_id=self.profile["id"])

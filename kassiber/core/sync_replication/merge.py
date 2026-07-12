@@ -12,7 +12,7 @@ import uuid
 from typing import Any, Mapping
 
 from ...errors import AppError
-from ...time_utils import now_iso
+from ...time_utils import now_iso, parse_timestamp
 from ..repo import invalidate_journals
 from .bundle import (
     BUNDLE_MANIFEST_DOMAIN,
@@ -1620,6 +1620,22 @@ def _apply_contiguous_event(
             reason="custody_revision_immutable",
             details=immutable_rejection,
         )
+    if (
+        event["event_type"] == "row.upsert"
+        and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+    ):
+        wire_row = (event.get("payload") or {}).get("row") or {}
+        try:
+            parse_timestamp(wire_row.get("created_at"))
+        except AppError:
+            return _reject_contiguous_event(
+                conn,
+                book=book,
+                replica=replica,
+                event=event,
+                reason="custody_revision_timestamp_invalid",
+                details={"entity_table": event["entity_table"]},
+            )
     if event["event_type"] == "transaction.edit":
         payload = event.get("payload") or {}
         transaction_id = _mapped_id(
