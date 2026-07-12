@@ -804,10 +804,11 @@ class LndTransactionImportTest(unittest.TestCase):
         )
         self.assertEqual(
             sorted(record["amount_msat"] for record in by_tag["channel_open"]),
-            [100_000_000, 200_000_000],
+            [-1, 100_000_000],
         )
-        self.assertTrue(
-            all(record["status"] == "complete" for record in by_tag["channel_open"])
+        self.assertEqual(
+            sorted(record["status"] for record in by_tag["channel_open"]),
+            ["complete", "incomplete"],
         )
         close = by_tag["channel_close"][0]
         self.assertEqual(close["txid"], "bb" * 32)
@@ -821,6 +822,25 @@ class LndTransactionImportTest(unittest.TestCase):
                 for record in records
             )
         )
+
+    def test_closed_channel_capacity_does_not_claim_unknown_pushed_principal(self) -> None:
+        records = core_lnd.lnd_channel_records(
+            [],
+            [
+                {
+                    "channel_point": "aa" * 32 + ":0",
+                    "chan_id": "closed-only",
+                    "open_initiator": "INITIATOR_LOCAL",
+                    "capacity": "200000",
+                    "closing_tx_hash": "bb" * 32,
+                    "settled_balance": "150000",
+                }
+            ],
+        )
+
+        opening = next(record for record in records if record["tag"] == "channel_open")
+        self.assertEqual(opening["amount_msat"], -1)
+        self.assertEqual(opening["status"], "incomplete")
 
     def test_claimed_force_close_resolutions_become_trusted_sweep_evidence(self) -> None:
         closing_txid = "bb" * 32

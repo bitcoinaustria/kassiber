@@ -1189,7 +1189,10 @@ def _lnd_channel_id(row: Mapping[str, Any]) -> str:
 
 
 def _lnd_local_funding_sat(
-    row: Mapping[str, Any], *, local_initiator: bool | None
+    row: Mapping[str, Any],
+    *,
+    local_initiator: bool | None,
+    allow_capacity_inference: bool = True,
 ) -> int:
     """Return ordinary single-funded local capacity, or zero if ambiguous.
 
@@ -1206,6 +1209,11 @@ def _lnd_local_funding_sat(
     )
     if explicit > 0:
         return explicit
+    # ChannelCloseSummary has no push-at-open field. Capacity alone therefore
+    # cannot distinguish owned principal from sats disposed to the peer when
+    # the channel opened. Only live Channel rows may use this inference.
+    if not allow_capacity_inference:
+        return 0
     if local_initiator is not True:
         return 0
     if _int(row.get("push_amount_sat") or row.get("push_sat")) > 0:
@@ -1276,13 +1284,17 @@ def lnd_channel_records(
     Remote-funded openings are not local on-chain outflows.
     """
     records_by_id: dict[str, dict[str, Any]] = {}
-    for row in [*open_channels, *closed_channels]:
+    for row, allow_capacity_inference in (
+        *((row, True) for row in open_channels),
+        *((row, False) for row in closed_channels),
+    ):
         funding = _lnd_funding_txid(row)
         local_initiator = _lnd_local_initiator(row)
         if funding and local_initiator is not False:
             local_contribution_sat = _lnd_local_funding_sat(
                 row,
                 local_initiator=local_initiator,
+                allow_capacity_inference=allow_capacity_inference,
             )
             amount_msat = (
                 local_contribution_sat * 1000
