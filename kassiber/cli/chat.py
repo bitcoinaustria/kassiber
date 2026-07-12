@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, TextIO
 
 from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
-from ..ai.tools import TOOL_CATALOG
+from ..ai.tools import TOOL_CATALOG, tool_capabilities
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from .termrender import MarkdownStreamRenderer, render_envelope_table
@@ -685,7 +685,7 @@ def _render_turn_footer(terminal: dict[str, Any], chrome: TextIO) -> None:
 
 def _active_tool_catalog(args: Any) -> list[Any]:
     if getattr(args, "tool_profile", "core") == "core":
-        return [entry for entry in TOOL_CATALOG if entry.name in CORE_TOOL_NAMES]
+        return [entry for entry in TOOL_CATALOG if "core" in tool_capabilities(entry)]
     return list(TOOL_CATALOG)
 
 
