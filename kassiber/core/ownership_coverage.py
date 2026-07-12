@@ -162,6 +162,36 @@ def assess_profile_ownership_coverage(
     return ProfileOwnershipCoverage(profile_id=profile_id, wallets=tuple(assessed))
 
 
+def build_ownership_coverage_snapshot(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet_id: str | None = None,
+) -> dict[str, Any]:
+    coverage = assess_profile_ownership_coverage(conn, profile_id)
+    wallets = [
+        wallet for wallet in coverage.wallets
+        if wallet_id is None or wallet.wallet_id == wallet_id
+    ]
+    counts = {tier: 0 for tier in TIERS}
+    repairs: list[str] = []
+    for wallet in wallets:
+        counts[wallet.policy_tier] += 1
+        repairs.extend(wallet.repair_actions)
+    return {
+        "profile_id": profile_id,
+        "summary": {
+            "wallets": len(wallets),
+            "policy_unknown": counts[TIER_UNKNOWN],
+            "policy_assumed": counts[TIER_ASSUMED],
+            "policy_proven": counts[TIER_PROVEN],
+            "all_policy_proven": bool(wallets) and counts[TIER_PROVEN] == len(wallets),
+        },
+        "wallets": [wallet.to_safe_dict() for wallet in wallets],
+        "repair_actions": list(dict.fromkeys(repairs)),
+    }
+
+
 def _assess_wallet(conn, profile_id, wallet, config, derived_override) -> WalletOwnershipCoverage:
     chain = normalize_chain(config.get("chain"))
     network = normalize_network(chain, config.get("network"))
@@ -301,5 +331,6 @@ __all__ = [
     "ProfileOwnershipCoverage",
     "WalletOwnershipCoverage",
     "assess_profile_ownership_coverage",
+    "build_ownership_coverage_snapshot",
     "normalize_policy_declaration",
 ]

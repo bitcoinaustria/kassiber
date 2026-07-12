@@ -1153,6 +1153,7 @@ __all__ = [
     "load_wallet_descriptor_plan_from_config",
     "has_silent_payment_sync_material",
     "OWNERSHIP_HISTORY_CONFIG_KEY",
+    "OWNERSHIP_POLICY_CONFIG_KEY",
     "OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY",
     "normalize_addresses",
     "wallet_is_deprecated",

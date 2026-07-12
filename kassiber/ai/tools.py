@@ -537,6 +537,28 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read wallet coins",
     ),
     ToolEntry(
+        name="ui.wallets.ownership_coverage",
+        description=(
+            "Read safe watch-only ownership policy and backend history coverage "
+            "tiers plus guided repair actions. Never returns descriptors, xpubs, "
+            "addresses, scripts, derivation paths, backend URLs, or credentials."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "wallet": {
+                    "type": "string",
+                    "description": "Optional wallet id or label; omit for the profile.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_ownership_coverage",
+        daemon_kind="ui.wallets.ownership_coverage",
+        summary_template="Read ownership coverage",
+    ),
+    ToolEntry(
         name="ui.wallets.identify",
         description=(
             "Reconcile a list of addresses and/or transaction ids against the "

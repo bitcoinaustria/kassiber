@@ -232,6 +232,23 @@ interface StatusResult {
   database_encrypted?: boolean;
 }
 
+interface OwnershipCoverageData {
+  summary: {
+    wallets: number;
+    policy_unknown: number;
+    policy_assumed: number;
+    policy_proven: number;
+    all_policy_proven: boolean;
+  };
+  wallets: Array<{
+    wallet_id: string;
+    policy_tier: "unknown" | "assumed" | "proven";
+    history_tier: "unknown" | "assumed" | "proven";
+    limitations: string[];
+    repair_actions: string[];
+  }>;
+}
+
 function walletDescriptorMaterialFromReveal(
   data: RevealDescriptorResult | undefined,
 ) {
@@ -624,6 +641,11 @@ function ConnectionDetailView({
   );
   const coinsInventoryQuery = useDaemon<WalletUtxosData>(
     "ui.wallets.utxos",
+    { wallet: connection.id },
+    { retry: retryRetryableDaemonError },
+  );
+  const ownershipCoverageQuery = useDaemon<OwnershipCoverageData>(
+    "ui.wallets.ownership_coverage",
     { wallet: connection.id },
     { retry: retryRetryableDaemonError },
   );
@@ -1531,6 +1553,54 @@ function ConnectionDetailView({
         onRefresh={onSync}
         onOpenTransaction={openUtxoTransaction}
       />
+
+      {ownershipCoverageQuery.data?.data?.wallets?.[0] ? (
+        <Card className="rounded-[1.25rem] border-border/70 shadow-sm">
+          <CardHeader className="border-b px-4 pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+              <ShieldCheck className="size-4" aria-hidden="true" />
+              {t("detail.ownershipCoverage.title")}
+              <Badge
+                variant={
+                  ownershipCoverageQuery.data.data.wallets[0].policy_tier === "proven"
+                    ? "default"
+                    : "secondary"
+                }
+              >
+                {t(
+                  `detail.ownershipCoverage.tier.${ownershipCoverageQuery.data.data.wallets[0].policy_tier}`,
+                )}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              {t("detail.ownershipCoverage.description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 px-4 pt-3 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">
+                {t("detail.ownershipCoverage.history")}
+              </span>
+              <span>
+                {t(
+                  `detail.ownershipCoverage.tier.${ownershipCoverageQuery.data.data.wallets[0].history_tier}`,
+                )}
+              </span>
+            </div>
+            {ownershipCoverageQuery.data.data.wallets[0].limitations.length > 0 ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-500/5 px-3 py-2 text-amber-800 dark:border-amber-900/60 dark:text-amber-300">
+                {t("detail.ownershipCoverage.repair")}: {ownershipCoverageQuery.data.data.wallets[0].limitations
+                  .map((code) =>
+                    t(`detail.ownershipCoverage.limitation.${code}`, {
+                      defaultValue: code.replaceAll("_", " "),
+                    }),
+                  )
+                  .join(" · ")}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {samouraiMetadata ? (
         <Card className="rounded-[1.25rem] border-border/70 shadow-sm">

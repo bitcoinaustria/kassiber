@@ -1064,6 +1064,10 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.transactions.metadata.update", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.utxos", ready["data"]["supported_kinds"])
+            self.assertIn(
+                "ui.wallets.ownership_coverage",
+                ready["data"]["supported_kinds"],
+            )
             self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.options", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.set_default", ready["data"]["supported_kinds"])

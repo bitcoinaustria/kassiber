@@ -87,6 +87,24 @@
       "inboundExcluded": "Ein Eingang ist ausgeschlossen oder der Sync ist veraltet — aktualisiere oder blende ausgeschlossene Transaktionen wieder ein.",
       "manualOrDuplicate": "Wahrscheinlich ein manueller oder doppelter Eintrag oder eine Ausgabe, die nicht per Sync erfasst wurde — aktualisiere oder prüfe diese Zeilen."
     },
+    "ownershipCoverage": {
+      "title": "Ownership-Abdeckung",
+      "description": "Ob Kassiber beweisen kann, dass die vollständige Watch-only-Policy dieser Wallet indexiert ist. Eine Gap-Limit-Suche gilt nur als angenommene Abdeckung.",
+      "history": "Backend-Verlaufsabdeckung",
+      "repair": "Bevor nicht zugeordnete Outputs als extern gelten dürfen",
+      "tier": {
+        "unknown": "Unbekannt",
+        "assumed": "Angenommen",
+        "proven": "Bewiesen"
+      },
+      "limitation": {
+        "wallet_policy_set_not_declared_complete": "vollständiges Wallet-Policy-Set bestätigen",
+        "wildcard_branch_bounds_missing": "zuletzt ausgegebene Receive-/Change-Grenzen importieren",
+        "historic_policy_coverage_missing": "archivierte Wallet-Policies bestätigen",
+        "declared_policy_not_fully_derived": "lokale Ownership-Ableitung erweitern",
+        "backend_history_not_proven": "privaten vollständigen Verlaufsscan ausführen"
+      }
+    },
     "samourai": {
       "title": "Samourai Wallet",
       "group": "Gruppe",

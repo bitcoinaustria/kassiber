@@ -129,6 +129,7 @@ from ..core import lightning as core_lightning
 from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from ..core import metadata as core_metadata
 from ..core import ownership as core_ownership
+from ..core import ownership_coverage as core_ownership_coverage
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import samourai as core_samourai
@@ -1423,6 +1424,32 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_get.add_argument("--workspace")
     wallets_get.add_argument("--profile")
     wallets_get.add_argument("--wallet", required=True)
+    wallets_coverage = wallets_sub.add_parser("coverage")
+    wallets_coverage.add_argument("--workspace")
+    wallets_coverage.add_argument("--profile")
+    wallets_coverage.add_argument("--wallet")
+    wallets_coverage_set = wallets_sub.add_parser("coverage-set")
+    wallets_coverage_set.add_argument("--workspace")
+    wallets_coverage_set.add_argument("--profile")
+    wallets_coverage_set.add_argument("--wallet", required=True)
+    wallets_coverage_set.add_argument(
+        "--complete",
+        action=argparse.BooleanOptionalAction,
+        required=True,
+        help="Declare whether this is the complete policy set for the real wallet.",
+    )
+    wallets_coverage_set.add_argument(
+        "--evidence",
+        choices=["user_attested", "wallet_export", "backend_reported"],
+        default="user_attested",
+    )
+    wallets_coverage_set.add_argument(
+        "--branch-last-issued",
+        action="append",
+        default=[],
+        metavar="BRANCH=INDEX",
+        help="Authoritative last-issued derivation index; repeat per branch.",
+    )
 
     wallets_update = wallets_sub.add_parser("update")
     wallets_update.add_argument("--workspace")
@@ -3246,6 +3273,57 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 core_wallets.get_wallet_details(
                     conn, args.workspace, args.profile, args.wallet
                 ),
+            )
+        if args.wallets_command == "coverage":
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
+            wallet_id = None
+            if args.wallet:
+                wallet_id = resolve_wallet(conn, profile["id"], args.wallet)["id"]
+            return emit(
+                args,
+                core_ownership_coverage.build_ownership_coverage_snapshot(
+                    conn, profile["id"], wallet_id=wallet_id
+                ),
+            )
+        if args.wallets_command == "coverage-set":
+            bounds = {}
+            for item in args.branch_last_issued:
+                branch, separator, raw_index = str(item).partition("=")
+                if not separator:
+                    raise AppError(
+                        "--branch-last-issued must use BRANCH=INDEX",
+                        code="validation",
+                    )
+                try:
+                    bounds[str(int(branch))] = int(raw_index)
+                except ValueError as exc:
+                    raise AppError(
+                        "--branch-last-issued must use integer branch and index values",
+                        code="validation",
+                    ) from exc
+            updated = core_wallets.update_wallet(
+                conn,
+                args.workspace,
+                args.profile,
+                args.wallet,
+                {
+                    "config": {
+                        core_wallets.OWNERSHIP_POLICY_CONFIG_KEY: {
+                            "complete": args.complete,
+                            "evidence": args.evidence,
+                            "branch_last_issued": bounds,
+                        }
+                    }
+                },
+            )
+            return emit(
+                args,
+                {
+                    "wallet": updated,
+                    "coverage": core_ownership_coverage.build_ownership_coverage_snapshot(
+                        conn, updated["profile_id"], wallet_id=updated["id"]
+                    ),
+                },
             )
         if args.wallets_command == "update":
             config_updates = {}

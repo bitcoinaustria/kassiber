@@ -130,6 +130,7 @@ from . import importers as importers_module
 from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import privacy_hygiene as core_privacy_hygiene
+from .core import ownership_coverage as core_ownership_coverage
 from .core import rates as core_rates
 from .core import freshness as core_freshness
 from .core import wallets as core_wallets
@@ -323,6 +324,7 @@ SUPPORTED_KINDS = (
     "ui.attachments.open",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.wallets.ownership_coverage",
     "ui.privacy_hygiene.snapshot",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
@@ -5361,6 +5363,18 @@ def _execute_read_only_ai_tool(
                     conn,
                     runtime.runtime_config,
                     call.arguments,
+                )
+            elif entry.daemon_kind == "ui.wallets.ownership_coverage":
+                profile_id = runtime.maintenance_state.get("scope_profile_id")
+                if not isinstance(profile_id, str) or not profile_id:
+                    _, profile = resolve_scope(conn, None, None)
+                    profile_id = str(profile["id"])
+                wallet_id = None
+                wallet_ref = call.arguments.get("wallet")
+                if wallet_ref:
+                    wallet_id = core_resolve_wallet(conn, profile_id, wallet_ref)["id"]
+                payload = core_ownership_coverage.build_ownership_coverage_snapshot(
+                    conn, profile_id, wallet_id=wallet_id
                 )
             elif entry.daemon_kind == "ui.wallets.identify":
                 payload = build_wallet_identify_snapshot_for_ai(
@@ -13545,6 +13559,25 @@ def handle_request(
                         ctx.conn,
                         ctx.runtime_config,
                         request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.ownership_coverage":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        _, profile = resolve_scope(ctx.conn, None, None)
+        wallet_id = None
+        if args.get("wallet"):
+            wallet_id = core_resolve_wallet(ctx.conn, profile["id"], args["wallet"])["id"]
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    core_ownership_coverage.build_ownership_coverage_snapshot(
+                        ctx.conn, profile["id"], wallet_id=wallet_id
                     ),
                 ),
                 request_id,
