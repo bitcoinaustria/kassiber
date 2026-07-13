@@ -661,8 +661,9 @@ column stores the ref ID, not the raw value.
 - Current prerelease path: build a one-file PyInstaller `kassiber-cli-*`
   executable per desktop target, smoke it with the JSONL daemon protocol, and
   bundle it as a Tauri resource.
-- Universal macOS desktop packages carry both arm64 and x86_64 CLI
-  sidecars; the Rust supervisor picks the matching sidecar at runtime.
+- macOS desktop packages are Apple Silicon-only and carry the
+  `aarch64-apple-darwin` CLI sidecar. Intel/universal packages are no longer
+  produced.
 - Production decision still open: keep the PyInstaller sidecar if signing and
   patching are acceptable, or switch to `python-build-standalone` with a pinned
   relocatable runtime tree if that is easier to inspect, debug, or notarize.

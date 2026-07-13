@@ -22,7 +22,7 @@ class HomebrewCaskRenderTest(unittest.TestCase):
         self.assertIn('version "0.22.9"', cask)
         self.assertIn(f'sha256 "{sha256}"', cask)
         self.assertIn(
-            'url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-macos-universal.dmg"',
+            'url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-macos-arm64.dmg"',
             cask,
         )
         self.assertIn('app "Kassiber.app"', cask)
@@ -45,6 +45,29 @@ class HomebrewCaskRenderTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             renderer.render_cask("0.22.9", "not-a-sha")
+
+    def test_prerelease_workflow_is_apple_silicon_only(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (
+            root / ".github" / "workflows" / "prerelease-binaries.yml"
+        ).read_text(encoding="utf-8")
+
+        for retired in (
+            "macos-15-intel",
+            "x86_64-apple-darwin",
+            "universal-apple-darwin",
+            "macos-universal",
+        ):
+            self.assertNotIn(retired, workflow)
+        self.assertIn("target: macos-arm64", workflow)
+        self.assertIn("tauri_args: --target aarch64-apple-darwin", workflow)
+        self.assertIn(
+            "sidecar_artifact_pattern: kassiber-desktop-sidecar-aarch64-apple-darwin",
+            workflow,
+        )
+        self.assertIn('dmg_name="kassiber-macos-arm64.dmg"', workflow)
+        self.assertIn("triple: x86_64-unknown-linux-gnu", workflow)
+        self.assertIn("triple: x86_64-pc-windows-msvc", workflow)
 
 
 if __name__ == "__main__":

@@ -240,17 +240,13 @@ observer state, transaction insertion/retraction, graph cache, inventory,
 coverage and freshness. Backend access, retries, sleeps and scans occur before
 that transaction.
 
-## Packaging references to remove
+## Apple Silicon packaging checkpoint
 
-- `.github/workflows/prerelease-binaries.yml`: `macos-15-intel`, the
-  `x86_64-apple-darwin` sidecar, `macos-universal`, and
-  `--target universal-apple-darwin` plus both Rust targets.
-- `ui-tauri/src-tauri/src/supervisor.rs`: the macOS x86_64 sidecar filename.
-- `docs/reference/prerelease-binaries.md`: universal artifact names, universal
-  build instructions and Intel CLI explanation.
-- `scripts/render_homebrew_cask.py`, `docs/reference/homebrew-cask.md`, and
-  their tests: `kassiber-macos-universal.dmg`.
-- `TODO.md`: the SQLCipher bundle-smoke text that still promises macOS x86_64.
+Phase 1 removes `macos-15-intel`, the `x86_64-apple-darwin` sidecar,
+`macos-universal`, `--target universal-apple-darwin`, the supervisor's Intel
+sidecar dispatch, and universal Homebrew/release documentation. New desktop
+and Homebrew artifacts are explicitly `macos-arm64`; the historical universal
+release remains available for Intel users but is not rebuilt.
 
 The supported release targets after the packaging phase are macOS ARM64,
 Linux x86_64 and Windows x86_64.

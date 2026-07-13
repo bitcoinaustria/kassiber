@@ -74,15 +74,15 @@ asks for one.
 
 The workflow currently builds:
 
-- CLI: macOS arm64, macOS x86_64, and Linux x86_64 one-file PyInstaller
-  binaries as `kassiber-cli-<platform>-<arch>.tar.gz` archives. The extracted
-  executable is still named `kassiber`. Linux is built on Ubuntu 22.04 to keep
-  the glibc floor aligned with the AppImage build.
-- Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
+- CLI: macOS arm64 and Linux x86_64 one-file PyInstaller binaries as
+  `kassiber-cli-<platform>-<arch>.tar.gz` archives. The extracted executable is
+  still named `kassiber`. Linux is built on Ubuntu 22.04 to keep the glibc
+  floor aligned with the AppImage build.
+- Desktop previews: an Apple Silicon macOS `.app` zip plus `.dmg`, Linux
   `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, published with short
   user-facing filenames. Each desktop preview includes a bundled one-file
-  Kassiber CLI sidecar for its target platform; the universal macOS app bundles
-  both arm64 and x86_64 CLI sidecars.
+  Kassiber CLI sidecar for its target platform; the macOS app bundles only the
+  ARM64 sidecar.
 
 Public release filenames intentionally omit the release version because the
 GitHub release tag already supplies it:
@@ -90,10 +90,9 @@ GitHub release tag already supplies it:
 ```text
 kassiber-cli-linux-x64.tar.gz
 kassiber-cli-macos-arm64.tar.gz
-kassiber-cli-macos-x64.tar.gz
 kassiber-linux-x64.AppImage
-kassiber-macos-universal.app.zip
-kassiber-macos-universal.dmg
+kassiber-macos-arm64.app.zip
+kassiber-macos-arm64.dmg
 kassiber-windows-x64.exe
 kassiber-windows-x64.msi
 SHA256SUMS.txt
@@ -101,7 +100,7 @@ SHA256SUMS.txt
 
 When the repository secret `HOMEBREW_TAP_TOKEN` is configured, successful
 release publishes also update `bitcoinaustria/homebrew-kassiber` with a cask
-for `kassiber-macos-universal.dmg`. See
+for `kassiber-macos-arm64.dmg`. See
 [Homebrew Cask](homebrew-cask.md) for the tap setup and immutability
 requirements.
 
@@ -110,12 +109,12 @@ filenames are internal to the desktop package and use Rust target triples such
 as `kassiber-cli-aarch64-apple-darwin`; those raw sidecars are not release
 assets.
 
-The macOS CLI legs stay architecture-specific because PyInstaller universal2
-requires a universal2 Python interpreter or extra binary stitching. The macOS
-desktop leg uses GitHub's `macos-latest` runner with Tauri's
-`--target universal-apple-darwin`, after installing both Rust targets
-(`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
-target name `macos-universal` so users only see one Mac GUI download.
+The macOS CLI, sidecar and desktop legs use GitHub's Apple Silicon
+`macos-latest` runner and the explicit Tauri target
+`aarch64-apple-darwin`. New Kassiber releases no longer include Intel or
+universal macOS artifacts. The last universal prerelease remains available
+from its immutable GitHub release for Intel users, but it is not a supported
+target for new builds.
 
 ### Local Apple Silicon build
 
@@ -246,6 +245,6 @@ host OS supports it, for example on macOS:
 ```bash
 cd ui-tauri
 pnpm install --frozen-lockfile
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-pnpm tauri build --target universal-apple-darwin --bundles app,dmg --ci
+rustup target add aarch64-apple-darwin
+pnpm tauri build --target aarch64-apple-darwin --bundles app,dmg --ci
 ```

@@ -59,7 +59,7 @@ same verification surface.
     Electrum/demo gates pass; the reference document names concrete manual
     observer functions, ingress paths, commit boundaries, packaging references,
     tests and honest initial compatibility routes.
-  - [ ] Phase 1 — Apple Silicon packaging: remove Intel CLI/sidecar and
+  - [x] Phase 1 — Apple Silicon packaging: remove Intel CLI/sidecar and
     universal desktop builds, publish explicit macOS ARM64 artifacts, update
     Homebrew/prerelease docs/tests and keep Linux x86_64 + Windows x86_64.
   - [ ] Phase 2 — watch-only boundary: introduce one shared descriptor
@@ -956,10 +956,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   test — `docs/reference/daemon.md` requires it but the reveal payload's
   `blinding_key` currently passes through unredacted.
 - [ ] Cross-platform CI for SQLCipher: PyInstaller bundle smoke tests on
-  macOS arm64/x86_64, Linux x86_64, Windows x86_64. The CLI-binary smoke matrix
-  now runs **macOS arm64 (macos-latest) + macOS x86_64 (macos-15-intel) + Linux
-  x86_64 (ubuntu-22.04)**; the remaining gap is **Windows x86_64** CLI-bundle
-  smoke (Windows currently builds only the desktop preview).
+  macOS arm64, Linux x86_64, Windows x86_64. The CLI-binary smoke matrix now
+  runs **macOS arm64 (macos-latest) + Linux x86_64 (ubuntu-22.04)**; the
+  remaining gap is **Windows x86_64** CLI-bundle smoke (Windows currently
+  builds only the desktop preview). Intel and universal macOS releases are
+  intentionally discontinued.
 - [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric
   reveal gate. macOS desktop builds now have the first half for database
   unlock: first lock-screen passphrase entry can enroll Touch ID for the next

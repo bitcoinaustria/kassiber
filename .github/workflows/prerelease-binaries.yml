@@ -40,7 +40,6 @@ jobs:
         os:
           - ubuntu-22.04
           - macos-latest
-          - macos-15-intel
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -226,13 +225,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: macOS universal
+          - label: macOS arm64
             os: macos-latest
-            target: macos-universal
+            target: macos-arm64
             bundles: app,dmg
-            tauri_args: --target universal-apple-darwin
-            sidecar_artifact_pattern: kassiber-desktop-sidecar-*-apple-darwin
-            sidecar_expected: 2
+            tauri_args: --target aarch64-apple-darwin
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-aarch64-apple-darwin
+            sidecar_expected: 1
           - label: Linux
             os: ubuntu-22.04
             target: linux-x64
@@ -268,10 +267,6 @@ jobs:
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: stable
-
-      - name: Install macOS universal Rust targets
-        if: matrix.target == 'macos-universal'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
@@ -371,10 +366,6 @@ jobs:
           - label: macOS arm64
             os: macos-latest
             triple: aarch64-apple-darwin
-            exe_ext: ""
-          - label: macOS x86_64
-            os: macos-15-intel
-            triple: x86_64-apple-darwin
             exe_ext: ""
           - label: Linux x86_64
             os: ubuntu-22.04
@@ -608,7 +599,7 @@ jobs:
           set -euo pipefail
           tag_name="${RELEASE_TAG_NAME}"
           version="${tag_name#v}"
-          dmg_name="kassiber-macos-universal.dmg"
+          dmg_name="kassiber-macos-arm64.dmg"
           dmg_path="release/${dmg_name}"
           cask_path="homebrew-tap/${HOMEBREW_CASK_PATH}"
 
