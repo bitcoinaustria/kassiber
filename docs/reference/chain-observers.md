@@ -35,6 +35,45 @@ transactions, retractions/replacements, output inventory, derivation coverage,
 and the freshness checkpoint. A failed or cancelled apply rolls back all of
 them.
 
+## Transactional observer contract
+
+`kassiber/core/chain_observer/` is the dependency boundary below the CLI and
+daemon layers. A request-scoped observer loads prior state and performs backend
+preparation only while SQLite has no active transaction. It returns an explicit
+JSON-safe `PreparedObserverUpdate`; dependency wallet, builder, signer, PSBT or
+PSET objects never cross the boundary. Application is accepted only inside the
+coordinator-owned wallet savepoint. It persists the new state and returns
+normalized transaction, retraction, output, coverage and freshness facts for
+Kassiber's existing projection stages.
+
+Observer state uses two private main-database tables:
+
+- `chain_observer_instances` stores representation-versioned JSON state for a
+  stable logical-wallet/source identity;
+- `chain_observer_coverage` stores versioned per-branch scan coverage.
+
+Identities are derived from structural, non-secret source keys. A multi-script
+xpub gets one instance per script family; receive/change branches remain
+distinct within the instance. Samourai child sources retain their concrete
+source-wallet identity while all map to the parent logical wallet. Descriptor
+or xpub text is never hashed into the identity.
+
+The store accepts JSON primitives only: no pickle, Python object serialization,
+or dependency sidecar database. Unknown or mismatched state/coverage versions
+raise `observer_state_rebuild_required` without returning the stored payload.
+Writes never commit and therefore roll back with the wallet refresh. A failed
+apply discards its request-local dependency object. Wallet material changes,
+wallet deletion and confirmed book reset remove observer rows; clearing this
+derived state does not touch transactions, notes, attachments, edit history or
+custody components.
+
+These tables are absent from the positive replication allowlist and every
+public snapshot, AI, diagnostics and audit query. Backup includes them only as
+pages in the encrypted main SQLCipher database. Dependency and compatibility
+facts cannot be applied together: the coordinator raises
+`observer_projection_conflict` instead of running a shadow observer or falling
+back after dependency application begins.
+
 ## Initial capability matrix
 
 This is a routing policy, not a claim that migration is already complete.

@@ -8,6 +8,7 @@ from typing import Any
 
 from ..db import resolve_attachments_root
 from ..errors import AppError
+from .chain_observer import delete_profile_observer_state
 from .repo import current_context_snapshot
 from .sync_replication.events import sync_enabled
 
@@ -136,6 +137,20 @@ def reset_current_profile_data(
     )
     removed = {
         "transactions": _count_profile_rows(conn, "transactions", profile_id),
+        "chain_observer_instances": _count_profile_rows(
+            conn, "chain_observer_instances", profile_id
+        ),
+        "chain_observer_coverage": _count_sql(
+            conn,
+            """
+            SELECT COUNT(*)
+            FROM chain_observer_coverage coverage
+            JOIN chain_observer_instances observer
+              ON observer.id = coverage.observer_id
+            WHERE observer.profile_id = ?
+            """,
+            (profile_id,),
+        ),
         "custody_components": _count_profile_rows(
             conn, "custody_components", profile_id
         ),
@@ -277,6 +292,7 @@ def reset_current_profile_data(
     }
 
     with conn:
+        delete_profile_observer_state(conn, profile_id)
         conn.execute(
             "INSERT INTO custody_component_purge_authorizations(profile_id) VALUES(?)",
             (profile_id,),

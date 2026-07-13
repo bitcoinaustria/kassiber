@@ -70,7 +70,7 @@ same verification surface.
     savepoint; apply observer state, transactions, retractions, graph evidence,
     inventory, coverage and freshness under one coordinator-owned rollback
     boundary with no sub-hook or progress-callback commit.
-  - [ ] Phase 4 — observer contract and SQLCipher store: add deterministic
+  - [x] Phase 4 — observer contract and SQLCipher store: add deterministic
     multi-instance identities, explicit versioned state/coverage persistence,
     fetch/apply contracts, rollback discard and strict exclusion from public,
     AI, diagnostics, audit and replication surfaces.

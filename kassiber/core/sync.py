@@ -16,6 +16,11 @@ from ..errors import AppError
 from ..util import str_or_none
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
+from .chain_observer import (
+    PreparedObserverUpdate,
+    apply_prepared_observer_update,
+    discard_prepared_observer_updates,
+)
 from .wallets import (
     has_descriptor_sync_material,
     has_silent_payment_sync_material,
@@ -151,6 +156,7 @@ class WalletBackendFetch:
     started: float
     force_full: bool
     skip_outcome: Mapping[str, Any] | None = None
+    observer_updates: tuple[PreparedObserverUpdate, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -565,6 +571,61 @@ def fetch_wallet_backend(
     return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
 
 
+def apply_fetch_observer_updates(
+    conn: sqlite3.Connection,
+    fetch: WalletBackendFetch,
+) -> WalletBackendFetch:
+    """Apply dependency updates and expose only normalized Kassiber facts."""
+
+    if not fetch.observer_updates:
+        return fetch
+    if fetch.normalized_records or (fetch.adapter_meta or {}).get("utxos") is not None:
+        raise AppError(
+            "A wallet refresh cannot apply dependency and compatibility projections together",
+            code="observer_projection_conflict",
+            hint="Select exactly one observer route before contacting the backend.",
+            retryable=False,
+        )
+    records: list[BackendRecord] = []
+    outputs: list[Mapping[str, Any]] = []
+    retracted: list[str] = []
+    observer_checkpoints: dict[str, Mapping[str, Any]] = {}
+    for prepared in fetch.observer_updates:
+        facts = apply_prepared_observer_update(conn, prepared)
+        records.extend(facts.transaction_records)
+        outputs.extend(facts.outputs)
+        retracted.extend(facts.retracted_external_ids)
+        observer_checkpoints[prepared.identity.id] = dict(
+            facts.freshness_checkpoint
+        )
+    adapter_meta = dict(fetch.adapter_meta or {})
+    if outputs:
+        adapter_meta["utxos"] = outputs
+    if retracted:
+        adapter_meta["observer_retracted_external_ids"] = list(
+            dict.fromkeys(str(value) for value in retracted if str(value))
+        )
+    if observer_checkpoints:
+        existing_checkpoint = adapter_meta.get("freshness_checkpoint")
+        merged_checkpoint = (
+            dict(existing_checkpoint) if isinstance(existing_checkpoint, Mapping) else {}
+        )
+        merged_checkpoint["observer_instances"] = dict(
+            sorted(observer_checkpoints.items())
+        )
+        adapter_meta["freshness_checkpoint"] = merged_checkpoint
+    return replace(
+        fetch,
+        normalized_records=tuple(records) if records else fetch.normalized_records,
+        adapter_meta=adapter_meta,
+    )
+
+
+def discard_fetch_observer_updates(fetch: WalletBackendFetch | BaseException | None) -> None:
+    if isinstance(fetch, WalletBackendFetch) and fetch.observer_updates:
+        discard_prepared_observer_updates(fetch.observer_updates)
+
+
 def sync_wallet_from_backend(
     conn: sqlite3.Connection,
     runtime_config: RuntimeConfig,
@@ -605,6 +666,7 @@ def sync_wallet_from_backend(
     fetch = prefetched
     if fetch.skip_outcome is not None:
         return dict(fetch.skip_outcome)
+    fetch = apply_fetch_observer_updates(conn, fetch)
     started = fetch.started
     force_full = fetch.force_full
     backend = fetch.backend
@@ -648,8 +710,11 @@ def sync_wallet_from_backend(
         hooks.persist_observer_update(conn, profile, wallet, fetch)
     notify_apply_stage(hooks, APPLY_STAGE_OBSERVER_PERSISTENCE)
     observed_utxos = adapter_meta.pop("utxos", None)
-    retracted_external_ids = _string_list(
-        adapter_meta.pop("bitcoinrpc_retracted_txids", [])
+    retracted_external_ids = list(
+        dict.fromkeys(
+            _string_list(adapter_meta.pop("bitcoinrpc_retracted_txids", []))
+            + _string_list(adapter_meta.pop("observer_retracted_external_ids", []))
+        )
     )
     retraction_outcome: SyncOutcome | None = None
     if retracted_external_ids and hooks.retract_records is not None:
@@ -1091,7 +1156,9 @@ __all__ = [
     "WalletSyncHooks",
     "WalletSyncState",
     "WALLET_FETCH_FANOUT",
+    "apply_fetch_observer_updates",
     "classify_wallet_sync",
+    "discard_fetch_observer_updates",
     "emit_sync_progress",
     "fetch_wallet_backend",
     "normalize_backend_kind",

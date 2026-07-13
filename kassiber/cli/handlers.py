@@ -3670,6 +3670,9 @@ def _apply_wallet_sync_atomically(
             ),
         )
     except BaseException:
+        core_sync.discard_fetch_observer_updates(
+            (prefetched or {}).get(str(wallet["id"]))
+        )
         if hooks.discard_observer_update is not None:
             hooks.discard_observer_update(wallet)
         raise
