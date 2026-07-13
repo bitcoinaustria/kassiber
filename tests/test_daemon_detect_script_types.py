@@ -36,6 +36,11 @@ def _xpub_from_seed() -> str:
     return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_public().to_base58()
 
 
+def _xprv_from_seed() -> str:
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
+    return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_base58()
+
+
 def _ctx(backends: dict | None = None, default: str = "esplora"):
     return types.SimpleNamespace(
         runtime_config={
@@ -130,6 +135,23 @@ class DetectScriptTypesTests(unittest.TestCase):
             _detect_script_types_payload(_ctx(), {"wallet_material": broken})
         self.assertEqual(ctx.exception.code, "validation")
         self.assertIn("checksum", str(ctx.exception).lower())
+
+    def test_private_extended_key_is_rejected_before_backend_probe(self):
+        secret = _xprv_from_seed()
+        with patch(
+            "kassiber.daemon.resolve_backend",
+            side_effect=AssertionError("backend must not be contacted"),
+        ):
+            with self.assertRaises(AppError) as ctx:
+                _detect_script_types_payload(
+                    _ctx(),
+                    {"wallet_material": secret},
+                )
+        self.assertEqual(
+            ctx.exception.code,
+            "wallet_spending_private_material",
+        )
+        self.assertNotIn(secret, str(ctx.exception))
 
 
 if __name__ == "__main__":  # pragma: no cover

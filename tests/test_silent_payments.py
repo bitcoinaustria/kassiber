@@ -267,19 +267,22 @@ class SilentPaymentsTests(unittest.TestCase):
 
         with self.assertRaises(AppError) as spending:
             silent_payments.validate_watch_only_descriptor("sp(spspend1q" + ("q" * 40) + ")")
-        self.assertEqual(spending.exception.code, "validation")
+        self.assertEqual(spending.exception.code, "wallet_spending_private_material")
 
         with self.assertRaises(AppError) as private_spend:
             silent_payments.validate_watch_only_descriptor(
                 "sp(K" + ("a" * 40) + ",L" + ("b" * 40) + ")"
             )
-        self.assertEqual(private_spend.exception.code, "validation")
+        self.assertEqual(private_spend.exception.code, "wallet_spending_private_material")
 
         with self.assertRaises(AppError) as wrapped_private_spend:
             silent_payments.validate_watch_only_descriptor(
                 "sp(K" + ("a" * 40) + ",musig(K" + ("b" * 40) + ",03" + ("c" * 32) + "))"
             )
-        self.assertEqual(wrapped_private_spend.exception.code, "validation")
+        self.assertEqual(
+            wrapped_private_spend.exception.code,
+            "wallet_spending_private_material",
+        )
 
         with self.assertRaises(AppError) as network_mismatch:
             silent_payments.validate_watch_only_descriptor(

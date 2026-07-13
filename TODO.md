@@ -62,7 +62,7 @@ same verification surface.
   - [x] Phase 1 — Apple Silicon packaging: remove Intel CLI/sidecar and
     universal desktop builds, publish explicit macOS ARM64 artifacts, update
     Homebrew/prerelease docs/tests and keep Linux x86_64 + Windows x86_64.
-  - [ ] Phase 2 — watch-only boundary: introduce one shared descriptor
+  - [x] Phase 2 — watch-only boundary: introduce one shared descriptor
     capability/preflight layer for CLI, daemon, files, BSMS, bare xpub,
     Samourai and compatibility importers; always reject spending-private
     Bitcoin/Liquid material while permitting sensitive Liquid view keys.

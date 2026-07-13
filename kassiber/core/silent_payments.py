@@ -22,6 +22,7 @@ from ..msat import dec
 from ..redaction import redact_secret_value
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int, str_or_none
+from ..wallet_security import reject_spending_private_material
 
 
 WALLET_KIND = "silent-payment"
@@ -176,6 +177,16 @@ def _private_key_expr(value: str) -> bool:
     )
 
 
+def _contains_private_key_expr(value: str) -> bool:
+    """Recognize private leaves inside BIP392 key expressions like musig(...)."""
+
+    return any(
+        _private_key_expr(candidate)
+        for candidate in re.split(r"[(),]", str(value or ""))
+        if candidate.strip()
+    )
+
+
 def _public_spend_key_expr(value: str) -> bool:
     text = _strip_origin(value)
     return bool(
@@ -218,12 +229,7 @@ def _ensure_key_network(value: str, network: str, *, private: bool, label: str) 
 def _validate_spscan_token(value: str, network: str) -> str:
     token = _strip_origin(value).lower()
     if _SPSPEND_RE.match(token):
-        raise AppError(
-            "Silent Payments spending material is not accepted",
-            code="validation",
-            hint="Use watch-only spscan material; spspend/full-wallet descriptors are out of scope.",
-            retryable=False,
-        )
+        reject_spending_private_material()
     match = _SPSCAN_RE.match(token)
     if not match:
         raise AppError(
@@ -256,12 +262,7 @@ def validate_watch_only_descriptor(material: Any, *, chain: Any = "bitcoin", net
     text = _compact_descriptor(material)
     args = _descriptor_args(text)
     if any("spspend" in arg.lower() for arg in args):
-        raise AppError(
-            "Silent Payments spending material is not accepted",
-            code="validation",
-            hint="Use watch-only spscan material or a private scan key with a public spend key.",
-            retryable=False,
-        )
+        reject_spending_private_material()
     if len(args) == 1:
         _validate_spscan_token(args[0], normalized_network)
         material_format = "bip392-spscan"
@@ -281,13 +282,8 @@ def validate_watch_only_descriptor(material: Any, *, chain: Any = "bitcoin", net
                 retryable=False,
             )
         _ensure_key_network(scan_key, normalized_network, private=True, label="scan key")
-        if _private_key_expr(spend_key):
-            raise AppError(
-                "Silent Payments spend-private material is not accepted",
-                code="validation",
-                hint="Use a public spend key/xpub in the second sp() argument.",
-                retryable=False,
-        )
+        if _contains_private_key_expr(spend_key):
+            reject_spending_private_material()
         if not _public_spend_key_expr(spend_key):
             raise AppError(
                 "sp(scan, spend) requires a public compressed spend key or public extended key",

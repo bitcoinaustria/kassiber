@@ -734,6 +734,61 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(prof["tax_country"], "generic")
         self.assertEqual(prof["fiat_currency"], "USD")
 
+    def test_02z_private_descriptor_error_envelope_is_secret_free(self):
+        from embit import bip32
+
+        isolated = tempfile.TemporaryDirectory(prefix="kassiber-private-descriptor-")
+        self.addCleanup(isolated.cleanup)
+        data_root = Path(isolated.name) / "data"
+        setup_commands = (
+            ("init",),
+            ("workspaces", "create", "Main"),
+            (
+                "profiles",
+                "create",
+                "--workspace",
+                "Main",
+                "--fiat-currency",
+                "EUR",
+                "--tax-country",
+                "generic",
+                "Book",
+            ),
+        )
+        for command in setup_commands:
+            _payload, setup_code = _run(data_root, *command)
+            self.assertEqual(setup_code, 0)
+
+        secret = bip32.HDKey.from_seed(b"cli-watch-only-boundary").derive(
+            "m/84h/0h/0h"
+        ).to_base58()
+        payload, code = _run(
+            data_root,
+            "--debug",
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--label",
+            "Unsafe descriptor",
+            "--kind",
+            "descriptor",
+            "--descriptor",
+            f"wpkh({secret}/0/*)",
+        )
+
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(
+            payload["error"]["code"],
+            "wallet_spending_private_material",
+        )
+        encoded = json.dumps(payload, sort_keys=True)
+        self.assertNotIn(secret, encoded)
+        self.assertIn("watch-only", encoded.lower())
+
     def test_03_wallet_create(self):
         payload = self._cli(
             "wallets", "create",

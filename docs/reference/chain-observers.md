@@ -211,6 +211,28 @@ or network access:
 Spending-private Bitcoin or Liquid descriptor material is rejected. Liquid
 private blinding/view keys are allowed but classified as sensitive.
 
+## Watch-only enforcement
+
+Phase 2 centralizes the spending-key boundary in
+`kassiber/wallet_security.py`. Wallet-export normalization performs a
+best-effort parsed-key preflight without breaking placeholder-only legacy
+exports; `load_descriptor_plan` performs the authoritative strict parse and
+checks every spending key before derivation or network access. The check covers
+primary and separate change descriptors, nested descriptors, multisig,
+multipath, WIF and extended private keys. A value in the nominal `xpub` field
+is parsed as untrusted key material even when the rest of that config is too
+incomplete to form a plan.
+
+Rejected material raises the stable
+`wallet_spending_private_material` error with a secret-free remediation hint.
+The error never includes the submitted value in its message, hint or details;
+CLI and daemon envelopes preserve that code. Stored unsafe configurations are
+not neutered or migrated: descriptor preview, wallet update and backend sync
+fail closed. Liquid descriptor spending keys must be public, while private
+SLIP-77 blinding/view material remains accepted inside SQLCipher. Silent
+Payments retains its narrower exception for private scan material and rejects
+private spend leaves, including leaves nested in spend-key expressions.
+
 ## Current refresh commit boundaries
 
 The current single-wallet chain refresh is not atomic:

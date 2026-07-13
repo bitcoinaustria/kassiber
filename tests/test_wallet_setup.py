@@ -38,6 +38,11 @@ def _account_xpub() -> tuple[bip32.HDKey, str]:
     return account, account.to_base58()
 
 
+def _private_account() -> bip32.HDKey:
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
+    return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h")
+
+
 class NormalizeWalletMaterialSlip132Tests(unittest.TestCase):
     def test_zpub_converts_to_native_segwit_descriptors(self):
         account, xpub = _account_xpub()
@@ -241,6 +246,68 @@ class NormalizeWalletMaterialMultiScriptTests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], f"sh(wpkh({xpub}/0/*))")
         self.assertNotIn("xpub", result)
+
+
+class NormalizeWalletMaterialWatchOnlyTests(unittest.TestCase):
+    def _assert_secret_free_rejection(self, material: str, *, script_type=None):
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(material, script_type=script_type)
+        error = ctx.exception
+        self.assertEqual(error.code, "wallet_spending_private_material")
+        rendered = json.dumps(
+            {
+                "message": str(error),
+                "hint": error.hint,
+                "details": error.details,
+            },
+            sort_keys=True,
+        )
+        self.assertNotIn(material, rendered)
+        self.assertNotIn("xprv", rendered.lower())
+        self.assertNotIn("wif", rendered.lower())
+
+    def test_rejects_all_supported_extended_private_key_versions(self):
+        account = _private_account()
+        versions = {
+            "xprv": "0488ade4",
+            "tprv": "04358394",
+            "yprv": "049d7878",
+            "zprv": "04b2430c",
+            "uprv": "044a4e28",
+            "vprv": "045f18bc",
+        }
+        for expected_prefix, version in versions.items():
+            material = account.to_base58(version=bytes.fromhex(version))
+            with self.subTest(prefix=expected_prefix):
+                self.assertTrue(material.startswith(expected_prefix))
+                self._assert_secret_free_rejection(
+                    material,
+                    script_type="p2wpkh",
+                )
+
+    def test_rejects_bare_wif(self):
+        self._assert_secret_free_rejection(_private_account().key.wif())
+
+    def test_rejects_private_receive_or_change_in_json_export(self):
+        account = _private_account()
+        xpub = account.to_public().to_base58()
+        xprv = account.to_base58()
+        for payload in (
+            {"descriptor": f"wpkh({xprv}/0/*)"},
+            {
+                "descriptor": f"wpkh({xpub}/0/*)",
+                "change_descriptor": f"wpkh({xprv}/1/*)",
+            },
+        ):
+            with self.subTest(fields=tuple(payload)):
+                material = json.dumps(payload)
+                with self.assertRaises(AppError) as ctx:
+                    normalize_wallet_material(material)
+                self.assertEqual(
+                    ctx.exception.code,
+                    "wallet_spending_private_material",
+                )
+                self.assertNotIn(xprv, str(ctx.exception))
 
 
 class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):
