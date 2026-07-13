@@ -74,7 +74,7 @@ same verification surface.
     multi-instance identities, explicit versioned state/coverage persistence,
     fetch/apply contracts, rollback discard and strict exclusion from public,
     AI, diagnostics, audit and replication surfaces.
-  - [ ] Phase 5 — Docker/regtest observer oracle: extend the existing disposable
+  - [x] Phase 5 — Docker/regtest observer oracle: extend the existing disposable
     Core/Elements stack with independent Bitcoin and Liquid truth manifests for
     confirmation, RBF, reorg, ownership, UTXO and restart transitions.
   - [ ] Phase 6 — Bitcoin BDK observer: pin/package the official dependency and

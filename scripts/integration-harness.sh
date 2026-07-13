@@ -347,6 +347,27 @@ run_bitcoin_backend_suite() {
   run_bitcoin_electrum_parity_smoke
 }
 
+run_chain_observer_oracle() {
+  py -m unittest tests.integration.test_live_chain_observer_oracle -v
+}
+
+run_chain_observers() {
+  local selected="${1:-all}"
+  case "$selected" in
+    all|bitcoin|liquid)
+      ;;
+    *)
+      echo "usage: $0 chain-observers [all|bitcoin|liquid]" >&2
+      exit 2
+      ;;
+  esac
+  export KASSIBER_CHAIN_OBSERVER_CHAIN="$selected"
+  if [ "$selected" != "bitcoin" ]; then
+    export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
+  fi
+  run_with_bitcoin_core run_chain_observer_oracle
+}
+
 probe_frigate() {
   py - <<'PY'
 import json
@@ -1577,6 +1598,9 @@ case "$MODE" in
   bitcoin-electrum)
     run_bitcoin_electrum
     ;;
+  chain-observers)
+    run_chain_observers "${2:-all}"
+    ;;
   demo|demo-full)
     run_regtest_demo_full
     ;;
@@ -1607,10 +1631,11 @@ case "$MODE" in
     # mine enough blocks to push the backdated accounting scenario out of range
     # if demo-full reuses the same disposable regtest volume.
     ( run_bitcoin_core )
+    ( run_chain_observers all )
     ( run_regtest_demo_full )
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|btcpay|silent-payments|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|btcpay|silent-payments|all]" >&2
     exit 2
     ;;
 esac

@@ -28,6 +28,11 @@ from kassiber.db import open_db
 
 from tests.integration.env import no_egress_guard
 from tests.integration import regtest_demo
+from tests.integration.chain_observer_oracle import (
+    BITCOIN_TRANSITIONS,
+    LIQUID_TRANSITIONS,
+    TruthManifest,
+)
 from tests.integration.tapes import BitcoinRpcTape, RecordedTape, TapeMiss
 
 
@@ -145,6 +150,52 @@ def _create_replay_book(conn, data_root: Path, *, core_wallet: str, addresses: l
 
 
 class RegtestHarnessTest(unittest.TestCase):
+    def test_chain_observer_truth_manifest_is_bounded_and_ordered(self):
+        bitcoin = TruthManifest("bitcoin", "regtest", "unit")
+        for name in BITCOIN_TRANSITIONS:
+            bitcoin.capture(
+                name,
+                tip={"height": 1, "hash": "11" * 32},
+                transactions=(),
+                utxos=(),
+                ownership=(),
+                highest_used={"receive": 0, "change": 0},
+            )
+        bitcoin.validate()
+
+        liquid = TruthManifest("liquid", "elementsregtest", "unit")
+        for name in LIQUID_TRANSITIONS:
+            liquid.capture(
+                name,
+                tip={"height": 1, "hash": "22" * 32},
+                transactions=(),
+                utxos=(),
+                ownership=(),
+                highest_used={"receive": 0, "change": 0},
+            )
+        liquid.validate()
+
+        broken = TruthManifest("bitcoin", "regtest", "unit")
+        broken.capture(
+            "noop",
+            tip={"height": 1, "hash": "33" * 32},
+            transactions=(),
+            utxos=(),
+            ownership=(),
+            highest_used={},
+        )
+        with self.assertRaisesRegex(AssertionError, "transition order"):
+            broken.validate()
+
+    def test_chain_observer_lane_is_shared_and_chain_selectable(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("chain-observers", harness)
+        self.assertIn("KASSIBER_CHAIN_OBSERVER_CHAIN", harness)
+        self.assertIn("run_with_bitcoin_core run_chain_observer_oracle", harness)
+        self.assertIn("tests.integration.test_live_chain_observer_oracle", harness)
+        self.assertNotIn("compose.chain-observers", harness)
+
     def test_no_egress_guard_blocks_only_non_loopback_connects(self):
         calls = []
 
