@@ -2319,7 +2319,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(synced["kind"], "ui.wallets.sync")
                 result = synced["data"]["results"][0]
                 self.assertEqual(result["wallet"], "Descriptor Live")
-                self.assertEqual(result["status"], "synced")
+                self.assertEqual(result["status"], "synced", synced)
                 self.assertEqual(result["imported"], 1)
                 self.assertEqual(result["sync_mode"], "descriptor")
                 self.assertEqual(result["target_count"], 2)

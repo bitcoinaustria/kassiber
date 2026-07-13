@@ -66,31 +66,27 @@ same verification surface.
     capability/preflight layer for CLI, daemon, files, BSMS, bare xpub,
     Samourai and compatibility importers; always reject spending-private
     Bitcoin/Liquid material while permitting sensitive Liquid view keys.
-  - [ ] Phase 3 — atomic refresh substrate: persist versioned observer blobs and
-    derivation coverage in SQLCipher; fetch before the transaction; apply
-    observer state, transactions, retractions, graph cache, inventory and
-    freshness under one rollback boundary with no sub-hook commit.
-  - [ ] Phase 4 — dependency contracts: verify and exactly pin current official
-    `bdkpython`/`lwk` releases, Python requirements, licenses, APIs and wheels;
-    update `uv.lock`, PyInstaller collection and third-party notices; add
-    executable API/wheel/privacy contracts for all supported targets.
-  - [ ] Phase 5 — Bitcoin BDK observer: route supported Esplora/Electrum
-    descriptor wallets through BDK with proxy/no-egress preservation,
-    deterministic normalization, restart/RBF/reorg tests and no legacy fallback
-    after dependency failure. Keep Core RPC, Silent Payments and proven binding
-    gaps as explicit named compatibility routes.
-  - [ ] Phase 6 — Liquid LWK observer: route executable-proven Liquid descriptor
-    forms through LWK, persist wollet state only in SQLCipher, preserve local
-    unblinding/privacy, and test fixed descriptors, Taproot, assets, fees,
-    restart/reorg and explicit unsupported-form routing.
-  - [ ] Phase 7 — retire duplicate state engines: delete replaced manual gap,
-    checkpoint, graph/replacement and UTXO-state machinery for migrated routes;
-    retain only narrow compatibility code and `embit` primitives with named
-    callers and tests.
-  - [ ] Phase 8 — release proof: run full unit/integration/demo/package gates,
-    fault injection and secret scans; verify no side files or replicated
-    observer blobs; update README/backend/testing/prerelease/license docs and
-    leave the same draft PR green and reviewable by checkpoint commit.
+  - [x] Phase 3 — atomic refresh substrate: finish chain fetch before the write
+    savepoint; apply observer state, transactions, retractions, graph evidence,
+    inventory, coverage and freshness under one coordinator-owned rollback
+    boundary with no sub-hook or progress-callback commit.
+  - [ ] Phase 4 — observer contract and SQLCipher store: add deterministic
+    multi-instance identities, explicit versioned state/coverage persistence,
+    fetch/apply contracts, rollback discard and strict exclusion from public,
+    AI, diagnostics, audit and replication surfaces.
+  - [ ] Phase 5 — Docker/regtest observer oracle: extend the existing disposable
+    Core/Elements stack with independent Bitcoin and Liquid truth manifests for
+    confirmation, RBF, reorg, ownership, UTXO and restart transitions.
+  - [ ] Phase 6 — Bitcoin BDK observer: pin/package the official dependency and
+    route supported Esplora/Electrum descriptor wallets through it with
+    deterministic normalization and no production shadow/fallback observer.
+  - [ ] Phase 7 — Liquid LWK observer: pin/package the official dependency,
+    route executable-proven Liquid descriptor forms through it, and persist
+    wollet state only inside SQLCipher while preserving local unblinding.
+  - [ ] Phase 8 — cleanup and final proof: delete replaced manual observer
+    engines, retain only named compatibility routes and `embit` primitives,
+    update all user/developer/release/license docs, and leave the same draft PR
+    green after full unit, integration, demo, package and secret-scan gates.
 
 - [x] Harden the CLI for one-shot agents: `--machine` now implies
   `--non-interactive`; `commands describe` exposes an argparse-derived command

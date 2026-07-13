@@ -233,34 +233,36 @@ SLIP-77 blinding/view material remains accepted inside SQLCipher. Silent
 Payments retains its narrower exception for private scan material and rejects
 private spend leaves, including leaves nested in spend-key expressions.
 
-## Current refresh commit boundaries
+## Atomic chain refresh boundary
 
-The current single-wallet chain refresh is not atomic:
+Phase 3 routes single-wallet refresh, `--all`, and daemon freshness through the
+same `_apply_wallet_sync_atomically` primitive. Chain discovery, source-overlap
+preflight, backend fetching, retry/backoff and any widened negative-balance
+repair scan finish before the coordinator opens its per-wallet savepoint. The
+coordinator supplies only `commit=False` hooks; it alone releases, rolls back
+and commits the local application.
 
-1. `cli.handlers.sync_wallet` calls `core.sync.sync_wallets` with
-   `_wallet_sync_hooks(commit=True)`.
-2. `insert_records` reaches `core.imports.import_records_into_wallet` and may
-   call `conn.commit()`.
-3. `update_output_inventory` reaches
-   `core.output_inventory.update_wallet_output_inventory` and may call a
-   second `conn.commit()`.
-4. `_mark_wallet_synced_from_results` writes wallet/freshness state, followed
-   by the caller's final `conn.commit()`.
+Within that savepoint the ordered apply stages are observer persistence,
+authoritative retractions, normalized transaction insertion (including the
+stored graph evidence), output inventory, derivation coverage, wallet sync
+metadata and the freshness checkpoint. The observer and coverage hooks are
+explicit seams for the Phase 4 store and do not expose dependency objects to
+CLI or daemon layers. If any stage or cancellation check fails, every local
+write rolls back and the request-scoped observer discard hook runs. `--all`
+then records a redacted error for that wallet and continues without disturbing
+already committed wallets.
 
-The `--all` path already creates a per-wallet savepoint and supplies
-`commit=False`, but that is an orchestration accident rather than a shared
-contract. Other wallet-refresh dispatches can also commit through their hooks:
+Freshness progress callbacks use the same SQLite connection and historically
+committed their progress rows. Network progress is emitted during preparation;
+commit-capable progress callbacks are suppressed during local apply so they
+cannot invalidate the wallet savepoint. Deterministic fault injection covers
+all six state boundaries and compares the exact before/after database state.
 
-- file imports through `core.imports`;
-- BTCPay sync and BTCPay/Bull Bitcoin enrichment;
-- Core Lightning and LND sync adapters;
-- output-inventory updates.
-
-The observer migration removes independent commits from chain-refresh
-sub-hooks. One apply coordinator owns `BEGIN`/savepoint, rollback and commit for
-observer state, transaction insertion/retraction, graph cache, inventory,
-coverage and freshness. Backend access, retries, sleeps and scans occur before
-that transaction.
+The boundary in this phase is the on-chain backend refresh path that the
+BDK/LWK migration will consume. File, BTCPay, Core Lightning and LND ingestion
+retain their existing source-specific orchestration; they use `commit=False`
+when invoked by the shared wallet coordinator, but their transport-specific
+fetch/apply decomposition is outside the chain-observer contract.
 
 ## Apple Silicon packaging checkpoint
 

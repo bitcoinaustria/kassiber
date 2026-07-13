@@ -75,6 +75,30 @@ UpdateOutputInventory = Callable[
     Mapping[str, Any],
 ]
 SourceOverlapPreflight = Callable[[WalletRow, "WalletSyncState"], "WalletSyncState | None"]
+PersistObserverUpdate = Callable[
+    [sqlite3.Connection, ProfileRow, WalletRow, "WalletBackendFetch"],
+    None,
+]
+UpdateDerivationCoverage = Callable[
+    [
+        sqlite3.Connection,
+        ProfileRow,
+        WalletRow,
+        "WalletSyncState",
+        Mapping[str, Any],
+    ],
+    None,
+]
+AfterApplyStage = Callable[[str], None]
+DiscardObserverUpdate = Callable[[WalletRow], None]
+
+
+APPLY_STAGE_OBSERVER_PERSISTENCE = "observer_persistence"
+APPLY_STAGE_RETRACTIONS = "retractions"
+APPLY_STAGE_TRANSACTION_INSERTION = "transaction_insertion"
+APPLY_STAGE_OUTPUT_INVENTORY = "output_inventory"
+APPLY_STAGE_DERIVATION_COVERAGE = "derivation_coverage"
+APPLY_STAGE_FRESHNESS_CHECKPOINT = "freshness_checkpoint"
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +128,10 @@ class WalletSyncHooks:
     sync_core_lightning_wallet: SyncCoreLightningWallet | None = None
     sync_lnd_wallet: SyncLndWallet | None = None
     update_output_inventory: UpdateOutputInventory | None = None
+    persist_observer_update: PersistObserverUpdate | None = None
+    update_derivation_coverage: UpdateDerivationCoverage | None = None
+    after_apply_stage: AfterApplyStage | None = None
+    discard_observer_update: DiscardObserverUpdate | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +163,13 @@ class WalletBackendDiscovery:
     started: float
     force_full: bool
     skip_outcome: Mapping[str, Any] | None = None
+
+
+def notify_apply_stage(hooks: WalletSyncHooks, stage: str) -> None:
+    """Expose deterministic fault-injection seams without owning a transaction."""
+
+    if hooks.after_apply_stage is not None:
+        hooks.after_apply_stage(stage)
 
 
 # Modest cap on concurrent per-wallet fetches. The per-host HTTP limiter already
@@ -577,6 +612,10 @@ def sync_wallet_from_backend(
     normalized_records = fetch.normalized_records
     kind = fetch.kind
     adapter_meta = dict(fetch.adapter_meta or {})
+    prepared_negative_balance_rescan = adapter_meta.pop(
+        "_prepared_negative_balance_rescan",
+        None,
+    )
     if conn is not None and sync_state is not None:
         filtered_sync_state = source_overlap.filter_sync_state_for_canonical_owner(
             conn,
@@ -605,6 +644,9 @@ def sync_wallet_from_backend(
                     )
                 )
             sync_state = filtered_sync_state
+    if hooks.persist_observer_update is not None:
+        hooks.persist_observer_update(conn, profile, wallet, fetch)
+    notify_apply_stage(hooks, APPLY_STAGE_OBSERVER_PERSISTENCE)
     observed_utxos = adapter_meta.pop("utxos", None)
     retracted_external_ids = _string_list(
         adapter_meta.pop("bitcoinrpc_retracted_txids", [])
@@ -618,6 +660,7 @@ def sync_wallet_from_backend(
             retracted_external_ids,
             f"backend:{backend['name']}",
         )
+    notify_apply_stage(hooks, APPLY_STAGE_RETRACTIONS)
     outcome = hooks.insert_records(
         conn,
         profile,
@@ -625,6 +668,7 @@ def sync_wallet_from_backend(
         normalized_records,
         f"backend:{backend['name']}",
     )
+    notify_apply_stage(hooks, APPLY_STAGE_TRANSACTION_INSERTION)
     if observed_utxos is not None and hooks.update_output_inventory is not None:
         outcome["output_inventory"] = dict(
             hooks.update_output_inventory(
@@ -636,6 +680,16 @@ def sync_wallet_from_backend(
                 observed_utxos,
             )
         )
+    notify_apply_stage(hooks, APPLY_STAGE_OUTPUT_INVENTORY)
+    if hooks.update_derivation_coverage is not None:
+        hooks.update_derivation_coverage(
+            conn,
+            profile,
+            wallet,
+            sync_state,
+            adapter_meta,
+        )
+    notify_apply_stage(hooks, APPLY_STAGE_DERIVATION_COVERAGE)
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = redact_backend_url(backend["url"])
@@ -677,6 +731,18 @@ def sync_wallet_from_backend(
         outcome["scripts_checked"] = scripts_changed + scripts_unchanged
     outcome["utxos_refreshed"] = observed_utxos is not None
     outcome["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+    if isinstance(prepared_negative_balance_rescan, Mapping):
+        remaining_events = _wallet_negative_balance_events(
+            conn,
+            str(profile["id"]),
+            str(wallet["id"]),
+        )
+        outcome["negative_balance_rescan"] = {
+            **dict(prepared_negative_balance_rescan),
+            "resolved": not remaining_events,
+            "remaining_negative_events": remaining_events,
+        }
+        return outcome
     if _allow_negative_balance_rescan and conn is not None:
         negative_events = _wallet_negative_balance_events(
             conn,
@@ -684,8 +750,8 @@ def sync_wallet_from_backend(
             str(wallet["id"]),
         )
         if negative_events:
-            rescan_gap_limit = _negative_balance_rescan_gap_limit(sync_state)
-            repair_wallet = _wallet_with_temporary_gap_limit(wallet, rescan_gap_limit)
+            rescan_gap_limit = negative_balance_rescan_gap_limit(sync_state)
+            repair_wallet = wallet_with_temporary_gap_limit(wallet, rescan_gap_limit)
             repair_outcome = sync_wallet_from_backend(
                 conn,
                 runtime_config,
@@ -759,7 +825,7 @@ def _wallet_negative_balance_events(
     return list(first_negative_by_asset.values())
 
 
-def _negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | None:
+def negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | None:
     plan = sync_state.descriptor_plan
     if plan is None:
         return None
@@ -774,7 +840,7 @@ def _negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | Non
     )
 
 
-def _wallet_with_temporary_gap_limit(wallet: WalletRow, gap_limit: int | None) -> WalletRow:
+def wallet_with_temporary_gap_limit(wallet: WalletRow, gap_limit: int | None) -> WalletRow:
     if gap_limit is None:
         return wallet
     config = json.loads(wallet["config_json"] or "{}")
@@ -1015,6 +1081,12 @@ def sync_wallets(
 
 
 __all__ = [
+    "APPLY_STAGE_DERIVATION_COVERAGE",
+    "APPLY_STAGE_FRESHNESS_CHECKPOINT",
+    "APPLY_STAGE_OBSERVER_PERSISTENCE",
+    "APPLY_STAGE_OUTPUT_INVENTORY",
+    "APPLY_STAGE_RETRACTIONS",
+    "APPLY_STAGE_TRANSACTION_INSERTION",
     "WalletBackendFetch",
     "WalletSyncHooks",
     "WalletSyncState",
@@ -1023,8 +1095,11 @@ __all__ = [
     "emit_sync_progress",
     "fetch_wallet_backend",
     "normalize_backend_kind",
+    "negative_balance_rescan_gap_limit",
+    "notify_apply_stage",
     "prefetch_wallets_backend",
     "sync_wallet_from_backend",
     "sync_progress_emitter",
     "sync_wallets",
+    "wallet_with_temporary_gap_limit",
 ]

@@ -3292,7 +3292,7 @@ def _wallet_sync_hooks(commit=True):
             wallet,
             external_ids,
             source_label,
-            commit=False,
+            commit=commit,
         ),
         resolve_backend=resolve_backend,
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
@@ -3394,6 +3394,287 @@ def _mark_wallet_synced_from_results(conn, wallet, results):
             )
 
 
+def _run_wallet_refresh_savepoint(conn, apply, *, suppress_progress=False):
+    """Run one wallet's local apply under the coordinator-owned savepoint."""
+
+    savepoint = f"wallet_refresh_{uuid.uuid4().hex}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    # Freshness progress callbacks persist and commit job progress on this same
+    # connection. Chain network progress has already been emitted by the
+    # preparation phase; suppress only the chain apply chatter so an observer
+    # callback cannot end the coordinator's savepoint from underneath it. File
+    # imports keep their established UI progress events because their emitter
+    # is non-persistent and their work is not part of the observer boundary.
+    progress_token = (
+        core_sync.sync_progress_emitter.set(None) if suppress_progress else None
+    )
+    try:
+        result = apply()
+    except BaseException:
+        try:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        finally:
+            conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+    finally:
+        if progress_token is not None:
+            core_sync.sync_progress_emitter.reset(progress_token)
+    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    conn.commit()
+    return result
+
+
+def _prospective_negative_balance_events(conn, profile, wallet, fetch):
+    """Conservatively detect a widened-rescan need before local writes begin."""
+
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT id, external_id, occurred_at, direction, asset,
+                   amount, fee, created_at
+            FROM transactions
+            WHERE profile_id = ? AND wallet_id = ? AND excluded = 0
+            """,
+            (profile["id"], wallet["id"]),
+        ).fetchall()
+    ]
+    retracted = {
+        str(value).strip().lower()
+        for value in fetch.adapter_meta.get("bitcoinrpc_retracted_txids", [])
+        if str(value).strip()
+    }
+    if retracted:
+        rows = [
+            row
+            for row in rows
+            if str(row.get("external_id") or "").strip().lower() not in retracted
+        ]
+    by_external_id = {
+        str(row.get("external_id") or "").strip().lower(): index
+        for index, row in enumerate(rows)
+        if str(row.get("external_id") or "").strip()
+    }
+    for index, record in enumerate(fetch.normalized_records):
+        normalized = core_imports.normalize_import_record(
+            record,
+            source_label=f"backend:{fetch.backend['name']}",
+        )
+        external_id = str(normalized.get("external_id") or "").strip().lower()
+        candidate = {
+            "id": f"prefetched:{external_id or index}",
+            "external_id": normalized.get("external_id"),
+            "occurred_at": normalized["occurred_at"],
+            "direction": normalized["direction"],
+            "asset": normalized["asset"],
+            "amount": btc_to_msat(normalized["amount"]),
+            "fee": btc_to_msat(normalized["fee"]),
+            "created_at": normalized["occurred_at"],
+        }
+        existing_index = by_external_id.get(external_id) if external_id else None
+        if existing_index is None:
+            rows.append(candidate)
+            if external_id:
+                by_external_id[external_id] = len(rows) - 1
+        else:
+            candidate["id"] = rows[existing_index]["id"]
+            candidate["created_at"] = rows[existing_index]["created_at"]
+            rows[existing_index] = candidate
+    balances = {}
+    first_negative = {}
+    for row in sorted(
+        rows,
+        key=lambda item: (
+            str(item.get("occurred_at") or ""),
+            str(item.get("created_at") or ""),
+            str(item.get("id") or ""),
+        ),
+    ):
+        asset = str(row.get("asset") or "")
+        amount = int(row.get("amount") or 0)
+        fee = int(row.get("fee") or 0)
+        if row.get("direction") == "inbound":
+            delta = amount
+        elif row.get("direction") == "outbound":
+            delta = -amount - fee
+        else:
+            delta = 0
+        running = balances.get(asset, 0) + delta
+        balances[asset] = running
+        if running < 0 and asset not in first_negative:
+            first_negative[asset] = {
+                "asset": asset,
+                "transaction_id": row.get("id"),
+                "external_id": row.get("external_id"),
+                "occurred_at": row.get("occurred_at"),
+                "delta_msat": delta,
+                "running_balance_msat": running,
+            }
+    return list(first_negative.values())
+
+
+def _prepare_negative_balance_repairs(
+    conn,
+    runtime_config,
+    profile,
+    wallets,
+    hooks,
+    prefetched,
+):
+    """Fetch any widened descriptor repair before opening the apply savepoint."""
+
+    prepared = dict(prefetched)
+    for wallet in wallets:
+        wallet_id = str(wallet["id"])
+        fetch = prepared.get(wallet_id)
+        if not isinstance(fetch, core_sync.WalletBackendFetch):
+            continue
+        if fetch.skip_outcome is not None or fetch.sync_state is None:
+            continue
+        negative_events = _prospective_negative_balance_events(
+            conn,
+            profile,
+            wallet,
+            fetch,
+        )
+        if not negative_events:
+            continue
+        rescan_gap_limit = core_sync.negative_balance_rescan_gap_limit(
+            fetch.sync_state
+        )
+        if rescan_gap_limit is None:
+            continue
+        repair_wallet = core_sync.wallet_with_temporary_gap_limit(
+            wallet,
+            rescan_gap_limit,
+        )
+        repair_fetch = core_sync.fetch_wallet_backend(
+            runtime_config,
+            profile,
+            repair_wallet,
+            hooks,
+            checkpoint={},
+            force_full=True,
+            source_overlap_preflight=(
+                lambda candidate, state: core_source_overlap.filter_sync_state_for_canonical_owner(
+                    conn,
+                    profile,
+                    candidate,
+                    state,
+                )
+            ),
+        )
+        repair_meta = dict(repair_fetch.adapter_meta)
+        repair_meta["_prepared_negative_balance_rescan"] = {
+            "triggered": True,
+            "initial_negative_events": negative_events,
+            "original_gap_limit": getattr(
+                fetch.sync_state.descriptor_plan,
+                "gap_limit",
+                None,
+            ),
+            "rescan_gap_limit": rescan_gap_limit,
+        }
+        prepared[wallet_id] = replace(repair_fetch, adapter_meta=repair_meta)
+    return prepared
+
+
+def _prefetch_chain_wallets(
+    conn,
+    runtime_config,
+    profile,
+    wallets,
+    hooks,
+    *,
+    freshness_checkpoints=None,
+    force_full=False,
+):
+    """Finish chain discovery and backend I/O before any write savepoint."""
+
+    backend_wallets = [
+        wallet
+        for wallet in wallets
+        if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses) == "backend"
+    ]
+    prefetched = core_sync.prefetch_wallets_backend(
+        runtime_config,
+        profile,
+        backend_wallets,
+        hooks,
+        checkpoints=freshness_checkpoints,
+        force_full=force_full,
+        source_overlap_preflight=(
+            lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
+                conn,
+                profile,
+                wallet,
+                sync_state,
+            )
+        ),
+    )
+    return _prepare_negative_balance_repairs(
+        conn,
+        runtime_config,
+        profile,
+        backend_wallets,
+        hooks,
+        prefetched,
+    )
+
+
+def _apply_wallet_sync_atomically(
+    conn,
+    runtime_config,
+    profile,
+    wallet,
+    hooks,
+    *,
+    freshness_checkpoints=None,
+    force_full=False,
+    prefetched=None,
+    check_cancelled=None,
+):
+    """Apply every local state group for one wallet or roll them all back."""
+
+    def apply():
+        if check_cancelled is not None:
+            check_cancelled()
+        wallet_results = core_sync.sync_wallets(
+            conn,
+            runtime_config,
+            profile,
+            [wallet],
+            hooks,
+            checkpoints=freshness_checkpoints,
+            force_full=force_full,
+            prefetched=prefetched,
+        )
+        if check_cancelled is not None:
+            check_cancelled()
+        _mark_wallet_synced_from_results(conn, wallet, wallet_results)
+        core_sync.notify_apply_stage(
+            hooks,
+            core_sync.APPLY_STAGE_FRESHNESS_CHECKPOINT,
+        )
+        if check_cancelled is not None:
+            check_cancelled()
+        return wallet_results
+
+    try:
+        return _run_wallet_refresh_savepoint(
+            conn,
+            apply,
+            suppress_progress=(
+                core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses)
+                == "backend"
+            ),
+        )
+    except BaseException:
+        if hooks.discard_observer_update is not None:
+            hooks.discard_observer_update(wallet)
+        raise
+
+
 def sync_wallet_from_backend(
     conn,
     runtime_config,
@@ -3403,17 +3684,36 @@ def sync_wallet_from_backend(
     *,
     checkpoint=None,
     force_full=False,
+    check_cancelled=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    return core_sync.sync_wallet_from_backend(
+    hooks = _wallet_sync_hooks(commit=False)
+    prefetched = _prefetch_chain_wallets(
+        conn,
+        runtime_config,
+        profile,
+        [wallet],
+        hooks,
+        freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
+        force_full=force_full,
+    )
+    results = _apply_wallet_sync_atomically(
         conn,
         runtime_config,
         profile,
         wallet,
-        _wallet_sync_hooks(),
-        checkpoint=checkpoint,
+        hooks,
+        freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
         force_full=force_full,
+        prefetched=prefetched,
+        check_cancelled=check_cancelled,
     )
+    result = results[0]
+    return {
+        key: value
+        for key, value in result.items()
+        if key != "wallet"
+    }
 
 
 def sync_wallet(
@@ -3442,82 +3742,49 @@ def sync_wallet(
                 json.loads(wallet["config_json"] or "{}")
             )
         ]
-        hooks = _wallet_sync_hooks(commit=False)
-        # Run discovery concurrently, apply the DB-backed overlap preflight on
-        # this thread, then run backend fetches concurrently before the serial
-        # write loop. Per-wallet savepoint isolation below is unchanged.
-        backend_wallets = [
-            wallet
-            for wallet in wallets
-            if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses) == "backend"
-        ]
-        prefetched = core_sync.prefetch_wallets_backend(
-            runtime_config,
-            profile,
-            backend_wallets,
-            hooks,
-            checkpoints=freshness_checkpoints,
-            force_full=force_full,
-            source_overlap_preflight=(
-                lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
-                    conn,
-                    profile,
-                    wallet,
-                    sync_state,
-                )
-            ),
-        )
-        results = []
-        for idx, wallet in enumerate(wallets):
-            savepoint = f"wallet_sync_{idx}"
-            conn.execute(f"SAVEPOINT {savepoint}")
-            try:
-                wallet_results = core_sync.sync_wallets(
-                    conn,
-                    runtime_config,
-                    profile,
-                    [wallet],
-                    hooks,
-                    checkpoints=freshness_checkpoints,
-                    force_full=force_full,
-                    prefetched=prefetched,
-                )
-                _mark_wallet_synced_from_results(conn, wallet, wallet_results)
-                results.extend(wallet_results)
-            except AppError as exc:
-                conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-                conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-                results.append(
-                    {
-                        "wallet": wallet["label"],
-                        "status": "error",
-                        "code": exc.code,
-                        "message": redact_backend_text(str(exc)),
-                        "hint": redact_backend_text(exc.hint) if exc.hint else "",
-                        "details": redact_backend_value(exc.details),
-                        "retryable": bool(exc.retryable),
-                    }
-                )
-            else:
-                conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-                conn.commit()
-        return results
     else:
         if not wallet_ref:
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
-        results = core_sync.sync_wallets(
-            conn,
-            runtime_config,
-            profile,
-            wallets,
-            _wallet_sync_hooks(),
-            checkpoints=freshness_checkpoints,
-            force_full=force_full,
-        )
-        _mark_wallet_synced_from_results(conn, wallets[0], results)
-        conn.commit()
-        return results
+    hooks = _wallet_sync_hooks(commit=False)
+    prefetched = _prefetch_chain_wallets(
+        conn,
+        runtime_config,
+        profile,
+        wallets,
+        hooks,
+        freshness_checkpoints=freshness_checkpoints,
+        force_full=force_full,
+    )
+    results = []
+    for wallet in wallets:
+        try:
+            wallet_results = _apply_wallet_sync_atomically(
+                conn,
+                runtime_config,
+                profile,
+                wallet,
+                hooks,
+                freshness_checkpoints=freshness_checkpoints,
+                force_full=force_full,
+                prefetched=prefetched,
+            )
+            results.extend(wallet_results)
+        except AppError as exc:
+            if not sync_all:
+                raise
+            results.append(
+                {
+                    "wallet": wallet["label"],
+                    "status": "error",
+                    "code": exc.code,
+                    "message": redact_backend_text(str(exc)),
+                    "hint": redact_backend_text(exc.hint) if exc.hint else "",
+                    "details": redact_backend_value(exc.details),
+                    "retryable": bool(exc.retryable),
+                }
+            )
+    return results
 
 
 def _sync_btcpay_wallet(

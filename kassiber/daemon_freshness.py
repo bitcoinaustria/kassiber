@@ -666,6 +666,7 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
                 wallet_with_checkpoint,
                 checkpoint=checkpoint,
                 force_full=force_full,
+                check_cancelled=check_cancelled,
             )
         finally:
             sync_progress_emitter.reset(token)
