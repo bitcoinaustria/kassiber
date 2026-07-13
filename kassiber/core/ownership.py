@@ -719,6 +719,7 @@ def build_owned_index(
                 warnings.append(
                     f"Wallet '{wallet['label']}': descriptor not scanned ({exc.code})"
                 )
+    _seed_transaction_outpoints(conn, index, profile_id)
     return index, warnings
 
 
@@ -843,6 +844,65 @@ def _seed_from_transactions(
             chain=chain,
             network=network,
         )
+
+
+def _seed_transaction_outpoints(
+    conn: sqlite3.Connection,
+    index: OwnedIndex,
+    profile_id: str,
+) -> None:
+    """Recover exact owned outpoints from stored Core receive observations.
+
+    Address-wallet sync predates the durable output inventory and therefore may
+    have no ``wallet_utxos`` row for an output that was spent before inventory
+    refresh. Bitcoin Core's stored ``listtransactions`` observations still name
+    the exact ``txid``, ``vout`` and receiving address. Use that evidence only
+    when it agrees with the transaction's canonical external id and the built
+    ownership index resolves the address exclusively to the row's wallet.
+
+    This deliberately does not infer an outpoint from a transaction-wide wallet
+    match. A fan-out transaction can be recorded by several wallets, and that
+    weaker evidence is exactly what the scoped ownership checks must reject.
+    """
+
+    rows = conn.execute(
+        "SELECT external_id, wallet_id, raw_json FROM transactions "
+        "WHERE profile_id = ? AND external_id IS NOT NULL AND raw_json IS NOT NULL",
+        (profile_id,),
+    ).fetchall()
+    for row in rows:
+        external_txid = str(row["external_id"] or "").strip().lower()
+        if not _is_txid_token(external_txid):
+            continue
+        try:
+            observations = json.loads(row["raw_json"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(observations, list):
+            continue
+        wallet_id = str(row["wallet_id"])
+        for observation in observations:
+            if not isinstance(observation, Mapping):
+                continue
+            observed_txid = str(observation.get("txid") or "").strip().lower()
+            if observed_txid != external_txid:
+                continue
+            address = str(observation.get("address") or "").strip()
+            vout = observation.get("vout")
+            if not address or isinstance(vout, bool):
+                continue
+            try:
+                output_index = int(vout)
+            except (TypeError, ValueError):
+                continue
+            if output_index < 0:
+                continue
+            matches = index.lookup_address(address)
+            if {str(match.wallet_id) for match in matches} != {wallet_id}:
+                continue
+            for match in matches:
+                if str(match.wallet_id) == wallet_id:
+                    index.add_outpoint(external_txid, output_index, match)
 
 
 def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, str]:
