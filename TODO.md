@@ -48,6 +48,50 @@ same verification surface.
 
 ## Right now
 
+- [ ] **Replace manual Bitcoin/Liquid chain state with dependency-backed
+  observers** in one phase-checkpointed PR. Current truth and the initial
+  capability matrix live in
+  [`docs/reference/chain-observers.md`](docs/reference/chain-observers.md).
+  Completion means supported BDK/LWK routes own chain state without a
+  production shadow observer, all derived state remains inside SQLCipher, and
+  one refresh atomically commits observer state + accounting projections.
+  - [x] Phase 0 — baseline and inventory: all existing quality/fast/Core/
+    Electrum/demo gates pass; the reference document names concrete manual
+    observer functions, ingress paths, commit boundaries, packaging references,
+    tests and honest initial compatibility routes.
+  - [ ] Phase 1 — Apple Silicon packaging: remove Intel CLI/sidecar and
+    universal desktop builds, publish explicit macOS ARM64 artifacts, update
+    Homebrew/prerelease docs/tests and keep Linux x86_64 + Windows x86_64.
+  - [ ] Phase 2 — watch-only boundary: introduce one shared descriptor
+    capability/preflight layer for CLI, daemon, files, BSMS, bare xpub,
+    Samourai and compatibility importers; always reject spending-private
+    Bitcoin/Liquid material while permitting sensitive Liquid view keys.
+  - [ ] Phase 3 — atomic refresh substrate: persist versioned observer blobs and
+    derivation coverage in SQLCipher; fetch before the transaction; apply
+    observer state, transactions, retractions, graph cache, inventory and
+    freshness under one rollback boundary with no sub-hook commit.
+  - [ ] Phase 4 — dependency contracts: verify and exactly pin current official
+    `bdkpython`/`lwk` releases, Python requirements, licenses, APIs and wheels;
+    update `uv.lock`, PyInstaller collection and third-party notices; add
+    executable API/wheel/privacy contracts for all supported targets.
+  - [ ] Phase 5 — Bitcoin BDK observer: route supported Esplora/Electrum
+    descriptor wallets through BDK with proxy/no-egress preservation,
+    deterministic normalization, restart/RBF/reorg tests and no legacy fallback
+    after dependency failure. Keep Core RPC, Silent Payments and proven binding
+    gaps as explicit named compatibility routes.
+  - [ ] Phase 6 — Liquid LWK observer: route executable-proven Liquid descriptor
+    forms through LWK, persist wollet state only in SQLCipher, preserve local
+    unblinding/privacy, and test fixed descriptors, Taproot, assets, fees,
+    restart/reorg and explicit unsupported-form routing.
+  - [ ] Phase 7 — retire duplicate state engines: delete replaced manual gap,
+    checkpoint, graph/replacement and UTXO-state machinery for migrated routes;
+    retain only narrow compatibility code and `embit` primitives with named
+    callers and tests.
+  - [ ] Phase 8 — release proof: run full unit/integration/demo/package gates,
+    fault injection and secret scans; verify no side files or replicated
+    observer blobs; update README/backend/testing/prerelease/license docs and
+    leave the same draft PR green and reviewable by checkpoint commit.
+
 - [x] Harden the CLI for one-shot agents: `--machine` now implies
   `--non-interactive`; `commands describe` exposes an argparse-derived command
   contract; `health` / `next-actions` expose shared readiness snapshots;
