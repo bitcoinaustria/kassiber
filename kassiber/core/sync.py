@@ -9,7 +9,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Mapping, MutableMapping, Protocol, Sequence
 
 from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
@@ -39,7 +39,21 @@ HistoryEntry = Mapping[str, Any]
 HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
-InsertRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[BackendRecord], str], SyncOutcome]
+
+
+class InsertRecords(Protocol):
+    def __call__(
+        self,
+        conn: sqlite3.Connection,
+        profile: ProfileRow,
+        wallet: WalletRow,
+        records: Sequence[BackendRecord],
+        source_label: str,
+        *,
+        authoritative_chain_observer: bool = False,
+    ) -> SyncOutcome: ...
+
+
 RetractRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[str], str], SyncOutcome]
 ResolveBackend = Callable[[RuntimeConfig, str | None], Mapping[str, Any]]
 ResolveSyncState = Callable[[Mapping[str, Any], WalletRow], "WalletSyncState"]
@@ -858,12 +872,16 @@ def sync_wallet_from_backend(
             f"backend:{backend['name']}",
         )
     notify_apply_stage(hooks, APPLY_STAGE_RETRACTIONS)
+    insert_kwargs = (
+        {"authoritative_chain_observer": True} if dependency_prepared else {}
+    )
     outcome = hooks.insert_records(
         conn,
         profile,
         wallet,
         normalized_records,
         f"backend:{backend['name']}",
+        **insert_kwargs,
     )
     notify_apply_stage(hooks, APPLY_STAGE_TRANSACTION_INSERTION)
     if observed_utxos is not None and hooks.update_output_inventory is not None:

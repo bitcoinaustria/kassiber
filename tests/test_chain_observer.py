@@ -258,7 +258,7 @@ class ChainObserverContractTest(unittest.TestCase):
 
         hooks = core_sync.WalletSyncHooks(
             import_file=lambda *_args: {},
-            insert_records=lambda *_args: {"inserted": 0},
+            insert_records=lambda *_args, **_kwargs: {"inserted": 0},
             resolve_backend=lambda *_args: fetch.backend,
             resolve_sync_state=lambda *_args: sync_state,
             normalize_addresses=lambda _value: (),
@@ -282,6 +282,66 @@ class ChainObserverContractTest(unittest.TestCase):
 
         self.assertIsNone(load_observer_state(self.conn, self.identity))
         self.assertTrue(observer.discarded)
+
+    def test_sync_marks_only_prepared_observer_records_as_authoritative(self):
+        _observer, prepared = self._prepare()
+        wallet = self.conn.execute(
+            "SELECT * FROM wallets WHERE id = ?", (self.wallet_id,)
+        ).fetchone()
+        profile = self.conn.execute(
+            "SELECT * FROM profiles WHERE id = ?", (self.profile_id,)
+        ).fetchone()
+        sync_state = core_sync.WalletSyncState(
+            chain="bitcoin",
+            network="regtest",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=(),
+            tracked_scripts={},
+            history_cache={},
+        )
+        fetch = core_sync.WalletBackendFetch(
+            backend={"name": "fake", "kind": "fake", "url": "http://127.0.0.1"},
+            sync_state=sync_state,
+            normalized_records=(),
+            adapter_meta={},
+            kind="fake",
+            started=0.0,
+            force_full=False,
+            observer_updates=(prepared,),
+        )
+        insert_calls = []
+
+        def insert_records(*_args, **kwargs):
+            insert_calls.append(kwargs)
+            return {"imported": 0, "skipped": 0}
+
+        hooks = core_sync.WalletSyncHooks(
+            import_file=lambda *_args: {},
+            insert_records=insert_records,
+            resolve_backend=lambda *_args: fetch.backend,
+            resolve_sync_state=lambda *_args: sync_state,
+            normalize_addresses=lambda _value: (),
+            backend_adapters={},
+        )
+        self.conn.execute("SAVEPOINT observer_authority")
+        with patch.object(
+            core_sync.source_overlap,
+            "filter_sync_state_for_canonical_owner",
+            side_effect=lambda _conn, _profile, _wallet, state: state,
+        ):
+            core_sync.sync_wallet_from_backend(
+                self.conn,
+                {},
+                profile,
+                wallet,
+                hooks,
+                prefetched=fetch,
+            )
+        self.conn.execute("ROLLBACK TO SAVEPOINT observer_authority")
+        self.conn.execute("RELEASE SAVEPOINT observer_authority")
+
+        self.assertEqual(insert_calls, [{"authoritative_chain_observer": True}])
 
     def test_sync_fetch_projects_facts_and_rejects_shadow_projection(self):
         observer, prepared = self._prepare()

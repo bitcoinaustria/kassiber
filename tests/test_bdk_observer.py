@@ -338,7 +338,7 @@ class BdkDependencyContractTest(unittest.TestCase):
         wallet.transactions.return_value = [confirmed]
         self.assertFalse(_electrum_confirmation_rebuild_needed(wallet, 7))
 
-    def test_authoritative_observer_can_demote_confirmation(self):
+    def test_only_trusted_observer_provenance_can_demote_confirmation(self):
         existing = defaultdict(
             lambda: None,
             confirmed_at="2026-01-01T00:00:00Z",
@@ -361,7 +361,15 @@ class BdkDependencyContractTest(unittest.TestCase):
             },
             source_label="backend:test",
         )
-        updates = _transaction_merge_updates(existing, normalized, "new")
+        untrusted_updates = _transaction_merge_updates(existing, normalized, "new")
+        self.assertNotIn("confirmed_at", untrusted_updates)
+
+        updates = _transaction_merge_updates(
+            existing,
+            normalized,
+            "new",
+            authoritative_chain_observer=True,
+        )
         self.assertIn("confirmed_at", updates)
         self.assertIsNone(updates["confirmed_at"])
 

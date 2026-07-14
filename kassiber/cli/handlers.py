@@ -3231,6 +3231,7 @@ def _import_records_for_sync(
     apply_btcpay=False,
     apply_phoenix=False,
     commit=True,
+    authoritative_chain_observer=False,
 ):
     return core_imports.import_records_into_wallet(
         conn,
@@ -3242,10 +3243,20 @@ def _import_records_for_sync(
         apply_btcpay=apply_btcpay,
         apply_phoenix=apply_phoenix,
         commit=commit,
+        authoritative_chain_observer=authoritative_chain_observer,
     )
 
 
-def _insert_records_for_sync(conn, profile, wallet, records, source_label, *, commit=True):
+def _insert_records_for_sync(
+    conn,
+    profile,
+    wallet,
+    records,
+    source_label,
+    *,
+    commit=True,
+    authoritative_chain_observer=False,
+):
     return _import_records_for_sync(
         conn,
         profile,
@@ -3253,6 +3264,7 @@ def _insert_records_for_sync(conn, profile, wallet, records, source_label, *, co
         records,
         source_label,
         commit=commit,
+        authoritative_chain_observer=authoritative_chain_observer,
     )
 
 
@@ -3278,13 +3290,16 @@ def _wallet_sync_hooks(commit=True):
             input_format,
             commit=commit,
         ),
-        insert_records=lambda conn, profile, wallet, records, source_label: _insert_records_for_sync(
-            conn,
-            profile,
-            wallet,
-            records,
-            source_label,
-            commit=commit,
+        insert_records=lambda conn, profile, wallet, records, source_label, **kwargs: (
+            _insert_records_for_sync(
+                conn,
+                profile,
+                wallet,
+                records,
+                source_label,
+                commit=commit,
+                **kwargs,
+            )
         ),
         retract_records=lambda conn, profile, wallet, external_ids, source_label: _retract_records_for_sync(
             conn,

@@ -603,7 +603,13 @@ def _ownership_graph_is_strict_enrichment(
     return enriched
 
 
-def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[str, Any], fingerprint: str):
+def _transaction_merge_updates(
+    existing: Mapping[str, Any],
+    normalized: Mapping[str, Any],
+    fingerprint: str,
+    *,
+    authoritative_chain_observer: bool = False,
+):
     updates = {}
     if normalized.get("kind") == "routing_income":
         incoming_amount = btc_to_msat(normalized["amount"])
@@ -636,11 +642,6 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     confirmed_at_added = (
         existing["confirmed_at"] in (None, "")
         and normalized["confirmed_at"] is not None
-    )
-    incoming_raw = _raw_json_payload(normalized)
-    authoritative_chain_observer = (
-        isinstance(incoming_raw, Mapping)
-        and incoming_raw.get("observer") in {"bdk", "lwk"}
     )
     confirmed_at_removed = (
         existing["confirmed_at"] not in (None, "")
@@ -1169,11 +1170,14 @@ def insert_wallet_records(
     commit: bool = True,
     match_existing_only: bool = False,
     report_updates: bool = False,
+    authoritative_chain_observer: bool = False,
 ) -> dict[str, Any]:
     """Insert parsed records and optionally enrich matching transactions.
 
     `updated` is a subcount of `skipped`: merge/enrichment rows do not insert a
     new transaction, so they stay in the skipped total for import accounting.
+    Confirmation demotion requires the sync coordinator's out-of-band observer
+    authority flag; serialized import payloads never grant that authority.
     """
     imported = 0
     skipped = 0
@@ -1204,7 +1208,12 @@ def insert_wallet_records(
         existing = _find_existing_transaction(conn, wallet["id"], normalized, fingerprint)
         if existing:
             _validate_import_price_currency(profile, normalized)
-            updates = _transaction_merge_updates(existing, normalized, fingerprint)
+            updates = _transaction_merge_updates(
+                existing,
+                normalized,
+                fingerprint,
+                authoritative_chain_observer=authoritative_chain_observer,
+            )
             if updates:
                 changed_fields = sorted(updates)
                 assignments = ", ".join(f"{column} = ?" for column in updates)
@@ -1658,6 +1667,7 @@ def import_records_into_wallet(
     commit: bool = True,
     match_existing_only: bool = False,
     report_updates: bool = False,
+    authoritative_chain_observer: bool = False,
 ) -> dict[str, Any]:
     outcome = insert_wallet_records(
         conn,
@@ -1669,6 +1679,7 @@ def import_records_into_wallet(
         commit=False,
         match_existing_only=match_existing_only,
         report_updates=report_updates,
+        authoritative_chain_observer=authoritative_chain_observer,
     )
     if apply_btcpay:
         outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks, commit=False))

@@ -81,13 +81,16 @@ def _import_hooks() -> core_imports.ImportCoordinatorHooks:
 def _sync_hooks() -> core_sync.WalletSyncHooks:
     return core_sync.WalletSyncHooks(
         import_file=lambda *args: {},
-        insert_records=lambda db, prof, wal, records, source_label: core_imports.insert_wallet_records(
-            db,
-            prof,
-            wal,
-            records,
-            source_label,
-            _import_hooks(),
+        insert_records=lambda db, prof, wal, records, source_label, **kwargs: (
+            core_imports.insert_wallet_records(
+                db,
+                prof,
+                wal,
+                records,
+                source_label,
+                _import_hooks(),
+                **kwargs,
+            )
         ),
         resolve_backend=backend_config.resolve_backend,
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
