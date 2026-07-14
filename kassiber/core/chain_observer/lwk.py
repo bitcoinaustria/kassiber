@@ -326,6 +326,13 @@ class LwkObserver:
         self._wallet = None
         self._store_link = None
 
+    def _identity_checkpoint(self, checkpoint: Mapping[str, Any]) -> Mapping[str, Any]:
+        instances = checkpoint.get("observer_instances")
+        if isinstance(instances, Mapping):
+            instance = instances.get(self.identity.id)
+            return instance if isinstance(instance, Mapping) else {}
+        return checkpoint
+
     def _client(self, network):
         lwk = require_lwk()
         endpoint = str(self.backend.get("url") or "").strip()
@@ -561,6 +568,7 @@ class LwkObserver:
 
     def prepare(self, request: ObserverPrepareRequest, prior_state: StoredObserverState | None) -> Mapping[str, Any]:
         try:
+            identity_checkpoint = self._identity_checkpoint(request.checkpoint)
             if prior_state is not None and prior_state.payload.get("schema_version") != LWK_OBSERVER_STATE_VERSION:
                 if not request.force_full:
                     raise AppError("Stored LWK observer state must be rebuilt", code="observer_state_rebuild_required", retryable=False)
@@ -571,7 +579,7 @@ class LwkObserver:
                     identity=self.identity,
                     payload={
                         "canonical_txids": list(
-                            request.checkpoint.get("canonical_txids") or ()
+                            identity_checkpoint.get("canonical_txids") or ()
                         )
                     },
                     coverage=(),
@@ -582,14 +590,14 @@ class LwkObserver:
             self._wallet = lwk.Wollet.with_custom_store(network, lwk_descriptor_for_plan(self.plan), self._store_link)
             client = self._client(network)
             emit_sync_progress({"phase": "backend_fetch", "observer": "lwk", "status": "scanning"})
-            if request.force_full and request.checkpoint.get("tip_height") is not None:
+            if request.force_full and identity_checkpoint.get("tip_height") is not None:
                 # Rebuilding the opaque wollet must not let a lagging backend
                 # retract facts newer than its current chain view.
                 _require_lwk_tip_not_behind(
                     client.tip(),
-                    int(request.checkpoint["tip_height"]),
+                    int(identity_checkpoint["tip_height"]),
                 )
-            scan_to = _lwk_scan_to_index(self.plan, prior_state, request.checkpoint)
+            scan_to = _lwk_scan_to_index(self.plan, prior_state, identity_checkpoint)
             update = client.full_scan_to_index(self._wallet, scan_to)
             if update is not None:
                 self._wallet.apply_update(update)

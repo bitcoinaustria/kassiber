@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 from embit import bip32, bip39
 
+from kassiber.core.chain_observer.contract import ChainFacts, ObserverPrepareRequest
 from kassiber.core.chain_observer.identity import identities_for_wallet
 from kassiber.core.chain_observer.lwk import (
     LwkObserver,
@@ -554,6 +555,59 @@ class LwkDescriptorContractTest(unittest.TestCase):
         observer = prepare.call_args.args[2]
         self.assertEqual(observer.store.snapshot(), {})
         load_values.assert_not_called()
+
+    def test_force_full_rebuild_uses_per_observer_checkpoint(self):
+        wallet, discovery = self._discovery(force_full=True)
+        identity = identities_for_wallet(wallet, observer_kind="lwk")[0]
+        observer = LwkObserver(
+            identity=identity,
+            backend=discovery.backend,
+            descriptor_plan=discovery.sync_state.descriptor_plan,
+            policy_asset_id=POLICY_ASSET,
+            stored_values={},
+        )
+        prior_txid = "11" * 32
+        request = ObserverPrepareRequest(
+            backend_name="native",
+            backend_kind="esplora",
+            force_full=True,
+            checkpoint={
+                "tip_height": 999,
+                "canonical_txids": ["ff" * 32],
+                "highest_used": {"0": 999},
+                "observer_instances": {
+                    identity.id: {
+                        "tip_height": 10,
+                        "canonical_txids": [prior_txid],
+                        "highest_used": {"0": 12},
+                    }
+                },
+            },
+        )
+        client = Mock()
+        client.full_scan_to_index.return_value = None
+        tip = Mock()
+        tip.height.return_value = 10
+        tip.block_hash.return_value = "22" * 32
+        client.tip.return_value = tip
+        facts = ChainFacts(
+            transaction_records=(),
+            retracted_external_ids=(prior_txid,),
+            outputs=(),
+            coverage=(),
+            freshness_checkpoint={"canonical_txids": []},
+        )
+        with patch.object(observer, "_client", return_value=client), patch.object(
+            observer,
+            "_facts",
+            return_value=facts,
+        ) as collect_facts:
+            prepared = observer.prepare(request, None)
+
+        self.assertEqual(client.full_scan_to_index.call_args.args[1], 32)
+        retraction_state = collect_facts.call_args.args[2]
+        self.assertEqual(retraction_state.payload["canonical_txids"], [prior_txid])
+        self.assertEqual(prepared["facts"]["retracted_external_ids"], [prior_txid])
 
 
 class LwkForeignStoreTest(unittest.TestCase):
