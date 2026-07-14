@@ -1016,6 +1016,7 @@ def _bitcoin_run(root: Path) -> TruthManifest:
             try:
                 _unload(url, username, password, wallet)
             except RuntimeError:
+                # Wallet teardown is best-effort; preserve the primary oracle result.
                 pass
 
 
