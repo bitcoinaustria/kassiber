@@ -31,15 +31,22 @@ fi
 "$VENV/bin/python" -m pip install -e "$ROOT"
 
 "$VENV/bin/python" - <<'PY'
-import embit
-import bdkpython
-import lwk
-import sqlcipher3
+import platform
+import sys
 from importlib.metadata import version
+
+import bdkpython
+import embit
+import sqlcipher3
 
 print(f"Verified embit from {embit.__file__}")
 print(f"Verified bdkpython {version('bdkpython')} from {bdkpython.__file__}")
-print(f"Verified lwk {version('lwk')} from {lwk.__file__}")
+if sys.platform == "darwin" and platform.machine() == "x86_64":
+    print("Skipped optional lwk verification on macOS x86_64")
+else:
+    import lwk
+
+    print(f"Verified lwk {version('lwk')} from {lwk.__file__}")
 print(f"Verified sqlcipher3 from {sqlcipher3.__file__}")
 PY
 
