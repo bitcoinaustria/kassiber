@@ -80,7 +80,7 @@ same verification surface.
   - [x] Phase 6 — Bitcoin BDK observer: pin/package the official dependency and
     route supported Esplora/Electrum descriptor wallets through it with
     deterministic normalization and no production shadow/fallback observer.
-  - [ ] Phase 7 — Liquid LWK observer: pin/package the official dependency,
+  - [x] Phase 7 — Liquid LWK observer: pin/package the official dependency,
     route executable-proven Liquid descriptor forms through it, and persist
     wollet state only inside SQLCipher while preserving local unblinding.
   - [ ] Phase 8 — cleanup and final proof: delete replaced manual observer
