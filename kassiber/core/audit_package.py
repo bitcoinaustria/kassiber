@@ -34,6 +34,7 @@ SENSITIVE_MATERIAL_EXCLUSIONS = [
     "AI settings",
     "unrelated books",
     "technical wallet evidence",
+    "chain observer state and derivation coverage",
 ]
 _DECISION_KEYWORDS = (
     "board",

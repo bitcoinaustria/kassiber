@@ -21,6 +21,7 @@ from kassiber.core import accounts as core_accounts
 from kassiber.core import freshness as core_freshness
 from kassiber.core import ownership
 from kassiber.core.sync import classify_wallet_sync
+from kassiber.core.sync_backends import resolve_wallet_sync_targets
 from kassiber.core.ui_snapshot import _wallet_backend_summary
 from kassiber.core.wallets import (
     OWNERSHIP_HISTORY_CONFIG_KEY,
@@ -39,6 +40,11 @@ from kassiber.errors import AppError
 def _xpub() -> str:
     seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
     return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_public().to_base58()
+
+
+def _xprv() -> str:
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
+    return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_base58()
 
 
 def _args(**overrides) -> types.SimpleNamespace:
@@ -178,6 +184,115 @@ class XpubWalletIsSyncableTests(unittest.TestCase):
     def test_backend_summary_is_descriptor_sync_mode(self):
         summary = _wallet_backend_summary("xpub", self._config(), "mempool")
         self.assertEqual(summary["sync_mode"], "backend_descriptor")
+
+
+class WatchOnlyWalletConfigTests(unittest.TestCase):
+    def _db_scope(self):
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-watch-only-")
+        self.addCleanup(tmp.cleanup)
+        conn = open_db(Path(tmp.name) / "data")
+        self.addCleanup(conn.close)
+        workspace = core_accounts.create_workspace(conn, "Main")
+        profile = core_accounts.create_profile(
+            conn,
+            workspace["id"],
+            "Book",
+            "EUR",
+            "FIFO",
+            "generic",
+            365,
+        )
+        return conn, workspace, profile
+
+    def _assert_private_error(self, callable_):
+        secret = _xprv()
+        with self.assertRaises(AppError) as ctx:
+            callable_()
+        self.assertEqual(
+            ctx.exception.code,
+            "wallet_spending_private_material",
+        )
+        self.assertNotIn(secret, str(ctx.exception))
+
+    def test_create_and_update_reject_private_spending_material(self):
+        conn, workspace, profile = self._db_scope()
+        secret = _xprv()
+        self._assert_private_error(
+            lambda: create_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                "Unsafe",
+                "descriptor",
+                config={"descriptor": f"wpkh({secret}/0/*)", "chain": "bitcoin"},
+            )
+        )
+        self.assertEqual(
+            conn.execute("SELECT COUNT(*) FROM wallets WHERE label = 'Unsafe'").fetchone()[0],
+            0,
+        )
+
+        wallet = create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "Vault",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh"],
+                "chain": "bitcoin",
+            },
+        )
+        self._assert_private_error(
+            lambda: update_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                wallet["id"],
+                {"config": {"change_descriptor": f"wpkh({secret}/1/*)"}},
+            )
+        )
+
+    def test_persisted_private_wallet_fails_closed_on_update_and_sync(self):
+        conn, workspace, profile = self._db_scope()
+        secret = _xprv()
+        wallet = create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "Vault",
+            "descriptor",
+            config={
+                "descriptor": f"wpkh({_xpub()}/0/*)",
+                "chain": "bitcoin",
+            },
+        )
+        unsafe_config = {
+            "descriptor": f"wpkh({secret}/0/*)",
+            "chain": "bitcoin",
+        }
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(unsafe_config), wallet["id"]),
+        )
+        conn.commit()
+
+        self._assert_private_error(
+            lambda: update_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                wallet["id"],
+                {"label": "Renamed"},
+            )
+        )
+        row = conn.execute(
+            "SELECT * FROM wallets WHERE id = ?", (wallet["id"],)
+        ).fetchone()
+        self._assert_private_error(
+            lambda: resolve_wallet_sync_targets({}, row)
+        )
 
 
 class WalletConfigFreshnessTests(unittest.TestCase):

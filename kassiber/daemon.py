@@ -268,6 +268,10 @@ from .wallet_descriptors import (
     load_descriptor_plan,
 )
 from .wallet_setup import normalize_script_types, normalize_wallet_material
+from .wallet_security import (
+    SPENDING_PRIVATE_MATERIAL_CODE,
+    assert_standalone_key_is_watch_only,
+)
 
 
 MAX_REQUEST_LINE_CHARS = 1_000_000
@@ -12377,7 +12381,15 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
         config["network"] = network
     try:
         plan = load_descriptor_plan(config)
-    except (ValueError, AppError) as exc:
+    except AppError as exc:
+        if exc.code == SPENDING_PRIVATE_MATERIAL_CODE:
+            raise
+        raise AppError(
+            f"Could not parse descriptor: {exc}",
+            code="validation",
+            retryable=False,
+        ) from exc
+    except ValueError as exc:
         raise AppError(
             f"Could not parse descriptor: {exc}",
             code="validation",
@@ -12429,6 +12441,7 @@ def _detect_script_types_payload(
     fallback_script_type = "p2wpkh"
     wallet_material = _required_str_arg(args, "wallet_material", "Wallet export")
     material = wallet_material.strip()
+    assert_standalone_key_is_watch_only(material)
     if material[:4] not in {"xpub", "tpub"}:
         raise AppError(
             "Script-type detection only applies to a bare xpub/tpub",

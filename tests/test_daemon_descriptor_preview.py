@@ -8,6 +8,7 @@ focus on input validation and the wallet_material → addresses round trip.
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from embit import bip32
@@ -22,6 +23,11 @@ def _xpub_from_seed() -> str:
     seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
     account = bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_public()
     return account.to_base58()
+
+
+def _xprv_from_seed() -> str:
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
+    return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_base58()
 
 
 class PreviewDescriptorTests(unittest.TestCase):
@@ -193,6 +199,31 @@ class PreviewDescriptorTests(unittest.TestCase):
             _preview_descriptor_payload({"descriptor": "wpkh(not-a-key/0/*)"})
         self.assertEqual(ctx.exception.code, "validation")
         self.assertIn("descriptor", str(ctx.exception).lower())
+
+    def test_private_spending_material_uses_safe_stable_error(self):
+        xprv = _xprv_from_seed()
+        for args in (
+            {"wallet_material": xprv, "script_type": "p2wpkh"},
+            {"descriptor": f"wpkh({xprv}/0/*)"},
+        ):
+            with self.subTest(path=tuple(args)):
+                with self.assertRaises(AppError) as ctx:
+                    _preview_descriptor_payload(args)
+                error = ctx.exception
+                self.assertEqual(
+                    error.code,
+                    "wallet_spending_private_material",
+                )
+                envelope_text = json.dumps(
+                    {
+                        "message": str(error),
+                        "hint": error.hint,
+                        "details": error.details,
+                    },
+                    sort_keys=True,
+                )
+                self.assertNotIn(xprv, envelope_text)
+                self.assertIn("watch-only", envelope_text.lower())
 
 
 if __name__ == "__main__":  # pragma: no cover

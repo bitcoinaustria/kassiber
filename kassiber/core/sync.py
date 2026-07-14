@@ -9,13 +9,18 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Mapping, MutableMapping, Sequence
+from typing import Any, Callable, Mapping, MutableMapping, Protocol, Sequence
 
 from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
 from ..util import str_or_none
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
+from .chain_observer import (
+    PreparedObserverUpdate,
+    apply_prepared_observer_update,
+    discard_prepared_observer_updates,
+)
 from .wallets import (
     has_descriptor_sync_material,
     has_silent_payment_sync_material,
@@ -34,7 +39,21 @@ HistoryEntry = Mapping[str, Any]
 HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
-InsertRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[BackendRecord], str], SyncOutcome]
+
+
+class InsertRecords(Protocol):
+    def __call__(
+        self,
+        conn: sqlite3.Connection,
+        profile: ProfileRow,
+        wallet: WalletRow,
+        records: Sequence[BackendRecord],
+        source_label: str,
+        *,
+        authoritative_chain_observer: bool = False,
+    ) -> SyncOutcome: ...
+
+
 RetractRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[str], str], SyncOutcome]
 ResolveBackend = Callable[[RuntimeConfig, str | None], Mapping[str, Any]]
 ResolveSyncState = Callable[[Mapping[str, Any], WalletRow], "WalletSyncState"]
@@ -75,6 +94,37 @@ UpdateOutputInventory = Callable[
     Mapping[str, Any],
 ]
 SourceOverlapPreflight = Callable[[WalletRow, "WalletSyncState"], "WalletSyncState | None"]
+ObserverFetchPreflight = Callable[
+    [WalletRow, "WalletBackendDiscovery"], "WalletBackendFetch | None"
+]
+PrepareObserverFetch = Callable[
+    [sqlite3.Connection, ProfileRow, WalletRow, "WalletBackendDiscovery"],
+    "WalletBackendFetch | None",
+]
+PersistObserverUpdate = Callable[
+    [sqlite3.Connection, ProfileRow, WalletRow, "WalletBackendFetch"],
+    None,
+]
+UpdateDerivationCoverage = Callable[
+    [
+        sqlite3.Connection,
+        ProfileRow,
+        WalletRow,
+        "WalletSyncState",
+        Mapping[str, Any],
+    ],
+    None,
+]
+AfterApplyStage = Callable[[str], None]
+DiscardObserverUpdate = Callable[[WalletRow], None]
+
+
+APPLY_STAGE_OBSERVER_PERSISTENCE = "observer_persistence"
+APPLY_STAGE_RETRACTIONS = "retractions"
+APPLY_STAGE_TRANSACTION_INSERTION = "transaction_insertion"
+APPLY_STAGE_OUTPUT_INVENTORY = "output_inventory"
+APPLY_STAGE_DERIVATION_COVERAGE = "derivation_coverage"
+APPLY_STAGE_FRESHNESS_CHECKPOINT = "freshness_checkpoint"
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +154,11 @@ class WalletSyncHooks:
     sync_core_lightning_wallet: SyncCoreLightningWallet | None = None
     sync_lnd_wallet: SyncLndWallet | None = None
     update_output_inventory: UpdateOutputInventory | None = None
+    persist_observer_update: PersistObserverUpdate | None = None
+    update_derivation_coverage: UpdateDerivationCoverage | None = None
+    after_apply_stage: AfterApplyStage | None = None
+    discard_observer_update: DiscardObserverUpdate | None = None
+    prepare_observer_fetch: PrepareObserverFetch | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +178,8 @@ class WalletBackendFetch:
     started: float
     force_full: bool
     skip_outcome: Mapping[str, Any] | None = None
+    observer_updates: tuple[PreparedObserverUpdate, ...] = ()
+    authoritative_chain_observer: bool = False
 
 
 @dataclass(frozen=True)
@@ -135,6 +192,13 @@ class WalletBackendDiscovery:
     started: float
     force_full: bool
     skip_outcome: Mapping[str, Any] | None = None
+
+
+def notify_apply_stage(hooks: WalletSyncHooks, stage: str) -> None:
+    """Expose deterministic fault-injection seams without owning a transaction."""
+
+    if hooks.after_apply_stage is not None:
+        hooks.after_apply_stage(stage)
 
 
 # Modest cap on concurrent per-wallet fetches. The per-host HTTP limiter already
@@ -351,6 +415,7 @@ def normalize_backend_kind(kind: Any) -> str:
         "core-ln": "coreln",
         "core-lightning": "coreln",
         "liquid-esplora": "esplora",
+        "mempool": "esplora",
     }
     return aliases.get(value, value)
 
@@ -495,6 +560,10 @@ def fetch_wallet_backend_from_discovery(
         kind=discovery.kind,
         started=discovery.started,
         force_full=discovery.force_full,
+        authoritative_chain_observer=(
+            sync_state.chain in {"bitcoin", "liquid"}
+            and discovery.kind in {"esplora", "electrum", "bitcoinrpc"}
+        ),
     )
 
 
@@ -507,6 +576,7 @@ def fetch_wallet_backend(
     *,
     force_full: bool = False,
     source_overlap_preflight: SourceOverlapPreflight | None = None,
+    observer_fetch_preflight: ObserverFetchPreflight | None = None,
 ) -> WalletBackendFetch:
     """Run discovery, optional overlap preflight, then backend fetch."""
     discovery = discover_wallet_backend(
@@ -527,7 +597,174 @@ def fetch_wallet_backend(
             discovery,
             source_overlap_preflight,
         )
+    if observer_fetch_preflight is not None:
+        token = _wrap_sync_progress_for_wallet(wallet)
+        try:
+            observer_fetch = observer_fetch_preflight(wallet, discovery)
+            if observer_fetch is not None:
+                return observer_fetch
+        finally:
+            if token is not None:
+                sync_progress_emitter.reset(token)
     return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
+
+
+def apply_fetch_observer_updates(
+    conn: sqlite3.Connection,
+    fetch: WalletBackendFetch,
+) -> WalletBackendFetch:
+    """Apply dependency updates and expose only normalized Kassiber facts."""
+
+    if not fetch.observer_updates:
+        return fetch
+    if fetch.normalized_records or (fetch.adapter_meta or {}).get("utxos") is not None:
+        raise AppError(
+            "A wallet refresh cannot apply dependency and compatibility projections together",
+            code="observer_projection_conflict",
+            hint="Select exactly one observer route before contacting the backend.",
+            retryable=False,
+        )
+    observer_records: list[BackendRecord] = []
+    outputs_by_key: dict[tuple[str, int], Mapping[str, Any]] = {}
+    retracted: list[str] = []
+    observer_checkpoints: dict[str, Mapping[str, Any]] = {}
+    highest_used: dict[str, int] = {}
+    for prepared in fetch.observer_updates:
+        facts = apply_prepared_observer_update(conn, prepared)
+        observer_records.extend(facts.transaction_records)
+        for output in facts.outputs:
+            key = (str(output.get("txid") or ""), int(output.get("vout") or 0))
+            outputs_by_key[key] = output
+        retracted.extend(facts.retracted_external_ids)
+        observer_checkpoints[prepared.identity.id] = dict(
+            facts.freshness_checkpoint
+        )
+        for branch, value in (facts.freshness_checkpoint.get("highest_used") or {}).items():
+            try:
+                highest_used[str(branch)] = max(highest_used.get(str(branch), -1), int(value))
+            except (TypeError, ValueError):
+                continue
+    records_by_key: dict[tuple[str, str, str], BackendRecord] = {}
+    bdk_groups: dict[str, list[BackendRecord]] = {}
+    for record in observer_records:
+        txid = str(record.get("txid") or record.get("external_id") or "")
+        raw = None
+        try:
+            raw = json.loads(str(record.get("raw_json") or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            # Non-BDK records may carry opaque importer payloads; skip BDK grouping.
+            raw = None
+        if (
+            txid
+            and record.get("asset") == "BTC"
+            and isinstance(raw, dict)
+            and raw.get("observer") == "bdk"
+        ):
+            bdk_groups.setdefault(txid, []).append(record)
+            continue
+        key = (txid, str(record.get("asset") or ""), str(record.get("direction") or ""))
+        records_by_key.setdefault(key, record)
+    if bdk_groups:
+        # A logical multi-script wallet uses one BDK Wallet per script family.
+        # Re-normalize shared transactions once with the union of owned scripts
+        # so cross-family change/consolidation becomes one wallet-local fact,
+        # not competing inbound/outbound rows.
+        from .sync_backends import record_from_bitcoin_esplora_tx
+
+        for txid, group in bdk_groups.items():
+            raw_candidates = [json.loads(str(item["raw_json"])) for item in group]
+            owned_scripts = {
+                str(script)
+                for raw in raw_candidates
+                for script in (raw.get("observer_owned_scripts") or [])
+                if str(script)
+            }
+            raw = dict(
+                max(
+                    raw_candidates,
+                    key=lambda item: sum(
+                        1
+                        for vin in item.get("vin", [])
+                        if isinstance(vin, dict) and vin.get("prevout")
+                    ),
+                )
+            )
+            merged_vin = [dict(vin) for vin in raw.get("vin", [])]
+            input_indexes = {
+                (str(vin.get("txid") or "").lower(), int(vin.get("vout") or 0)): index
+                for index, vin in enumerate(merged_vin)
+                if isinstance(vin, dict) and str(vin.get("txid") or "")
+            }
+            for candidate in raw_candidates:
+                for vin in candidate.get("vin", []):
+                    if not isinstance(vin, dict) or not vin.get("prevout"):
+                        continue
+                    input_key = (
+                        str(vin.get("txid") or "").lower(),
+                        int(vin.get("vout") or 0),
+                    )
+                    target_index = input_indexes.get(input_key)
+                    if target_index is None:
+                        raise AppError(
+                            "BDK observers returned inconsistent inputs for one transaction",
+                            code="observer_projection_conflict",
+                            details={"txid": txid},
+                            retryable=False,
+                        )
+                    existing = merged_vin[target_index].get("prevout")
+                    if existing is not None and existing != vin["prevout"]:
+                        raise AppError(
+                            "BDK observers returned conflicting prevouts for one transaction",
+                            code="observer_projection_conflict",
+                            details={"txid": txid},
+                            retryable=False,
+                        )
+                    merged_vin[target_index]["prevout"] = vin["prevout"]
+            raw["vin"] = merged_vin
+            raw.pop("observer_owned_scripts", None)
+            normalized = record_from_bitcoin_esplora_tx(
+                raw,
+                {script: {} for script in owned_scripts},
+                str(fetch.backend.get("name") or "BDK"),
+            )
+            if normalized is not None:
+                key = (
+                    txid,
+                    str(normalized.get("asset") or ""),
+                    str(normalized.get("direction") or ""),
+                )
+                records_by_key[key] = normalized
+    records = list(records_by_key.values())
+    outputs = list(outputs_by_key.values())
+    adapter_meta = dict(fetch.adapter_meta or {})
+    # Observer facts are an authoritative full output snapshot. Preserve an
+    # empty list so spending the final output clears the prior inventory.
+    adapter_meta["utxos"] = outputs
+    if retracted:
+        adapter_meta["observer_retracted_external_ids"] = list(
+            dict.fromkeys(str(value) for value in retracted if str(value))
+        )
+    if observer_checkpoints:
+        existing_checkpoint = adapter_meta.get("freshness_checkpoint")
+        merged_checkpoint = (
+            dict(existing_checkpoint) if isinstance(existing_checkpoint, Mapping) else {}
+        )
+        merged_checkpoint["observer_instances"] = dict(
+            sorted(observer_checkpoints.items())
+        )
+        if highest_used:
+            merged_checkpoint["highest_used"] = dict(sorted(highest_used.items()))
+        adapter_meta["freshness_checkpoint"] = merged_checkpoint
+    return replace(
+        fetch,
+        normalized_records=tuple(records) if records else fetch.normalized_records,
+        adapter_meta=adapter_meta,
+    )
+
+
+def discard_fetch_observer_updates(fetch: WalletBackendFetch | BaseException | None) -> None:
+    if isinstance(fetch, WalletBackendFetch) and fetch.observer_updates:
+        discard_prepared_observer_updates(fetch.observer_updates)
 
 
 def sync_wallet_from_backend(
@@ -564,12 +801,24 @@ def sync_wallet_from_backend(
             checkpoint,
             force_full=force_full,
             source_overlap_preflight=preflight,
+            observer_fetch_preflight=(
+                lambda candidate, discovery: hooks.prepare_observer_fetch(
+                    conn,
+                    profile,
+                    candidate,
+                    discovery,
+                )
+                if hooks.prepare_observer_fetch is not None
+                else None
+            ),
         )
     if isinstance(prefetched, BaseException):
         raise prefetched
     fetch = prefetched
+    dependency_prepared = bool(fetch.observer_updates)
     if fetch.skip_outcome is not None:
         return dict(fetch.skip_outcome)
+    fetch = apply_fetch_observer_updates(conn, fetch)
     started = fetch.started
     force_full = fetch.force_full
     backend = fetch.backend
@@ -577,6 +826,10 @@ def sync_wallet_from_backend(
     normalized_records = fetch.normalized_records
     kind = fetch.kind
     adapter_meta = dict(fetch.adapter_meta or {})
+    prepared_negative_balance_rescan = adapter_meta.pop(
+        "_prepared_negative_balance_rescan",
+        None,
+    )
     if conn is not None and sync_state is not None:
         filtered_sync_state = source_overlap.filter_sync_state_for_canonical_owner(
             conn,
@@ -605,9 +858,15 @@ def sync_wallet_from_backend(
                     )
                 )
             sync_state = filtered_sync_state
+    if hooks.persist_observer_update is not None:
+        hooks.persist_observer_update(conn, profile, wallet, fetch)
+    notify_apply_stage(hooks, APPLY_STAGE_OBSERVER_PERSISTENCE)
     observed_utxos = adapter_meta.pop("utxos", None)
-    retracted_external_ids = _string_list(
-        adapter_meta.pop("bitcoinrpc_retracted_txids", [])
+    retracted_external_ids = list(
+        dict.fromkeys(
+            _string_list(adapter_meta.pop("bitcoinrpc_retracted_txids", []))
+            + _string_list(adapter_meta.pop("observer_retracted_external_ids", []))
+        )
     )
     retraction_outcome: SyncOutcome | None = None
     if retracted_external_ids and hooks.retract_records is not None:
@@ -618,13 +877,21 @@ def sync_wallet_from_backend(
             retracted_external_ids,
             f"backend:{backend['name']}",
         )
+    notify_apply_stage(hooks, APPLY_STAGE_RETRACTIONS)
+    insert_kwargs = (
+        {"authoritative_chain_observer": True}
+        if dependency_prepared or fetch.authoritative_chain_observer
+        else {}
+    )
     outcome = hooks.insert_records(
         conn,
         profile,
         wallet,
         normalized_records,
         f"backend:{backend['name']}",
+        **insert_kwargs,
     )
+    notify_apply_stage(hooks, APPLY_STAGE_TRANSACTION_INSERTION)
     if observed_utxos is not None and hooks.update_output_inventory is not None:
         outcome["output_inventory"] = dict(
             hooks.update_output_inventory(
@@ -636,6 +903,16 @@ def sync_wallet_from_backend(
                 observed_utxos,
             )
         )
+    notify_apply_stage(hooks, APPLY_STAGE_OUTPUT_INVENTORY)
+    if hooks.update_derivation_coverage is not None:
+        hooks.update_derivation_coverage(
+            conn,
+            profile,
+            wallet,
+            sync_state,
+            adapter_meta,
+        )
+    notify_apply_stage(hooks, APPLY_STAGE_DERIVATION_COVERAGE)
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = redact_backend_url(backend["url"])
@@ -677,15 +954,27 @@ def sync_wallet_from_backend(
         outcome["scripts_checked"] = scripts_changed + scripts_unchanged
     outcome["utxos_refreshed"] = observed_utxos is not None
     outcome["elapsed_ms"] = int((time.monotonic() - started) * 1000)
-    if _allow_negative_balance_rescan and conn is not None:
+    if isinstance(prepared_negative_balance_rescan, Mapping):
+        remaining_events = _wallet_negative_balance_events(
+            conn,
+            str(profile["id"]),
+            str(wallet["id"]),
+        )
+        outcome["negative_balance_rescan"] = {
+            **dict(prepared_negative_balance_rescan),
+            "resolved": not remaining_events,
+            "remaining_negative_events": remaining_events,
+        }
+        return outcome
+    if _allow_negative_balance_rescan and conn is not None and not dependency_prepared:
         negative_events = _wallet_negative_balance_events(
             conn,
             str(profile["id"]),
             str(wallet["id"]),
         )
         if negative_events:
-            rescan_gap_limit = _negative_balance_rescan_gap_limit(sync_state)
-            repair_wallet = _wallet_with_temporary_gap_limit(wallet, rescan_gap_limit)
+            rescan_gap_limit = negative_balance_rescan_gap_limit(sync_state)
+            repair_wallet = wallet_with_temporary_gap_limit(wallet, rescan_gap_limit)
             repair_outcome = sync_wallet_from_backend(
                 conn,
                 runtime_config,
@@ -759,7 +1048,7 @@ def _wallet_negative_balance_events(
     return list(first_negative_by_asset.values())
 
 
-def _negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | None:
+def negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | None:
     plan = sync_state.descriptor_plan
     if plan is None:
         return None
@@ -774,7 +1063,7 @@ def _negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | Non
     )
 
 
-def _wallet_with_temporary_gap_limit(wallet: WalletRow, gap_limit: int | None) -> WalletRow:
+def wallet_with_temporary_gap_limit(wallet: WalletRow, gap_limit: int | None) -> WalletRow:
     if gap_limit is None:
         return wallet
     config = json.loads(wallet["config_json"] or "{}")
@@ -811,6 +1100,7 @@ def prefetch_wallets_backend(
     force_full: bool = False,
     max_workers: int = WALLET_FETCH_FANOUT,
     source_overlap_preflight: SourceOverlapPreflight | None = None,
+    observer_fetch_preflight: ObserverFetchPreflight | None = None,
 ) -> dict[str, "WalletBackendFetch | BaseException"]:
     """Run discovery/preflight/fetch for several backend wallets.
 
@@ -875,8 +1165,32 @@ def prefetch_wallets_backend(
             except AppError as exc:
                 discoveries[wallet_id] = exc
 
+    observer_fetches: dict[str, WalletBackendFetch | BaseException] = {}
+    if observer_fetch_preflight is not None:
+        # BDK/LWK custom persistence must load the owning SQLCipher connection,
+        # so dependency preparation deliberately runs on the caller thread
+        # after overlap checks and before any native client is constructed.
+        for wallet in wallets:
+            wallet_id = str(wallet["id"])
+            discovery = discoveries.get(wallet_id)
+            if isinstance(discovery, BaseException) or discovery is None:
+                continue
+            token = _wrap_sync_progress_for_wallet(wallet)
+            try:
+                observer_fetch = observer_fetch_preflight(wallet, discovery)
+                if observer_fetch is not None:
+                    observer_fetches[wallet_id] = observer_fetch
+            except AppError as exc:
+                observer_fetches[wallet_id] = exc
+            finally:
+                if token is not None:
+                    sync_progress_emitter.reset(token)
+
     def _fetch(wallet: WalletRow):
-        discovery = discoveries.get(str(wallet["id"]))
+        wallet_id = str(wallet["id"])
+        if wallet_id in observer_fetches:
+            return observer_fetches[wallet_id]
+        discovery = discoveries.get(wallet_id)
         if isinstance(discovery, BaseException):
             return discovery
         if discovery is None:
@@ -1015,16 +1329,27 @@ def sync_wallets(
 
 
 __all__ = [
+    "APPLY_STAGE_DERIVATION_COVERAGE",
+    "APPLY_STAGE_FRESHNESS_CHECKPOINT",
+    "APPLY_STAGE_OBSERVER_PERSISTENCE",
+    "APPLY_STAGE_OUTPUT_INVENTORY",
+    "APPLY_STAGE_RETRACTIONS",
+    "APPLY_STAGE_TRANSACTION_INSERTION",
     "WalletBackendFetch",
     "WalletSyncHooks",
     "WalletSyncState",
     "WALLET_FETCH_FANOUT",
+    "apply_fetch_observer_updates",
     "classify_wallet_sync",
+    "discard_fetch_observer_updates",
     "emit_sync_progress",
     "fetch_wallet_backend",
     "normalize_backend_kind",
+    "negative_balance_rescan_gap_limit",
+    "notify_apply_stage",
     "prefetch_wallets_backend",
     "sync_wallet_from_backend",
     "sync_progress_emitter",
     "sync_wallets",
+    "wallet_with_temporary_gap_limit",
 ]

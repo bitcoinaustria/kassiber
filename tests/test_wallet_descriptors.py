@@ -325,6 +325,82 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         self.assertEqual(len(secret), 32)
 
 
+class WatchOnlyDescriptorBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        self.account = bip32.HDKey.from_seed(b"watch-only-boundary").derive(
+            "m/84h/0h/0h"
+        )
+        self.xprv = self.account.to_base58()
+        self.xpub = self.account.to_public().to_base58()
+        self.wif = self.account.key.wif()
+
+    def _assert_rejected(self, config, *secrets):
+        with self.assertRaises(AppError) as ctx:
+            load_descriptor_plan(config)
+        error = ctx.exception
+        self.assertEqual(error.code, "wallet_spending_private_material")
+        rendered = " ".join(
+            str(value or "")
+            for value in (str(error), error.hint, error.details)
+        )
+        for secret in secrets:
+            self.assertNotIn(secret, rendered)
+
+    def test_rejects_private_keys_across_descriptor_shapes(self):
+        cases = {
+            "receive": f"wpkh({self.xprv}/0/*)",
+            "nested": f"sh(wpkh({self.xprv}/0/*))",
+            "wif": f"wpkh({self.wif})",
+            "multisig": (
+                f"wsh(sortedmulti(1,{self.xprv}/0/*,{self.xpub}/0/*))"
+            ),
+            "multipath": f"wpkh({self.xprv}/<0;1>/*)",
+        }
+        for shape, descriptor in cases.items():
+            with self.subTest(shape=shape):
+                self._assert_rejected(
+                    {"descriptor": descriptor, "chain": "bitcoin"},
+                    self.xprv,
+                    self.wif,
+                )
+
+    def test_rejects_private_change_descriptor(self):
+        self._assert_rejected(
+            {
+                "descriptor": f"wpkh({self.xpub}/0/*)",
+                "change_descriptor": f"wpkh({self.xprv}/1/*)",
+                "chain": "bitcoin",
+            },
+            self.xprv,
+        )
+
+    def test_nominal_xpub_field_is_untrusted_even_without_script_types(self):
+        for script_types in (None, ["p2wpkh"]):
+            config = {"xpub": self.xprv, "chain": "bitcoin"}
+            if script_types is not None:
+                config["script_types"] = script_types
+            with self.subTest(script_types=script_types):
+                self._assert_rejected(config, self.xprv)
+
+    def test_liquid_rejects_private_spending_key_but_keeps_private_blinding(self):
+        blinding_key = bip32.HDKey.from_seed(_BLINDING_SEED).key.wif()
+        private_spend = (
+            f"ct(slip77({blinding_key}),elwpkh({self.xprv}/0/*))"
+        )
+        self._assert_rejected(
+            {"descriptor": private_spend, "chain": "liquid"},
+            self.xprv,
+        )
+
+        public_spend = (
+            f"ct(slip77({blinding_key}),elwpkh({self.xpub}/0/*))"
+        )
+        plan = load_descriptor_plan(
+            {"descriptor": public_spend, "chain": "liquid"}
+        )
+        self.assertTrue(liquid_plan_can_unblind(plan))
+
+
 class MultiScriptXpubPlanTests(unittest.TestCase):
     """A bare xpub watching several script types builds one receive/change pair
     per type at fixed branch indices, so enabling a type later never renumbers

@@ -36,6 +36,7 @@ from ..importers import (
 )
 from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
+from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
@@ -149,7 +150,7 @@ def normalize_import_direction(direction: Any, amount: Any) -> str:
 
 _EXISTING_TRANSACTION_COLUMNS = """
        id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-       occurred_at, direction, asset, amount, fee,
+       occurred_at, direction, asset, amount, fee, amount_includes_fee,
        confirmed_at, fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
@@ -164,6 +165,8 @@ def _find_existing_transaction(
     wallet_id: str,
     normalized: Mapping[str, Any],
     fingerprint: str,
+    *,
+    authoritative_chain_observer: bool = False,
 ):
     existing = conn.execute(
         f"""
@@ -197,6 +200,40 @@ def _find_existing_transaction(
         ).fetchone()
         if existing:
             return existing
+    if authoritative_chain_observer and canonical_txid(normalized["external_id"]):
+        # Dependency observers own the economic interpretation of a canonical
+        # on-chain transaction. Match the prior compatibility projection by
+        # txid/component even when the dependency corrects its amount or fee.
+        rows = conn.execute(
+            f"""
+            SELECT {_EXISTING_TRANSACTION_COLUMNS}
+            FROM transactions
+            WHERE wallet_id = ? AND external_id = ?
+              AND direction = ? AND asset = ?
+            ORDER BY created_at DESC
+            LIMIT 2
+            """,
+            (
+                wallet_id,
+                normalized["external_id"],
+                normalized["direction"],
+                normalized["asset"],
+            ),
+        ).fetchall()
+        existing = _single_match(rows)
+        if existing:
+            return existing
+        if len(rows) > 1:
+            raise AppError(
+                "Authoritative chain observation matched multiple transaction rows",
+                code="observer_projection_conflict",
+                details={
+                    "txid": normalized["external_id"],
+                    "asset": normalized["asset"],
+                    "direction": normalized["direction"],
+                },
+                retryable=False,
+            )
     existing = conn.execute(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}
@@ -603,8 +640,28 @@ def _ownership_graph_is_strict_enrichment(
     return enriched
 
 
-def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[str, Any], fingerprint: str):
+def _transaction_merge_updates(
+    existing: Mapping[str, Any],
+    normalized: Mapping[str, Any],
+    fingerprint: str,
+    *,
+    authoritative_chain_observer: bool = False,
+):
     updates = {}
+    authoritative_amount_changed = False
+    if authoritative_chain_observer:
+        incoming_amount = btc_to_msat(normalized["amount"])
+        incoming_fee = btc_to_msat(normalized["fee"])
+        incoming_amount_includes_fee = 1 if normalized.get("amount_includes_fee") else 0
+        authoritative_amount_changed = int(existing["amount"] or 0) != incoming_amount
+        if authoritative_amount_changed:
+            updates["amount"] = incoming_amount
+        if int(existing["fee"] or 0) != incoming_fee:
+            updates["fee"] = incoming_fee
+        if int(existing["amount_includes_fee"] or 0) != incoming_amount_includes_fee:
+            updates["amount_includes_fee"] = incoming_amount_includes_fee
+        if updates and existing["fingerprint"] != fingerprint:
+            updates["fingerprint"] = fingerprint
     if normalized.get("kind") == "routing_income":
         incoming_amount = btc_to_msat(normalized["amount"])
         incoming_fee = btc_to_msat(normalized["fee"])
@@ -637,8 +694,39 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
         existing["confirmed_at"] in (None, "")
         and normalized["confirmed_at"] is not None
     )
-    if confirmed_at_added:
+    authoritative_confirmation_changed = (
+        authoritative_chain_observer
+        and normalized["confirmed_at"] is not None
+        and existing["confirmed_at"] != normalized["confirmed_at"]
+    )
+    confirmed_at_removed = (
+        existing["confirmed_at"] not in (None, "")
+        and normalized["confirmed_at"] is None
+        and authoritative_chain_observer
+    )
+    if confirmed_at_added or authoritative_confirmation_changed:
         updates["confirmed_at"] = normalized["confirmed_at"]
+        if authoritative_chain_observer:
+            # Dependency observers use block time for confirmed rows. Refresh
+            # it both on first confirmation and when a reorg moves the tx to a
+            # different block so pricing and fingerprint identity stay aligned.
+            if existing["occurred_at"] != normalized["occurred_at"]:
+                updates["occurred_at"] = normalized["occurred_at"]
+            if existing["fingerprint"] != fingerprint:
+                updates["fingerprint"] = fingerprint
+    elif confirmed_at_removed:
+        # Dependency observers are canonical chain state, so a reorg must be
+        # allowed to demote a previously confirmed record. Generic imports
+        # remain monotonic and cannot clear confirmation evidence.
+        updates["confirmed_at"] = None
+        # A confirmed observer record uses block time as its occurrence time.
+        # Once demoted, replace that stale timestamp with the dependency's
+        # unconfirmed first-seen time (or the explicit unknown sentinel) and
+        # keep the fingerprint aligned with the new identity inputs.
+        if existing["occurred_at"] != normalized["occurred_at"]:
+            updates["occurred_at"] = normalized["occurred_at"]
+        if existing["fingerprint"] != fingerprint:
+            updates["fingerprint"] = fingerprint
 
     has_existing_price = (
         existing["fiat_rate"] is not None
@@ -654,8 +742,26 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     )
     if has_import_price and (not has_existing_price or incoming_priority >= existing_priority):
         updates.update({column: normalized[column] for column in PRICE_COLUMNS})
-    elif confirmed_at_added and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE:
+    elif (
+        (confirmed_at_added or authoritative_confirmation_changed or confirmed_at_removed)
+        and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE
+    ):
+        # Rate-cache pricing is timestamp-derived. Both confirmation and
+        # demotion change the authoritative pricing timestamp, so discard the
+        # whole provenance bundle and let the rates workflow price it again.
         updates.update({column: None for column in PRICE_COLUMNS})
+    elif authoritative_amount_changed:
+        # The existing unit price remains valid when only the observer's
+        # quantity changed at the same chain timestamp. Recalculate the total
+        # rather than retaining the compatibility projection's stale value.
+        rate = existing["fiat_rate_exact"] or existing["fiat_rate"]
+        if rate not in (None, ""):
+            exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
+            updates["fiat_value"] = float(exact_value)
+            updates["fiat_value_exact"] = exact_value
+        elif existing["fiat_value"] is not None or existing["fiat_value_exact"] is not None:
+            updates["fiat_value"] = None
+            updates["fiat_value_exact"] = None
 
     exchange_execution_overrides = (
         normalized["pricing_source_kind"] == pricing.SOURCE_EXCHANGE_EXECUTION
@@ -1154,11 +1260,14 @@ def insert_wallet_records(
     commit: bool = True,
     match_existing_only: bool = False,
     report_updates: bool = False,
+    authoritative_chain_observer: bool = False,
 ) -> dict[str, Any]:
     """Insert parsed records and optionally enrich matching transactions.
 
     `updated` is a subcount of `skipped`: merge/enrichment rows do not insert a
     new transaction, so they stay in the skipped total for import accounting.
+    Confirmation demotion requires the sync coordinator's out-of-band observer
+    authority flag; serialized import payloads never grant that authority.
     """
     imported = 0
     skipped = 0
@@ -1186,10 +1295,21 @@ def insert_wallet_records(
             normalized["amount"],
             normalized["fee"],
         )
-        existing = _find_existing_transaction(conn, wallet["id"], normalized, fingerprint)
+        existing = _find_existing_transaction(
+            conn,
+            wallet["id"],
+            normalized,
+            fingerprint,
+            authoritative_chain_observer=authoritative_chain_observer,
+        )
         if existing:
             _validate_import_price_currency(profile, normalized)
-            updates = _transaction_merge_updates(existing, normalized, fingerprint)
+            updates = _transaction_merge_updates(
+                existing,
+                normalized,
+                fingerprint,
+                authoritative_chain_observer=authoritative_chain_observer,
+            )
             if updates:
                 changed_fields = sorted(updates)
                 assignments = ", ".join(f"{column} = ?" for column in updates)
@@ -1643,6 +1763,7 @@ def import_records_into_wallet(
     commit: bool = True,
     match_existing_only: bool = False,
     report_updates: bool = False,
+    authoritative_chain_observer: bool = False,
 ) -> dict[str, Any]:
     outcome = insert_wallet_records(
         conn,
@@ -1654,6 +1775,7 @@ def import_records_into_wallet(
         commit=False,
         match_existing_only=match_existing_only,
         report_updates=report_updates,
+        authoritative_chain_observer=authoritative_chain_observer,
     )
     if apply_btcpay:
         outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks, commit=False))

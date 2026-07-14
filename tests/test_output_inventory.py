@@ -443,7 +443,7 @@ class OutputInventoryTest(unittest.TestCase):
                 conn.close()
 
     def test_esplora_utxos_keep_derivation_metadata_and_spent_detection(self):
-        from kassiber.core.sync_backends import esplora_utxos_for_wallet
+        from kassiber.core.sync_backends import compatibility_esplora_utxos_for_wallet
 
         target_receive = {
             "chain": "bitcoin",
@@ -511,7 +511,7 @@ class OutputInventoryTest(unittest.TestCase):
             "kassiber.core.sync_backends.http_get_text",
             return_value="800002\n",
         ):
-            outputs = esplora_utxos_for_wallet(
+            outputs = compatibility_esplora_utxos_for_wallet(
                 {"name": "esplora", "kind": "esplora", "url": "https://example.invalid"},
                 sync_state,
             )

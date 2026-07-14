@@ -82,6 +82,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          observer_collect_args=(
+            --collect-submodules bdkpython
+            --collect-data bdkpython
+            --copy-metadata bdkpython
+          )
+          if uv run python -c 'import lwk'; then
+            observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
+          fi
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
@@ -89,6 +97,7 @@ jobs:
             --name kassiber \
             --paths . \
             --collect-data kassiber \
+            "${observer_collect_args[@]}" \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \
@@ -408,6 +417,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          observer_collect_args=(
+            --collect-submodules bdkpython
+            --collect-data bdkpython
+            --copy-metadata bdkpython
+          )
+          if uv run python -c 'import lwk'; then
+            observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
+          fi
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
@@ -415,6 +432,7 @@ jobs:
             --name kassiber-cli \
             --paths . \
             --collect-data kassiber \
+            "${observer_collect_args[@]}" \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \

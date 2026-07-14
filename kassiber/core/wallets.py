@@ -28,6 +28,7 @@ from ..wallet_setup import (
 from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
 from .address_scripts import scriptpubkey_for_address_or_none
+from .chain_observer import delete_wallet_observer_state
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -1085,6 +1086,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             hint="Choose a different wallet label.",
         ) from exc
     if sync_material_changed:
+        delete_wallet_observer_state(conn, wallet["id"])
         core_output_inventory.clear_wallet_output_inventory(
             conn,
             wallet["id"],

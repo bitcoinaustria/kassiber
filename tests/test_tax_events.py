@@ -1843,6 +1843,63 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(len(pairs), 1)
         self.assertEqual(matched, {"o", "i"})
 
+    def test_core_receive_list_is_typed_physical_identity(self):
+        from kassiber.transfers import onchain_transfer_scope
+
+        txid = "94" * 32
+        row = _row(
+            "core-receive",
+            "wallet-a",
+            "inbound",
+            50_000_000_000,
+            external_id=txid,
+            raw_json=json.dumps(
+                [
+                    {
+                        "txid": txid,
+                        "vout": 2,
+                        "address": "bcrt1qowned",
+                        "category": "receive",
+                    }
+                ]
+            ),
+        )
+        row["config_json"] = json.dumps(
+            {"chain": "bitcoin", "network": "regtest"}
+        )
+
+        self.assertEqual(
+            onchain_transfer_scope(row),
+            ("bitcoin", "regtest", txid, "BTC"),
+        )
+
+    def test_core_receive_list_with_conflicting_txid_is_unscoped(self):
+        from kassiber.transfers import onchain_transfer_scope
+
+        txid = "95" * 32
+        row = _row(
+            "core-receive-conflict",
+            "wallet-a",
+            "inbound",
+            50_000_000_000,
+            external_id=txid,
+            raw_json=json.dumps(
+                [
+                    {
+                        "txid": "96" * 32,
+                        "vout": 2,
+                        "address": "bcrt1qowned",
+                        "category": "receive",
+                    }
+                ]
+            ),
+        )
+        row["config_json"] = json.dumps(
+            {"chain": "bitcoin", "network": "regtest"}
+        )
+
+        self.assertIsNone(onchain_transfer_scope(row))
+
     def test_liquid_scope_uses_consensus_asset_id(self):
         from kassiber.transfers import detect_intra_transfers
 

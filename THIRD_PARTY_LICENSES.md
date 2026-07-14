@@ -6,7 +6,7 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 ## Core dependency credit
 
-Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, [ReportLab](https://www.reportlab.com/) for styled PDF report exports, and [keyring](https://github.com/jaraco/keyring) for opt-in CLI access to native OS credential stores.
+Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [BDK Python](https://github.com/bitcoindevkit/bdk-python) for dependency-backed Bitcoin observation, [Liquid Wallet Kit](https://github.com/Blockstream/lwk) for dependency-backed Liquid observation, [embit](https://github.com/diybitcoinhardware/embit) for compatibility descriptor derivation and Liquid decoding, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, [ReportLab](https://www.reportlab.com/) for styled PDF report exports, and [keyring](https://github.com/jaraco/keyring) for opt-in CLI access to native OS credential stores.
 The in-development Tauri frontend also depends directly on TanStack Table for
 interactive local data grids.
 The descriptor connection screen uses local-only QR scanner libraries for
@@ -17,6 +17,8 @@ xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
+| `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Esplora and Electrum clients; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database | MIT OR Apache-2.0 |
+| `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Esplora and Electrum clients; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database | MIT (BSD-MIT wording) |
 | `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@24eeeed5e88d79cedfada9062dbb4fb45f55946c` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |

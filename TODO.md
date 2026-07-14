@@ -48,6 +48,61 @@ same verification surface.
 
 ## Right now
 
+- [x] **Replace manual Bitcoin/Liquid chain state with dependency-backed
+  observers** in one phase-checkpointed PR. Current truth and the initial
+  capability matrix live in
+  [`docs/reference/chain-observers.md`](docs/reference/chain-observers.md).
+  Completion means supported BDK/LWK routes own chain state without a
+  production shadow observer, all derived state remains inside SQLCipher, and
+  one refresh atomically commits observer state + accounting projections.
+  - [x] Phase 0 — baseline and inventory: all existing quality/fast/Core/
+    Electrum/demo gates pass; the reference document names concrete manual
+    observer functions, ingress paths, commit boundaries, packaging references,
+    tests and honest initial compatibility routes.
+  - [x] Phase 1 — cross-platform packaging: retain universal macOS desktop and
+    Intel CLI/sidecar builds, collect BDK on both Mac architectures, and keep
+    the named Liquid compatibility observer outside macOS arm64, Linux x86-64,
+    and Windows AMD64 because LWK 0.18.0 publishes wheels only for those
+    platforms.
+  - [x] Phase 2 — watch-only boundary: introduce one shared descriptor
+    capability/preflight layer for CLI, daemon, files, BSMS, bare xpub,
+    Samourai and compatibility importers; always reject spending-private
+    Bitcoin/Liquid material while permitting sensitive Liquid view keys.
+  - [x] Phase 3 — atomic refresh substrate: finish chain fetch before the write
+    savepoint; apply observer state, transactions, retractions, graph evidence,
+    inventory, coverage and freshness under one coordinator-owned rollback
+    boundary with no sub-hook or progress-callback commit.
+  - [x] Phase 4 — observer contract and SQLCipher store: add deterministic
+    multi-instance identities, explicit versioned state/coverage persistence,
+    fetch/apply contracts, rollback discard and strict exclusion from public,
+    AI, diagnostics, audit and replication surfaces.
+  - [x] Phase 5 — Docker/regtest observer oracle: extend the existing disposable
+    Core/Elements stack with independent Bitcoin and Liquid truth manifests for
+    confirmation, RBF, reorg, ownership, UTXO and restart transitions.
+  - [x] Phase 6 — Bitcoin BDK observer: pin/package the official dependency and
+    route supported Esplora/Electrum descriptor wallets through it with
+    deterministic normalization and no production shadow/fallback observer.
+  - [x] Phase 7 — Liquid LWK observer: pin/package the official dependency,
+    route executable-proven Liquid descriptor forms through it, and persist
+    wollet state only inside SQLCipher while preserving local unblinding.
+  - [x] Phase 8 — cleanup and final proof: delete replaced manual observer
+    engines, retain only named compatibility routes and `embit` primitives,
+    update all user/developer/release/license docs, and leave the same draft PR
+    green after full unit, integration, demo, package and secret-scan gates.
+  - [x] Follow-up — reduce compatibility by capability, without weakening
+    accounting ownership: pass supported Liquid Esplora auth and Electrum TLS
+    policy directly to LWK; normalize `mempool`; fail closed when Esplora
+    custom trust cannot be represented; canonicalize only structurally
+    equivalent Liquid receive/change descriptors; exercise dependency clients
+    over every supported transport; retain partial-descriptor compatibility
+    until mixed-input fees, filtered retractions and branch coverage have a
+    formally tested accounting-ownership model; and describe Core RPC,
+    Bitcoin address scripts and Silent Payments as first-class specialized
+    observers rather than generic dependency fallbacks. The direct TLS probe
+    additionally proved pinned LWK 0.18.0's insecure Rustls verifier unusable;
+    keep that named compatibility route until a packaged LWK release contains
+    the upstream signature-scheme fix and passes the local oracle.
+
 - [x] Harden the CLI for one-shot agents: `--machine` now implies
   `--non-interactive`; `commands describe` exposes an argparse-derived command
   contract; `health` / `next-actions` expose shared readiness snapshots;
@@ -913,7 +968,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   `blinding_key` currently passes through unredacted.
 - [ ] Cross-platform CI for SQLCipher: PyInstaller bundle smoke tests on
   macOS arm64/x86_64, Linux x86_64, Windows x86_64. The CLI-binary smoke matrix
-  now runs **macOS arm64 (macos-latest) + macOS x86_64 (macos-15-intel) + Linux
+  runs **macOS arm64 (macos-latest) + macOS x86_64 (macos-15-intel) + Linux
   x86_64 (ubuntu-22.04)**; the remaining gap is **Windows x86_64** CLI-bundle
   smoke (Windows currently builds only the desktop preview).
 - [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric

@@ -10,6 +10,8 @@ questions from the same reduced facts in the desktop GUI, CLI, and assistant:
 
 It is advisory-only. It never signs, broadcasts, syncs wallets, fetches chain
 data, refreshes tax journals, selects coins, or mutates accounting data.
+The BDK/LWK observer stores are not inputs to this surface: Privacy Mirror reads
+only Kassiber's reduced transaction, ownership, coverage, and UTXO projections.
 
 ## Surfaces
 

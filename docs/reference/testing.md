@@ -26,6 +26,7 @@ SQLCipher system package command if the development headers are not available.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
+| CHAIN OBSERVERS | `./scripts/integration-harness.sh chain-observers [all\|bitcoin\|liquid]` | yes, unless reusing nodes | Extends the same disposable Compose stack with an independent Core/Elements truth oracle. It records bounded mode-0600 manifests for descriptor/address families, receive/change and gap ownership, mempool/confirmation/RBF/reorg/restart transitions, Bitcoin and Liquid UTXOs, policy/issued-asset values, and protocol endpoint heights. It also proves observer state commits and rollback/restart behavior inside a temporary SQLCipher book with no dependency sidecar store. |
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including 8–12-address Bitcoin wallets, legacy/nested-SegWit/bech32/taproot rotation targets, a Silent Payments wallet, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; monthly EUR-denominated receipts, payments, payroll, rent, cloud, and other expenses converted through the bundled Kraken BTC/EUR rate for each cycle; a deterministic jittered clock with quiet and doubled activity months; era-sensitive fees, rare heavy-tail receipts, 2–3 outbound payments in busy regimes, five external counterparty clusters, threshold-driven working-capital/merchant/cold-reserve transfers, near-full Bitcoin rotations with an explicit bounded legacy reserve where required, a real Liquid treasury migration with a delayed-receipt catch-up sweep, three policy-selected UTXO consolidation windows, and assertions that deprecated wallets retain at most one fee-reserve UTXO; 2021–22 pool payouts plus one solo coinbase, scheduled batched/dust/PayJoin/RBF edge cases, closed and still-open collateralized loans, ownership-derived fan-out self-transfer matching, a mempool-pending receipt, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, swap/peg bridge pairs, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning and BTCPay overlays by default, seeding merchant Lightning, BTCPay connections, paid BTCPay invoice/payment-request examples, and reviewed commercial reconciliation unless explicitly disabled. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, persists the paid invoice through Kassiber's native LND adapter boundary, records the Liquid policy-asset id and Elements regtest scope, and explicitly reviews the resulting strong provider-hash candidate while the plain Liquid payment stays unpaired. An outbound submarine lockup has no owned claim witness, so provider metadata plus a native invoice is intentionally not called exact. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows. Exact `provider_swap_id` assertions require a unique 1:1 provider key, canonical send/receive route txids, explicit chain/network scope and Liquid consensus asset id, plus integer-msat principals covering both complete rows; incomplete evidence must stay strong/manual. |
@@ -51,7 +52,7 @@ The required PR workflow is fail-fast without reducing the test inventory:
 
 1. `Preflight` compiles Python, validates the test-shard manifest, runs the
    dependency/workflow/catalog/report drift contracts, and gates only the
-   Python shards. Frontend and CLI smoke start independently.
+   Python shards. Frontend, CLI smoke, and observer jobs start independently.
 2. Pytest runs every `tests/**/test_*.py` module in exactly one lane. The
    `core-accounting`, `wallets-sync`, `daemon-cli`,
    `security-replication`, and `reports-contracts` lanes use two xdist workers
@@ -80,6 +81,80 @@ cache misses still install only from the checked-in lockfiles.
 
 The local `./scripts/quality-gate.sh` favors deterministic serial execution,
 but runs the same complete Python inventory once before the frontend checks.
+
+## Dependency chain-observer oracle
+
+Run both independent node scenarios before changing a dependency adapter:
+
+```bash
+./scripts/integration-harness.sh chain-observers
+```
+
+The optional selector narrows local debugging without changing the shared
+Compose stack:
+
+```bash
+./scripts/integration-harness.sh chain-observers bitcoin
+./scripts/integration-harness.sh chain-observers liquid
+```
+
+The lane creates a temporary output root and removes it together with the
+per-worktree Compose volumes by default. A normal run also removes any stale
+project/volumes left by an earlier keep-mode run before starting, so node truth
+always begins on a clean chain. `KASSIBER_REGTEST_KEEP=1` preserves both for
+debugging; `KASSIBER_REGTEST_REUSE_CORE=1` reuses already-running loopback
+nodes and the existing port/credential environment. Generated
+`bitcoin-truth.json` and `liquid-truth.json` files are private run artifacts,
+not fixtures: Bitcoin Core and Elements RPC define expected txids, outpoints,
+heights, confirmation/replacement relationships, ownership indices, UTXOs and
+asset values. Fulcrum/Electrum and the local Esplora-compatible endpoints must
+report the same tip, but never define truth themselves.
+
+Bitcoin transitions are full scan, no-op, gap payment/discovery, unconfirmed
+and confirmed receipt, unconfirmed spend, RBF replacement and confirmation,
+block invalidation, mempool resurrection, reconsideration, process restart,
+incremental refresh and final no-op. Wallet-form metadata covers BIP44/49/84/86,
+fixed 2-of-2, receive/change, canonical multipath, multi-script logical xpub,
+and representative Samourai Deposit/Badbank/Premix/Postmix/Ricochet sources.
+
+Liquid transitions cover ranged confidential receive/change discovery, LBTC
+receive/spend, a real issued asset receive/spend, confirmation, invalidation,
+resurrection, reconsideration and restart. The manifest records the consensus
+policy/issued asset ids, confidential unblinding success and the controlled
+wrong-key failure expectation. Capability rows state whether the pinned local
+Elements build exposes Taproot or executable ranged multisig rather than
+pretending unsupported forms ran.
+
+Every transition is also referenced from versioned observer JSON in the main
+temporary SQLCipher database. The runner injects and rolls back a failed state
+write, reopens the encrypted project, and rejects BDK/LWK-looking sidecar files.
+For Bitcoin/all selections, the lane then creates a real Core descriptor wallet,
+funds both low and gap-edge receive indices, and refreshes its public descriptor
+through Fulcrum using BDK. It asserts the BDK route, transaction/UTXO projection,
+per-branch coverage, SQLCipher-only state, process restart, and byte-stable
+immediate no-op state.
+For Liquid/all selections, the lane creates a real Elements descriptor wallet
+with private SLIP77 view material and public spending keys, then refreshes it
+through both the local Electrum and Esplora-compatible services using LWK. It
+asserts the LWK-only route, opaque `ForeignStore` bytes in the main database,
+restart and immediate no-op stability, confidential LBTC receive/spend and fee
+normalization, issued-asset history, transport parity, confirmation, block
+invalidation and unconfirmed resurrection.
+Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
+pins pre-connect compatibility selection for this phase, forbids runtime
+fallback, and records that `.onion` endpoints may not connect directly.
+The transport oracle also drives the pinned clients themselves: BDK crosses
+plain Electrum, Esplora, insecure test TLS and SOCKS5h; LWK crosses plain
+Electrum, Esplora, explicit insecure test TLS and an authentication-enforcing
+Esplora reverse proxy. Custom-CA rows use Kassiber's manual Electrum client
+because neither pinned dependency accepts a per-client trust root; configured
+Esplora custom trust fails before egress rather than being silently ignored.
+
+Pull requests and main-branch pushes expose a required
+`Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the
+lane when observer, descriptor, sync, persistence, dependency-lock, or regtest
+backend paths change; unrelated changes retain the same successful check name
+without starting the Docker stack.
 
 The Compose lane generates disposable RPC credentials per run unless you set
 them explicitly, passes only the `rpcauth` hash to bitcoind, publishes RPC on

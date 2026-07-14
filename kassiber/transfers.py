@@ -106,6 +106,30 @@ def _json_mapping(value):
     return parsed if isinstance(parsed, Mapping) else {}
 
 
+def _json_mapping_sequence(value):
+    """Return mapping observations from a stored JSON list, if present.
+
+    Bitcoin Core address-wallet sync stores its ``listtransactions`` receive
+    observations as a JSON list. They carry explicit ``txid``/``vout`` fields
+    but are not a full vin/vout graph. Keep this parser separate from
+    :func:`_json_mapping` so configuration and provider payload callers do not
+    accidentally reinterpret arbitrary arrays as objects.
+    """
+
+    if isinstance(value, list):
+        parsed = value
+    elif value in (None, ""):
+        return []
+    else:
+        try:
+            parsed = json.loads(str(value))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, Mapping)]
+
+
 def _canonical_chain(value):
     text = str(value or "").strip().lower()
     return {
@@ -230,11 +254,12 @@ def onchain_transfer_scope(row):
         # and must never rejoin their residual/source row through that raw txid.
         return None
 
-    raw = _json_mapping(_row_field(row, "raw_json"))
+    raw_value = _row_field(row, "raw_json")
+    raw = _json_mapping(raw_value)
     config = _json_mapping(
         _row_field(row, "config_json") or _row_field(row, "wallet_config_json")
     )
-    graph_mappings = [raw]
+    graph_mappings = [raw, *_json_mapping_sequence(raw_value)]
     for key in ("tx", "ownership_graph"):
         nested = raw.get(key)
         if isinstance(nested, Mapping):

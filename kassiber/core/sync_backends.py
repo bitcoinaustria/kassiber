@@ -92,19 +92,19 @@ def http_get_json(
     url,
     timeout=30,
     *,
+    headers=None,
     proxy_url=None,
     _sleeper=None,
     _rng=None,
     _max_attempts=None,
 ):
     def _opener():
-        request = urlrequest.Request(
-            url,
-            headers={
-                "Accept": "application/json",
-                "User-Agent": f"{APP_NAME}/{__version__}",
-            },
-        )
+        request_headers = {
+            "Accept": "application/json",
+            "User-Agent": f"{APP_NAME}/{__version__}",
+        }
+        request_headers.update(headers or {})
+        request = urlrequest.Request(url, headers=request_headers)
         with urlopen_with_proxy(
             request,
             url,
@@ -129,19 +129,19 @@ def http_get_text(
     timeout=30,
     accept="text/plain",
     *,
+    headers=None,
     proxy_url=None,
     _sleeper=None,
     _rng=None,
     _max_attempts=None,
 ):
     def _opener():
-        request = urlrequest.Request(
-            url,
-            headers={
-                "Accept": accept,
-                "User-Agent": f"{APP_NAME}/{__version__}",
-            },
-        )
+        request_headers = {
+            "Accept": accept,
+            "User-Agent": f"{APP_NAME}/{__version__}",
+        }
+        request_headers.update(headers or {})
+        request = urlrequest.Request(url, headers=request_headers)
         with urlopen_with_proxy(
             request,
             url,
@@ -559,13 +559,21 @@ def _highest_used_branch_index(highest_used, branch_index):
     return parsed if parsed >= 0 else None
 
 
-def scan_descriptor_targets(
+def scan_compatibility_descriptor_targets(
     plan,
-    target_used=None,
-    target_used_batch=None,
+    *,
+    target_used_batch,
     scan_batch_size=100,
     highest_used=None,
 ):
+    """Discover descriptor history for an explicit compatibility route.
+
+    BDK/LWK own ordinary descriptor discovery. Compatibility observers still
+    need their legacy backend-backed gap scan after source-overlap preflight,
+    because the finite local target set used by that preflight is not a safe
+    first-refresh discovery boundary.
+    """
+
     limits = branch_limits(plan)
     targets = []
     targets_checked = 0
@@ -583,7 +591,11 @@ def scan_descriptor_targets(
     for branch in plan.branches:
         branch_gap_limit = limits.get(branch.branch_index, plan.gap_limit)
         if branch_gap_limit <= 1:
-            targets.append(sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, 0)))
+            targets.append(
+                sync_target_from_derived(
+                    derive_descriptor_target(plan, branch.branch_index, 0)
+                )
+            )
             continue
         consecutive_unused = 0
         address_index = 0
@@ -600,62 +612,71 @@ def scan_descriptor_targets(
             )
             address_index = known_highest + 1
         while consecutive_unused < branch_gap_limit:
-            if target_used_batch is not None:
-                batch_targets = [
-                    sync_target_from_derived(target)
-                    for target in derive_descriptor_targets(
-                        plan,
-                        branch_index=branch.branch_index,
-                        start=address_index,
-                        end=address_index + scan_batch_size,
-                    )
-                ]
-                if not batch_targets:
+            batch_targets = [
+                sync_target_from_derived(target)
+                for target in derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=address_index,
+                    end=address_index + scan_batch_size,
+                )
+            ]
+            if not batch_targets:
+                break
+            used_batch = list(target_used_batch(batch_targets))
+            if len(used_batch) != len(batch_targets):
+                raise AppError(
+                    "Compatibility descriptor discovery returned an unexpected number of usage checks"
+                )
+            targets_checked += len(batch_targets)
+            for target, is_used in zip(batch_targets, used_batch):
+                targets.append(target)
+                if is_used:
+                    consecutive_unused = 0
+                else:
+                    consecutive_unused += 1
+                address_index += 1
+                if consecutive_unused >= branch_gap_limit:
                     break
-                used_batch = list(target_used_batch(batch_targets))
-                if len(used_batch) != len(batch_targets):
-                    raise AppError("Descriptor discovery returned an unexpected number of usage checks")
-                targets_checked += len(batch_targets)
-                for target, is_used in zip(batch_targets, used_batch):
-                    targets.append(target)
-                    if is_used:
-                        consecutive_unused = 0
-                    else:
-                        consecutive_unused += 1
-                    address_index += 1
-                    if consecutive_unused >= branch_gap_limit:
-                        break
-                emit_discovery_progress(
-                    branch.branch_index,
-                    branch_gap_limit,
-                    consecutive_unused,
-                )
-                continue
-            target = sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, address_index))
-            targets.append(target)
-            targets_checked += 1
-            if target_used and target_used(target):
-                consecutive_unused = 0
-            else:
-                consecutive_unused += 1
-            address_index += 1
-            if address_index % 50 == 0:
-                emit_discovery_progress(
-                    branch.branch_index,
-                    branch_gap_limit,
-                    consecutive_unused,
-                )
-        emit_discovery_progress(
-            branch.branch_index,
-            branch_gap_limit,
-            consecutive_unused,
-        )
+            emit_discovery_progress(
+                branch.branch_index,
+                branch_gap_limit,
+                consecutive_unused,
+            )
     return targets
 
 
-def esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
+def _esplora_auth_headers(backend):
+    auth_header = str(backend_value(backend, "auth_header") or "").strip()
+    if auth_header:
+        return {"Authorization": auth_header}
+    token = str(backend_value(backend, "token") or "").strip()
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return None
+
+
+def _esplora_call_kwargs(*, timeout, headers=None, proxy_url=None, **extra):
+    """Keep unauthenticated compatibility calls on their historical shape."""
+    kwargs = {"timeout": timeout, "proxy_url": proxy_url, **extra}
+    if headers is not None:
+        kwargs["headers"] = headers
+    return kwargs
+
+
+def esplora_scripthash_stats(
+    base_url,
+    script_pubkey_hex,
+    timeout=30,
+    *,
+    headers=None,
+    proxy_url=None,
+):
     resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
-    return http_get_json(resource, timeout=timeout, proxy_url=proxy_url)
+    return http_get_json(
+        resource,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
+    )
 
 
 def esplora_stats_fingerprint(payload):
@@ -684,12 +705,18 @@ def esplora_stats_fingerprint(payload):
     ).hexdigest()
 
 
-def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
+def esplora_scripthash_has_history(
+    base_url,
+    script_pubkey_hex,
+    timeout=30,
+    *,
+    headers=None,
+    proxy_url=None,
+):
     payload = esplora_scripthash_stats(
         base_url,
         script_pubkey_hex,
-        timeout=timeout,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
     chain_stats = payload.get("chain_stats") or {}
     mempool_stats = payload.get("mempool_stats") or {}
@@ -699,14 +726,18 @@ def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30, *, p
 def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
     if kind == "esplora":
         workers = _bounded_http_workers(backend)
+        headers = _esplora_auth_headers(backend)
         proxy_url = _backend_proxy_url(backend)
 
         def probe(script_pubkey):
             return esplora_scripthash_has_history(
                 backend["url"],
                 script_pubkey,
-                timeout=timeout,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             )
 
         return _map_bounded(script_pubkeys, probe, workers)
@@ -755,34 +786,40 @@ def detect_active_script_types(backend, xpub, *, chain="bitcoin", network=None, 
     ]
 
 
-def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
+def discover_compatibility_descriptor_targets(backend, plan, kind, checkpoint=None):
+    """Run backend-backed gap discovery for a named compatibility observer."""
+
     timeout = backend_timeout(backend)
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     if kind == "esplora":
         scan_batch_size = _bounded_http_workers(backend)
+        headers = _esplora_auth_headers(backend)
         proxy_url = _backend_proxy_url(backend)
         cached_stats = checkpoint.get("esplora_scripthashes") or {}
 
-        def target_used_single(target):
+        def target_used(target):
             scripthash = scriptpubkey_scripthash(target["script_pubkey"])
             cached = cached_stats.get(scripthash)
-            if isinstance(cached, dict) and "tx_count" in cached:
-                if int(cached.get("tx_count") or 0) > 0:
-                    return True
+            if isinstance(cached, dict) and int(cached.get("tx_count") or 0) > 0:
+                return True
             return esplora_scripthash_has_history(
                 backend["url"],
                 target["script_pubkey"],
-                timeout=timeout,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             )
 
-        def target_used_batch(targets):
-            return _map_bounded(targets, target_used_single, scan_batch_size)
-
         return {
-            "targets": scan_descriptor_targets(
+            "targets": scan_compatibility_descriptor_targets(
                 plan,
-                target_used_batch=target_used_batch,
+                target_used_batch=lambda targets: _map_bounded(
+                    targets,
+                    target_used,
+                    scan_batch_size,
+                ),
                 scan_batch_size=scan_batch_size,
                 highest_used=checkpoint.get("highest_used"),
             ),
@@ -790,47 +827,80 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
         }
     if kind == "electrum":
         electrum_batch_size = backend_batch_size(backend)
-        cached_statuses = checkpoint.get("electrum_scripthash_statuses") or {}
+        cached_statuses = dict(checkpoint.get("electrum_scripthash_statuses") or {})
         with ElectrumClient(backend) as client:
-            history_cache = {}
 
             def target_used_batch(targets):
-                scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in targets]
-                used_by_scripthash = {}
+                scripthashes = [
+                    scriptpubkey_scripthash(target["script_pubkey"])
+                    for target in targets
+                ]
                 missing = [
                     scripthash
                     for scripthash in scripthashes
-                    if scripthash not in cached_statuses
-                    or cached_statuses.get(scripthash) is None
+                    if cached_statuses.get(scripthash) is None
                 ]
                 if missing:
                     statuses = electrum_call_many(
                         client,
-                        [("blockchain.scripthash.subscribe", [scripthash]) for scripthash in missing],
+                        [
+                            ("blockchain.scripthash.subscribe", [scripthash])
+                            for scripthash in missing
+                        ],
                         batch_size=electrum_batch_size,
                     )
                     for scripthash, status in zip(missing, statuses):
                         cached_statuses[scripthash] = status
-                for scripthash in scripthashes:
-                    used_by_scripthash[scripthash] = cached_statuses.get(scripthash) is not None
-                return [used_by_scripthash[scripthash] for scripthash in scripthashes]
+                return [
+                    cached_statuses.get(scripthash) is not None
+                    for scripthash in scripthashes
+                ]
 
             return {
-                "targets": scan_descriptor_targets(
+                "targets": scan_compatibility_descriptor_targets(
                     plan,
                     target_used_batch=target_used_batch,
                     scan_batch_size=electrum_batch_size,
                     highest_used=checkpoint.get("highest_used"),
                 ),
-                "history_cache": history_cache,
+                "history_cache": {},
             }
-    if kind == "bitcoinrpc":
-        checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
-        return {
-            "targets": _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint),
-            "history_cache": {},
-        }
-    raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
+    raise AppError(
+        f"Compatibility descriptor discovery is not implemented for backend kind '{kind}'"
+    )
+
+
+def discover_bitcoinrpc_descriptor_targets(plan, checkpoint=None):
+    """Resolve Core's local import range without backend access."""
+
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    return {
+        "targets": _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint),
+        "history_cache": {},
+    }
+
+
+def _offline_descriptor_targets(plan, checkpoint=None):
+    """Resolve a finite overlap horizon without contacting a backend."""
+
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    highest_used = checkpoint.get("highest_used") or {}
+    targets = []
+    for branch in plan.branches:
+        try:
+            observed = int(highest_used.get(str(branch.branch_index), highest_used.get(branch.branch_index, -1)))
+        except (TypeError, ValueError):
+            observed = -1
+        end = max(plan.gap_limit, observed + plan.gap_limit + 1)
+        targets.extend(
+            derive_descriptor_targets(
+                plan,
+                branch_index=branch.branch_index,
+                start=0,
+                end=end,
+            )
+        )
+    return [target.__dict__ if hasattr(target, "__dict__") else dict(target) for target in targets]
 
 
 def resolve_wallet_sync_targets(backend, wallet):
@@ -865,7 +935,15 @@ def resolve_wallet_sync_targets(backend, wallet):
         if chain == "liquid" and not config.get("backend"):
             raise AppError("Liquid wallets must name a backend explicitly; no public Liquid default is built in")
         kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
-        discovery = discover_descriptor_targets(backend, descriptor_plan, kind, checkpoint=checkpoint)
+        # Discovery must stay local so source-overlap checks run before either
+        # BDK or an explicit compatibility adapter opens a network connection.
+        if kind in {"esplora", "electrum"}:
+            discovery = {
+                "targets": _offline_descriptor_targets(descriptor_plan, checkpoint),
+                "history_cache": {},
+            }
+        else:
+            discovery = discover_bitcoinrpc_descriptor_targets(descriptor_plan, checkpoint)
         targets = discovery["targets"]
         history_cache = discovery.get("history_cache") or {}
     else:
@@ -899,6 +977,300 @@ def resolve_wallet_sync_targets(backend, wallet):
         targets=targets,
         tracked_scripts=tracked_scripts,
         history_cache=history_cache,
+        checkpoint=checkpoint,
+    )
+
+
+def _observer_discovered_targets(observer_updates):
+    """Collect owned scripts discovered beyond the finite preflight horizon."""
+
+    targets = {}
+
+    def add_target(value):
+        target = dict(value) if isinstance(value, dict) else {"script_pubkey": value}
+        script = str(
+            target.get("script_pubkey") or target.get("scriptpubkey") or ""
+        ).strip().lower()
+        if not script:
+            return
+        try:
+            bytes.fromhex(script)
+        except ValueError:
+            return
+        target["script_pubkey"] = script
+        targets.setdefault(script, target)
+
+    for prepared in observer_updates:
+        update = getattr(prepared, "update", None)
+        facts = update.get("facts") if isinstance(update, dict) else None
+        if not isinstance(facts, dict):
+            continue
+        for output in facts.get("outputs") or []:
+            add_target(output)
+        for record in facts.get("transaction_records") or []:
+            if not isinstance(record, dict):
+                continue
+            raw = record.get("raw_json")
+            try:
+                raw = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            for script in raw.get("observer_owned_scripts") or []:
+                add_target(script)
+            for entry in [*(raw.get("vin") or []), *(raw.get("vout") or [])]:
+                if not isinstance(entry, dict):
+                    continue
+                owned = (
+                    entry.get("prevout")
+                    if isinstance(entry.get("prevout"), dict)
+                    else entry
+                )
+                if isinstance(owned, dict) and owned.get("role") == "owned":
+                    add_target(owned)
+    return list(targets.values())
+
+
+def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
+    """Prepare supported Bitcoin/Liquid descriptor refreshes through dependencies."""
+
+    from .chain_observer import (
+        ObserverPrepareRequest,
+        discard_prepared_observer_updates,
+        prepare_observer_update,
+    )
+    from .chain_observer.bdk import (
+        BdkObserver,
+        bdk_branches_for_identity,
+        bdk_compatibility_reason,
+    )
+    from .chain_observer.identity import identities_for_wallet
+    from .chain_observer.lwk import LwkObserver, lwk_compatibility_reason
+    from .chain_observer.store import load_observer_values
+    from .sync import WalletBackendFetch, _overlap_filtered_skip_outcome
+
+    state = discovery.sync_state
+    if discovery.skip_outcome is not None or state is None:
+        return None
+
+    def compatibility_fetch(reason):
+        if state.chain not in {"bitcoin", "liquid"} or discovery.kind not in {"esplora", "electrum"}:
+            return None
+        compatibility_state = state
+        descriptor_plan = state.descriptor_plan
+        if (
+            descriptor_plan is not None
+            and getattr(descriptor_plan, "kind", None) != "silent-payment"
+        ):
+            online_discovery = discover_compatibility_descriptor_targets(
+                discovery.backend,
+                descriptor_plan,
+                discovery.kind,
+                checkpoint=state.checkpoint,
+            )
+            online_targets = list(online_discovery["targets"])
+            compatibility_state = replace(
+                state,
+                targets=online_targets,
+                tracked_scripts={
+                    target["script_pubkey"]: target
+                    for target in online_targets
+                    if target.get("script_pubkey")
+                },
+                history_cache=online_discovery.get("history_cache") or {},
+            )
+            # The finite local horizon was filtered before any connection.
+            # Reapply ownership to every online result so deeper targets cannot
+            # introduce an overlap that did not exist inside that horizon.
+            from . import source_overlap
+
+            compatibility_state = source_overlap.filter_sync_state_for_canonical_owner(
+                conn,
+                profile,
+                wallet,
+                compatibility_state,
+            )
+            if not compatibility_state.targets:
+                return WalletBackendFetch(
+                    backend=discovery.backend,
+                    sync_state=None,
+                    normalized_records=(),
+                    adapter_meta={},
+                    kind=discovery.kind,
+                    started=discovery.started,
+                    force_full=discovery.force_full,
+                    skip_outcome=_overlap_filtered_skip_outcome(
+                        wallet,
+                        started=discovery.started,
+                        force_full=discovery.force_full,
+                        original_target_count=len(online_targets),
+                    ),
+                )
+        adapter = COMPATIBILITY_SYNC_BACKEND_ADAPTERS[discovery.kind]
+        try:
+            records, meta = adapter(discovery.backend, wallet, compatibility_state)
+        except AppError:
+            raise
+        except Exception as exc:
+            safe_error = redact_operational_text(str(exc))
+            raise AppError(
+                f"{state.chain.title()} compatibility observation failed for backend '{discovery.backend.get('name')}'",
+                code="backend_sync_failed",
+                details={"observer_route": "compatibility", "error": safe_error},
+                retryable=True,
+            ) from exc
+        route = (
+            "silent_payments"
+            if reason == "silent_payment"
+            else "bitcoin_script"
+            if state.chain == "bitcoin" and reason == "address_list"
+            else "compatibility"
+        )
+        normalized_records = tuple(records)
+        authoritative = reason != "silent_payment" or (
+            (meta or {}).get("silent_payment_scan_complete") is True
+            and all(
+                record.get("confirmed_at") not in (None, "")
+                for record in normalized_records
+            )
+        )
+        return WalletBackendFetch(
+            backend=discovery.backend,
+            sync_state=compatibility_state,
+            normalized_records=normalized_records,
+            adapter_meta={
+                **dict(meta or {}),
+                "observer_route": route,
+                "observer_compatibility_reason": reason,
+            },
+            kind=discovery.kind,
+            started=discovery.started,
+            force_full=discovery.force_full,
+            authoritative_chain_observer=authoritative,
+        )
+
+    dependency_kind = "lwk" if state.chain == "liquid" else "bdk"
+    compatibility_reason = (
+        lwk_compatibility_reason(discovery.backend, state)
+        if state.chain == "liquid"
+        else bdk_compatibility_reason(discovery.backend, state)
+    )
+    if compatibility_reason is not None:
+        return compatibility_fetch(compatibility_reason)
+    expected_scripts = {
+        target.get("script_pubkey")
+        for target in _offline_descriptor_targets(state.descriptor_plan, state.checkpoint)
+        if target.get("script_pubkey")
+    }
+    actual_scripts = {
+        target.get("script_pubkey") for target in state.targets if target.get("script_pubkey")
+    }
+    if actual_scripts != expected_scripts:
+        # BDK scans whole descriptors. A finite source-overlap exclusion cannot
+        # safely be represented, so keep this named compatibility route.
+        return compatibility_fetch("source_overlap_partial_descriptor")
+    identities = identities_for_wallet(wallet, observer_kind=dependency_kind)
+    if not identities:
+        raise AppError(
+            "The dependency observer route resolved no wallet identities",
+            code="observer_identity_invalid",
+            hint="Review the wallet descriptor source; Kassiber will not treat an empty scan as authoritative.",
+            details={"observer": dependency_kind, "wallet_id": str(wallet["id"])},
+            retryable=False,
+        )
+    prepared = []
+    try:
+        for identity in identities:
+            if dependency_kind == "lwk":
+                # A full refresh reconstructs the wollet in memory. Existing
+                # encrypted values remain durable until successful apply, but
+                # are never loaded into this request-local ForeignStore.
+                stored_values = (
+                    {}
+                    if discovery.force_full
+                    else load_observer_values(conn, identity)
+                )
+                observer = LwkObserver(
+                    identity=identity,
+                    backend=discovery.backend,
+                    descriptor_plan=state.descriptor_plan,
+                    policy_asset_id=state.policy_asset_id,
+                    stored_values=stored_values,
+                )
+            else:
+                observer = BdkObserver(
+                    identity=identity,
+                    backend=discovery.backend,
+                    branches=bdk_branches_for_identity(state.descriptor_plan, identity),
+                    gap_limit=state.descriptor_plan.gap_limit,
+                )
+            prepared.append(
+                prepare_observer_update(
+                    conn,
+                    identity,
+                    observer,
+                    ObserverPrepareRequest(
+                        backend_name=str(discovery.backend["name"]),
+                        backend_kind=discovery.kind,
+                        force_full=discovery.force_full,
+                        checkpoint=dict(state.checkpoint or {}),
+                    ),
+                )
+            )
+        discovered_targets = _observer_discovered_targets(prepared)
+        newly_discovered = [
+            target
+            for target in discovered_targets
+            if target.get("script_pubkey") not in actual_scripts
+        ]
+        if newly_discovered:
+            from . import source_overlap
+
+            expanded_targets = {
+                str(target.get("script_pubkey") or "").strip().lower(): target
+                for target in state.targets
+                if target.get("script_pubkey")
+            }
+            for target in newly_discovered:
+                expanded_targets.setdefault(target["script_pubkey"], target)
+            expanded_state = replace(
+                state,
+                targets=list(expanded_targets.values()),
+                tracked_scripts=dict(expanded_targets),
+            )
+            filtered_state = source_overlap.filter_sync_state_for_canonical_owner(
+                conn,
+                profile,
+                wallet,
+                expanded_state,
+            )
+            filtered_scripts = {
+                str(target.get("script_pubkey") or "").strip().lower()
+                for target in filtered_state.targets
+                if target.get("script_pubkey")
+            }
+            if filtered_scripts != set(expanded_targets):
+                discard_prepared_observer_updates(prepared)
+                fallback = compatibility_fetch("source_overlap_dependency_discovery")
+                if fallback is None:
+                    raise AppError(
+                        "Dependency-discovered ownership overlap has no safe observer route",
+                        code="source_overlap",
+                        retryable=False,
+                    )
+                return fallback
+    except BaseException:
+        discard_prepared_observer_updates(prepared)
+        raise
+    return WalletBackendFetch(
+        backend=discovery.backend,
+        sync_state=state,
+        normalized_records=(),
+        adapter_meta={"observer_route": dependency_kind},
+        kind=discovery.kind,
+        started=discovery.started,
+        force_full=discovery.force_full,
+        observer_updates=tuple(prepared),
+        authoritative_chain_observer=True,
     )
 
 
@@ -908,6 +1280,7 @@ def fetch_esplora_history(
     max_pages=None,
     timeout=30,
     *,
+    headers=None,
     proxy_url=None,
 ):
     transactions = []
@@ -922,7 +1295,10 @@ def fetch_esplora_history(
             if last_seen
             else append_url_path(base_url, f"{resource_path}/txs/chain")
         )
-        page = http_get_json(chain_url, timeout=timeout, proxy_url=proxy_url)
+        page = http_get_json(
+            chain_url,
+            **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
+        )
         if not page:
             break
         for tx in page:
@@ -935,7 +1311,10 @@ def fetch_esplora_history(
         if len(page) < 25:
             break
     mempool_url = append_url_path(base_url, f"{resource_path}/txs/mempool")
-    for tx in http_get_json(mempool_url, timeout=timeout, proxy_url=proxy_url):
+    for tx in http_get_json(
+        mempool_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
+    ):
         txid = tx.get("txid")
         if txid and txid not in seen_txids:
             seen_txids.add(txid)
@@ -949,29 +1328,46 @@ def fetch_esplora_scripthash_transactions(
     max_pages=None,
     timeout=30,
     *,
+    headers=None,
     proxy_url=None,
 ):
     return fetch_esplora_history(
         base_url,
         f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}",
-        max_pages=max_pages,
-        timeout=timeout,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(
+            timeout=timeout,
+            headers=headers,
+            proxy_url=proxy_url,
+            max_pages=max_pages,
+        ),
     )
 
 
-def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
+def fetch_esplora_scripthash_utxos(
+    base_url,
+    script_pubkey_hex,
+    timeout=30,
+    *,
+    headers=None,
+    proxy_url=None,
+):
     return http_get_json(
         append_url_path(
             base_url,
             f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}/utxo",
         ),
-        timeout=timeout,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
 
 
-def fetch_esplora_transaction(base_url, txid, timeout=30, *, proxy_url=None):
+def fetch_esplora_transaction(
+    base_url,
+    txid,
+    timeout=30,
+    *,
+    headers=None,
+    proxy_url=None,
+):
     """Fetch one transaction's JSON by txid.
 
     Esplora returns ``vin`` entries with inline ``prevout`` (including
@@ -982,8 +1378,7 @@ def fetch_esplora_transaction(base_url, txid, timeout=30, *, proxy_url=None):
     """
     return http_get_json(
         append_url_path(base_url, f"tx/{txid}"),
-        timeout=timeout,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
 
 
@@ -1058,8 +1453,11 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
         tx = fetch_esplora_transaction(
             backend["url"],
             txid,
-            timeout=timeout,
-            proxy_url=_backend_proxy_url(backend),
+            **_esplora_call_kwargs(
+                timeout=timeout,
+                headers=_esplora_auth_headers(backend),
+                proxy_url=_backend_proxy_url(backend),
+            ),
         )
         return _legs_from_esplora_tx(tx, normalized_chain)
     if kind == "electrum":
@@ -1165,13 +1563,16 @@ def _confirmations_from_heights(block_height, tip_height):
     return normalized_tip_height - normalized_block_height + 1
 
 
-def _esplora_tip_height(base_url, timeout=30, *, proxy_url=None):
+def _esplora_tip_height(base_url, timeout=30, *, headers=None, proxy_url=None):
     try:
         return int(
             http_get_text(
                 append_url_path(base_url, "blocks/tip/height"),
-                timeout=timeout,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
         )
     except (AppError, TypeError, ValueError):
@@ -1251,14 +1652,14 @@ def _liquid_utxo_record_from_output(
     }
 
 
-def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
+def compatibility_esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
     timeout = backend_timeout(backend)
     worker_count = _bounded_http_workers(backend)
+    headers = _esplora_auth_headers(backend)
     proxy_url = _backend_proxy_url(backend)
     tip_height = _esplora_tip_height(
         backend["url"],
-        timeout=timeout,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
 
     # Phase 1: fetch each tracked script's UTXO set concurrently, bounded by the
@@ -1268,8 +1669,7 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
         raw_utxos = fetch_esplora_scripthash_utxos(
             backend["url"],
             target["script_pubkey"],
-            timeout=timeout,
-            proxy_url=proxy_url,
+            **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
         )
         return target, list(raw_utxos or [])
 
@@ -1309,8 +1709,11 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
         def fetch_liquid_decode(txid):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
-                timeout=timeout,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
             return txid, decode_liquid_transaction(raw_hex)
 
@@ -1477,7 +1880,7 @@ def _silent_payment_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         raise AppError("Wallet sync state is not for Silent Payments", code="validation")
     kind = normalize_backend_kind(backend.get("kind"))
     payload = _silent_payment_scan_payload(backend, wallet, plan)
-    return silent_payments.normalize_scan_payload(
+    records, meta = silent_payments.normalize_scan_payload(
         payload,
         backend_name=str(backend.get("name") or ""),
         backend_kind=kind,
@@ -1486,6 +1889,7 @@ def _silent_payment_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         wallet_id=str(wallet["id"]) if "id" in wallet.keys() else None,
         wallet_label=str(wallet["label"]) if "label" in wallet.keys() else None,
     )
+    return records, {**dict(meta or {}), "observer_route": "silent_payments"}
 
 
 def _skip_unchanged_utxo_refresh(meta, sync_state: WalletSyncState):
@@ -1729,9 +2133,14 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         amount = sats_to_btc(amount_sats)
         fee = sats_to_btc(fee_sats)
         kind = "withdrawal" if amount > 0 else "fee"
-    block_time = (tx.get("status") or {}).get("block_time")
-    occurred_at = timestamp_to_iso(block_time)
-    confirmed_at = timestamp_to_iso(block_time, default=None)
+    status = tx.get("status") or {}
+    block_time = status.get("block_time")
+    occurred_at = timestamp_to_iso(block_time or tx.get("observed_at"))
+    confirmed_at = (
+        timestamp_to_iso(block_time, default=None)
+        if status.get("confirmed") is True or block_time is not None
+        else None
+    )
     claim_evidence = _extract_unique_claim_payment_hash_outpoint(
         tx.get("vin", []), _esplora_witness_items
     )
@@ -2004,10 +2413,11 @@ def record_components_from_liquid_tx(
     return records
 
 
-def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
+def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     timeout = backend_timeout(backend)
     worker_count = _bounded_http_workers(backend)
+    headers = _esplora_auth_headers(backend)
     proxy_url = _backend_proxy_url(backend)
     checkpoint = _checkpoint_mapping(sync_state)
     previous_stats = checkpoint.get("esplora_scripthashes") or {}
@@ -2021,8 +2431,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
         stats = esplora_scripthash_stats(
             backend["url"],
             target["script_pubkey"],
-            timeout=timeout,
-            proxy_url=proxy_url,
+            **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
         )
         return target, scripthash, stats
 
@@ -2087,9 +2496,12 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
         for tx in fetch_esplora_scripthash_transactions(
             backend["url"],
             target["script_pubkey"],
-            max_pages=max_pages,
-            timeout=timeout,
-            proxy_url=proxy_url,
+            **_esplora_call_kwargs(
+                timeout=timeout,
+                headers=headers,
+                proxy_url=proxy_url,
+                max_pages=max_pages,
+            ),
         ):
             target_txs.append(tx)
             known_txids.add(tx["txid"])
@@ -2129,8 +2541,11 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
         if txid not in raw_tx_cache:
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
-                timeout=backend_timeout(backend),
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=backend_timeout(backend),
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
             raw_tx_cache[txid] = {
                 "raw_hex": raw_hex,
@@ -2155,8 +2570,11 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
         def fetch_liquid_main_tx(txid):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
-                timeout=timeout,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
             return txid, raw_hex
 
@@ -2211,14 +2629,14 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     }
 
 
-def esplora_sync_adapter(backend, wallet, sync_state):
+def compatibility_esplora_sync_adapter(backend, wallet, sync_state):
     if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
         return _silent_payment_sync_adapter(backend, wallet, sync_state)
-    records, meta = esplora_records_for_wallet(backend, sync_state)
+    records, meta = compatibility_esplora_records_for_wallet(backend, sync_state)
     if _skip_unchanged_utxo_refresh(meta, sync_state):
         meta["utxos_skipped_unchanged"] = True
     else:
-        meta["utxos"] = esplora_utxos_for_wallet(backend, sync_state)
+        meta["utxos"] = compatibility_esplora_utxos_for_wallet(backend, sync_state)
     return records, meta
 
 
@@ -3094,6 +3512,7 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         tx_cache=meta.get("_bitcoinrpc_verbose_tx_cache"),
     )
     meta["utxos"] = utxos
+    meta["observer_route"] = "bitcoin_core_rpc"
     meta.pop("_bitcoinrpc_verbose_tx_cache", None)
     if sync_state.descriptor_plan is not None:
         highest_used = dict(checkpoint.get("highest_used") or {})
@@ -3387,7 +3806,7 @@ def _electrum_bitcoin_utxo_record(raw_utxo, target, sync_state, header_timestamp
     }
 
 
-def electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
+def compatibility_electrum_utxos_for_wallet(backend, sync_state: WalletSyncState):
     outputs = []
     batch_size = backend_batch_size(backend)
     header_timestamps = {}
@@ -3533,7 +3952,7 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     }
 
 
-def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
+def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncState):
     transactions = {}
     records = []
     batch_size = backend_batch_size(backend)
@@ -3814,14 +4233,14 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
     }
 
 
-def electrum_sync_adapter(backend, wallet, sync_state):
+def compatibility_electrum_sync_adapter(backend, wallet, sync_state):
     if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
         return _silent_payment_sync_adapter(backend, wallet, sync_state)
-    records, meta = electrum_records_for_wallet(backend, sync_state)
+    records, meta = compatibility_electrum_records_for_wallet(backend, sync_state)
     if _skip_unchanged_utxo_refresh(meta, sync_state):
         meta["utxos_skipped_unchanged"] = True
     else:
-        meta["utxos"] = electrum_utxos_for_wallet(backend, sync_state)
+        meta["utxos"] = compatibility_electrum_utxos_for_wallet(backend, sync_state)
     return records, meta
 
 
@@ -3835,10 +4254,17 @@ def custom_sync_adapter(backend, wallet, sync_state):
     )
 
 
+COMPATIBILITY_SYNC_BACKEND_ADAPTERS = MappingProxyType(
+    {
+        "esplora": compatibility_esplora_sync_adapter,
+        "electrum": compatibility_electrum_sync_adapter,
+    }
+)
+
+
 SYNC_BACKEND_ADAPTERS = MappingProxyType(
     {
-        "esplora": esplora_sync_adapter,
-        "electrum": electrum_sync_adapter,
+        **COMPATIBILITY_SYNC_BACKEND_ADAPTERS,
         "bitcoinrpc": bitcoinrpc_sync_adapter,
         "custom": custom_sync_adapter,
     }
@@ -3852,10 +4278,10 @@ __all__ = [
     "bitcoinrpc_utxos_for_wallet_name",
     "custom_sync_adapter",
     "decode_raw_transaction",
-    "electrum_sync_adapter",
-    "electrum_utxos_for_wallet",
-    "esplora_sync_adapter",
-    "esplora_utxos_for_wallet",
+    "compatibility_electrum_sync_adapter",
+    "compatibility_electrum_utxos_for_wallet",
+    "compatibility_esplora_sync_adapter",
+    "compatibility_esplora_utxos_for_wallet",
     "fetch_esplora_transaction",
     "fetch_transaction_legs",
     "resolve_wallet_sync_targets",

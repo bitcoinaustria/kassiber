@@ -223,6 +223,65 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  chain-observers:
+    name: Chain observers (Linux Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Detect observer-sensitive changes
+        id: observer_paths
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BASE_SHA"...HEAD -- \
+            kassiber/core/chain_observer \
+            kassiber/core/sync.py \
+            kassiber/core/sync_backends.py \
+            kassiber/wallet_descriptors.py \
+            kassiber/wallet_security.py \
+            kassiber/db.py \
+            dev/regtest \
+            scripts/integration-harness.sh \
+            tests/integration \
+            pyproject.toml \
+            uv.lock; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.observer_paths.outputs.run == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        if: steps.observer_paths.outputs.run == 'true'
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync dependencies
+        if: steps.observer_paths.outputs.run == 'true'
+        run: uv sync --frozen
+
+      - name: Dependency-backed chain-observer oracle
+        if: steps.observer_paths.outputs.run == 'true'
+        run: ./scripts/integration-harness.sh chain-observers
+
+      - name: No observer-sensitive changes
+        if: steps.observer_paths.outputs.run != 'true'
+        run: echo "The dependency-backed chain-observer lane is not required for this change."
+
   required:
     name: required
     if: always()
@@ -231,6 +290,7 @@ jobs:
       - python-tests
       - frontend
       - cli-smoke
+      - chain-observers
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -241,7 +301,8 @@ jobs:
           echo "- Python shards: ${{ needs.python-tests.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' }}
+        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1

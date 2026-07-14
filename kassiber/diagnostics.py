@@ -275,6 +275,7 @@ def _privacy_contract() -> dict[str, Any]:
             "addresses",
             "attachment filenames and URLs",
             "backend hostnames and full URLs",
+            "chain observer state and derivation coverage",
             "descriptors and xpubs",
             "Silent Payments scan material, spscan/spspend keys, and sp() descriptors",
             "exact BTC, asset, fiat, fee, rate, balance, and tax values",

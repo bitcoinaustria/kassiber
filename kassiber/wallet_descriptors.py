@@ -13,6 +13,11 @@ from .wallet_setup import (
     BSMS_DESCRIPTOR_SOURCE,
     parse_bsms_descriptor_record,
 )
+from .wallet_security import (
+    assert_descriptor_is_watch_only,
+    assert_descriptor_text_is_watch_only,
+    assert_standalone_key_is_watch_only,
+)
 
 
 DEFAULT_DESCRIPTOR_GAP_LIMIT = 100
@@ -275,6 +280,15 @@ def enabled_script_branches(xpub, script_types, descriptor_class):
 def load_descriptor_plan(config):
     descriptor_text = str(config.get("descriptor") or "").strip()
     xpub = str(config.get("xpub") or "").strip()
+    # Field names are not a trust boundary: reject a private extended key even
+    # when an incomplete/malformed config has placed it in the nominal xpub
+    # slot and would otherwise return no descriptor plan.
+    assert_standalone_key_is_watch_only(xpub)
+    # Validate both named branches even when the primary plan is synthesized
+    # from an xpub. Otherwise an ignored private change_descriptor could remain
+    # persisted and later become active after an ordinary config edit.
+    assert_descriptor_text_is_watch_only(descriptor_text)
+    assert_descriptor_text_is_watch_only(config.get("change_descriptor"))
     script_types = ordered_script_types(config.get("script_types"))
     if not descriptor_text and not (xpub and script_types):
         return None
@@ -304,6 +318,8 @@ def load_descriptor_plan(config):
         # Multi-script xpub wallet: one receive/change branch pair per enabled
         # script type, each at that type's fixed branch indices.
         branches = enabled_script_branches(xpub, script_types, descriptor_class)
+        for branch in branches:
+            assert_descriptor_is_watch_only(branch.descriptor)
         fingerprint = sha256(
             json.dumps(
                 {
@@ -328,6 +344,9 @@ def load_descriptor_plan(config):
     change_descriptor = (
         descriptor_class.from_string(normalize_descriptor_text(chain, change_text)) if change_text else None
     )
+    assert_descriptor_is_watch_only(primary)
+    if change_descriptor is not None:
+        assert_descriptor_is_watch_only(change_descriptor)
     if change_descriptor is None and synthesize_change:
         # No explicit change descriptor: derive the sibling change chain from a
         # receive-only descriptor so internal/change UTXOs are not missed.

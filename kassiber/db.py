@@ -138,6 +138,54 @@ CREATE TABLE IF NOT EXISTS wallets (
     UNIQUE (profile_id, label)
 );
 
+-- Private dependency-observer state. These rows live only in the main
+-- SQLite/SQLCipher store; no public, audit, AI, diagnostic, or replication
+-- surface selects them. ``logical_wallet_id`` lets one grouped wallet own
+-- multiple observer instances while ``source_wallet_id`` identifies the
+-- concrete descriptor source that is refreshed.
+CREATE TABLE IF NOT EXISTS chain_observer_instances (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    logical_wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    source_wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    observer_kind TEXT NOT NULL,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    state_version INTEGER NOT NULL,
+    state_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (logical_wallet_id, source_wallet_id, source_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chain_observer_instances_profile
+    ON chain_observer_instances(profile_id, logical_wallet_id, source_wallet_id);
+
+CREATE TABLE IF NOT EXISTS chain_observer_coverage (
+    observer_id TEXT NOT NULL REFERENCES chain_observer_instances(id) ON DELETE CASCADE,
+    branch_key TEXT NOT NULL,
+    coverage_version INTEGER NOT NULL,
+    highest_used INTEGER,
+    scanned_to INTEGER NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (observer_id, branch_key)
+);
+
+-- Opaque dependency-owned key/value state. Values are intentionally BLOBs:
+-- Kassiber namespaces and versions them but never interprets their contents.
+-- The FK keeps the values inside the observer row's SQLCipher transaction.
+CREATE TABLE IF NOT EXISTS chain_observer_values (
+    observer_id TEXT NOT NULL REFERENCES chain_observer_instances(id) ON DELETE CASCADE,
+    namespace_version INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value BLOB NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (observer_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

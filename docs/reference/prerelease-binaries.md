@@ -115,7 +115,13 @@ requires a universal2 Python interpreter or extra binary stitching. The macOS
 desktop leg uses GitHub's `macos-latest` runner with Tauri's
 `--target universal-apple-darwin`, after installing both Rust targets
 (`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
-target name `macos-universal` so users only see one Mac GUI download.
+target name `macos-universal` so users see one Mac GUI download.
+
+The sidecar build always collects pinned `bdkpython`. It collects pinned `lwk`
+where a native wheel exists. LWK 0.18.0 has no macOS x86_64 wheel, so the Intel
+sidecar deliberately omits it and routes Liquid descriptor observation through
+the named compatibility observer. macOS arm64, Linux x86_64, and Windows x86_64
+smokes include both dependencies.
 
 ### Local Apple Silicon build
 

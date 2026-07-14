@@ -678,6 +678,132 @@ class BuildOwnedIndexTests(unittest.TestCase):
             {("regtest", "Regtest")},
         )
 
+    def test_core_receive_history_seeds_exact_scoped_outpoints(self):
+        conn = _engine_conn()
+        txid = "ef" * 32
+        conn.executemany(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            [
+                (
+                    "treasury",
+                    "p1",
+                    "Treasury",
+                    "address",
+                    '{"addresses":["treasury-address"],"chain":"bitcoin","network":"regtest"}',
+                    None,
+                ),
+                (
+                    "merchant",
+                    "p1",
+                    "Merchant",
+                    "address",
+                    '{"addresses":["merchant-address"],"chain":"bitcoin","network":"regtest"}',
+                    None,
+                ),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO transactions(profile_id, wallet_id, external_id, raw_json) "
+            "VALUES(?,?,?,?)",
+            [
+                (
+                    "p1",
+                    "treasury",
+                    txid,
+                    json.dumps(
+                        [{"txid": txid, "vout": 4, "address": "treasury-address"}]
+                    ),
+                ),
+                (
+                    "p1",
+                    "merchant",
+                    txid,
+                    json.dumps(
+                        [{"txid": txid, "vout": 1, "address": "merchant-address"}]
+                    ),
+                ),
+            ],
+        )
+        wallets = conn.execute(
+            "SELECT w.*, NULL AS account_code, NULL AS account_label "
+            "FROM wallets w ORDER BY id"
+        ).fetchall()
+
+        index, warnings = ownership.build_owned_index(
+            conn, "p1", wallets, derive=False
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(
+            [
+                match.wallet_id
+                for match in index.lookup_outpoint(
+                    f"{txid}:4", chain="bitcoin", network="regtest"
+                )
+            ],
+            ["treasury"],
+        )
+        self.assertEqual(
+            [
+                match.wallet_id
+                for match in index.lookup_outpoint(
+                    f"{txid}:1", chain="bitcoin", network="regtest"
+                )
+            ],
+            ["merchant"],
+        )
+        self.assertEqual(
+            index.lookup_txid_wallets(
+                txid, chain="bitcoin", network="regtest"
+            ),
+            {("merchant", "Merchant"), ("treasury", "Treasury")},
+        )
+
+    def test_core_receive_history_does_not_seed_ambiguous_address(self):
+        conn = _engine_conn()
+        txid = "12" * 32
+        config = (
+            '{"addresses":["shared-address"],"chain":"bitcoin",'
+            '"network":"regtest"}'
+        )
+        conn.executemany(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            [
+                ("one", "p1", "One", "address", config, None),
+                ("two", "p1", "Two", "address", config, None),
+            ],
+        )
+        conn.execute(
+            "INSERT INTO transactions(profile_id, wallet_id, external_id, raw_json) "
+            "VALUES(?,?,?,?)",
+            (
+                "p1",
+                "one",
+                txid,
+                json.dumps(
+                    [{"txid": txid, "vout": 0, "address": "shared-address"}]
+                ),
+            ),
+        )
+        wallets = conn.execute(
+            "SELECT w.*, NULL AS account_code, NULL AS account_label "
+            "FROM wallets w ORDER BY id"
+        ).fetchall()
+
+        index, warnings = ownership.build_owned_index(
+            conn, "p1", wallets, derive=False
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(
+            index.lookup_outpoint(
+                f"{txid}:0", chain="bitcoin", network="regtest"
+            ),
+            [],
+        )
+
     def test_wallet_config_can_raise_journal_ownership_scan_depth(self):
         conn = _engine_conn()
         conn.execute(

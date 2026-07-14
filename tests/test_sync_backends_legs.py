@@ -106,6 +106,26 @@ class FetchTransactionLegsGuardTests(unittest.TestCase):
             proxy_url="socks5h://127.0.0.1:9050",
         )
 
+    def test_esplora_fetch_forwards_backend_auth_when_configured(self):
+        backend = {
+            "name": "private-esplora",
+            "kind": "esplora",
+            "url": "https://x",
+            "auth_header": "Bearer observer-secret",
+        }
+        with patch(
+            "kassiber.core.sync_backends.fetch_esplora_transaction",
+            return_value={"vin": [], "vout": []},
+        ) as fetch:
+            sync_backends.fetch_transaction_legs(backend, "ab" * 32, chain="bitcoin")
+        fetch.assert_called_once_with(
+            "https://x",
+            "ab" * 32,
+            timeout=30,
+            headers={"Authorization": "Bearer observer-secret"},
+            proxy_url=None,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

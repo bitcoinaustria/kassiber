@@ -6,6 +6,10 @@ import re
 from typing import Any
 
 from .errors import AppError
+from .wallet_security import (
+    assert_descriptor_text_is_watch_only,
+    assert_standalone_key_is_watch_only,
+)
 
 
 _BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -80,20 +84,21 @@ def normalize_wallet_material(
             code="validation",
             hint="Paste a descriptor, descriptor export, or supported extended public key.",
         )
+    assert_standalone_key_is_watch_only(material)
     json_payload = _parse_json_material(material)
     if json_payload is not None:
         parsed = _descriptors_from_json(json_payload)
         if parsed:
-            return parsed
+            return _validate_parsed_wallet_material(parsed)
     parsed = parse_bsms_descriptor_record(material)
     if parsed:
-        return parsed
+        return _validate_parsed_wallet_material(parsed)
     parsed = _descriptors_from_text(material)
     if parsed:
-        return parsed
+        return _validate_parsed_wallet_material(parsed)
     parsed = _descriptors_from_slip132(material)
     if parsed:
-        return parsed
+        return _validate_parsed_wallet_material(parsed)
     prefix = material[:4]
     if prefix in {"xpub", "tpub"}:
         resolved_types = normalize_script_types(script_types)
@@ -101,7 +106,9 @@ def normalize_wallet_material(
             # Reject a malformed key before we record it; descriptor rendering
             # is deferred to load_descriptor_plan (single source of truth).
             _base58check_decode(material)
-            return {"xpub": material, "script_types": resolved_types}
+            return _validate_parsed_wallet_material(
+                {"xpub": material, "script_types": resolved_types}
+            )
         if script_type:
             return _descriptors_from_bare_xpub(material, script_type)
         raise AppError(
@@ -114,6 +121,15 @@ def normalize_wallet_material(
         code="validation",
         hint="Paste a descriptor, a BSMS descriptor record, Bitcoin Core descriptor JSON, Sparrow-style descriptor text, or a ypub/zpub/upub/vpub key.",
     )
+
+
+def _validate_parsed_wallet_material(material: dict[str, Any]) -> dict[str, Any]:
+    """Reject parsed private spending keys without weakening format handling."""
+
+    assert_standalone_key_is_watch_only(material.get("xpub"))
+    assert_descriptor_text_is_watch_only(material.get("descriptor"))
+    assert_descriptor_text_is_watch_only(material.get("change_descriptor"))
+    return material
 
 
 def _parse_json_material(material: str) -> Any | None:
@@ -326,10 +342,10 @@ def _descriptors_from_bare_xpub(material: str, script_type: str) -> dict[str, st
         )
     # Reject a malformed key before we wrap it in a descriptor.
     _base58check_decode(material)
-    return {
+    return _validate_parsed_wallet_material({
         "descriptor": template.format(key=material, branch=0),
         "change_descriptor": template.format(key=material, branch=1),
-    }
+    })
 
 
 def _descriptors_from_slip132(material: str) -> dict[str, str] | None:

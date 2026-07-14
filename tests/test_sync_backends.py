@@ -4,13 +4,16 @@ import random
 import sqlite3
 import tempfile
 import unittest
+from dataclasses import replace
 from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from urllib import error as urlerror
 
+from kassiber.cli import handlers as cli_handlers
 from kassiber.core import sync_backends as sb
+from kassiber.core import sync as core_sync
 from kassiber.core import wallets as core_wallets
 from kassiber.core.sync import (
     WalletBackendFetch,
@@ -31,13 +34,13 @@ from kassiber.core.sync_backends import (
     _emit_backend_progress,
     bitcoinrpc_import_ranged_descriptors,
     bitcoinrpc_sync_adapter,
-    discover_descriptor_targets,
-    electrum_sync_adapter,
-    esplora_sync_adapter,
-    esplora_utxos_for_wallet,
+    compatibility_electrum_sync_adapter,
+    compatibility_esplora_sync_adapter,
+    compatibility_esplora_utxos_for_wallet,
+    discover_bitcoinrpc_descriptor_targets,
+    discover_compatibility_descriptor_targets,
     record_from_bitcoin_esplora_tx,
     record_from_bitcoinrpc_details,
-    scan_descriptor_targets,
     scriptpubkey_scripthash,
 )
 from kassiber.core import imports as core_imports
@@ -203,9 +206,11 @@ class SyncBackendsTest(unittest.TestCase):
                 "retracted_records": [{"transaction_id": "stale"}],
             }
 
-        def insert_records(conn, profile, wallet, records, source_label):
+        def insert_records(conn, profile, wallet, records, source_label, **kwargs):
             del conn, profile, wallet
-            inserted_after_retract.append((source_label, bool(retracted), list(records)))
+            inserted_after_retract.append(
+                (source_label, bool(retracted), list(records), kwargs)
+            )
             return {"imported": 0, "skipped": 0, "journal_invalidated": False}
 
         hooks = WalletSyncHooks(
@@ -229,6 +234,7 @@ class SyncBackendsTest(unittest.TestCase):
             kind="bitcoinrpc",
             started=0.0,
             force_full=False,
+            authoritative_chain_observer=True,
         )
 
         outcome = sync_wallet_from_backend(
@@ -243,6 +249,10 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(retracted, [("backend:core-regtest", ["aa" * 32])])
         self.assertEqual(inserted_after_retract[0][0], "backend:core-regtest")
         self.assertTrue(inserted_after_retract[0][1])
+        self.assertEqual(
+            inserted_after_retract[0][3],
+            {"authoritative_chain_observer": True},
+        )
         self.assertEqual(outcome["retracted"], 1)
         self.assertTrue(outcome["journal_invalidated"])
         self.assertEqual(outcome["bitcoinrpc_retracted_txids"], ["aa" * 32])
@@ -467,7 +477,16 @@ class SyncBackendsTest(unittest.TestCase):
                 {"freshness_checkpoint": {"pass": len(adapter_gaps)}},
             )
 
-        def insert_records(conn, profile, wallet_row, records, source_label):
+        def insert_records(
+            conn,
+            profile,
+            wallet_row,
+            records,
+            source_label,
+            *,
+            authoritative_chain_observer=False,
+        ):
+            self.assertTrue(authoritative_chain_observer)
             pass_number = records[0]["pass"]
             if pass_number == 1:
                 conn.execute(
@@ -602,7 +621,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.http_get_text",
             return_value="123\n",
         ):
-            records, meta = esplora_sync_adapter(
+            records, meta = compatibility_esplora_sync_adapter(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -617,6 +636,47 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertAlmostEqual(float(records[0]["amount"]), 0.00012345, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
+
+    def test_esplora_sync_adapter_forwards_backend_auth_to_every_read(self):
+        target = {"address": "bc1qauth", "script_pubkey": "0014" + "22" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        auth = {"Authorization": "Bearer observer-secret"}
+        with patch(
+            "kassiber.core.sync_backends.esplora_scripthash_stats",
+            return_value={"chain_stats": {"tx_count": 0}, "mempool_stats": {"tx_count": 0}},
+        ) as stats, patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_transactions",
+            return_value=[],
+        ) as history, patch(
+            "kassiber.core.sync_backends._esplora_tip_height",
+            return_value=100,
+        ) as tip, patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
+            return_value=[],
+        ) as utxos:
+            compatibility_esplora_sync_adapter(
+                {
+                    "name": "authenticated-esplora",
+                    "kind": "esplora",
+                    "url": "https://esplora.example",
+                    "token": "observer-secret",
+                },
+                {"id": "wallet-1"},
+                sync_state,
+            )
+
+        self.assertEqual(stats.call_args.kwargs["headers"], auth)
+        self.assertEqual(history.call_args.kwargs["headers"], auth)
+        self.assertEqual(tip.call_args.kwargs["headers"], auth)
+        self.assertEqual(utxos.call_args.kwargs["headers"], auth)
 
     def test_esplora_checkpoint_skips_unchanged_script_pages(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
@@ -634,8 +694,10 @@ class SyncBackendsTest(unittest.TestCase):
             script_pubkey_hex,
             max_pages=None,
             timeout=30,
+            headers=None,
             proxy_url=None,
         ):
+            del headers
             fetch_calls.append(
                 (base_url, script_pubkey_hex, max_pages, timeout, proxy_url)
             )
@@ -660,7 +722,7 @@ class SyncBackendsTest(unittest.TestCase):
                 tracked_scripts={target["script_pubkey"]: target},
                 history_cache={},
             )
-            records, meta = esplora_sync_adapter(
+            records, meta = compatibility_esplora_sync_adapter(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -676,7 +738,7 @@ class SyncBackendsTest(unittest.TestCase):
                 history_cache={},
                 checkpoint=meta["freshness_checkpoint"],
             )
-            records, second_meta = esplora_sync_adapter(
+            records, second_meta = compatibility_esplora_sync_adapter(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
                 {"id": "wallet-1"},
                 second_state,
@@ -764,8 +826,8 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             return_value=[],
         ):
-            records1, meta1 = esplora_sync_adapter(backend, wallet, make_state())
-            records2, meta2 = esplora_sync_adapter(
+            records1, meta1 = compatibility_esplora_sync_adapter(backend, wallet, make_state())
+            records2, meta2 = compatibility_esplora_sync_adapter(
                 backend, wallet, make_state(meta1["freshness_checkpoint"])
             )
 
@@ -777,43 +839,6 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(meta2["scripts_changed"], 1)
         self.assertEqual(
             {record["txid"] for record in records2}, {"11" * 32, "22" * 32}
-        )
-
-    def test_esplora_descriptor_discovery_rechecks_previously_unused_scripts(self):
-        target = {"address": "bc1qgap", "script_pubkey": "0014" + "22" * 20}
-        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-        usage_checks = []
-
-        def fake_scan(
-            plan,
-            target_used=None,
-            target_used_batch=None,
-            scan_batch_size=None,
-            highest_used=None,
-        ):
-            del plan, target_used, scan_batch_size, highest_used
-            self.assertIsNotNone(target_used_batch)
-            usage_checks.extend(target_used_batch([target]))
-            return [target]
-
-        with patch("kassiber.core.sync_backends.scan_descriptor_targets", side_effect=fake_scan), patch(
-            "kassiber.core.sync_backends.esplora_scripthash_has_history",
-            return_value=True,
-        ) as has_history:
-            discovery = discover_descriptor_targets(
-                {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
-                object(),
-                "esplora",
-                checkpoint={"esplora_scripthashes": {scripthash: {"tx_count": 0}}},
-            )
-
-        self.assertEqual(discovery["targets"], [target])
-        self.assertEqual(usage_checks, [True])
-        has_history.assert_called_once_with(
-            "https://esplora.example",
-            target["script_pubkey"],
-            timeout=30,
-            proxy_url=None,
         )
 
     def test_electrum_sync_adapter_returns_record_shape(self):
@@ -890,7 +915,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ):
-            records, meta = electrum_sync_adapter(
+            records, meta = compatibility_electrum_sync_adapter(
                 {"name": "electrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -975,7 +1000,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ):
-            records, meta = sb.electrum_records_for_wallet(
+            records, meta = sb.compatibility_electrum_records_for_wallet(
                 {"name": "fulcrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 sync_state,
             )
@@ -1039,7 +1064,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
-            "kassiber.core.sync_backends.electrum_utxos_for_wallet",
+            "kassiber.core.sync_backends.compatibility_electrum_utxos_for_wallet",
             return_value=[],
         ) as fetch_utxos:
             sync_state = WalletSyncState(
@@ -1051,7 +1076,7 @@ class SyncBackendsTest(unittest.TestCase):
                 tracked_scripts={target["script_pubkey"]: target},
                 history_cache={},
             )
-            records, meta = electrum_sync_adapter(
+            records, meta = compatibility_electrum_sync_adapter(
                 {"name": "electrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -1068,7 +1093,7 @@ class SyncBackendsTest(unittest.TestCase):
                 history_cache={},
                 checkpoint=meta["freshness_checkpoint"],
             )
-            records, second_meta = electrum_sync_adapter(
+            records, second_meta = compatibility_electrum_sync_adapter(
                 {"name": "electrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 {"id": "wallet-1"},
                 second_state,
@@ -1084,183 +1109,6 @@ class SyncBackendsTest(unittest.TestCase):
             second_calls,
             [("blockchain.scripthash.subscribe", (scripthash,))],
         )
-
-    def test_electrum_descriptor_discovery_rechecks_cached_unused_status(self):
-        target = {"address": "bc1qgap", "script_pubkey": "0014cafebabe"}
-        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-        batch_calls = []
-
-        class FakeElectrumClient:
-            def __init__(self, backend):
-                self.backend = backend
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def batch_call(self, requests):
-                batch_calls.extend(requests)
-                responses = []
-                for method, params in requests:
-                    key = (method, tuple(params or ()))
-                    if key == ("blockchain.scripthash.subscribe", (scripthash,)):
-                        responses.append("status-new")
-                    else:
-                        raise AssertionError(f"Unexpected Electrum call: {key!r}")
-                return responses
-
-        def fake_scan(
-            plan,
-            target_used=None,
-            target_used_batch=None,
-            scan_batch_size=None,
-            highest_used=None,
-        ):
-            del plan, target_used, scan_batch_size, highest_used
-            self.assertIsNotNone(target_used_batch)
-            self.assertEqual(target_used_batch([target]), [True])
-            return [target]
-
-        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
-            "kassiber.core.sync_backends.scan_descriptor_targets",
-            side_effect=fake_scan,
-        ):
-            discovery = discover_descriptor_targets(
-                {
-                    "name": "electrum",
-                    "kind": "electrum",
-                    "url": "ssl://electrum.example:50002",
-                    "batch_size": 10,
-                },
-                object(),
-                "electrum",
-                checkpoint={"electrum_scripthash_statuses": {scripthash: None}},
-            )
-
-        self.assertEqual(discovery["targets"], [target])
-        self.assertEqual(
-            batch_calls,
-            [("blockchain.scripthash.subscribe", [scripthash])],
-        )
-
-    def test_descriptor_scan_reuses_highest_used_targets_and_checks_trailing_gap(self):
-        class FakeDescriptor:
-            is_wildcard = True
-
-        plan = DescriptorPlan(
-            chain="bitcoin",
-            network="bitcoin",
-            gap_limit=2,
-            descriptor_fingerprint="fp",
-            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
-        )
-        checked = []
-        progress = []
-
-        def fake_derive(plan, branch_index=None, start=0, end=0):
-            del plan
-            return [
-                DerivedTarget(
-                    chain="bitcoin",
-                    network="bitcoin",
-                    branch_index=branch_index,
-                    branch_label="receive",
-                    address_index=index,
-                    address=f"bc1q{index}",
-                    unconfidential_address=None,
-                    script_pubkey=f"{index:064x}",
-                    derivation_path=f"m/0/{index}",
-                    derivation_paths=(f"m/0/{index}",),
-                    key_origins=(),
-                )
-                for index in range(start, end)
-            ]
-
-        def target_used_batch(targets):
-            checked.extend(target["address_index"] for target in targets)
-            return [False for _ in targets]
-
-        with patch(
-            "kassiber.core.sync_backends.derive_descriptor_targets",
-            side_effect=fake_derive,
-        ):
-            token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
-            try:
-                targets = scan_descriptor_targets(
-                    plan,
-                    target_used_batch=target_used_batch,
-                    scan_batch_size=1,
-                    highest_used={"0": 2},
-                )
-            finally:
-                sync_progress_emitter.reset(token)
-
-        self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
-        self.assertEqual(checked, [3, 4])
-        self.assertEqual(progress[-1]["processed"], 2)
-        self.assertNotIn("total", progress[-1])
-        self.assertEqual(progress[-1]["retained_targets"], 5)
-        self.assertEqual(progress[-1]["unused_streak"], 2)
-        self.assertEqual(progress[-1]["gap_limit"], 2)
-
-    def test_first_sync_scans_full_gap_depth_following_used_addresses(self):
-        # A first sync (no stored checkpoint, highest_used=None) must walk the
-        # FULL active range, not a fixed shallow window: every used address
-        # resets the trailing-gap counter so discovery extends as deep as
-        # activity goes, stopping only after gap_limit consecutive unused. This
-        # pins the "first Refresh reaches the entire gap limit" trust property
-        # (the original Issue #1 complaint) so it cannot silently regress.
-        class FakeDescriptor:
-            is_wildcard = True
-
-        plan = DescriptorPlan(
-            chain="bitcoin",
-            network="bitcoin",
-            gap_limit=3,
-            descriptor_fingerprint="fp",
-            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
-        )
-        used_indices = {0, 3, 6}
-
-        def fake_derive(plan, branch_index=None, start=0, end=0):
-            del plan
-            return [
-                DerivedTarget(
-                    chain="bitcoin",
-                    network="bitcoin",
-                    branch_index=branch_index,
-                    branch_label="receive",
-                    address_index=index,
-                    address=f"bc1q{index}",
-                    unconfidential_address=None,
-                    script_pubkey=f"{index:064x}",
-                    derivation_path=f"m/0/{index}",
-                    derivation_paths=(f"m/0/{index}",),
-                    key_origins=(),
-                )
-                for index in range(start, end)
-            ]
-
-        def target_used_batch(targets):
-            return [target["address_index"] in used_indices for target in targets]
-
-        with patch(
-            "kassiber.core.sync_backends.derive_descriptor_targets",
-            side_effect=fake_derive,
-        ):
-            targets = scan_descriptor_targets(
-                plan,
-                target_used_batch=target_used_batch,
-                scan_batch_size=1,
-                highest_used=None,  # first sync: derive from index 0
-            )
-
-        scanned = [target["address_index"] for target in targets]
-        # Used at 0/3/6 keep the walk alive past a naive shallow scan; it stops
-        # only after gap_limit(3) trailing unused (7, 8, 9), reaching index 9.
-        self.assertEqual(scanned, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
@@ -1409,6 +1257,7 @@ class SyncBackendsTest(unittest.TestCase):
                 sync_state,
             )
         self.assertEqual(meta["core_wallet"], "kassiber-wallet-1")
+        self.assertEqual(meta["observer_route"], "bitcoin_core_rpc")
         self.assertEqual(meta["imported_addresses"], 1)
         self.assertEqual(meta["bitcoinrpc_sync_mode"], "full_scan")
         self.assertEqual(meta["freshness_checkpoint"]["bitcoinrpc_last_block"], "aa" * 32)
@@ -1777,6 +1626,71 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "45" * 32)
 
+    def test_compatibility_descriptor_discovery_reaches_history_beyond_local_horizon(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+        used_indices = {0, 3, 6}
+
+        def fake_derive(plan, branch_index=None, start=0, end=0):
+            del plan
+            return [
+                DerivedTarget(
+                    chain="bitcoin",
+                    network="bitcoin",
+                    branch_index=branch_index,
+                    branch_label="receive",
+                    address_index=index,
+                    address=f"bc1q{index}",
+                    unconfidential_address=None,
+                    script_pubkey=f"{index:064x}",
+                    derivation_path=f"m/0/{index}",
+                    derivation_paths=(f"m/0/{index}",),
+                    key_origins=(),
+                )
+                for index in range(start, end)
+            ]
+
+        with patch(
+            "kassiber.core.sync_backends.derive_descriptor_targets",
+            side_effect=fake_derive,
+        ), patch(
+            "kassiber.core.sync_backends.esplora_scripthash_has_history",
+            side_effect=lambda _url, script, **_kwargs: int(script, 16)
+            in used_indices,
+        ) as has_history:
+            discovery = discover_compatibility_descriptor_targets(
+                {
+                    "name": "compatibility",
+                    "kind": "esplora",
+                    "url": "https://esplora.example",
+                    "batch_size": 1,
+                    "auth_header": "Bearer discovery-secret",
+                },
+                plan,
+                "esplora",
+            )
+
+        self.assertEqual(
+            [target["address_index"] for target in discovery["targets"]],
+            list(range(10)),
+        )
+        self.assertTrue(has_history.call_args_list)
+        self.assertTrue(
+            all(
+                item.kwargs["headers"]
+                == {"Authorization": "Bearer discovery-secret"}
+                for item in has_history.call_args_list
+            )
+        )
+
     def test_bitcoinrpc_descriptor_discovery_is_read_only(self):
         class FakeDescriptor:
             is_wildcard = True
@@ -1797,10 +1711,8 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_checkpoint",
             return_value=[target],
         ) as derive_targets:
-            discovery = discover_descriptor_targets(
-                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+            discovery = discover_bitcoinrpc_descriptor_targets(
                 plan,
-                "bitcoinrpc",
                 checkpoint={"highest_used": {"6": 4}},
             )
 
@@ -2804,6 +2716,28 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
         self.assertEqual(opener.call_args.kwargs["proxy_url"], "127.0.0.1:9050")
         self.assertEqual(opener.call_args.kwargs["source_label"], "backend")
 
+    def test_http_get_helpers_forward_explicit_authorization_header(self):
+        auth = {"Authorization": "Bearer observer-secret"}
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse('{"ok": true}'),
+        ) as opener:
+            sb.http_get_json("https://esplora.example/x", headers=auth)
+        self.assertEqual(
+            opener.call_args.args[0].get_header("Authorization"),
+            "Bearer observer-secret",
+        )
+
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse("123"),
+        ) as opener:
+            sb.http_get_text("https://esplora.example/x", headers=auth)
+        self.assertEqual(
+            opener.call_args.args[0].get_header("Authorization"),
+            "Bearer observer-secret",
+        )
+
     def test_http_get_text_retries_on_503_then_succeeds(self):
         sleeps = []
         scripted = [_http_error(503), _http_error(503), "tip-height-body"]
@@ -2961,8 +2895,14 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             history_cache={},
         )
 
-        def fake_utxos(base_url, script_pubkey_hex, timeout=30, proxy_url=None):
-            del base_url, timeout, proxy_url
+        def fake_utxos(
+            base_url,
+            script_pubkey_hex,
+            timeout=30,
+            headers=None,
+            proxy_url=None,
+        ):
+            del base_url, timeout, headers, proxy_url
             # Encode the target's position in the UTXO value so the output order
             # is verifiable independent of which worker finishes first.
             index = next(i for i, t in enumerate(targets) if t["script_pubkey"] == script_pubkey_hex)
@@ -2974,7 +2914,7 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             side_effect=fake_utxos,
         ):
-            outputs = esplora_utxos_for_wallet(
+            outputs = compatibility_esplora_utxos_for_wallet(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example", "batch_size": 8},
                 sync_state,
             )
@@ -3223,6 +3163,535 @@ class CrossWalletPrefetchTest(unittest.TestCase):
                 None, {}, {}, [bad], hooks, prefetched={"w-bad": AppError("boom", code="x")}
             )
         self.assertEqual(ctx.exception.code, "x")
+
+
+class AtomicWalletRefreshTest(unittest.TestCase):
+    """Every chain projection rolls back with the coordinator savepoint."""
+
+    STAGES = (
+        core_sync.APPLY_STAGE_OBSERVER_PERSISTENCE,
+        core_sync.APPLY_STAGE_RETRACTIONS,
+        core_sync.APPLY_STAGE_TRANSACTION_INSERTION,
+        core_sync.APPLY_STAGE_OUTPUT_INVENTORY,
+        core_sync.APPLY_STAGE_DERIVATION_COVERAGE,
+        core_sync.APPLY_STAGE_FRESHNESS_CHECKPOINT,
+    )
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-atomic-refresh-")
+        self.conn = open_db(Path(self.tmp.name) / "data")
+        self.conn.executescript(
+            """
+            CREATE TABLE atomic_observer_state(value TEXT NOT NULL);
+            CREATE TABLE atomic_projection(value TEXT NOT NULL);
+            CREATE TABLE atomic_inventory(value TEXT NOT NULL);
+            CREATE TABLE atomic_coverage(value TEXT NOT NULL);
+            """
+        )
+        self.conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-atomic", "Main", _RETRACT_NOW),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "profile-atomic",
+                "ws-atomic",
+                "Book",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                _RETRACT_NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO accounts(
+                id, workspace_id, profile_id, code, label,
+                account_type, asset, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "account-atomic",
+                "ws-atomic",
+                "profile-atomic",
+                "vault",
+                "Vault",
+                "asset",
+                "BTC",
+                _RETRACT_NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label,
+                kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wallet-atomic",
+                "ws-atomic",
+                "profile-atomic",
+                "account-atomic",
+                "Vault",
+                "address",
+                json.dumps({"addresses": ["bc1qatomic"], "backend": "default"}),
+                _RETRACT_NOW,
+            ),
+        )
+        self.conn.execute("INSERT INTO atomic_projection(value) VALUES('old')")
+        self.conn.commit()
+        self.profile = self.conn.execute(
+            "SELECT * FROM profiles WHERE id = 'profile-atomic'"
+        ).fetchone()
+        self.wallet = self.conn.execute(
+            "SELECT * FROM wallets WHERE id = 'wallet-atomic'"
+        ).fetchone()
+        target = {"address": "bc1qatomic", "script_pubkey": "0014" + "11" * 20}
+        self.sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        self.fetch = WalletBackendFetch(
+            backend={
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            sync_state=self.sync_state,
+            normalized_records=[{"external_id": "new"}],
+            adapter_meta={
+                "bitcoinrpc_retracted_txids": ["old"],
+                "utxos": [{"outpoint": "new:0"}],
+                "freshness_checkpoint": {"tip": 42},
+            },
+            kind="esplora",
+            started=0.0,
+            force_full=False,
+        )
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _snapshot(self):
+        tables = (
+            "atomic_observer_state",
+            "atomic_projection",
+            "atomic_inventory",
+            "atomic_coverage",
+            "freshness_source_states",
+        )
+        return {
+            **{
+                table: [tuple(row) for row in self.conn.execute(f"SELECT * FROM {table}")]
+                for table in tables
+            },
+            "wallet": tuple(
+                self.conn.execute(
+                    "SELECT config_json FROM wallets WHERE id = 'wallet-atomic'"
+                ).fetchone()
+            ),
+        }
+
+    def _hooks(self, fail_stage, discarded=None):
+        def after_stage(stage):
+            if stage == fail_stage:
+                raise RuntimeError(f"injected failure after {stage}")
+
+        return WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda conn, *args: (
+                conn.execute("INSERT INTO atomic_projection(value) VALUES('new')")
+                and {
+                    "imported": 1,
+                    "skipped": 0,
+                    "freshness_checkpoint": {"tip": 42},
+                }
+            ),
+            retract_records=lambda conn, *args: (
+                conn.execute("DELETE FROM atomic_projection WHERE value = 'old'")
+                and {"retracted": 1, "retracted_records": []}
+            ),
+            resolve_backend=lambda *args: self.fetch.backend,
+            resolve_sync_state=lambda *args: self.sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": lambda *args: ([], {})},
+            update_output_inventory=lambda conn, *args: (
+                conn.execute("INSERT INTO atomic_inventory(value) VALUES('new')")
+                and {"observed": 1}
+            ),
+            persist_observer_update=lambda conn, *args: conn.execute(
+                "INSERT INTO atomic_observer_state(value) VALUES('new')"
+            ),
+            update_derivation_coverage=lambda conn, *args: conn.execute(
+                "INSERT INTO atomic_coverage(value) VALUES('new')"
+            ),
+            after_apply_stage=after_stage,
+            discard_observer_update=(
+                (lambda wallet: discarded.append(wallet["id"]))
+                if discarded is not None
+                else None
+            ),
+        )
+
+    def test_every_apply_stage_failure_restores_exact_database_state(self):
+        before = self._snapshot()
+        for stage in self.STAGES:
+            with self.subTest(stage=stage):
+                discarded = []
+                with patch(
+                    "kassiber.core.sync.source_overlap.filter_sync_state_for_canonical_owner",
+                    side_effect=lambda conn, profile, wallet, state: state,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, stage):
+                        cli_handlers._apply_wallet_sync_atomically(
+                            self.conn,
+                            {},
+                            self.profile,
+                            self.wallet,
+                            self._hooks(stage, discarded),
+                            prefetched={self.wallet["id"]: self.fetch},
+                        )
+                self.assertFalse(self.conn.in_transaction)
+                self.assertEqual(self._snapshot(), before)
+                self.assertEqual(discarded, ["wallet-atomic"])
+
+    def test_success_commits_all_state_groups_together(self):
+        with patch(
+            "kassiber.core.sync.source_overlap.filter_sync_state_for_canonical_owner",
+            side_effect=lambda conn, profile, wallet, state: state,
+        ):
+            results = cli_handlers._apply_wallet_sync_atomically(
+                self.conn,
+                {},
+                self.profile,
+                self.wallet,
+                self._hooks(None),
+                prefetched={self.wallet["id"]: self.fetch},
+            )
+        self.assertEqual(results[0]["status"], "synced")
+        after = self._snapshot()
+        self.assertIn("last_synced_at", json.loads(after["wallet"][0]))
+        self.assertEqual(after["atomic_observer_state"], [("new",)])
+        self.assertEqual(after["atomic_projection"], [("new",)])
+        self.assertEqual(after["atomic_inventory"], [("new",)])
+        self.assertEqual(after["atomic_coverage"], [("new",)])
+        self.assertEqual(len(after["freshness_source_states"]), 1)
+
+    def test_backend_fetch_finishes_before_single_wallet_savepoint(self):
+        transaction_states = []
+
+        def adapter(*args):
+            transaction_states.append(("fetch", self.conn.in_transaction))
+            return [], {"freshness_checkpoint": {"tip": 42}}
+
+        def after_stage(stage):
+            transaction_states.append((stage, self.conn.in_transaction))
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {
+                "imported": 0,
+                "skipped": 0,
+                "freshness_checkpoint": {"tip": 42},
+            },
+            resolve_backend=lambda *args: self.fetch.backend,
+            resolve_sync_state=lambda *args: self.sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+            after_apply_stage=after_stage,
+        )
+        with (
+            patch("kassiber.cli.handlers._wallet_sync_hooks", return_value=hooks),
+            patch(
+                "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
+                side_effect=lambda conn, profile, wallet, state: state,
+            ),
+        ):
+            results = cli_handlers.sync_wallet(
+                self.conn,
+                {},
+                "ws-atomic",
+                "profile-atomic",
+                wallet_ref="wallet-atomic",
+            )
+        self.assertEqual(results[0]["status"], "synced")
+        self.assertEqual(transaction_states[0], ("fetch", False))
+        self.assertTrue(
+            all(in_transaction for _, in_transaction in transaction_states[1:])
+        )
+        self.assertFalse(self.conn.in_transaction)
+
+    def test_apply_suppresses_progress_callbacks_that_would_commit(self):
+        callbacks = []
+
+        def committing_progress(payload):
+            callbacks.append(dict(payload))
+            self.conn.commit()
+
+        hooks = self._hooks(None)
+        original_insert = hooks.insert_records
+        hooks = replace(
+            hooks,
+            insert_records=lambda *args, **kwargs: (
+                core_sync.emit_sync_progress({"phase": "importing"})
+                or original_insert(*args, **kwargs)
+            ),
+        )
+        token = sync_progress_emitter.set(committing_progress)
+        try:
+            with patch(
+                "kassiber.core.sync.source_overlap.filter_sync_state_for_canonical_owner",
+                side_effect=lambda conn, profile, wallet, state: state,
+            ):
+                results = cli_handlers._apply_wallet_sync_atomically(
+                    self.conn,
+                    {},
+                    self.profile,
+                    self.wallet,
+                    hooks,
+                    prefetched={self.wallet["id"]: self.fetch},
+                )
+        finally:
+            sync_progress_emitter.reset(token)
+        self.assertEqual(results[0]["status"], "synced")
+        self.assertEqual(callbacks, [])
+        self.assertFalse(self.conn.in_transaction)
+
+    def test_cancellation_after_local_projection_rolls_back_everything(self):
+        before = self._snapshot()
+        checks = []
+
+        def check_cancelled():
+            checks.append(self.conn.in_transaction)
+            if len(checks) == 2:
+                raise AppError("cancelled", code="cancelled")
+
+        with patch(
+            "kassiber.core.sync.source_overlap.filter_sync_state_for_canonical_owner",
+            side_effect=lambda conn, profile, wallet, state: state,
+        ):
+            with self.assertRaises(AppError) as ctx:
+                cli_handlers._apply_wallet_sync_atomically(
+                    self.conn,
+                    {},
+                    self.profile,
+                    self.wallet,
+                    self._hooks(None),
+                    prefetched={self.wallet["id"]: self.fetch},
+                    check_cancelled=check_cancelled,
+                )
+        self.assertEqual(ctx.exception.code, "cancelled")
+        self.assertEqual(checks, [True, True])
+        self.assertEqual(self._snapshot(), before)
+        self.assertFalse(self.conn.in_transaction)
+
+    def test_negative_balance_repair_fetch_also_finishes_before_savepoint(self):
+        fetch_states = []
+        gaps = []
+
+        def resolve_sync_state(_backend, wallet):
+            config = json.loads(wallet["config_json"])
+            gap_limit = int(config.get("gap_limit") or DEFAULT_DESCRIPTOR_GAP_LIMIT)
+            return WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=SimpleNamespace(gap_limit=gap_limit),
+                policy_asset_id="",
+                targets=self.sync_state.targets,
+                tracked_scripts=self.sync_state.tracked_scripts,
+                history_cache={},
+            )
+
+        def record(external_id, occurred_at, direction):
+            return {
+                "external_id": external_id,
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": "0.001",
+                "fee": "0",
+            }
+
+        def adapter(_backend, _wallet, sync_state):
+            fetch_states.append(self.conn.in_transaction)
+            gaps.append(sync_state.descriptor_plan.gap_limit)
+            outbound = record(
+                "22" * 32,
+                "2026-01-02T00:00:00Z",
+                "outbound",
+            )
+            if len(gaps) == 1:
+                return [outbound], {"freshness_checkpoint": {"pass": 1}}
+            return [
+                record("11" * 32, "2026-01-01T00:00:00Z", "inbound"),
+                outbound,
+            ], {"freshness_checkpoint": {"pass": 2}}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=lambda *args, **kwargs: {},
+            resolve_backend=lambda *args: self.fetch.backend,
+            resolve_sync_state=resolve_sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+        )
+        with patch(
+            "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
+            side_effect=lambda conn, profile, wallet, state: state,
+        ):
+            prefetched = cli_handlers._prefetch_chain_wallets(
+                self.conn,
+                {},
+                self.profile,
+                [self.wallet],
+                hooks,
+            )
+        self.assertEqual(fetch_states, [False, False])
+        self.assertEqual(
+            gaps,
+            [DEFAULT_DESCRIPTOR_GAP_LIMIT, NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT],
+        )
+        repair = prefetched[self.wallet["id"]]
+        self.assertTrue(
+            repair.adapter_meta["_prepared_negative_balance_rescan"]["triggered"]
+        )
+
+    def test_negative_balance_repair_failure_stays_scoped_to_wallet(self):
+        first = {**self.wallet, "id": "repair-fails", "label": "Repair fails"}
+        second = {**self.wallet, "id": "repair-succeeds", "label": "Repair succeeds"}
+        successful_repair = replace(self.fetch, adapter_meta={})
+        failure = AppError("repair failed", code="repair_failed", retryable=True)
+        with (
+            patch.object(
+                cli_handlers,
+                "_prospective_negative_balance_events",
+                return_value=[{"asset": "BTC"}],
+            ),
+            patch.object(
+                core_sync,
+                "negative_balance_rescan_gap_limit",
+                return_value=100,
+            ),
+            patch.object(
+                core_sync,
+                "wallet_with_temporary_gap_limit",
+                side_effect=lambda wallet, _gap: wallet,
+            ),
+            patch.object(
+                core_sync,
+                "fetch_wallet_backend",
+                side_effect=[failure, successful_repair],
+            ),
+            patch.object(core_sync, "discard_fetch_observer_updates") as discard,
+        ):
+            prepared = cli_handlers._prepare_negative_balance_repairs(
+                self.conn,
+                {},
+                self.profile,
+                [first, second],
+                self._hooks(None),
+                {first["id"]: self.fetch, second["id"]: self.fetch},
+            )
+
+        self.assertIs(prepared[first["id"]], failure)
+        self.assertIsInstance(prepared[second["id"]], WalletBackendFetch)
+        self.assertTrue(
+            prepared[second["id"]]
+            .adapter_meta["_prepared_negative_balance_rescan"]["triggered"]
+        )
+        self.assertEqual(discard.call_count, 2)
+
+    def test_single_and_all_route_through_same_atomic_apply_primitive(self):
+        calls = []
+
+        def apply(conn, runtime_config, profile, wallet, hooks, **kwargs):
+            calls.append(wallet["id"])
+            return [{"wallet": wallet["label"], "status": "synced"}]
+
+        with (
+            patch("kassiber.cli.handlers._prefetch_chain_wallets", return_value={}),
+            patch(
+                "kassiber.cli.handlers._apply_wallet_sync_atomically",
+                side_effect=apply,
+            ),
+        ):
+            single = cli_handlers.sync_wallet(
+                self.conn,
+                {},
+                "ws-atomic",
+                "profile-atomic",
+                wallet_ref="wallet-atomic",
+            )
+            all_results = cli_handlers.sync_wallet(
+                self.conn,
+                {},
+                "ws-atomic",
+                "profile-atomic",
+                sync_all=True,
+            )
+        self.assertEqual(single[0]["status"], "synced")
+        self.assertEqual(all_results[0]["status"], "synced")
+        self.assertEqual(calls, ["wallet-atomic", "wallet-atomic"])
+
+    def test_all_keeps_completed_wallet_when_later_wallet_fails(self):
+        self.conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label,
+                kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wallet-bad",
+                "ws-atomic",
+                "profile-atomic",
+                "account-atomic",
+                "Zulu",
+                "address",
+                json.dumps({"addresses": ["bc1qbad"], "backend": "default"}),
+                _RETRACT_NOW,
+            ),
+        )
+        self.conn.commit()
+
+        def apply(conn, runtime_config, profile, wallet, hooks, **kwargs):
+            if wallet["id"] == "wallet-bad":
+                raise AppError("injected wallet failure", code="injected")
+            return [{"wallet": wallet["label"], "status": "synced"}]
+
+        with (
+            patch("kassiber.cli.handlers._prefetch_chain_wallets", return_value={}),
+            patch(
+                "kassiber.cli.handlers._apply_wallet_sync_atomically",
+                side_effect=apply,
+            ),
+        ):
+            results = cli_handlers.sync_wallet(
+                self.conn,
+                {},
+                "ws-atomic",
+                "profile-atomic",
+                sync_all=True,
+            )
+        self.assertEqual(
+            [(item["wallet"], item["status"]) for item in results],
+            [("Vault", "synced"), ("Zulu", "error")],
+        )
+        self.assertEqual(results[1]["code"], "injected")
 
 
 _RETRACT_NOW = "2026-01-01T00:00:00Z"

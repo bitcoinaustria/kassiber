@@ -662,7 +662,9 @@ column stores the ref ID, not the raw value.
   executable per desktop target, smoke it with the JSONL daemon protocol, and
   bundle it as a Tauri resource.
 - Universal macOS desktop packages carry both arm64 and x86_64 CLI
-  sidecars; the Rust supervisor picks the matching sidecar at runtime.
+  sidecars; the Rust supervisor picks the matching sidecar at runtime. LWK is
+  bundled on arm64 only because the pinned release has no Intel wheel; Intel
+  uses the named Liquid compatibility observer while retaining BDK support.
 - Production decision still open: keep the PyInstaller sidecar if signing and
   patching are acceptable, or switch to `python-build-standalone` with a pinned
   relocatable runtime tree if that is easier to inspect, debug, or notarize.

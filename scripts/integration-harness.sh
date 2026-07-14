@@ -58,6 +58,23 @@ PY
   exit 2
 }
 
+ensure_bdk_runtime() {
+  if py - <<'PY' >/dev/null 2>&1
+import importlib.util
+import sys
+
+if importlib.util.find_spec("bdkpython") is None:
+    sys.exit(1)
+PY
+  then
+    return 0
+  fi
+  echo "The Bitcoin dependency-backed observer requires bdkpython in this interpreter." >&2
+  echo "Run ./scripts/bootstrap-dev-env.sh on a supported BDK wheel platform and rerun." >&2
+  echo "Current Python: $PYTHON_BIN" >&2
+  exit 2
+}
+
 run_fast() {
   ensure_python_runtime
   KASSIBER_NO_EGRESS=1 py -m unittest \
@@ -318,6 +335,12 @@ run_with_bitcoin_core() {
     # Mark before `up` so the EXIT trap also removes a half-created project
     # (network/volume/container) when startup fails, e.g. on a port collision.
     STARTED_COMPOSE=1
+    if [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then
+      # A prior KEEP run may have left this per-worktree project's volumes at
+      # an arbitrarily advanced chain height. The default lane promises fresh
+      # disposable truth, so remove that state before creating the stack.
+      docker_compose_regtest down -v --remove-orphans
+    fi
     if ! docker_compose_regtest up -d; then
       echo "Failed to start the regtest bitcoind container." >&2
       echo "If port ${KASSIBER_REGTEST_RPC_PORT} is already taken (e.g. by the demo-up node)," >&2
@@ -345,6 +368,36 @@ run_bitcoin_electrum_parity_smoke() {
 run_bitcoin_backend_suite() {
   run_bitcoin_core_smoke
   run_bitcoin_electrum_parity_smoke
+}
+
+run_chain_observer_oracle() {
+  py -m unittest tests.integration.test_live_chain_observer_oracle -v
+  if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "liquid" ]; then
+    py -m unittest tests.integration.test_live_bdk_observer -v
+  fi
+  if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "bitcoin" ]; then
+    py -m unittest tests.integration.test_live_lwk_observer -v
+  fi
+}
+
+run_chain_observers() {
+  local selected="${1:-all}"
+  case "$selected" in
+    all|bitcoin|liquid)
+      ;;
+    *)
+      echo "usage: $0 chain-observers [all|bitcoin|liquid]" >&2
+      exit 2
+      ;;
+  esac
+  if [ "$selected" != "liquid" ]; then
+    ensure_bdk_runtime
+  fi
+  export KASSIBER_CHAIN_OBSERVER_CHAIN="$selected"
+  if [ "$selected" != "bitcoin" ]; then
+    export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
+  fi
+  run_with_bitcoin_core run_chain_observer_oracle
 }
 
 probe_frigate() {
@@ -1577,6 +1630,9 @@ case "$MODE" in
   bitcoin-electrum)
     run_bitcoin_electrum
     ;;
+  chain-observers)
+    run_chain_observers "${2:-all}"
+    ;;
   demo|demo-full)
     run_regtest_demo_full
     ;;
@@ -1607,10 +1663,11 @@ case "$MODE" in
     # mine enough blocks to push the backdated accounting scenario out of range
     # if demo-full reuses the same disposable regtest volume.
     ( run_bitcoin_core )
+    ( run_chain_observers all )
     ( run_regtest_demo_full )
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|btcpay|silent-payments|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|btcpay|silent-payments|all]" >&2
     exit 2
     ;;
 esac
