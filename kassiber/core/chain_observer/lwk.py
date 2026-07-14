@@ -41,20 +41,11 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     plan = getattr(sync_state, "descriptor_plan", None)
     if plan is None:
         return "address_list"
-    try:
-        require_lwk()
-    except AppError as exc:
-        if exc.code == "dependency_missing":
-            return "dependency_unavailable"
-        raise
     kind = normalize_backend_kind(backend.get("kind"))
-    if kind not in {"esplora", "electrum"}:
-        return "backend_kind"
-    endpoint = str(backend.get("url") or "")
-    proxy = backend_value(backend, "tor_proxy", "proxy")
-    if proxy or is_onion_endpoint(endpoint):
-        return "proxy_transport"
     if kind == "esplora" and backend_value(backend, "certificate"):
+        # The compatibility HTTP transport cannot load a per-backend trust
+        # root either, so reject this before missing LWK wheels can redirect
+        # the wallet to an unsafe compatibility route.
         raise AppError(
             "LWK Esplora does not support a configured custom trust root",
             code="observer_capability_unsupported",
@@ -62,6 +53,18 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
             details={"capability": "esplora_custom_ca", "observer": "lwk"},
             retryable=False,
         )
+    try:
+        require_lwk()
+    except AppError as exc:
+        if exc.code == "dependency_missing":
+            return "dependency_unavailable"
+        raise
+    if kind not in {"esplora", "electrum"}:
+        return "backend_kind"
+    endpoint = str(backend.get("url") or "")
+    proxy = backend_value(backend, "tor_proxy", "proxy")
+    if proxy or is_onion_endpoint(endpoint):
+        return "proxy_transport"
     if kind == "electrum" and backend_value(backend, "certificate"):
         return "custom_ca"
     if kind == "electrum" and parse_bool(

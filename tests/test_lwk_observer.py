@@ -280,11 +280,15 @@ class LwkDescriptorContractTest(unittest.TestCase):
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
-        with self.assertRaises(AppError) as raised:
+        with patch(
+            "kassiber.core.chain_observer.lwk.require_lwk",
+            side_effect=AssertionError("dependency check ran before custom-CA guard"),
+        ) as dependency, self.assertRaises(AppError) as raised:
             lwk_compatibility_reason(
                 {"kind": "esplora", "url": "https://host", "certificate": "ca.pem"},
                 state,
             )
+        dependency.assert_not_called()
         self.assertEqual(raised.exception.code, "observer_capability_unsupported")
         self.assertEqual(raised.exception.details["capability"], "esplora_custom_ca")
 
