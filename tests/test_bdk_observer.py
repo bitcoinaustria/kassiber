@@ -4,8 +4,7 @@ from collections import defaultdict
 import json
 import os
 from pathlib import Path
-import unittest
-from unittest import mock
+from unittest import TestCase, main, mock
 
 import bdkpython as bdk
 from embit import bip32, bip39
@@ -55,7 +54,7 @@ def _descriptor_wallet():
     return wallet, load_descriptor_plan(config)
 
 
-class BdkDependencyContractTest(unittest.TestCase):
+class BdkDependencyContractTest(TestCase):
     def _discovery(self, *, backend=None, partial_targets=False):
         wallet, plan = _descriptor_wallet()
         targets = sync_backends._offline_descriptor_targets(plan, {})
@@ -646,4 +645,4 @@ class BdkDependencyContractTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
