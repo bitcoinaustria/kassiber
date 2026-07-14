@@ -562,14 +562,15 @@ class ApiHandler(BaseHTTPRequestHandler):
         if len(parts) < 4:
             self._error(404, "not found")
             return
-        # Esplora renders SHA256(script) in digest order, whereas Electrum's
-        # protocol renders the same digest with its bytes reversed. The shared
-        # in-memory index uses Electrum order, so normalize the HTTP key here.
+        # Kassiber's Esplora client uses the same Electrum-order script hash as
+        # the shared in-memory index. Validate the path as hex without changing
+        # its byte order.
         try:
-            scripthash = bytes.fromhex(parts[3])[::-1].hex()
+            bytes.fromhex(parts[3])
         except ValueError:
             self._error(400, "invalid scripthash")
             return
+        scripthash = parts[3]
         if len(parts) == 4:
             self._json(self.server.index.stats(scripthash))
         elif path.endswith("/txs"):

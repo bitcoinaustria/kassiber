@@ -63,7 +63,7 @@ class RegtestBackendStackTest(unittest.TestCase):
         self.assertEqual(handler._call("blockchain.transaction.get", ["txid"]), "raw-txid")
         self.assertEqual(handler._call("blockchain.block.header", [41]), "header-41")
 
-    def test_esplora_scripthash_is_normalized_to_electrum_index_order(self) -> None:
+    def test_esplora_scripthash_preserves_electrum_index_order(self) -> None:
         captured: list[object] = []
 
         class CapturingHandler(backend_stack.ApiHandler):
@@ -81,7 +81,7 @@ class RegtestBackendStackTest(unittest.TestCase):
 
         CapturingHandler()._scripthash("/api/scripthash/deadbeef")
 
-        self.assertEqual(captured, [{"seen": "efbeadde"}])
+        self.assertEqual(captured, [{"seen": "deadbeef"}])
 
     def test_esplora_address_routes_resolve_script_through_chain_rpc(self) -> None:
         captured: list[object] = []
