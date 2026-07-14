@@ -29,7 +29,7 @@ dependencies = [
   "PyYAML>=6,<7",
   "pytest>=8,<9",
   "pytest-xdist>=3.6,<4",
-  "lwk==0.18.0; platform_system != 'Darwin' or platform_machine != 'x86_64'",
+  "lwk==0.18.0; (platform_system == 'Darwin' and platform_machine == 'arm64') or (platform_system == 'Linux' and platform_machine == 'x86_64') or (platform_system == 'Windows' and platform_machine == 'AMD64')",
 ]
 
 [project.scripts]

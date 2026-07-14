@@ -50,12 +50,17 @@ if bdk_supported:
     print(f"Verified bdkpython {version('bdkpython')} from {bdkpython.__file__}")
 else:
     print("Skipped optional bdkpython verification on an unsupported wheel platform")
-if sys.platform == "darwin" and platform.machine() == "x86_64":
-    print("Skipped optional lwk verification on macOS x86_64")
-else:
+lwk_supported = (
+    (sys.platform == "darwin" and platform.machine() == "arm64")
+    or (sys.platform == "linux" and platform.machine() == "x86_64")
+    or (sys.platform == "win32" and platform.machine() == "AMD64")
+)
+if lwk_supported:
     import lwk
 
     print(f"Verified lwk {version('lwk')} from {lwk.__file__}")
+else:
+    print("Skipped optional lwk verification on an unsupported wheel platform")
 print(f"Verified sqlcipher3 from {sqlcipher3.__file__}")
 PY
 

@@ -61,8 +61,9 @@ same verification surface.
     tests and honest initial compatibility routes.
   - [x] Phase 1 — cross-platform packaging: retain universal macOS desktop and
     Intel CLI/sidecar builds, collect BDK on both Mac architectures, and keep
-    the named Liquid compatibility observer on Intel because LWK 0.18.0 does
-    not publish a macOS x86_64 wheel.
+    the named Liquid compatibility observer outside macOS arm64, Linux x86-64,
+    and Windows AMD64 because LWK 0.18.0 publishes wheels only for those
+    platforms.
   - [x] Phase 2 — watch-only boundary: introduce one shared descriptor
     capability/preflight layer for CLI, daemon, files, BSMS, bare xpub,
     Samourai and compatibility importers; always reject spending-private

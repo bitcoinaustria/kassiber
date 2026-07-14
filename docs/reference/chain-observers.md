@@ -24,8 +24,9 @@ descriptor-wallet chain state for Esplora and Electrum on CPython 3.10–3.13
 macOS, Linux x86-64, and Windows AMD64, where the release ships native wheels.
 Other runtimes use the named Bitcoin compatibility observer. Pinned `lwk` 0.18.0
 (`lwk_wollet`) owns supported Liquid descriptor-wallet chain state for
-Esplora and Electrum on platforms for which it ships a wheel; macOS Intel uses
-the named Liquid compatibility observer. Kassiber continues to own:
+Esplora and Electrum on macOS arm64, Linux x86-64, and Windows AMD64, matching
+the published wheel set. Other runtimes use the named Liquid compatibility
+observer. Kassiber continues to own:
 
 - wallet/source configuration and the SQLCipher security boundary;
 - normalized accounting transactions, graph evidence, retractions and review;
@@ -45,7 +46,7 @@ Authority is scoped by connection model, not by chain alone:
 | Configuration | Authoritative observer |
 | --- | --- |
 | Bitcoin descriptor + Esplora/Electrum | BDK where the pinned binding ships; named compatibility observer elsewhere |
-| Liquid descriptor + Esplora/Electrum | LWK where the pinned binding ships; named compatibility observer on macOS Intel |
+| Liquid descriptor + Esplora/Electrum | LWK on macOS arm64, Linux x86-64, and Windows AMD64; named compatibility observer elsewhere |
 | Bitcoin Core backend | Bitcoin Core RPC adapter |
 | Silent Payments wallet | BIP352/BIP392 Silent Payments scanner |
 
@@ -130,7 +131,7 @@ never retried silently through compatibility code.
 | Bitcoin `mempool` backend alias | supported descriptor | BDK Esplora | normalized once for capability selection, client construction, remote-tip checks and initial/incremental scans; the live restart oracle uses this alias |
 | Bitcoin | spending-private descriptor/key material | none | always rejected before network access |
 | Liquid Electrum/Esplora | watch-only confidential SegWit v0 (including nested `elsh(wpkh(...))`), Taproot, executable legacy P2SH, fixed or canonical `<0;1>` ranged descriptor; private view/blinding material with public spend keys | LWK 0.18.0 | enabled; only the outer Elements script wrapper is translated, while nested miniscript keeps Bitcoin spelling |
-| Liquid Electrum/Esplora | macOS x86_64 package | named compatibility observer | LWK 0.18.0 publishes no Intel Mac wheel; universal packaging retains the existing observer for that architecture |
+| Liquid Electrum/Esplora | platform without an LWK 0.18.0 wheel | named compatibility observer | the dependency marker is limited to macOS arm64, Linux x86-64, and Windows AMD64; other architectures retain the existing observer |
 | Liquid address-list source | any | none | rejected locally because confidential outputs require descriptor-backed private view/blinding material |
 | Liquid | unsupported general pre-SegWit descriptor | named compatibility observer | selected when executable LWK descriptor construction rejects the form; remove as upstream support becomes executable |
 | Liquid | structurally equivalent separate `/0/*` receive + `/1/*` change descriptors | LWK 0.18.0 | canonicalized to `<0;1>` only when every ranged key has the same blinding policy, script, origins, keys, order and wildcard geometry |

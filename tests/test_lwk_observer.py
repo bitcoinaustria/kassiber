@@ -137,7 +137,10 @@ class LwkDescriptorContractTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/prerelease-binaries.yml").read_text(encoding="utf-8")
         self.assertIn('name = "lwk"\nversion = "0.18.0"', lock)
         self.assertIn(
-            '"lwk==0.18.0; platform_system != \'Darwin\' or platform_machine != \'x86_64\'"',
+            '"lwk==0.18.0; (platform_system == \'Darwin\' and '
+            "platform_machine == 'arm64') or (platform_system == 'Linux' and "
+            "platform_machine == 'x86_64') or (platform_system == 'Windows' and "
+            "platform_machine == 'AMD64')\"",
             pyproject,
         )
         for platform in (
