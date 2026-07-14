@@ -507,6 +507,46 @@ class BdkDependencyContractTest(TestCase):
                     self.assertIn(column, updates)
                     self.assertIsNone(updates[column])
 
+    def test_authoritative_amount_change_clears_value_without_unit_rate(self):
+        occurred_at = "2026-01-02T12:00:00Z"
+        normalized = normalize_import_record(
+            {
+                "txid": "23" * 32,
+                "occurred_at": occurred_at,
+                "confirmed_at": occurred_at,
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": "0.000002",
+                "fee": "0",
+                "raw_json": {"observer": "bdk", "status": {"confirmed": True}},
+            },
+            source_label="backend:test",
+        )
+        existing = defaultdict(
+            lambda: None,
+            confirmed_at=occurred_at,
+            occurred_at=occurred_at,
+            fingerprint="old",
+            amount=100_000,
+            fee=0,
+            fiat_value=10.0,
+            fiat_value_exact="10",
+            fiat_price_source="import",
+            pricing_source_kind="imported_total",
+        )
+
+        updates = _transaction_merge_updates(
+            existing,
+            normalized,
+            "new",
+            authoritative_chain_observer=True,
+        )
+
+        self.assertEqual(updates["amount"], 200_000)
+        self.assertIsNone(updates["fiat_value"])
+        self.assertIsNone(updates["fiat_value_exact"])
+        self.assertNotIn("fiat_price_source", updates)
+
     def test_exact_pin_lock_wheels_and_packager_collection(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         lock = (ROOT / "uv.lock").read_text(encoding="utf-8")

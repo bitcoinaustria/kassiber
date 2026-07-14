@@ -759,6 +759,9 @@ def _transaction_merge_updates(
             exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
             updates["fiat_value"] = float(exact_value)
             updates["fiat_value_exact"] = exact_value
+        elif existing["fiat_value"] is not None or existing["fiat_value_exact"] is not None:
+            updates["fiat_value"] = None
+            updates["fiat_value_exact"] = None
 
     exchange_execution_overrides = (
         normalized["pricing_source_kind"] == pricing.SOURCE_EXCHANGE_EXECUTION
