@@ -87,7 +87,7 @@ same verification surface.
     engines, retain only named compatibility routes and `embit` primitives,
     update all user/developer/release/license docs, and leave the same draft PR
     green after full unit, integration, demo, package and secret-scan gates.
-  - [ ] Follow-up — reduce compatibility by capability, without weakening
+  - [x] Follow-up — reduce compatibility by capability, without weakening
     accounting ownership: pass supported Liquid Esplora auth and Electrum TLS
     policy directly to LWK; normalize `mempool`; fail closed when Esplora
     custom trust cannot be represented; canonicalize only structurally
