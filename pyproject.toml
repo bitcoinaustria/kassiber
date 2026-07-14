@@ -29,6 +29,7 @@ dependencies = [
   "PyYAML>=6,<7",
   "pytest>=8,<9",
   "pytest-xdist>=3.6,<4",
+  "lwk==0.18.0",
 ]
 
 [project.scripts]

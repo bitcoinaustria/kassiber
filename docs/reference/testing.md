@@ -133,6 +133,13 @@ funds both low and gap-edge receive indices, and refreshes its public descriptor
 through Fulcrum using BDK. It asserts the BDK route, transaction/UTXO projection,
 per-branch coverage, SQLCipher-only state, process restart, and byte-stable
 immediate no-op state.
+For Liquid/all selections, the lane creates a real Elements descriptor wallet
+with private SLIP77 view material and public spending keys, then refreshes it
+through both the local Electrum and Esplora-compatible services using LWK. It
+asserts the LWK-only route, opaque `ForeignStore` bytes in the main database,
+restart and immediate no-op stability, confidential LBTC receive/spend and fee
+normalization, issued-asset history, transport parity, confirmation, block
+invalidation and unconfirmed resurrection.
 Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.

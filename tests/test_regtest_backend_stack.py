@@ -83,6 +83,124 @@ class RegtestBackendStackTest(unittest.TestCase):
 
         self.assertEqual(captured, [{"seen": "efbeadde"}])
 
+    def test_esplora_address_routes_resolve_script_through_chain_rpc(self) -> None:
+        captured: list[object] = []
+        script = "0014" + "11" * 20
+        expected = backend_stack.electrum_scripthash(script)
+
+        class CapturingHandler(backend_stack.ApiHandler):
+            def __init__(self) -> None:
+                self.server = SimpleNamespace(
+                    index=SimpleNamespace(
+                        rpc=SimpleNamespace(
+                            call=lambda method, params: {
+                                "isvalid": method == "validateaddress" and params == ["ert1qtest"],
+                                "scriptPubKey": script,
+                            }
+                        ),
+                        stats=lambda scripthash: {"seen": scripthash},
+                    )
+                )
+
+            def _json(self, value) -> None:
+                captured.append(value)
+
+            def _error(self, code, message) -> None:
+                raise AssertionError(f"unexpected error {code}: {message}")
+
+        CapturingHandler()._address("/api/address/ert1qtest")
+        self.assertEqual(captured, [{"seen": expected}])
+
+    def test_lwk_custom_elements_hrp_is_translated_for_elements_core(self) -> None:
+        payload = [0, 1, 2, 3, 4]
+        values = backend_stack._blech32_hrp_expand("el") + payload + [0] * 12
+        polymod = backend_stack._blech32_polymod(values) ^ 1
+        checksum = [(polymod >> (5 * (11 - index))) & 31 for index in range(12)]
+        address = "el1" + "".join(
+            backend_stack.BLECH32_CHARSET[value] for value in payload + checksum
+        )
+
+        translated = backend_stack._replace_blech32_hrp(address, "ert")
+
+        self.assertTrue(translated.startswith("ert1"))
+        encoded = [
+            backend_stack.BLECH32_CHARSET.index(char)
+            for char in translated.split("1", 1)[1]
+        ]
+        self.assertEqual(encoded[:-12], payload)
+        self.assertEqual(
+            backend_stack._blech32_polymod(
+                backend_stack._blech32_hrp_expand("ert") + encoded
+            ),
+            1,
+        )
+
+    def test_liquid_esplora_payload_omits_custom_network_address(self) -> None:
+        index = backend_stack.BitcoinIndex(SimpleNamespace(), chain="liquid")
+        payload = index._to_esplora(
+            {
+                "txid": "11" * 32,
+                "vout": [
+                    {
+                        "n": 0,
+                        "value": "1.0",
+                        "scriptPubKey": {
+                            "hex": "0014" + "22" * 20,
+                            "address": "ert1-invalid-to-lwk",
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertNotIn("scriptpubkey_address", payload["vout"][0])
+
+    def test_esplora_tip_hash_uses_the_current_chain_tip(self) -> None:
+        captured: list[str] = []
+
+        class CapturingHandler(backend_stack.ApiHandler):
+            def __init__(self) -> None:
+                self.path = "/api/blocks/tip/hash"
+                self.server = SimpleNamespace(
+                    index=SimpleNamespace(
+                        tip_height=lambda: 42,
+                        rpc=SimpleNamespace(
+                            call=lambda method, params: (
+                                "tip-42"
+                                if method == "getblockhash" and params == [42]
+                                else None
+                            )
+                        ),
+                    )
+                )
+
+            def _text(self, value) -> None:
+                captured.append(value)
+
+            def _error(self, code, message) -> None:
+                raise AssertionError(f"unexpected error {code}: {message}")
+
+        CapturingHandler().do_GET()
+        self.assertEqual(captured, ["tip-42"])
+
+    def test_esplora_raw_transaction_is_binary_not_hex_text(self) -> None:
+        captured: list[bytes] = []
+
+        class CapturingHandler(backend_stack.ApiHandler):
+            def __init__(self) -> None:
+                self.server = SimpleNamespace(
+                    index=SimpleNamespace(raw_hex=lambda txid: "0102" if txid == "tx" else "")
+                )
+
+            def _binary(self, value) -> None:
+                captured.append(value)
+
+            def _error(self, code, message) -> None:
+                raise AssertionError(f"unexpected error {code}: {message}")
+
+        CapturingHandler()._tx_raw("tx")
+        self.assertEqual(captured, [b"\x01\x02"])
+
     def test_index_utxos_include_electrum_and_esplora_keys(self) -> None:
         script_hex = "0014" + "11" * 20
 

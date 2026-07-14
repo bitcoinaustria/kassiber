@@ -16,8 +16,9 @@ from .identity import ObserverIdentity
 OBSERVER_STATE_VERSION = 1
 OBSERVER_COVERAGE_VERSION = 1
 PRIVATE_OBSERVER_TABLES = frozenset(
-    {"chain_observer_instances", "chain_observer_coverage"}
+    {"chain_observer_instances", "chain_observer_coverage", "chain_observer_values"}
 )
+OBSERVER_VALUES_NAMESPACE_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,11 +42,11 @@ def _rebuild_required(
     stored_version: Any,
     representation: str,
 ) -> AppError:
-    supported = (
-        OBSERVER_STATE_VERSION
-        if representation == "state"
-        else OBSERVER_COVERAGE_VERSION
-    )
+    supported = {
+        "state": OBSERVER_STATE_VERSION,
+        "coverage": OBSERVER_COVERAGE_VERSION,
+        "opaque_values": OBSERVER_VALUES_NAMESPACE_VERSION,
+    }.get(representation)
     return AppError(
         "Stored chain observer state must be rebuilt before this wallet can refresh",
         code="observer_state_rebuild_required",
@@ -312,6 +313,78 @@ def persist_observer_state(
         )
 
 
+def load_observer_values(
+    conn: sqlite3.Connection,
+    identity: ObserverIdentity,
+) -> dict[str, bytes]:
+    """Load opaque dependency values without exposing them through JSON state."""
+
+    rows = conn.execute(
+        """
+        SELECT namespace_version, key, value
+        FROM chain_observer_values
+        WHERE observer_id = ?
+        ORDER BY key
+        """,
+        (identity.id,),
+    ).fetchall()
+    values: dict[str, bytes] = {}
+    for row in rows:
+        version = int(row["namespace_version"])
+        if version != OBSERVER_VALUES_NAMESPACE_VERSION:
+            raise _rebuild_required(
+                identity,
+                stored_version=version,
+                representation="opaque_values",
+            )
+        values[str(row["key"])] = bytes(row["value"])
+    return values
+
+
+def persist_observer_values(
+    conn: sqlite3.Connection,
+    identity: ObserverIdentity,
+    values: Mapping[str, bytes],
+) -> None:
+    """Replace opaque values inside the caller-owned wallet savepoint."""
+
+    if not conn.in_transaction:
+        raise AppError(
+            "Observer values require the caller's wallet transaction",
+            code="observer_apply_outside_transaction",
+            retryable=False,
+        )
+    normalized: list[tuple[str, bytes]] = []
+    for key, value in values.items():
+        if not isinstance(key, str) or not key:
+            raise AppError(
+                "Observer value keys must be non-empty strings",
+                code="observer_state_invalid",
+                retryable=False,
+            )
+        if not isinstance(value, (bytes, bytearray, memoryview)):
+            raise AppError(
+                "Observer values must remain opaque bytes",
+                code="observer_state_invalid",
+                details={"key": key},
+                retryable=False,
+            )
+        normalized.append((key, bytes(value)))
+    conn.execute("DELETE FROM chain_observer_values WHERE observer_id = ?", (identity.id,))
+    timestamp = now_iso()
+    conn.executemany(
+        """
+        INSERT INTO chain_observer_values(
+            observer_id, namespace_version, key, value, updated_at
+        ) VALUES(?, ?, ?, ?, ?)
+        """,
+        [
+            (identity.id, OBSERVER_VALUES_NAMESPACE_VERSION, key, value, timestamp)
+            for key, value in sorted(normalized)
+        ],
+    )
+
+
 def delete_wallet_observer_state(
     conn: sqlite3.Connection,
     wallet_id: str,
@@ -340,6 +413,7 @@ def delete_profile_observer_state(
 __all__ = [
     "OBSERVER_COVERAGE_VERSION",
     "OBSERVER_STATE_VERSION",
+    "OBSERVER_VALUES_NAMESPACE_VERSION",
     "PRIVATE_OBSERVER_TABLES",
     "CoveragePoint",
     "StoredObserverState",
@@ -347,5 +421,7 @@ __all__ = [
     "delete_wallet_observer_state",
     "encode_json_payload",
     "load_observer_state",
+    "load_observer_values",
     "persist_observer_state",
+    "persist_observer_values",
 ]

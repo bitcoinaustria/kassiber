@@ -179,7 +179,15 @@ def identities_for_wallet(
             for script_type in script_types
         )
     if str_or_none(config.get("descriptor")):
-        branches = ("receive", "change") if config.get("change_descriptor") else ("receive",)
+        # Use the executable plan so a receive-only ranged descriptor promoted
+        # to canonical <0;1> multipath receives stable change coverage too.
+        from ...wallet_descriptors import load_descriptor_plan
+
+        plan = load_descriptor_plan(config)
+        branches = tuple(
+            "change" if "change" in str(branch.branch_label).lower() else "receive"
+            for branch in (plan.branches if plan is not None else ())
+        ) or ("receive",)
         return (
             _identity(
                 wallet,

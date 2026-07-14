@@ -194,6 +194,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_CHAIN_OBSERVER_CHAIN", harness)
         self.assertIn("run_with_bitcoin_core run_chain_observer_oracle", harness)
         self.assertIn("tests.integration.test_live_chain_observer_oracle", harness)
+        self.assertIn("tests.integration.test_live_lwk_observer", harness)
         self.assertNotIn("compose.chain-observers", harness)
 
     def test_default_compose_lane_removes_stale_keep_state_before_start(self):

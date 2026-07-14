@@ -358,6 +358,9 @@ run_chain_observer_oracle() {
   if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "liquid" ]; then
     py -m unittest tests.integration.test_live_bdk_observer -v
   fi
+  if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "bitcoin" ]; then
+    py -m unittest tests.integration.test_live_lwk_observer -v
+  fi
 }
 
 run_chain_observers() {

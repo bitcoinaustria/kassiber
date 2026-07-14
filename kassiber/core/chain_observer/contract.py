@@ -196,6 +196,11 @@ def apply_prepared_observer_update(
         normalized_state,
         normalized_facts.coverage,
     )
+    persist_opaque = getattr(prepared._observer, "persist_opaque_state", None)
+    if callable(persist_opaque):
+        # The dependency's buffered ForeignStore mutations become durable only
+        # here, inside the same caller-owned savepoint as facts and JSON state.
+        persist_opaque(conn)
     prepared.applied = True
     return normalized_facts
 

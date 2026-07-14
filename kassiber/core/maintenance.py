@@ -151,6 +151,17 @@ def reset_current_profile_data(
             """,
             (profile_id,),
         ),
+        "chain_observer_values": _count_sql(
+            conn,
+            """
+            SELECT COUNT(*)
+            FROM chain_observer_values observer_value
+            JOIN chain_observer_instances observer
+              ON observer.id = observer_value.observer_id
+            WHERE observer.profile_id = ?
+            """,
+            (profile_id,),
+        ),
         "custody_components": _count_profile_rows(
             conn, "custody_components", profile_id
         ),

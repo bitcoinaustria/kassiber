@@ -174,6 +174,18 @@ CREATE TABLE IF NOT EXISTS chain_observer_coverage (
     PRIMARY KEY (observer_id, branch_key)
 );
 
+-- Opaque dependency-owned key/value state. Values are intentionally BLOBs:
+-- Kassiber namespaces and versions them but never interprets their contents.
+-- The FK keeps the values inside the observer row's SQLCipher transaction.
+CREATE TABLE IF NOT EXISTS chain_observer_values (
+    observer_id TEXT NOT NULL REFERENCES chain_observer_instances(id) ON DELETE CASCADE,
+    namespace_version INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value BLOB NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (observer_id, key)
+);
+
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

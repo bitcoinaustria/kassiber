@@ -67,6 +67,7 @@ class SyncSchemaBoundaryTests(unittest.TestCase):
             "wallet_utxos",
             "chain_observer_instances",
             "chain_observer_coverage",
+            "chain_observer_values",
             "rates_cache",
             "sync_member_private_keys",
             "sync_device_private_keys",

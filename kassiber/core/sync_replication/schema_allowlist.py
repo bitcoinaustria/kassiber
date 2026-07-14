@@ -497,6 +497,7 @@ NEVER_SYNC_TABLES = frozenset(
         "wallet_utxo_refreshes",
         "chain_observer_instances",
         "chain_observer_coverage",
+        "chain_observer_values",
         "rates_cache",
         "rates_checked_minutes",
         "freshness_source_states",

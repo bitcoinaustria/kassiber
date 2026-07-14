@@ -935,7 +935,7 @@ def resolve_wallet_sync_targets(backend, wallet):
 
 
 def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
-    """Prepare supported Bitcoin descriptor refreshes through BDK."""
+    """Prepare supported Bitcoin/Liquid descriptor refreshes through dependencies."""
 
     from .chain_observer import ObserverPrepareRequest, prepare_observer_update
     from .chain_observer.bdk import (
@@ -944,6 +944,8 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         bdk_compatibility_reason,
     )
     from .chain_observer.identity import identities_for_wallet
+    from .chain_observer.lwk import LwkObserver, lwk_compatibility_reason
+    from .chain_observer.store import load_observer_values
     from .sync import WalletBackendFetch
 
     state = discovery.sync_state
@@ -951,7 +953,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         return None
 
     def compatibility_fetch(reason):
-        if state.chain != "bitcoin" or discovery.kind not in {"esplora", "electrum"}:
+        if state.chain not in {"bitcoin", "liquid"} or discovery.kind not in {"esplora", "electrum"}:
             return None
         adapter = SYNC_BACKEND_ADAPTERS[discovery.kind]
         try:
@@ -961,7 +963,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         except Exception as exc:
             safe_error = redact_operational_text(str(exc))
             raise AppError(
-                f"Bitcoin compatibility observation failed for backend '{discovery.backend.get('name')}'",
+                f"{state.chain.title()} compatibility observation failed for backend '{discovery.backend.get('name')}'",
                 code="backend_sync_failed",
                 details={"observer_route": "compatibility", "error": safe_error},
                 retryable=True,
@@ -981,7 +983,12 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             force_full=discovery.force_full,
         )
 
-    compatibility_reason = bdk_compatibility_reason(discovery.backend, state)
+    dependency_kind = "lwk" if state.chain == "liquid" else "bdk"
+    compatibility_reason = (
+        lwk_compatibility_reason(discovery.backend, state)
+        if state.chain == "liquid"
+        else bdk_compatibility_reason(discovery.backend, state)
+    )
     if compatibility_reason is not None:
         return compatibility_fetch(compatibility_reason)
     expected_scripts = {
@@ -996,16 +1003,25 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         # BDK scans whole descriptors. A finite source-overlap exclusion cannot
         # safely be represented, so keep this named compatibility route.
         return compatibility_fetch("source_overlap_partial_descriptor")
-    identities = identities_for_wallet(wallet, observer_kind="bdk")
+    identities = identities_for_wallet(wallet, observer_kind=dependency_kind)
     prepared = []
     try:
         for identity in identities:
-            observer = BdkObserver(
-                identity=identity,
-                backend=discovery.backend,
-                branches=bdk_branches_for_identity(state.descriptor_plan, identity),
-                gap_limit=state.descriptor_plan.gap_limit,
-            )
+            if dependency_kind == "lwk":
+                observer = LwkObserver(
+                    identity=identity,
+                    backend=discovery.backend,
+                    descriptor_plan=state.descriptor_plan,
+                    policy_asset_id=state.policy_asset_id,
+                    stored_values=load_observer_values(conn, identity),
+                )
+            else:
+                observer = BdkObserver(
+                    identity=identity,
+                    backend=discovery.backend,
+                    branches=bdk_branches_for_identity(state.descriptor_plan, identity),
+                    gap_limit=state.descriptor_plan.gap_limit,
+                )
             prepared.append(
                 prepare_observer_update(
                     conn,
@@ -1028,7 +1044,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         backend=discovery.backend,
         sync_state=state,
         normalized_records=(),
-        adapter_meta={"observer_route": "bdk"},
+        adapter_meta={"observer_route": dependency_kind},
         kind=discovery.kind,
         started=discovery.started,
         force_full=discovery.force_full,

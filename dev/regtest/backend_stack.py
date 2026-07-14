@@ -13,12 +13,56 @@ from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib import error, request
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 SATOSHIS = Decimal("100000000")
 DEFAULT_BTC_EUR_PRICE = Decimal("58968.90")
 DEFAULT_BTC_USD_PRICE = Decimal("63500.00")
+BLECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+
+def _blech32_polymod(values: list[int]) -> int:
+    generators = (
+        0x7D52FBA40BD886,
+        0x5E8DBF1A03950C,
+        0x1C3A3C74072A18,
+        0x385D72FA0E5139,
+        0x7093E5A608865B,
+    )
+    checksum = 1
+    for value in values:
+        top = checksum >> 55
+        checksum = ((checksum & 0x7FFFFFFFFFFFFF) << 5) ^ value
+        for index, generator in enumerate(generators):
+            if (top >> index) & 1:
+                checksum ^= generator
+    return checksum
+
+
+def _blech32_hrp_expand(hrp: str) -> list[int]:
+    return [ord(char) >> 5 for char in hrp] + [0] + [ord(char) & 31 for char in hrp]
+
+
+def _replace_blech32_hrp(address: str, target_hrp: str) -> str:
+    """Translate equivalent custom Elements HRPs used by LWK and Elements Core."""
+
+    normalized = str(address).lower()
+    separator = normalized.rfind("1")
+    if separator < 1 or (str(address).lower() != address and str(address).upper() != address):
+        raise ValueError("invalid confidential address")
+    encoded = normalized[separator + 1 :]
+    if len(encoded) < 12 or any(char not in BLECH32_CHARSET for char in encoded):
+        raise ValueError("invalid confidential address")
+    data = [BLECH32_CHARSET.index(char) for char in encoded]
+    old_hrp = normalized[:separator]
+    if _blech32_polymod(_blech32_hrp_expand(old_hrp) + data) != 1:
+        raise ValueError("invalid confidential address checksum")
+    payload = data[:-12]
+    values = _blech32_hrp_expand(target_hrp) + payload + [0] * 12
+    polymod = _blech32_polymod(values) ^ 1
+    checksum = [(polymod >> (5 * (11 - index))) & 31 for index in range(12)]
+    return target_hrp + "1" + "".join(BLECH32_CHARSET[value] for value in payload + checksum)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -76,8 +120,9 @@ def _script_payload(output: dict[str, Any]) -> dict[str, Any]:
 
 
 class BitcoinIndex:
-    def __init__(self, rpc: RpcClient) -> None:
+    def __init__(self, rpc: RpcClient, *, chain: str = "bitcoin") -> None:
         self.rpc = rpc
+        self.chain = chain
         self._lock = threading.Lock()
         self._cache_until = 0.0
         self._tip: tuple[int, str, tuple[str, ...]] | None = None
@@ -146,6 +191,8 @@ class BitcoinIndex:
         for output in tx.get("vout") or []:
             if isinstance(output, dict):
                 payload = _script_payload(output)
+                if self.chain == "liquid":
+                    payload.pop("scriptpubkey_address", None)
                 total_outputs += int(payload.get("value") or 0)
                 result["vout"].append({"n": output.get("n"), **payload})
         if total_inputs:
@@ -159,7 +206,10 @@ class BitcoinIndex:
             outputs = previous.get("vout") or []
             if index < 0 or index >= len(outputs) or not isinstance(outputs[index], dict):
                 return None
-            return _script_payload(outputs[index])
+            payload = _script_payload(outputs[index])
+            if self.chain == "liquid":
+                payload.pop("scriptpubkey_address", None)
+            return payload
         except Exception:
             return None
 
@@ -400,9 +450,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         prefix = "/api/tx/"
         if path.startswith(prefix):
             suffix = path[len(prefix) :]
-            if suffix.endswith(("/hex", "/raw")):
+            if suffix.endswith("/hex"):
                 txid = suffix.rsplit("/", 1)[0]
                 self._tx_hex(txid)
+            elif suffix.endswith("/raw"):
+                txid = suffix.rsplit("/", 1)[0]
+                self._tx_raw(txid)
             elif suffix.endswith("/status"):
                 txid = suffix.rsplit("/", 1)[0]
                 self._tx_status(txid)
@@ -412,9 +465,19 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/scripthash/"):
             self._scripthash(path)
             return
+        if path.startswith("/api/address/"):
+            self._address(path)
+            return
         if path == "/api/blocks/tip/height":
             try:
                 self._text(str(self.server.index.tip_height()))
+            except Exception as exc:
+                self._error(503, str(exc))
+            return
+        if path == "/api/blocks/tip/hash":
+            try:
+                height = self.server.index.tip_height()
+                self._text(str(self.server.index.rpc.call("getblockhash", [height])))
             except Exception as exc:
                 self._error(503, str(exc))
             return
@@ -482,6 +545,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._error(404, str(exc))
 
+    def _tx_raw(self, txid: str) -> None:
+        try:
+            self._binary(bytes.fromhex(self.server.index.raw_hex(txid)))
+        except Exception as exc:
+            self._error(404, str(exc))
+
     def _tx_status(self, txid: str) -> None:
         try:
             self._json(self.server.index.esplora_tx(txid).get("status") or {})
@@ -519,6 +588,52 @@ class ApiHandler(BaseHTTPRequestHandler):
         else:
             self._error(404, "not found")
 
+    def _address(self, path: str) -> None:
+        parts = path.split("/")
+        if len(parts) < 4:
+            self._error(404, "not found")
+            return
+        try:
+            address = unquote(parts[3])
+            info = self.server.index.rpc.call("validateaddress", [address])
+            if not info.get("isvalid", True) and self.server.chain == "liquid" and address.startswith("el1"):
+                address = _replace_blech32_hrp(address, "ert")
+                info = self.server.index.rpc.call("validateaddress", [address])
+            script_hex = str(info.get("scriptPubKey") or info.get("scriptpubkey") or "")
+            if not info.get("isvalid", True) or not script_hex:
+                raise ValueError("invalid address")
+            scripthash = electrum_scripthash(script_hex)
+        except Exception as exc:
+            self._error(400, f"invalid address: {exc}")
+            return
+        if len(parts) == 4:
+            self._json(self.server.index.stats(scripthash))
+        elif path.endswith("/txs"):
+            self._json(
+                [
+                    self.server.index.esplora_tx(row["tx_hash"])
+                    for row in self.server.index.history(scripthash)
+                ]
+            )
+        elif path.endswith("/txs/mempool"):
+            self._json(
+                [
+                    self.server.index.esplora_tx(row["tx_hash"])
+                    for row in self.server.index.history(scripthash, mempool=True)
+                ]
+            )
+        elif "/txs/chain" in path:
+            self._json(
+                [
+                    self.server.index.esplora_tx(row["tx_hash"])
+                    for row in self.server.index.history(scripthash, mempool=False)
+                ]
+            )
+        elif path.endswith("/utxo"):
+            self._json(self.server.index.utxos(scripthash))
+        else:
+            self._error(404, "not found")
+
     def _cors_headers(self) -> None:
         origin = os.environ.get("KASSIBER_REGTEST_EXPLORER_CORS_ORIGIN", "*").strip()
         if not origin:
@@ -544,6 +659,14 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _binary(self, payload: bytes, status: int = 200) -> None:
+        self.send_response(status)
+        self._cors_headers()
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def _error(self, status: int, message: str) -> None:
         self._json({"ok": False, "error": message}, status=status)
@@ -659,7 +782,8 @@ def _enabled_services() -> set[str]:
 def main() -> int:
     bitcoin_index = BitcoinIndex(RpcClient())
     liquid_index = BitcoinIndex(
-        RpcClient(env_prefix="ELEMENTS", default_url="http://elementsd:7041")
+        RpcClient(env_prefix="ELEMENTS", default_url="http://elementsd:7041"),
+        chain="liquid",
     )
     enabled = _enabled_services()
     services: list[Any] = []

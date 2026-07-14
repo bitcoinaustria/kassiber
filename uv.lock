@@ -493,6 +493,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "embit" },
     { name = "keyring" },
+    { name = "lwk" },
     { name = "openpyxl" },
     { name = "pyrage" },
     { name = "pytest" },
@@ -513,6 +514,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=44,<48" },
     { name = "embit", specifier = ">=0.8.0" },
     { name = "keyring", specifier = ">=25.6,<26" },
+    { name = "lwk", specifier = "==0.18.0" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "pyrage", specifier = ">=1.3,<2" },
     { name = "pytest", specifier = ">=8,<9" },
@@ -542,6 +544,16 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/43/4b/674af6ef2f97d56f0ab5153bf0bfa28ccb6c3ed4d1babf4305449668807b/keyring-25.7.0.tar.gz", hash = "sha256:fe01bd85eb3f8fb3dd0405defdeac9a5b4f6f0439edbb3149577f244a2e8245b", size = 63516, upload-time = "2025-11-16T16:26:09.482Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/db/e655086b7f3a705df045bf0933bdd9c2f79bb3c97bfef1384598bb79a217/keyring-25.7.0-py3-none-any.whl", hash = "sha256:be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f", size = 39160, upload-time = "2025-11-16T16:26:08.402Z" },
+]
+
+[[package]]
+name = "lwk"
+version = "0.18.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/d3/e1fe56accfadb8bde70bf00426760325b5a57df3eda5c2bd8c42d28ee9f4/lwk-0.18.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:26c7b5dfcd3f1a7b35fd3e1f29e25c0ad85289aa9e9db291480b91d3efe3cf5f", size = 13616700, upload-time = "2026-06-16T08:48:30.642Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/46/01d54fb5baf6d6b30f4f8a43b16e0f8ba232eb57efc25cf716909ed02666/lwk-0.18.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0bf6eb5b2f0036fea93b636d4df2f0c9f45e3869da4f11c8130effdfc5f53d54", size = 14601824, upload-time = "2026-06-16T08:48:34.278Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/c6/f423501d1efbc31fea8dec3ba33b76a98675ff8ff19c22e485ff0f6fcc64/lwk-0.18.0-py3-none-win_amd64.whl", hash = "sha256:169e330928b7e3c814b1ad00fe20411d572d5c65fb4eaf71c393699150f7e69e", size = 13369555, upload-time = "2026-06-16T08:48:38.214Z" },
 ]
 
 [[package]]

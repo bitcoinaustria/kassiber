@@ -145,6 +145,15 @@ Current backend kinds:
 the bundled Liquid defaults use Electrum because Liquid history refresh is
 faster through those servers.
 
+Supported watch-only Bitcoin descriptors on Esplora/Electrum are observed by
+BDK 3.0.0; supported confidential Liquid descriptors are observed by LWK
+0.18.0. Selection is capability-based and happens before connection. Backends
+requiring transport features the pinned binding cannot express (for example a
+Liquid SOCKS proxy, custom CA, Esplora authorization, or non-default Electrum
+timeout) use an explicitly named compatibility observer. A dependency runtime
+failure never retries through that path. The complete matrix and removal
+conditions are in [Chain observers](chain-observers.md).
+
 Common fields:
 
 - `KIND`

@@ -13,9 +13,9 @@ phase checkpoint commits; it is not a shadow-observer rollout.
 ## Target boundary
 
 Pinned `bdkpython` 3.0.0 (`bdk_wallet`) owns supported Bitcoin
-descriptor-wallet chain state for Esplora and Electrum. `lwk` (`lwk_wollet`)
-will own supported Liquid
-descriptor-wallet chain state. Kassiber continues to own:
+descriptor-wallet chain state for Esplora and Electrum. Pinned `lwk` 0.18.0
+(`lwk_wollet`) owns supported Liquid descriptor-wallet chain state for
+Esplora and Electrum. Kassiber continues to own:
 
 - wallet/source configuration and the SQLCipher security boundary;
 - normalized accounting transactions, graph evidence, retractions and review;
@@ -47,11 +47,17 @@ coordinator-owned wallet savepoint. It persists the new state and returns
 normalized transaction, retraction, output, coverage and freshness facts for
 Kassiber's existing projection stages.
 
-Observer state uses two private main-database tables:
+Observer JSON state uses two private main-database tables:
 
 - `chain_observer_instances` stores representation-versioned JSON state for a
   stable logical-wallet/source identity;
 - `chain_observer_coverage` stores versioned per-branch scan coverage.
+
+LWK additionally uses `chain_observer_values`, a versioned string-keyed byte
+store implementing its `ForeignStore` callback. Values are opaque to Kassiber,
+loaded only for the matching observer identity, and replaced only inside the
+coordinator-owned apply savepoint. LWK never receives a filesystem path. A
+rollback discards the request-local wollet and its buffered values.
 
 Identities are derived from structural, non-secret source keys. A multi-script
 xpub gets one instance per script family; receive/change branches remain
@@ -78,8 +84,7 @@ back after dependency application begins.
 ## Capability matrix
 
 Capability selection occurs before network access; a dependency failure is
-never retried silently through compatibility code. Bitcoin rows below are live;
-Liquid rows remain the Phase 7 target.
+never retried silently through compatibility code.
 
 | Chain/source | Configuration | Observer | Status |
 | --- | --- | --- | --- |
@@ -94,12 +99,16 @@ Liquid rows remain the Phase 7 target.
 | Bitcoin Core RPC | descriptor, xpub or address watch source | existing `bitcoinrpc` adapter | explicit compatibility route; not migrated to BDK |
 | Bitcoin Silent Payments | BIP352/BIP392 material | dedicated Silent Payments path | explicit compatibility route |
 | Bitcoin | spending-private descriptor/key material | none | always rejected before network access |
-| Liquid Electrum/Esplora | LWK-supported watch-only descriptor with private view/blinding material | LWK | planned; exact descriptor/backend support must be contract-tested |
-| Liquid | fixed descriptors | LWK when executable test passes | expected supported; do not route until proven |
-| Liquid | Taproot descriptor | LWK when executable test passes | expected supported despite stale upstream error variants |
-| Liquid | general pre-SegWit descriptor | named compatibility observer | expected unsupported by LWK; preflight required |
-| Liquid | noncanonical multipath descriptor | named compatibility observer | expected unsupported by LWK; preflight required |
-| Liquid | proxy or custom-CA backend unsupported by the binding | named compatibility observer | preflight required; never downgrade after a failed LWK call |
+| Liquid Electrum/Esplora | watch-only confidential SegWit v0, Taproot, executable legacy P2SH, fixed or canonical `<0;1>` ranged descriptor; private view/blinding material with public spend keys | LWK 0.18.0 | enabled; LWK owns wollet scan, transaction, unblinding and output state |
+| Liquid Electrum/Esplora | address-list source | named compatibility observer | LWK route is descriptor-only; remove when LWK exposes equivalent address-list observation |
+| Liquid | unsupported general pre-SegWit descriptor | named compatibility observer | selected when executable LWK descriptor construction rejects the form; remove as upstream support becomes executable |
+| Liquid | noncanonical multipath or separately-authored change descriptor | named compatibility observer | selected before connect; remove when LWK can represent the same branch geometry without changing ownership |
+| Liquid Esplora/Electrum | SOCKS proxy configured or `.onion` endpoint | named compatibility observer | LWK 0.18.0 Python transport cannot carry Kassiber's proxy policy; compatibility preserves it until the binding exposes proxy configuration |
+| Liquid Esplora/Electrum | custom CA unsupported by the binding | named compatibility observer | selected before connect; remove when the binding accepts the configured trust root |
+| Liquid Esplora | custom HTTP authorization unsupported by the binding | named compatibility observer | selected before connect; remove when the binding exposes request headers/authentication |
+| Liquid Electrum | non-default timeout | named compatibility observer | selected before connect so the configured bound remains enforceable; remove when the binding exposes a timeout |
+| Liquid Esplora/Electrum | finite source-overlap exclusion would require a partial descriptor scan | named compatibility observer | selected after local overlap policy and before connect; remove when partial descriptor ownership can be represented safely |
+| Liquid | backend other than Esplora/Electrum | existing named backend adapter | LWK route is not selected |
 | Liquid | spending-private descriptor/key material | none | always rejected; private blinding/view material remains allowed and sensitive |
 
 `embit` remains available for compatibility parsing, intentionally unsupported
@@ -131,6 +140,23 @@ client API. A height rollback or disconnected tip rebuilds a fresh watch-only
 BDK wallet from the same public descriptors and replaces the derived aggregate
 atomically. It does not invoke the compatibility protocol client, retain a
 second graph, or alter authored accounting evidence.
+
+### LWK persistence representation
+
+`kassiber/core/chain_observer/lwk_persistence.py` implements LWK 0.18.0's
+`ForeignStore` without a side database or data directory. The callback buffers
+opaque string-keyed byte values in a request-local map during fetch and scan.
+Only a successful observer apply copies that map into version-1
+`chain_observer_values` rows under the same wallet savepoint as normalized
+transactions, retractions, inventory, coverage and freshness. `put` and
+`remove` never commit independently.
+
+The public JSON observer state stores only Kassiber's representation version
+and canonical txids used for retraction. LWK's own bytes are not JSON-decoded,
+logged, replicated, exported, exposed over desktop IPC, or returned to AI
+tools. Unknown namespace versions fail with
+`observer_state_rebuild_required`; clearing and rebuilding this derived state
+does not alter authored transaction metadata.
 
 ## Manual observer inventory
 
@@ -174,7 +200,8 @@ checkpoint.
 The remaining manual discovery/history/UTXO helpers are reachable only through
 the named capability routes in the matrix above (address-list, custom CA,
 custom HTTP authorization, non-default Esplora timeout, or a partial descriptor
-after source-overlap filtering), and through Liquid until Phase 7 completes.
+after source-overlap filtering, plus the explicitly labelled Liquid transport
+and descriptor limitations).
 Dependency-contract tests fail if an ordinary supported BDK route calls one of
 those adapters or retries through one after a BDK error.
 
@@ -252,7 +279,7 @@ ownership or source precedence.
 - `wallet_policy_asset_id`, `liquid_asset_code`, and the DB compatibility
   backfills map policy-asset identifiers to `LBTC`.
 
-LWK becomes the authoritative supported-route wollet state and unblinding
+LWK is the authoritative supported-route wollet state and unblinding
 engine. Private view/blinding material stays inside SQLCipher and must never
 enter logs, diagnostics, audit packages, AI tools, daemon/event payloads or
 replication.
