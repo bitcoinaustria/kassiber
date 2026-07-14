@@ -346,9 +346,15 @@ class ChainObserverContractTest(unittest.TestCase):
                     "vout": 0,
                     "prevout": {"scriptpubkey": script_a, "value": 10_000},
                     "witness": [],
-                }
+                },
+                {
+                    "txid": "55" * 32,
+                    "vout": 1,
+                    "prevout": {"scriptpubkey": script_b, "value": 20_000},
+                    "witness": [],
+                },
             ],
-            "vout": [{"scriptpubkey": script_b, "value": 9_000}],
+            "vout": [{"scriptpubkey": script_b, "value": 29_000}],
             "fee": 1_000,
             "status": {"confirmed": False},
             "observer": "bdk",
@@ -363,7 +369,11 @@ class ChainObserverContractTest(unittest.TestCase):
                 return {"ready": True}
 
             def apply(self, _update, _prior_state):
-                raw = {**raw_base, "observer_owned_scripts": [self.owned_script]}
+                raw = json.loads(json.dumps(raw_base))
+                for vin in raw["vin"]:
+                    if vin["prevout"]["scriptpubkey"] != self.owned_script:
+                        vin["prevout"] = None
+                raw["observer_owned_scripts"] = [self.owned_script]
                 return ObserverApplication(
                     state={"schema_version": 1, "owned": self.owned_script},
                     facts=ChainFacts(
@@ -433,6 +443,8 @@ class ChainObserverContractTest(unittest.TestCase):
         self.assertEqual(record["direction"], "outbound")
         self.assertEqual(str(record["amount"]), "0")
         self.assertEqual(str(record["fee"]), "0.00001")
+        merged_raw = json.loads(record["raw_json"])
+        self.assertTrue(all(vin.get("prevout") for vin in merged_raw["vin"]))
         self.conn.execute("ROLLBACK TO SAVEPOINT shared_bdk_transaction")
         self.conn.execute("RELEASE SAVEPOINT shared_bdk_transaction")
 

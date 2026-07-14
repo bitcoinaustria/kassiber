@@ -659,12 +659,48 @@ def apply_fetch_observer_updates(
                 for script in (raw.get("observer_owned_scripts") or [])
                 if str(script)
             }
-            raw = max(
-                raw_candidates,
-                key=lambda item: sum(
-                    1 for vin in item.get("vin", []) if isinstance(vin, dict) and vin.get("prevout")
-                ),
+            raw = dict(
+                max(
+                    raw_candidates,
+                    key=lambda item: sum(
+                        1
+                        for vin in item.get("vin", [])
+                        if isinstance(vin, dict) and vin.get("prevout")
+                    ),
+                )
             )
+            merged_vin = [dict(vin) for vin in raw.get("vin", [])]
+            input_indexes = {
+                (str(vin.get("txid") or "").lower(), int(vin.get("vout") or 0)): index
+                for index, vin in enumerate(merged_vin)
+                if isinstance(vin, dict) and str(vin.get("txid") or "")
+            }
+            for candidate in raw_candidates:
+                for vin in candidate.get("vin", []):
+                    if not isinstance(vin, dict) or not vin.get("prevout"):
+                        continue
+                    input_key = (
+                        str(vin.get("txid") or "").lower(),
+                        int(vin.get("vout") or 0),
+                    )
+                    target_index = input_indexes.get(input_key)
+                    if target_index is None:
+                        raise AppError(
+                            "BDK observers returned inconsistent inputs for one transaction",
+                            code="observer_projection_conflict",
+                            details={"txid": txid},
+                            retryable=False,
+                        )
+                    existing = merged_vin[target_index].get("prevout")
+                    if existing is not None and existing != vin["prevout"]:
+                        raise AppError(
+                            "BDK observers returned conflicting prevouts for one transaction",
+                            code="observer_projection_conflict",
+                            details={"txid": txid},
+                            retryable=False,
+                        )
+                    merged_vin[target_index]["prevout"] = vin["prevout"]
+            raw["vin"] = merged_vin
             raw.pop("observer_owned_scripts", None)
             normalized = record_from_bitcoin_esplora_tx(
                 raw,
