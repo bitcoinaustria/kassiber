@@ -652,7 +652,8 @@ def apply_fetch_observer_updates(
         try:
             raw = json.loads(str(record.get("raw_json") or "{}"))
         except (TypeError, ValueError, json.JSONDecodeError):
-            pass
+            # Non-BDK records may carry opaque importer payloads; skip BDK grouping.
+            raw = None
         if (
             txid
             and record.get("asset") == "BTC"
