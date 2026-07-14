@@ -27,7 +27,7 @@ from kassiber.core.chain_observer.bdk_persistence import (
     serialize_changeset,
 )
 from kassiber.core.chain_observer.identity import identities_for_wallet
-from kassiber.core.chain_observer.contract import ObserverPrepareRequest
+from kassiber.core.chain_observer.contract import ChainFacts, ObserverPrepareRequest
 from kassiber.core.imports import (
     PRICE_COLUMNS,
     _transaction_merge_updates,
@@ -630,6 +630,66 @@ class BdkDependencyContractTest(TestCase):
                 observer.prepare(request, None)
         self.assertEqual(raised.exception.code, "backend_tip_behind")
         full_scan.assert_not_called()
+
+    def test_force_full_rebuild_uses_per_observer_checkpoint(self):
+        wallet, plan = _descriptor_wallet()
+        identity = identities_for_wallet(wallet, observer_kind="bdk")[0]
+        observer = BdkObserver(
+            identity=identity,
+            backend={
+                "name": "mempool",
+                "kind": "mempool",
+                "url": "https://mempool.example/api",
+            },
+            branches=bdk_branches_for_identity(plan, identity),
+            gap_limit=20,
+        )
+        native_wallet = mock.Mock()
+        client = mock.Mock()
+        observer._persistence = mock.Mock()
+        observer._persistence.payload.return_value = {"schema_version": 1}
+        prior_txid = "11" * 32
+        request = ObserverPrepareRequest(
+            backend_name="mempool",
+            backend_kind="mempool",
+            force_full=True,
+            checkpoint={
+                "tip_height": 999,
+                "canonical_txids": ["ff" * 32],
+                "observer_instances": {
+                    identity.id: {
+                        "tip_height": 10,
+                        "canonical_txids": [prior_txid],
+                    }
+                },
+            },
+        )
+        facts = ChainFacts(
+            transaction_records=(),
+            retracted_external_ids=(prior_txid,),
+            outputs=(),
+            coverage=(),
+            freshness_checkpoint={"canonical_txids": []},
+        )
+        with mock.patch.object(
+            observer,
+            "_wallet_from_state",
+            return_value=(native_wallet, mock.Mock()),
+        ), mock.patch.object(observer, "_client", return_value=client), mock.patch.object(
+            observer, "_remote_block_hash"
+        ) as remote_hash, mock.patch.object(
+            observer, "_full_scan", return_value=mock.Mock()
+        ), mock.patch.object(
+            observer, "_reveal_scan_horizon"
+        ), mock.patch.object(
+            observer, "_facts", return_value=facts
+        ) as collect_facts:
+            prepared = observer.prepare(request, None)
+
+        remote_hash.assert_called_once_with(client, 10)
+        retraction_state = collect_facts.call_args.args[1]
+        self.assertEqual(retraction_state.payload["canonical_txids"], [prior_txid])
+        self.assertEqual(prepared["facts"]["retracted_external_ids"], [prior_txid])
 
     def test_remote_dns_proxy_stays_on_named_compatibility_route(self):
         _wallet, plan = _descriptor_wallet()

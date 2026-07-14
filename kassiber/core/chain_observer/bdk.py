@@ -200,6 +200,15 @@ class BdkObserver:
         self._wallet = None
         self._persistence = None
 
+    def _identity_checkpoint(self, checkpoint: Mapping[str, Any]) -> Mapping[str, Any]:
+        instances = checkpoint.get("observer_instances")
+        if isinstance(instances, Mapping):
+            instance = instances.get(self.identity.id)
+            return instance if isinstance(instance, Mapping) else {}
+        # Accept the pre-observer checkpoint shape during migration, but never
+        # borrow another observer's facts from an aggregate checkpoint.
+        return checkpoint
+
     def _client(self) -> Any:
         import bdkpython as bdk
 
@@ -610,13 +619,14 @@ class BdkObserver:
         prior_state: StoredObserverState | None,
     ) -> Mapping[str, Any]:
         try:
+            identity_checkpoint = self._identity_checkpoint(request.checkpoint)
             retraction_state = prior_state
             if retraction_state is None and request.force_full:
                 retraction_state = StoredObserverState(
                     identity=self.identity,
                     payload={
                         "canonical_txids": list(
-                            request.checkpoint.get("canonical_txids") or ()
+                            identity_checkpoint.get("canonical_txids") or ()
                         )
                     },
                     coverage=(),
@@ -638,10 +648,10 @@ class BdkObserver:
                     wallet, persister = self._wallet_from_state(None)
                     self._wallet = wallet
                     use_full_scan = True
-            elif request.force_full and request.checkpoint.get("tip_height") is not None:
+            elif request.force_full and identity_checkpoint.get("tip_height") is not None:
                 # A force-full rebuild may discard dependency state, but it
                 # must not let a lagging backend erase newer canonical facts.
-                self._remote_block_hash(client, int(request.checkpoint["tip_height"]))
+                self._remote_block_hash(client, int(identity_checkpoint["tip_height"]))
             if use_full_scan:
                 wallet.apply_update(self._full_scan(client, wallet))
                 self._reveal_scan_horizon(wallet)
