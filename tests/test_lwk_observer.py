@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,10 +13,12 @@ from embit import bip32, bip39
 from kassiber.core.chain_observer.identity import identities_for_wallet
 from kassiber.core.chain_observer.lwk import (
     LwkObserver,
+    _allocated_liquid_fee,
     _fee_sats_by_asset,
     _lwk_electrum_connection,
     _lwk_esplora_auth_options,
     _lwk_scan_to_index,
+    _require_lwk_tip_not_behind,
     lwk_compatibility_reason,
     lwk_descriptor_for_plan,
 )
@@ -53,6 +56,34 @@ def wallet_row(config: dict) -> dict:
 
 
 class LwkDescriptorContractTest(unittest.TestCase):
+    def test_force_full_lag_guard_rejects_an_older_backend_tip(self):
+        tip = Mock()
+        tip.height.return_value = 41
+        with self.assertRaises(AppError) as raised:
+            _require_lwk_tip_not_behind(tip, 42)
+        self.assertEqual(raised.exception.code, "backend_tip_behind")
+        self.assertTrue(raised.exception.retryable)
+
+    def test_mixed_input_fee_stays_folded_into_exact_wallet_delta(self):
+        self.assertEqual(
+            _allocated_liquid_fee(
+                net_sats=-41_000,
+                transaction_fee_sats=1_000,
+                owns_input=True,
+                mixed_inputs=True,
+            ),
+            (0, True),
+        )
+        self.assertEqual(
+            _allocated_liquid_fee(
+                net_sats=-61_000,
+                transaction_fee_sats=1_000,
+                owns_input=True,
+                mixed_inputs=False,
+            ),
+            (1_000, False),
+        )
+
     def test_fee_normalization_reads_explicit_elements_fee_outputs(self):
         class Output:
             def __init__(self, *, fee, value=None, asset=None):
@@ -104,13 +135,37 @@ class LwkDescriptorContractTest(unittest.TestCase):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
         workflow = (ROOT / ".github/workflows/prerelease-binaries.yml").read_text(encoding="utf-8")
-        self.assertIn('"lwk==0.18.0"', pyproject)
         self.assertIn('name = "lwk"\nversion = "0.18.0"', lock)
+        self.assertIn(
+            '"lwk==0.18.0; platform_system != \'Darwin\' or platform_machine != \'x86_64\'"',
+            pyproject,
+        )
         for platform in (
             "macosx_11_0_arm64", "manylinux_2_17_x86_64.manylinux2014_x86_64", "win_amd64",
         ):
             self.assertIn(f"lwk-0.18.0-py3-none-{platform}.whl", lock)
         self.assertGreaterEqual(workflow.count("--collect-submodules lwk"), 2)
+        self.assertEqual(
+            inspect.signature(require_lwk().WalletTxOut.wildcard_index).return_annotation,
+            "'int'",
+        )
+
+    def test_missing_native_dependency_selects_named_compatibility(self):
+        plan = load_descriptor_plan(
+            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        with patch(
+            "kassiber.core.chain_observer.lwk.require_lwk",
+            side_effect=AppError("not packaged", code="dependency_missing"),
+        ):
+            self.assertEqual(
+                lwk_compatibility_reason(
+                    {"kind": "esplora", "url": "http://127.0.0.1:3002"},
+                    state,
+                ),
+                "dependency_unavailable",
+            )
 
     def test_canonical_multipath_and_fixed_descriptors_execute_upstream(self):
         for raw in (descriptor(), descriptor(path="0/7")):
@@ -151,6 +206,29 @@ class LwkDescriptorContractTest(unittest.TestCase):
             f"ct({'11' * 32},elsh(multi(2,{','.join(keys)})))"
         )
         self.assertIn("elsh(multi", str(parsed))
+
+    def test_nested_segwit_p2sh_translates_only_the_outer_wrapper(self):
+        root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(MNEMONIC))
+        xpub = root.derive("m/49h/1h/0h").to_public().to_base58()
+        blind = bip32.HDKey.from_seed(b"\x03" * 32).key.wif()
+        raw = f"ct(slip77({blind}),elsh(wpkh({xpub}/<0;1>/*)))"
+        plan = load_descriptor_plan(
+            {
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "descriptor": raw,
+            }
+        )
+        parsed = lwk_descriptor_for_plan(plan)
+        self.assertIn("elsh(wpkh(", str(parsed))
+        self.assertNotIn("elsh(elwpkh(", str(parsed))
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        self.assertIsNone(
+            lwk_compatibility_reason(
+                {"kind": "esplora", "url": "http://127.0.0.1:3002"},
+                state,
+            )
+        )
 
     def test_transport_and_descriptor_compatibility_is_preflighted(self):
         plan = load_descriptor_plan(

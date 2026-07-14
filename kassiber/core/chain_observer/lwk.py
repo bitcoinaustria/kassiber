@@ -41,6 +41,12 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     plan = getattr(sync_state, "descriptor_plan", None)
     if plan is None:
         return "address_list"
+    try:
+        require_lwk()
+    except AppError as exc:
+        if exc.code == "dependency_missing":
+            return "dependency_unavailable"
+        raise
     kind = normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         return "backend_kind"
@@ -196,6 +202,43 @@ def lwk_network(network: str, policy_asset_id: str):
     raise AppError("Unsupported LWK network", code="observer_capability_unsupported")
 
 
+def _translate_lwk_script_wrapper(text: str) -> str:
+    """Translate only the outer Elements script wrapper expected by LWK.
+
+    LWK spells native wrappers as ``elwpkh``/``elwsh``/``eltr``/``elsh``,
+    but a nested SegWit redeem script remains Bitcoin miniscript. For example,
+    ``sh(wpkh(...))`` must become ``elsh(wpkh(...))``, never
+    ``elsh(elwpkh(...))``.
+    """
+
+    depth = 0
+    script_start = None
+    for index, character in enumerate(text):
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+        elif character == "," and depth == 1:
+            script_start = index + 1
+            break
+    if script_start is None:
+        raise AppError(
+            "LWK confidential descriptor is missing its script expression",
+            code="observer_capability_unsupported",
+            retryable=False,
+        )
+    script = text[script_start:]
+    for source, target in (
+        ("wpkh(", "elwpkh("),
+        ("wsh(", "elwsh("),
+        ("tr(", "eltr("),
+        ("sh(", "elsh("),
+    ):
+        if script.startswith(source):
+            return text[:script_start] + target + script[len(source) :]
+    return text
+
+
 def lwk_descriptor_for_plan(plan: Any):
     """Translate the executable embit CT plan into LWK's CT spelling."""
 
@@ -213,14 +256,7 @@ def lwk_descriptor_for_plan(plan: Any):
         if key is None or not getattr(key, "is_private", False):
             raise AppError("LWK requires private view material", code="observer_capability_unsupported")
         text = re.sub(r"^blinded\([^,]+,", f"ct({key},", text)
-    replacements = (
-        (r"(?<![a-z])wpkh\(", "elwpkh("),
-        (r"(?<![a-z])wsh\(", "elwsh("),
-        (r"(?<![a-z])tr\(", "eltr("),
-        (r"(?<![a-z])sh\(", "elsh("),
-    )
-    for pattern, target in replacements:
-        text = re.sub(pattern, target, text)
+    text = _translate_lwk_script_wrapper(text)
     return lwk.WolletDescriptor(text)
 
 
@@ -238,6 +274,38 @@ def _fee_sats_by_asset(outputs: list[Any]) -> dict[str, int]:
         asset_id = str(output.asset())
         fees[asset_id] = fees.get(asset_id, 0) + int(output.value())
     return fees
+
+
+def _allocated_liquid_fee(
+    *,
+    net_sats: int,
+    transaction_fee_sats: int,
+    owns_input: bool,
+    mixed_inputs: bool,
+) -> tuple[int, bool]:
+    """Return wallet-attributed fee and whether it remains folded into delta."""
+
+    if not owns_input or net_sats >= 0 or transaction_fee_sats <= 0:
+        return 0, False
+    if mixed_inputs:
+        return 0, True
+    return int(transaction_fee_sats), False
+
+
+def _require_lwk_tip_not_behind(tip: Any, persisted_height: int) -> None:
+    remote_height = int(tip.height())
+    if remote_height < int(persisted_height):
+        raise AppError(
+            "The selected Liquid backend is behind the persisted wallet state",
+            code="backend_tip_behind",
+            hint="Wait for the backend to catch up or select a fully synchronized backend, then retry.",
+            details={
+                "observer": "lwk",
+                "backend_height": remote_height,
+                "persisted_height": int(persisted_height),
+            },
+            retryable=True,
+        )
 
 
 class LwkObserver:
@@ -362,18 +430,27 @@ class LwkObserver:
         occurred_at = timestamp_to_iso(timestamp) if timestamp is not None else UNKNOWN_OCCURRED_AT
         confirmed_at = occurred_at if timestamp is not None else None
         owns_input = any(item is not None for item in owned_inputs)
+        mixed_inputs = owns_input and sum(item is not None for item in owned_inputs) < len(
+            raw_inputs
+        )
         records = []
         for asset_id, signed_value in sorted(wallet_tx.balance().items(), key=lambda item: str(item[0])):
             asset_id = str(asset_id)
             net = int(signed_value)
-            fee = fee_sats_by_asset.get(asset_id, 0) if owns_input and net <= 0 else 0
+            transaction_fee = fee_sats_by_asset.get(asset_id, 0)
+            fee, amount_includes_fee = _allocated_liquid_fee(
+                net_sats=net,
+                transaction_fee_sats=transaction_fee,
+                owns_input=owns_input,
+                mixed_inputs=mixed_inputs,
+            )
             if net == 0 and fee == 0:
                 continue
             if net > 0:
                 direction, amount, record_fee, kind = "inbound", _btc(net), Decimal(0), "deposit"
             else:
                 direction = "outbound"
-                amount = _btc(max(0, abs(net) - fee))
+                amount = _btc(abs(net) if amount_includes_fee else max(0, abs(net) - fee))
                 record_fee = _btc(fee)
                 kind = "withdrawal" if amount > 0 else "fee"
             asset = liquid_asset_code(asset_id, self.policy_asset_id)
@@ -386,6 +463,7 @@ class LwkObserver:
                     "asset": asset,
                     "amount": str(amount),
                     "fee": str(record_fee),
+                    "amount_includes_fee": amount_includes_fee,
                     "fiat_rate": None,
                     "fiat_value": None,
                     "kind": kind,
@@ -406,6 +484,12 @@ class LwkObserver:
                                     "asset": asset,
                                     "net_sats": net,
                                     "fee_sats": fee,
+                                    "transaction_fee_sats": transaction_fee,
+                                    "fee_attribution": (
+                                        "implicit_wallet_delta"
+                                        if amount_includes_fee
+                                        else "exact"
+                                    ),
                                 },
                             }
                         ),
@@ -498,6 +582,13 @@ class LwkObserver:
             self._wallet = lwk.Wollet.with_custom_store(network, lwk_descriptor_for_plan(self.plan), self._store_link)
             client = self._client(network)
             emit_sync_progress({"phase": "backend_fetch", "observer": "lwk", "status": "scanning"})
+            if request.force_full and request.checkpoint.get("tip_height") is not None:
+                # Rebuilding the opaque wollet must not let a lagging backend
+                # retract facts newer than its current chain view.
+                _require_lwk_tip_not_behind(
+                    client.tip(),
+                    int(request.checkpoint["tip_height"]),
+                )
             scan_to = _lwk_scan_to_index(self.plan, prior_state, request.checkpoint)
             update = client.full_scan_to_index(self._wallet, scan_to)
             if update is not None:

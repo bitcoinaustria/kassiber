@@ -38,7 +38,17 @@ def require_lwk():
     return lwk
 
 
-class SqlCipherForeignStore(require_lwk().ForeignStore):
+try:
+    _ForeignStoreBase = require_lwk().ForeignStore
+except AppError as exc:
+    if exc.code != "dependency_missing":
+        raise
+
+    class _ForeignStoreBase:
+        """Import-only placeholder where the pinned LWK has no native wheel."""
+
+
+class SqlCipherForeignStore(_ForeignStoreBase):
     """Request-local store whose bytes become durable only during apply."""
 
     def __init__(self, identity: ObserverIdentity, values: Mapping[str, bytes]):
