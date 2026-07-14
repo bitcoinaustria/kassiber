@@ -21,7 +21,7 @@ def render_cask(version: str, sha256: str) -> str:
   version "{normalized_version}"
   sha256 "{sha256}"
 
-  url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{{version}}/kassiber-macos-arm64.dmg"
+  url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{{version}}/kassiber-macos-universal.dmg"
   name "Kassiber"
   desc "Local-first Bitcoin accounting suite"
   homepage "https://github.com/bitcoinaustria/kassiber"
@@ -42,7 +42,7 @@ end
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, help="Release version, with or without v prefix")
-    parser.add_argument("--sha256", required=True, help="SHA-256 of kassiber-macos-arm64.dmg")
+    parser.add_argument("--sha256", required=True, help="SHA-256 of kassiber-macos-universal.dmg")
     parser.add_argument("--output", required=True, type=Path, help="Path to write Casks/kassiber.rb")
     args = parser.parse_args()
 

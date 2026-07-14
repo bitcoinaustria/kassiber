@@ -29,7 +29,7 @@ release artifacts and skips the Homebrew update.
 For a tag publish or `workflow_dispatch` run with `publish_release=true`, the
 release job:
 
-1. Builds and uploads the Apple Silicon-only `kassiber-macos-arm64.dmg`.
+1. Builds and uploads `kassiber-macos-universal.dmg`.
 2. Generates `SHA256SUMS.txt`.
 3. Checks out `bitcoinaustria/homebrew-kassiber` when `HOMEBREW_TAP_TOKEN` is
    configured.
@@ -56,10 +56,6 @@ kassiber status
 The cask route uses Homebrew's own prefix for the terminal command, so it does
 not need Kassiber's Settings -> Desktop -> Terminal command helper. That helper
 still matters for users who install the `.dmg` directly or do not use Homebrew.
-
-New cask releases require Apple Silicon. The last previously published
-universal release remains available from its immutable GitHub release for
-Intel Mac users, but the tap advances only to supported ARM64 releases.
 
 ## Release discipline
 

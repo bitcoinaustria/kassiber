@@ -10,12 +10,20 @@ The migration started from commit
 `codex/dependency-chain-observers`. It is one deliberately broad change set with
 phase checkpoint commits; it is not a shadow-observer rollout.
 
+This implemented decision supersedes earlier planning guidance that avoided
+BDK/LWK adoption. The replacement is accepted because dependency state now
+stays inside SQLCipher through custom persistence callbacks, supported routes
+have live restart/reorg/replacement parity oracles, and Core RPC plus Silent
+Payments remain separate first-class observers rather than being forced
+through descriptor discovery.
+
 ## Target boundary
 
 Pinned `bdkpython` 3.0.0 (`bdk_wallet`) owns supported Bitcoin
 descriptor-wallet chain state for Esplora and Electrum. Pinned `lwk` 0.18.0
 (`lwk_wollet`) owns supported Liquid descriptor-wallet chain state for
-Esplora and Electrum. Kassiber continues to own:
+Esplora and Electrum on platforms for which it ships a wheel; macOS Intel uses
+the named Liquid compatibility observer. Kassiber continues to own:
 
 - wallet/source configuration and the SQLCipher security boundary;
 - normalized accounting transactions, graph evidence, retractions and review;
@@ -35,7 +43,7 @@ Authority is scoped by connection model, not by chain alone:
 | Configuration | Authoritative observer |
 | --- | --- |
 | Bitcoin descriptor + Esplora/Electrum | BDK |
-| Liquid descriptor + Esplora/Electrum | LWK |
+| Liquid descriptor + Esplora/Electrum | LWK where the pinned binding ships; named compatibility observer on macOS Intel |
 | Bitcoin Core backend | Bitcoin Core RPC adapter |
 | Silent Payments wallet | BIP352/BIP392 Silent Payments scanner |
 
@@ -108,7 +116,7 @@ never retried silently through compatibility code.
 | --- | --- | --- | --- |
 | Bitcoin Esplora | supported watch-only descriptor, normal platform trust | BDK | enabled; BDK owns scan, canonical transaction, chain-position and output state |
 | Bitcoin Electrum | supported watch-only descriptor over TCP or normal TLS | BDK | enabled; live descriptor restart/no-op coverage runs in the regtest observer lane |
-| Bitcoin Esplora/Electrum | SOCKS proxy configured | BDK | enabled through the binding's proxy argument; onion endpoints fail closed without it |
+| Bitcoin Esplora/Electrum | SOCKS proxy configured or `.onion` endpoint | named compatibility observer | BDK accepts only `socks5://`; Kassiber does not downgrade `socks5h://` and leak DNS outside Tor |
 | Bitcoin Electrum | custom CA unsupported by BDK | Bitcoin script-protocol observer | the explicit Electrum client loads the configured CA; selected before connect |
 | Bitcoin Esplora | custom CA unsupported by BDK and the compatibility HTTP client | none | fails before egress with `observer_capability_unsupported`; remove only after a dependency client can load the configured trust root |
 | Bitcoin Esplora | custom HTTP authorization unsupported by the binding | named compatibility observer | selected before connect; never a runtime fallback |
@@ -117,9 +125,10 @@ never retried silently through compatibility code.
 | Bitcoin Esplora/Electrum | address-list source | Bitcoin script observer | BDK cannot reconstruct key semantics from an address; prefer descriptor migration when more wallet material exists |
 | Bitcoin Core RPC | descriptor, xpub or address watch source | Bitcoin Core RPC observer | first-class Core route; BDK Python has no Bitcoin RPC chain source |
 | Bitcoin Silent Payments | BIP352/BIP392 material | Silent Payments observer | first-class BIP352/BIP392 discovery route |
-| Bitcoin `mempool` backend alias | supported descriptor | BDK Esplora | normalized to `esplora` before capability selection and client construction |
+| Bitcoin `mempool` backend alias | supported descriptor | BDK Esplora | normalized once for capability selection, client construction, remote-tip checks and initial/incremental scans; the live restart oracle uses this alias |
 | Bitcoin | spending-private descriptor/key material | none | always rejected before network access |
-| Liquid Electrum/Esplora | watch-only confidential SegWit v0, Taproot, executable legacy P2SH, fixed or canonical `<0;1>` ranged descriptor; private view/blinding material with public spend keys | LWK 0.18.0 | enabled; LWK owns wollet scan, transaction, unblinding and output state |
+| Liquid Electrum/Esplora | watch-only confidential SegWit v0 (including nested `elsh(wpkh(...))`), Taproot, executable legacy P2SH, fixed or canonical `<0;1>` ranged descriptor; private view/blinding material with public spend keys | LWK 0.18.0 | enabled; only the outer Elements script wrapper is translated, while nested miniscript keeps Bitcoin spelling |
+| Liquid Electrum/Esplora | macOS x86_64 package | named compatibility observer | LWK 0.18.0 publishes no Intel Mac wheel; universal packaging retains the existing observer for that architecture |
 | Liquid address-list source | any | none | rejected locally because confidential outputs require descriptor-backed private view/blinding material |
 | Liquid | unsupported general pre-SegWit descriptor | named compatibility observer | selected when executable LWK descriptor construction rejects the form; remove as upstream support becomes executable |
 | Liquid | structurally equivalent separate `/0/*` receive + `/1/*` change descriptors | LWK 0.18.0 | canonicalized to `<0;1>` only when every ranged key has the same blinding policy, script, origins, keys, order and wildcard geometry |
@@ -157,24 +166,25 @@ coordinator's apply savepoint writes its JSON payload to
 An immediate no-op therefore reloads the same aggregate from SQLCipher and
 persists byte-for-byte equivalent canonical JSON without a BDK sidecar.
 
+Initial import, forced rebuild and a disconnected-chain rebuild use BDK full
+scan. Ordinary refreshes reveal a complete unused gap beyond every known used
+index and use `start_sync_with_revealed_spks`; discovery widens and repeats the
+incremental request only when a newly revealed address is used. This prevents
+full descriptor rescans on every refresh without reintroducing a manual gap
+engine.
+
 The exact 3.0.0 Python binding bundles an Electrum client from before the
-upstream stale-anchor rollback fix. Before an incremental Electrum scan,
+upstream stale-anchor rollback fix. Before an incremental Electrum sync,
 Kassiber compares the persisted BDK tip with the remote header through BDK's
 client API. A height rollback or disconnected tip rebuilds a fresh watch-only
 BDK wallet from the same public descriptors and replaces the derived aggregate
 atomically. It does not invoke the compatibility protocol client, retain a
 second graph, or alter authored accounting evidence.
 
-That bundled client can also advance the local tip without replacing a known
-mempool position with its new confirmation anchor. When—and only when—the tip
-advanced and an unconfirmed canonical transaction remains, Kassiber asks a
-fresh watch-only BDK wallet for one dependency update and applies that update
-additively to the persisted aggregate. This preserves older anchors that a
-fresh Electrum response may omit. Ordinary mempool/no-op scans remain
-incremental, and no manual transaction graph or compatibility fallback is
-introduced. The live oracle waits for Electrum Merkle state before comparing
-transport projections so backend indexing races are not mistaken for observer
-state.
+The live oracle waits for Electrum Merkle state before comparing transport
+projections so backend indexing races are not mistaken for observer state.
+The incremental request proves mempool-to-confirmed transitions without the
+former second full scan.
 
 ### LWK persistence representation
 
@@ -192,6 +202,21 @@ logged, replicated, exported, exposed over desktop IPC, or returned to AI
 tools. Unknown namespace versions fail with
 `observer_state_rebuild_required`; clearing and rebuilding this derived state
 does not alter authored transaction metadata.
+
+LWK exposes one explicit fee output for the whole Elements transaction. When
+every input belongs to the observed wollet, Kassiber can assign that fee to the
+wallet row. For mixed-input transactions it instead records the exact wallet
+delta with `amount_includes_fee=true`, keeps the whole transaction fee only as
+graph evidence, and lets transfer/custody conservation require an explicit
+component rather than charging the entire fee to one participant.
+
+Elements consensus values are stored as integer 1e-8 base units for every
+asset; Kassiber preserves that canonical unit even when an issued asset has
+separate display metadata. The pinned binding declares
+`WalletTxOut.wildcard_index() -> int`, so fixed-descriptor outputs do not expose
+an optional-index state in this version. Forced rebuilds compare the backend
+tip height with the persisted checkpoint before scanning, preventing a lagging
+backend from retracting newer facts.
 
 ## Manual observer inventory
 
@@ -419,16 +444,14 @@ retain their existing source-specific orchestration; they use `commit=False`
 when invoked by the shared wallet coordinator, but their transport-specific
 fetch/apply decomposition is outside the chain-observer contract.
 
-## Apple Silicon packaging checkpoint
+## Cross-platform packaging checkpoint
 
-Phase 1 removes `macos-15-intel`, the `x86_64-apple-darwin` sidecar,
-`macos-universal`, `--target universal-apple-darwin`, the supervisor's Intel
-sidecar dispatch, and universal Homebrew/release documentation. New desktop
-and Homebrew artifacts are explicitly `macos-arm64`; the historical universal
-release remains available for Intel users but is not rebuilt.
-
-The supported release targets after the packaging phase are macOS ARM64,
-Linux x86_64 and Windows x86_64.
+Phase 1 retains `macos-15-intel`, both Apple sidecars, the universal Tauri
+target and the universal Homebrew artifact. BDK 3.0.0 ships wheels for both Mac
+architectures. LWK 0.18.0 ships only arm64 on macOS, so the dependency is
+platform-marked out on Intel and capability selection chooses the named Liquid
+compatibility observer before network access. Linux x86_64 and Windows x86_64
+continue to bundle both dependencies.
 
 ## Production cleanup inventory
 

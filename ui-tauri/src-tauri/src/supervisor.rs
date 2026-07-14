@@ -1786,6 +1786,7 @@ fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
 fn sidecar_filename() -> Option<String> {
     let triple = match (env::consts::OS, env::consts::ARCH) {
         ("macos", "aarch64") => "aarch64-apple-darwin",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
         // Not built by the prerelease workflow yet; Linux arm64 falls back to
         // developer Python unless a matching sidecar is manually bundled.
         ("linux", "aarch64") => "aarch64-unknown-linux-gnu",

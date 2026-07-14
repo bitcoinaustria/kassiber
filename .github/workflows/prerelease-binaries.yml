@@ -40,6 +40,7 @@ jobs:
         os:
           - ubuntu-22.04
           - macos-latest
+          - macos-15-intel
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -81,6 +82,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          observer_collect_args=(
+            --collect-submodules bdkpython
+            --collect-data bdkpython
+          )
+          if uv run python -c 'import lwk'; then
+            observer_collect_args+=(--collect-submodules lwk --collect-data lwk)
+          fi
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
@@ -88,10 +96,7 @@ jobs:
             --name kassiber \
             --paths . \
             --collect-data kassiber \
-            --collect-submodules bdkpython \
-            --collect-data bdkpython \
-            --collect-submodules lwk \
-            --collect-data lwk \
+            "${observer_collect_args[@]}" \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \
@@ -229,13 +234,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: macOS arm64
+          - label: macOS universal
             os: macos-latest
-            target: macos-arm64
+            target: macos-universal
             bundles: app,dmg
-            tauri_args: --target aarch64-apple-darwin
-            sidecar_artifact_pattern: kassiber-desktop-sidecar-aarch64-apple-darwin
-            sidecar_expected: 1
+            tauri_args: --target universal-apple-darwin
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-*-apple-darwin
+            sidecar_expected: 2
           - label: Linux
             os: ubuntu-22.04
             target: linux-x64
@@ -271,6 +276,10 @@ jobs:
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: stable
+
+      - name: Install macOS universal Rust targets
+        if: matrix.target == 'macos-universal'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
@@ -371,6 +380,10 @@ jobs:
             os: macos-latest
             triple: aarch64-apple-darwin
             exe_ext: ""
+          - label: macOS x86_64
+            os: macos-15-intel
+            triple: x86_64-apple-darwin
+            exe_ext: ""
           - label: Linux x86_64
             os: ubuntu-22.04
             triple: x86_64-unknown-linux-gnu
@@ -403,6 +416,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          observer_collect_args=(
+            --collect-submodules bdkpython
+            --collect-data bdkpython
+          )
+          if uv run python -c 'import lwk'; then
+            observer_collect_args+=(--collect-submodules lwk --collect-data lwk)
+          fi
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
@@ -410,10 +430,7 @@ jobs:
             --name kassiber-cli \
             --paths . \
             --collect-data kassiber \
-            --collect-submodules bdkpython \
-            --collect-data bdkpython \
-            --collect-submodules lwk \
-            --collect-data lwk \
+            "${observer_collect_args[@]}" \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \
@@ -607,7 +624,7 @@ jobs:
           set -euo pipefail
           tag_name="${RELEASE_TAG_NAME}"
           version="${tag_name#v}"
-          dmg_name="kassiber-macos-arm64.dmg"
+          dmg_name="kassiber-macos-universal.dmg"
           dmg_path="release/${dmg_name}"
           cask_path="homebrew-tap/${HOMEBREW_CASK_PATH}"
 
