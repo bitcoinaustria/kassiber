@@ -618,7 +618,10 @@ class BdkDependencyContractTest(TestCase):
     def test_esplora_custom_ca_fails_closed_instead_of_ignoring_trust(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
-        with self.assertRaises(AppError) as raised:
+        with mock.patch(
+            "kassiber.core.chain_observer.bdk.require_bdk",
+            side_effect=AssertionError("dependency check ran before custom-CA guard"),
+        ) as dependency, self.assertRaises(AppError) as raised:
             bdk_compatibility_reason(
                 {
                     "kind": "esplora",
@@ -627,6 +630,7 @@ class BdkDependencyContractTest(TestCase):
                 },
                 state,
             )
+        dependency.assert_not_called()
         self.assertEqual(raised.exception.code, "observer_capability_unsupported")
         self.assertEqual(raised.exception.details["capability"], "esplora_custom_ca")
 

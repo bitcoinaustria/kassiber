@@ -89,13 +89,24 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         return "address_list"
     if getattr(plan, "kind", None) == "silent-payment":
         return "silent_payment"
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind == "esplora" and backend_value(backend, "certificate"):
+        # The compatibility HTTP transport cannot load a per-backend trust
+        # root either, so this must fail before optional BDK availability can
+        # redirect the wallet onto that route.
+        raise AppError(
+            "BDK Esplora does not support a configured custom trust root",
+            code="observer_capability_unsupported",
+            hint="Use platform trust or an Electrum backend until BDK exposes per-client custom CA support.",
+            details={"capability": "esplora_custom_ca", "observer": "bdk"},
+            retryable=False,
+        )
     try:
         require_bdk()
     except AppError as exc:
         if exc.code == "dependency_missing":
             return "dependency_unavailable"
         raise
-    kind = normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         return "backend_kind"
     endpoint = str(backend.get("url") or "")
@@ -104,14 +115,6 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         # ``socks5h://`` spelling would move DNS resolution out of Tor, so the
         # remote-DNS compatibility transport remains authoritative here.
         return "proxy_transport"
-    if kind == "esplora" and backend_value(backend, "certificate"):
-        raise AppError(
-            "BDK Esplora does not support a configured custom trust root",
-            code="observer_capability_unsupported",
-            hint="Use platform trust or an Electrum backend until BDK exposes per-client custom CA support.",
-            details={"capability": "esplora_custom_ca", "observer": "bdk"},
-            retryable=False,
-        )
     if kind == "electrum" and backend_value(backend, "certificate"):
         # bdk_electrum does not expose a custom trust-store hook.
         return "custom_ca"
