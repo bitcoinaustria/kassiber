@@ -501,13 +501,33 @@ class LwkDescriptorContractTest(unittest.TestCase):
             ("proxy_transport", {"name": "tor", "kind": "esplora", "url": "http://hidden.onion", "proxy": "socks5://127.0.0.1:9050"}, False),
         ):
             wallet, discovery = self._discovery(backend=backend, partial=partial)
+            online_targets = [
+                *discovery.sync_state.targets,
+                {
+                    **discovery.sync_state.targets[-1],
+                    "address_index": 999,
+                    "script_pubkey": "ff" * 32,
+                },
+            ]
             compatibility = unittest.mock.Mock(return_value=([], {}))
             with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
+                "kassiber.core.sync_backends.discover_compatibility_descriptor_targets",
+                return_value={"targets": online_targets, "history_cache": {}},
+            ) as online_discovery, patch(
+                "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
+                side_effect=lambda _conn, _profile, _wallet, state: state,
+            ) as overlap_filter, patch(
                 "kassiber.core.chain_observer.prepare_observer_update"
             ) as native:
                 fetched = sync_backends.prepare_dependency_observer_fetch(unittest.mock.Mock(), {}, wallet, discovery)
             self.assertEqual(fetched.adapter_meta["observer_compatibility_reason"], expected)
             compatibility.assert_called_once()
+            self.assertEqual(compatibility.call_args.args[2].targets, online_targets)
+            online_discovery.assert_called_once()
+            if partial:
+                overlap_filter.assert_called_once()
+            else:
+                overlap_filter.assert_not_called()
             native.assert_not_called()
 
     def test_forced_refresh_rebuilds_incompatible_opaque_store_in_memory(self):

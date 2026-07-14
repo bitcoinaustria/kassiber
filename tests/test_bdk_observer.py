@@ -164,12 +164,27 @@ class BdkDependencyContractTest(TestCase):
                     backend=backend,
                     partial_targets=partial_targets,
                 )
+                online_targets = [
+                    *discovery.sync_state.targets,
+                    {
+                        **discovery.sync_state.targets[-1],
+                        "address_index": 999,
+                        "script_pubkey": "ff" * 32,
+                    },
+                ]
                 compatibility = mock.Mock(return_value=([{"txid": "11" * 32}], {}))
                 with mock.patch.object(
                     sync_backends,
                     "COMPATIBILITY_SYNC_BACKEND_ADAPTERS",
                     {backend["kind"]: compatibility},
-                ), mock.patch(
+                ), mock.patch.object(
+                    sync_backends,
+                    "discover_compatibility_descriptor_targets",
+                    return_value={"targets": online_targets, "history_cache": {}},
+                ) as online_discovery, mock.patch(
+                    "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
+                    side_effect=lambda _conn, _profile, _wallet, state: state,
+                ) as overlap_filter, mock.patch(
                     "kassiber.core.chain_observer.prepare_observer_update"
                 ) as dependency_prepare:
                     fetched = sync_backends.prepare_dependency_observer_fetch(
@@ -181,6 +196,15 @@ class BdkDependencyContractTest(TestCase):
                 )
                 self.assertTrue(fetched.authoritative_chain_observer)
                 compatibility.assert_called_once()
+                self.assertEqual(
+                    compatibility.call_args.args[2].targets,
+                    online_targets,
+                )
+                online_discovery.assert_called_once()
+                if partial_targets:
+                    overlap_filter.assert_called_once()
+                else:
+                    overlap_filter.assert_not_called()
                 dependency_prepare.assert_not_called()
 
     def test_supported_descriptor_families_construct_watch_only_bdk_wallets(self):

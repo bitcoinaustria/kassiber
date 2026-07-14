@@ -41,6 +41,7 @@ from ..util import normalize_chain_value, normalize_network_value, parse_bool, p
 from ..wallet_descriptors import (
     SCRIPT_TYPE_BRANCH_BASE,
     branch_descriptor,
+    branch_limits,
     decode_liquid_transaction,
     derive_descriptor_target,
     derive_descriptor_targets,
@@ -558,6 +559,93 @@ def _highest_used_branch_index(highest_used, branch_index):
     return parsed if parsed >= 0 else None
 
 
+def scan_compatibility_descriptor_targets(
+    plan,
+    *,
+    target_used_batch,
+    scan_batch_size=100,
+    highest_used=None,
+):
+    """Discover descriptor history for an explicit compatibility route.
+
+    BDK/LWK own ordinary descriptor discovery. Compatibility observers still
+    need their legacy backend-backed gap scan after source-overlap preflight,
+    because the finite local target set used by that preflight is not a safe
+    first-refresh discovery boundary.
+    """
+
+    limits = branch_limits(plan)
+    targets = []
+    targets_checked = 0
+
+    def emit_discovery_progress(branch_index, branch_gap_limit, consecutive_unused):
+        _emit_backend_progress(
+            "discovery",
+            targets_checked=targets_checked,
+            retained_targets=len(targets),
+            branch_index=branch_index,
+            gap_limit=branch_gap_limit,
+            unused_streak=consecutive_unused,
+        )
+
+    for branch in plan.branches:
+        branch_gap_limit = limits.get(branch.branch_index, plan.gap_limit)
+        if branch_gap_limit <= 1:
+            targets.append(
+                sync_target_from_derived(
+                    derive_descriptor_target(plan, branch.branch_index, 0)
+                )
+            )
+            continue
+        consecutive_unused = 0
+        address_index = 0
+        known_highest = _highest_used_branch_index(highest_used, branch.branch_index)
+        if known_highest is not None:
+            targets.extend(
+                sync_target_from_derived(target)
+                for target in derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=0,
+                    end=known_highest + 1,
+                )
+            )
+            address_index = known_highest + 1
+        while consecutive_unused < branch_gap_limit:
+            batch_targets = [
+                sync_target_from_derived(target)
+                for target in derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=address_index,
+                    end=address_index + scan_batch_size,
+                )
+            ]
+            if not batch_targets:
+                break
+            used_batch = list(target_used_batch(batch_targets))
+            if len(used_batch) != len(batch_targets):
+                raise AppError(
+                    "Compatibility descriptor discovery returned an unexpected number of usage checks"
+                )
+            targets_checked += len(batch_targets)
+            for target, is_used in zip(batch_targets, used_batch):
+                targets.append(target)
+                if is_used:
+                    consecutive_unused = 0
+                else:
+                    consecutive_unused += 1
+                address_index += 1
+                if consecutive_unused >= branch_gap_limit:
+                    break
+            emit_discovery_progress(
+                branch.branch_index,
+                branch_gap_limit,
+                consecutive_unused,
+            )
+    return targets
+
+
 def esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
     resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
     return http_get_json(resource, timeout=timeout, proxy_url=proxy_url)
@@ -658,6 +746,86 @@ def detect_active_script_types(backend, xpub, *, chain="bitcoin", network=None, 
         {"script_type": script_type, "has_history": bool(used)}
         for script_type, used in zip(candidates, history)
     ]
+
+
+def discover_compatibility_descriptor_targets(backend, plan, kind, checkpoint=None):
+    """Run backend-backed gap discovery for a named compatibility observer."""
+
+    timeout = backend_timeout(backend)
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    if kind == "esplora":
+        scan_batch_size = _bounded_http_workers(backend)
+        proxy_url = _backend_proxy_url(backend)
+        cached_stats = checkpoint.get("esplora_scripthashes") or {}
+
+        def target_used(target):
+            scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+            cached = cached_stats.get(scripthash)
+            if isinstance(cached, dict) and int(cached.get("tx_count") or 0) > 0:
+                return True
+            return esplora_scripthash_has_history(
+                backend["url"],
+                target["script_pubkey"],
+                timeout=timeout,
+                proxy_url=proxy_url,
+            )
+
+        return {
+            "targets": scan_compatibility_descriptor_targets(
+                plan,
+                target_used_batch=lambda targets: _map_bounded(
+                    targets,
+                    target_used,
+                    scan_batch_size,
+                ),
+                scan_batch_size=scan_batch_size,
+                highest_used=checkpoint.get("highest_used"),
+            ),
+            "history_cache": {},
+        }
+    if kind == "electrum":
+        electrum_batch_size = backend_batch_size(backend)
+        cached_statuses = dict(checkpoint.get("electrum_scripthash_statuses") or {})
+        with ElectrumClient(backend) as client:
+
+            def target_used_batch(targets):
+                scripthashes = [
+                    scriptpubkey_scripthash(target["script_pubkey"])
+                    for target in targets
+                ]
+                missing = [
+                    scripthash
+                    for scripthash in scripthashes
+                    if cached_statuses.get(scripthash) is None
+                ]
+                if missing:
+                    statuses = electrum_call_many(
+                        client,
+                        [
+                            ("blockchain.scripthash.subscribe", [scripthash])
+                            for scripthash in missing
+                        ],
+                        batch_size=electrum_batch_size,
+                    )
+                    for scripthash, status in zip(missing, statuses):
+                        cached_statuses[scripthash] = status
+                return [
+                    cached_statuses.get(scripthash) is not None
+                    for scripthash in scripthashes
+                ]
+
+            return {
+                "targets": scan_compatibility_descriptor_targets(
+                    plan,
+                    target_used_batch=target_used_batch,
+                    scan_batch_size=electrum_batch_size,
+                    highest_used=checkpoint.get("highest_used"),
+                ),
+                "history_cache": {},
+            }
+    raise AppError(
+        f"Compatibility descriptor discovery is not implemented for backend kind '{kind}'"
+    )
 
 
 def discover_bitcoinrpc_descriptor_targets(plan, checkpoint=None):
@@ -792,9 +960,64 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
     def compatibility_fetch(reason):
         if state.chain not in {"bitcoin", "liquid"} or discovery.kind not in {"esplora", "electrum"}:
             return None
+        compatibility_state = state
+        descriptor_plan = state.descriptor_plan
+        if (
+            descriptor_plan is not None
+            and getattr(descriptor_plan, "kind", None) != "silent-payment"
+        ):
+            preflight_scripts = {
+                target.get("script_pubkey")
+                for target in state.targets
+                if target.get("script_pubkey")
+            }
+            local_scripts = {
+                target.get("script_pubkey")
+                for target in _offline_descriptor_targets(
+                    descriptor_plan,
+                    state.checkpoint,
+                )
+                if target.get("script_pubkey")
+            }
+            online_discovery = discover_compatibility_descriptor_targets(
+                discovery.backend,
+                descriptor_plan,
+                discovery.kind,
+                checkpoint=state.checkpoint,
+            )
+            online_targets = list(online_discovery["targets"])
+            compatibility_state = replace(
+                state,
+                targets=online_targets,
+                tracked_scripts={
+                    target["script_pubkey"]: target
+                    for target in online_targets
+                    if target.get("script_pubkey")
+                },
+                history_cache=online_discovery.get("history_cache") or {},
+            )
+            if preflight_scripts != local_scripts:
+                # The local horizon was filtered before any connection. Apply
+                # the same ownership policy to newly discovered targets so a
+                # deeper compatibility scan cannot reintroduce overlap.
+                from . import source_overlap
+
+                compatibility_state = source_overlap.filter_sync_state_for_canonical_owner(
+                    conn,
+                    profile,
+                    wallet,
+                    compatibility_state,
+                )
+                if not compatibility_state.targets:
+                    raise AppError(
+                        "Source overlap covered every compatibility observer target",
+                        code="source_overlap_retry",
+                        hint="Retry refresh so Kassiber can skip the fully overlapping wallet before backend discovery.",
+                        retryable=True,
+                    )
         adapter = COMPATIBILITY_SYNC_BACKEND_ADAPTERS[discovery.kind]
         try:
-            records, meta = adapter(discovery.backend, wallet, state)
+            records, meta = adapter(discovery.backend, wallet, compatibility_state)
         except AppError:
             raise
         except Exception as exc:
@@ -814,7 +1037,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         )
         return WalletBackendFetch(
             backend=discovery.backend,
-            sync_state=state,
+            sync_state=compatibility_state,
             normalized_records=tuple(records),
             adapter_meta={
                 **dict(meta or {}),

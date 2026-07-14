@@ -38,6 +38,7 @@ from kassiber.core.sync_backends import (
     compatibility_esplora_sync_adapter,
     compatibility_esplora_utxos_for_wallet,
     discover_bitcoinrpc_descriptor_targets,
+    discover_compatibility_descriptor_targets,
     record_from_bitcoin_esplora_tx,
     record_from_bitcoinrpc_details,
     scriptpubkey_scripthash,
@@ -52,6 +53,7 @@ from kassiber.wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     DescriptorBranch,
     DescriptorPlan,
+    DerivedTarget,
 )
 
 
@@ -1580,6 +1582,62 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertNotIn("bitcoinrpc_pending_maturity", meta["freshness_checkpoint"])
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "45" * 32)
+
+    def test_compatibility_descriptor_discovery_reaches_history_beyond_local_horizon(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+        used_indices = {0, 3, 6}
+
+        def fake_derive(plan, branch_index=None, start=0, end=0):
+            del plan
+            return [
+                DerivedTarget(
+                    chain="bitcoin",
+                    network="bitcoin",
+                    branch_index=branch_index,
+                    branch_label="receive",
+                    address_index=index,
+                    address=f"bc1q{index}",
+                    unconfidential_address=None,
+                    script_pubkey=f"{index:064x}",
+                    derivation_path=f"m/0/{index}",
+                    derivation_paths=(f"m/0/{index}",),
+                    key_origins=(),
+                )
+                for index in range(start, end)
+            ]
+
+        with patch(
+            "kassiber.core.sync_backends.derive_descriptor_targets",
+            side_effect=fake_derive,
+        ), patch(
+            "kassiber.core.sync_backends.esplora_scripthash_has_history",
+            side_effect=lambda _url, script, **_kwargs: int(script, 16)
+            in used_indices,
+        ):
+            discovery = discover_compatibility_descriptor_targets(
+                {
+                    "name": "compatibility",
+                    "kind": "esplora",
+                    "url": "https://esplora.example",
+                    "batch_size": 1,
+                },
+                plan,
+                "esplora",
+            )
+
+        self.assertEqual(
+            [target["address_index"] for target in discovery["targets"]],
+            list(range(10)),
+        )
 
     def test_bitcoinrpc_descriptor_discovery_is_read_only(self):
         class FakeDescriptor:
