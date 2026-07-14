@@ -197,6 +197,12 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("tests.integration.test_live_lwk_observer", harness)
         self.assertNotIn("compose.chain-observers", harness)
 
+        oracle = (ROOT / "tests" / "integration" / "chain_observer_oracle.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("deadline = time.monotonic() + 180", oracle)
+        self.assertIn("transport tips have not caught up", oracle)
+
     def test_chain_observer_ci_job_is_path_aware_and_required(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"

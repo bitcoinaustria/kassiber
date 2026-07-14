@@ -630,13 +630,33 @@ def _probe_transports(*, chain: str, expected_height: int) -> list[dict[str, Any
     else:
         electrum_port = int(os.environ["KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT"])
         esplora_port = int(os.environ["KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT"])
-    header = _electrum_call("127.0.0.1", electrum_port, "blockchain.headers.subscribe")
-    if int((header or {}).get("height") or 0) != expected_height:
-        raise AssertionError("Electrum truth endpoint disagrees with node height")
-    with request.urlopen(f"http://127.0.0.1:{esplora_port}/api/blocks/tip/height", timeout=10) as response:
-        esplora_height = int(response.read().decode("ascii"))
-    if esplora_height != expected_height:
-        raise AssertionError("Esplora truth endpoint disagrees with node height")
+    deadline = time.monotonic() + 180
+    last_error: Exception | None = None
+    while True:
+        try:
+            header = _electrum_call(
+                "127.0.0.1", electrum_port, "blockchain.headers.subscribe"
+            )
+            electrum_height = int((header or {}).get("height") or 0)
+            with request.urlopen(
+                f"http://127.0.0.1:{esplora_port}/api/blocks/tip/height", timeout=10
+            ) as response:
+                esplora_height = int(response.read().decode("ascii"))
+            if electrum_height == expected_height and esplora_height == expected_height:
+                break
+            last_error = AssertionError(
+                "transport tips have not caught up "
+                f"(expected={expected_height}, electrum={electrum_height}, "
+                f"esplora={esplora_height})"
+            )
+        except Exception as exc:
+            last_error = exc
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Timed out waiting for {chain} truth transports at height "
+                f"{expected_height}: {last_error}"
+            ) from last_error
+        time.sleep(2)
     transports = [
         {"kind": "electrum", "transport": "tcp", "host": "127.0.0.1", "port": electrum_port, "height": expected_height},
         {"kind": "esplora", "transport": "http", "host": "127.0.0.1", "port": esplora_port, "height": expected_height},
