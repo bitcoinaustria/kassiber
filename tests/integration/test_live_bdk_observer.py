@@ -191,12 +191,12 @@ def _observer_snapshot(root: Path) -> tuple[str, int, int, int]:
 def _transport_projection(root: Path) -> list[dict]:
     rows = _transaction_projection(root)
     for row in rows:
-        if row["confirmed_at"] is None or row["occurred_at"] != row["confirmed_at"]:
-            # First-seen is intentionally the dependency scan time. Separate
-            # transports run sequentially, so compare the semantic state while
-            # retaining the real timestamp in each book, including after that
-            # mempool observation is subsequently confirmed.
-            row["occurred_at"] = "<unconfirmed-observed>"
+        # `occurred_at` is intentionally the dependency's first observation,
+        # which can be either mempool time or block time when two independent
+        # indexers converge at different speeds. Confirmation truth remains
+        # exact in `confirmed_at`; transport parity must not compare discovery
+        # timing even when one backend first sees the transaction confirmed.
+        row["occurred_at"] = "<transport-observed>"
     return rows
 
 
@@ -408,15 +408,25 @@ class LiveBdkObserverTest(unittest.TestCase):
                 )
                 self.assertIsNotNone(confirmed["confirmed_at"])
 
-                # Invalidate/reconsider exercises BDK's local-chain rollback,
-                # unconfirmed resurrection, and reconfirmation across restarts.
+                # Replace the confirming block with an equal-height empty
+                # competitor. A merely shorter backend is indistinguishable
+                # from a lagging indexer and must fail retryably; the competing
+                # block gives BDK a real hash mismatch to roll back safely.
                 _rpc(core_url, username, password, "invalidateblock", [replacement_block])
-                height -= 1
+                alternate_block = _rpc(
+                    core_url,
+                    username,
+                    password,
+                    "generateblock",
+                    [mining, []],
+                )["hash"]
+                self.assertNotEqual(alternate_block, replacement_block)
+                height = int(_rpc(core_url, username, password, "getblockcount"))
                 _wait_for_electrum_height(electrum_url, height)
                 _wait_for_electrum_confirmation(
                     electrum_url,
                     replacement_txid,
-                    height=height + 1,
+                    height=height,
                     confirmed=False,
                 )
                 _wait_for_esplora(esplora_url, replacement_txid, confirmed=False)
@@ -433,8 +443,10 @@ class LiveBdkObserverTest(unittest.TestCase):
                 )
                 self.assertIsNone(reorged["confirmed_at"])
 
-                _rpc(core_url, username, password, "reconsiderblock", [replacement_block])
-                height += 1
+                # Mine the resurrected mempool transaction on the competing
+                # branch to prove reconfirmation after the rollback.
+                _rpc(core_url, username, password, "generatetoaddress", [1, mining])
+                height = int(_rpc(core_url, username, password, "getblockcount"))
                 _wait_for_electrum_height(electrum_url, height)
                 _wait_for_electrum_confirmation(
                     electrum_url,
