@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from unittest import mock
 
 from embit import bip32
 
@@ -19,6 +20,7 @@ from kassiber.wallet_setup import (
     normalize_script_types,
     normalize_wallet_material,
 )
+from kassiber.wallet_security import assert_descriptor_text_is_watch_only
 
 
 _SLIP132_MAINNET_VERSIONS = {
@@ -308,6 +310,20 @@ class NormalizeWalletMaterialWatchOnlyTests(unittest.TestCase):
                     "wallet_spending_private_material",
                 )
                 self.assertNotIn(xprv, str(ctx.exception))
+
+    def test_descriptor_preflight_propagates_typed_security_errors(self):
+        rejection = AppError(
+            "private material",
+            code="wallet_spending_private_material",
+            retryable=False,
+        )
+        with mock.patch(
+            "embit.descriptor.Descriptor.from_string",
+            side_effect=rejection,
+        ):
+            with self.assertRaises(AppError) as ctx:
+                assert_descriptor_text_is_watch_only("wpkh(placeholder)")
+        self.assertIs(ctx.exception, rejection)
 
 
 class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):

@@ -68,6 +68,10 @@ def assert_descriptor_text_is_watch_only(value: Any) -> None:
         try:
             descriptor_class = getattr(import_module(module_name), class_name)
             descriptor = descriptor_class.from_string(candidate)
+        except AppError:
+            # Security decisions are fail-closed even if a current or future
+            # descriptor parser reports them from inside its parsing hook.
+            raise
         except Exception:
             continue
         assert_descriptor_is_watch_only(descriptor)
