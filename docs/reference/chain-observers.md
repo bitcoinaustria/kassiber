@@ -20,7 +20,9 @@ through descriptor discovery.
 ## Target boundary
 
 Pinned `bdkpython` 3.0.0 (`bdk_wallet`) owns supported Bitcoin
-descriptor-wallet chain state for Esplora and Electrum. Pinned `lwk` 0.18.0
+descriptor-wallet chain state for Esplora and Electrum on CPython 3.10–3.13
+macOS, Linux x86-64, and Windows AMD64, where the release ships native wheels.
+Other runtimes use the named Bitcoin compatibility observer. Pinned `lwk` 0.18.0
 (`lwk_wollet`) owns supported Liquid descriptor-wallet chain state for
 Esplora and Electrum on platforms for which it ships a wheel; macOS Intel uses
 the named Liquid compatibility observer. Kassiber continues to own:
@@ -42,7 +44,7 @@ Authority is scoped by connection model, not by chain alone:
 
 | Configuration | Authoritative observer |
 | --- | --- |
-| Bitcoin descriptor + Esplora/Electrum | BDK |
+| Bitcoin descriptor + Esplora/Electrum | BDK where the pinned binding ships; named compatibility observer elsewhere |
 | Liquid descriptor + Esplora/Electrum | LWK where the pinned binding ships; named compatibility observer on macOS Intel |
 | Bitcoin Core backend | Bitcoin Core RPC adapter |
 | Silent Payments wallet | BIP352/BIP392 Silent Payments scanner |

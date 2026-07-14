@@ -13,7 +13,7 @@ authors = [
   { name = "Bitcoin Austria" }
 ]
 dependencies = [
-  "bdkpython==3.0.0",
+  "bdkpython==3.0.0; python_version < '3.14' and (platform_system == 'Darwin' or (platform_system == 'Linux' and platform_machine == 'x86_64') or (platform_system == 'Windows' and platform_machine == 'AMD64'))",
   "embit>=0.8.0",
   "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@24eeeed5e88d79cedfada9062dbb4fb45f55946c",
   "XlsxWriter>=3.2,<4",

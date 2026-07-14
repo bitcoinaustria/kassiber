@@ -25,6 +25,23 @@ from .store import CoveragePoint, StoredObserverState
 BDK_OBSERVER_STATE_VERSION = 1
 
 
+def require_bdk() -> Any:
+    """Load the optional native binding or return a typed capability error."""
+
+    try:
+        import bdkpython as bdk
+    except ModuleNotFoundError as exc:
+        if exc.name != "bdkpython":
+            raise
+        raise AppError(
+            "The BDK Python binding is unavailable on this runtime",
+            code="dependency_missing",
+            hint="Use the compatibility observer or install Kassiber on a supported BDK wheel platform.",
+            retryable=False,
+        ) from exc
+    return bdk
+
+
 def _truthy_env(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -72,6 +89,12 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         return "address_list"
     if getattr(plan, "kind", None) == "silent-payment":
         return "silent_payment"
+    try:
+        require_bdk()
+    except AppError as exc:
+        if exc.code == "dependency_missing":
+            return "dependency_unavailable"
+        raise
     kind = normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         return "backend_kind"

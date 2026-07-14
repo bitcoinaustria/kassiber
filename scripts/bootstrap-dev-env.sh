@@ -35,12 +35,21 @@ import platform
 import sys
 from importlib.metadata import version
 
-import bdkpython
 import embit
 import sqlcipher3
 
 print(f"Verified embit from {embit.__file__}")
-print(f"Verified bdkpython {version('bdkpython')} from {bdkpython.__file__}")
+bdk_supported = sys.version_info < (3, 14) and (
+    sys.platform == "darwin"
+    or (sys.platform == "linux" and platform.machine() == "x86_64")
+    or (sys.platform == "win32" and platform.machine() == "AMD64")
+)
+if bdk_supported:
+    import bdkpython
+
+    print(f"Verified bdkpython {version('bdkpython')} from {bdkpython.__file__}")
+else:
+    print("Skipped optional bdkpython verification on an unsupported wheel platform")
 if sys.platform == "darwin" and platform.machine() == "x86_64":
     print("Skipped optional lwk verification on macOS x86_64")
 else:

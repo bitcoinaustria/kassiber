@@ -488,7 +488,7 @@ name = "kassiber"
 version = "0.22.55"
 source = { editable = "." }
 dependencies = [
-    { name = "bdkpython" },
+    { name = "bdkpython", marker = "(python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version < '3.14' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version < '3.14' and sys_platform == 'darwin')" },
     { name = "certifi" },
     { name = "cryptography" },
     { name = "embit" },
@@ -509,7 +509,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bdkpython", specifier = "==3.0.0" },
+    { name = "bdkpython", marker = "(python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version < '3.14' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version < '3.14' and sys_platform == 'darwin')", specifier = "==3.0.0" },
     { name = "certifi", specifier = ">=2024.7.4" },
     { name = "cryptography", specifier = ">=44,<48" },
     { name = "embit", specifier = ">=0.8.0" },

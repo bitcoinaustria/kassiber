@@ -121,6 +121,24 @@ class BdkDependencyContractTest(TestCase):
                 )
         self.assertEqual(raised.exception.code, "observer_identity_invalid")
 
+    def test_missing_native_dependency_selects_named_compatibility(self):
+        _wallet, discovery = self._discovery()
+        with mock.patch(
+            "kassiber.core.chain_observer.bdk.require_bdk",
+            side_effect=AppError(
+                "missing",
+                code="dependency_missing",
+                retryable=False,
+            ),
+        ):
+            self.assertEqual(
+                bdk_compatibility_reason(
+                    discovery.backend,
+                    discovery.sync_state,
+                ),
+                "dependency_unavailable",
+            )
+
     def test_bdk_failure_is_not_retried_through_compatibility_adapter(self):
         wallet, discovery = self._discovery()
         compatibility = mock.Mock(side_effect=AssertionError("legacy adapter called"))
@@ -406,7 +424,13 @@ class BdkDependencyContractTest(TestCase):
         workflow = (ROOT / ".github/workflows/prerelease-binaries.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"bdkpython==3.0.0"', pyproject)
+        self.assertIn(
+            '"bdkpython==3.0.0; python_version < \'3.14\' and '
+            "(platform_system == 'Darwin' or (platform_system == 'Linux' and "
+            "platform_machine == 'x86_64') or (platform_system == 'Windows' and "
+            "platform_machine == 'AMD64'))\"",
+            pyproject,
+        )
         self.assertIn('name = "bdkpython"\nversion = "3.0.0"', lock)
         for platform in (
             "macosx_11_0_arm64",
