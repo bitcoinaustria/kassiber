@@ -981,10 +981,63 @@ def resolve_wallet_sync_targets(backend, wallet):
     )
 
 
+def _observer_discovered_targets(observer_updates):
+    """Collect owned scripts discovered beyond the finite preflight horizon."""
+
+    targets = {}
+
+    def add_target(value):
+        target = dict(value) if isinstance(value, dict) else {"script_pubkey": value}
+        script = str(
+            target.get("script_pubkey") or target.get("scriptpubkey") or ""
+        ).strip().lower()
+        if not script:
+            return
+        try:
+            bytes.fromhex(script)
+        except ValueError:
+            return
+        target["script_pubkey"] = script
+        targets.setdefault(script, target)
+
+    for prepared in observer_updates:
+        update = getattr(prepared, "update", None)
+        facts = update.get("facts") if isinstance(update, dict) else None
+        if not isinstance(facts, dict):
+            continue
+        for output in facts.get("outputs") or []:
+            add_target(output)
+        for record in facts.get("transaction_records") or []:
+            if not isinstance(record, dict):
+                continue
+            raw = record.get("raw_json")
+            try:
+                raw = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            for script in raw.get("observer_owned_scripts") or []:
+                add_target(script)
+            for entry in [*(raw.get("vin") or []), *(raw.get("vout") or [])]:
+                if not isinstance(entry, dict):
+                    continue
+                owned = (
+                    entry.get("prevout")
+                    if isinstance(entry.get("prevout"), dict)
+                    else entry
+                )
+                if isinstance(owned, dict) and owned.get("role") == "owned":
+                    add_target(owned)
+    return list(targets.values())
+
+
 def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
     """Prepare supported Bitcoin/Liquid descriptor refreshes through dependencies."""
 
-    from .chain_observer import ObserverPrepareRequest, prepare_observer_update
+    from .chain_observer import (
+        ObserverPrepareRequest,
+        discard_prepared_observer_updates,
+        prepare_observer_update,
+    )
     from .chain_observer.bdk import (
         BdkObserver,
         bdk_branches_for_identity,
@@ -1163,9 +1216,49 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                     ),
                 )
             )
-    except BaseException:
-        from .chain_observer import discard_prepared_observer_updates
+        discovered_targets = _observer_discovered_targets(prepared)
+        newly_discovered = [
+            target
+            for target in discovered_targets
+            if target.get("script_pubkey") not in actual_scripts
+        ]
+        if newly_discovered:
+            from . import source_overlap
 
+            expanded_targets = {
+                str(target.get("script_pubkey") or "").strip().lower(): target
+                for target in state.targets
+                if target.get("script_pubkey")
+            }
+            for target in newly_discovered:
+                expanded_targets.setdefault(target["script_pubkey"], target)
+            expanded_state = replace(
+                state,
+                targets=list(expanded_targets.values()),
+                tracked_scripts=dict(expanded_targets),
+            )
+            filtered_state = source_overlap.filter_sync_state_for_canonical_owner(
+                conn,
+                profile,
+                wallet,
+                expanded_state,
+            )
+            filtered_scripts = {
+                str(target.get("script_pubkey") or "").strip().lower()
+                for target in filtered_state.targets
+                if target.get("script_pubkey")
+            }
+            if filtered_scripts != set(expanded_targets):
+                discard_prepared_observer_updates(prepared)
+                fallback = compatibility_fetch("source_overlap_dependency_discovery")
+                if fallback is None:
+                    raise AppError(
+                        "Dependency-discovered ownership overlap has no safe observer route",
+                        code="source_overlap",
+                        retryable=False,
+                    )
+                return fallback
+    except BaseException:
         discard_prepared_observer_updates(prepared)
         raise
     return WalletBackendFetch(

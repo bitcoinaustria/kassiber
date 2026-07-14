@@ -243,6 +243,76 @@ class BdkDependencyContractTest(TestCase):
                 overlap_filter.assert_called_once()
                 dependency_prepare.assert_not_called()
 
+    def test_dependency_discovered_overlap_falls_back_before_observer_apply(self):
+        wallet, discovery = self._discovery()
+        deeper_target = {
+            **discovery.sync_state.targets[-1],
+            "address_index": 999,
+            "script_pubkey": "ff" * 32,
+        }
+        prepared = mock.Mock()
+        prepared.update = {
+            "facts": {
+                "outputs": [],
+                "transaction_records": [
+                    {
+                        "raw_json": json.dumps(
+                            {"observer_owned_scripts": [deeper_target["script_pubkey"]]}
+                        )
+                    }
+                ],
+            }
+        }
+        online_targets = [*discovery.sync_state.targets, deeper_target]
+        compatibility = mock.Mock(return_value=([], {}))
+
+        def filter_deeper(_conn, _profile, _wallet, state):
+            kept = [
+                target
+                for target in state.targets
+                if target.get("script_pubkey") != deeper_target["script_pubkey"]
+            ]
+            return replace(
+                state,
+                targets=kept,
+                tracked_scripts={target["script_pubkey"]: target for target in kept},
+            )
+
+        with mock.patch.object(
+            sync_backends,
+            "COMPATIBILITY_SYNC_BACKEND_ADAPTERS",
+            {"esplora": compatibility},
+        ), mock.patch.object(
+            sync_backends,
+            "discover_compatibility_descriptor_targets",
+            return_value={"targets": online_targets, "history_cache": {}},
+        ), mock.patch(
+            "kassiber.core.chain_observer.prepare_observer_update",
+            return_value=prepared,
+        ), mock.patch(
+            "kassiber.core.chain_observer.discard_prepared_observer_updates"
+        ) as discard, mock.patch(
+            "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
+            side_effect=filter_deeper,
+        ) as overlap_filter:
+            fetched = sync_backends.prepare_dependency_observer_fetch(
+                mock.Mock(), {}, wallet, discovery
+            )
+
+        self.assertEqual(fetched.adapter_meta["observer_route"], "compatibility")
+        self.assertEqual(
+            fetched.adapter_meta["observer_compatibility_reason"],
+            "source_overlap_dependency_discovery",
+        )
+        self.assertEqual(fetched.observer_updates, ())
+        self.assertEqual(
+            [target["script_pubkey"] for target in fetched.sync_state.targets],
+            [target["script_pubkey"] for target in discovery.sync_state.targets],
+        )
+        discard.assert_called_once_with([prepared])
+        self.assertEqual(overlap_filter.call_count, 2)
+        compatibility.assert_called_once()
+
     def test_supported_descriptor_families_construct_watch_only_bdk_wallets(self):
         root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(MNEMONIC))
         fingerprint = root.my_fingerprint.hex()

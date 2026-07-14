@@ -538,6 +538,45 @@ class LwkDescriptorContractTest(unittest.TestCase):
             overlap_filter.assert_called_once()
             native.assert_not_called()
 
+    def test_lwk_owned_graph_scripts_feed_postscan_overlap_filter(self):
+        owned_input = "0014" + "11" * 20
+        owned_output = "0014" + "22" * 20
+        external = "0014" + "33" * 20
+        prepared = SimpleNamespace(
+            update={
+                "facts": {
+                    "outputs": [],
+                    "transaction_records": [
+                        {
+                            "raw_json": json.dumps(
+                                {
+                                    "vin": [
+                                        {
+                                            "prevout": {
+                                                "scriptpubkey": owned_input,
+                                                "role": "owned",
+                                            }
+                                        }
+                                    ],
+                                    "vout": [
+                                        {"scriptpubkey": owned_output, "role": "owned"},
+                                        {"scriptpubkey": external, "role": "external"},
+                                    ],
+                                }
+                            )
+                        }
+                    ],
+                }
+            }
+        )
+
+        targets = sync_backends._observer_discovered_targets([prepared])
+
+        self.assertEqual(
+            {target["script_pubkey"] for target in targets},
+            {owned_input, owned_output},
+        )
+
     def test_forced_refresh_rebuilds_incompatible_opaque_store_in_memory(self):
         wallet, discovery = self._discovery(force_full=True)
         prepared = object()
