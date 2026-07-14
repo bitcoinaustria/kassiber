@@ -464,6 +464,49 @@ class BdkDependencyContractTest(TestCase):
         self.assertNotIn("fiat_rate", imported_price_updates)
         self.assertNotIn("pricing_timestamp", imported_price_updates)
 
+    def test_authoritative_confirmation_refreshes_block_time_and_fingerprint(self):
+        normalized = normalize_import_record(
+            {
+                "txid": "22" * 32,
+                "occurred_at": "2026-01-02T12:00:00Z",
+                "confirmed_at": "2026-01-02T12:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": "0.000001",
+                "fee": "0",
+                "raw_json": {"observer": "bdk", "status": {"confirmed": True}},
+            },
+            source_label="backend:test",
+        )
+        for existing_confirmed_at in (None, "2026-01-02T11:00:00Z"):
+            with self.subTest(existing_confirmed_at=existing_confirmed_at):
+                existing = defaultdict(
+                    lambda: None,
+                    confirmed_at=existing_confirmed_at,
+                    occurred_at="2026-01-02T11:00:00Z",
+                    fingerprint="old",
+                    amount=100_000,
+                    fee=0,
+                    fiat_rate=100_000.0,
+                    fiat_value=10.0,
+                    fiat_rate_exact="100000",
+                    fiat_value_exact="10",
+                    fiat_price_source="rates_cache",
+                    pricing_source_kind="fmv_provider",
+                )
+                updates = _transaction_merge_updates(
+                    existing,
+                    normalized,
+                    "new",
+                    authoritative_chain_observer=True,
+                )
+                self.assertEqual(updates["confirmed_at"], "2026-01-02T12:00:00Z")
+                self.assertEqual(updates["occurred_at"], "2026-01-02T12:00:00Z")
+                self.assertEqual(updates["fingerprint"], "new")
+                for column in PRICE_COLUMNS:
+                    self.assertIn(column, updates)
+                    self.assertIsNone(updates[column])
+
     def test_exact_pin_lock_wheels_and_packager_collection(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         lock = (ROOT / "uv.lock").read_text(encoding="utf-8")

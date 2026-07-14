@@ -694,13 +694,26 @@ def _transaction_merge_updates(
         existing["confirmed_at"] in (None, "")
         and normalized["confirmed_at"] is not None
     )
+    authoritative_confirmation_changed = (
+        authoritative_chain_observer
+        and normalized["confirmed_at"] is not None
+        and existing["confirmed_at"] != normalized["confirmed_at"]
+    )
     confirmed_at_removed = (
         existing["confirmed_at"] not in (None, "")
         and normalized["confirmed_at"] is None
         and authoritative_chain_observer
     )
-    if confirmed_at_added:
+    if confirmed_at_added or authoritative_confirmation_changed:
         updates["confirmed_at"] = normalized["confirmed_at"]
+        if authoritative_chain_observer:
+            # Dependency observers use block time for confirmed rows. Refresh
+            # it both on first confirmation and when a reorg moves the tx to a
+            # different block so pricing and fingerprint identity stay aligned.
+            if existing["occurred_at"] != normalized["occurred_at"]:
+                updates["occurred_at"] = normalized["occurred_at"]
+            if existing["fingerprint"] != fingerprint:
+                updates["fingerprint"] = fingerprint
     elif confirmed_at_removed:
         # Dependency observers are canonical chain state, so a reorg must be
         # allowed to demote a previously confirmed record. Generic imports
@@ -730,7 +743,7 @@ def _transaction_merge_updates(
     if has_import_price and (not has_existing_price or incoming_priority >= existing_priority):
         updates.update({column: normalized[column] for column in PRICE_COLUMNS})
     elif (
-        (confirmed_at_added or confirmed_at_removed)
+        (confirmed_at_added or authoritative_confirmation_changed or confirmed_at_removed)
         and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE
     ):
         # Rate-cache pricing is timestamp-derived. Both confirmation and
