@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from kassiber.envelope import json_ready
 from kassiber.core import accounts as core_accounts
@@ -810,6 +812,49 @@ class SilentPaymentsTests(unittest.TestCase):
         conn.commit()
         blockers = ui_snapshot.build_report_blockers_snapshot(conn)["blockers"]
         self.assertTrue(any(blocker.get("code") == "silent_payment_scan_incomplete" for blocker in blockers))
+
+    def test_only_complete_timestamped_scans_are_authoritative(self):
+        plan = silent_payments.build_plan(_sp_config())
+        state = WalletSyncState(
+            chain="bitcoin",
+            network="main",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=[silent_payments.sync_target(plan)],
+            tracked_scripts={},
+            history_cache={},
+        )
+        discovery = SimpleNamespace(
+            backend={"name": "sp", "kind": "esplora", "url": "https://sp.invalid"},
+            sync_state=state,
+            kind="esplora",
+            started="2026-07-14T12:00:00Z",
+            force_full=False,
+            skip_outcome=None,
+        )
+        cases = (
+            (False, "2026-06-01T12:00:00Z", False),
+            (True, None, False),
+            (True, "2026-06-01T12:00:00Z", True),
+        )
+        for complete, confirmed_at, expected in cases:
+            with self.subTest(complete=complete, confirmed_at=confirmed_at):
+                adapter = lambda *_args: (
+                    [{"txid": "11" * 32, "confirmed_at": confirmed_at}],
+                    {"silent_payment_scan_complete": complete},
+                )
+                with patch.object(
+                    sync_backends,
+                    "COMPATIBILITY_SYNC_BACKEND_ADAPTERS",
+                    {**sync_backends.COMPATIBILITY_SYNC_BACKEND_ADAPTERS, "esplora": adapter},
+                ):
+                    fetched = sync_backends.prepare_dependency_observer_fetch(
+                        object(),
+                        {},
+                        {"id": "wallet", "label": "SP"},
+                        discovery,
+                    )
+                self.assertEqual(fetched.authoritative_chain_observer, expected)
 
     def test_partial_scan_does_not_mark_missing_utxos_spent(self):
         conn = self._db()

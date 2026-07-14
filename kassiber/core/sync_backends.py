@@ -1072,10 +1072,18 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             if state.chain == "bitcoin" and reason == "address_list"
             else "compatibility"
         )
+        normalized_records = tuple(records)
+        authoritative = reason != "silent_payment" or (
+            (meta or {}).get("silent_payment_scan_complete") is True
+            and all(
+                record.get("confirmed_at") not in (None, "")
+                for record in normalized_records
+            )
+        )
         return WalletBackendFetch(
             backend=discovery.backend,
             sync_state=compatibility_state,
-            normalized_records=tuple(records),
+            normalized_records=normalized_records,
             adapter_meta={
                 **dict(meta or {}),
                 "observer_route": route,
@@ -1084,7 +1092,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             kind=discovery.kind,
             started=discovery.started,
             force_full=discovery.force_full,
-            authoritative_chain_observer=True,
+            authoritative_chain_observer=authoritative,
         )
 
     dependency_kind = "lwk" if state.chain == "liquid" else "bdk"
