@@ -656,6 +656,14 @@ def _esplora_auth_headers(backend):
     return None
 
 
+def _esplora_call_kwargs(*, timeout, headers=None, proxy_url=None, **extra):
+    """Keep unauthenticated compatibility calls on their historical shape."""
+    kwargs = {"timeout": timeout, "proxy_url": proxy_url, **extra}
+    if headers is not None:
+        kwargs["headers"] = headers
+    return kwargs
+
+
 def esplora_scripthash_stats(
     base_url,
     script_pubkey_hex,
@@ -665,7 +673,10 @@ def esplora_scripthash_stats(
     proxy_url=None,
 ):
     resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
-    return http_get_json(resource, timeout=timeout, headers=headers, proxy_url=proxy_url)
+    return http_get_json(
+        resource,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
+    )
 
 
 def esplora_stats_fingerprint(payload):
@@ -705,9 +716,7 @@ def esplora_scripthash_has_history(
     payload = esplora_scripthash_stats(
         base_url,
         script_pubkey_hex,
-        timeout=timeout,
-        headers=headers,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
     chain_stats = payload.get("chain_stats") or {}
     mempool_stats = payload.get("mempool_stats") or {}
@@ -724,9 +733,11 @@ def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
             return esplora_scripthash_has_history(
                 backend["url"],
                 script_pubkey,
-                timeout=timeout,
-                headers=headers,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             )
 
         return _map_bounded(script_pubkeys, probe, workers)
@@ -794,9 +805,11 @@ def discover_compatibility_descriptor_targets(backend, plan, kind, checkpoint=No
             return esplora_scripthash_has_history(
                 backend["url"],
                 target["script_pubkey"],
-                timeout=timeout,
-                headers=headers,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             )
 
         return {
@@ -1183,9 +1196,7 @@ def fetch_esplora_history(
         )
         page = http_get_json(
             chain_url,
-            timeout=timeout,
-            headers=headers,
-            proxy_url=proxy_url,
+            **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
         )
         if not page:
             break
@@ -1201,9 +1212,7 @@ def fetch_esplora_history(
     mempool_url = append_url_path(base_url, f"{resource_path}/txs/mempool")
     for tx in http_get_json(
         mempool_url,
-        timeout=timeout,
-        headers=headers,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     ):
         txid = tx.get("txid")
         if txid and txid not in seen_txids:
@@ -1224,10 +1233,12 @@ def fetch_esplora_scripthash_transactions(
     return fetch_esplora_history(
         base_url,
         f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}",
-        max_pages=max_pages,
-        timeout=timeout,
-        headers=headers,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(
+            timeout=timeout,
+            headers=headers,
+            proxy_url=proxy_url,
+            max_pages=max_pages,
+        ),
     )
 
 
@@ -1244,9 +1255,7 @@ def fetch_esplora_scripthash_utxos(
             base_url,
             f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}/utxo",
         ),
-        timeout=timeout,
-        headers=headers,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
 
 
@@ -1268,9 +1277,7 @@ def fetch_esplora_transaction(
     """
     return http_get_json(
         append_url_path(base_url, f"tx/{txid}"),
-        timeout=timeout,
-        headers=headers,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
 
 
@@ -1342,17 +1349,14 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
     chain_source = chain or backend_value(backend, "chain")
     normalized_chain = normalize_chain_value(chain_source) if chain_source else ""
     if kind == "esplora":
-        fetch_kwargs = {
-            "timeout": timeout,
-            "proxy_url": _backend_proxy_url(backend),
-        }
-        auth_headers = _esplora_auth_headers(backend)
-        if auth_headers is not None:
-            fetch_kwargs["headers"] = auth_headers
         tx = fetch_esplora_transaction(
             backend["url"],
             txid,
-            **fetch_kwargs,
+            **_esplora_call_kwargs(
+                timeout=timeout,
+                headers=_esplora_auth_headers(backend),
+                proxy_url=_backend_proxy_url(backend),
+            ),
         )
         return _legs_from_esplora_tx(tx, normalized_chain)
     if kind == "electrum":
@@ -1463,9 +1467,11 @@ def _esplora_tip_height(base_url, timeout=30, *, headers=None, proxy_url=None):
         return int(
             http_get_text(
                 append_url_path(base_url, "blocks/tip/height"),
-                timeout=timeout,
-                headers=headers,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
         )
     except (AppError, TypeError, ValueError):
@@ -1552,9 +1558,7 @@ def compatibility_esplora_utxos_for_wallet(backend, sync_state: WalletSyncState)
     proxy_url = _backend_proxy_url(backend)
     tip_height = _esplora_tip_height(
         backend["url"],
-        timeout=timeout,
-        headers=headers,
-        proxy_url=proxy_url,
+        **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
     )
 
     # Phase 1: fetch each tracked script's UTXO set concurrently, bounded by the
@@ -1564,9 +1568,7 @@ def compatibility_esplora_utxos_for_wallet(backend, sync_state: WalletSyncState)
         raw_utxos = fetch_esplora_scripthash_utxos(
             backend["url"],
             target["script_pubkey"],
-            timeout=timeout,
-            headers=headers,
-            proxy_url=proxy_url,
+            **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
         )
         return target, list(raw_utxos or [])
 
@@ -1606,9 +1608,11 @@ def compatibility_esplora_utxos_for_wallet(backend, sync_state: WalletSyncState)
         def fetch_liquid_decode(txid):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
-                timeout=timeout,
-                headers=headers,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
             return txid, decode_liquid_transaction(raw_hex)
 
@@ -2326,9 +2330,7 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         stats = esplora_scripthash_stats(
             backend["url"],
             target["script_pubkey"],
-            timeout=timeout,
-            headers=headers,
-            proxy_url=proxy_url,
+            **_esplora_call_kwargs(timeout=timeout, headers=headers, proxy_url=proxy_url),
         )
         return target, scripthash, stats
 
@@ -2393,10 +2395,12 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         for tx in fetch_esplora_scripthash_transactions(
             backend["url"],
             target["script_pubkey"],
-            max_pages=max_pages,
-            timeout=timeout,
-            headers=headers,
-            proxy_url=proxy_url,
+            **_esplora_call_kwargs(
+                timeout=timeout,
+                headers=headers,
+                proxy_url=proxy_url,
+                max_pages=max_pages,
+            ),
         ):
             target_txs.append(tx)
             known_txids.add(tx["txid"])
@@ -2436,9 +2440,11 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         if txid not in raw_tx_cache:
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
-                timeout=backend_timeout(backend),
-                headers=headers,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=backend_timeout(backend),
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
             raw_tx_cache[txid] = {
                 "raw_hex": raw_hex,
@@ -2463,9 +2469,11 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         def fetch_liquid_main_tx(txid):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
-                timeout=timeout,
-                headers=headers,
-                proxy_url=proxy_url,
+                **_esplora_call_kwargs(
+                    timeout=timeout,
+                    headers=headers,
+                    proxy_url=proxy_url,
+                ),
             ).strip()
             return txid, raw_hex
 
