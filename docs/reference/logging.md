@@ -64,7 +64,8 @@ itself, so it must not become a health checker or background probe.
 
 **Secret floor — applied at insert, in every buffer.** Seed phrases,
 extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
-`spspend` material, API keys, bearer tokens, passphrase assignments. These are
+`spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
+bearer tokens, passphrase assignments. These are
 scrubbed by
 [`kassiber/redaction.py`](../../kassiber/redaction.py) (Python),
 `redact_sensitive_text` (Rust), and `redactSecretFloorText` (TypeScript)

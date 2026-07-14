@@ -14,6 +14,7 @@ from kassiber.core import sync as core_sync
 from kassiber.core import sync_backends
 from kassiber.core.chain_observer.bdk import (
     BdkObserver,
+    _electrum_confirmation_rebuild_needed,
     _electrum_header_hash,
     bdk_branches_for_identity,
     bdk_compatibility_reason,
@@ -154,7 +155,7 @@ class BdkDependencyContractTest(unittest.TestCase):
                 compatibility = mock.Mock(return_value=([{"txid": "11" * 32}], {}))
                 with mock.patch.object(
                     sync_backends,
-                    "SYNC_BACKEND_ADAPTERS",
+                    "COMPATIBILITY_SYNC_BACKEND_ADAPTERS",
                     {backend["kind"]: compatibility},
                 ), mock.patch(
                     "kassiber.core.chain_observer.prepare_observer_update"
@@ -297,6 +298,22 @@ class BdkDependencyContractTest(unittest.TestCase):
             _electrum_header_hash(header),
             "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
         )
+
+    def test_electrum_rebuild_is_limited_to_advanced_tip_with_stale_mempool_position(self):
+        wallet = mock.Mock()
+        wallet.latest_checkpoint.return_value.height = 8
+        confirmed = mock.Mock()
+        confirmed.chain_position.is_confirmed.return_value = True
+        mempool = mock.Mock()
+        mempool.chain_position.is_confirmed.return_value = False
+
+        wallet.transactions.return_value = [mempool]
+        self.assertTrue(_electrum_confirmation_rebuild_needed(wallet, 7))
+        self.assertFalse(_electrum_confirmation_rebuild_needed(wallet, 8))
+        self.assertFalse(_electrum_confirmation_rebuild_needed(wallet, None))
+
+        wallet.transactions.return_value = [confirmed]
+        self.assertFalse(_electrum_confirmation_rebuild_needed(wallet, 7))
 
     def test_authoritative_observer_can_demote_confirmation(self):
         existing = defaultdict(

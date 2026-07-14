@@ -119,7 +119,14 @@ def prepare_observer_update(
             code="observer_prepare_in_transaction",
             retryable=False,
         )
-    prior_state = load_observer_state(conn, identity)
+    try:
+        prior_state = load_observer_state(conn, identity)
+    except AppError as exc:
+        if not request.force_full or exc.code != "observer_state_rebuild_required":
+            raise
+        # Rebuild in memory first. The incompatible encrypted rows remain
+        # untouched until the coordinator atomically applies the replacement.
+        prior_state = None
     prepared = observer.prepare(request, prior_state)
     if not isinstance(prepared, Mapping):
         raise AppError(

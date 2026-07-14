@@ -103,7 +103,11 @@ start or bundle Tor, so the user still needs an existing Tor service.
 - `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — project SQLite DB.
   Contains the books/profiles in that project: descriptors, xpubs, addresses,
   transactions, metadata, rates cache, backend definitions/defaults, and any
-  stored backend credentials.
+  stored backend credentials. Versioned BDK/LWK observer state and opaque LWK
+  values live only in this database; the bindings receive no path and may not
+  create a side database, wallet file, cache, or state directory. These derived
+  rows are excluded from diagnostics, audit packages, AI/desktop payloads, and
+  cross-device authored-event replication.
 - Persisted AI chat sessions also live inside that database
   (`ai_chat_sessions` / `ai_chat_messages`) — never as separate plaintext
   files. The default `auto` policy persists only when the database is

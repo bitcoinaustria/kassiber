@@ -48,7 +48,7 @@ same verification surface.
 
 ## Right now
 
-- [ ] **Replace manual Bitcoin/Liquid chain state with dependency-backed
+- [x] **Replace manual Bitcoin/Liquid chain state with dependency-backed
   observers** in one phase-checkpointed PR. Current truth and the initial
   capability matrix live in
   [`docs/reference/chain-observers.md`](docs/reference/chain-observers.md).
@@ -83,7 +83,7 @@ same verification surface.
   - [x] Phase 7 — Liquid LWK observer: pin/package the official dependency,
     route executable-proven Liquid descriptor forms through it, and persist
     wollet state only inside SQLCipher while preserving local unblinding.
-  - [ ] Phase 8 — cleanup and final proof: delete replaced manual observer
+  - [x] Phase 8 — cleanup and final proof: delete replaced manual observer
     engines, retain only named compatibility routes and `embit` primitives,
     update all user/developer/release/license docs, and leave the same draft PR
     green after full unit, integration, demo, package and secret-scan gates.

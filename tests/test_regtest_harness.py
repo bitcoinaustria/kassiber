@@ -197,6 +197,19 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("tests.integration.test_live_lwk_observer", harness)
         self.assertNotIn("compose.chain-observers", harness)
 
+    def test_chain_observer_ci_job_is_path_aware_and_required(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("chain-observers:", workflow)
+        self.assertIn("name: Chain observers (Linux Docker)", workflow)
+        self.assertIn("Detect observer-sensitive changes", workflow)
+        self.assertIn("kassiber/core/chain_observer", workflow)
+        self.assertIn("kassiber/core/sync_backends.py", workflow)
+        self.assertIn("kassiber/wallet_descriptors.py", workflow)
+        self.assertIn("dev/regtest", workflow)
+        self.assertIn("./scripts/integration-harness.sh chain-observers", workflow)
+
     def test_default_compose_lane_removes_stale_keep_state_before_start(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
         cleanup = "docker_compose_regtest down -v --remove-orphans"

@@ -154,6 +154,13 @@ timeout) use an explicitly named compatibility observer. A dependency runtime
 failure never retries through that path. The complete matrix and removal
 conditions are in [Chain observers](chain-observers.md).
 
+Observer state is derived and versioned. An ordinary refresh fails closed with
+`observer_state_rebuild_required` when it encounters an unknown/newer state,
+coverage, or LWK opaque-value namespace. A forced/full refresh reconstructs the
+dependency state in memory and replaces it only in the successful atomic apply;
+it does not pre-delete transactions, notes, attachments, review history, or
+custody interpretations.
+
 Common fields:
 
 - `KIND`

@@ -61,6 +61,20 @@ def _electrum_header_hash(header: Any) -> str:
     return hashlib.sha256(hashlib.sha256(payload).digest()).digest()[::-1].hex()
 
 
+def _electrum_confirmation_rebuild_needed(wallet: Any, prior_tip_height: int | None) -> bool:
+    """Work around stale mempool positions in bdk_electrum 0.23.2.
+
+    The binding bundled by bdkpython 3.0.0 can advance the local chain without
+    replacing an already-known mempool position with its new anchor.  A fresh
+    dependency scan is necessary only when the tip advanced and an
+    unconfirmed canonical transaction remains.
+    """
+
+    if prior_tip_height is None or int(wallet.latest_checkpoint().height) <= prior_tip_height:
+        return False
+    return any(not item.chain_position.is_confirmed() for item in wallet.transactions())
+
+
 def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str | None:
     """Return why an existing adapter must remain in use, or ``None`` for BDK."""
 
@@ -461,11 +475,26 @@ class BdkObserver:
         prior_state: StoredObserverState | None,
     ) -> Mapping[str, Any]:
         try:
-            wallet, persister = self._wallet_from_state(prior_state)
+            retraction_state = prior_state
+            if retraction_state is None and request.force_full:
+                retraction_state = StoredObserverState(
+                    identity=self.identity,
+                    payload={
+                        "canonical_txids": list(
+                            request.checkpoint.get("canonical_txids") or ()
+                        )
+                    },
+                    coverage=(),
+                )
+            wallet_state = None if request.force_full else prior_state
+            wallet, persister = self._wallet_from_state(wallet_state)
             self._wallet = wallet
+            prior_tip_height = (
+                int(wallet.latest_checkpoint().height) if wallet_state is not None else None
+            )
             emit_sync_progress({"phase": "backend_fetch", "observer": "bdk", "status": "scanning"})
             client = self._client()
-            if prior_state is not None:
+            if wallet_state is not None:
                 prior_tip = wallet.latest_checkpoint()
                 remote_hash = self._remote_block_hash(client, int(prior_tip.height))
                 if remote_hash != str(prior_tip.hash):
@@ -492,7 +521,27 @@ class BdkObserver:
                 )
             wallet.apply_update(update)
             wallet.persist(persister)
-            facts = self._facts(wallet, prior_state)
+            if kind == "electrum" and _electrum_confirmation_rebuild_needed(
+                wallet,
+                prior_tip_height,
+            ):
+                # bdk_electrum 0.23.2 may leave a persisted mempool position
+                # stale when the transaction becomes confirmed. Build a fresh
+                # dependency request for that transition, but apply its update
+                # onto the existing aggregate so anchors omitted from the
+                # fresh response cannot demote older confirmed transactions.
+                aggregate_persistence = self._persistence
+                fresh_wallet, _fresh_persister = self._wallet_from_state(None)
+                update = client.full_scan(
+                    fresh_wallet.start_full_scan().build(),
+                    stop_gap=self.gap_limit,
+                    batch_size=max(1, backend_batch_size(self.backend)),
+                    fetch_prev_txouts=True,
+                )
+                self._persistence = aggregate_persistence
+                wallet.apply_update(update)
+                wallet.persist(persister)
+            facts = self._facts(wallet, retraction_state)
         except AppError:
             raise
         except Exception as exc:

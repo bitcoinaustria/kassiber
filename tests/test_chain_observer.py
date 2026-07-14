@@ -15,6 +15,7 @@ from kassiber.core import wallets as core_wallets
 from kassiber.core.chain_observer import (
     PRIVATE_OBSERVER_TABLES,
     ChainFacts,
+    ChainObserver,
     CoveragePoint,
     ObserverApplication,
     ObserverIdentity,
@@ -166,6 +167,16 @@ class ChainObserverContractTest(unittest.TestCase):
             [(point.branch_key, point.scanned_to) for point in stored.coverage],
             [("change", 20), ("receive", 40)],
         )
+
+    def test_observer_boundary_exposes_no_spending_or_broadcast_capability(self):
+        methods = {
+            name
+            for name, value in ChainObserver.__dict__.items()
+            if callable(value) and not name.startswith("_")
+        }
+        self.assertEqual(methods, {"prepare", "apply", "discard"})
+        forbidden = {"address", "build", "coin_select", "psbt", "pset", "sign", "broadcast"}
+        self.assertTrue(methods.isdisjoint(forbidden))
 
     def test_prepare_inside_and_apply_outside_transactions_fail_closed(self):
         self.conn.execute("SAVEPOINT invalid_prepare")
@@ -437,6 +448,35 @@ class ChainObserverContractTest(unittest.TestCase):
             load_observer_state(self.conn, self.identity)
         self.assertEqual(error.exception.code, "observer_state_rebuild_required")
         self.assertNotIn("observer-private-marker", str(error.exception.details))
+
+        observer = FakeObserver(self.conn)
+        prepared = prepare_observer_update(
+            self.conn,
+            self.identity,
+            observer,
+            ObserverPrepareRequest(
+                backend_name="regtest",
+                backend_kind="fake",
+                force_full=True,
+            ),
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT state_version FROM chain_observer_instances WHERE id = ?",
+                (self.identity.id,),
+            ).fetchone()[0],
+            99,
+        )
+        self._apply_and_commit(prepared)
+        rebuilt = load_observer_state(self.conn, self.identity)
+        self.assertEqual(rebuilt.payload["generation"], 1)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT state_version FROM chain_observer_instances WHERE id = ?",
+                (self.identity.id,),
+            ).fetchone()[0],
+            1,
+        )
 
         self.conn.execute("SAVEPOINT invalid_state")
         with self.assertRaises(AppError) as invalid:

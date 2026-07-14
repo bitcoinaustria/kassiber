@@ -34,13 +34,12 @@ from kassiber.core.sync_backends import (
     _emit_backend_progress,
     bitcoinrpc_import_ranged_descriptors,
     bitcoinrpc_sync_adapter,
-    discover_descriptor_targets,
-    electrum_sync_adapter,
-    esplora_sync_adapter,
-    esplora_utxos_for_wallet,
+    compatibility_electrum_sync_adapter,
+    compatibility_esplora_sync_adapter,
+    compatibility_esplora_utxos_for_wallet,
+    discover_bitcoinrpc_descriptor_targets,
     record_from_bitcoin_esplora_tx,
     record_from_bitcoinrpc_details,
-    scan_descriptor_targets,
     scriptpubkey_scripthash,
 )
 from kassiber.core import imports as core_imports
@@ -53,7 +52,6 @@ from kassiber.wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     DescriptorBranch,
     DescriptorPlan,
-    DerivedTarget,
 )
 
 
@@ -605,7 +603,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.http_get_text",
             return_value="123\n",
         ):
-            records, meta = esplora_sync_adapter(
+            records, meta = compatibility_esplora_sync_adapter(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -663,7 +661,7 @@ class SyncBackendsTest(unittest.TestCase):
                 tracked_scripts={target["script_pubkey"]: target},
                 history_cache={},
             )
-            records, meta = esplora_sync_adapter(
+            records, meta = compatibility_esplora_sync_adapter(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -679,7 +677,7 @@ class SyncBackendsTest(unittest.TestCase):
                 history_cache={},
                 checkpoint=meta["freshness_checkpoint"],
             )
-            records, second_meta = esplora_sync_adapter(
+            records, second_meta = compatibility_esplora_sync_adapter(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
                 {"id": "wallet-1"},
                 second_state,
@@ -767,8 +765,8 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             return_value=[],
         ):
-            records1, meta1 = esplora_sync_adapter(backend, wallet, make_state())
-            records2, meta2 = esplora_sync_adapter(
+            records1, meta1 = compatibility_esplora_sync_adapter(backend, wallet, make_state())
+            records2, meta2 = compatibility_esplora_sync_adapter(
                 backend, wallet, make_state(meta1["freshness_checkpoint"])
             )
 
@@ -780,43 +778,6 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(meta2["scripts_changed"], 1)
         self.assertEqual(
             {record["txid"] for record in records2}, {"11" * 32, "22" * 32}
-        )
-
-    def test_esplora_descriptor_discovery_rechecks_previously_unused_scripts(self):
-        target = {"address": "bc1qgap", "script_pubkey": "0014" + "22" * 20}
-        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-        usage_checks = []
-
-        def fake_scan(
-            plan,
-            target_used=None,
-            target_used_batch=None,
-            scan_batch_size=None,
-            highest_used=None,
-        ):
-            del plan, target_used, scan_batch_size, highest_used
-            self.assertIsNotNone(target_used_batch)
-            usage_checks.extend(target_used_batch([target]))
-            return [target]
-
-        with patch("kassiber.core.sync_backends.scan_descriptor_targets", side_effect=fake_scan), patch(
-            "kassiber.core.sync_backends.esplora_scripthash_has_history",
-            return_value=True,
-        ) as has_history:
-            discovery = discover_descriptor_targets(
-                {"name": "esplora", "kind": "esplora", "url": "https://esplora.example"},
-                object(),
-                "esplora",
-                checkpoint={"esplora_scripthashes": {scripthash: {"tx_count": 0}}},
-            )
-
-        self.assertEqual(discovery["targets"], [target])
-        self.assertEqual(usage_checks, [True])
-        has_history.assert_called_once_with(
-            "https://esplora.example",
-            target["script_pubkey"],
-            timeout=30,
-            proxy_url=None,
         )
 
     def test_electrum_sync_adapter_returns_record_shape(self):
@@ -893,7 +854,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ):
-            records, meta = electrum_sync_adapter(
+            records, meta = compatibility_electrum_sync_adapter(
                 {"name": "electrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -978,7 +939,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ):
-            records, meta = sb.electrum_records_for_wallet(
+            records, meta = sb.compatibility_electrum_records_for_wallet(
                 {"name": "fulcrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 sync_state,
             )
@@ -1042,7 +1003,7 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.decode_raw_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
-            "kassiber.core.sync_backends.electrum_utxos_for_wallet",
+            "kassiber.core.sync_backends.compatibility_electrum_utxos_for_wallet",
             return_value=[],
         ) as fetch_utxos:
             sync_state = WalletSyncState(
@@ -1054,7 +1015,7 @@ class SyncBackendsTest(unittest.TestCase):
                 tracked_scripts={target["script_pubkey"]: target},
                 history_cache={},
             )
-            records, meta = electrum_sync_adapter(
+            records, meta = compatibility_electrum_sync_adapter(
                 {"name": "electrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 {"id": "wallet-1"},
                 sync_state,
@@ -1071,7 +1032,7 @@ class SyncBackendsTest(unittest.TestCase):
                 history_cache={},
                 checkpoint=meta["freshness_checkpoint"],
             )
-            records, second_meta = electrum_sync_adapter(
+            records, second_meta = compatibility_electrum_sync_adapter(
                 {"name": "electrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
                 {"id": "wallet-1"},
                 second_state,
@@ -1087,183 +1048,6 @@ class SyncBackendsTest(unittest.TestCase):
             second_calls,
             [("blockchain.scripthash.subscribe", (scripthash,))],
         )
-
-    def test_electrum_descriptor_discovery_rechecks_cached_unused_status(self):
-        target = {"address": "bc1qgap", "script_pubkey": "0014cafebabe"}
-        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-        batch_calls = []
-
-        class FakeElectrumClient:
-            def __init__(self, backend):
-                self.backend = backend
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def batch_call(self, requests):
-                batch_calls.extend(requests)
-                responses = []
-                for method, params in requests:
-                    key = (method, tuple(params or ()))
-                    if key == ("blockchain.scripthash.subscribe", (scripthash,)):
-                        responses.append("status-new")
-                    else:
-                        raise AssertionError(f"Unexpected Electrum call: {key!r}")
-                return responses
-
-        def fake_scan(
-            plan,
-            target_used=None,
-            target_used_batch=None,
-            scan_batch_size=None,
-            highest_used=None,
-        ):
-            del plan, target_used, scan_batch_size, highest_used
-            self.assertIsNotNone(target_used_batch)
-            self.assertEqual(target_used_batch([target]), [True])
-            return [target]
-
-        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
-            "kassiber.core.sync_backends.scan_descriptor_targets",
-            side_effect=fake_scan,
-        ):
-            discovery = discover_descriptor_targets(
-                {
-                    "name": "electrum",
-                    "kind": "electrum",
-                    "url": "ssl://electrum.example:50002",
-                    "batch_size": 10,
-                },
-                object(),
-                "electrum",
-                checkpoint={"electrum_scripthash_statuses": {scripthash: None}},
-            )
-
-        self.assertEqual(discovery["targets"], [target])
-        self.assertEqual(
-            batch_calls,
-            [("blockchain.scripthash.subscribe", [scripthash])],
-        )
-
-    def test_descriptor_scan_reuses_highest_used_targets_and_checks_trailing_gap(self):
-        class FakeDescriptor:
-            is_wildcard = True
-
-        plan = DescriptorPlan(
-            chain="bitcoin",
-            network="bitcoin",
-            gap_limit=2,
-            descriptor_fingerprint="fp",
-            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
-        )
-        checked = []
-        progress = []
-
-        def fake_derive(plan, branch_index=None, start=0, end=0):
-            del plan
-            return [
-                DerivedTarget(
-                    chain="bitcoin",
-                    network="bitcoin",
-                    branch_index=branch_index,
-                    branch_label="receive",
-                    address_index=index,
-                    address=f"bc1q{index}",
-                    unconfidential_address=None,
-                    script_pubkey=f"{index:064x}",
-                    derivation_path=f"m/0/{index}",
-                    derivation_paths=(f"m/0/{index}",),
-                    key_origins=(),
-                )
-                for index in range(start, end)
-            ]
-
-        def target_used_batch(targets):
-            checked.extend(target["address_index"] for target in targets)
-            return [False for _ in targets]
-
-        with patch(
-            "kassiber.core.sync_backends.derive_descriptor_targets",
-            side_effect=fake_derive,
-        ):
-            token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
-            try:
-                targets = scan_descriptor_targets(
-                    plan,
-                    target_used_batch=target_used_batch,
-                    scan_batch_size=1,
-                    highest_used={"0": 2},
-                )
-            finally:
-                sync_progress_emitter.reset(token)
-
-        self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
-        self.assertEqual(checked, [3, 4])
-        self.assertEqual(progress[-1]["processed"], 2)
-        self.assertNotIn("total", progress[-1])
-        self.assertEqual(progress[-1]["retained_targets"], 5)
-        self.assertEqual(progress[-1]["unused_streak"], 2)
-        self.assertEqual(progress[-1]["gap_limit"], 2)
-
-    def test_first_sync_scans_full_gap_depth_following_used_addresses(self):
-        # A first sync (no stored checkpoint, highest_used=None) must walk the
-        # FULL active range, not a fixed shallow window: every used address
-        # resets the trailing-gap counter so discovery extends as deep as
-        # activity goes, stopping only after gap_limit consecutive unused. This
-        # pins the "first Refresh reaches the entire gap limit" trust property
-        # (the original Issue #1 complaint) so it cannot silently regress.
-        class FakeDescriptor:
-            is_wildcard = True
-
-        plan = DescriptorPlan(
-            chain="bitcoin",
-            network="bitcoin",
-            gap_limit=3,
-            descriptor_fingerprint="fp",
-            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
-        )
-        used_indices = {0, 3, 6}
-
-        def fake_derive(plan, branch_index=None, start=0, end=0):
-            del plan
-            return [
-                DerivedTarget(
-                    chain="bitcoin",
-                    network="bitcoin",
-                    branch_index=branch_index,
-                    branch_label="receive",
-                    address_index=index,
-                    address=f"bc1q{index}",
-                    unconfidential_address=None,
-                    script_pubkey=f"{index:064x}",
-                    derivation_path=f"m/0/{index}",
-                    derivation_paths=(f"m/0/{index}",),
-                    key_origins=(),
-                )
-                for index in range(start, end)
-            ]
-
-        def target_used_batch(targets):
-            return [target["address_index"] in used_indices for target in targets]
-
-        with patch(
-            "kassiber.core.sync_backends.derive_descriptor_targets",
-            side_effect=fake_derive,
-        ):
-            targets = scan_descriptor_targets(
-                plan,
-                target_used_batch=target_used_batch,
-                scan_batch_size=1,
-                highest_used=None,  # first sync: derive from index 0
-            )
-
-        scanned = [target["address_index"] for target in targets]
-        # Used at 0/3/6 keep the walk alive past a naive shallow scan; it stops
-        # only after gap_limit(3) trailing unused (7, 8, 9), reaching index 9.
-        self.assertEqual(scanned, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
@@ -1800,10 +1584,8 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_checkpoint",
             return_value=[target],
         ) as derive_targets:
-            discovery = discover_descriptor_targets(
-                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+            discovery = discover_bitcoinrpc_descriptor_targets(
                 plan,
-                "bitcoinrpc",
                 checkpoint={"highest_used": {"6": 4}},
             )
 
@@ -2977,7 +2759,7 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             side_effect=fake_utxos,
         ):
-            outputs = esplora_utxos_for_wallet(
+            outputs = compatibility_esplora_utxos_for_wallet(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example", "batch_size": 8},
                 sync_state,
             )

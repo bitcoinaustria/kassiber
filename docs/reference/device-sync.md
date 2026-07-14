@@ -6,7 +6,8 @@ SQLCipher database. A book that never enables it has no sync identities, keys,
 poller, or listener.
 
 The replicated unit is the signed authored-event layer, not the SQLite file.
-Journals, reports, rates, UTXO/freshness caches, backend rows and credentials,
+Journals, reports, rates, UTXO/freshness caches, BDK/LWK observer state and
+coverage, backend rows and credentials,
 AI configuration/history, logs, raw wallet files, private descriptors, seeds,
 and spend keys stay local. Watch-only public wallet material can sync; raw
 transaction fingerprints and attachment hashes are replaced with book-keyed

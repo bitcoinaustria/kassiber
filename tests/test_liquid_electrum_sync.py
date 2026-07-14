@@ -12,8 +12,7 @@ from kassiber.core.imports import (
 )
 from kassiber.core.sync import WalletSyncState
 from kassiber.core.sync_backends import (
-    discover_descriptor_targets,
-    electrum_records_for_wallet,
+    compatibility_electrum_records_for_wallet,
     record_components_from_liquid_tx,
     scriptpubkey_scripthash,
     validate_backend_for_wallet,
@@ -238,7 +237,7 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
-            records, meta = electrum_records_for_wallet(
+            records, meta = compatibility_electrum_records_for_wallet(
                 {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
                 WalletSyncState(
                     chain="liquid",
@@ -323,7 +322,7 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
-            records, meta = electrum_records_for_wallet(
+            records, meta = compatibility_electrum_records_for_wallet(
                 {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
                 WalletSyncState(
                     chain="liquid",
@@ -345,67 +344,6 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             any(method == "blockchain.block.header" for method, _params in calls),
             calls,
         )
-
-    def test_discover_descriptor_targets_uses_subscription_status_with_backend_batch_size(self):
-        first_target = {"script_pubkey": "0014feedface"}
-        second_target = {"script_pubkey": "0014deadbeef"}
-        first_hash = scriptpubkey_scripthash(first_target["script_pubkey"])
-        second_hash = scriptpubkey_scripthash(second_target["script_pubkey"])
-        batch_calls = []
-
-        class FakeElectrumClient:
-            def __init__(self, backend):
-                self.backend = backend
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def batch_call(self, requests):
-                batch_calls.append(requests)
-                responses = []
-                for method, params in requests:
-                    key = (method, tuple(params or ()))
-                    if key == ("blockchain.scripthash.subscribe", (first_hash,)):
-                        responses.append("status-1")
-                    elif key == ("blockchain.scripthash.subscribe", (second_hash,)):
-                        responses.append(None)
-                    else:
-                        raise AssertionError(f"Unexpected batched call: {key!r}")
-                return responses
-
-        def fake_scan(plan, target_used=None, target_used_batch=None, scan_batch_size=None, highest_used=None):
-            self.assertIsNone(target_used)
-            self.assertEqual(scan_batch_size, 1)
-            self.assertEqual(target_used_batch([first_target, second_target]), [True, False])
-            return [first_target, second_target]
-
-        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
-            "kassiber.core.sync_backends.scan_descriptor_targets",
-            side_effect=fake_scan,
-        ):
-            discovery = discover_descriptor_targets(
-                {
-                    "name": "liquid",
-                    "kind": "electrum",
-                    "url": "ssl://liquid.example:995",
-                    "batch_size": 1,
-                },
-                object(),
-                "electrum",
-            )
-
-        self.assertEqual(discovery["targets"], [first_target, second_target])
-        self.assertEqual(
-            batch_calls,
-            [
-                [("blockchain.scripthash.subscribe", [first_hash])],
-                [("blockchain.scripthash.subscribe", [second_hash])],
-            ],
-        )
-        self.assertEqual(discovery["history_cache"], {})
 
     def test_electrum_records_uses_subscription_status_and_batch_fetches(self):
         policy_asset_id = default_policy_asset_id("liquidv1")
@@ -472,7 +410,7 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
-            records, meta = electrum_records_for_wallet(
+            records, meta = compatibility_electrum_records_for_wallet(
                 {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
                 WalletSyncState(
                     chain="liquid",

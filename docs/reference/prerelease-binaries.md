@@ -116,6 +116,11 @@ universal macOS artifacts. The last universal prerelease remains available
 from its immutable GitHub release for Intel users, but it is not a supported
 target for new builds.
 
+The sidecar build collects the pinned native `bdkpython` and `lwk` packages.
+Every supported sidecar smoke imports both bindings before the desktop bundle
+is assembled, so a missing native wheel blocks macOS ARM64, Linux x86_64, or
+Windows x86_64 packaging rather than producing a broken observer at runtime.
+
 ### Local Apple Silicon build
 
 For a local Apple Silicon build without Rosetta, use the arm64-only helper:

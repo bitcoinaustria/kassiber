@@ -71,7 +71,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
 
         self.assertEqual(_fee_sats_by_asset(outputs), {"policy": 1000})
 
-    def _discovery(self, *, backend=None, partial=False):
+    def _discovery(self, *, backend=None, partial=False, force_full=False):
         config = {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor(), "gap_limit": 20}
         plan = load_descriptor_plan(config)
         targets = sync_backends._offline_descriptor_targets(plan, {})
@@ -87,7 +87,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         )
         return wallet, core_sync.WalletBackendDiscovery(
             backend=resolved, sync_state=state, kind=resolved["kind"],
-            started=0.0, force_full=False,
+            started=0.0, force_full=force_full,
         )
 
     def test_dependency_version_is_exact(self):
@@ -164,7 +164,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         wallet, discovery = self._discovery()
         compatibility = unittest.mock.Mock(side_effect=AssertionError("embit observer called"))
         prepared = object()
-        with patch.object(sync_backends, "SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
+        with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
             "kassiber.core.chain_observer.prepare_observer_update", return_value=prepared,
         ), patch("kassiber.core.chain_observer.store.load_observer_values", return_value={}):
             fetched = sync_backends.prepare_dependency_observer_fetch(unittest.mock.Mock(), {}, wallet, discovery)
@@ -172,7 +172,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         self.assertEqual(fetched.observer_updates, (prepared,))
         compatibility.assert_not_called()
 
-        with patch.object(sync_backends, "SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
+        with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
             "kassiber.core.chain_observer.prepare_observer_update",
             side_effect=AppError("native failed", code="backend_sync_failed"),
         ), patch("kassiber.core.chain_observer.store.load_observer_values", return_value={}):
@@ -187,13 +187,35 @@ class LwkDescriptorContractTest(unittest.TestCase):
         ):
             wallet, discovery = self._discovery(backend=backend, partial=partial)
             compatibility = unittest.mock.Mock(return_value=([], {}))
-            with patch.object(sync_backends, "SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
+            with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
                 "kassiber.core.chain_observer.prepare_observer_update"
             ) as native:
                 fetched = sync_backends.prepare_dependency_observer_fetch(unittest.mock.Mock(), {}, wallet, discovery)
             self.assertEqual(fetched.adapter_meta["observer_compatibility_reason"], expected)
             compatibility.assert_called_once()
             native.assert_not_called()
+
+    def test_forced_refresh_rebuilds_incompatible_opaque_store_in_memory(self):
+        wallet, discovery = self._discovery(force_full=True)
+        prepared = object()
+        with patch(
+            "kassiber.core.chain_observer.store.load_observer_values",
+            side_effect=AppError(
+                "newer opaque namespace",
+                code="observer_state_rebuild_required",
+            ),
+        ) as load_values, patch(
+            "kassiber.core.chain_observer.prepare_observer_update",
+            return_value=prepared,
+        ) as prepare:
+            fetched = sync_backends.prepare_dependency_observer_fetch(
+                unittest.mock.Mock(), {}, wallet, discovery
+            )
+
+        self.assertEqual(fetched.observer_updates, (prepared,))
+        observer = prepare.call_args.args[2]
+        self.assertEqual(observer.store.snapshot(), {})
+        load_values.assert_not_called()
 
 
 class LwkForeignStoreTest(unittest.TestCase):

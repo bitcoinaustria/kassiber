@@ -67,9 +67,13 @@ or xpub text is never hashed into the identity.
 
 The store accepts JSON primitives only: no pickle, Python object serialization,
 or dependency sidecar database. Unknown or mismatched state/coverage versions
-raise `observer_state_rebuild_required` without returning the stored payload.
-Writes never commit and therefore roll back with the wallet refresh. A failed
-apply discards its request-local dependency object. Wallet material changes,
+raise `observer_state_rebuild_required` without returning the stored payload on
+an ordinary refresh. A forced refresh treats incompatible state as absent in
+memory, retains canonical txids from the freshness checkpoint for retractions,
+and replaces encrypted observer rows only inside the successful wallet
+savepoint. Fetch or apply failure leaves the old rows intact. Writes never
+commit independently. A failed apply discards its request-local dependency
+object. Wallet material changes,
 wallet deletion and confirmed book reset remove observer rows; clearing this
 derived state does not touch transactions, notes, attachments, edit history or
 custody components.
@@ -141,6 +145,17 @@ BDK wallet from the same public descriptors and replaces the derived aggregate
 atomically. It does not invoke the compatibility protocol client, retain a
 second graph, or alter authored accounting evidence.
 
+That bundled client can also advance the local tip without replacing a known
+mempool position with its new confirmation anchor. When—and only when—the tip
+advanced and an unconfirmed canonical transaction remains, Kassiber asks a
+fresh watch-only BDK wallet for one dependency update and applies that update
+additively to the persisted aggregate. This preserves older anchors that a
+fresh Electrum response may omit. Ordinary mempool/no-op scans remain
+incremental, and no manual transaction graph or compatibility fallback is
+introduced. The live oracle waits for Electrum Merkle state before comparing
+transport projections so backend indexing races are not mistaken for observer
+state.
+
 ### LWK persistence representation
 
 `kassiber/core/chain_observer/lwk_persistence.py` implements LWK 0.18.0's
@@ -182,10 +197,11 @@ those routes.
 
 ### Gap discovery and derivation coverage
 
-- `scan_descriptor_targets` performs branch-by-branch gap walking and reuses a
-  manual `highest_used` map.
-- `discover_descriptor_targets` probes Esplora stats or Electrum subscription
-  status, while Bitcoin Core builds targets from imported range ends.
+- The former `scan_descriptor_targets` network gap walker and the
+  Esplora/Electrum branches of `discover_descriptor_targets` are deleted.
+  Supported BDK/LWK observers now own gap discovery and chain position.
+- `discover_bitcoinrpc_descriptor_targets` remains a local range calculation
+  for the explicitly separate Bitcoin Core adapter; it performs no RPC call.
 - `_highest_used_branch_index`, `_merge_highest_used`,
   `_bitcoinrpc_descriptor_end`,
   `_bitcoinrpc_descriptor_targets_for_checkpoint`, and
@@ -197,7 +213,7 @@ BDK/LWK replace this machinery for supported routes. Kassiber persists a
 redacted coverage projection for inventory/ownership UI, not a competing scan
 checkpoint.
 
-The remaining manual discovery/history/UTXO helpers are reachable only through
+The remaining manual history/UTXO helpers are reachable only through
 the named capability routes in the matrix above (address-list, custom CA,
 custom HTTP authorization, non-default Esplora timeout, or a partial descriptor
 after source-overlap filtering, plus the explicitly labelled Liquid transport
@@ -207,11 +223,13 @@ those adapters or retries through one after a BDK error.
 
 ### Esplora and Electrum history checkpoints
 
-- Esplora uses `esplora_scripthash_stats`, `esplora_stats_fingerprint`,
-  `fetch_esplora_history`, `esplora_records_for_wallet` and the
+- Compatibility Esplora uses `esplora_scripthash_stats`,
+  `esplora_stats_fingerprint`, `fetch_esplora_history`,
+  `compatibility_esplora_records_for_wallet` and the
   `esplora_scripthashes` checkpoint map.
-- Electrum uses the local `ElectrumClient`, `electrum_call_many`, subscription
-  statuses, history/header caches, `electrum_records_for_wallet`, and the
+- Compatibility Electrum uses the local `ElectrumClient`, `electrum_call_many`,
+  subscription statuses, history/header caches,
+  `compatibility_electrum_records_for_wallet`, and the
   `electrum_scripthash_statuses` checkpoint map.
 - `core.freshness` stores those backend-specific maps in
   `freshness_source_states.checkpoint_json`.
@@ -229,7 +247,8 @@ parallel transaction/UTXO state machine.
   `bitcoinrpc_sync_adapter`.
 - Electrum graph reconstruction spans `decode_raw_transaction`,
   `_normalize_electrum_bitcoin_graph_for_storage`,
-  `record_from_electrum_tx` and `electrum_records_for_wallet`.
+  `record_from_electrum_tx` and
+  `compatibility_electrum_records_for_wallet`.
 - `transaction_graph_cache`, `core.imports.retract_wallet_records`, and
   transaction upserts persist the accounting projection.
 
@@ -239,7 +258,8 @@ normalizes the resulting accounting rows and graph evidence.
 
 ### UTXO lifecycle
 
-- `esplora_utxos_for_wallet`, `electrum_utxos_for_wallet` and
+- `compatibility_esplora_utxos_for_wallet`,
+  `compatibility_electrum_utxos_for_wallet` and
   `bitcoinrpc_utxos_for_wallet_name` construct current-output snapshots.
 - `core.output_inventory.update_wallet_output_inventory` normalizes them,
   upserts `wallet_utxos`, marks missing outputs spent per source, and updates
@@ -273,9 +293,10 @@ ownership or source precedence.
   `liquid_blinding_secret` and `decode_liquid_transaction` provide current
   parsing and secrets.
 - `_liquid_utxo_record_from_output`, `liquid_output_amount_asset_id`,
-  `record_components_from_liquid_tx`, `esplora_records_for_wallet` and
-  `electrum_records_for_wallet` manually fetch, decode, unblind and correlate
-  Liquid inputs/outputs.
+  `record_components_from_liquid_tx`,
+  `compatibility_esplora_records_for_wallet` and
+  `compatibility_electrum_records_for_wallet` manually fetch, decode, unblind
+  and correlate Liquid inputs/outputs only on named compatibility routes.
 - `wallet_policy_asset_id`, `liquid_asset_code`, and the DB compatibility
   backfills map policy-asset identifiers to `LBTC`.
 
@@ -377,6 +398,22 @@ release remains available for Intel users but is not rebuilt.
 The supported release targets after the packaging phase are macOS ARM64,
 Linux x86_64 and Windows x86_64.
 
+## Production cleanup inventory
+
+The migration removed the production manual Esplora/Electrum descriptor gap
+engine: `scan_descriptor_targets` and the network branches of
+`discover_descriptor_targets`, together with their test-only checkpoint/gap
+fixtures. The surviving manual fetchers are named `compatibility_*` and can be
+reached only after a capability reason is selected before connection. Bitcoin
+Core range/import logic, Silent Payments, protocol decoding, HTLC evidence,
+normalization, and Kassiber's ownership/tax domain logic remain intentionally
+separate.
+
+The required Linux `chain-observers` CI job is path-aware for observer,
+descriptor, sync, persistence, dependency, and regtest changes. Packaging
+smokes import both pinned bindings in macOS ARM64, Linux x86_64, and Windows
+x86_64 sidecars before desktop bundling.
+
 ## Existing test inventory
 
 - Descriptor parsing/derivation: `tests/test_wallet_setup.py`,
@@ -398,8 +435,8 @@ Linux x86_64 and Windows x86_64.
   `tests/test_wallet_descriptors.py`, `tests/integration/boltz_liquid_regtest.py`,
   and the Elements-backed `demo-full` lane.
 - Persistence/atomicity: importer `commit=False` tests, freshness tests,
-  output-inventory refresh tests, and sync prefetch/savepoint tests. New fault
-  injection is required for observer-blob rollback and restart reconstruction.
+  output-inventory refresh tests, sync prefetch/savepoint tests, observer-blob
+  rollback/restart reconstruction, and forced rebuild of unknown versions.
 - Packaging: `.github/workflows/prerelease-binaries.yml` packaged descriptor
   smokes, `tests/test_rp2_packaging.py`, Homebrew cask rendering tests, Tauri
   supervisor sidecar tests, and the quality-gate workflow validation.

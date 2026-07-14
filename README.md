@@ -67,9 +67,11 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Highlights
 
-- **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC
-  descriptor/xpub/address refresh, BTCPay Greenfield, Liquid Electrum,
-  plus watch-only UTXO inventory for chain-backed wallet sources.
+- **Dependency-backed chain sync** — BDK-backed Bitcoin Esplora/Electrum and
+  LWK-backed Liquid Esplora/Electrum descriptor observation, explicit Bitcoin
+  Core RPC and Silent Payments paths, BTCPay Greenfield, plus watch-only UTXO
+  inventory. Observer state stays inside the project SQLCipher database and a
+  refresh commits chain state and accounting projections atomically.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
   21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool public descriptor/xpub,
   generic CSV/JSON, a fill-in Excel/CSV ledger template for manual entry,
@@ -116,8 +118,8 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Install
 
-**Desktop app** — download an unsigned prerelease binary for macOS, Linux,
-or Windows from the latest `v*` release. The bundle ships a CLI sidecar,
+**Desktop app** — download an unsigned prerelease binary for Apple Silicon
+macOS, Linux x86_64, or Windows x86_64 from the latest `v*` release. The bundle ships a CLI sidecar,
 so no separate Python install is needed. Settings can install a user-local
 `kassiber` terminal launcher without administrator privileges. Gatekeeper /
 SmartScreen first-launch handling lives in
@@ -228,6 +230,13 @@ watch-only descriptor rescan. The desktop setup can detect a local Core node
 from default cookie paths or `bitcoin.conf`; it reports wallet-RPC and BIP158
 filter-index availability, but Kassiber's current Core sync path is still
 watch-only descriptor import, not filter-first P2P sync.
+
+Supported Esplora/Electrum descriptor wallets use the pinned BDK/LWK observers.
+Private spending descriptors are rejected before any connection; Liquid view
+or blinding material may be accepted but remains sensitive. Configurations the
+bindings cannot express are selected into a named compatibility path before
+network access, never after a dependency failure. See the complete
+[chain-observer capability matrix](docs/reference/chain-observers.md).
 
 To reconcile old flows, `kassiber wallets identify` (or the desktop **Reconcile**
 screen) checks whether pasted addresses / transaction ids belong to any of your

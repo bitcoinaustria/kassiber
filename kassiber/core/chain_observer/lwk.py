@@ -364,7 +364,20 @@ class LwkObserver:
     def prepare(self, request: ObserverPrepareRequest, prior_state: StoredObserverState | None) -> Mapping[str, Any]:
         try:
             if prior_state is not None and prior_state.payload.get("schema_version") != LWK_OBSERVER_STATE_VERSION:
-                raise AppError("Stored LWK observer state must be rebuilt", code="observer_state_rebuild_required", retryable=False)
+                if not request.force_full:
+                    raise AppError("Stored LWK observer state must be rebuilt", code="observer_state_rebuild_required", retryable=False)
+                prior_state = None
+            retraction_state = prior_state
+            if retraction_state is None and request.force_full:
+                retraction_state = StoredObserverState(
+                    identity=self.identity,
+                    payload={
+                        "canonical_txids": list(
+                            request.checkpoint.get("canonical_txids") or ()
+                        )
+                    },
+                    coverage=(),
+                )
             lwk = require_lwk()
             network = lwk_network(self.identity.network, self.policy_asset_id)
             self._store_link = lwk.ForeignStoreLink(self.store)
@@ -376,7 +389,7 @@ class LwkObserver:
             if update is not None:
                 self._wallet.apply_update(update)
             tip = client.tip()
-            facts = self._facts(self._wallet, tip, prior_state)
+            facts = self._facts(self._wallet, tip, retraction_state)
         except AppError:
             raise
         except Exception as exc:

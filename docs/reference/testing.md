@@ -144,6 +144,12 @@ Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.
 
+Pull requests and main-branch pushes expose a required
+`Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the
+lane when observer, descriptor, sync, persistence, dependency-lock, or regtest
+backend paths change; unrelated changes retain the same successful check name
+without starting the Docker stack.
+
 The Compose lane generates disposable RPC credentials per run unless you set
 them explicitly, passes only the `rpcauth` hash to bitcoind, publishes RPC on
 host loopback, and uses Bitcoin Core v30 by default. It also publishes Core's
