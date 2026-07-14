@@ -687,6 +687,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                 try:
                     _rpc(core_url, username, password, "unloadwallet", [wallet])
                 except Exception:
+                    # Teardown must not mask the live observer assertion result.
                     pass
 
 
