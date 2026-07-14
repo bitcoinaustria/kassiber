@@ -77,7 +77,7 @@ same verification surface.
   - [x] Phase 5 — Docker/regtest observer oracle: extend the existing disposable
     Core/Elements stack with independent Bitcoin and Liquid truth manifests for
     confirmation, RBF, reorg, ownership, UTXO and restart transitions.
-  - [ ] Phase 6 — Bitcoin BDK observer: pin/package the official dependency and
+  - [x] Phase 6 — Bitcoin BDK observer: pin/package the official dependency and
     route supported Esplora/Electrum descriptor wallets through it with
     deterministic normalization and no production shadow/fallback observer.
   - [ ] Phase 7 — Liquid LWK observer: pin/package the official dependency,

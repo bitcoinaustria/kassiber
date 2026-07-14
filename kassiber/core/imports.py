@@ -637,8 +637,23 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
         existing["confirmed_at"] in (None, "")
         and normalized["confirmed_at"] is not None
     )
+    incoming_raw = _raw_json_payload(normalized)
+    authoritative_chain_observer = (
+        isinstance(incoming_raw, Mapping)
+        and incoming_raw.get("observer") in {"bdk", "lwk"}
+    )
+    confirmed_at_removed = (
+        existing["confirmed_at"] not in (None, "")
+        and normalized["confirmed_at"] is None
+        and authoritative_chain_observer
+    )
     if confirmed_at_added:
         updates["confirmed_at"] = normalized["confirmed_at"]
+    elif confirmed_at_removed:
+        # Dependency observers are canonical chain state, so a reorg must be
+        # allowed to demote a previously confirmed record. Generic imports
+        # remain monotonic and cannot clear confirmation evidence.
+        updates["confirmed_at"] = None
 
     has_existing_price = (
         existing["fiat_rate"] is not None

@@ -63,6 +63,7 @@ def _script_payload(output: dict[str, Any]) -> dict[str, Any]:
         script = {}
     result: dict[str, Any] = {
         "scriptpubkey": script.get("hex") or output.get("scriptpubkey") or "",
+        "scriptpubkey_asm": script.get("asm") or output.get("scriptpubkey_asm") or "",
         "scriptpubkey_type": script.get("type") or output.get("scriptpubkey_type") or "unknown",
         "value": _btc_to_sats(output.get("value")),
     }
@@ -98,10 +99,13 @@ class BitcoinIndex:
         return int(self.rpc.call("getblockcount"))
 
     def esplora_tx(self, txid: str) -> dict[str, Any]:
-        tx = self.raw_tx(txid)
+        self._refresh()
+        tx = self._txs.get(str(txid)) or self.raw_tx(txid)
         return self._to_esplora(tx)
 
     def _to_esplora(self, tx: dict[str, Any]) -> dict[str, Any]:
+        total_inputs = 0
+        total_outputs = 0
         result: dict[str, Any] = {
             "txid": tx.get("txid"),
             "version": tx.get("version"),
@@ -109,6 +113,7 @@ class BitcoinIndex:
             "size": tx.get("size"),
             "vsize": tx.get("vsize"),
             "weight": tx.get("weight"),
+            "fee": 0,
             "vin": [],
             "vout": [],
             "status": {
@@ -124,16 +129,27 @@ class BitcoinIndex:
             vin: dict[str, Any] = {
                 "txid": entry.get("txid"),
                 "vout": entry.get("vout"),
+                "is_coinbase": "coinbase" in entry,
+                "scriptsig": (entry.get("scriptSig") or {}).get("hex") or "",
+                "scriptsig_asm": (entry.get("scriptSig") or {}).get("asm") or "",
                 "sequence": entry.get("sequence"),
+                "witness": list(entry.get("txinwitness") or []),
             }
             if entry.get("txid") and entry.get("vout") is not None:
                 prevout = self._prevout(entry.get("txid"), entry.get("vout"))
                 if prevout:
                     vin["prevout"] = prevout
+                    total_inputs += int(prevout.get("value") or 0)
+            else:
+                vin["prevout"] = None
             result["vin"].append(vin)
         for output in tx.get("vout") or []:
             if isinstance(output, dict):
-                result["vout"].append({"n": output.get("n"), **_script_payload(output)})
+                payload = _script_payload(output)
+                total_outputs += int(payload.get("value") or 0)
+                result["vout"].append({"n": output.get("n"), **payload})
+        if total_inputs:
+            result["fee"] = max(0, total_inputs - total_outputs)
         return result
 
     def _prevout(self, txid: Any, vout: Any) -> dict[str, Any] | None:
@@ -174,12 +190,20 @@ class BitcoinIndex:
                 for tx in block.get("tx") or []:
                     if isinstance(tx, dict) and tx.get("txid"):
                         tx["blockheight"] = block_height
+                        tx["blockhash"] = block_hash
+                        tx["blocktime"] = block.get("time")
                         txs[str(tx["txid"])] = tx
-                        self._index_tx(history, spent, tx, block_height)
+                        self._index_tx(
+                            history,
+                            spent,
+                            tx,
+                            block_height,
+                            known_txs=txs,
+                        )
             for txid in mempool:
                 tx = self.raw_tx(txid)
                 txs[txid] = tx
-                self._index_tx(history, spent, tx, 0)
+                self._index_tx(history, spent, tx, 0, known_txs=txs)
             utxos: dict[str, list[dict[str, Any]]] = {}
             for txid, tx in txs.items():
                 for output in tx.get("vout") or []:
@@ -220,12 +244,32 @@ class BitcoinIndex:
         spent: set[tuple[str, int]],
         tx: dict[str, Any],
         height: int,
+        *,
+        known_txs: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         txid = str(tx.get("txid") or "")
+        history_keys: set[str] = set()
         for entry in tx.get("vin") or []:
             if isinstance(entry, dict) and entry.get("txid") and entry.get("vout") is not None:
                 try:
-                    spent.add((str(entry["txid"]), int(entry["vout"])))
+                    previous_txid = str(entry["txid"])
+                    previous_vout = int(entry["vout"])
+                    spent.add((previous_txid, previous_vout))
+                    previous = (known_txs or {}).get(previous_txid)
+                    previous_outputs = (
+                        previous.get("vout") or []
+                        if isinstance(previous, dict)
+                        else []
+                    )
+                    prevout = (
+                        _script_payload(previous_outputs[previous_vout])
+                        if 0 <= previous_vout < len(previous_outputs)
+                        and isinstance(previous_outputs[previous_vout], dict)
+                        else self._prevout(previous_txid, previous_vout)
+                    )
+                    script_hex = (prevout or {}).get("scriptpubkey")
+                    if script_hex:
+                        history_keys.add(electrum_scripthash(str(script_hex)))
                 except Exception:
                     pass
         for output in tx.get("vout") or []:
@@ -234,7 +278,8 @@ class BitcoinIndex:
             script_hex = _script_payload(output).get("scriptpubkey")
             if not script_hex:
                 continue
-            key = electrum_scripthash(str(script_hex))
+            history_keys.add(electrum_scripthash(str(script_hex)))
+        for key in sorted(history_keys):
             history.setdefault(key, []).append({"tx_hash": txid, "height": height})
 
     def history(self, scripthash: str, *, mempool: bool | None = None) -> list[dict[str, Any]]:
@@ -355,9 +400,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         prefix = "/api/tx/"
         if path.startswith(prefix):
             suffix = path[len(prefix) :]
-            if suffix.endswith("/hex"):
-                txid = suffix[:-4].rstrip("/")
+            if suffix.endswith(("/hex", "/raw")):
+                txid = suffix.rsplit("/", 1)[0]
                 self._tx_hex(txid)
+            elif suffix.endswith("/status"):
+                txid = suffix.rsplit("/", 1)[0]
+                self._tx_status(txid)
             else:
                 self._tx_json(suffix)
             return
@@ -370,6 +418,31 @@ class ApiHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._error(503, str(exc))
             return
+        if path == "/api/blocks" or path.startswith("/api/blocks/"):
+            try:
+                requested = (
+                    int(path.rsplit("/", 1)[1])
+                    if path != "/api/blocks"
+                    else self.server.index.tip_height()
+                )
+                self._json(self._blocks(requested))
+            except Exception as exc:
+                self._error(404, str(exc))
+            return
+        if path.startswith("/api/block-height/"):
+            try:
+                height = int(path.rsplit("/", 1)[1])
+                self._text(str(self.server.index.rpc.call("getblockhash", [height])))
+            except Exception as exc:
+                self._error(404, str(exc))
+            return
+        if path.startswith("/api/block/") and path.endswith("/header"):
+            try:
+                block_hash = path.split("/")[3]
+                self._text(str(self.server.index.rpc.call("getblockheader", [block_hash, False])))
+            except Exception as exc:
+                self._error(404, str(exc))
+            return
         self._error(404, "not found")
 
     def _tx_json(self, txid: str) -> None:
@@ -378,9 +451,40 @@ class ApiHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._error(404, str(exc))
 
+    def _blocks(self, start_height: int) -> list[dict[str, Any]]:
+        output = []
+        for height in range(int(start_height), max(-1, int(start_height) - 10), -1):
+            block_hash = str(self.server.index.rpc.call("getblockhash", [height]))
+            header = self.server.index.rpc.call("getblockheader", [block_hash, True])
+            block = self.server.index.rpc.call("getblock", [block_hash, 1])
+            output.append(
+                {
+                    "id": block_hash,
+                    "height": height,
+                    "version": header.get("version"),
+                    "timestamp": header.get("time"),
+                    "tx_count": block.get("nTx", len(block.get("tx") or [])),
+                    "size": block.get("size"),
+                    "weight": block.get("weight"),
+                    "merkle_root": header.get("merkleroot"),
+                    "previousblockhash": header.get("previousblockhash"),
+                    "mediantime": header.get("mediantime"),
+                    "nonce": header.get("nonce"),
+                    "bits": int(str(header.get("bits") or "0"), 16),
+                    "difficulty": header.get("difficulty"),
+                }
+            )
+        return output
+
     def _tx_hex(self, txid: str) -> None:
         try:
             self._text(self.server.index.raw_hex(txid))
+        except Exception as exc:
+            self._error(404, str(exc))
+
+    def _tx_status(self, txid: str) -> None:
+        try:
+            self._json(self.server.index.esplora_tx(txid).get("status") or {})
         except Exception as exc:
             self._error(404, str(exc))
 
@@ -389,9 +493,23 @@ class ApiHandler(BaseHTTPRequestHandler):
         if len(parts) < 4:
             self._error(404, "not found")
             return
-        scripthash = parts[3]
+        # Esplora renders SHA256(script) in digest order, whereas Electrum's
+        # protocol renders the same digest with its bytes reversed. The shared
+        # in-memory index uses Electrum order, so normalize the HTTP key here.
+        try:
+            scripthash = bytes.fromhex(parts[3])[::-1].hex()
+        except ValueError:
+            self._error(400, "invalid scripthash")
+            return
         if len(parts) == 4:
             self._json(self.server.index.stats(scripthash))
+        elif path.endswith("/txs"):
+            self._json(
+                [
+                    self.server.index.esplora_tx(row["tx_hash"])
+                    for row in self.server.index.history(scripthash)
+                ]
+            )
         elif path.endswith("/txs/mempool"):
             self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in self.server.index.history(scripthash, mempool=True)])
         elif "/txs/chain" in path:

@@ -196,6 +196,14 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("tests.integration.test_live_chain_observer_oracle", harness)
         self.assertNotIn("compose.chain-observers", harness)
 
+    def test_default_compose_lane_removes_stale_keep_state_before_start(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+        cleanup = "docker_compose_regtest down -v --remove-orphans"
+        startup = "docker_compose_regtest up -d"
+
+        self.assertIn(cleanup, harness)
+        self.assertLess(harness.index(cleanup), harness.index(startup))
+
     def test_no_egress_guard_blocks_only_non_loopback_connects(self):
         calls = []
 

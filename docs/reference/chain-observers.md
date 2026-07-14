@@ -12,8 +12,9 @@ phase checkpoint commits; it is not a shadow-observer rollout.
 
 ## Target boundary
 
-`bdkpython` (`bdk_wallet`) will own supported Bitcoin descriptor-wallet chain
-state for Esplora and Electrum. `lwk` (`lwk_wollet`) will own supported Liquid
+Pinned `bdkpython` 3.0.0 (`bdk_wallet`) owns supported Bitcoin
+descriptor-wallet chain state for Esplora and Electrum. `lwk` (`lwk_wollet`)
+will own supported Liquid
 descriptor-wallet chain state. Kassiber continues to own:
 
 - wallet/source configuration and the SQLCipher security boundary;
@@ -74,20 +75,22 @@ facts cannot be applied together: the coordinator raises
 `observer_projection_conflict` instead of running a shadow observer or falling
 back after dependency application begins.
 
-## Initial capability matrix
+## Capability matrix
 
-This is a routing policy, not a claim that migration is already complete.
-Every dependency-backed cell must be proven by executable contract and regtest
-tests before its route is enabled. Capability selection occurs before network
-access; a dependency failure is never retried silently through compatibility
-code.
+Capability selection occurs before network access; a dependency failure is
+never retried silently through compatibility code. Bitcoin rows below are live;
+Liquid rows remain the Phase 7 target.
 
-| Chain/source | Configuration | Planned observer | Initial status |
+| Chain/source | Configuration | Observer | Status |
 | --- | --- | --- | --- |
-| Bitcoin Esplora | supported watch-only descriptor, normal platform trust | BDK | planned; dependency contract and parity tests required |
-| Bitcoin Electrum | supported watch-only descriptor over TCP or normal TLS | BDK | planned; TCP/TLS and proxy contract tests required |
-| Bitcoin Esplora/Electrum | SOCKS proxy supported by the tested binding | BDK | conditional; must preserve per-backend proxy and `KASSIBER_NO_EGRESS` |
-| Bitcoin Esplora/Electrum | custom CA unsupported by the tested binding | named compatibility observer | permitted only after executable capability preflight |
+| Bitcoin Esplora | supported watch-only descriptor, normal platform trust | BDK | enabled; BDK owns scan, canonical transaction, chain-position and output state |
+| Bitcoin Electrum | supported watch-only descriptor over TCP or normal TLS | BDK | enabled; live descriptor restart/no-op coverage runs in the regtest observer lane |
+| Bitcoin Esplora/Electrum | SOCKS proxy configured | BDK | enabled through the binding's proxy argument; onion endpoints fail closed without it |
+| Bitcoin Esplora/Electrum | custom CA unsupported by the binding | named compatibility observer | selected before connect; never a runtime fallback |
+| Bitcoin Esplora | custom HTTP authorization unsupported by the binding | named compatibility observer | selected before connect; never a runtime fallback |
+| Bitcoin Esplora | non-default caller timeout unsupported by the binding | named compatibility observer | selected before connect so the configured timeout remains enforceable |
+| Bitcoin Esplora/Electrum | finite source-overlap exclusion would require a partial descriptor scan | named compatibility observer | selected after local overlap policy and before connect |
+| Bitcoin Esplora/Electrum | address-list source | named compatibility observer | BDK route is descriptor-only |
 | Bitcoin Core RPC | descriptor, xpub or address watch source | existing `bitcoinrpc` adapter | explicit compatibility route; not migrated to BDK |
 | Bitcoin Silent Payments | BIP352/BIP392 material | dedicated Silent Payments path | explicit compatibility route |
 | Bitcoin | spending-private descriptor/key material | none | always rejected before network access |
@@ -102,6 +105,32 @@ code.
 `embit` remains available for compatibility parsing, intentionally unsupported
 descriptor forms, Liquid transaction decoding, HTLC parsing and specialized
 primitives not replaced by BDK/LWK.
+
+### BDK persistence representation
+
+`kassiber/core/chain_observer/bdk_persistence.py` implements BDK's custom
+`Persistence` callback without giving BDK a database path. Schema version 1
+serializes every aggregate `ChangeSet` component explicitly: public
+descriptors, network, local-chain changes, full transactions, floating txouts,
+anchors, first/last-seen and eviction times, descriptor-index state, and locked
+outpoints. Transaction and identifier bytes are hex; values and timestamps are
+integers. Root, component and item fields are exact, so missing or future
+fields require an explicit rebuild/migration rather than being silently
+dropped. Pickle and opaque native blobs are prohibited.
+
+The request-local callback merges staged BDK changes in memory. Only the
+coordinator's apply savepoint writes its JSON payload to
+`chain_observer_instances`, alongside normalized facts and branch coverage.
+An immediate no-op therefore reloads the same aggregate from SQLCipher and
+persists byte-for-byte equivalent canonical JSON without a BDK sidecar.
+
+The exact 3.0.0 Python binding bundles an Electrum client from before the
+upstream stale-anchor rollback fix. Before an incremental Electrum scan,
+Kassiber compares the persisted BDK tip with the remote header through BDK's
+client API. A height rollback or disconnected tip rebuilds a fresh watch-only
+BDK wallet from the same public descriptors and replaces the derived aggregate
+atomically. It does not invoke the compatibility protocol client, retain a
+second graph, or alter authored accounting evidence.
 
 ## Manual observer inventory
 
@@ -141,6 +170,13 @@ those routes.
 BDK/LWK replace this machinery for supported routes. Kassiber persists a
 redacted coverage projection for inventory/ownership UI, not a competing scan
 checkpoint.
+
+The remaining manual discovery/history/UTXO helpers are reachable only through
+the named capability routes in the matrix above (address-list, custom CA,
+custom HTTP authorization, non-default Esplora timeout, or a partial descriptor
+after source-overlap filtering), and through Liquid until Phase 7 completes.
+Dependency-contract tests fail if an ordinary supported BDK route calls one of
+those adapters or retries through one after a BDK error.
 
 ### Esplora and Electrum history checkpoints
 

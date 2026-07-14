@@ -30,6 +30,29 @@ wheels = [
 ]
 
 [[package]]
+name = "bdkpython"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/87/a2ea72095a4d2e45e6655481ec520d45a7c9b31c8757fa485b98c4d3c10b/bdkpython-3.0.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:ebf6a8feabc546d74301c495f1b6a79888e822cad4eb2e8315043fd07abc840e", size = 5581651, upload-time = "2026-06-01T19:51:57.556Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/30/b5c64490bfc70f0efbc9441959aa4327b033e423226939b03a737d38666d/bdkpython-3.0.0-cp310-cp310-macosx_11_0_x86_64.whl", hash = "sha256:a946d91e7dc15b66cfba4afb380c63f2fdc64d38808e767d00a598020791e9de", size = 5521563, upload-time = "2026-06-01T19:51:59.73Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/ab/c963fbae6c5f83e4b225f8b4ed28fc9e79f59aa88395ced34b1a19239674/bdkpython-3.0.0-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:8a619e8b3729c2c729d1ba500ff5c52b8dd73700564a919ef5e0f4a9440e46f8", size = 5252937, upload-time = "2026-06-01T19:52:01.39Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/b2/00da7e7c870d5b826cec094701285766c88fca867603850b4bd4e6796b47/bdkpython-3.0.0-cp310-cp310-win_amd64.whl", hash = "sha256:2d5ec75b0fe2bf9311244009ceee397c9d81fd59a6ddf76ceb25c2acfea92e96", size = 4773378, upload-time = "2026-06-01T19:52:02.789Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/1a/0eb88bec12e54c5807ed0830eccb3de0e0d480dff497cf8f11d1e4fbb856/bdkpython-3.0.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:da136484617ed7378233c82f8fa60c1718bcbb44afec40943fe3383ec1724465", size = 5581654, upload-time = "2026-06-01T19:52:04.463Z" },
+    { url = "https://files.pythonhosted.org/packages/34/00/92a1f28757e78889e70882a31ba73ed8d1b10892da530873b30c7aa25fbc/bdkpython-3.0.0-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:7a991fc960b8326314f44220b7f809f94b6e1f00fb5eff5d2e336649c5df3b31", size = 5521570, upload-time = "2026-06-01T19:52:06.27Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/fa/67099a49f5635b54de01e7fc6c94d9ac9e070ef98c439ca6a717b4e07b75/bdkpython-3.0.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:0593ad8826224238ce4ec64edf4e0614f52a076cf957547045b31aba949429cb", size = 5252944, upload-time = "2026-06-01T19:52:08.008Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/fa/553c68634b5b88aebdfd9407d5053fa40a6191f06fcade71caeb64156829/bdkpython-3.0.0-cp311-cp311-win_amd64.whl", hash = "sha256:5a4fe52f6eaa575c84fbd4b7ccb8e97ffdfb27cb38663aa8d0479564ead1edae", size = 4773366, upload-time = "2026-06-01T19:52:09.558Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/37/e05b5c6fb39d60bcd1cc1ee37f85304fb4998bfc58f89dfd4d06d7c4febc/bdkpython-3.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:83c56e7dd2aebb08c2fb986e508b42734b25ce2ed9b3afcbe7aacecd9136ca5a", size = 5581655, upload-time = "2026-06-01T19:52:11.181Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/51/1b614857c6a85529a8d4088e9ce1a46b606c9f9a183a34e72185a54ccefe/bdkpython-3.0.0-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:b58b12ffe32ee5e926815d17fa0886e3f8c3a72d039c20b4c4f99b815f7b8750", size = 5521571, upload-time = "2026-06-01T19:52:13.289Z" },
+    { url = "https://files.pythonhosted.org/packages/87/9e/f72587ab213146c81b99989cc5dfadbf82ae20e2cc1a9325ed6f2b1dfd42/bdkpython-3.0.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:6caa884cff14d11b6517140eed05adcac3d034df4374e3ff0b7a994f9ffab265", size = 5252933, upload-time = "2026-06-01T19:52:15.083Z" },
+    { url = "https://files.pythonhosted.org/packages/69/2b/71e5e855f47e5ea746a93783b4b66877966d3d669c31c2379caa7ed4e6bc/bdkpython-3.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:ada19e5f2a96a08d50309ef702f592f4315ecc1719d06b7dad82eac3bd46282f", size = 4773386, upload-time = "2026-06-01T19:52:16.663Z" },
+    { url = "https://files.pythonhosted.org/packages/31/8a/230020232299954bce65c4e8a63fcd73d7da32ee7983cef6a6b3cf08225a/bdkpython-3.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:9e8e9fbe91211ada4c0e5bc36c7d8aa66a403813cace75d474f770348827a2f4", size = 5581663, upload-time = "2026-06-01T19:52:18.454Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/b9/bb960b9db53e3b33136a62a69bcd0ece5e392eaf67bd73a769ee5a5e5269/bdkpython-3.0.0-cp313-cp313-macosx_11_0_x86_64.whl", hash = "sha256:7fdce39cc527efba74ce4a3cecf117439ce8cd08116351e15ae41538d8d210a2", size = 5521569, upload-time = "2026-06-01T19:52:19.888Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/c5/90a94785f1daad534d52117021f7ccf866d21d9b847b6344d08908128832/bdkpython-3.0.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:38b4cbccb5039bd7ca93f9f26ee37f23b922ce60fda45110a80b56a46de02fa0", size = 5252934, upload-time = "2026-06-01T19:52:21.406Z" },
+    { url = "https://files.pythonhosted.org/packages/03/b9/31f1b0efbd49387715c700cb002d0f5268f53b44f73819d5794095507e0c/bdkpython-3.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:500e82dc03e6f8034349c822380d9c4e8b3bfee6c08ade320334d5b18543f40d", size = 4773369, upload-time = "2026-06-01T19:52:23.146Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.4.22"
 source = { registry = "https://pypi.org/simple" }
@@ -342,7 +365,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -465,6 +488,7 @@ name = "kassiber"
 version = "0.22.55"
 source = { editable = "." }
 dependencies = [
+    { name = "bdkpython" },
     { name = "certifi" },
     { name = "cryptography" },
     { name = "embit" },
@@ -484,6 +508,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bdkpython", specifier = "==3.0.0" },
     { name = "certifi", specifier = ">=2024.7.4" },
     { name = "cryptography", specifier = ">=44,<48" },
     { name = "embit", specifier = ">=0.8.0" },

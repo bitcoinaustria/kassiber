@@ -88,6 +88,8 @@ jobs:
             --name kassiber \
             --paths . \
             --collect-data kassiber \
+            --collect-submodules bdkpython \
+            --collect-data bdkpython \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \
@@ -406,6 +408,8 @@ jobs:
             --name kassiber-cli \
             --paths . \
             --collect-data kassiber \
+            --collect-submodules bdkpython \
+            --collect-data bdkpython \
             --collect-submodules embit \
             --collect-data embit \
             --collect-submodules rp2 \

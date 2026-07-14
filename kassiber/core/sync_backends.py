@@ -833,6 +833,29 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
     raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
 
 
+def _offline_descriptor_targets(plan, checkpoint=None):
+    """Resolve a finite overlap horizon without contacting a backend."""
+
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    highest_used = checkpoint.get("highest_used") or {}
+    targets = []
+    for branch in plan.branches:
+        try:
+            observed = int(highest_used.get(str(branch.branch_index), highest_used.get(branch.branch_index, -1)))
+        except (TypeError, ValueError):
+            observed = -1
+        end = max(plan.gap_limit, observed + plan.gap_limit + 1)
+        targets.extend(
+            derive_descriptor_targets(
+                plan,
+                branch_index=branch.branch_index,
+                start=0,
+                end=end,
+            )
+        )
+    return [target.__dict__ if hasattr(target, "__dict__") else dict(target) for target in targets]
+
+
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
@@ -865,7 +888,15 @@ def resolve_wallet_sync_targets(backend, wallet):
         if chain == "liquid" and not config.get("backend"):
             raise AppError("Liquid wallets must name a backend explicitly; no public Liquid default is built in")
         kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
-        discovery = discover_descriptor_targets(backend, descriptor_plan, kind, checkpoint=checkpoint)
+        # Discovery must stay local so source-overlap checks run before either
+        # BDK or an explicit compatibility adapter opens a network connection.
+        if kind in {"esplora", "electrum"}:
+            discovery = {
+                "targets": _offline_descriptor_targets(descriptor_plan, checkpoint),
+                "history_cache": {},
+            }
+        else:
+            discovery = discover_descriptor_targets(backend, descriptor_plan, kind, checkpoint=checkpoint)
         targets = discovery["targets"]
         history_cache = discovery.get("history_cache") or {}
     else:
@@ -899,6 +930,109 @@ def resolve_wallet_sync_targets(backend, wallet):
         targets=targets,
         tracked_scripts=tracked_scripts,
         history_cache=history_cache,
+        checkpoint=checkpoint,
+    )
+
+
+def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
+    """Prepare supported Bitcoin descriptor refreshes through BDK."""
+
+    from .chain_observer import ObserverPrepareRequest, prepare_observer_update
+    from .chain_observer.bdk import (
+        BdkObserver,
+        bdk_branches_for_identity,
+        bdk_compatibility_reason,
+    )
+    from .chain_observer.identity import identities_for_wallet
+    from .sync import WalletBackendFetch
+
+    state = discovery.sync_state
+    if discovery.skip_outcome is not None or state is None:
+        return None
+
+    def compatibility_fetch(reason):
+        if state.chain != "bitcoin" or discovery.kind not in {"esplora", "electrum"}:
+            return None
+        adapter = SYNC_BACKEND_ADAPTERS[discovery.kind]
+        try:
+            records, meta = adapter(discovery.backend, wallet, state)
+        except AppError:
+            raise
+        except Exception as exc:
+            safe_error = redact_operational_text(str(exc))
+            raise AppError(
+                f"Bitcoin compatibility observation failed for backend '{discovery.backend.get('name')}'",
+                code="backend_sync_failed",
+                details={"observer_route": "compatibility", "error": safe_error},
+                retryable=True,
+            ) from exc
+        route = "silent_payment" if reason == "silent_payment" else "compatibility"
+        return WalletBackendFetch(
+            backend=discovery.backend,
+            sync_state=state,
+            normalized_records=tuple(records),
+            adapter_meta={
+                **dict(meta or {}),
+                "observer_route": route,
+                "observer_compatibility_reason": reason,
+            },
+            kind=discovery.kind,
+            started=discovery.started,
+            force_full=discovery.force_full,
+        )
+
+    compatibility_reason = bdk_compatibility_reason(discovery.backend, state)
+    if compatibility_reason is not None:
+        return compatibility_fetch(compatibility_reason)
+    expected_scripts = {
+        target.get("script_pubkey")
+        for target in _offline_descriptor_targets(state.descriptor_plan, state.checkpoint)
+        if target.get("script_pubkey")
+    }
+    actual_scripts = {
+        target.get("script_pubkey") for target in state.targets if target.get("script_pubkey")
+    }
+    if actual_scripts != expected_scripts:
+        # BDK scans whole descriptors. A finite source-overlap exclusion cannot
+        # safely be represented, so keep this named compatibility route.
+        return compatibility_fetch("source_overlap_partial_descriptor")
+    identities = identities_for_wallet(wallet, observer_kind="bdk")
+    prepared = []
+    try:
+        for identity in identities:
+            observer = BdkObserver(
+                identity=identity,
+                backend=discovery.backend,
+                branches=bdk_branches_for_identity(state.descriptor_plan, identity),
+                gap_limit=state.descriptor_plan.gap_limit,
+            )
+            prepared.append(
+                prepare_observer_update(
+                    conn,
+                    identity,
+                    observer,
+                    ObserverPrepareRequest(
+                        backend_name=str(discovery.backend["name"]),
+                        backend_kind=discovery.kind,
+                        force_full=discovery.force_full,
+                        checkpoint=dict(state.checkpoint or {}),
+                    ),
+                )
+            )
+    except BaseException:
+        from .chain_observer import discard_prepared_observer_updates
+
+        discard_prepared_observer_updates(prepared)
+        raise
+    return WalletBackendFetch(
+        backend=discovery.backend,
+        sync_state=state,
+        normalized_records=(),
+        adapter_meta={"observer_route": "bdk"},
+        kind=discovery.kind,
+        started=discovery.started,
+        force_full=discovery.force_full,
+        observer_updates=tuple(prepared),
     )
 
 
@@ -1729,9 +1863,14 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         amount = sats_to_btc(amount_sats)
         fee = sats_to_btc(fee_sats)
         kind = "withdrawal" if amount > 0 else "fee"
-    block_time = (tx.get("status") or {}).get("block_time")
-    occurred_at = timestamp_to_iso(block_time)
-    confirmed_at = timestamp_to_iso(block_time, default=None)
+    status = tx.get("status") or {}
+    block_time = status.get("block_time")
+    occurred_at = timestamp_to_iso(block_time or tx.get("observed_at"))
+    confirmed_at = (
+        timestamp_to_iso(block_time, default=None)
+        if status.get("confirmed") is True or block_time is not None
+        else None
+    )
     claim_evidence = _extract_unique_claim_payment_hash_outpoint(
         tx.get("vin", []), _esplora_witness_items
     )

@@ -3298,6 +3298,7 @@ def _wallet_sync_hooks(commit=True):
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
         normalize_addresses=core_wallets.normalize_addresses,
         backend_adapters=core_sync_backends.SYNC_BACKEND_ADAPTERS,
+        prepare_observer_fetch=core_sync_backends.prepare_dependency_observer_fetch,
         update_output_inventory=lambda conn, profile, wallet, backend, sync_state, outputs: core_output_inventory.update_wallet_output_inventory(
             conn,
             profile,
@@ -3439,9 +3440,20 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             (profile["id"], wallet["id"]),
         ).fetchall()
     ]
+    observer_records = []
+    observer_retractions = []
+    for prepared in fetch.observer_updates:
+        facts = prepared.update.get("facts") if isinstance(prepared.update, dict) else None
+        if not isinstance(facts, dict):
+            continue
+        observer_records.extend(facts.get("transaction_records") or [])
+        observer_retractions.extend(facts.get("retracted_external_ids") or [])
     retracted = {
         str(value).strip().lower()
-        for value in fetch.adapter_meta.get("bitcoinrpc_retracted_txids", [])
+        for value in (
+            list(fetch.adapter_meta.get("bitcoinrpc_retracted_txids", []))
+            + observer_retractions
+        )
         if str(value).strip()
     }
     if retracted:
@@ -3455,7 +3467,8 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
         for index, row in enumerate(rows)
         if str(row.get("external_id") or "").strip()
     }
-    for index, record in enumerate(fetch.normalized_records):
+    candidate_records = list(fetch.normalized_records) + observer_records
+    for index, record in enumerate(candidate_records):
         normalized = core_imports.normalize_import_record(
             record,
             source_label=f"backend:{fetch.backend['name']}",
@@ -3563,6 +3576,16 @@ def _prepare_negative_balance_repairs(
                     state,
                 )
             ),
+            observer_fetch_preflight=(
+                lambda candidate, discovery: hooks.prepare_observer_fetch(
+                    conn,
+                    profile,
+                    candidate,
+                    discovery,
+                )
+                if hooks.prepare_observer_fetch is not None
+                else None
+            ),
         )
         repair_meta = dict(repair_fetch.adapter_meta)
         repair_meta["_prepared_negative_balance_rescan"] = {
@@ -3610,6 +3633,16 @@ def _prefetch_chain_wallets(
                 wallet,
                 sync_state,
             )
+        ),
+        observer_fetch_preflight=(
+            lambda candidate, discovery: hooks.prepare_observer_fetch(
+                conn,
+                profile,
+                candidate,
+                discovery,
+            )
+            if hooks.prepare_observer_fetch is not None
+            else None
         ),
     )
     return _prepare_negative_balance_repairs(

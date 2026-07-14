@@ -72,6 +72,8 @@ run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --specpath build \
   --paths . \
   --collect-data kassiber \
+  --collect-submodules bdkpython \
+  --collect-data bdkpython \
   --collect-submodules embit \
   --collect-data embit \
   --collect-submodules rp2 \

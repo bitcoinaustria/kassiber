@@ -42,7 +42,7 @@ import sys
 
 missing = [
     name
-    for name in ("embit", "openpyxl")
+    for name in ("bdkpython", "embit", "openpyxl")
     if importlib.util.find_spec(name) is None
 ]
 if missing:
@@ -318,6 +318,12 @@ run_with_bitcoin_core() {
     # Mark before `up` so the EXIT trap also removes a half-created project
     # (network/volume/container) when startup fails, e.g. on a port collision.
     STARTED_COMPOSE=1
+    if [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then
+      # A prior KEEP run may have left this per-worktree project's volumes at
+      # an arbitrarily advanced chain height. The default lane promises fresh
+      # disposable truth, so remove that state before creating the stack.
+      docker_compose_regtest down -v --remove-orphans
+    fi
     if ! docker_compose_regtest up -d; then
       echo "Failed to start the regtest bitcoind container." >&2
       echo "If port ${KASSIBER_REGTEST_RPC_PORT} is already taken (e.g. by the demo-up node)," >&2
@@ -349,6 +355,9 @@ run_bitcoin_backend_suite() {
 
 run_chain_observer_oracle() {
   py -m unittest tests.integration.test_live_chain_observer_oracle -v
+  if [ "${KASSIBER_CHAIN_OBSERVER_CHAIN:-all}" != "liquid" ]; then
+    py -m unittest tests.integration.test_live_bdk_observer -v
+  fi
 }
 
 run_chain_observers() {

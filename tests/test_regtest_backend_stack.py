@@ -63,7 +63,7 @@ class RegtestBackendStackTest(unittest.TestCase):
         self.assertEqual(handler._call("blockchain.transaction.get", ["txid"]), "raw-txid")
         self.assertEqual(handler._call("blockchain.block.header", [41]), "header-41")
 
-    def test_liquid_api_scripthash_stats_delegate_to_real_index(self) -> None:
+    def test_esplora_scripthash_is_normalized_to_electrum_index_order(self) -> None:
         captured: list[object] = []
 
         class CapturingHandler(backend_stack.ApiHandler):
@@ -81,7 +81,7 @@ class RegtestBackendStackTest(unittest.TestCase):
 
         CapturingHandler()._scripthash("/api/scripthash/deadbeef")
 
-        self.assertEqual(captured, [{"seen": "deadbeef"}])
+        self.assertEqual(captured, [{"seen": "efbeadde"}])
 
     def test_index_utxos_include_electrum_and_esplora_keys(self) -> None:
         script_hex = "0014" + "11" * 20
@@ -127,6 +127,52 @@ class RegtestBackendStackTest(unittest.TestCase):
         self.assertEqual(rows[1]["height"], 1)
         self.assertEqual(rows[1]["txid"], "tx-1")
         self.assertEqual(rows[1]["vout"], 0)
+
+    def test_index_history_includes_no_change_spend_via_prevout_script(self) -> None:
+        owned_script = "0014" + "11" * 20
+        external_script = "0014" + "22" * 20
+        index = backend_stack.BitcoinIndex(SimpleNamespace())
+        history: dict[str, list[dict[str, object]]] = {}
+        spent: set[tuple[str, int]] = set()
+        transaction = {
+            "txid": "spend",
+            "vin": [{"txid": "funding", "vout": 2}],
+            "vout": [
+                {
+                    "n": 0,
+                    "value": 0.00009000,
+                    "scriptPubKey": {"hex": external_script},
+                }
+            ],
+        }
+
+        previous = {
+            "txid": "funding",
+            "vout": [
+                {"n": 0, "value": 0.0, "scriptPubKey": {"hex": external_script}},
+                {"n": 1, "value": 0.0, "scriptPubKey": {"hex": external_script}},
+                {"n": 2, "value": 0.0001, "scriptPubKey": {"hex": owned_script}},
+            ],
+        }
+        with patch.object(
+            index,
+            "_prevout",
+            side_effect=AssertionError("known prevout used RPC fallback"),
+        ) as fallback:
+            index._index_tx(
+                history,
+                spent,
+                transaction,
+                0,
+                known_txs={"funding": previous},
+            )
+
+        self.assertEqual(spent, {("funding", 2)})
+        fallback.assert_not_called()
+        self.assertEqual(
+            history[backend_stack.electrum_scripthash(owned_script)],
+            [{"tx_hash": "spend", "height": 0}],
+        )
 
 
 if __name__ == "__main__":

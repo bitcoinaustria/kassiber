@@ -32,9 +32,12 @@ fi
 
 "$VENV/bin/python" - <<'PY'
 import embit
+import bdkpython
 import sqlcipher3
+from importlib.metadata import version
 
 print(f"Verified embit from {embit.__file__}")
+print(f"Verified bdkpython {version('bdkpython')} from {bdkpython.__file__}")
 print(f"Verified sqlcipher3 from {sqlcipher3.__file__}")
 PY
 

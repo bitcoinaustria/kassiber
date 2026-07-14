@@ -99,9 +99,11 @@ Compose stack:
 ```
 
 The lane creates a temporary output root and removes it together with the
-per-worktree Compose volumes by default. `KASSIBER_REGTEST_KEEP=1` preserves
-both for debugging; `KASSIBER_REGTEST_REUSE_CORE=1` reuses already-running
-loopback nodes and the existing port/credential environment. Generated
+per-worktree Compose volumes by default. A normal run also removes any stale
+project/volumes left by an earlier keep-mode run before starting, so node truth
+always begins on a clean chain. `KASSIBER_REGTEST_KEEP=1` preserves both for
+debugging; `KASSIBER_REGTEST_REUSE_CORE=1` reuses already-running loopback
+nodes and the existing port/credential environment. Generated
 `bitcoin-truth.json` and `liquid-truth.json` files are private run artifacts,
 not fixtures: Bitcoin Core and Elements RPC define expected txids, outpoints,
 heights, confirmation/replacement relationships, ownership indices, UTXOs and
@@ -126,6 +128,11 @@ pretending unsupported forms ran.
 Every transition is also referenced from versioned observer JSON in the main
 temporary SQLCipher database. The runner injects and rolls back a failed state
 write, reopens the encrypted project, and rejects BDK/LWK-looking sidecar files.
+For Bitcoin/all selections, the lane then creates a real Core descriptor wallet,
+funds both low and gap-edge receive indices, and refreshes its public descriptor
+through Fulcrum using BDK. It asserts the BDK route, transaction/UTXO projection,
+per-branch coverage, SQLCipher-only state, process restart, and byte-stable
+immediate no-op state.
 Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.

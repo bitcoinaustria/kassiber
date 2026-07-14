@@ -294,9 +294,63 @@ class _ToolChatHandler(BaseHTTPRequestHandler):
 
 class _EsploraSyncHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        self.server.paths.append(self.path)  # type: ignore[attr-defined]
         target_scripthash = self.server.target_scripthash  # type: ignore[attr-defined]
+        target_esplora_scripthash = self.server.target_esplora_scripthash  # type: ignore[attr-defined]
         transaction = self.server.transaction  # type: ignore[attr-defined]
-        if self.path == f"/scripthash/{target_scripthash}":
+        block_hash = self.server.block_hash  # type: ignore[attr-defined]
+        tip_height = self.server.tip_height  # type: ignore[attr-defined]
+        target_hashes = {target_scripthash, target_esplora_scripthash}
+        if self.path == "/blocks/tip/height":
+            self._send_text(tip_height)
+            return
+        if self.path == "/blocks/tip/hash":
+            self._send_text(block_hash)
+            return
+        if self.path == f"/block-height/{tip_height}":
+            self._send_text(block_hash)
+            return
+        if self.path == "/block-height/0":
+            self._send_text(self.server.previous_block_hash)  # type: ignore[attr-defined]
+            return
+        if self.path in {"/blocks", f"/blocks/{tip_height}"}:
+            self._send_json(
+                [
+                    {
+                        "id": block_hash,
+                        "height": tip_height,
+                        "version": 1,
+                        "timestamp": 1_231_006_505,
+                        "tx_count": 1,
+                        "size": 285,
+                        "weight": 1_140,
+                        "merkle_root": (
+                            "4a5e1e4baab89f3a32518a88c31bc87f"
+                            "618f76673e2cc77ab2127b7afdeda33b"
+                        ),
+                        "previousblockhash": self.server.previous_block_hash,  # type: ignore[attr-defined]
+                        "mediantime": 1_231_006_505,
+                        "nonce": 2_083_236_893,
+                        "bits": 486_604_799,
+                        "difficulty": 1.0,
+                    }
+                ]
+            )
+            return
+        if self.path == f"/tx/{transaction['txid']}":
+            self._send_json(transaction)
+            return
+        if self.path == f"/tx/{transaction['txid']}/status":
+            self._send_json(transaction["status"])
+            return
+        if self.path == f"/tx/{transaction['txid']}/hex":
+            self._send_text(self.server.transaction_hex)  # type: ignore[attr-defined]
+            return
+        if self.path.startswith("/scripthash/") and self.path.endswith("/txs"):
+            scripthash = self.path.split("/")[2]
+            self._send_json([transaction] if scripthash in target_hashes else [])
+            return
+        if self.path in {f"/scripthash/{value}" for value in target_hashes}:
             self._send_json(
                 {"chain_stats": {"tx_count": 1}, "mempool_stats": {"tx_count": 0}}
             )
@@ -325,6 +379,14 @@ class _EsploraSyncHandler(BaseHTTPRequestHandler):
         raw = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _send_text(self, payload):
+        raw = str(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("content-type", "text/plain")
         self.send_header("content-length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
@@ -2234,6 +2296,9 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(code, 0, stderr)
 
     def test_ui_wallets_sync_zpub_against_local_esplora_backend(self):
+        from embit import script as embit_script
+        from embit.transaction import Transaction, TransactionInput, TransactionOutput
+
         from kassiber.core.sync_backends import scriptpubkey_scripthash
         from kassiber.wallet_descriptors import derive_descriptor_target, load_descriptor_plan
         from kassiber.wallet_setup import normalize_wallet_material
@@ -2252,16 +2317,80 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             target = derive_descriptor_target(plan, 0, 0)
             target_scripthash = scriptpubkey_scripthash(target.script_pubkey)
+            genesis_hash = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
+            block_hash = "11" * 32
+            previous_txid = "22" * 32
+            previous_script = "0014" + "33" * 20
+            dependency_tx = Transaction(
+                vin=[
+                    TransactionInput(
+                        bytes.fromhex(previous_txid),
+                        0,
+                        embit_script.Script(),
+                    )
+                ],
+                vout=[
+                    TransactionOutput(
+                        123_456,
+                        embit_script.Script(bytes.fromhex(target.script_pubkey)),
+                    )
+                ],
+            )
+            transaction_hex = dependency_tx.serialize().hex()
             transaction = {
-                "txid": "66" * 32,
-                "fee": 0,
-                "vin": [],
-                "vout": [{"scriptpubkey": target.script_pubkey, "value": 123_456}],
-                "status": {"confirmed": True, "block_time": 1_700_000_000},
+                "txid": dependency_tx.txid().hex(),
+                "version": 2,
+                "locktime": 0,
+                "size": len(dependency_tx.serialize()),
+                "vsize": len(dependency_tx.serialize()),
+                "weight": len(dependency_tx.serialize()) * 4,
+                "fee": 76_544,
+                "vin": [
+                    {
+                        "txid": previous_txid,
+                        "vout": 0,
+                        "prevout": {
+                            "scriptpubkey": previous_script,
+                            "scriptpubkey_asm": "",
+                            "scriptpubkey_type": "v0_p2wpkh",
+                            "scriptpubkey_address": None,
+                            "value": 200_000,
+                        },
+                        "scriptsig": "",
+                        "scriptsig_asm": "",
+                        "witness": [],
+                        "is_coinbase": False,
+                        "sequence": 4_294_967_295,
+                    }
+                ],
+                "vout": [
+                    {
+                        "scriptpubkey": target.script_pubkey,
+                        "n": 0,
+                        "scriptpubkey_asm": "",
+                        "scriptpubkey_type": "v0_p2wpkh",
+                        "scriptpubkey_address": target.address,
+                        "value": 123_456,
+                    }
+                ],
+                "status": {
+                    "confirmed": True,
+                    "block_height": 1,
+                    "block_hash": block_hash,
+                    "block_time": 1_700_000_000,
+                },
             }
             server = ThreadingHTTPServer(("127.0.0.1", 0), _EsploraSyncHandler)
+            server.paths = []  # type: ignore[attr-defined]
             server.target_scripthash = target_scripthash  # type: ignore[attr-defined]
+            server.target_esplora_scripthash = bytes.fromhex(target_scripthash)[  # type: ignore[attr-defined]
+                ::-1
+            ].hex()
             server.transaction = transaction  # type: ignore[attr-defined]
+            server.transaction_hex = transaction_hex  # type: ignore[attr-defined]
+            server.tip_height = 1  # type: ignore[attr-defined]
+            server.block_hash = block_hash  # type: ignore[attr-defined]
+            server.previous_block_hash = genesis_hash  # type: ignore[attr-defined]
             server_thread = threading.Thread(target=server.serve_forever, daemon=True)
             server_thread.start()
 
@@ -2319,8 +2448,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(synced["kind"], "ui.wallets.sync")
                 result = synced["data"]["results"][0]
                 self.assertEqual(result["wallet"], "Descriptor Live")
-                self.assertEqual(result["status"], "synced", synced)
-                self.assertEqual(result["imported"], 1)
+                self.assertEqual(result["status"], "synced", (synced, server.paths))
+                self.assertEqual(result["imported"], 1, server.paths)
                 self.assertEqual(result["sync_mode"], "descriptor")
                 self.assertEqual(result["target_count"], 2)
                 self.assertTrue(result["has_backend_url"])

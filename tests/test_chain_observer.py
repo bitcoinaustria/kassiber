@@ -323,6 +323,108 @@ class ChainObserverContractTest(unittest.TestCase):
         core_sync.discard_fetch_observer_updates(conflicting)
         self.assertTrue(second_observer.discarded)
 
+    def test_multi_observer_shared_transaction_is_normalized_once(self):
+        script_a = "0014" + "11" * 20
+        script_b = "0014" + "22" * 20
+        txid = "33" * 32
+        raw_base = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "44" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": script_a, "value": 10_000},
+                    "witness": [],
+                }
+            ],
+            "vout": [{"scriptpubkey": script_b, "value": 9_000}],
+            "fee": 1_000,
+            "status": {"confirmed": False},
+            "observer": "bdk",
+        }
+
+        class StaticBdkObserver:
+            def __init__(self, owned_script, direction):
+                self.owned_script = owned_script
+                self.direction = direction
+
+            def prepare(self, _request, _prior_state):
+                return {"ready": True}
+
+            def apply(self, _update, _prior_state):
+                raw = {**raw_base, "observer_owned_scripts": [self.owned_script]}
+                return ObserverApplication(
+                    state={"schema_version": 1, "owned": self.owned_script},
+                    facts=ChainFacts(
+                        transaction_records=(
+                            {
+                                "txid": txid,
+                                "asset": "BTC",
+                                "direction": self.direction,
+                                "amount": "0.00009",
+                                "fee": "0.00001",
+                                "raw_json": json.dumps(raw, sort_keys=True),
+                            },
+                        ),
+                    ),
+                )
+
+            def discard(self):
+                return None
+
+        second_identity = ObserverIdentity(
+            id="observer-instance-second",
+            workspace_id=self.workspace_id,
+            profile_id=self.profile_id,
+            logical_wallet_id=self.wallet_id,
+            source_wallet_id=self.wallet_id,
+            source_key="xpub:p2tr",
+            observer_kind="bdk",
+            chain="bitcoin",
+            network="regtest",
+            branch_keys=("receive",),
+        )
+        first = prepare_observer_update(
+            self.conn,
+            self.identity,
+            StaticBdkObserver(script_a, "outbound"),
+            ObserverPrepareRequest("regtest", "electrum"),
+        )
+        second = prepare_observer_update(
+            self.conn,
+            second_identity,
+            StaticBdkObserver(script_b, "inbound"),
+            ObserverPrepareRequest("regtest", "electrum"),
+        )
+        sync_state = core_sync.WalletSyncState(
+            chain="bitcoin",
+            network="regtest",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=(),
+            tracked_scripts={},
+            history_cache={},
+        )
+        fetch = core_sync.WalletBackendFetch(
+            backend={"name": "regtest", "kind": "electrum", "url": "tcp://127.0.0.1"},
+            sync_state=sync_state,
+            normalized_records=(),
+            adapter_meta={},
+            kind="electrum",
+            started=0.0,
+            force_full=False,
+            observer_updates=(first, second),
+        )
+        self.conn.execute("SAVEPOINT shared_bdk_transaction")
+        projected = core_sync.apply_fetch_observer_updates(self.conn, fetch)
+        self.assertEqual(len(projected.normalized_records), 1)
+        record = projected.normalized_records[0]
+        self.assertEqual(record["direction"], "outbound")
+        self.assertEqual(str(record["amount"]), "0")
+        self.assertEqual(str(record["fee"]), "0.00001")
+        self.conn.execute("ROLLBACK TO SAVEPOINT shared_bdk_transaction")
+        self.conn.execute("RELEASE SAVEPOINT shared_bdk_transaction")
+
     def test_unknown_version_and_non_json_state_require_safe_rebuild(self):
         _observer, prepared = self._prepare()
         self._apply_and_commit(prepared)
