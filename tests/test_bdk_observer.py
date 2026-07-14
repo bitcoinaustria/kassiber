@@ -623,6 +623,9 @@ class BdkDependencyContractTest(TestCase):
         workflow = (ROOT / ".github/workflows/prerelease-binaries.yml").read_text(
             encoding="utf-8"
         )
+        app_packager = (ROOT / "scripts/build-macos-arm64-app.sh").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(
             '"bdkpython==3.0.0; python_version < \'3.14\' and '
             "(platform_system == 'Darwin' or (platform_system == 'Linux' and "
@@ -639,6 +642,11 @@ class BdkDependencyContractTest(TestCase):
         ):
             self.assertIn(f"bdkpython-3.0.0-cp313-cp313-{platform}.whl", lock)
         self.assertGreaterEqual(workflow.count("--collect-submodules bdkpython"), 2)
+        self.assertEqual(
+            workflow.count("--collect-submodules bdkpython"),
+            workflow.count("--copy-metadata bdkpython"),
+        )
+        self.assertIn("--copy-metadata bdkpython", app_packager)
         self.assertTrue(callable(bdk.Wallet.start_full_scan))
         self.assertTrue(callable(bdk.Persister.custom))
 

@@ -139,6 +139,9 @@ class LwkDescriptorContractTest(unittest.TestCase):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
         workflow = (ROOT / ".github/workflows/prerelease-binaries.yml").read_text(encoding="utf-8")
+        app_packager = (ROOT / "scripts/build-macos-arm64-app.sh").read_text(
+            encoding="utf-8"
+        )
         self.assertIn('name = "lwk"\nversion = "0.18.0"', lock)
         self.assertIn(
             '"lwk==0.18.0; (platform_system == \'Darwin\' and '
@@ -152,6 +155,11 @@ class LwkDescriptorContractTest(unittest.TestCase):
         ):
             self.assertIn(f"lwk-0.18.0-py3-none-{platform}.whl", lock)
         self.assertGreaterEqual(workflow.count("--collect-submodules lwk"), 2)
+        self.assertEqual(
+            workflow.count("--collect-submodules lwk"),
+            workflow.count("--copy-metadata lwk"),
+        )
+        self.assertIn("--copy-metadata lwk", app_packager)
         self.assertEqual(
             inspect.signature(require_lwk().WalletTxOut.wildcard_index).return_annotation,
             "'int'",

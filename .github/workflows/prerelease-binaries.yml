@@ -85,9 +85,10 @@ jobs:
           observer_collect_args=(
             --collect-submodules bdkpython
             --collect-data bdkpython
+            --copy-metadata bdkpython
           )
           if uv run python -c 'import lwk'; then
-            observer_collect_args+=(--collect-submodules lwk --collect-data lwk)
+            observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
           fi
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
@@ -419,9 +420,10 @@ jobs:
           observer_collect_args=(
             --collect-submodules bdkpython
             --collect-data bdkpython
+            --copy-metadata bdkpython
           )
           if uv run python -c 'import lwk'; then
-            observer_collect_args+=(--collect-submodules lwk --collect-data lwk)
+            observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
           fi
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
