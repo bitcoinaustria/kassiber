@@ -39,9 +39,16 @@ from kassiber.time_utils import now_iso
 
 
 class FakeObserver:
-    def __init__(self, conn, *, marker="observer-private-marker"):
+    def __init__(
+        self,
+        conn,
+        *,
+        marker="observer-private-marker",
+        outputs=({"txid": "aa" * 32, "vout": 0},),
+    ):
         self.conn = conn
         self.marker = marker
+        self.outputs = outputs
         self.events = []
         self.discarded = False
 
@@ -66,7 +73,7 @@ class FakeObserver:
             facts=ChainFacts(
                 transaction_records=({"external_id": f"tx-{generation}"},),
                 retracted_external_ids=("old-tx",),
-                outputs=({"txid": "aa" * 32, "vout": 0},),
+                outputs=self.outputs,
                 coverage=(
                     CoveragePoint(
                         "receive",
@@ -333,6 +340,33 @@ class ChainObserverContractTest(unittest.TestCase):
         self.conn.execute("RELEASE SAVEPOINT observer_conflict")
         core_sync.discard_fetch_observer_updates(conflicting)
         self.assertTrue(second_observer.discarded)
+
+    def test_empty_observer_output_snapshot_remains_authoritative(self):
+        _observer, prepared = self._prepare(FakeObserver(self.conn, outputs=()))
+        sync_state = core_sync.WalletSyncState(
+            chain="bitcoin",
+            network="regtest",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=(),
+            tracked_scripts={},
+            history_cache={},
+        )
+        fetch = core_sync.WalletBackendFetch(
+            backend={"name": "fake", "kind": "fake"},
+            sync_state=sync_state,
+            normalized_records=(),
+            adapter_meta={},
+            kind="fake",
+            started=0.0,
+            force_full=False,
+            observer_updates=(prepared,),
+        )
+        self.conn.execute("SAVEPOINT empty_observer_outputs")
+        projected = core_sync.apply_fetch_observer_updates(self.conn, fetch)
+        self.assertEqual(projected.adapter_meta["utxos"], [])
+        self.conn.execute("ROLLBACK TO SAVEPOINT empty_observer_outputs")
+        self.conn.execute("RELEASE SAVEPOINT empty_observer_outputs")
 
     def test_multi_observer_shared_transaction_is_normalized_once(self):
         script_a = "0014" + "11" * 20

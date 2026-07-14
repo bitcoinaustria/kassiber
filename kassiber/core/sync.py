@@ -717,8 +717,9 @@ def apply_fetch_observer_updates(
     records = list(records_by_key.values())
     outputs = list(outputs_by_key.values())
     adapter_meta = dict(fetch.adapter_meta or {})
-    if outputs:
-        adapter_meta["utxos"] = outputs
+    # Observer facts are an authoritative full output snapshot. Preserve an
+    # empty list so spending the final output clears the prior inventory.
+    adapter_meta["utxos"] = outputs
     if retracted:
         adapter_meta["observer_retracted_external_ids"] = list(
             dict.fromkeys(str(value) for value in retracted if str(value))
