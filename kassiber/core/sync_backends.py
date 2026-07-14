@@ -1342,12 +1342,17 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
     chain_source = chain or backend_value(backend, "chain")
     normalized_chain = normalize_chain_value(chain_source) if chain_source else ""
     if kind == "esplora":
+        fetch_kwargs = {
+            "timeout": timeout,
+            "proxy_url": _backend_proxy_url(backend),
+        }
+        auth_headers = _esplora_auth_headers(backend)
+        if auth_headers is not None:
+            fetch_kwargs["headers"] = auth_headers
         tx = fetch_esplora_transaction(
             backend["url"],
             txid,
-            timeout=timeout,
-            headers=_esplora_auth_headers(backend),
-            proxy_url=_backend_proxy_url(backend),
+            **fetch_kwargs,
         )
         return _legs_from_esplora_tx(tx, normalized_chain)
     if kind == "electrum":
