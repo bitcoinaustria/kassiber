@@ -637,6 +637,47 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
 
+    def test_esplora_sync_adapter_forwards_backend_auth_to_every_read(self):
+        target = {"address": "bc1qauth", "script_pubkey": "0014" + "22" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        auth = {"Authorization": "Bearer observer-secret"}
+        with patch(
+            "kassiber.core.sync_backends.esplora_scripthash_stats",
+            return_value={"chain_stats": {"tx_count": 0}, "mempool_stats": {"tx_count": 0}},
+        ) as stats, patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_transactions",
+            return_value=[],
+        ) as history, patch(
+            "kassiber.core.sync_backends._esplora_tip_height",
+            return_value=100,
+        ) as tip, patch(
+            "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
+            return_value=[],
+        ) as utxos:
+            compatibility_esplora_sync_adapter(
+                {
+                    "name": "authenticated-esplora",
+                    "kind": "esplora",
+                    "url": "https://esplora.example",
+                    "token": "observer-secret",
+                },
+                {"id": "wallet-1"},
+                sync_state,
+            )
+
+        self.assertEqual(stats.call_args.kwargs["headers"], auth)
+        self.assertEqual(history.call_args.kwargs["headers"], auth)
+        self.assertEqual(tip.call_args.kwargs["headers"], auth)
+        self.assertEqual(utxos.call_args.kwargs["headers"], auth)
+
     def test_esplora_checkpoint_skips_unchanged_script_pages(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
         tx = {
@@ -653,8 +694,10 @@ class SyncBackendsTest(unittest.TestCase):
             script_pubkey_hex,
             max_pages=None,
             timeout=30,
+            headers=None,
             proxy_url=None,
         ):
+            del headers
             fetch_calls.append(
                 (base_url, script_pubkey_hex, max_pages, timeout, proxy_url)
             )
@@ -1622,13 +1665,14 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.esplora_scripthash_has_history",
             side_effect=lambda _url, script, **_kwargs: int(script, 16)
             in used_indices,
-        ):
+        ) as has_history:
             discovery = discover_compatibility_descriptor_targets(
                 {
                     "name": "compatibility",
                     "kind": "esplora",
                     "url": "https://esplora.example",
                     "batch_size": 1,
+                    "auth_header": "Bearer discovery-secret",
                 },
                 plan,
                 "esplora",
@@ -1637,6 +1681,14 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(
             [target["address_index"] for target in discovery["targets"]],
             list(range(10)),
+        )
+        self.assertTrue(has_history.call_args_list)
+        self.assertTrue(
+            all(
+                item.kwargs["headers"]
+                == {"Authorization": "Bearer discovery-secret"}
+                for item in has_history.call_args_list
+            )
         )
 
     def test_bitcoinrpc_descriptor_discovery_is_read_only(self):
@@ -2664,6 +2716,28 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
         self.assertEqual(opener.call_args.kwargs["proxy_url"], "127.0.0.1:9050")
         self.assertEqual(opener.call_args.kwargs["source_label"], "backend")
 
+    def test_http_get_helpers_forward_explicit_authorization_header(self):
+        auth = {"Authorization": "Bearer observer-secret"}
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse('{"ok": true}'),
+        ) as opener:
+            sb.http_get_json("https://esplora.example/x", headers=auth)
+        self.assertEqual(
+            opener.call_args.args[0].get_header("Authorization"),
+            "Bearer observer-secret",
+        )
+
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse("123"),
+        ) as opener:
+            sb.http_get_text("https://esplora.example/x", headers=auth)
+        self.assertEqual(
+            opener.call_args.args[0].get_header("Authorization"),
+            "Bearer observer-secret",
+        )
+
     def test_http_get_text_retries_on_503_then_succeeds(self):
         sleeps = []
         scripted = [_http_error(503), _http_error(503), "tip-height-body"]
@@ -2821,8 +2895,14 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             history_cache={},
         )
 
-        def fake_utxos(base_url, script_pubkey_hex, timeout=30, proxy_url=None):
-            del base_url, timeout, proxy_url
+        def fake_utxos(
+            base_url,
+            script_pubkey_hex,
+            timeout=30,
+            headers=None,
+            proxy_url=None,
+        ):
+            del base_url, timeout, headers, proxy_url
             # Encode the target's position in the UTXO value so the output order
             # is verifiable independent of which worker finishes first.
             index = next(i for i, t in enumerate(targets) if t["script_pubkey"] == script_pubkey_hex)
