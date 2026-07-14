@@ -28,10 +28,16 @@ Run this before push or PR:
 
 That covers:
 - compile sanity
-- CLI smoke suite
-- review regression suite
-- key CLI help/smoke checks
-- the fast regtest replay harness (`tests.test_regtest_harness`)
+- every Python test module exactly once through pytest (including unittest tests)
+- in-process CLI help coverage plus a small real-subprocess entrypoint smoke
+- TypeScript typechecking and ESLint
+- the complete desktop Vitest suite
+
+Pull-request CI uses the same Python manifest but splits it into disjoint
+domain shards. Safe shards use two pytest-xdist workers; socket-sensitive,
+daemon-listener, broad-regression, and process/integration modules use isolated
+serial jobs. JUnit artifacts and the 50
+slowest tests are retained per shard.
 
 For local-first wallet-sync proof beyond the default gate, use the opt-in
 integration harness:
@@ -56,8 +62,8 @@ guardrails.
 
 ### Desktop UI (frontend)
 
-The Python quality gate does not cover the Tauri/React frontend. For changes
-under `ui-tauri/`, run from that directory:
+The full quality gate covers the Tauri/React checks. For focused changes under
+`ui-tauri/`, run them directly from that directory:
 
 ```bash
 pnpm typecheck      # incl. type-safe i18n keys

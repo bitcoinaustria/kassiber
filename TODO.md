@@ -26,7 +26,11 @@ Backlog contract:
 
 ## Rules for every session
 
-Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the baseline compile, smoke, regression, and CLI help checks so humans and agents use the same verification path.
+Use `./scripts/quality-gate.sh` before calling work ready to push. It compiles
+Python, validates the disjoint CI shard manifest, runs every Python module once
+through pytest, exercises in-process help plus bounded real CLI subprocesses,
+and runs the TypeScript, ESLint, and Vitest checks so humans and agents use the
+same verification surface.
 
 - Preserve the current JSON envelope contract and error shape
 - Keep `tests/test_cli_smoke.py` as the behavior pin; prefer extending it

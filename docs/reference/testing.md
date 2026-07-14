@@ -45,6 +45,42 @@ export KASSIBER_REGTEST_RPC_PASSWORD=...
 ./scripts/integration-harness.sh bitcoin-electrum
 ```
 
+## Pull-request CI
+
+The required PR workflow is fail-fast without reducing the test inventory:
+
+1. `Preflight` compiles Python, validates the test-shard manifest, runs the
+   dependency/workflow/catalog/report drift contracts, and gates only the
+   Python shards. Frontend and CLI smoke start independently.
+2. Pytest runs every `tests/**/test_*.py` module in exactly one lane. The
+   `core-accounting`, `wallets-sync`, `daemon-cli`,
+   `security-replication`, and `reports-contracts` lanes use two xdist workers
+   with class/module scope. Isolated `serial-network`, `serial-daemon`,
+   `serial-regressions`, and `serial-integration` jobs own
+   socket-, listener-, broad-regression-, OS-process-, and opt-in
+   integration-sensitive modules.
+3. The CLI smoke lane checks the broad argparse help surface in-process and
+   keeps only status/health/next-actions, command discovery, and daemon EOF as
+   real subprocess probes. TypeScript, ESLint, and Vitest run together in an
+   independent frontend job.
+4. Specialized jobs can remain independent roots and join `ci/required`
+   without blocking unrelated setup. Platform credential jobs retain their
+   separate credential/packaging path filter, and ordinary pull requests do
+   not build release packages.
+5. Each pytest/Vitest lane uploads a JUnit artifact even after failure. Python
+   lanes print `--durations=50` output in their job summary. The stable
+   `ci/required` aggregate is successful only when every required lane passes.
+
+`scripts/python_test_shards.py` is the single file-to-lane mapping. Unknown new
+test modules default to `core-accounting`, while `tests/test_ci_shards.py`
+proves that every discovered module appears once and that sensitive modules do
+not enter xdist. PR pushes use a concurrency group and cancel superseded CI;
+test failures are never broadly retried. Locked uv and pnpm stores are cached;
+cache misses still install only from the checked-in lockfiles.
+
+The local `./scripts/quality-gate.sh` favors deterministic serial execution,
+but runs the same complete Python inventory once before the frontend checks.
+
 The Compose lane generates disposable RPC credentials per run unless you set
 them explicitly, passes only the `rpcauth` hash to bitcoind, publishes RPC on
 host loopback, and uses Bitcoin Core v30 by default. It also publishes Core's

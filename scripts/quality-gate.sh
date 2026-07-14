@@ -42,130 +42,27 @@ py() {
   fi
 }
 
-run py -m compileall -q kassiber tests
+run py -m compileall -q kassiber tests scripts/python_test_shards.py
+run py scripts/python_test_shards.py validate
 
-run py -m unittest tests.test_dependency_drift -v
-run py -m unittest tests.test_connection_catalog_drift -v
-run py -m unittest tests.test_transaction_graph -v
-run py -m unittest tests.test_report_contract_drift -v
-run py -m unittest tests.test_homebrew_cask -v
-run py -m unittest tests.test_btcpay_commercial_provenance -v
-run py -m unittest tests.test_core_maintenance -v
-run py -m unittest tests.test_cli_chat -v
-run py -m unittest tests.test_termrender -v
-run py -m unittest tests.test_ai_core -v
-run py -m unittest tests.test_cli_smoke -v
-run py -m unittest tests.test_rp2_packaging -v
-run py -m unittest tests.test_source_funds_cli -v
-run py -m unittest tests.test_daemon_smoke -v
-run py -m unittest tests.test_secrets_smoke -v
-run py -m unittest tests.test_remembered_unlock -v
-run py -m unittest tests.test_rates_kraken_csv -v
-run py -m unittest tests.test_review_regressions -v
-run py -m unittest tests.test_exit_tax -v
-run py -m unittest tests.test_ownership -v
-run py -m unittest tests.test_ownership_transfers -v
-run py -m unittest tests.test_rp2_ownership_transfers -v
-run py -m unittest tests.test_transfer_matching -v
-run py -m unittest tests.test_swap_matching_cli -v
-run py -m unittest tests.test_swap_rules -v
-run py -m unittest tests.test_schema_swap_matching -v
-run py -m unittest tests.test_loans -v
-run py -m unittest tests.test_austrian_classification -v
-run py -m unittest tests.test_daemon_swap_matching -v
-run py -m unittest tests.test_sync_backends -v
-run py -m unittest tests.test_sync_backends_legs -v
-run py -m unittest tests.test_sync_htlc_enrichment -v
-run py -m unittest tests.test_sync_btcpay_incremental -v
-run py -m unittest tests.test_freshness -v
-run py -m unittest tests.test_liquid_electrum_sync -v
-run py -m unittest tests.test_silent_payments -v
-run py -m unittest tests.test_log_ring -v
-run py -m unittest tests.test_regtest_harness -v
-
-run py -m unittest discover -v
-run py -m pytest tests/test_proxy.py -q
-
-echo
-SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-quality-gate-home.XXXXXX")"
-trap 'rm -rf "$SMOKE_HOME"' EXIT
-smoke_py() {
-  HOME="$SMOKE_HOME" py "$@"
-}
-
-echo "> CLI help smoke (isolated HOME: $SMOKE_HOME)"
-smoke_py -m kassiber --help >/dev/null
-smoke_py -m kassiber --machine status >/dev/null
-smoke_py -m kassiber --machine health >/dev/null
-smoke_py -m kassiber --machine next-actions >/dev/null
-smoke_py -m kassiber --machine commands describe wallets sync >/dev/null
-smoke_py -m kassiber daemon </dev/null >/dev/null
-smoke_py -m kassiber backends list >/dev/null
-smoke_py -m kassiber wallets kinds >/dev/null
-smoke_py -m kassiber wallets sync-btcpay --help >/dev/null
-smoke_py -m kassiber wallets import-river --help >/dev/null
-smoke_py -m kassiber wallets import-21bitcoin --help >/dev/null
-smoke_py -m kassiber wallets import-strike --help >/dev/null
-smoke_py -m kassiber wallets import-ledger --help >/dev/null
-smoke_py -m kassiber wallets import-ledger-live --help >/dev/null
-smoke_py -m kassiber wallets import-binance-supplemental --help >/dev/null
-smoke_py -m kassiber wallets sync-kraken --help >/dev/null
-smoke_py -m kassiber wallets sync-coinbase --help >/dev/null
-smoke_py -m kassiber wallets sync-binance --help >/dev/null
-smoke_py -m kassiber wallets ledger-template --help >/dev/null
-smoke_py -m kassiber profiles create --help >/dev/null
-smoke_py -m kassiber metadata records --help >/dev/null
-smoke_py -m kassiber attachments list --help >/dev/null
-smoke_py -m kassiber source-funds --help >/dev/null
-smoke_py -m kassiber source-funds sources create --help >/dev/null
-smoke_py -m kassiber source-funds links review --help >/dev/null
-smoke_py -m kassiber btcpay provenance --help >/dev/null
-smoke_py -m kassiber btcpay provenance review --help >/dev/null
-smoke_py -m kassiber documents create --help >/dev/null
-smoke_py -m kassiber journals events --help >/dev/null
-smoke_py -m kassiber reports commercial-subledger --help >/dev/null
-smoke_py -m kassiber reports export-commercial-subledger-csv --help >/dev/null
-smoke_py -m kassiber reports source-funds --help >/dev/null
-smoke_py -m kassiber reports export-source-funds-pdf --help >/dev/null
-smoke_py -m kassiber reports balance-history --help >/dev/null
-smoke_py -m kassiber reports exit-tax --help >/dev/null
-smoke_py -m kassiber reports export-exit-tax-pdf --help >/dev/null
-smoke_py -m kassiber reports export-exit-tax-xlsx --help >/dev/null
-smoke_py -m kassiber rates --help >/dev/null
-smoke_py -m kassiber diagnostics collect --help >/dev/null
-smoke_py -m kassiber chat --help >/dev/null
-smoke_py -m kassiber chats --help >/dev/null
-smoke_py -m kassiber ai --help >/dev/null
-smoke_py -m kassiber ai providers --help >/dev/null
-smoke_py -m kassiber ai providers create --help >/dev/null
-smoke_py -m kassiber secrets --help >/dev/null
-smoke_py -m kassiber secrets init --help >/dev/null
-smoke_py -m kassiber secrets change-passphrase --help >/dev/null
-smoke_py -m kassiber secrets remember-unlock --help >/dev/null
-smoke_py -m kassiber secrets forget-unlock --help >/dev/null
-smoke_py -m kassiber secrets verify --help >/dev/null
-smoke_py -m kassiber secrets status --help >/dev/null
-smoke_py -m kassiber secrets migrate-credentials --help >/dev/null
-smoke_py -m kassiber backup --help >/dev/null
-smoke_py -m kassiber backup export --help >/dev/null
-smoke_py -m kassiber backup import --help >/dev/null
-smoke_py -m kassiber sync --help >/dev/null
-smoke_py -m kassiber sync transport add --help >/dev/null
-smoke_py -m kassiber sync lan --help >/dev/null
-smoke_py -m kassiber sync tor --help >/dev/null
-smoke_py -m kassiber sync gc --help >/dev/null
-smoke_py -m kassiber backends reveal-token --help >/dev/null
-smoke_py -m kassiber wallets reveal-descriptor --help >/dev/null
+# Pytest collects both unittest.TestCase and native pytest modules.  Keep this
+# as the single Python pass; CI partitions the same manifest into parallel
+# domain jobs while this developer gate favors deterministic serial execution.
+run py -m pytest tests -q --durations=50
 
 echo
 if [ ! -d "$ROOT/ui-tauri/node_modules" ]; then
   echo "quality gate requires ui-tauri/node_modules for Vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
   exit 2
 fi
-if [ ! -x "$ROOT/ui-tauri/node_modules/.bin/vitest" ]; then
-  echo "quality gate requires ui-tauri/node_modules/.bin/vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
-  exit 2
-fi
+for tool in eslint tsc vitest; do
+  if [ ! -x "$ROOT/ui-tauri/node_modules/.bin/$tool" ]; then
+    echo "quality gate requires ui-tauri/node_modules/.bin/$tool; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
+    exit 2
+  fi
+done
+run_in_dir ui-tauri ./node_modules/.bin/tsc -b --noEmit
+run_in_dir ui-tauri ./node_modules/.bin/eslint .
 run_in_dir ui-tauri ./node_modules/.bin/vitest run
 
 echo

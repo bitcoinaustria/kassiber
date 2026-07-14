@@ -6,9 +6,15 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
+  preflight:
+    name: Preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
@@ -19,28 +25,223 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync Python dependencies
+        run: uv sync --frozen
+
+      - name: Compile Python
+        run: uv run python -m compileall -q kassiber tests scripts/python_test_shards.py
+
+      - name: Validate disjoint Python shards
+        run: uv run python scripts/python_test_shards.py validate
+
+      - name: Contract preflight
+        shell: bash
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          uv run python scripts/python_test_shards.py run preflight --ci -- \
+            --junitxml=test-results/preflight.xml \
+            --durations=50 \
+            -q 2>&1 | tee test-results/preflight.log
+
+      - name: Upload preflight report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pytest-preflight-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+  python-tests:
+    name: Python (${{ matrix.shard }})
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - core-accounting
+          - wallets-sync
+          - daemon-cli
+          - security-replication
+          - reports-contracts
+          - serial-network
+          - serial-daemon
+          - serial-regressions
+          - serial-integration
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Sync dependencies
         run: uv sync --frozen
 
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - name: Run Python shard
+        shell: bash
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          uv run python scripts/python_test_shards.py run "${{ matrix.shard }}" --ci -- \
+            --junitxml="test-results/${{ matrix.shard }}.xml" \
+            --durations=50 \
+            -q 2>&1 | tee "test-results/${{ matrix.shard }}.log"
+
+      - name: Summarize Python shard
+        if: always()
+        shell: bash
+        run: |
+          echo "### Python shard: ${{ matrix.shard }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "test-results/${{ matrix.shard }}.log" ]; then
+            echo '<details><summary>Slowest tests / final output</summary>' >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            sed -n '/slowest 50 durations/,$p' "test-results/${{ matrix.shard }}.log" | head -60 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo '</details>' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Python test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          node-version: '22'
+          name: pytest-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 10.33.0
 
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: ui-tauri/pnpm-lock.yaml
+
       - name: Install desktop dependencies
         run: pnpm --dir ui-tauri install --frozen-lockfile
 
-      # Type-safe i18n keys (and all TS): catches typo'd / missing / wrong-namespace
-      # translation keys. The en/de key-parity guard runs via Vitest inside the
-      # quality gate below.
       - name: Desktop UI typecheck
         run: pnpm --dir ui-tauri run typecheck
 
-      - name: Quality gate
-        run: ./scripts/quality-gate.sh
+      - name: Desktop UI lint
+        run: pnpm --dir ui-tauri run lint
+
+      - name: Run Vitest
+        run: |
+          mkdir -p test-results
+          pnpm --dir ui-tauri exec vitest run \
+            --reporter=default \
+            --reporter=junit \
+            --outputFile.junit=../test-results/vitest.xml
+
+      - name: Upload frontend test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vitest-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+  cli-smoke:
+    name: CLI smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run CLI smoke
+        shell: bash
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          uv run python scripts/python_test_shards.py run cli-smoke --ci -- \
+            --junitxml=test-results/cli-smoke.xml \
+            --durations=50 \
+            -q 2>&1 | tee test-results/cli-smoke.log
+
+      - name: Summarize CLI smoke
+        if: always()
+        shell: bash
+        run: |
+          echo "### CLI smoke" >> "$GITHUB_STEP_SUMMARY"
+          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f test-results/cli-smoke.log ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            sed -n '/slowest 50 durations/,$p' test-results/cli-smoke.log | head -60 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload CLI smoke report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pytest-cli-smoke-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+  required:
+    name: required
+    if: always()
+    needs:
+      - preflight
+      - python-tests
+      - frontend
+      - cli-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record required-check results
+        run: |
+          echo "### Required CI" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Preflight: ${{ needs.preflight.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Python shards: ${{ needs.python-tests.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce required checks
+        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' }}
+        run: exit 1
