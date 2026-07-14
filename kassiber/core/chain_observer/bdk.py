@@ -282,14 +282,37 @@ class BdkObserver:
             )
         return wallet, persister
 
-    def _remote_block_hash(self, client: Any, height: int) -> str | None:
+    def _remote_block_hash(self, client: Any, height: int) -> str:
         kind = str(self.backend["kind"]).lower()
         if kind == "esplora":
             remote_height = int(client.get_height())
-            return str(client.get_block_hash(height)) if remote_height >= height else None
+            if remote_height < height:
+                raise AppError(
+                    "The selected Bitcoin backend is behind the persisted wallet state",
+                    code="backend_tip_behind",
+                    hint="Wait for the backend to catch up or select a fully synchronized backend, then retry.",
+                    details={
+                        "observer": "bdk",
+                        "backend_height": remote_height,
+                        "persisted_height": int(height),
+                    },
+                    retryable=True,
+                )
+            return str(client.get_block_hash(height))
         notification = client.block_headers_subscribe()
-        if int(notification.height) < height:
-            return None
+        remote_height = int(notification.height)
+        if remote_height < height:
+            raise AppError(
+                "The selected Bitcoin backend is behind the persisted wallet state",
+                code="backend_tip_behind",
+                hint="Wait for the backend to catch up or select a fully synchronized backend, then retry.",
+                details={
+                    "observer": "bdk",
+                    "backend_height": remote_height,
+                    "persisted_height": int(height),
+                },
+                retryable=True,
+            )
         return _electrum_header_hash(client.block_header(height))
 
     def _target(self, wallet: Any, script: Any) -> dict[str, Any] | None:

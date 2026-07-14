@@ -300,6 +300,28 @@ class BdkDependencyContractTest(unittest.TestCase):
             "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
         )
 
+    def test_lagging_backend_fails_before_reorg_rebuild(self):
+        observer = object.__new__(BdkObserver)
+
+        observer.backend = {"kind": "esplora"}
+        esplora = mock.Mock()
+        esplora.get_height.return_value = 9
+        with self.assertRaises(AppError) as raised:
+            observer._remote_block_hash(esplora, 10)
+        self.assertEqual(raised.exception.code, "backend_tip_behind")
+        self.assertTrue(raised.exception.retryable)
+        self.assertEqual(raised.exception.details["backend_height"], 9)
+        esplora.get_block_hash.assert_not_called()
+
+        observer.backend = {"kind": "electrum"}
+        electrum = mock.Mock()
+        electrum.block_headers_subscribe.return_value.height = 8
+        with self.assertRaises(AppError) as raised:
+            observer._remote_block_hash(electrum, 10)
+        self.assertEqual(raised.exception.code, "backend_tip_behind")
+        self.assertTrue(raised.exception.retryable)
+        electrum.block_header.assert_not_called()
+
     def test_electrum_rebuild_is_limited_to_advanced_tip_with_stale_mempool_position(self):
         wallet = mock.Mock()
         wallet.latest_checkpoint.return_value.height = 8
