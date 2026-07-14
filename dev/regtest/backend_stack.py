@@ -265,23 +265,22 @@ class BitcoinIndex:
                     script_hex = _script_payload(output).get("scriptpubkey")
                     if not script_hex:
                         continue
-                    key = electrum_scripthash(str(script_hex))
-                    utxos.setdefault(key, []).append(
-                        {
-                            "tx_hash": txid,
-                            "tx_pos": n,
-                            "height": tx.get("blockheight") or 0,
-                            "txid": txid,
-                            "vout": n,
-                            "value": _btc_to_sats(output.get("value")) or 0,
-                            "status": {
-                                "confirmed": bool(tx.get("blockhash")),
-                                "block_height": tx.get("blockheight"),
-                                "block_hash": tx.get("blockhash"),
-                                "block_time": tx.get("blocktime") or tx.get("time"),
-                            },
-                        }
-                    )
+                    row = {
+                        "tx_hash": txid,
+                        "tx_pos": n,
+                        "height": tx.get("blockheight") or 0,
+                        "txid": txid,
+                        "vout": n,
+                        "value": _btc_to_sats(output.get("value")) or 0,
+                        "status": {
+                            "confirmed": bool(tx.get("blockhash")),
+                            "block_height": tx.get("blockheight"),
+                            "block_hash": tx.get("blockhash"),
+                            "block_time": tx.get("blocktime") or tx.get("time"),
+                        },
+                    }
+                    for key in protocol_scripthashes(str(script_hex)):
+                        utxos.setdefault(key, []).append(row)
             self._tip = tip
             self._txs = txs
             self._history = history
@@ -319,7 +318,7 @@ class BitcoinIndex:
                     )
                     script_hex = (prevout or {}).get("scriptpubkey")
                     if script_hex:
-                        history_keys.add(electrum_scripthash(str(script_hex)))
+                        history_keys.update(protocol_scripthashes(str(script_hex)))
                 except Exception:
                     pass
         for output in tx.get("vout") or []:
@@ -328,7 +327,7 @@ class BitcoinIndex:
             script_hex = _script_payload(output).get("scriptpubkey")
             if not script_hex:
                 continue
-            history_keys.add(electrum_scripthash(str(script_hex)))
+            history_keys.update(protocol_scripthashes(str(script_hex)))
         for key in sorted(history_keys):
             history.setdefault(key, []).append({"tx_hash": txid, "height": height})
 
@@ -377,6 +376,22 @@ def electrum_scripthash(script_hex: str) -> str:
     except ValueError:
         payload = b""
     return hashlib.sha256(payload).digest()[::-1].hex()
+
+
+def esplora_scripthash(script_hex: str) -> str:
+    try:
+        payload = bytes.fromhex(script_hex)
+    except ValueError:
+        payload = b""
+    return hashlib.sha256(payload).hexdigest()
+
+
+def protocol_scripthashes(script_hex: str) -> tuple[str, ...]:
+    """Return the wire representations used by Electrum and Esplora clients."""
+
+    electrum = electrum_scripthash(script_hex)
+    esplora = esplora_scripthash(script_hex)
+    return (electrum,) if electrum == esplora else (electrum, esplora)
 
 
 def electrum_status(history: list[dict[str, Any]]) -> str | None:
@@ -562,9 +577,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         if len(parts) < 4:
             self._error(404, "not found")
             return
-        # Kassiber's Esplora client uses the same Electrum-order script hash as
-        # the shared in-memory index. Validate the path as hex without changing
-        # its byte order.
+        # Both Esplora and Electrum wire representations are direct keys in the
+        # shared index. Validate the requested key without changing byte order.
         try:
             bytes.fromhex(parts[3])
         except ValueError:

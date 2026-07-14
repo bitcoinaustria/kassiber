@@ -237,14 +237,43 @@ class RegtestBackendStackTest(unittest.TestCase):
                 raise AssertionError(f"unexpected RPC call: {method} {params}")
 
         index = backend_stack.BitcoinIndex(FakeRpc())
-        rows = index.utxos(backend_stack.electrum_scripthash(script_hex))
+        electrum_rows = index.utxos(backend_stack.electrum_scripthash(script_hex))
+        esplora_rows = index.utxos(backend_stack.esplora_scripthash(script_hex))
 
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[1]["tx_hash"], "tx-1")
-        self.assertEqual(rows[1]["tx_pos"], 0)
-        self.assertEqual(rows[1]["height"], 1)
-        self.assertEqual(rows[1]["txid"], "tx-1")
-        self.assertEqual(rows[1]["vout"], 0)
+        self.assertEqual(electrum_rows, esplora_rows)
+        self.assertEqual(len(electrum_rows), 2)
+        self.assertEqual(electrum_rows[1]["tx_hash"], "tx-1")
+        self.assertEqual(electrum_rows[1]["tx_pos"], 0)
+        self.assertEqual(electrum_rows[1]["height"], 1)
+        self.assertEqual(electrum_rows[1]["txid"], "tx-1")
+        self.assertEqual(electrum_rows[1]["vout"], 0)
+
+    def test_index_history_includes_electrum_and_esplora_keys(self) -> None:
+        script_hex = "0014" + "11" * 20
+        index = backend_stack.BitcoinIndex(SimpleNamespace())
+        history: dict[str, list[dict[str, object]]] = {}
+
+        index._index_tx(
+            history,
+            set(),
+            {
+                "txid": "funding",
+                "vin": [],
+                "vout": [
+                    {
+                        "n": 0,
+                        "value": 0.00010000,
+                        "scriptPubKey": {"hex": script_hex},
+                    }
+                ],
+            },
+            42,
+        )
+
+        electrum_rows = history[backend_stack.electrum_scripthash(script_hex)]
+        esplora_rows = history[backend_stack.esplora_scripthash(script_hex)]
+        self.assertEqual(electrum_rows, esplora_rows)
+        self.assertEqual(electrum_rows, [{"tx_hash": "funding", "height": 42}])
 
     def test_index_history_includes_no_change_spend_via_prevout_script(self) -> None:
         owned_script = "0014" + "11" * 20
