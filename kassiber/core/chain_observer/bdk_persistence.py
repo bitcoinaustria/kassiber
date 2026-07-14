@@ -308,23 +308,31 @@ def deserialize_changeset(payload: Mapping[str, Any]) -> Any:
     )
 
 
-class SqlCipherBdkPersistence(_bdk().Persistence):
-    """BDK callback whose aggregate is committed by Kassiber, never by BDK."""
+def SqlCipherBdkPersistence(aggregate: Any | None = None) -> Any:
+    """Build BDK's custom callback only after the native route is selected.
 
-    def __init__(self, aggregate: Any | None = None):
-        super().__init__()
-        bdk = _bdk()
-        self.aggregate = aggregate if aggregate is not None else bdk.ChangeSet()
+    The dependency is intentionally absent on runtimes without a supported
+    wheel.  Evaluating ``bdk.Persistence`` as a module-level base class would
+    make importing the observer fail before routing can choose compatibility.
+    """
 
-    def initialize(self) -> Any:
-        return self.aggregate
+    bdk = _bdk()
 
-    def persist(self, changeset: Any) -> None:
-        bdk = _bdk()
-        self.aggregate = bdk.ChangeSet.from_merge(self.aggregate, changeset)
+    class _SqlCipherBdkPersistence(bdk.Persistence):
+        def __init__(self, initial: Any | None = None):
+            super().__init__()
+            self.aggregate = initial if initial is not None else bdk.ChangeSet()
 
-    def payload(self) -> dict[str, Any]:
-        return serialize_changeset(self.aggregate)
+        def initialize(self) -> Any:
+            return self.aggregate
+
+        def persist(self, changeset: Any) -> None:
+            self.aggregate = bdk.ChangeSet.from_merge(self.aggregate, changeset)
+
+        def payload(self) -> dict[str, Any]:
+            return serialize_changeset(self.aggregate)
+
+    return _SqlCipherBdkPersistence(aggregate)
 
 
 __all__ = [

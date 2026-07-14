@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import replace
+import importlib
 import json
 import os
 from pathlib import Path
+import sys
 from unittest import TestCase, main, mock
 
 import bdkpython as bdk
@@ -142,6 +144,13 @@ class BdkDependencyContractTest(TestCase):
                 ),
                 "dependency_unavailable",
             )
+
+    def test_persistence_module_import_does_not_require_native_dependency(self):
+        from kassiber.core.chain_observer import bdk_persistence
+
+        with mock.patch.dict(sys.modules, {"bdkpython": None}):
+            reloaded = importlib.reload(bdk_persistence)
+        self.assertTrue(callable(reloaded.SqlCipherBdkPersistence))
 
     def test_bdk_failure_is_not_retried_through_compatibility_adapter(self):
         wallet, discovery = self._discovery()
