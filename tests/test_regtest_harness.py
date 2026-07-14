@@ -206,6 +206,23 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("deadline = time.monotonic() + 180", oracle)
         self.assertIn("transport tips have not caught up", oracle)
 
+    def test_bdk_runtime_probe_is_limited_to_bitcoin_observer_lane(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+        base_probe = harness[
+            harness.index("ensure_python_runtime()") : harness.index("ensure_bdk_runtime()")
+        ]
+        bdk_probe = harness[
+            harness.index("ensure_bdk_runtime()") : harness.index("run_fast()")
+        ]
+        observer_lane = harness[
+            harness.index("run_chain_observers()") : harness.index("probe_frigate()")
+        ]
+
+        self.assertNotIn("bdkpython", base_probe)
+        self.assertIn("bdkpython", bdk_probe)
+        self.assertIn('if [ "$selected" != "liquid" ]; then', observer_lane)
+        self.assertIn("ensure_bdk_runtime", observer_lane)
+
     def test_chain_observer_ci_job_is_path_aware_and_required(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
             encoding="utf-8"

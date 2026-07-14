@@ -42,7 +42,7 @@ import sys
 
 missing = [
     name
-    for name in ("bdkpython", "embit", "openpyxl")
+    for name in ("embit", "openpyxl")
     if importlib.util.find_spec(name) is None
 ]
 if missing:
@@ -54,6 +54,23 @@ PY
   fi
   echo "Kassiber's Python dependencies are not available in this interpreter." >&2
   echo "Run ./scripts/bootstrap-dev-env.sh, activate a prepared virtualenv, or install uv and rerun." >&2
+  echo "Current Python: $PYTHON_BIN" >&2
+  exit 2
+}
+
+ensure_bdk_runtime() {
+  if py - <<'PY' >/dev/null 2>&1
+import importlib.util
+import sys
+
+if importlib.util.find_spec("bdkpython") is None:
+    sys.exit(1)
+PY
+  then
+    return 0
+  fi
+  echo "The Bitcoin dependency-backed observer requires bdkpython in this interpreter." >&2
+  echo "Run ./scripts/bootstrap-dev-env.sh on a supported BDK wheel platform and rerun." >&2
   echo "Current Python: $PYTHON_BIN" >&2
   exit 2
 }
@@ -373,6 +390,9 @@ run_chain_observers() {
       exit 2
       ;;
   esac
+  if [ "$selected" != "liquid" ]; then
+    ensure_bdk_runtime
+  fi
   export KASSIBER_CHAIN_OBSERVER_CHAIN="$selected"
   if [ "$selected" != "bitcoin" ]; then
     export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
