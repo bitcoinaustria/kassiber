@@ -52,7 +52,7 @@ The required PR workflow is fail-fast without reducing the test inventory:
 
 1. `Preflight` compiles Python, validates the test-shard manifest, runs the
    dependency/workflow/catalog/report drift contracts, and gates only the
-   Python shards. Frontend and CLI smoke start independently.
+   Python shards. Frontend, CLI smoke, and observer jobs start independently.
 2. Pytest runs every `tests/**/test_*.py` module in exactly one lane. The
    `core-accounting`, `wallets-sync`, `daemon-cli`,
    `security-replication`, and `reports-contracts` lanes use two xdist workers
