@@ -36,6 +36,7 @@ from ..importers import (
 )
 from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
+from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
@@ -149,7 +150,7 @@ def normalize_import_direction(direction: Any, amount: Any) -> str:
 
 _EXISTING_TRANSACTION_COLUMNS = """
        id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-       occurred_at, direction, asset, amount, fee,
+       occurred_at, direction, asset, amount, fee, amount_includes_fee,
        confirmed_at, fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
@@ -164,6 +165,8 @@ def _find_existing_transaction(
     wallet_id: str,
     normalized: Mapping[str, Any],
     fingerprint: str,
+    *,
+    authoritative_chain_observer: bool = False,
 ):
     existing = conn.execute(
         f"""
@@ -197,6 +200,40 @@ def _find_existing_transaction(
         ).fetchone()
         if existing:
             return existing
+    if authoritative_chain_observer and canonical_txid(normalized["external_id"]):
+        # Dependency observers own the economic interpretation of a canonical
+        # on-chain transaction. Match the prior compatibility projection by
+        # txid/component even when the dependency corrects its amount or fee.
+        rows = conn.execute(
+            f"""
+            SELECT {_EXISTING_TRANSACTION_COLUMNS}
+            FROM transactions
+            WHERE wallet_id = ? AND external_id = ?
+              AND direction = ? AND asset = ?
+            ORDER BY created_at DESC
+            LIMIT 2
+            """,
+            (
+                wallet_id,
+                normalized["external_id"],
+                normalized["direction"],
+                normalized["asset"],
+            ),
+        ).fetchall()
+        existing = _single_match(rows)
+        if existing:
+            return existing
+        if len(rows) > 1:
+            raise AppError(
+                "Authoritative chain observation matched multiple transaction rows",
+                code="observer_projection_conflict",
+                details={
+                    "txid": normalized["external_id"],
+                    "asset": normalized["asset"],
+                    "direction": normalized["direction"],
+                },
+                retryable=False,
+            )
     existing = conn.execute(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}
@@ -611,6 +648,20 @@ def _transaction_merge_updates(
     authoritative_chain_observer: bool = False,
 ):
     updates = {}
+    authoritative_amount_changed = False
+    if authoritative_chain_observer:
+        incoming_amount = btc_to_msat(normalized["amount"])
+        incoming_fee = btc_to_msat(normalized["fee"])
+        incoming_amount_includes_fee = 1 if normalized.get("amount_includes_fee") else 0
+        authoritative_amount_changed = int(existing["amount"] or 0) != incoming_amount
+        if authoritative_amount_changed:
+            updates["amount"] = incoming_amount
+        if int(existing["fee"] or 0) != incoming_fee:
+            updates["fee"] = incoming_fee
+        if int(existing["amount_includes_fee"] or 0) != incoming_amount_includes_fee:
+            updates["amount_includes_fee"] = incoming_amount_includes_fee
+        if updates and existing["fingerprint"] != fingerprint:
+            updates["fingerprint"] = fingerprint
     if normalized.get("kind") == "routing_income":
         incoming_amount = btc_to_msat(normalized["amount"])
         incoming_fee = btc_to_msat(normalized["fee"])
@@ -686,6 +737,15 @@ def _transaction_merge_updates(
         # demotion change the authoritative pricing timestamp, so discard the
         # whole provenance bundle and let the rates workflow price it again.
         updates.update({column: None for column in PRICE_COLUMNS})
+    elif authoritative_amount_changed:
+        # The existing unit price remains valid when only the observer's
+        # quantity changed at the same chain timestamp. Recalculate the total
+        # rather than retaining the compatibility projection's stale value.
+        rate = existing["fiat_rate_exact"] or existing["fiat_rate"]
+        if rate not in (None, ""):
+            exact_value = format(dec(rate) * dec(normalized["amount"]), "f")
+            updates["fiat_value"] = float(exact_value)
+            updates["fiat_value_exact"] = exact_value
 
     exchange_execution_overrides = (
         normalized["pricing_source_kind"] == pricing.SOURCE_EXCHANGE_EXECUTION
@@ -1219,7 +1279,13 @@ def insert_wallet_records(
             normalized["amount"],
             normalized["fee"],
         )
-        existing = _find_existing_transaction(conn, wallet["id"], normalized, fingerprint)
+        existing = _find_existing_transaction(
+            conn,
+            wallet["id"],
+            normalized,
+            fingerprint,
+            authoritative_chain_observer=authoritative_chain_observer,
+        )
         if existing:
             _validate_import_price_currency(profile, normalized)
             updates = _transaction_merge_updates(

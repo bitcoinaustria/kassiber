@@ -26,8 +26,11 @@ from kassiber.core.chain_observer.lwk_persistence import SqlCipherForeignStore, 
 from kassiber.core.chain_observer.store import load_observer_values, persist_observer_state
 from kassiber.core import sync as core_sync
 from kassiber.core import sync_backends
+from kassiber.core.imports import ImportCoordinatorHooks, insert_wallet_records
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from kassiber.fingerprints import make_transaction_fingerprint
+from kassiber.msat import btc_to_msat
 from kassiber.time_utils import now_iso
 from kassiber.wallet_descriptors import (
     derive_descriptor_target,
@@ -614,6 +617,93 @@ class LwkForeignStoreTest(unittest.TestCase):
                 observer._client(require_lwk().Network.regtest(POLICY_ASSET))
         self.assertEqual(error.exception.code, "network_egress_disabled")
         native.assert_not_called()
+
+    def test_authoritative_lwk_row_replaces_compatibility_economics_by_txid(self):
+        profile = self.conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
+        wallet = self.conn.execute("SELECT * FROM wallets WHERE id='wallet'").fetchone()
+        txid = "ab" * 32
+        occurred_at = "2026-07-01T12:00:00Z"
+        hooks = ImportCoordinatorHooks(
+            ensure_tag_row=Mock(),
+            invalidate_journals=Mock(),
+        )
+        compatibility = {
+            "txid": txid,
+            "occurred_at": occurred_at,
+            "confirmed_at": occurred_at,
+            "direction": "outbound",
+            "asset": "LBTC",
+            "amount": "0.00099000",
+            "fee": "0.00001000",
+            "amount_includes_fee": False,
+            "fiat_rate": "100000",
+            "raw_json": {"observer": "compatibility"},
+        }
+        first = insert_wallet_records(
+            self.conn,
+            profile,
+            wallet,
+            [compatibility],
+            "liquid-esplora",
+            hooks,
+        )
+        original_id = first["inserted_records"][0]["transaction_id"]
+        self.conn.execute(
+            "UPDATE transactions SET note='keep authored note' WHERE id=?",
+            (original_id,),
+        )
+
+        authoritative = {
+            **compatibility,
+            "amount": "0.00100000",
+            "fee": "0",
+            "amount_includes_fee": True,
+            "fiat_rate": None,
+            "raw_json": {"observer": "lwk"},
+        }
+        outcome = insert_wallet_records(
+            self.conn,
+            profile,
+            wallet,
+            [authoritative],
+            "lwk",
+            hooks,
+            report_updates=True,
+            authoritative_chain_observer=True,
+        )
+
+        rows = self.conn.execute(
+            """
+            SELECT id, fingerprint, amount, fee, amount_includes_fee,
+                   fiat_rate_exact, fiat_value_exact, note, raw_json
+            FROM transactions WHERE wallet_id='wallet' AND external_id=?
+            """,
+            (txid,),
+        ).fetchall()
+        self.assertEqual(outcome["imported"], 0)
+        self.assertEqual(outcome["updated"], 1)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["id"], original_id)
+        self.assertEqual(row["amount"], btc_to_msat("0.00100000"))
+        self.assertEqual(row["fee"], 0)
+        self.assertEqual(row["amount_includes_fee"], 1)
+        self.assertEqual(row["fiat_rate_exact"], "100000")
+        self.assertEqual(row["fiat_value_exact"], "100.00000000")
+        self.assertEqual(row["note"], "keep authored note")
+        self.assertEqual(json.loads(row["raw_json"])["observer"], "lwk")
+        self.assertEqual(
+            row["fingerprint"],
+            make_transaction_fingerprint(
+                "wallet",
+                txid,
+                occurred_at,
+                "outbound",
+                "LBTC",
+                "0.00100000",
+                "0",
+            ),
+        )
 
 
 if __name__ == "__main__":
