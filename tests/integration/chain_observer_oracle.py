@@ -25,6 +25,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterable
 from urllib import request
@@ -507,10 +508,11 @@ class _SocksHandler(socketserver.BaseRequestHandler):
         else:
             raise AssertionError("unsupported SOCKS5 address type")
         port = int.from_bytes(_read_exact(sock, 2), "big")
-        if host not in {"127.0.0.1", "localhost", "::1"}:
+        if host not in {"127.0.0.1", "localhost", "::1", "observer.invalid"}:
             sock.sendall(b"\x05\x02\x00\x01\x00\x00\x00\x00\x00\x00")
             raise AssertionError(f"SOCKS5 oracle refused non-loopback target {host}")
-        with socket.create_connection((host, port), timeout=10) as upstream:
+        connect_host = "127.0.0.1" if host == "observer.invalid" else host
+        with socket.create_connection((connect_host, port), timeout=10) as upstream:
             sock.sendall(b"\x05\x00\x00\x01\x7f\x00\x00\x01\x00\x00")
             _relay(sock, upstream)
 
@@ -518,6 +520,37 @@ class _SocksHandler(socketserver.BaseRequestHandler):
 class _SocksServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
+
+
+class _AuthenticatedHttpForwardHandler(BaseHTTPRequestHandler):
+    def log_message(self, _format: str, *_args: Any) -> None:
+        return
+
+    def do_GET(self) -> None:
+        expected = str(self.server.expected_authorization)
+        if self.headers.get("Authorization") != expected:
+            self.send_response(401)
+            self.end_headers()
+            return
+        target = f"{str(self.server.upstream).rstrip('/')}{self.path}"
+        with request.urlopen(target, timeout=10) as response:
+            payload = response.read()
+            self.send_response(int(response.status))
+            content_type = response.headers.get("Content-Type")
+            if content_type:
+                self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+
+class _AuthenticatedHttpForwardServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, upstream: str, expected_authorization: str):
+        self.upstream = upstream
+        self.expected_authorization = expected_authorization
+        super().__init__(("127.0.0.1", 0), _AuthenticatedHttpForwardHandler)
 
 
 def _write_test_ca(root: Path) -> tuple[Path, Path, Path]:
@@ -623,7 +656,12 @@ def _socks_electrum_call(proxy_port: int, target_port: int) -> Any:
     return response.get("result")
 
 
-def _probe_transports(*, chain: str, expected_height: int) -> list[dict[str, Any]]:
+def _probe_transports(
+    *,
+    chain: str,
+    expected_height: int,
+    policy_asset_id: str | None = None,
+) -> list[dict[str, Any]]:
     if chain == "bitcoin":
         electrum_port = int(os.environ["KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT"])
         esplora_port = int(os.environ["KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT"])
@@ -661,6 +699,49 @@ def _probe_transports(*, chain: str, expected_height: int) -> list[dict[str, Any
         {"kind": "electrum", "transport": "tcp", "host": "127.0.0.1", "port": electrum_port, "height": expected_height},
         {"kind": "esplora", "transport": "http", "host": "127.0.0.1", "port": esplora_port, "height": expected_height},
     ]
+    if chain == "bitcoin":
+        import bdkpython as bdk
+
+        bdk.ElectrumClient(
+            f"tcp://127.0.0.1:{electrum_port}", timeout=10, retry=1
+        ).ping()
+        dependency_height = int(
+            bdk.EsploraClient(f"http://127.0.0.1:{esplora_port}/api").get_height()
+        )
+        if dependency_height != expected_height:
+            raise AssertionError("BDK Esplora client disagrees with node height")
+        transports.extend(
+            [
+                {"kind": "electrum", "transport": "tcp", "client": "bdk", "height": expected_height},
+                {"kind": "esplora", "transport": "http", "client": "bdk", "height": expected_height},
+            ]
+        )
+    else:
+        if not policy_asset_id:
+            raise AssertionError("Liquid dependency transport probes require the policy asset id")
+        import lwk
+
+        network = lwk.Network.regtest(policy_asset_id)
+        electrum_tip = lwk.ElectrumClient(
+            f"127.0.0.1:{electrum_port}", False, False
+        ).tip()
+        if int(electrum_tip.height()) != expected_height:
+            raise AssertionError("LWK Electrum client disagrees with node height")
+        dependency_tip = lwk.EsploraClient.from_builder(
+            lwk.EsploraClientBuilder(
+                base_url=f"http://127.0.0.1:{esplora_port}/api",
+                network=network,
+                timeout=10,
+            )
+        ).tip()
+        if int(dependency_tip.height()) != expected_height:
+            raise AssertionError("LWK Esplora client disagrees with node height")
+        transports.extend(
+            [
+                {"kind": "electrum", "transport": "tcp", "client": "lwk", "height": expected_height},
+                {"kind": "esplora", "transport": "http", "client": "lwk", "height": expected_height},
+            ]
+        )
     ledger = get_egress_ledger()
     after_id = int(ledger.snapshot(limit=0).get("last_id") or 0)
     ledger.record(subsystem=f"chain-observer-{chain}", host="127.0.0.1", port=electrum_port, scheme="tcp", operation="electrum.headers")
@@ -678,6 +759,13 @@ def _probe_transports(*, chain: str, expected_height: int) -> list[dict[str, Any
             insecure_header = _electrum_call("127.0.0.1", tls_port, "blockchain.headers.subscribe", tls=insecure)
             custom_ca = ssl.create_default_context(cafile=str(ca_path))
             custom_header = _electrum_call("127.0.0.1", tls_port, "blockchain.headers.subscribe", tls=custom_ca)
+            if chain == "bitcoin":
+                bdk.ElectrumClient(
+                    f"ssl://127.0.0.1:{tls_port}",
+                    timeout=10,
+                    retry=1,
+                    validate_domain=False,
+                ).ping()
         finally:
             tls_server.shutdown()
             tls_server.server_close()
@@ -692,6 +780,10 @@ def _probe_transports(*, chain: str, expected_height: int) -> list[dict[str, Any
                 {"kind": "electrum", "transport": "tls-custom-ca", "host": "127.0.0.1", "port": tls_port, "height": expected_height},
             ]
         )
+        if chain == "bitcoin":
+            transports.append(
+                {"kind": "electrum", "transport": "tls-insecure", "client": "bdk", "height": expected_height}
+            )
 
         socks_server = _SocksServer(("127.0.0.1", 0), _SocksHandler)
         socks_thread = threading.Thread(target=socks_server.serve_forever, daemon=True)
@@ -699,6 +791,13 @@ def _probe_transports(*, chain: str, expected_height: int) -> list[dict[str, Any
         socks_port = int(socks_server.server_address[1])
         try:
             socks_header = _socks_electrum_call(socks_port, electrum_port)
+            if chain == "bitcoin":
+                bdk.ElectrumClient(
+                    f"tcp://observer.invalid:{electrum_port}",
+                    socks5=f"socks5://127.0.0.1:{socks_port}",
+                    timeout=10,
+                    retry=1,
+                ).ping()
         finally:
             socks_server.shutdown()
             socks_server.server_close()
@@ -716,6 +815,36 @@ def _probe_transports(*, chain: str, expected_height: int) -> list[dict[str, Any
         transports.append(
             {"kind": "electrum", "transport": "socks5h", "host": "127.0.0.1", "port": electrum_port, "proxy_port": socks_port, "height": expected_height}
         )
+        if chain == "bitcoin":
+            transports.append(
+                {"kind": "electrum", "transport": "socks5-remote-dns", "client": "bdk", "height": expected_height}
+            )
+
+        if chain == "liquid":
+            auth_server = _AuthenticatedHttpForwardServer(
+                f"http://127.0.0.1:{esplora_port}", "Bearer observer-test"
+            )
+            auth_thread = threading.Thread(target=auth_server.serve_forever, daemon=True)
+            auth_thread.start()
+            auth_port = int(auth_server.server_address[1])
+            try:
+                authenticated_tip = lwk.EsploraClient.from_builder(
+                    lwk.EsploraClientBuilder(
+                        base_url=f"http://127.0.0.1:{auth_port}/api",
+                        network=network,
+                        timeout=10,
+                        headers={"Authorization": "Bearer observer-test"},
+                    )
+                ).tip()
+            finally:
+                auth_server.shutdown()
+                auth_server.server_close()
+                auth_thread.join(timeout=5)
+            if int(authenticated_tip.height()) != expected_height:
+                raise AssertionError("Authenticated LWK Esplora client disagrees with node height")
+            transports.append(
+                {"kind": "esplora", "transport": "http-auth", "client": "lwk", "height": expected_height}
+            )
     records = ledger.snapshot(after_id=after_id, limit=50).get("records") or []
     if not records or any(row.get("host") not in {"127.0.0.1", "localhost", "::1"} for row in records):
         raise AssertionError(f"observer egress ledger contains an unaccounted target: {records}")
@@ -1030,7 +1159,11 @@ def _liquid_run(root: Path) -> TruthManifest:
         _rpc(url, username, password, "loadwallet", [owner])
         capture("process_restart", highest=7, facts=[_tx_fact(url, username, password, txids["asset_spend"], direction="outbound")])
         capture("incremental", highest=7, facts=[_tx_fact(url, username, password, txids["asset_spend"], direction="outbound")])
-        manifest.transports = _probe_transports(chain="liquid", expected_height=manifest.transitions[-1]["tip"]["height"])
+        manifest.transports = _probe_transports(
+            chain="liquid",
+            expected_height=manifest.transitions[-1]["tip"]["height"],
+            policy_asset_id=policy_asset,
+        )
         manifest.capabilities.update(
             {
                 "policy_asset_id": policy_asset,

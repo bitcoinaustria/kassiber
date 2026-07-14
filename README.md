@@ -233,9 +233,11 @@ watch-only descriptor import, not filter-first P2P sync.
 
 Supported Esplora/Electrum descriptor wallets use the pinned BDK/LWK observers.
 Private spending descriptors are rejected before any connection; Liquid view
-or blinding material may be accepted but remains sensitive. Configurations the
-bindings cannot express are selected into a named compatibility path before
-network access, never after a dependency failure. See the complete
+or blinding material may be accepted but remains sensitive. BDK/LWK are the
+default indexer-backed descriptor observers, while Bitcoin address scripts,
+Bitcoin Core RPC and Silent Payments remain first-class specialized routes.
+Unsupported transport capabilities fail before egress or select an explicitly
+named protocol route; dependency failures never trigger runtime fallback. See the complete
 [chain-observer capability matrix](docs/reference/chain-observers.md).
 
 To reconcile old flows, `kassiber wallets identify` (or the desktop **Reconcile**

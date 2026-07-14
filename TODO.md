@@ -87,6 +87,19 @@ same verification surface.
     engines, retain only named compatibility routes and `embit` primitives,
     update all user/developer/release/license docs, and leave the same draft PR
     green after full unit, integration, demo, package and secret-scan gates.
+  - [ ] Follow-up — reduce compatibility by capability, without weakening
+    accounting ownership: pass supported Liquid Esplora auth and Electrum TLS
+    policy directly to LWK; normalize `mempool`; fail closed when Esplora
+    custom trust cannot be represented; canonicalize only structurally
+    equivalent Liquid receive/change descriptors; exercise dependency clients
+    over every supported transport; retain partial-descriptor compatibility
+    until mixed-input fees, filtered retractions and branch coverage have a
+    formally tested accounting-ownership model; and describe Core RPC,
+    Bitcoin address scripts and Silent Payments as first-class specialized
+    observers rather than generic dependency fallbacks. The direct TLS probe
+    additionally proved pinned LWK 0.18.0's insecure Rustls verifier unusable;
+    keep that named compatibility route until a packaged LWK release contains
+    the upstream signature-scheme fix and passes the local oracle.
 
 - [x] Harden the CLI for one-shot agents: `--machine` now implies
   `--non-interactive`; `commands describe` exposes an argparse-derived command

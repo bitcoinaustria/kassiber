@@ -1196,6 +1196,7 @@ class SyncBackendsTest(unittest.TestCase):
                 sync_state,
             )
         self.assertEqual(meta["core_wallet"], "kassiber-wallet-1")
+        self.assertEqual(meta["observer_route"], "bitcoin_core_rpc")
         self.assertEqual(meta["imported_addresses"], 1)
         self.assertEqual(meta["bitcoinrpc_sync_mode"], "full_scan")
         self.assertEqual(meta["freshness_checkpoint"]["bitcoinrpc_last_block"], "aa" * 32)

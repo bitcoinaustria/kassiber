@@ -143,6 +143,12 @@ invalidation and unconfirmed resurrection.
 Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.
+The transport oracle also drives the pinned clients themselves: BDK crosses
+plain Electrum, Esplora, insecure test TLS and SOCKS5h; LWK crosses plain
+Electrum, Esplora, explicit insecure test TLS and an authentication-enforcing
+Esplora reverse proxy. Custom-CA rows use Kassiber's manual Electrum client
+because neither pinned dependency accepts a per-client trust root; configured
+Esplora custom trust fails before egress rather than being silently ignored.
 
 Pull requests and main-branch pushes expose a required
 `Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the

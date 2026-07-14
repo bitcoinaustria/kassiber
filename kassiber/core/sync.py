@@ -400,6 +400,7 @@ def normalize_backend_kind(kind: Any) -> str:
         "core-ln": "coreln",
         "core-lightning": "coreln",
         "liquid-esplora": "esplora",
+        "mempool": "esplora",
     }
     return aliases.get(value, value)
 

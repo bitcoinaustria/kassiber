@@ -14,7 +14,7 @@ from ...errors import AppError
 from ...proxy import is_onion_endpoint
 from ...redaction import redact_operational_text, redact_secret_text
 from ...wallet_descriptors import branch_descriptor
-from ..sync import emit_sync_progress
+from ..sync import emit_sync_progress, normalize_backend_kind
 from .bdk_persistence import SqlCipherBdkPersistence, deserialize_changeset
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
 from .identity import ObserverIdentity
@@ -26,6 +26,17 @@ BDK_OBSERVER_STATE_VERSION = 1
 
 def _truthy_env(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _bdk_proxy_url(value: Any) -> str | None:
+    """Translate Kassiber's remote-DNS spelling to BDK's accepted scheme."""
+
+    proxy = str(value or "").strip()
+    if not proxy:
+        return None
+    if proxy.lower().startswith("socks5h://"):
+        return "socks5://" + proxy[len("socks5h://") :]
+    return proxy
 
 
 def _network(value: str) -> Any:
@@ -85,11 +96,19 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         return "address_list"
     if getattr(plan, "kind", None) == "silent-payment":
         return "silent_payment"
-    kind = str(backend.get("kind") or "").strip().lower()
+    kind = normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         return "backend_kind"
-    if backend_value(backend, "certificate"):
-        # bdk_esplora and bdk_electrum do not expose a custom trust-store hook.
+    if kind == "esplora" and backend_value(backend, "certificate"):
+        raise AppError(
+            "BDK Esplora does not support a configured custom trust root",
+            code="observer_capability_unsupported",
+            hint="Use platform trust or an Electrum backend until BDK exposes per-client custom CA support.",
+            details={"capability": "esplora_custom_ca", "observer": "bdk"},
+            retryable=False,
+        )
+    if kind == "electrum" and backend_value(backend, "certificate"):
+        # bdk_electrum does not expose a custom trust-store hook.
         return "custom_ca"
     if kind == "esplora" and (
         backend_value(backend, "auth_header") or backend_value(backend, "token")
@@ -179,7 +198,7 @@ class BdkObserver:
         import bdkpython as bdk
 
         endpoint = str(self.backend.get("url") or "").strip()
-        proxy = str(backend_value(self.backend, "tor_proxy", "proxy") or "").strip() or None
+        proxy = _bdk_proxy_url(backend_value(self.backend, "tor_proxy", "proxy"))
         if not endpoint:
             raise AppError("BDK observer backend is missing its endpoint", code="validation")
         if is_onion_endpoint(endpoint) and proxy is None:
@@ -204,7 +223,7 @@ class BdkObserver:
             operation=f"bdk.{self.backend['kind']}.connect",
             via_proxy=proxy is not None,
         )
-        kind = str(self.backend["kind"]).lower()
+        kind = normalize_backend_kind(self.backend["kind"])
         if kind == "esplora":
             return bdk.EsploraClient(endpoint, proxy=proxy)
         if kind == "electrum":

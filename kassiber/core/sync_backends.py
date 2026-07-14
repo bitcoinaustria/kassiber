@@ -805,7 +805,13 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                 details={"observer_route": "compatibility", "error": safe_error},
                 retryable=True,
             ) from exc
-        route = "silent_payment" if reason == "silent_payment" else "compatibility"
+        route = (
+            "silent_payments"
+            if reason == "silent_payment"
+            else "bitcoin_script"
+            if state.chain == "bitcoin" and reason == "address_list"
+            else "compatibility"
+        )
         return WalletBackendFetch(
             backend=discovery.backend,
             sync_state=state,
@@ -1472,7 +1478,7 @@ def _silent_payment_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         raise AppError("Wallet sync state is not for Silent Payments", code="validation")
     kind = normalize_backend_kind(backend.get("kind"))
     payload = _silent_payment_scan_payload(backend, wallet, plan)
-    return silent_payments.normalize_scan_payload(
+    records, meta = silent_payments.normalize_scan_payload(
         payload,
         backend_name=str(backend.get("name") or ""),
         backend_kind=kind,
@@ -1481,6 +1487,7 @@ def _silent_payment_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         wallet_id=str(wallet["id"]) if "id" in wallet.keys() else None,
         wallet_label=str(wallet["label"]) if "label" in wallet.keys() else None,
     )
+    return records, {**dict(meta or {}), "observer_route": "silent_payments"}
 
 
 def _skip_unchanged_utxo_refresh(meta, sync_state: WalletSyncState):
@@ -3094,6 +3101,7 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         tx_cache=meta.get("_bitcoinrpc_verbose_tx_cache"),
     )
     meta["utxos"] = utxos
+    meta["observer_route"] = "bitcoin_core_rpc"
     meta.pop("_bitcoinrpc_verbose_tx_cache", None)
     if sync_state.descriptor_plan is not None:
         highest_used = dict(checkpoint.get("highest_used") or {})

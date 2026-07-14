@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from embit import bip32, bip39
 
@@ -13,6 +13,8 @@ from kassiber.core.chain_observer.identity import identities_for_wallet
 from kassiber.core.chain_observer.lwk import (
     LwkObserver,
     _fee_sats_by_asset,
+    _lwk_electrum_connection,
+    _lwk_esplora_auth_options,
     lwk_compatibility_reason,
     lwk_descriptor_for_plan,
 )
@@ -23,7 +25,11 @@ from kassiber.core import sync_backends
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.time_utils import now_iso
-from kassiber.wallet_descriptors import load_descriptor_plan
+from kassiber.wallet_descriptors import (
+    derive_descriptor_target,
+    liquid_blinding_secret,
+    load_descriptor_plan,
+)
 
 
 MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -159,6 +165,217 @@ class LwkDescriptorContractTest(unittest.TestCase):
         self.assertEqual(lwk_compatibility_reason(
             {"kind": "electrum", "url": "ssl://host:50002", "certificate": "ca.pem"}, state
         ), "custom_ca")
+
+    def test_esplora_auth_is_passed_to_lwk_instead_of_compatibility(self):
+        plan = load_descriptor_plan(
+            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        backend = {
+            "kind": "liquid-esplora",
+            "url": "https://example.invalid",
+            "auth_header": "Bearer secret",
+            "token": "api-key",
+        }
+        self.assertIsNone(lwk_compatibility_reason(backend, state))
+        fake_lwk = SimpleNamespace(
+            TokenProvider=SimpleNamespace(STATIC=lambda value: ("static", value))
+        )
+        self.assertEqual(
+            _lwk_esplora_auth_options(fake_lwk, backend),
+            {
+                "headers": {"Authorization": "Bearer secret"},
+                "token_provider": ("static", "api-key"),
+            },
+        )
+
+    def test_esplora_custom_ca_fails_closed_before_compatibility(self):
+        plan = load_descriptor_plan(
+            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        with self.assertRaises(AppError) as raised:
+            lwk_compatibility_reason(
+                {"kind": "esplora", "url": "https://host", "certificate": "ca.pem"},
+                state,
+            )
+        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
+        self.assertEqual(raised.exception.details["capability"], "esplora_custom_ca")
+
+    def test_explicit_electrum_constructor_honors_tls_validation(self):
+        self.assertEqual(
+            _lwk_electrum_connection({"url": "ssl://node.example:50002"}),
+            ("node.example:50002", True, True),
+        )
+        self.assertEqual(
+            _lwk_electrum_connection({"url": "tcp://node.example:50001"}),
+            ("node.example:50001", False, False),
+        )
+
+    def test_pinned_lwk_insecure_tls_stays_on_compatibility(self):
+        plan = load_descriptor_plan(
+            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        self.assertEqual(
+            lwk_compatibility_reason(
+                {
+                    "kind": "electrum",
+                    "url": "ssl://node.example:50002",
+                    "insecure": True,
+                },
+                state,
+            ),
+            "insecure_tls",
+        )
+
+    def test_native_client_receives_auth_and_explicit_tls_policy(self):
+        network = object()
+        builder = object()
+        esplora_client = object()
+        fake_lwk = SimpleNamespace(
+            TokenProvider=SimpleNamespace(STATIC=Mock(return_value="static-token")),
+            EsploraClientBuilder=Mock(return_value=builder),
+            EsploraClient=SimpleNamespace(from_builder=Mock(return_value=esplora_client)),
+            ElectrumClient=Mock(return_value="electrum-client"),
+        )
+        observer = object.__new__(LwkObserver)
+        observer.backend = {
+            "name": "auth",
+            "kind": "liquid-esplora",
+            "url": "https://example.invalid/api",
+            "auth_header": "Bearer secret",
+            "token": "api-key",
+            "batch_size": 4,
+            "timeout": 12,
+        }
+        with patch(
+            "kassiber.core.chain_observer.lwk.require_lwk", return_value=fake_lwk
+        ), patch(
+            "kassiber.core.chain_observer.lwk._truthy_env", return_value=False
+        ):
+            self.assertIs(observer._client(network), esplora_client)
+        fake_lwk.EsploraClientBuilder.assert_called_once_with(
+            base_url="https://example.invalid/api",
+            network=network,
+            concurrency=4,
+            timeout=12,
+            headers={"Authorization": "Bearer secret"},
+            token_provider="static-token",
+        )
+
+        observer.backend = {
+            "name": "tls",
+            "kind": "electrum",
+            "url": "ssl://node.example:50002",
+        }
+        with patch(
+            "kassiber.core.chain_observer.lwk.require_lwk", return_value=fake_lwk
+        ), patch(
+            "kassiber.core.chain_observer.lwk._truthy_env", return_value=False
+        ):
+            self.assertEqual(observer._client(network), "electrum-client")
+        fake_lwk.ElectrumClient.assert_called_once_with(
+            "node.example:50002", True, True
+        )
+
+    def test_structurally_equivalent_separate_change_is_canonicalized(self):
+        plan = load_descriptor_plan(
+            {
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "descriptor": descriptor(path="0/*"),
+                "change_descriptor": descriptor(path="1/*"),
+                "synthesize_change": False,
+            }
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        self.assertIsNone(
+            lwk_compatibility_reason(
+                {"kind": "esplora", "url": "http://127.0.0.1:3002"}, state
+            )
+        )
+        parsed = lwk_descriptor_for_plan(plan)
+        self.assertIn("/<0;1>/*", str(parsed))
+        lwk = require_lwk()
+        for branch_index, chain in ((0, lwk.Chain.EXTERNAL), (1, lwk.Chain.INTERNAL)):
+            for index in (0, 1, 7, 100):
+                expected = derive_descriptor_target(plan, branch_index, index)
+                actual_script = parsed.script_pubkey(chain, index)
+                self.assertEqual(actual_script.to_bytes().hex(), expected.script_pubkey)
+                expected_blinding, _target = liquid_blinding_secret(
+                    plan, branch_index, index
+                )
+                actual_blinding = parsed.derive_blinding_key(actual_script)
+                self.assertIsNotNone(actual_blinding)
+                self.assertEqual(actual_blinding.bytes(), expected_blinding)
+
+    def test_different_change_policy_stays_on_compatibility_route(self):
+        plan = load_descriptor_plan(
+            {
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "descriptor": descriptor(path="0/*"),
+                "change_descriptor": descriptor(script="eltr", path="1/*"),
+                "synthesize_change": False,
+            }
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        self.assertEqual(
+            lwk_compatibility_reason(
+                {"kind": "esplora", "url": "http://127.0.0.1:3002"}, state
+            ),
+            "separate_change_descriptor",
+        )
+
+    def test_separate_multisig_change_canonicalizes_all_key_branches(self):
+        root_a = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(MNEMONIC))
+        root_b = bip32.HDKey.from_seed(b"\x02" * 32)
+        blind = bip32.HDKey.from_seed(b"\x03" * 32).key.wif()
+
+        def multisig(branch: int) -> str:
+            keys = [
+                root.derive("m/48h/1h/0h/2h").to_public().to_base58()
+                + f"/{branch}/*"
+                for root in (root_a, root_b)
+            ]
+            return f"ct(slip77({blind}),elwsh(sortedmulti(2,{keys[0]},{keys[1]})))"
+
+        plan = load_descriptor_plan(
+            {
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "descriptor": multisig(0),
+                "change_descriptor": multisig(1),
+                "synthesize_change": False,
+            }
+        )
+        parsed = lwk_descriptor_for_plan(plan)
+        self.assertEqual(str(parsed).count("/<0;1>/*"), 2)
+        lwk = require_lwk()
+        for branch_index, chain in ((0, lwk.Chain.EXTERNAL), (1, lwk.Chain.INTERNAL)):
+            for index in (0, 9, 100):
+                expected = derive_descriptor_target(plan, branch_index, index)
+                self.assertEqual(
+                    parsed.script_pubkey(chain, index).to_bytes().hex(),
+                    expected.script_pubkey,
+                )
+
+    def test_reversed_noncanonical_multipath_is_not_relabelled(self):
+        plan = load_descriptor_plan(
+            {
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "descriptor": descriptor(path="<1;0>/*"),
+            }
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        self.assertEqual(
+            lwk_compatibility_reason(
+                {"kind": "esplora", "url": "http://127.0.0.1:3002"}, state
+            ),
+            "descriptor_unsupported",
+        )
 
     def test_supported_route_is_lwk_only_and_runtime_failure_never_falls_back(self):
         wallet, discovery = self._discovery()

@@ -14,6 +14,7 @@ from kassiber.core import sync as core_sync
 from kassiber.core import sync_backends
 from kassiber.core.chain_observer.bdk import (
     BdkObserver,
+    _bdk_proxy_url,
     _electrum_confirmation_rebuild_needed,
     _electrum_header_hash,
     bdk_branches_for_identity,
@@ -437,6 +438,75 @@ class BdkDependencyContractTest(unittest.TestCase):
         address_state = type("State", (), {"chain": "bitcoin", "descriptor_plan": None})()
         self.assertEqual(
             bdk_compatibility_reason({"kind": "electrum"}, address_state), "address_list"
+        )
+
+    def test_esplora_custom_ca_fails_closed_instead_of_ignoring_trust(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        with self.assertRaises(AppError) as raised:
+            bdk_compatibility_reason(
+                {
+                    "kind": "esplora",
+                    "url": "https://node.example",
+                    "certificate": "/private/ca.pem",
+                },
+                state,
+            )
+        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
+        self.assertEqual(raised.exception.details["capability"], "esplora_custom_ca")
+
+    def test_mempool_backend_alias_selects_bdk(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        self.assertIsNone(
+            bdk_compatibility_reason(
+                {"kind": "mempool", "url": "https://mempool.example/api"}, state
+            )
+        )
+        self.assertEqual(core_sync.normalize_backend_kind("mempool"), "esplora")
+
+    def test_socks5h_is_translated_for_bdk_without_losing_credentials(self):
+        self.assertEqual(
+            _bdk_proxy_url("socks5h://user:pass@127.0.0.1:9050"),
+            "socks5://user:pass@127.0.0.1:9050",
+        )
+        self.assertEqual(
+            _bdk_proxy_url("socks5://127.0.0.1:9050"),
+            "socks5://127.0.0.1:9050",
+        )
+
+    def test_address_list_reports_first_class_bitcoin_script_route(self):
+        wallet, _discovery = self._discovery()
+        backend = {"name": "script", "kind": "esplora", "url": "https://host"}
+        state = core_sync.WalletSyncState(
+            chain="bitcoin",
+            network="main",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=({"script_pubkey": "0014" + "11" * 20},),
+            tracked_scripts={},
+            history_cache={},
+            checkpoint={},
+        )
+        discovery = core_sync.WalletBackendDiscovery(
+            backend=backend,
+            sync_state=state,
+            kind="esplora",
+            started=0.0,
+            force_full=False,
+        )
+        compatibility = mock.Mock(return_value=([], {}))
+        with mock.patch.object(
+            sync_backends,
+            "COMPATIBILITY_SYNC_BACKEND_ADAPTERS",
+            {"esplora": compatibility},
+        ):
+            fetched = sync_backends.prepare_dependency_observer_fetch(
+                mock.Mock(), {}, wallet, discovery
+            )
+        self.assertEqual(fetched.adapter_meta["observer_route"], "bitcoin_script")
+        self.assertEqual(
+            fetched.adapter_meta["observer_compatibility_reason"], "address_list"
         )
 
     def test_no_egress_fails_before_native_client_construction(self):

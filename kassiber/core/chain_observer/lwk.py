@@ -7,6 +7,7 @@ import re
 import json
 from decimal import Decimal
 from typing import Any, Mapping
+from urllib import parse as urlparse
 
 from ...backends import backend_batch_size, backend_timeout, backend_value
 from ...egress_ledger import endpoint_from_url, get_egress_ledger
@@ -15,8 +16,9 @@ from ...errors import AppError
 from ...redaction import redact_operational_text, redact_secret_text
 from ...time_utils import UNKNOWN_OCCURRED_AT, timestamp_to_iso
 from ...proxy import is_onion_endpoint
+from ...util import parse_bool
 from ...wallet_descriptors import liquid_asset_code
-from ..sync import emit_sync_progress
+from ..sync import emit_sync_progress, normalize_backend_kind
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
 from .identity import ObserverIdentity
 from .lwk_persistence import SqlCipherForeignStore, require_lwk
@@ -24,6 +26,7 @@ from .store import CoveragePoint, StoredObserverState
 
 
 LWK_OBSERVER_STATE_VERSION = 1
+_LIQUID_BRANCH_STEP_RE = re.compile(r"/(?P<branch>[01])/\*")
 
 
 def _truthy_env(name: str) -> bool:
@@ -38,19 +41,33 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     plan = getattr(sync_state, "descriptor_plan", None)
     if plan is None:
         return "address_list"
-    kind = str(backend.get("kind") or "").strip().lower()
+    kind = normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         return "backend_kind"
     endpoint = str(backend.get("url") or "")
     proxy = backend_value(backend, "tor_proxy", "proxy")
     if proxy or is_onion_endpoint(endpoint):
         return "proxy_transport"
-    if backend_value(backend, "certificate"):
+    if kind == "esplora" and backend_value(backend, "certificate"):
+        raise AppError(
+            "LWK Esplora does not support a configured custom trust root",
+            code="observer_capability_unsupported",
+            hint="Use platform trust or an Electrum backend until LWK exposes per-client custom CA support.",
+            details={"capability": "esplora_custom_ca", "observer": "lwk"},
+            retryable=False,
+        )
+    if kind == "electrum" and backend_value(backend, "certificate"):
         return "custom_ca"
-    if kind == "esplora" and (
-        backend_value(backend, "auth_header") or backend_value(backend, "token")
+    if kind == "electrum" and parse_bool(
+        backend_value(backend, "insecure"), default=False
     ):
-        return "custom_http_auth"
+        # LWK 0.18.0 pins rust-electrum-client 0.21.0. Its Rustls
+        # NoCertificateVerification implementation advertises no supported
+        # signature schemes, so the explicit validate_domain=False path cannot
+        # complete a standards-compliant TLS handshake. Keep the working
+        # compatibility transport until the packaged binding contains the
+        # upstream verifier fix.
+        return "insecure_tls"
     if kind == "electrum" and backend_value(backend, "timeout") is not None:
         try:
             if int(backend_value(backend, "timeout")) != 30:
@@ -61,15 +78,85 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     if len(branches) not in {1, 2}:
         return "noncanonical_multipath"
     if len(branches) == 2:
-        if tuple(getattr(branch, "selector", None) for branch in branches) != (0, 1):
-            return "separate_change_descriptor"
-        if str(branches[0].descriptor) != str(branches[1].descriptor):
+        selectors = tuple(getattr(branch, "selector", None) for branch in branches)
+        if selectors != (0, 1) and _canonical_liquid_multipath_text(plan) is None:
             return "separate_change_descriptor"
     try:
         lwk_descriptor_for_plan(plan)
     except Exception:
         return "descriptor_unsupported"
     return None
+
+
+def _lwk_esplora_auth_options(lwk: Any, backend: Mapping[str, Any]) -> dict[str, Any]:
+    """Translate encrypted Kassiber credentials into LWK builder options."""
+
+    options: dict[str, Any] = {}
+    auth_header = str(backend_value(backend, "auth_header") or "").strip()
+    token = str(backend_value(backend, "token") or "").strip()
+    if auth_header:
+        options["headers"] = {"Authorization": auth_header}
+    if token:
+        options["token_provider"] = lwk.TokenProvider.STATIC(token)
+    return options
+
+
+def _lwk_electrum_connection(backend: Mapping[str, Any]) -> tuple[str, bool, bool]:
+    """Return endpoint, TLS use and domain validation for the explicit client."""
+
+    raw = str(backend.get("url") or "").strip()
+    parsed = urlparse.urlsplit(raw if "://" in raw else f"ssl://{raw}")
+    scheme = str(parsed.scheme or "ssl").lower()
+    if scheme not in {"ssl", "tls", "tcp"}:
+        raise AppError(
+            f"Unsupported LWK Electrum transport '{scheme}'",
+            code="observer_capability_unsupported",
+            retryable=False,
+        )
+    host = parsed.hostname
+    port = parsed.port or (50002 if scheme in {"ssl", "tls"} else 50001)
+    if not host or not port:
+        raise AppError("Invalid LWK Electrum endpoint", code="validation", retryable=False)
+    tls = scheme in {"ssl", "tls"}
+    endpoint = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+    return endpoint, tls, tls
+
+
+def _canonical_liquid_multipath_text(plan: Any) -> str | None:
+    """Combine only provably-equivalent separate receive/change descriptors."""
+
+    branches = tuple(getattr(plan, "branches", ()))
+    if len(branches) != 2:
+        return None
+    receive = str(branches[0].descriptor)
+    change = str(branches[1].descriptor)
+    receive_steps = list(_LIQUID_BRANCH_STEP_RE.finditer(receive))
+    change_steps = list(_LIQUID_BRANCH_STEP_RE.finditer(change))
+    if not receive_steps or len(receive_steps) != len(change_steps):
+        return None
+    if any(match.group("branch") != "0" for match in receive_steps):
+        return None
+    if any(match.group("branch") != "1" for match in change_steps):
+        return None
+    receive_shape = _LIQUID_BRANCH_STEP_RE.sub("/{branch}/*", receive)
+    change_shape = _LIQUID_BRANCH_STEP_RE.sub("/{branch}/*", change)
+    if receive_shape != change_shape:
+        return None
+    return _LIQUID_BRANCH_STEP_RE.sub("/<0;1>/*", receive)
+
+
+def _lwk_descriptor_text_for_plan(plan: Any) -> str:
+    branches = tuple(getattr(plan, "branches", ()))
+    if len(branches) == 2 and str(branches[0].descriptor) != str(branches[1].descriptor):
+        canonical = _canonical_liquid_multipath_text(plan)
+        if canonical is None:
+            raise AppError(
+                "Separate Liquid receive/change descriptors are not structurally equivalent",
+                code="observer_capability_unsupported",
+                retryable=False,
+            )
+        return canonical
+    return str(branches[0].descriptor)
 
 
 def lwk_network(network: str, policy_asset_id: str):
@@ -89,7 +176,7 @@ def lwk_descriptor_for_plan(plan: Any):
 
     lwk = require_lwk()
     descriptor = plan.branches[0].descriptor
-    text = str(descriptor)
+    text = _lwk_descriptor_text_for_plan(plan)
     if not text.startswith("blinded("):
         raise AppError("LWK requires a confidential descriptor", code="observer_capability_unsupported")
     blinding = descriptor.blinding_key
@@ -166,17 +253,19 @@ class LwkObserver:
             operation=f"lwk.{self.backend['kind']}.connect",
             via_proxy=False,
         )
-        kind = str(self.backend["kind"]).lower()
+        kind = normalize_backend_kind(self.backend["kind"])
         if kind == "esplora":
             builder = lwk.EsploraClientBuilder(
                 base_url=endpoint,
                 network=network,
                 concurrency=max(1, min(8, backend_batch_size(self.backend))),
                 timeout=max(1, min(255, backend_timeout(self.backend))),
+                **_lwk_esplora_auth_options(lwk, self.backend),
             )
             return lwk.EsploraClient.from_builder(builder)
         if kind == "electrum":
-            return lwk.ElectrumClient.from_url(endpoint)
+            electrum_endpoint, tls, validate_domain = _lwk_electrum_connection(self.backend)
+            return lwk.ElectrumClient(electrum_endpoint, tls, validate_domain)
         raise AppError("Unsupported LWK observer backend", code="observer_capability_unsupported")
 
     @staticmethod
