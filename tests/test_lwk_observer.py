@@ -15,6 +15,7 @@ from kassiber.core.chain_observer.lwk import (
     _fee_sats_by_asset,
     _lwk_electrum_connection,
     _lwk_esplora_auth_options,
+    _lwk_scan_to_index,
     lwk_compatibility_reason,
     lwk_descriptor_for_plan,
 )
@@ -228,6 +229,25 @@ class LwkDescriptorContractTest(unittest.TestCase):
             ),
             "insecure_tls",
         )
+
+    def test_incremental_scan_horizon_advances_from_prior_highest_used(self):
+        plan = load_descriptor_plan(
+            {
+                "chain": "liquid",
+                "network": "elementsregtest",
+                "descriptor": descriptor(),
+                "gap_limit": 8,
+            }
+        )
+        prior_state = SimpleNamespace(
+            coverage=(SimpleNamespace(highest_used=7), SimpleNamespace(highest_used=3))
+        )
+        self.assertEqual(_lwk_scan_to_index(plan, prior_state, {}), 15)
+        self.assertEqual(
+            _lwk_scan_to_index(plan, None, {"highest_used": {"0": 12}}),
+            20,
+        )
+        self.assertEqual(_lwk_scan_to_index(plan, None, {}), 7)
 
     def test_native_client_receives_auth_and_explicit_tls_policy(self):
         network = object()

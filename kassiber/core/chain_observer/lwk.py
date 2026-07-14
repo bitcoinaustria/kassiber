@@ -122,6 +122,31 @@ def _lwk_electrum_connection(backend: Mapping[str, Any]) -> tuple[str, bool, boo
     return endpoint, tls, tls
 
 
+def _lwk_scan_to_index(
+    plan: Any,
+    prior_state: StoredObserverState | None,
+    checkpoint: Mapping[str, Any],
+) -> int:
+    """Keep the explicit LWK scan horizon ahead of prior discoveries."""
+
+    gap_limit = max(1, int(plan.gap_limit))
+    highest_used: list[int] = []
+    if prior_state is not None:
+        highest_used.extend(
+            int(point.highest_used)
+            for point in prior_state.coverage
+            if point.highest_used is not None and int(point.highest_used) >= 0
+        )
+    for value in (checkpoint.get("highest_used") or {}).values():
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            highest_used.append(parsed)
+    return max([gap_limit - 1, *(value + gap_limit for value in highest_used)])
+
+
 def _canonical_liquid_multipath_text(plan: Any) -> str | None:
     """Combine only provably-equivalent separate receive/change descriptors."""
 
@@ -473,7 +498,7 @@ class LwkObserver:
             self._wallet = lwk.Wollet.with_custom_store(network, lwk_descriptor_for_plan(self.plan), self._store_link)
             client = self._client(network)
             emit_sync_progress({"phase": "backend_fetch", "observer": "lwk", "status": "scanning"})
-            scan_to = max(0, int(self.plan.gap_limit) - 1)
+            scan_to = _lwk_scan_to_index(self.plan, prior_state, request.checkpoint)
             update = client.full_scan_to_index(self._wallet, scan_to)
             if update is not None:
                 self._wallet.apply_update(update)
