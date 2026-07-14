@@ -26,7 +26,11 @@ from kassiber.core.chain_observer.bdk_persistence import (
 )
 from kassiber.core.chain_observer.identity import identities_for_wallet
 from kassiber.core.chain_observer.contract import ObserverPrepareRequest
-from kassiber.core.imports import _transaction_merge_updates, normalize_import_record
+from kassiber.core.imports import (
+    PRICE_COLUMNS,
+    _transaction_merge_updates,
+    normalize_import_record,
+)
 from kassiber.errors import AppError
 from kassiber.wallet_descriptors import load_descriptor_plan
 from tests.test_cli_smoke import _sample_descriptor_pair
@@ -392,11 +396,25 @@ class BdkDependencyContractTest(TestCase):
             raw_json=json.dumps({"observer": "bdk", "status": {"confirmed": True}}),
             amount=100_000,
             fee=1_000,
+            fiat_rate=100_000.0,
+            fiat_value=10.0,
+            fiat_rate_exact="100000",
+            fiat_value_exact="10",
+            fiat_price_source="rates_cache",
+            pricing_source_kind="fmv_provider",
+            pricing_provider="test-rates",
+            pricing_pair="BTC-EUR",
+            pricing_timestamp="2026-01-01T00:00:00Z",
+            pricing_fetched_at="2026-01-01T00:01:00Z",
+            pricing_granularity="minute",
+            pricing_method="nearest",
+            pricing_external_ref="rate-1",
+            pricing_quality="provider_sample",
         )
         normalized = normalize_import_record(
             {
                 "txid": "11" * 32,
-                "occurred_at": "2026-01-01T00:00:00Z",
+                "occurred_at": "2025-12-31T23:55:00Z",
                 "confirmed_at": None,
                 "direction": "outbound",
                 "asset": "BTC",
@@ -417,6 +435,25 @@ class BdkDependencyContractTest(TestCase):
         )
         self.assertIn("confirmed_at", updates)
         self.assertIsNone(updates["confirmed_at"])
+        self.assertEqual(updates["occurred_at"], "2025-12-31T23:55:00Z")
+        self.assertEqual(updates["fingerprint"], "new")
+        for column in PRICE_COLUMNS:
+            self.assertIn(column, updates)
+            self.assertIsNone(updates[column])
+
+        imported_price = defaultdict(
+            lambda: None,
+            existing,
+            fiat_price_source="import",
+        )
+        imported_price_updates = _transaction_merge_updates(
+            imported_price,
+            normalized,
+            "new",
+            authoritative_chain_observer=True,
+        )
+        self.assertNotIn("fiat_rate", imported_price_updates)
+        self.assertNotIn("pricing_timestamp", imported_price_updates)
 
     def test_exact_pin_lock_wheels_and_packager_collection(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")

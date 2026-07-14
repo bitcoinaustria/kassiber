@@ -655,6 +655,14 @@ def _transaction_merge_updates(
         # allowed to demote a previously confirmed record. Generic imports
         # remain monotonic and cannot clear confirmation evidence.
         updates["confirmed_at"] = None
+        # A confirmed observer record uses block time as its occurrence time.
+        # Once demoted, replace that stale timestamp with the dependency's
+        # unconfirmed first-seen time (or the explicit unknown sentinel) and
+        # keep the fingerprint aligned with the new identity inputs.
+        if existing["occurred_at"] != normalized["occurred_at"]:
+            updates["occurred_at"] = normalized["occurred_at"]
+        if existing["fingerprint"] != fingerprint:
+            updates["fingerprint"] = fingerprint
 
     has_existing_price = (
         existing["fiat_rate"] is not None
@@ -670,7 +678,13 @@ def _transaction_merge_updates(
     )
     if has_import_price and (not has_existing_price or incoming_priority >= existing_priority):
         updates.update({column: normalized[column] for column in PRICE_COLUMNS})
-    elif confirmed_at_added and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE:
+    elif (
+        (confirmed_at_added or confirmed_at_removed)
+        and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE
+    ):
+        # Rate-cache pricing is timestamp-derived. Both confirmation and
+        # demotion change the authoritative pricing timestamp, so discard the
+        # whole provenance bundle and let the rates workflow price it again.
         updates.update({column: None for column in PRICE_COLUMNS})
 
     exchange_execution_overrides = (
