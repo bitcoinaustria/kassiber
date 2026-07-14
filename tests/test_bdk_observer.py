@@ -563,6 +563,36 @@ class BdkDependencyContractTest(unittest.TestCase):
         self.assertEqual(raised.exception.code, "network_proxy_required")
         client.assert_not_called()
 
+    def test_electrum_insecure_flag_uses_boolean_semantics(self):
+        wallet, plan = _descriptor_wallet()
+        identity = identities_for_wallet(wallet, observer_kind="bdk")[0]
+        observer = BdkObserver(
+            identity=identity,
+            backend={
+                "name": "native",
+                "kind": "electrum",
+                "url": "ssl://127.0.0.1:50002",
+            },
+            branches=bdk_branches_for_identity(plan, identity),
+            gap_limit=20,
+        )
+        with mock.patch.object(bdk, "ElectrumClient") as client:
+            for value, validate_domain in (
+                (False, True),
+                ("false", True),
+                ("0", True),
+                (True, False),
+                ("true", False),
+                ("1", False),
+            ):
+                with self.subTest(value=value):
+                    observer.backend["insecure"] = value
+                    observer._client()
+                    self.assertEqual(
+                        client.call_args.kwargs["validate_domain"],
+                        validate_domain,
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

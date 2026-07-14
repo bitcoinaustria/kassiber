@@ -13,6 +13,7 @@ from ...egress_ledger import endpoint_from_url, get_egress_ledger
 from ...errors import AppError
 from ...proxy import is_onion_endpoint
 from ...redaction import redact_operational_text, redact_secret_text
+from ...util import parse_bool
 from ...wallet_descriptors import branch_descriptor
 from ..sync import emit_sync_progress, normalize_backend_kind
 from .bdk_persistence import SqlCipherBdkPersistence, deserialize_changeset
@@ -232,7 +233,9 @@ class BdkObserver:
                 socks5=proxy,
                 timeout=max(1, int(backend_timeout(self.backend))),
                 retry=1,
-                validate_domain=not bool(backend_value(self.backend, "insecure")),
+                validate_domain=not parse_bool(
+                    backend_value(self.backend, "insecure"), default=False
+                ),
             )
         raise AppError("Unsupported BDK observer backend", code="observer_capability_unsupported")
 
