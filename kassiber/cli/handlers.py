@@ -3561,32 +3561,38 @@ def _prepare_negative_balance_repairs(
             wallet,
             rescan_gap_limit,
         )
-        repair_fetch = core_sync.fetch_wallet_backend(
-            runtime_config,
-            profile,
-            repair_wallet,
-            hooks,
-            checkpoint={},
-            force_full=True,
-            source_overlap_preflight=(
-                lambda candidate, state: core_source_overlap.filter_sync_state_for_canonical_owner(
-                    conn,
-                    profile,
-                    candidate,
-                    state,
-                )
-            ),
-            observer_fetch_preflight=(
-                lambda candidate, discovery: hooks.prepare_observer_fetch(
-                    conn,
-                    profile,
-                    candidate,
-                    discovery,
-                )
-                if hooks.prepare_observer_fetch is not None
-                else None
-            ),
-        )
+        try:
+            repair_fetch = core_sync.fetch_wallet_backend(
+                runtime_config,
+                profile,
+                repair_wallet,
+                hooks,
+                checkpoint={},
+                force_full=True,
+                source_overlap_preflight=(
+                    lambda candidate, state: core_source_overlap.filter_sync_state_for_canonical_owner(
+                        conn,
+                        profile,
+                        candidate,
+                        state,
+                    )
+                ),
+                observer_fetch_preflight=(
+                    lambda candidate, discovery: hooks.prepare_observer_fetch(
+                        conn,
+                        profile,
+                        candidate,
+                        discovery,
+                    )
+                    if hooks.prepare_observer_fetch is not None
+                    else None
+                ),
+            )
+        except AppError as exc:
+            core_sync.discard_fetch_observer_updates(fetch)
+            prepared[wallet_id] = exc
+            continue
+        core_sync.discard_fetch_observer_updates(fetch)
         repair_meta = dict(repair_fetch.adapter_meta)
         repair_meta["_prepared_negative_balance_rescan"] = {
             "triggered": True,

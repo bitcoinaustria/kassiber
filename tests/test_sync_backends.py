@@ -3416,6 +3416,51 @@ class AtomicWalletRefreshTest(unittest.TestCase):
             repair.adapter_meta["_prepared_negative_balance_rescan"]["triggered"]
         )
 
+    def test_negative_balance_repair_failure_stays_scoped_to_wallet(self):
+        first = {**self.wallet, "id": "repair-fails", "label": "Repair fails"}
+        second = {**self.wallet, "id": "repair-succeeds", "label": "Repair succeeds"}
+        successful_repair = replace(self.fetch, adapter_meta={})
+        failure = AppError("repair failed", code="repair_failed", retryable=True)
+        with (
+            patch.object(
+                cli_handlers,
+                "_prospective_negative_balance_events",
+                return_value=[{"asset": "BTC"}],
+            ),
+            patch.object(
+                core_sync,
+                "negative_balance_rescan_gap_limit",
+                return_value=100,
+            ),
+            patch.object(
+                core_sync,
+                "wallet_with_temporary_gap_limit",
+                side_effect=lambda wallet, _gap: wallet,
+            ),
+            patch.object(
+                core_sync,
+                "fetch_wallet_backend",
+                side_effect=[failure, successful_repair],
+            ),
+            patch.object(core_sync, "discard_fetch_observer_updates") as discard,
+        ):
+            prepared = cli_handlers._prepare_negative_balance_repairs(
+                self.conn,
+                {},
+                self.profile,
+                [first, second],
+                self._hooks(None),
+                {first["id"]: self.fetch, second["id"]: self.fetch},
+            )
+
+        self.assertIs(prepared[first["id"]], failure)
+        self.assertIsInstance(prepared[second["id"]], WalletBackendFetch)
+        self.assertTrue(
+            prepared[second["id"]]
+            .adapter_meta["_prepared_negative_balance_rescan"]["triggered"]
+        )
+        self.assertEqual(discard.call_count, 2)
+
     def test_single_and_all_route_through_same_atomic_apply_primitive(self):
         calls = []
 
