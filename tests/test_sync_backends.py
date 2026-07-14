@@ -204,9 +204,11 @@ class SyncBackendsTest(unittest.TestCase):
                 "retracted_records": [{"transaction_id": "stale"}],
             }
 
-        def insert_records(conn, profile, wallet, records, source_label):
+        def insert_records(conn, profile, wallet, records, source_label, **kwargs):
             del conn, profile, wallet
-            inserted_after_retract.append((source_label, bool(retracted), list(records)))
+            inserted_after_retract.append(
+                (source_label, bool(retracted), list(records), kwargs)
+            )
             return {"imported": 0, "skipped": 0, "journal_invalidated": False}
 
         hooks = WalletSyncHooks(
@@ -230,6 +232,7 @@ class SyncBackendsTest(unittest.TestCase):
             kind="bitcoinrpc",
             started=0.0,
             force_full=False,
+            authoritative_chain_observer=True,
         )
 
         outcome = sync_wallet_from_backend(
@@ -244,6 +247,10 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(retracted, [("backend:core-regtest", ["aa" * 32])])
         self.assertEqual(inserted_after_retract[0][0], "backend:core-regtest")
         self.assertTrue(inserted_after_retract[0][1])
+        self.assertEqual(
+            inserted_after_retract[0][3],
+            {"authoritative_chain_observer": True},
+        )
         self.assertEqual(outcome["retracted"], 1)
         self.assertTrue(outcome["journal_invalidated"])
         self.assertEqual(outcome["bitcoinrpc_retracted_txids"], ["aa" * 32])
@@ -468,7 +475,16 @@ class SyncBackendsTest(unittest.TestCase):
                 {"freshness_checkpoint": {"pass": len(adapter_gaps)}},
             )
 
-        def insert_records(conn, profile, wallet_row, records, source_label):
+        def insert_records(
+            conn,
+            profile,
+            wallet_row,
+            records,
+            source_label,
+            *,
+            authoritative_chain_observer=False,
+        ):
+            self.assertTrue(authoritative_chain_observer)
             pass_number = records[0]["pass"]
             if pass_number == 1:
                 conn.execute(

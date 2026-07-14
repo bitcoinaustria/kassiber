@@ -14,8 +14,6 @@ from kassiber.core import sync as core_sync
 from kassiber.core import sync_backends
 from kassiber.core.chain_observer.bdk import (
     BdkObserver,
-    _bdk_proxy_url,
-    _electrum_confirmation_rebuild_needed,
     _electrum_header_hash,
     bdk_branches_for_identity,
     bdk_compatibility_reason,
@@ -27,6 +25,7 @@ from kassiber.core.chain_observer.bdk_persistence import (
     serialize_changeset,
 )
 from kassiber.core.chain_observer.identity import identities_for_wallet
+from kassiber.core.chain_observer.contract import ObserverPrepareRequest
 from kassiber.core.imports import _transaction_merge_updates, normalize_import_record
 from kassiber.errors import AppError
 from kassiber.wallet_descriptors import load_descriptor_plan
@@ -107,7 +106,20 @@ class BdkDependencyContractTest(unittest.TestCase):
         self.assertEqual(fetched.adapter_meta["observer_route"], "bdk")
         self.assertEqual(fetched.normalized_records, ())
         self.assertEqual(fetched.observer_updates, (prepared,))
+        self.assertTrue(fetched.authoritative_chain_observer)
         compatibility.assert_not_called()
+
+    def test_supported_route_rejects_an_empty_identity_set(self):
+        wallet, discovery = self._discovery()
+        with mock.patch(
+            "kassiber.core.chain_observer.identity.identities_for_wallet",
+            return_value=(),
+        ):
+            with self.assertRaises(AppError) as raised:
+                sync_backends.prepare_dependency_observer_fetch(
+                    mock.Mock(), {}, wallet, discovery
+                )
+        self.assertEqual(raised.exception.code, "observer_identity_invalid")
 
     def test_bdk_failure_is_not_retried_through_compatibility_adapter(self):
         wallet, discovery = self._discovery()
@@ -168,6 +180,7 @@ class BdkDependencyContractTest(unittest.TestCase):
                     fetched.adapter_meta["observer_compatibility_reason"],
                     reason,
                 )
+                self.assertTrue(fetched.authoritative_chain_observer)
                 compatibility.assert_called_once()
                 dependency_prepare.assert_not_called()
 
@@ -304,6 +317,7 @@ class BdkDependencyContractTest(unittest.TestCase):
         observer = object.__new__(BdkObserver)
 
         observer.backend = {"kind": "esplora"}
+        observer.backend_kind = "esplora"
         esplora = mock.Mock()
         esplora.get_height.return_value = 9
         with self.assertRaises(AppError) as raised:
@@ -314,6 +328,7 @@ class BdkDependencyContractTest(unittest.TestCase):
         esplora.get_block_hash.assert_not_called()
 
         observer.backend = {"kind": "electrum"}
+        observer.backend_kind = "electrum"
         electrum = mock.Mock()
         electrum.block_headers_subscribe.return_value.height = 8
         with self.assertRaises(AppError) as raised:
@@ -321,22 +336,6 @@ class BdkDependencyContractTest(unittest.TestCase):
         self.assertEqual(raised.exception.code, "backend_tip_behind")
         self.assertTrue(raised.exception.retryable)
         electrum.block_header.assert_not_called()
-
-    def test_electrum_rebuild_is_limited_to_advanced_tip_with_stale_mempool_position(self):
-        wallet = mock.Mock()
-        wallet.latest_checkpoint.return_value.height = 8
-        confirmed = mock.Mock()
-        confirmed.chain_position.is_confirmed.return_value = True
-        mempool = mock.Mock()
-        mempool.chain_position.is_confirmed.return_value = False
-
-        wallet.transactions.return_value = [mempool]
-        self.assertTrue(_electrum_confirmation_rebuild_needed(wallet, 7))
-        self.assertFalse(_electrum_confirmation_rebuild_needed(wallet, 8))
-        self.assertFalse(_electrum_confirmation_rebuild_needed(wallet, None))
-
-        wallet.transactions.return_value = [confirmed]
-        self.assertFalse(_electrum_confirmation_rebuild_needed(wallet, 7))
 
     def test_only_trusted_observer_provenance_can_demote_confirmation(self):
         existing = defaultdict(
@@ -381,7 +380,12 @@ class BdkDependencyContractTest(unittest.TestCase):
         )
         self.assertIn('"bdkpython==3.0.0"', pyproject)
         self.assertIn('name = "bdkpython"\nversion = "3.0.0"', lock)
-        for platform in ("macosx_11_0_arm64", "manylinux_2_28_x86_64", "win_amd64"):
+        for platform in (
+            "macosx_11_0_arm64",
+            "macosx_11_0_x86_64",
+            "manylinux_2_28_x86_64",
+            "win_amd64",
+        ):
             self.assertIn(f"bdkpython-3.0.0-cp313-cp313-{platform}.whl", lock)
         self.assertGreaterEqual(workflow.count("--collect-submodules bdkpython"), 2)
         self.assertTrue(callable(bdk.Wallet.start_full_scan))
@@ -495,14 +499,53 @@ class BdkDependencyContractTest(unittest.TestCase):
         )
         self.assertEqual(core_sync.normalize_backend_kind("mempool"), "esplora")
 
-    def test_socks5h_is_translated_for_bdk_without_losing_credentials(self):
-        self.assertEqual(
-            _bdk_proxy_url("socks5h://user:pass@127.0.0.1:9050"),
-            "socks5://user:pass@127.0.0.1:9050",
+    def test_force_full_mempool_alias_rejects_a_lagging_backend(self):
+        wallet, plan = _descriptor_wallet()
+        identity = identities_for_wallet(wallet, observer_kind="bdk")[0]
+        observer = BdkObserver(
+            identity=identity,
+            backend={
+                "name": "mempool",
+                "kind": "mempool",
+                "url": "https://mempool.example/api",
+            },
+            branches=bdk_branches_for_identity(plan, identity),
+            gap_limit=20,
         )
+        native_wallet = mock.Mock()
+        client = mock.Mock()
+        client.get_height.return_value = 9
+        request = ObserverPrepareRequest(
+            backend_name="mempool",
+            backend_kind="mempool",
+            force_full=True,
+            checkpoint={"tip_height": 10, "canonical_txids": ["11" * 32]},
+        )
+        with mock.patch.object(
+            observer,
+            "_wallet_from_state",
+            return_value=(native_wallet, mock.Mock()),
+        ), mock.patch.object(observer, "_client", return_value=client), mock.patch.object(
+            observer, "_full_scan"
+        ) as full_scan:
+            with self.assertRaises(AppError) as raised:
+                observer.prepare(request, None)
+        self.assertEqual(raised.exception.code, "backend_tip_behind")
+        full_scan.assert_not_called()
+
+    def test_remote_dns_proxy_stays_on_named_compatibility_route(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
         self.assertEqual(
-            _bdk_proxy_url("socks5://127.0.0.1:9050"),
-            "socks5://127.0.0.1:9050",
+            bdk_compatibility_reason(
+                {
+                    "kind": "esplora",
+                    "url": "https://example.invalid",
+                    "proxy": "socks5h://user:pass@127.0.0.1:9050",
+                },
+                state,
+            ),
+            "proxy_transport",
         )
 
     def test_address_list_reports_first_class_bitcoin_script_route(self):
@@ -568,7 +611,7 @@ class BdkDependencyContractTest(unittest.TestCase):
         with mock.patch.object(bdk, "ElectrumClient") as client:
             with self.assertRaises(AppError) as raised:
                 observer._client()
-        self.assertEqual(raised.exception.code, "network_proxy_required")
+        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
         client.assert_not_called()
 
     def test_electrum_insecure_flag_uses_boolean_semantics(self):

@@ -179,6 +179,7 @@ class WalletBackendFetch:
     force_full: bool
     skip_outcome: Mapping[str, Any] | None = None
     observer_updates: tuple[PreparedObserverUpdate, ...] = ()
+    authoritative_chain_observer: bool = False
 
 
 @dataclass(frozen=True)
@@ -559,6 +560,10 @@ def fetch_wallet_backend_from_discovery(
         kind=discovery.kind,
         started=discovery.started,
         force_full=discovery.force_full,
+        authoritative_chain_observer=(
+            sync_state.chain in {"bitcoin", "liquid"}
+            and discovery.kind in {"esplora", "electrum", "bitcoinrpc"}
+        ),
     )
 
 
@@ -873,7 +878,9 @@ def sync_wallet_from_backend(
         )
     notify_apply_stage(hooks, APPLY_STAGE_RETRACTIONS)
     insert_kwargs = (
-        {"authoritative_chain_observer": True} if dependency_prepared else {}
+        {"authoritative_chain_observer": True}
+        if dependency_prepared or fetch.authoritative_chain_observer
+        else {}
     )
     outcome = hooks.insert_records(
         conn,

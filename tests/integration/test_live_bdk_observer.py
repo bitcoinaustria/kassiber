@@ -202,7 +202,7 @@ def _transport_projection(root: Path) -> list[dict]:
 
 @skip_unless_integration
 class LiveBdkObserverTest(unittest.TestCase):
-    def test_esplora_and_electrum_descriptor_routes_match_and_restart(self):
+    def test_mempool_esplora_alias_and_electrum_routes_match_and_restart(self):
         core_url = os.environ.get("KASSIBER_REGTEST_CORE_URL", "http://127.0.0.1:18443")
         username = os.environ.get("KASSIBER_REGTEST_RPC_USER", "kassiber")
         password = os.environ.get("KASSIBER_REGTEST_RPC_PASSWORD", "kassiber")
@@ -255,7 +255,7 @@ class LiveBdkObserverTest(unittest.TestCase):
             with tempfile.TemporaryDirectory(prefix="kassiber-live-bdk-") as tmp:
                 roots = {
                     "electrum": Path(tmp) / "electrum",
-                    "esplora": Path(tmp) / "esplora",
+                    "mempool": Path(tmp) / "mempool",
                 }
                 _create_book(
                     roots["electrum"],
@@ -265,8 +265,8 @@ class LiveBdkObserverTest(unittest.TestCase):
                     change=change,
                 )
                 _create_book(
-                    roots["esplora"],
-                    backend_kind="esplora",
+                    roots["mempool"],
+                    backend_kind="mempool",
                     backend_url=esplora_url,
                     receive=receive,
                     change=change,
@@ -285,11 +285,11 @@ class LiveBdkObserverTest(unittest.TestCase):
                     states[kind] = state_before
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 self.assertEqual(
                     _utxo_projection(roots["electrum"]),
-                    _utxo_projection(roots["esplora"]),
+                    _utxo_projection(roots["mempool"]),
                 )
 
                 # Exercise gap expansion after initial state exists.
@@ -318,11 +318,11 @@ class LiveBdkObserverTest(unittest.TestCase):
                     self.assertEqual(utxo_count, 2)
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 self.assertEqual(
                     _utxo_projection(roots["electrum"]),
-                    _utxo_projection(roots["esplora"]),
+                    _utxo_projection(roots["mempool"]),
                 )
 
                 # Outbound observation includes an exact on-chain fee while
@@ -353,7 +353,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                     self.assertEqual(outcome["observer_route"], "bdk", kind)
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 spend = next(
                     row
@@ -375,7 +375,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                     outcome = _sync(root, "BDK watch")
                     self.assertEqual(outcome["observer_route"], "bdk", kind)
                 electrum_rows = _transport_projection(roots["electrum"])
-                self.assertEqual(electrum_rows, _transport_projection(roots["esplora"]))
+                self.assertEqual(electrum_rows, _transport_projection(roots["mempool"]))
                 self.assertNotIn(spend_txid, {row["external_id"] for row in electrum_rows})
                 self.assertIn(replacement_txid, {row["external_id"] for row in electrum_rows})
 
@@ -399,7 +399,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _sync(root, "BDK watch")
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 confirmed = next(
                     row
@@ -434,7 +434,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _sync(root, "BDK watch")
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 reorged = next(
                     row
@@ -459,7 +459,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _sync(root, "BDK watch")
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 reconfirmed = next(
                     row
@@ -509,11 +509,11 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _sync(root, "BDK watch")
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 self.assertEqual(
                     _utxo_projection(roots["electrum"]),
-                    _utxo_projection(roots["esplora"]),
+                    _utxo_projection(roots["mempool"]),
                 )
                 owned_utxos = _rpc(
                     core_url,
@@ -583,11 +583,11 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _sync(root, "BDK watch")
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 self.assertEqual(
                     _utxo_projection(roots["electrum"]),
-                    _utxo_projection(roots["esplora"]),
+                    _utxo_projection(roots["mempool"]),
                 )
                 spent_b = next(
                     row
@@ -626,7 +626,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                 electrum_rows = _transport_projection(roots["electrum"])
                 self.assertEqual(
                     electrum_rows,
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 self.assertNotIn(
                     evicted_txid,
@@ -637,7 +637,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                     {row["external_id"] for row in electrum_rows},
                 )
                 electrum_utxos = _utxo_projection(roots["electrum"])
-                self.assertEqual(electrum_utxos, _utxo_projection(roots["esplora"]))
+                self.assertEqual(electrum_utxos, _utxo_projection(roots["mempool"]))
                 resurrected_b = next(
                     row
                     for row in electrum_utxos
@@ -663,11 +663,11 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _sync(root, "BDK watch")
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
-                    _transport_projection(roots["esplora"]),
+                    _transport_projection(roots["mempool"]),
                 )
                 self.assertEqual(
                     _utxo_projection(roots["electrum"]),
-                    _utxo_projection(roots["esplora"]),
+                    _utxo_projection(roots["mempool"]),
                 )
 
                 # New CLI processes load each aggregate through custom

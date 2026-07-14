@@ -29,17 +29,6 @@ def _truthy_env(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _bdk_proxy_url(value: Any) -> str | None:
-    """Translate Kassiber's remote-DNS spelling to BDK's accepted scheme."""
-
-    proxy = str(value or "").strip()
-    if not proxy:
-        return None
-    if proxy.lower().startswith("socks5h://"):
-        return "socks5://" + proxy[len("socks5h://") :]
-    return proxy
-
-
 def _network(value: str) -> Any:
     import bdkpython as bdk
 
@@ -73,20 +62,6 @@ def _electrum_header_hash(header: Any) -> str:
     return hashlib.sha256(hashlib.sha256(payload).digest()).digest()[::-1].hex()
 
 
-def _electrum_confirmation_rebuild_needed(wallet: Any, prior_tip_height: int | None) -> bool:
-    """Work around stale mempool positions in bdk_electrum 0.23.2.
-
-    The binding bundled by bdkpython 3.0.0 can advance the local chain without
-    replacing an already-known mempool position with its new anchor.  A fresh
-    dependency scan is necessary only when the tip advanced and an
-    unconfirmed canonical transaction remains.
-    """
-
-    if prior_tip_height is None or int(wallet.latest_checkpoint().height) <= prior_tip_height:
-        return False
-    return any(not item.chain_position.is_confirmed() for item in wallet.transactions())
-
-
 def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str | None:
     """Return why an existing adapter must remain in use, or ``None`` for BDK."""
 
@@ -100,6 +75,12 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     kind = normalize_backend_kind(backend.get("kind"))
     if kind not in {"esplora", "electrum"}:
         return "backend_kind"
+    endpoint = str(backend.get("url") or "")
+    if backend_value(backend, "tor_proxy", "proxy") or is_onion_endpoint(endpoint):
+        # bdkpython accepts only ``socks5://``. Translating Kassiber's
+        # ``socks5h://`` spelling would move DNS resolution out of Tor, so the
+        # remote-DNS compatibility transport remains authoritative here.
+        return "proxy_transport"
     if kind == "esplora" and backend_value(backend, "certificate"):
         raise AppError(
             "BDK Esplora does not support a configured custom trust root",
@@ -190,6 +171,7 @@ class BdkObserver:
     ):
         self.identity = identity
         self.backend = dict(backend)
+        self.backend_kind = normalize_backend_kind(self.backend.get("kind"))
         self.branches = tuple(branches)
         self.gap_limit = max(1, int(gap_limit))
         self._wallet = None
@@ -199,14 +181,15 @@ class BdkObserver:
         import bdkpython as bdk
 
         endpoint = str(self.backend.get("url") or "").strip()
-        proxy = _bdk_proxy_url(backend_value(self.backend, "tor_proxy", "proxy"))
+        proxy = backend_value(self.backend, "tor_proxy", "proxy")
         if not endpoint:
             raise AppError("BDK observer backend is missing its endpoint", code="validation")
-        if is_onion_endpoint(endpoint) and proxy is None:
+        if proxy or is_onion_endpoint(endpoint):
             raise AppError(
-                ".onion backend URLs require a Tor/SOCKS proxy",
-                code="network_proxy_required",
-                hint="Configure a SOCKS proxy; Kassiber will not connect to onion services directly.",
+                "BDK cannot preserve Kassiber's remote-DNS proxy policy",
+                code="observer_capability_unsupported",
+                hint="Use the named compatibility observer for SOCKS and onion transports.",
+                details={"capability": "proxy_transport", "observer": "bdk"},
                 retryable=False,
             )
         if _truthy_env("KASSIBER_NO_EGRESS"):
@@ -221,16 +204,15 @@ class BdkObserver:
             host=host,
             port=port,
             scheme=scheme,
-            operation=f"bdk.{self.backend['kind']}.connect",
-            via_proxy=proxy is not None,
+            operation=f"bdk.{self.backend_kind}.connect",
+            via_proxy=False,
         )
-        kind = normalize_backend_kind(self.backend["kind"])
-        if kind == "esplora":
-            return bdk.EsploraClient(endpoint, proxy=proxy)
-        if kind == "electrum":
+        if self.backend_kind == "esplora":
+            return bdk.EsploraClient(endpoint, proxy=None)
+        if self.backend_kind == "electrum":
             return bdk.ElectrumClient(
                 endpoint,
-                socks5=proxy,
+                socks5=None,
                 timeout=max(1, int(backend_timeout(self.backend))),
                 retry=1,
                 validate_domain=not parse_bool(
@@ -286,8 +268,7 @@ class BdkObserver:
         return wallet, persister
 
     def _remote_block_hash(self, client: Any, height: int) -> str:
-        kind = str(self.backend["kind"]).lower()
-        if kind == "esplora":
+        if self.backend_kind == "esplora":
             remote_height = int(client.get_height())
             if remote_height < height:
                 raise AppError(
@@ -317,6 +298,79 @@ class BdkObserver:
                 retryable=True,
             )
         return _electrum_header_hash(client.block_header(height))
+
+    def _reveal_scan_horizon(self, wallet: Any) -> bool:
+        """Reveal one full gap beyond every currently used keychain index."""
+
+        import bdkpython as bdk
+
+        highest_used: dict[bool, int] = {}
+        for output in wallet.list_output():
+            internal = output.keychain == bdk.KeychainKind.INTERNAL
+            highest_used[internal] = max(
+                highest_used.get(internal, -1),
+                int(output.derivation_index),
+            )
+        changed = False
+        for branch in self.branches:
+            keychain = (
+                bdk.KeychainKind.INTERNAL
+                if branch.internal
+                else bdk.KeychainKind.EXTERNAL
+            )
+            current = wallet.derivation_index(keychain)
+            target = max(
+                self.gap_limit - 1,
+                highest_used.get(branch.internal, -1) + self.gap_limit,
+            )
+            if current is None or int(current) < target:
+                wallet.reveal_addresses_to(keychain, target)
+                changed = True
+        return changed
+
+    def _full_scan(self, client: Any, wallet: Any) -> Any:
+        scan_request = wallet.start_full_scan().build()
+        if self.backend_kind == "esplora":
+            return client.full_scan(
+                scan_request,
+                stop_gap=self.gap_limit,
+                parallel_requests=max(1, min(8, backend_batch_size(self.backend))),
+            )
+        return client.full_scan(
+            scan_request,
+            stop_gap=self.gap_limit,
+            batch_size=max(1, backend_batch_size(self.backend)),
+            fetch_prev_txouts=True,
+        )
+
+    def _incremental_sync(self, client: Any, wallet: Any) -> Any:
+        request = wallet.start_sync_with_revealed_spks().build()
+        if self.backend_kind == "esplora":
+            return client.sync(
+                request,
+                parallel_requests=max(1, min(8, backend_batch_size(self.backend))),
+            )
+        return client.sync(
+            request,
+            batch_size=max(1, backend_batch_size(self.backend)),
+            fetch_prev_txouts=True,
+        )
+
+    def _sync_revealed_horizon(self, client: Any, wallet: Any) -> None:
+        """Incrementally sync, widening until a complete unused gap is known."""
+
+        self._reveal_scan_horizon(wallet)
+        for _pass in range(64):
+            wallet.apply_update(self._incremental_sync(client, wallet))
+            if not self._reveal_scan_horizon(wallet):
+                return
+        raise AppError(
+            "BDK descriptor discovery exceeded the bounded widening limit",
+            code="observer_scan_limit",
+            hint="Increase the wallet gap limit or run another refresh after reviewing its descriptor history.",
+            details={"observer": "bdk", "passes": 64},
+            retryable=False,
+        )
 
     def _target(self, wallet: Any, script: Any) -> dict[str, Any] | None:
         import bdkpython as bdk
@@ -417,6 +471,19 @@ class BdkObserver:
                         ),
                         "witness": [bytes(item).hex() for item in txin.witness],
                     }
+                )
+            owns_input = any(
+                item.get("prevout") is not None
+                and item["prevout"].get("scriptpubkey") in tracked
+                for item in vin
+            )
+            if owns_input and (details is None or details.fee is None):
+                raise AppError(
+                    "BDK could not prove the network fee for an owned spend",
+                    code="observer_accounting_ambiguous",
+                    hint="Retry with a backend that serves every previous output; Kassiber will not book a zero fee.",
+                    details={"observer": "bdk", "txid": txid, "missing": "network_fee"},
+                    retryable=False,
                 )
             raw = {
                 "txid": txid,
@@ -534,11 +601,9 @@ class BdkObserver:
             wallet_state = None if request.force_full else prior_state
             wallet, persister = self._wallet_from_state(wallet_state)
             self._wallet = wallet
-            prior_tip_height = (
-                int(wallet.latest_checkpoint().height) if wallet_state is not None else None
-            )
             emit_sync_progress({"phase": "backend_fetch", "observer": "bdk", "status": "scanning"})
             client = self._client()
+            use_full_scan = wallet_state is None
             if wallet_state is not None:
                 prior_tip = wallet.latest_checkpoint()
                 remote_hash = self._remote_block_hash(client, int(prior_tip.height))
@@ -549,43 +614,17 @@ class BdkObserver:
                     # replacing a disconnected local chain/anchor aggregate.
                     wallet, persister = self._wallet_from_state(None)
                     self._wallet = wallet
-            scan_request = wallet.start_full_scan().build()
-            kind = str(self.backend["kind"]).lower()
-            if kind == "esplora":
-                update = client.full_scan(
-                    scan_request,
-                    stop_gap=self.gap_limit,
-                    parallel_requests=max(1, min(8, backend_batch_size(self.backend))),
-                )
+                    use_full_scan = True
+            elif request.force_full and request.checkpoint.get("tip_height") is not None:
+                # A force-full rebuild may discard dependency state, but it
+                # must not let a lagging backend erase newer canonical facts.
+                self._remote_block_hash(client, int(request.checkpoint["tip_height"]))
+            if use_full_scan:
+                wallet.apply_update(self._full_scan(client, wallet))
+                self._reveal_scan_horizon(wallet)
             else:
-                update = client.full_scan(
-                    scan_request,
-                    stop_gap=self.gap_limit,
-                    batch_size=max(1, backend_batch_size(self.backend)),
-                    fetch_prev_txouts=True,
-                )
-            wallet.apply_update(update)
+                self._sync_revealed_horizon(client, wallet)
             wallet.persist(persister)
-            if kind == "electrum" and _electrum_confirmation_rebuild_needed(
-                wallet,
-                prior_tip_height,
-            ):
-                # bdk_electrum 0.23.2 may leave a persisted mempool position
-                # stale when the transaction becomes confirmed. Build a fresh
-                # dependency request for that transition, but apply its update
-                # onto the existing aggregate so anchors omitted from the
-                # fresh response cannot demote older confirmed transactions.
-                aggregate_persistence = self._persistence
-                fresh_wallet, _fresh_persister = self._wallet_from_state(None)
-                update = client.full_scan(
-                    fresh_wallet.start_full_scan().build(),
-                    stop_gap=self.gap_limit,
-                    batch_size=max(1, backend_batch_size(self.backend)),
-                    fetch_prev_txouts=True,
-                )
-                self._persistence = aggregate_persistence
-                wallet.apply_update(update)
-                wallet.persist(persister)
             facts = self._facts(wallet, retraction_state)
         except AppError:
             raise

@@ -824,6 +824,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             kind=discovery.kind,
             started=discovery.started,
             force_full=discovery.force_full,
+            authoritative_chain_observer=True,
         )
 
     dependency_kind = "lwk" if state.chain == "liquid" else "bdk"
@@ -847,6 +848,14 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         # safely be represented, so keep this named compatibility route.
         return compatibility_fetch("source_overlap_partial_descriptor")
     identities = identities_for_wallet(wallet, observer_kind=dependency_kind)
+    if not identities:
+        raise AppError(
+            "The dependency observer route resolved no wallet identities",
+            code="observer_identity_invalid",
+            hint="Review the wallet descriptor source; Kassiber will not treat an empty scan as authoritative.",
+            details={"observer": dependency_kind, "wallet_id": str(wallet["id"])},
+            retryable=False,
+        )
     prepared = []
     try:
         for identity in identities:
@@ -900,6 +909,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
         started=discovery.started,
         force_full=discovery.force_full,
         observer_updates=tuple(prepared),
+        authoritative_chain_observer=True,
     )
 
 
