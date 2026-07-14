@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -183,7 +184,14 @@ class BdkDependencyContractTest(TestCase):
                     return_value={"targets": online_targets, "history_cache": {}},
                 ) as online_discovery, mock.patch(
                     "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
-                    side_effect=lambda _conn, _profile, _wallet, state: state,
+                    side_effect=lambda _conn, _profile, _wallet, state: replace(
+                        state,
+                        targets=state.targets[:-1],
+                        tracked_scripts={
+                            target["script_pubkey"]: target
+                            for target in state.targets[:-1]
+                        },
+                    ),
                 ) as overlap_filter, mock.patch(
                     "kassiber.core.chain_observer.prepare_observer_update"
                 ) as dependency_prepare:
@@ -198,13 +206,10 @@ class BdkDependencyContractTest(TestCase):
                 compatibility.assert_called_once()
                 self.assertEqual(
                     compatibility.call_args.args[2].targets,
-                    online_targets,
+                    online_targets[:-1],
                 )
                 online_discovery.assert_called_once()
-                if partial_targets:
-                    overlap_filter.assert_called_once()
-                else:
-                    overlap_filter.assert_not_called()
+                overlap_filter.assert_called_once()
                 dependency_prepare.assert_not_called()
 
     def test_supported_descriptor_families_construct_watch_only_bdk_wallets(self):

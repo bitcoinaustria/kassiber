@@ -524,10 +524,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
             compatibility.assert_called_once()
             self.assertEqual(compatibility.call_args.args[2].targets, online_targets)
             online_discovery.assert_called_once()
-            if partial:
-                overlap_filter.assert_called_once()
-            else:
-                overlap_filter.assert_not_called()
+            overlap_filter.assert_called_once()
             native.assert_not_called()
 
     def test_forced_refresh_rebuilds_incompatible_opaque_store_in_memory(self):

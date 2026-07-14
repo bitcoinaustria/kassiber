@@ -951,7 +951,7 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
     from .chain_observer.identity import identities_for_wallet
     from .chain_observer.lwk import LwkObserver, lwk_compatibility_reason
     from .chain_observer.store import load_observer_values
-    from .sync import WalletBackendFetch
+    from .sync import WalletBackendFetch, _overlap_filtered_skip_outcome
 
     state = discovery.sync_state
     if discovery.skip_outcome is not None or state is None:
@@ -966,19 +966,6 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
             descriptor_plan is not None
             and getattr(descriptor_plan, "kind", None) != "silent-payment"
         ):
-            preflight_scripts = {
-                target.get("script_pubkey")
-                for target in state.targets
-                if target.get("script_pubkey")
-            }
-            local_scripts = {
-                target.get("script_pubkey")
-                for target in _offline_descriptor_targets(
-                    descriptor_plan,
-                    state.checkpoint,
-                )
-                if target.get("script_pubkey")
-            }
             online_discovery = discover_compatibility_descriptor_targets(
                 discovery.backend,
                 descriptor_plan,
@@ -996,25 +983,33 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                 },
                 history_cache=online_discovery.get("history_cache") or {},
             )
-            if preflight_scripts != local_scripts:
-                # The local horizon was filtered before any connection. Apply
-                # the same ownership policy to newly discovered targets so a
-                # deeper compatibility scan cannot reintroduce overlap.
-                from . import source_overlap
+            # The finite local horizon was filtered before any connection.
+            # Reapply ownership to every online result so deeper targets cannot
+            # introduce an overlap that did not exist inside that horizon.
+            from . import source_overlap
 
-                compatibility_state = source_overlap.filter_sync_state_for_canonical_owner(
-                    conn,
-                    profile,
-                    wallet,
-                    compatibility_state,
+            compatibility_state = source_overlap.filter_sync_state_for_canonical_owner(
+                conn,
+                profile,
+                wallet,
+                compatibility_state,
+            )
+            if not compatibility_state.targets:
+                return WalletBackendFetch(
+                    backend=discovery.backend,
+                    sync_state=None,
+                    normalized_records=(),
+                    adapter_meta={},
+                    kind=discovery.kind,
+                    started=discovery.started,
+                    force_full=discovery.force_full,
+                    skip_outcome=_overlap_filtered_skip_outcome(
+                        wallet,
+                        started=discovery.started,
+                        force_full=discovery.force_full,
+                        original_target_count=len(online_targets),
+                    ),
                 )
-                if not compatibility_state.targets:
-                    raise AppError(
-                        "Source overlap covered every compatibility observer target",
-                        code="source_overlap_retry",
-                        hint="Retry refresh so Kassiber can skip the fully overlapping wallet before backend discovery.",
-                        retryable=True,
-                    )
         adapter = COMPATIBILITY_SYNC_BACKEND_ADAPTERS[discovery.kind]
         try:
             records, meta = adapter(discovery.backend, wallet, compatibility_state)
