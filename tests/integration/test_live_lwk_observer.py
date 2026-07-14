@@ -195,6 +195,7 @@ class LiveLwkObserverTest(unittest.TestCase):
                 try:
                     _rpc(url, user, password, "unloadwallet", [wallet])
                 except Exception:
+                    # Teardown must not mask the live observer assertion result.
                     pass
 
 
