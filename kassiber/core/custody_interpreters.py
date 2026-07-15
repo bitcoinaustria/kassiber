@@ -121,6 +121,85 @@ def _pair_priority(pair: Mapping[str, Any]) -> tuple[str, ClaimPriority, str]:
     )
 
 
+def _reviewed_split_remainder_pairs(
+    auto_pairs: Sequence[Mapping[str, Any]],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+    *,
+    manual_pair_records: Sequence[Mapping[str, Any]],
+    direct_payout_records: Sequence[Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    """Promote only exactly conserved remainders of explicit split reviews.
+
+    ``--out-amount`` reserves the reviewed swap or payout slice.  It also says
+    that the rest of that source transaction stayed in custody, but it does
+    not make arbitrary same-txid imports trustworthy.  The candidate rows may
+    therefore carry basis only when all unreviewed candidates for the source
+    exactly equal the principal left after every explicit review.
+    """
+
+    reserved_by_source: dict[str, int] = {}
+    review_ids_by_source: dict[str, list[str]] = {}
+    manual_targets: set[str] = set()
+    for kind, records in (
+        ("pair", manual_pair_records),
+        ("payout", direct_payout_records),
+    ):
+        for record in records:
+            source_id = str(_field(record, "out_transaction_id") or "")
+            source = rows_by_id.get(source_id)
+            raw_amount = _field(record, "out_amount")
+            if source is None or raw_amount in (None, ""):
+                continue
+            amount_msat = int(raw_amount)
+            principal_msat = row_principal_msat(source)
+            if amount_msat <= 0 or amount_msat >= principal_msat:
+                continue
+            reserved_by_source[source_id] = (
+                reserved_by_source.get(source_id, 0) + amount_msat
+            )
+            review_id = str(_field(record, "id") or source_id)
+            review_ids_by_source.setdefault(source_id, []).append(
+                f"{kind}:{review_id}"
+            )
+            if kind == "pair":
+                target_id = str(_field(record, "in_transaction_id") or "")
+                if target_id:
+                    manual_targets.add(target_id)
+
+    candidates_by_source: dict[str, list[Mapping[str, Any]]] = {}
+    for pair in auto_pairs:
+        source_id = _anchor_id(_field(pair, "out", {}) or {})
+        target_id = _anchor_id(_field(pair, "in", {}) or {})
+        if source_id in reserved_by_source and target_id not in manual_targets:
+            candidates_by_source.setdefault(source_id, []).append(pair)
+
+    promoted: list[Mapping[str, Any]] = []
+    for source_id, candidates in sorted(candidates_by_source.items()):
+        source = rows_by_id[source_id]
+        remainder_msat = row_principal_msat(source) - reserved_by_source[source_id]
+        candidate_msat = sum(
+            row_principal_msat(_field(pair, "in", {}) or {})
+            for pair in candidates
+        )
+        if remainder_msat <= 0 or candidate_msat != remainder_msat:
+            continue
+        review_key = ",".join(sorted(review_ids_by_source[source_id]))
+        for pair in candidates:
+            target_id = _anchor_id(_field(pair, "in", {}) or {})
+            promoted.append(
+                {
+                    **dict(pair),
+                    "pair_id": (
+                        f"reviewed-split-remainder:{source_id}:{target_id}:"
+                        f"{review_key}"
+                    ),
+                    "source": "reviewed_split_remainder",
+                    "allow_unclaimed_residual": True,
+                }
+            )
+    return tuple(promoted)
+
+
 def _is_exact_recorded_pair(
     pair: Mapping[str, Any],
     out_row: Mapping[str, Any],
@@ -1199,36 +1278,40 @@ def compile_custody_interpreters(
     same_asset_pairs, cross_asset_pairs = apply_manual_pairs(
         rows, auto_pairs, manual_pair_records
     )
-    partial_manual_sources = {
-        str(_field(record, "out_transaction_id") or "")
-        for record in manual_pair_records
-        if _field(record, "out_amount") not in (None, "")
-        and int(_field(record, "out_amount"))
-        < int(
-            _field(
-                rows_by_id.get(
-                    str(_field(record, "out_transaction_id") or ""), {}
-                ),
-                "amount",
-                0,
-            )
-            or 0
+    reviewed_remainders = _reviewed_split_remainder_pairs(
+        auto_pairs,
+        rows_by_id,
+        manual_pair_records=manual_pair_records,
+        direct_payout_records=direct_payout_records,
+    )
+    reviewed_remainders_by_anchors = {
+        (
+            _anchor_id(_field(pair, "out", {}) or {}),
+            _anchor_id(_field(pair, "in", {}) or {}),
+        ): pair
+        for pair in reviewed_remainders
+    }
+    same_asset_pairs = [
+        reviewed_remainders_by_anchors.get(
+            (
+                _anchor_id(_field(pair, "out", {}) or {}),
+                _anchor_id(_field(pair, "in", {}) or {}),
+            ),
+            pair,
         )
-    }
-    manual_targets = {
-        str(_field(record, "in_transaction_id") or "")
-        for record in manual_pair_records
-    }
+        for pair in same_asset_pairs
+    ]
     existing_pair_anchors = {
-        (_anchor_id(_field(pair, "out", {}) or {}), _anchor_id(_field(pair, "in", {}) or {}))
+        (
+            _anchor_id(_field(pair, "out", {}) or {}),
+            _anchor_id(_field(pair, "in", {}) or {}),
+        )
         for pair in same_asset_pairs
     }
     same_asset_pairs.extend(
         pair
-        for pair in auto_pairs
-        if _anchor_id(_field(pair, "out", {}) or {}) in partial_manual_sources
-        and _anchor_id(_field(pair, "in", {}) or {}) not in manual_targets
-        and (
+        for pair in reviewed_remainders
+        if (
             _anchor_id(_field(pair, "out", {}) or {}),
             _anchor_id(_field(pair, "in", {}) or {}),
         )

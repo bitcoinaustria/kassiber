@@ -2387,6 +2387,19 @@ class CliSmokeTest(unittest.TestCase):
         self._assert_kind(payload, "wallets.import-csv")
         self.assertEqual(payload["data"]["imported"], 1)
 
+        # CSV rows do not carry observer authority. The matching txid is a
+        # useful review key, but cannot prove that the inbound belongs to the
+        # authoritative graph, so this fixture records the user's decision.
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+            "--tx-out", _SELF_TRANSFER_TXID,
+            "--tx-in", _SELF_TRANSFER_TXID,
+            "--policy", "carrying-value",
+        )
+        self._assert_kind(payload, "transfers.pair")
+
         payload = self._cli(
             "journals", "process",
             "--workspace", "Main",
@@ -2438,7 +2451,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(custody_row["from_wallet"], "Cold")
         self.assertEqual(custody_row["to_wallet"], "Hot")
         self.assertEqual(custody_row["amount_msat"], 50000000000)
-        self.assertEqual(custody_row["custody_state"], "internal_verified")
+        self.assertEqual(custody_row["custody_state"], "internal_reviewed")
         self.assertEqual(custody_row["basis_state"], "eligible")
 
         # Network fees are recorded for holdings/audit, but they are not
@@ -2533,6 +2546,14 @@ class CliSmokeTest(unittest.TestCase):
             "--wallet", "HotValue",
             "--file", str(self.hot_transfer_value_only_csv),
         )
+        self._cli(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "TransferValueOnly",
+            "--tx-out", _SELF_TRANSFER_VALUE_TXID,
+            "--tx-in", _SELF_TRANSFER_VALUE_TXID,
+            "--policy", "carrying-value",
+        )
 
         payload = self._cli(
             "journals", "process",
@@ -2625,11 +2646,11 @@ class CliSmokeTest(unittest.TestCase):
         detail_rows = [row for row in payload["data"] if row["row_type"] == "detail"]
         self.assertEqual(detail_rows, [])
 
-    def test_13d_split_peg_implausible_fee_is_quarantined_not_taxed(self):
-        # A spend that fans out to an owned wallet + a Liquid peg must NOT be
-        # booked as a self-transfer whose ~0.0195 BTC peg residual is taxed as a
-        # network fee. The implausible-fee guard quarantines it for review while
-        # the rest of the report (the funding acquisition) still computes.
+    def test_13d_graphless_same_txid_does_not_invent_split_peg_transfer(self):
+        # These CSV rows describe only two fragments of a wider transaction;
+        # neither endpoint has observer authority. A shared txid must not turn
+        # the partial inbound into an owned transfer and disguise the omitted
+        # peg output as a miner fee.
         payload = self._cli(
             "profiles", "create",
             "--workspace", "Main",
@@ -2666,33 +2687,20 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "journals.process")
         data = payload["data"]
-        # The bad pair is quarantined, not booked as a transfer; only the
-        # funding acquisition survives as an entry.
+        # No MOVE or transfer fee is invented. Without authoritative graph
+        # evidence or an explicit review, the rows retain their conservative
+        # standalone meanings: funding + receipt acquisitions and one disposal.
         self.assertEqual(data["transfers_detected"], 0)
-        self.assertGreaterEqual(data["quarantined"], 1)
-        self.assertEqual(data["entries_created"], 1)
+        self.assertEqual(data["quarantined"], 0)
+        self.assertEqual(data["entries_created"], 3)
 
-        # No fee/transfer disposal is exposed as final: unresolved custody is a
-        # hard report boundary, not a provisional journal result.
-        payload = self._cli_error(
+        payload = self._cli(
             "reports", "journal-entries",
             "--workspace", "Main", "--profile", "SplitPeg",
         )
-        self.assertEqual(payload["error"]["code"], "custody_quantity_unresolved")
-
-        # The quarantine names the implausible-fee reason and the right legs.
-        payload = self._cli(
-            "journals", "quarantined",
-            "--workspace", "Main", "--profile", "SplitPeg",
-        )
-        reasons = [q["reason"] for q in payload["data"]]
-        self.assertIn("transfer_fee_implausible", reasons)
-        flagged = next(
-            q for q in payload["data"] if q["reason"] == "transfer_fee_implausible"
-        )
-        self.assertAlmostEqual(flagged["detail"]["implied_fee"], 0.01952253, places=8)
-        self.assertGreater(
-            flagged["detail"]["implied_fee"], flagged["detail"]["fee_ceiling"]
+        self.assertEqual(
+            sorted(entry["entry_type"] for entry in payload["data"]),
+            ["acquisition", "acquisition", "disposal"],
         )
 
     def test_13e_per_account_oversell_quarantined_not_crashed(self):
@@ -2708,6 +2716,9 @@ class CliSmokeTest(unittest.TestCase):
                   "--wallet", "Source", "--file", str(self.oversell_source_csv))
         self._cli("wallets", "import-csv", "--workspace", "Main", "--profile", "Oversell",
                   "--wallet", "Onchain", "--file", str(self.oversell_onchain_csv))
+        self._cli("transfers", "pair", "--workspace", "Main", "--profile", "Oversell",
+                  "--tx-out", _OVERSELL_MOVE_TXID, "--tx-in", _OVERSELL_MOVE_TXID,
+                  "--policy", "carrying-value")
         payload = self._cli("journals", "process", "--workspace", "Main", "--profile", "Oversell")
         # Success envelope, not an app_error — the report computes.
         self._assert_kind(payload, "journals.process")
@@ -3391,12 +3402,12 @@ class CliSmokeTest(unittest.TestCase):
         self._cli("wallets", "import-csv", "--workspace", workspace, "--profile", "SplitSwap",
                   "--wallet", "Liq", "--file", str(self.split_swap_lbtc_csv))
 
-        # Unresolved, the 0.05-out / 0.03-in auto-pair has an implausible 0.02
-        # "fee" and is quarantined.
+        # Before review, graphless CSV legs do not auto-pair merely because
+        # they share a txid. The omitted peg stays an external interpretation,
+        # not an invented 0.02 BTC transfer fee.
         payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitSwap")
-        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
-        payload = self._cli("journals", "quarantined", "--workspace", workspace, "--profile", "SplitSwap")
-        self.assertIn("transfer_fee_implausible", [q["reason"] for q in payload["data"]])
+        self.assertEqual(payload["data"]["transfers_detected"], 0)
+        self.assertEqual(payload["data"]["quarantined"], 0)
 
         # Resolve by pairing the BTC spend with the L-BTC peg and declaring the
         # 0.02 BTC that was swapped; the 0.03 remainder is the self-transfer.
@@ -3449,9 +3460,8 @@ class CliSmokeTest(unittest.TestCase):
                   "--wallet", "Keep", "--file", str(self.split_swap_keep_csv))
 
         payload = self._cli("journals", "process", "--workspace", workspace, "--profile", "SplitPayout")
-        self.assertGreaterEqual(payload["data"]["quarantined"], 1)
-        payload = self._cli("journals", "quarantined", "--workspace", workspace, "--profile", "SplitPayout")
-        self.assertIn("transfer_fee_implausible", [q["reason"] for q in payload["data"]])
+        self.assertEqual(payload["data"]["transfers_detected"], 0)
+        self.assertEqual(payload["data"]["quarantined"], 0)
 
         payload = self._cli("transfers", "payouts", "create",
                             "--workspace", workspace, "--profile", "SplitPayout",
