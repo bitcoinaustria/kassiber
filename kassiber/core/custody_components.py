@@ -749,6 +749,26 @@ def _allocations_with_component_inference(
     return complete
 
 
+def complete_component_allocations(
+    legs: Sequence[Mapping[str, Any]],
+    allocations: Sequence[Mapping[str, Any]],
+    *,
+    conservation_mode: str,
+) -> list[dict[str, Any]]:
+    """Return explicit or unambiguous inferred allocation edges.
+
+    Effective-component consumers should use this seam instead of rebuilding
+    the 1:N/N:1 inference rules independently. N:M components have already
+    been required to carry explicit edges before they can become effective.
+    """
+
+    return _allocations_with_component_inference(
+        legs,
+        allocations,
+        conservation_mode=conservation_mode,
+    )
+
+
 def _allocation_chronology_issues(
     legs: Sequence[Mapping[str, Any]],
     allocations: Sequence[Mapping[str, Any]],
@@ -3960,6 +3980,7 @@ __all__ = [
     "CONSERVATION_MODES",
     "LEG_ROLES",
     "activate_component",
+    "complete_component_allocations",
     "create_component",
     "get_component",
     "iter_authored_active_components",
