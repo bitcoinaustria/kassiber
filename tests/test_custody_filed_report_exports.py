@@ -4,8 +4,12 @@ import hashlib
 import sqlite3
 from unittest.mock import patch
 
+import pytest
+
+from kassiber.cli import handlers
 from kassiber.core import custody_filed_reports, reports
 from kassiber.db import open_db
+from kassiber.errors import AppError
 
 
 def _scope(conn: sqlite3.Connection) -> None:
@@ -165,6 +169,46 @@ def test_standalone_transaction_exports_are_evidence_not_saved_reports(tmp_path)
             conn.execute("SELECT COUNT(*) FROM filed_report_snapshots").fetchone()[0]
             == 0
         )
+    finally:
+        conn.close()
+
+
+def test_transaction_exports_fail_before_writing_when_custody_is_unresolved(
+    tmp_path,
+):
+    conn = open_db(tmp_path / "book")
+    try:
+        _scope(conn)
+        conn.execute(
+            """
+            INSERT INTO journal_quantity_issues(
+                issue_id, workspace_id, profile_id, issue_type, state,
+                asset, amount_msat, occurred_at, transaction_ids_json,
+                reason, detail_json, blocks_from, created_at
+            ) VALUES(
+                'issue', 'ws', 'profile', 'custody_gap', 'custody_suspense',
+                'BTC', 100000, '2025-06-01T00:00:00Z', '["sale"]',
+                'missing_wallet', '{}', '2025-06-01T00:00:00Z', 'now'
+            )
+            """
+        )
+        conn.commit()
+
+        for suffix, exporter in (
+            ("csv", reports.export_transactions_csv_report),
+            ("xlsx", reports.export_transactions_xlsx_report),
+        ):
+            artifact = tmp_path / f"transactions.{suffix}"
+            with pytest.raises(AppError) as blocked:
+                exporter(
+                    conn,
+                    "ws",
+                    "profile",
+                    artifact,
+                    handlers._report_hooks(),
+                )
+            assert blocked.value.code == "custody_quantity_unresolved"
+            assert not artifact.exists()
     finally:
         conn.close()
 

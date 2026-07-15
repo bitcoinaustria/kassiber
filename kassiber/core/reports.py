@@ -7283,6 +7283,7 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
     sheet — including note, counterparty, tags, and the linked-file/URL
     attachments — so the standalone export matches the report."""
     workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    hooks.require_processed_journals(conn, profile)
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     query_rows = _report_query_rows(conn, profile, wallet=wallet)
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
