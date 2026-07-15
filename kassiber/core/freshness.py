@@ -803,7 +803,8 @@ def _retry_after_from_error(exc: AppError, job: Mapping[str, Any]) -> tuple[str 
     retry_after = details.get("retry_after_seconds") or details.get("retry_after")
     if retry_after is not None:
         try:
-            return _iso_from_now_plus(int(retry_after)), "retry-after"
+            retry_reason = str(details.get("retry_reason") or "retry-after")
+            return _iso_from_now_plus(int(retry_after)), retry_reason
         except (TypeError, ValueError):
             pass
     text = str(exc).lower()
@@ -814,6 +815,54 @@ def _retry_after_from_error(exc: AppError, job: Mapping[str, Any]) -> tuple[str 
         jitter = _stable_jitter_seconds(f"{job['id']}:{attempts}", min(base // 4, 300))
         return _iso_from_now_plus(base + jitter), "exponential-backoff"
     return None, None
+
+
+def _safe_sqlite_error_details(exc: Exception) -> dict[str, Any]:
+    """Return driver-neutral, non-sensitive SQLite diagnostics.
+
+    ``sqlcipher3.dbapi2.OperationalError`` does not inherit from stdlib
+    ``sqlite3.OperationalError``.  Both drivers do expose SQLite's numeric and
+    symbolic result codes, which are safe to log and let freshness distinguish
+    transient writer contention from a real SQL/schema defect without putting
+    the exception message (which may contain operational data) in the RAM ring.
+    """
+
+    error_name = getattr(exc, "sqlite_errorname", None)
+    error_code = getattr(exc, "sqlite_errorcode", None)
+    if not (
+        isinstance(error_name, str)
+        and error_name.startswith("SQLITE_")
+        and error_name.replace("_", "").isalnum()
+    ):
+        return {}
+    details: dict[str, Any] = {
+        "error_class": f"{exc.__class__.__module__}.{exc.__class__.__qualname__}",
+        "sqlite_error_name": error_name,
+    }
+    if type(error_code) is int and error_code >= 0:
+        details["sqlite_error_code"] = error_code
+    return details
+
+
+def _sqlite_error_is_busy(details: Mapping[str, Any]) -> bool:
+    error_name = str(details.get("sqlite_error_name") or "")
+    if error_name.startswith(("SQLITE_BUSY", "SQLITE_LOCKED")):
+        return True
+    error_code = details.get("sqlite_error_code")
+    return type(error_code) is int and (error_code & 0xFF) in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }
+
+
+def _database_busy_retry_seconds(job: Mapping[str, Any]) -> int:
+    attempts = max(1, int(job.get("attempts") or 1))
+    base = min(MAX_BACKOFF_SECONDS, DEFAULT_BACKOFF_SECONDS * (2 ** max(0, attempts - 1)))
+    jitter = _stable_jitter_seconds(
+        f"database-busy:{job['id']}:{attempts}",
+        min(base // 4, 300),
+    )
+    return base + jitter
 
 
 def _mark_success(
@@ -879,10 +928,30 @@ def _mark_error(
     # identifier, never runtime data, so it is safe for the RAM log ring and
     # makes an otherwise-opaque "freshness_job_failed" diagnosable.
     error_class = exc.details.get("error_class") if isinstance(exc.details, dict) else None
+    sqlite_error_name = (
+        exc.details.get("sqlite_error_name") if isinstance(exc.details, dict) else None
+    )
     if cooldown_until:
-        _LOGGER.warning("Freshness %s rate-limited (%s)", source_name, error_code)
+        if sqlite_error_name:
+            _LOGGER.warning(
+                "Freshness %s deferred (%s; %s)",
+                source_name,
+                error_code,
+                sqlite_error_name,
+            )
+        else:
+            _LOGGER.warning("Freshness %s rate-limited (%s)", source_name, error_code)
     elif error_class:
-        _LOGGER.error("Freshness %s failed (%s; %s)", source_name, error_code, error_class)
+        if sqlite_error_name:
+            _LOGGER.error(
+                "Freshness %s failed (%s; %s; %s)",
+                source_name,
+                error_code,
+                error_class,
+                sqlite_error_name,
+            )
+        else:
+            _LOGGER.error("Freshness %s failed (%s; %s)", source_name, error_code, error_class)
     else:
         _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
     now = now_iso()
@@ -1001,17 +1070,40 @@ def run_job(
         # hold backend URLs/credentials) so a swallowed non-AppError failure —
         # e.g. an RP2/Liquid balance error during the journal refresh — is
         # diagnosable from the log instead of a bare "freshness_job_failed".
-        updated = _mark_error(
-            conn,
-            job,
-            AppError(
+        sqlite_details = _safe_sqlite_error_details(exc)
+        if _sqlite_error_is_busy(sqlite_details):
+            # A foreground daemon request owns SQLite's only writer slot. The
+            # backend fetch may already have completed, but no observer state is
+            # committed until its atomic apply transaction succeeds. Roll back
+            # any partial local transaction and retry with bounded backoff
+            # instead of turning harmless contention into a permanent failed
+            # source/report blocker.
+            conn.rollback()
+            wrapped = AppError(
+                "The local database is busy; this freshness job will retry automatically.",
+                code="database_busy",
+                hint="No action is required unless retries continue after other Kassiber work finishes.",
+                retryable=True,
+                details={
+                    **sqlite_details,
+                    "retry_after_seconds": _database_busy_retry_seconds(job),
+                    "retry_reason": "database-busy",
+                },
+            )
+        else:
+            wrapped = AppError(
                 str(exc) or exc.__class__.__name__,
                 code="freshness_job_failed",
                 retryable=True,
-                details={
+                details=sqlite_details
+                or {
                     "error_class": f"{exc.__class__.__module__}.{exc.__class__.__qualname__}"
                 },
-            ),
+            )
+        updated = _mark_error(
+            conn,
+            job,
+            wrapped,
         )
         conn.commit()
         return updated
