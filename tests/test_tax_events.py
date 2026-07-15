@@ -10,7 +10,10 @@ from kassiber.core.tax_events import (
     normalize_tax_asset_inputs,
 )
 from kassiber.core.pair_allocation import first_pair_by_edge
-from tests.custody_tax_helpers import finalized_tax_inputs
+from tests.custody_tax_helpers import (
+    authoritative_chain_observation,
+    finalized_tax_inputs,
+)
 
 
 def _row(
@@ -2584,7 +2587,7 @@ class TransferGateEngineTest(unittest.TestCase):
 
         def engine_row(tx_id, wallet_id, direction):
             ref = wallet_refs[wallet_id]
-            return {
+            return authoritative_chain_observation({
                 "id": tx_id,
                 "workspace_id": "workspace-1",
                 "profile_id": "profile-1",
@@ -2610,7 +2613,7 @@ class TransferGateEngineTest(unittest.TestCase):
                 "raw_json": json.dumps({"txid": "44" * 32}),
                 "excluded": 0,
                 "payment_hash": None,
-            }
+            })
 
         state = build_tax_engine(profile).build_ledger_state(
             finalized_tax_inputs(
