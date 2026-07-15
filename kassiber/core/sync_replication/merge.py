@@ -13,6 +13,9 @@ from typing import Any, Mapping
 
 from ...errors import AppError
 from ...time_utils import now_iso, parse_timestamp
+from .. import freshness as core_freshness
+from .. import output_inventory as core_output_inventory
+from ..chain_observer import delete_wallet_observer_state
 from ..ownership_policy_epochs import (
     policy_identity_material,
     private_policy_material,
@@ -1154,6 +1157,21 @@ def _apply_row_upsert(
                 prior_wallet,
                 prior_wallet_material or {},
                 private_policy_material(updated_config),
+            )
+            delete_wallet_observer_state(conn, str(prior_wallet["id"]))
+            core_output_inventory.clear_wallet_output_inventory(
+                conn,
+                str(prior_wallet["id"]),
+                commit=False,
+            )
+            core_freshness.reset_source_checkpoint(
+                conn,
+                str(prior_wallet["profile_id"]),
+                core_freshness.source_key(
+                    core_freshness.SOURCE_ONCHAIN,
+                    str(prior_wallet["id"]),
+                ),
+                stale_reason="wallet_config_changed",
             )
     for field, value in merged.items():
         winner = winning_events.get(field, event)
