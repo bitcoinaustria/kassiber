@@ -94,6 +94,7 @@ class CustodyGapSearchLimitError(ValueError):
         promotion_eligible_count: int | None = None,
         limit_kind: str = "capacity",
         partial_candidates: Sequence[Any] = (),
+        accounting_candidates: Sequence[Any] = (),
         normalized_legs: Sequence[Any] = (),
     ) -> None:
         super().__init__(message)
@@ -101,6 +102,11 @@ class CustodyGapSearchLimitError(ValueError):
         self.promotion_eligible_count = promotion_eligible_count
         self.limit_kind = limit_kind
         self.partial_candidates = tuple(partial_candidates)
+        # The UI prefix stays bounded by ``max_candidates``.  Canonical
+        # accounting must nevertheless retain every already-scored structured
+        # candidate: dropping one merely because the display queue is full
+        # would let its boundary rows fall back into RP2.
+        self.accounting_candidates = tuple(accounting_candidates)
         self.normalized_legs = tuple(normalized_legs)
         self.blocking = False
         self.search_complete = False
@@ -304,6 +310,9 @@ def suggest_custody_gap_candidates(
             promotion_eligible_count=promotion_count,
             limit_kind="candidate_population",
             partial_candidates=stamped[:max_candidates],
+            accounting_candidates=tuple(
+                candidate for candidate in stamped if candidate.promotion_eligible
+            ),
         )
     return stamped
 

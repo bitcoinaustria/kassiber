@@ -537,6 +537,50 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         self.assertIsNone(state.tax_eligibility.barrier_event_key)
         self.assertFalse(state.gap_candidate_transaction_ids)
 
+    def test_structured_candidates_survive_the_display_population_limit(self):
+        rows = [
+            _row(
+                "out",
+                "wallet-a",
+                "outbound",
+                10_000,
+                "2020-01-01T00:00:00Z",
+                privacy_boundary="coinjoin",
+            ),
+            _row(
+                "return",
+                "wallet-c",
+                "inbound",
+                9_900,
+                "2021-01-01T00:00:00Z",
+            ),
+        ]
+        candidate = next(
+            item
+            for item in suggest_custody_gap_candidates(enriched_quantity_rows(rows))
+            if item.promotion_eligible
+        )
+
+        with patch(
+            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
+            side_effect=CustodyGapSearchLimitError(
+                "candidate population exceeds its display ceiling",
+                candidate_count=501,
+                promotion_eligible_count=1,
+                partial_candidates=(),
+                accounting_candidates=(candidate,),
+                limit_kind="candidate_population",
+            ),
+        ):
+            state = build_canonical_quantity_state(rows)
+
+        self.assertTrue(state.report_blocked)
+        self.assertEqual(state.tax_eligibility.blocked_from, "2020-01-01T00:00:00Z")
+        self.assertEqual(
+            state.gap_candidate_transaction_ids,
+            ("out", "return"),
+        )
+
     def test_promoted_candidate_compile_failure_still_holds_boundaries(self):
         rows = [
             _row(

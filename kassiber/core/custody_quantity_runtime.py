@@ -528,13 +528,15 @@ def _gap_candidate_claims_and_issues(
     ignored = tuple(sorted({str(item) for item in ignored_transaction_ids if item}))
     try:
         candidates = suggest_custody_gap_candidates(rows, ignored_ids=ignored)
-    except CustodyGapSearchLimitError:
+    except CustodyGapSearchLimitError as exc:
         # Candidate search is advisory. Capacity says only that suggestions are
-        # incomplete; it is not concrete evidence about any physical quantity
-        # and must never create a profile-wide tax-basis barrier. A candidate
-        # becomes blocking only after it exists and its canonical claim fails
-        # to compile or contradicts another exact claim.
-        return (), (), ()
+        # incomplete; it is not itself evidence about any physical quantity.
+        # A population ceiling can, however, be reached *after* structured
+        # candidates were completely scored. Preserve those candidates for
+        # canonical accounting even though the UI queue remains bounded.
+        candidates = tuple(exc.accounting_candidates)
+        if not candidates:
+            return (), (), ()
 
     observations = _observations_by_transaction(canonical)
     claims: list[QuantityClaim] = []
