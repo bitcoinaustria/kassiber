@@ -6,13 +6,17 @@ import unittest
 from pathlib import Path
 
 from kassiber.core.chain_observer import CoveragePoint, ObserverIdentity
+from kassiber.core.chain_observer.store import PRIVATE_OBSERVER_TABLES
 from kassiber.core.ownership_policy_epochs import (
     record_observer_policy_coverage,
     retired_policy_materials,
     roll_wallet_policy_epoch,
     technical_coverage_snapshot,
 )
-from kassiber.core.sync_replication.schema_allowlist import SYNC_TABLES
+from kassiber.core.sync_replication.schema_allowlist import (
+    NEVER_SYNC_TABLES,
+    SYNC_TABLE_MAP,
+)
 from kassiber.db import open_db
 from kassiber.time_utils import now_iso
 
@@ -202,12 +206,16 @@ class OwnershipPolicyEpochTest(unittest.TestCase):
         self.assertNotIn("p2wpkh", serialized)
 
     def test_private_epoch_tables_are_not_replicated(self):
+        private_policy_tables = {
+            "wallet_policy_epochs",
+            "wallet_policy_sources",
+            "wallet_policy_coverage_witnesses",
+        }
+        self.assertTrue(private_policy_tables <= NEVER_SYNC_TABLES)
+        self.assertTrue(private_policy_tables.isdisjoint(SYNC_TABLE_MAP))
+        self.assertTrue(PRIVATE_OBSERVER_TABLES <= NEVER_SYNC_TABLES)
         self.assertTrue(
-            {
-                "wallet_policy_epochs",
-                "wallet_policy_sources",
-                "wallet_policy_coverage_witnesses",
-            }.isdisjoint(SYNC_TABLES)
+            PRIVATE_OBSERVER_TABLES.isdisjoint(SYNC_TABLE_MAP)
         )
 
 

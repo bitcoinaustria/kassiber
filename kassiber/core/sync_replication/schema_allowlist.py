@@ -14,6 +14,7 @@ import sqlite3
 from typing import Any, Iterator, Mapping
 
 from ...errors import AppError
+from ..chain_observer.store import PRIVATE_OBSERVER_TABLES
 from .crypto import decode_secret, hmac_identifier
 
 
@@ -683,7 +684,7 @@ SYNC_TABLE_MAP: Mapping[str, TableSpec] = {spec.table: spec for spec in SYNC_TAB
 
 # Explicit assertions document the privilege boundary. Adding one of these to
 # ``SYNC_TABLES`` must fail loudly in tests/review.
-NEVER_SYNC_TABLES = frozenset(
+NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset(
     {
         "settings",
         "schema_migration_audits",
@@ -707,9 +708,9 @@ NEVER_SYNC_TABLES = frozenset(
         "custody_authored_evidence_snapshots",
         "wallet_utxos",
         "wallet_utxo_refreshes",
-        "chain_observer_instances",
-        "chain_observer_coverage",
-        "chain_observer_values",
+        "wallet_policy_epochs",
+        "wallet_policy_sources",
+        "wallet_policy_coverage_witnesses",
         "rates_cache",
         "rates_checked_minutes",
         "freshness_source_states",
