@@ -30,6 +30,7 @@ from . import output_inventory as core_output_inventory
 from .address_scripts import scriptpubkey_for_address_or_none
 from .chain_observer import delete_wallet_observer_state
 from .ownership_policy_epochs import (
+    canonical_wallet_config_identity,
     policy_identity_material,
     private_policy_material,
     roll_wallet_policy_epoch,
@@ -662,7 +663,10 @@ def _sync_material_config_json(config):
     sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_HISTORY_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY, None)
-    return json.dumps(sync_config, sort_keys=True)
+    return json.dumps(
+        canonical_wallet_config_identity(sync_config),
+        sort_keys=True,
+    )
 
 
 def _wallet_descriptor_state(config):

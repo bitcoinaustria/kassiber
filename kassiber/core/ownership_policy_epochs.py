@@ -13,6 +13,7 @@ import sqlite3
 import uuid
 from typing import Any, Mapping, Sequence
 
+from ..errors import AppError
 from ..time_utils import now_iso
 from ..util import normalize_chain_value, normalize_network_value
 
@@ -113,6 +114,46 @@ def private_policy_material(config: Mapping[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def canonical_wallet_config_identity(
+    config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Canonicalize only the identity used to compare wallet configurations.
+
+    Raw encrypted epoch material remains byte-for-byte authored. Chain/network
+    aliases and a set-like ``script_types`` list must not manufacture a wallet
+    rotation or discard observer state merely because their representation
+    changed.
+    """
+
+    if not isinstance(config, Mapping):
+        return {}
+    canonical = dict(config)
+    if canonical:
+        try:
+            chain = normalize_chain_value(canonical.get("chain") or "bitcoin")
+        except AppError:
+            chain = str(canonical.get("chain") or "bitcoin").strip().lower()
+        try:
+            network = normalize_network_value(chain, canonical.get("network"))
+        except AppError:
+            network = str(canonical.get("network") or "").strip().lower()
+        canonical["chain"] = chain
+        canonical["network"] = network
+    if "script_types" in canonical:
+        values = canonical["script_types"]
+        if isinstance(values, str):
+            values = [values]
+        if isinstance(values, (list, tuple, set, frozenset)):
+            canonical["script_types"] = sorted(
+                {
+                    str(value or "").strip().lower()
+                    for value in values
+                    if str(value or "").strip()
+                }
+            )
+    return canonical
+
+
 def policy_identity_material(config: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return script-policy identity without mutable coverage bookkeeping.
 
@@ -125,7 +166,7 @@ def policy_identity_material(config: Mapping[str, Any] | None) -> dict[str, Any]
     material = private_policy_material(config)
     material.pop("ownership_scan_to_index", None)
     material.pop("gap_limit", None)
-    return material
+    return canonical_wallet_config_identity(material)
 
 
 def _wallet_config(wallet: Mapping[str, Any]) -> dict[str, Any]:
@@ -460,7 +501,9 @@ def technical_coverage_snapshot(
 
 
 __all__ = [
+    "canonical_wallet_config_identity",
     "ensure_active_wallet_epoch",
+    "policy_identity_material",
     "private_policy_material",
     "record_observer_policy_coverage",
     "retired_policy_materials",

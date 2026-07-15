@@ -540,6 +540,25 @@ class SyncBundleReplayTests(unittest.TestCase):
             (wallet_id,),
         ).fetchone()
         ensure_active_wallet_epoch(self.peer, peer_wallet)
+        observer_timestamp = now_iso()
+        self.peer.execute(
+            """
+            INSERT INTO chain_observer_instances(
+                id, workspace_id, profile_id, logical_wallet_id,
+                source_wallet_id, source_key, observer_kind, chain, network,
+                state_version, state_json, created_at, updated_at
+            ) VALUES('rotation-observer', ?, ?, ?, ?, 'xpub:p2wpkh', 'bdk',
+                     'bitcoin', 'main', 1, '{}', ?, ?)
+            """,
+            (
+                self.workspace["id"],
+                self.profile["id"],
+                wallet_id,
+                wallet_id,
+                observer_timestamp,
+                observer_timestamp,
+            ),
+        )
 
         owner_config = json.loads(
             self.owner.execute(
@@ -588,6 +607,93 @@ class SyncBundleReplayTests(unittest.TestCase):
             ).fetchone()[0]
         )
         self.assertNotIn("xpub", peer_config)
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT COUNT(*) FROM chain_observer_instances "
+                "WHERE id = 'rotation-observer'"
+            ).fetchone()[0],
+            0,
+        )
+
+    def test_replicated_alias_only_wallet_change_preserves_epoch_and_observer(self):
+        self._join_peer("editor")
+        wallet_id, _, _, _ = self._insert_wallet_transaction_attachment()
+        initial_config = json.loads(
+            self.owner.execute(
+                "SELECT config_json FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()[0]
+        )
+        initial_config["script_types"] = ["p2wpkh", "p2tr"]
+        self.owner.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(initial_config), wallet_id),
+        )
+        initial = build_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            attachments_root=self.attachments_a,
+        )
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=initial.ciphertext,
+            attachments_root=self.attachments_b,
+        )
+        peer_wallet = self.peer.execute(
+            "SELECT * FROM wallets WHERE id = ?",
+            (wallet_id,),
+        ).fetchone()
+        epoch_id = ensure_active_wallet_epoch(self.peer, peer_wallet)
+        observer_timestamp = now_iso()
+        self.peer.execute(
+            """
+            INSERT INTO chain_observer_instances(
+                id, workspace_id, profile_id, logical_wallet_id,
+                source_wallet_id, source_key, observer_kind, chain, network,
+                state_version, state_json, created_at, updated_at
+            ) VALUES('alias-observer', ?, ?, ?, ?, 'xpub:p2wpkh', 'bdk',
+                     'bitcoin', 'main', 1, '{}', ?, ?)
+            """,
+            (
+                self.workspace["id"],
+                self.profile["id"],
+                wallet_id,
+                wallet_id,
+                observer_timestamp,
+                observer_timestamp,
+            ),
+        )
+        self.peer.commit()
+
+        represented = dict(initial_config)
+        represented["chain"] = "btc"
+        represented["network"] = "main"
+        represented["script_types"] = ["p2tr", "p2wpkh", "p2tr"]
+        self.owner.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(represented), wallet_id),
+        )
+        bundle = build_bundle(self.owner, profile_id=self.profile["id"])
+        result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+
+        self.assertEqual(result.rejected_events, 0)
+        epochs = self.peer.execute(
+            "SELECT id, status FROM wallet_policy_epochs WHERE wallet_id = ?",
+            (wallet_id,),
+        ).fetchall()
+        self.assertEqual([(row["id"], row["status"]) for row in epochs], [(epoch_id, "active")])
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT COUNT(*) FROM chain_observer_instances "
+                "WHERE id = 'alias-observer'"
+            ).fetchone()[0],
+            1,
+        )
 
     def test_replicated_public_policy_never_deletes_peer_private_material(self):
         self._join_peer("editor")

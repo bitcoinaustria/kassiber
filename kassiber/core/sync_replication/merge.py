@@ -21,6 +21,7 @@ from .. import freshness as core_freshness
 from .. import output_inventory as core_output_inventory
 from ..chain_observer import delete_wallet_observer_state
 from ..ownership_policy_epochs import (
+    canonical_wallet_config_identity,
     policy_identity_material,
     private_policy_material,
     roll_wallet_policy_epoch,
@@ -1313,8 +1314,8 @@ def _apply_row_upsert(
                 private_policy_material(updated_config),
             )
         observer_config_changed = (
-            public_wallet_config(updated_config)
-            != (prior_public_wallet_config or {})
+            canonical_wallet_config_identity(public_wallet_config(updated_config))
+            != canonical_wallet_config_identity(prior_public_wallet_config or {})
         )
         if identity_changed or observer_config_changed:
             delete_wallet_observer_state(conn, str(prior_wallet["id"]))

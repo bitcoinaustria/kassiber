@@ -8,6 +8,9 @@ from pathlib import Path
 from kassiber.core.chain_observer import CoveragePoint, ObserverIdentity
 from kassiber.core.chain_observer.store import PRIVATE_OBSERVER_TABLES
 from kassiber.core.ownership_policy_epochs import (
+    canonical_wallet_config_identity,
+    policy_identity_material,
+    private_policy_material,
     record_observer_policy_coverage,
     retired_policy_materials,
     roll_wallet_policy_epoch,
@@ -113,6 +116,33 @@ class OwnershipPolicyEpochTest(unittest.TestCase):
             "observer-structural-id",
         ):
             self.assertNotIn(private_value, serialized)
+
+    def test_comparison_identity_canonicalizes_aliases_without_rewriting_material(self):
+        authored = {
+            "chain": "btc",
+            "network": "mainnet",
+            "xpub": "xpub-public-material",
+            "script_types": ["p2tr", "p2wpkh", "p2tr"],
+        }
+        represented = {
+            "chain": "bitcoin",
+            "network": "main",
+            "xpub": "xpub-public-material",
+            "script_types": ["p2wpkh", "p2tr"],
+        }
+
+        self.assertEqual(
+            canonical_wallet_config_identity(authored),
+            canonical_wallet_config_identity(represented),
+        )
+        self.assertEqual(
+            policy_identity_material(authored),
+            policy_identity_material(represented),
+        )
+        self.assertNotEqual(
+            private_policy_material(authored),
+            private_policy_material(represented),
+        )
 
     def test_rollover_preserves_private_material_and_final_coverage(self):
         old_epoch_id = record_observer_policy_coverage(
