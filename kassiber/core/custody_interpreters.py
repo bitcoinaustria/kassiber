@@ -1238,7 +1238,7 @@ def compile_custody_interpreters(
             continue
         if source_amount > 0 and reviewed_amount == source_amount:
             whole_payout_source_ids.add(out_id)
-        elif 0 < reviewed_amount < source_amount:
+        elif reviewed_amount < source_amount:
             partial_payout_source_ids.add(out_id)
     direct_payout_conflict_ids = {
         _anchor_id(_field(pair, "in", {}) or {})

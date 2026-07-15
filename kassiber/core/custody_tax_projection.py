@@ -371,7 +371,6 @@ def compile_finalized_tax_projection(
     cross_asset_pairs: list[Mapping[str, Any]] = []
     quarantines: dict[tuple[str, str], Mapping[str, Any]] = {}
     interpreter_quarantine_keys: set[tuple[str, str]] = set()
-    interpreter_reasons_by_transaction: dict[str, set[str]] = {}
     selected_moves: list[str] = []
     allocated_fee_sources: set[str] = set()
     fee_by_pair_bundle: dict[str, int] = {}
@@ -384,9 +383,6 @@ def compile_finalized_tax_projection(
             key = (transaction_id, reason)
             quarantines[key] = dict(item)
             interpreter_quarantine_keys.add(key)
-            interpreter_reasons_by_transaction.setdefault(
-                transaction_id, set()
-            ).add(reason)
 
     for transaction_id in sorted(effectively_blocked - explicitly_blocked):
         if transaction_id not in rows_by_id:
@@ -488,10 +484,6 @@ def compile_finalized_tax_projection(
         }
         if not blocked_ids:
             return True
-        reason_sets = [
-            interpreter_reasons_by_transaction.get(transaction_id, set())
-            for transaction_id in blocked_ids
-        ]
         return False
 
     for decision in decisions:

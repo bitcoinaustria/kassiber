@@ -148,7 +148,8 @@ class CustodyLayerEvent:
 class CustodyLayerAdapter(Protocol):
     """Read-only adapter surface; transport and authentication stay outside."""
 
-    def custody_events(self) -> Sequence[CustodyLayerEvent]: ...
+    def custody_events(self) -> Sequence[CustodyLayerEvent]:
+        raise NotImplementedError
 
 
 def build_layer_quantity_input(

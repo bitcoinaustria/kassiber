@@ -702,6 +702,7 @@ def _gap_snapshot_version(conn, profile_id: str) -> tuple[Any, ...]:
         ).fetchone()
         review_version = (int(row[0]), int(row[1]), str(row[2]))
     except sqlite3.OperationalError:
+        # Reduced migration fixtures may not have custody review tables yet.
         pass
     if profile is None:
         return (active_count, *review_version)
@@ -1678,6 +1679,7 @@ def _claimed_transaction_ids(
         ).fetchall()
         claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows)
     except sqlite3.OperationalError:
+        # Narrow migration fixtures may omit authored transaction pairs.
         pass
     if include_journal_claims:
         try:
@@ -1695,6 +1697,7 @@ def _claimed_transaction_ids(
             ).fetchall()
             claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows)
         except sqlite3.OperationalError:
+            # A reduced schema has no derived journal claims to suppress.
             pass
     try:
         rows = conn.execute(
@@ -1707,6 +1710,7 @@ def _claimed_transaction_ids(
         ).fetchall()
         claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows)
     except sqlite3.OperationalError:
+        # Older/reduced schemas may not contain direct payout reviews.
         pass
     try:
         rows = conn.execute(
@@ -1720,6 +1724,7 @@ def _claimed_transaction_ids(
         ).fetchall()
         claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows if row[0])
     except sqlite3.OperationalError:
+        # Component tables may be absent in migration and surface fixtures.
         pass
     return claimed
 
