@@ -197,9 +197,9 @@ class CoreMaintenanceTest(unittest.TestCase):
                 conn.execute(
                     """
                     INSERT INTO custody_gap_review_transactions(
-                        id, review_id, workspace_id, profile_id, ordinal,
+                        id, review_id, workspace_id, profile_id,
                         role, transaction_id, created_at
-                    ) VALUES('reset-review-source', 'reset-review', ?, ?, 0,
+                    ) VALUES('reset-review-source', 'reset-review', ?, ?,
                              'source', ?, ?)
                     """,
                     (

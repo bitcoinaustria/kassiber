@@ -268,19 +268,19 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             (review["gap_id"],),
         ).fetchone()[0]
         relations = [
-            (row["role"], row["ordinal"], row["transaction_id"])
+            (row["role"], row["transaction_id"])
             for row in self.conn.execute(
                 """
-                SELECT role, ordinal, transaction_id
+                SELECT role, transaction_id
                 FROM custody_gap_review_transactions
-                WHERE review_id = ? ORDER BY role, ordinal
+                WHERE review_id = ? ORDER BY role, transaction_id
                 """,
                 (review_id,),
             ).fetchall()
         ]
         self.assertEqual(
             relations,
-            [("return", 0, "return"), ("source", 0, "out")],
+            [("return", "return"), ("source", "out")],
         )
 
         self.conn.execute("DELETE FROM transactions WHERE id = 'out'")
@@ -302,19 +302,19 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self.conn = open_db(self.root.name)
 
         relations = [
-            (row["role"], row["ordinal"], row["transaction_id"])
+            (row["role"], row["transaction_id"])
             for row in self.conn.execute(
                 """
-                SELECT role, ordinal, transaction_id
+                SELECT role, transaction_id
                 FROM custody_gap_review_transactions
-                WHERE review_id = ? ORDER BY role, ordinal
+                WHERE review_id = ? ORDER BY role, transaction_id
                 """,
                 (created["review_id"],),
             ).fetchall()
         ]
         self.assertEqual(
             relations,
-            [("return", 0, "return"), ("source", 0, "out")],
+            [("return", "return"), ("source", "out")],
         )
         self.assertEqual(candidate.source_ids, ("out",))
 

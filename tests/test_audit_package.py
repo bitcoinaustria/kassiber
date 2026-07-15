@@ -923,9 +923,9 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.conn.executemany(
             """
             INSERT INTO custody_gap_review_transactions(
-                id, review_id, workspace_id, profile_id, ordinal,
+                id, review_id, workspace_id, profile_id,
                 role, transaction_id, created_at
-            ) VALUES(?, 'componentless-review', ?, ?, 0, ?, ?, ?)
+            ) VALUES(?, 'componentless-review', ?, ?, ?, ?, ?)
             """,
             (
                 (
@@ -1011,7 +1011,13 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
         self.assertEqual(
             unrelated["custody_gap_review_history"],
-            {"count": 0, "returned": 0, "truncated": False, "records": []},
+            {
+                "count": 0,
+                "returned": 0,
+                "truncated": False,
+                "scope_completeness": "complete",
+                "records": [],
+            },
         )
 
     def test_audit_summary_retains_filed_snapshot_and_amendment_history(self):
@@ -1256,7 +1262,17 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertEqual(bounded["custody_filed_report_impact_resolutions"], [])
         self.assertEqual(
             bounded["custody_gap_review_history"],
-            {"count": 0, "returned": 0, "truncated": False, "records": []},
+            {
+                "count": 0,
+                "returned": 0,
+                "truncated": False,
+                "scope_completeness": "legacy_unscoped_history_present",
+                "records": [],
+            },
+        )
+        self.assertNotIn(
+            "legacy_unscoped_review_count",
+            bounded["custody_gap_review_history"],
         )
         bounded_json = json.dumps(bounded)
         self.assertNotIn("UNSELECTED_B_REPORT_NOTE", bounded_json)

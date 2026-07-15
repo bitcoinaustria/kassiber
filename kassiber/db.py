@@ -1254,16 +1254,14 @@ CREATE TABLE IF NOT EXISTS custody_gap_review_transactions (
     review_id TEXT NOT NULL REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
     role TEXT NOT NULL CHECK (role IN ('source', 'return')),
     transaction_id TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    UNIQUE (review_id, role, ordinal),
     UNIQUE (review_id, role, transaction_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_review
-    ON custody_gap_review_transactions(review_id, role, ordinal, id);
+    ON custody_gap_review_transactions(review_id, role, transaction_id, id);
 
 CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_scope
     ON custody_gap_review_transactions(profile_id, transaction_id, review_id);
@@ -3061,25 +3059,228 @@ def _custody_evidence_commitment_id(component_id, ordinal):
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def custody_gap_review_transaction_id(review_id, role, ordinal):
+def custody_gap_review_transaction_id(review_id, role, transaction_id):
     """Return the stable authored id for one review boundary anchor."""
 
     encoded = json.dumps(
-        ["custody-gap-review-transaction-v1", str(review_id), str(role), int(ordinal)],
+        [
+            "custody-gap-review-transaction-v2",
+            str(review_id),
+            str(role),
+            str(transaction_id),
+        ],
         ensure_ascii=True,
         separators=(",", ":"),
     )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _create_custody_gap_review_transaction_aux_schema(conn):
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_review
+            ON custody_gap_review_transactions(
+                review_id, role, transaction_id, id
+            );
+        CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_scope
+            ON custody_gap_review_transactions(
+                profile_id, transaction_id, review_id
+            );
+        CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transaction_scope_insert
+        BEFORE INSERT ON custody_gap_review_transactions
+        BEGIN
+            SELECT CASE WHEN NOT EXISTS (
+                SELECT 1 FROM custody_gap_reviews r
+                WHERE r.id = NEW.review_id
+                  AND r.workspace_id = NEW.workspace_id
+                  AND r.profile_id = NEW.profile_id
+            ) THEN RAISE(
+                ABORT, 'custody_gap_review_transaction_review_scope_mismatch'
+            ) END;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM transactions t WHERE t.id = NEW.transaction_id
+            ) AND NOT EXISTS (
+                SELECT 1 FROM transactions t
+                WHERE t.id = NEW.transaction_id
+                  AND t.workspace_id = NEW.workspace_id
+                  AND t.profile_id = NEW.profile_id
+            ) THEN RAISE(
+                ABORT, 'custody_gap_review_transaction_scope_mismatch'
+            ) END;
+        END;
+        CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transactions_immutable
+        BEFORE UPDATE ON custody_gap_review_transactions
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_gap_review_transactions_immutable');
+        END;
+        """
+    )
+
+
+def _ensure_custody_gap_review_transaction_schema(conn):
+    """Replace the unreleased ordinal-keyed relation shape with set identity."""
+
+    columns = {
+        str(row["name"])
+        for row in conn.execute(
+            "PRAGMA table_info(custody_gap_review_transactions)"
+        ).fetchall()
+    }
+    if "ordinal" not in columns:
+        return False
+    rows = conn.execute(
+        """
+        SELECT review_id, workspace_id, profile_id, role,
+               transaction_id, created_at
+        FROM custody_gap_review_transactions
+        ORDER BY review_id, role, transaction_id, id
+        """
+    ).fetchall()
+    conn.execute("DROP TRIGGER IF EXISTS trg_custody_gap_review_transaction_scope_insert")
+    conn.execute("DROP TRIGGER IF EXISTS trg_custody_gap_review_transactions_immutable")
+    conn.execute("DROP INDEX IF EXISTS idx_custody_gap_review_transactions_review")
+    conn.execute("DROP INDEX IF EXISTS idx_custody_gap_review_transactions_scope")
+    conn.execute(
+        "ALTER TABLE custody_gap_review_transactions "
+        "RENAME TO custody_gap_review_transactions_v1"
+    )
+    conn.execute(
+        """
+        CREATE TABLE custody_gap_review_transactions (
+            id TEXT PRIMARY KEY,
+            review_id TEXT NOT NULL
+                REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
+            workspace_id TEXT NOT NULL
+                REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL
+                REFERENCES profiles(id) ON DELETE CASCADE,
+            role TEXT NOT NULL CHECK (role IN ('source', 'return')),
+            transaction_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE (review_id, role, transaction_id)
+        )
+        """
+    )
+    for row in rows:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO custody_gap_review_transactions(
+                id, review_id, workspace_id, profile_id,
+                role, transaction_id, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                custody_gap_review_transaction_id(
+                    row["review_id"], row["role"], row["transaction_id"]
+                ),
+                row["review_id"],
+                row["workspace_id"],
+                row["profile_id"],
+                row["role"],
+                row["transaction_id"],
+                row["created_at"],
+            ),
+        )
+    conn.execute("DROP TABLE custody_gap_review_transactions_v1")
+    _create_custody_gap_review_transaction_aux_schema(conn)
+    return True
+
+
+def backfill_custody_gap_review_relations(
+    conn,
+    *,
+    review_id,
+    workspace_id,
+    profile_id,
+    created_at,
+    relations,
+):
+    """Insert any missing durable review anchors without rewriting history.
+
+    Existing databases and replicas can contain only a prefix of the relation
+    rows.  Repair therefore works per ``(role, transaction_id)`` instead of
+    treating the first child row as proof that the whole review was migrated.
+    An authored transaction identity remains valid after source retraction;
+    only a currently-live row owned by another book makes that identity unsafe
+    to attach here.
+    """
+
+    grouped = {"source": [], "return": []}
+    for role, transaction_id in relations:
+        normalized_role = str(role)
+        normalized_id = str(transaction_id or "")
+        if normalized_role not in grouped or not normalized_id:
+            continue
+        if normalized_id not in grouped[normalized_role]:
+            grouped[normalized_role].append(normalized_id)
+
+    existing_rows = conn.execute(
+        """
+        SELECT role, transaction_id
+        FROM custody_gap_review_transactions
+        WHERE review_id = ?
+        ORDER BY role, transaction_id, id
+        """,
+        (review_id,),
+    ).fetchall()
+    existing_ids = {"source": set(), "return": set()}
+    for row in existing_rows:
+        role = str(row["role"])
+        if role not in existing_ids:
+            continue
+        existing_ids[role].add(str(row["transaction_id"]))
+
+    inserted = 0
+    for role in ("source", "return"):
+        for transaction_id in sorted(grouped[role]):
+            if transaction_id in existing_ids[role]:
+                continue
+            collision = conn.execute(
+                """
+                SELECT 1
+                FROM transactions
+                WHERE id = ?
+                  AND (workspace_id != ? OR profile_id != ?)
+                LIMIT 1
+                """,
+                (transaction_id, workspace_id, profile_id),
+            ).fetchone()
+            if collision is not None:
+                continue
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO custody_gap_review_transactions(
+                    id, review_id, workspace_id, profile_id,
+                    role, transaction_id, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    custody_gap_review_transaction_id(
+                        review_id, role, transaction_id
+                    ),
+                    review_id,
+                    workspace_id,
+                    profile_id,
+                    role,
+                    transaction_id,
+                    created_at,
+                ),
+            )
+            if int(cursor.rowcount) > 0:
+                inserted += int(cursor.rowcount)
+                existing_ids[role].add(transaction_id)
+    return inserted
+
+
 def _backfill_custody_gap_review_transactions(conn):
     """Normalize only transaction identities already durably authored.
 
-    Older candidate fingerprints cannot be reversed, and current derived
-    candidates may have changed since a review.  Safe backfill is therefore
-    limited to verified legacy snapshot id arrays and component leg anchors.
-    Componentless reviews without either source remain unscoped rather than
-    being guessed into an auditor export.
+    Older candidate fingerprints cannot be reversed here, and current derived
+    candidates may have changed since a review.  This lower-layer pass is
+    therefore limited to legacy snapshot id arrays and component leg anchors.
+    The custody review layer separately performs an exact fingerprint-checked
+    candidate recovery for old componentless dismissals whose snapshots never
+    contained those arrays.
     """
 
     inserted = 0
@@ -3091,13 +3292,6 @@ def _backfill_custody_gap_review_transactions(conn):
         """
     ).fetchall()
     for review in reviews:
-        existing = conn.execute(
-            "SELECT 1 FROM custody_gap_review_transactions WHERE review_id = ? LIMIT 1",
-            (review["id"],),
-        ).fetchone()
-        if existing is not None:
-            continue
-
         relation_ids = {"source": [], "return": []}
         try:
             snapshot = json.loads(str(review["snapshot_json"] or "{}"))
@@ -3111,14 +3305,7 @@ def _backfill_custody_gap_review_transactions(conn):
                 for value in values:
                     if not isinstance(value, str) or not value:
                         continue
-                    valid = conn.execute(
-                        """
-                        SELECT 1 FROM transactions
-                        WHERE id = ? AND workspace_id = ? AND profile_id = ?
-                        """,
-                        (value, review["workspace_id"], review["profile_id"]),
-                    ).fetchone()
-                    if valid is not None and value not in relation_ids[role]:
+                    if value not in relation_ids[role]:
                         relation_ids[role].append(value)
 
         if review["component_id"]:
@@ -3127,53 +3314,68 @@ def _backfill_custody_gap_review_transactions(conn):
                 SELECT role, COALESCE(anchor_transaction_id, transaction_id) AS transaction_id
                 FROM custody_component_legs
                 WHERE component_id = ?
+                  AND workspace_id = ?
+                  AND profile_id = ?
                   AND role IN ('source', 'fee', 'destination')
                   AND COALESCE(anchor_transaction_id, transaction_id) IS NOT NULL
                 ORDER BY ordinal, id
                 """,
-                (review["component_id"],),
+                (
+                    review["component_id"],
+                    review["workspace_id"],
+                    review["profile_id"],
+                ),
             ).fetchall()
             for leg in legs:
                 role = "return" if leg["role"] == "destination" else "source"
                 transaction_id = str(leg["transaction_id"])
-                valid = conn.execute(
-                    """
-                    SELECT 1 FROM transactions
-                    WHERE id = ? AND workspace_id = ? AND profile_id = ?
-                    """,
-                    (
-                        transaction_id,
-                        review["workspace_id"],
-                        review["profile_id"],
-                    ),
-                ).fetchone()
-                if valid is not None and transaction_id not in relation_ids[role]:
+                if transaction_id not in relation_ids[role]:
                     relation_ids[role].append(transaction_id)
 
-        for role in ("source", "return"):
-            for ordinal, transaction_id in enumerate(relation_ids[role]):
-                cursor = conn.execute(
-                    """
-                    INSERT OR IGNORE INTO custody_gap_review_transactions(
-                        id, review_id, workspace_id, profile_id, ordinal,
-                        role, transaction_id, created_at
-                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        custody_gap_review_transaction_id(
-                            review["id"], role, ordinal
-                        ),
-                        review["id"],
-                        review["workspace_id"],
-                        review["profile_id"],
-                        ordinal,
-                        role,
-                        transaction_id,
-                        review["created_at"],
-                    ),
-                )
-                inserted += max(0, int(cursor.rowcount))
+        inserted += backfill_custody_gap_review_relations(
+            conn,
+            review_id=review["id"],
+            workspace_id=review["workspace_id"],
+            profile_id=review["profile_id"],
+            created_at=review["created_at"],
+            relations=(
+                *(("source", value) for value in relation_ids["source"]),
+                *(("return", value) for value in relation_ids["return"]),
+            ),
+        )
     return inserted
+
+
+def _backfill_legacy_componentless_review_transactions(conn):
+    """Run the higher-layer deterministic recovery after DB initialization.
+
+    The cheap guard avoids importing or running the custody matcher for normal
+    databases.  The local runtime import keeps the foundational DB module free
+    of a module-load back-edge while allowing a semantic migration that cannot
+    safely be implemented by reversing a one-way candidate fingerprint.
+    """
+
+    pending = conn.execute(
+        """
+        SELECT 1
+        FROM custody_gap_reviews r
+        WHERE r.component_id IS NULL
+          AND r.action = 'dismissed'
+          AND COALESCE(r.event_kind, 'review_decision') = 'review_decision'
+          AND NOT EXISTS (
+              SELECT 1 FROM custody_gap_review_transactions x
+              WHERE x.review_id = r.id
+          )
+        LIMIT 1
+        """
+    ).fetchone()
+    if pending is None:
+        return 0
+    from .core.custody_gap_reviews import (
+        backfill_legacy_componentless_review_relations,
+    )
+
+    return backfill_legacy_componentless_review_relations(conn)
 
 
 def _custody_replicable_detail_hash(payload_json):
@@ -3656,7 +3858,11 @@ def ensure_schema_compat(conn):
     ):
         conn.commit()
     _ensure_custody_leg_role_schema(conn)
+    if _ensure_custody_gap_review_transaction_schema(conn):
+        conn.commit()
     if _backfill_custody_gap_review_transactions(conn):
+        conn.commit()
+    if _backfill_legacy_componentless_review_transactions(conn):
         conn.commit()
     _ensure_custody_revision_immutability_triggers(conn)
     _ensure_commercial_reconciliation_schema(conn)

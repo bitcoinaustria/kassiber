@@ -19,7 +19,10 @@ from types import SimpleNamespace
 import uuid
 from typing import Any, Mapping, Sequence
 
-from ..db import custody_gap_review_transaction_id
+from ..db import (
+    backfill_custody_gap_review_relations,
+    custody_gap_review_transaction_id,
+)
 from ..errors import AppError
 from ..time_utils import now_iso
 from . import custody_components
@@ -498,13 +501,19 @@ def list_audit_review_history(
             "Custody audit review history limit must be between 1 and 500",
             code="custody_gap_review_validation",
         )
+    incomplete_review_ids = _incomplete_review_scope_ids(conn, profile_id)
     where = "r.profile_id = ?"
     params: list[Any] = [profile_id]
     selected_transaction_ids: frozenset[str] | None = None
     if transaction_ids is not None:
         selected = tuple(sorted({str(value) for value in transaction_ids if value}))
         if not selected:
-            return {"count": 0, "returned": 0, "truncated": False, "records": []}
+            return _audit_review_history_result(
+                count=0,
+                records=[],
+                bounded=True,
+                incomplete_review_ids=incomplete_review_ids,
+            )
         selected_transaction_ids = frozenset(selected)
         placeholders = ",".join("?" for _ in selected)
         where += f"""
@@ -573,6 +582,7 @@ def list_audit_review_history(
             for review_id, normalized_transaction_ids in normalized_by_review.items()
             if normalized_transaction_ids
             and normalized_transaction_ids.issubset(selected_transaction_ids)
+            and review_id not in incomplete_review_ids
         }
     records = [
         _redacted_review_history_row(
@@ -585,12 +595,186 @@ def list_audit_review_history(
         )
         for row in rows
     ]
-    return {
+    return _audit_review_history_result(
+        count=count,
+        records=records,
+        bounded=selected_transaction_ids is not None,
+        incomplete_review_ids=incomplete_review_ids,
+    )
+
+
+def _audit_review_history_result(
+    *,
+    count: int,
+    records: list[dict[str, Any]],
+    bounded: bool,
+    incomplete_review_ids: set[str],
+) -> dict[str, Any]:
+    incomplete = bool(incomplete_review_ids)
+    result: dict[str, Any] = {
         "count": count,
         "returned": len(records),
         "truncated": count > len(records),
+        "scope_completeness": (
+            "legacy_unscoped_history_present" if incomplete else "complete"
+        ),
         "records": records,
     }
+    # A bounded handoff must acknowledge that older history cannot be scoped,
+    # but enumerating the profile-wide count would leak unrelated book state.
+    if not bounded:
+        result["legacy_unscoped_review_count"] = len(incomplete_review_ids)
+    return result
+
+
+def _snapshot_review_relations(snapshot_json: Any) -> tuple[tuple[str, str], ...]:
+    try:
+        snapshot = json.loads(str(snapshot_json or "{}"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return ()
+    if not isinstance(snapshot, Mapping):
+        return ()
+    relations: list[tuple[str, str]] = []
+    for role, key in (("source", "source_ids"), ("return", "return_ids")):
+        values = snapshot.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, str) and value:
+                relation = (role, value)
+                if relation not in relations:
+                    relations.append(relation)
+    return tuple(relations)
+
+
+def _incomplete_review_scope_ids(
+    conn: sqlite3.Connection, profile_id: str
+) -> set[str]:
+    """Identify legacy reviews whose complete authored boundary is unknowable."""
+
+    reviews = conn.execute(
+        """
+        SELECT id, component_id, snapshot_json
+        FROM custody_gap_reviews
+        WHERE profile_id = ?
+        ORDER BY created_at, id
+        """,
+        (profile_id,),
+    ).fetchall()
+    incomplete: set[str] = set()
+    for review in reviews:
+        normalized = {
+            (str(row["role"]), str(row["transaction_id"]))
+            for row in conn.execute(
+                """
+                SELECT role, transaction_id
+                FROM custody_gap_review_transactions
+                WHERE review_id = ?
+                """,
+                (review["id"],),
+            ).fetchall()
+        }
+        expected = set(_snapshot_review_relations(review["snapshot_json"]))
+        if review["component_id"]:
+            expected.update(
+                (
+                    "return" if row["role"] == "destination" else "source",
+                    str(row["transaction_id"]),
+                )
+                for row in conn.execute(
+                    """
+                    SELECT role,
+                           COALESCE(anchor_transaction_id, transaction_id)
+                               AS transaction_id
+                    FROM custody_component_legs
+                    WHERE profile_id = ? AND component_id = ?
+                      AND role IN ('source', 'fee', 'destination')
+                      AND COALESCE(anchor_transaction_id, transaction_id)
+                          IS NOT NULL
+                    """,
+                    (profile_id, review["component_id"]),
+                ).fetchall()
+            )
+        if expected:
+            if not expected.issubset(normalized):
+                incomplete.add(str(review["id"]))
+        elif not normalized:
+            incomplete.add(str(review["id"]))
+    return incomplete
+
+
+def backfill_legacy_componentless_review_relations(
+    conn: sqlite3.Connection,
+) -> int:
+    """Recover old dismissal anchors only from an exact current candidate.
+
+    Early review snapshots intentionally omitted boundary transaction ids. A
+    stored fingerprint is not reversible, so recovery re-runs the deterministic
+    matcher and requires both the stable gap id and the complete candidate
+    fingerprint to match.  Changed or unavailable evidence stays explicitly
+    unscoped. This migration is invoked after schema compatibility work, never
+    from audit/AI read paths.
+    """
+
+    pending = conn.execute(
+        """
+        SELECT r.id, r.workspace_id, r.profile_id, r.gap_id,
+               r.candidate_fingerprint, r.created_at
+        FROM custody_gap_reviews r
+        WHERE r.component_id IS NULL
+          AND r.action = 'dismissed'
+          AND COALESCE(r.event_kind, 'review_decision') = 'review_decision'
+          AND NOT EXISTS (
+              SELECT 1 FROM custody_gap_review_transactions x
+              WHERE x.review_id = r.id
+          )
+        ORDER BY r.profile_id, r.created_at, r.id
+        """
+    ).fetchall()
+    if not pending:
+        return 0
+
+    from .custody_gaps import CustodyGapSearchLimitError, load_gap_candidates
+
+    inserted = 0
+    by_profile: dict[str, list[Mapping[str, Any]]] = {}
+    for row in pending:
+        by_profile.setdefault(str(row["profile_id"]), []).append(row)
+    for profile_id, reviews in by_profile.items():
+        try:
+            candidates, _ = load_gap_candidates(
+                conn,
+                profile_id,
+                include_journal_claims=False,
+            )
+        except CustodyGapSearchLimitError as exc:
+            candidates = [
+                candidate
+                for candidate in (*exc.partial_candidates, *exc.accounting_candidates)
+                if isinstance(candidate, CustodyGapCandidate)
+            ]
+        exact = {
+            (candidate.gap_id, candidate_fingerprint(candidate)): candidate
+            for candidate in candidates
+        }
+        for review in reviews:
+            candidate = exact.get(
+                (str(review["gap_id"]), str(review["candidate_fingerprint"]))
+            )
+            if candidate is None:
+                continue
+            inserted += backfill_custody_gap_review_relations(
+                conn,
+                review_id=review["id"],
+                workspace_id=review["workspace_id"],
+                profile_id=review["profile_id"],
+                created_at=review["created_at"],
+                relations=(
+                    *(("source", value) for value in candidate.source_ids),
+                    *(("return", value) for value in candidate.return_ids),
+                ),
+            )
+    return inserted
 
 
 def _redacted_review_history_row(
@@ -1791,7 +1975,7 @@ def _prior_review_transaction_relations(
           )
         ORDER BY r.created_at DESC, r.id DESC,
                  CASE x.role WHEN 'source' THEN 0 ELSE 1 END,
-                 x.ordinal, x.id
+                 x.transaction_id, x.id
         """,
         (profile_id, gap_id, profile_id, gap_id),
     ).fetchall()
@@ -1843,20 +2027,21 @@ def _append_review_transaction_relations(
         if normalized_id not in grouped[role]:
             grouped[role].append(normalized_id)
     for role in ("source", "return"):
-        for ordinal, transaction_id in enumerate(grouped[role]):
+        for transaction_id in sorted(grouped[role]):
             conn.execute(
                 """
                 INSERT INTO custody_gap_review_transactions(
-                    id, review_id, workspace_id, profile_id, ordinal,
+                    id, review_id, workspace_id, profile_id,
                     role, transaction_id, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    custody_gap_review_transaction_id(review_id, role, ordinal),
+                    custody_gap_review_transaction_id(
+                        review_id, role, transaction_id
+                    ),
                     review_id,
                     workspace_id,
                     profile_id,
-                    ordinal,
                     role,
                     transaction_id,
                     created_at,

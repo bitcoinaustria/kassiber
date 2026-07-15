@@ -21,7 +21,7 @@ from kassiber.core.custody_components import (
     supersede_component,
     update_component,
 )
-from kassiber.core import custody_filed_reports
+from kassiber.core import custody_filed_reports, custody_gap_reviews, custody_gaps
 from kassiber.core.sync_replication.bundle import build_bundle
 from kassiber.core.sync_replication.capture import preferred_wire_id
 from kassiber.core.sync_replication.conflicts import resolve_conflict
@@ -344,9 +344,9 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         self.owner.execute(
             """
             INSERT INTO custody_gap_review_transactions(
-                id, review_id, workspace_id, profile_id, ordinal,
+                id, review_id, workspace_id, profile_id,
                 role, transaction_id, created_at
-            ) VALUES('filed-review-source', 'filed-review', ?, ?, 0,
+            ) VALUES('filed-review-source', 'filed-review', ?, ?,
                      'source', ?, ?)
             """,
             (
@@ -403,7 +403,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             dict(row)
             for row in self.owner.execute(
                 """
-                SELECT review_id, workspace_id, profile_id, ordinal,
+                SELECT review_id, workspace_id, profile_id,
                        role, transaction_id, created_at
                 FROM custody_gap_review_transactions WHERE review_id = 'filed-review'
                 """
@@ -413,7 +413,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             dict(row)
             for row in self.peer.execute(
                 """
-                SELECT review_id, workspace_id, profile_id, ordinal,
+                SELECT review_id, workspace_id, profile_id,
                        role, transaction_id, created_at
                 FROM custody_gap_review_transactions WHERE review_id = 'filed-review'
                 """
@@ -488,6 +488,147 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM sync_events "
                 "WHERE entity_table = 'custody_authored_evidence_snapshots'"
             ).fetchone()[0],
+        )
+
+    def test_recovered_legacy_review_anchors_replicate_after_source_retraction(self):
+        self._join_peer()
+        account_id = self.owner.execute(
+            "SELECT id FROM accounts WHERE profile_id = ? ORDER BY id LIMIT 1",
+            (self.profile["id"],),
+        ).fetchone()[0]
+        wallet_ids = (str(uuid.uuid4()), str(uuid.uuid4()))
+        for wallet_id, label in zip(wallet_ids, ("Old vault", "New vault")):
+            self.owner.execute(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, account_id, label, kind,
+                    config_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, 'xpub',
+                         '{"chain":"bitcoin","network":"regtest"}', ?)
+                """,
+                (
+                    wallet_id,
+                    self.workspace["id"],
+                    self.profile["id"],
+                    account_id,
+                    label,
+                    NOW,
+                ),
+            )
+        transaction_ids = (str(uuid.uuid4()), str(uuid.uuid4()))
+        for tx_id, wallet_id, direction, amount, occurred_at, boundary in (
+            (
+                transaction_ids[0],
+                wallet_ids[0],
+                "outbound",
+                1_000_000,
+                "2020-01-01T00:00:00Z",
+                "coinjoin",
+            ),
+            (
+                transaction_ids[1],
+                wallet_ids[1],
+                "inbound",
+                990_000,
+                "2021-01-01T00:00:00Z",
+                None,
+            ),
+        ):
+            txid = hashlib.sha256(tx_id.encode("ascii")).hexdigest()
+            self.owner.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id,
+                    fingerprint, occurred_at, direction, asset, amount, fee,
+                    privacy_boundary, raw_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'BTC', ?, 0, ?, ?, ?)
+                """,
+                (
+                    tx_id,
+                    self.workspace["id"],
+                    self.profile["id"],
+                    wallet_id,
+                    txid,
+                    f"fingerprint-{tx_id}",
+                    occurred_at,
+                    direction,
+                    amount,
+                    boundary,
+                    json.dumps({"txid": txid}),
+                    occurred_at,
+                ),
+            )
+        candidates, _ = custody_gaps.load_gap_candidates(
+            self.owner,
+            self.profile["id"],
+            include_journal_claims=False,
+        )
+        candidate = next(
+            item
+            for item in candidates
+            if item.source_ids == (transaction_ids[0],)
+            and item.return_ids == (transaction_ids[1],)
+        )
+        self.owner.execute(
+            """
+            INSERT INTO custody_gap_reviews(
+                id, workspace_id, profile_id, gap_id, revision,
+                candidate_fingerprint, action, event_kind, component_id,
+                authored_source, reason, snapshot_json, created_at
+            ) VALUES('legacy-recovered-review', ?, ?, ?, 1, ?, 'dismissed',
+                     'review_decision', NULL, 'user', 'legacy', '{}', ?)
+            """,
+            (
+                self.workspace["id"],
+                self.profile["id"],
+                candidate.gap_id,
+                custody_gap_reviews.candidate_fingerprint(candidate),
+                NOW,
+            ),
+        )
+        self.assertEqual(
+            custody_gap_reviews.backfill_legacy_componentless_review_relations(
+                self.owner
+            ),
+            2,
+        )
+        self.owner.execute(
+            "DELETE FROM transactions WHERE id IN (?, ?)", transaction_ids
+        )
+        self.owner.commit()
+
+        self._sync_owner_to_peer()
+
+        owner_rows = [
+            tuple(row)
+            for row in self.owner.execute(
+                """
+                SELECT id, role, transaction_id
+                FROM custody_gap_review_transactions
+                WHERE review_id = 'legacy-recovered-review'
+                ORDER BY role, transaction_id
+                """
+            ).fetchall()
+        ]
+        peer_rows = [
+            tuple(row)
+            for row in self.peer.execute(
+                """
+                SELECT id, role, transaction_id
+                FROM custody_gap_review_transactions
+                WHERE review_id = 'legacy-recovered-review'
+                ORDER BY role, transaction_id
+                """
+            ).fetchall()
+        ]
+        self.assertEqual(peer_rows, owner_rows)
+        self.assertEqual(len(peer_rows), 2)
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT COUNT(*) FROM transactions WHERE id IN (?, ?)",
+                transaction_ids,
+            ).fetchone()[0],
+            0,
         )
 
     def test_changed_synced_evidence_drifts_on_author_and_receiver(self):

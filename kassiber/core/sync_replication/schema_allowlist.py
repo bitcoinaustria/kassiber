@@ -394,20 +394,20 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
     TableSpec(
         "custody_gap_review_transactions",
         (
-            "id", "review_id", "workspace_id", "profile_id", "ordinal",
+            "id", "review_id", "workspace_id", "profile_id",
             "role", "transaction_id", "created_at",
         ),
         ("id",),
         _profile_scope("custody_gap_review_transactions"),
         high_stakes_fields=frozenset(
             {
-                "review_id", "workspace_id", "profile_id", "ordinal",
+                "review_id", "workspace_id", "profile_id",
                 "role", "transaction_id", "created_at",
             }
         ),
         immutable_fields=frozenset(
             {
-                "review_id", "workspace_id", "profile_id", "ordinal",
+                "review_id", "workspace_id", "profile_id",
                 "role", "transaction_id", "created_at",
             }
         ),
