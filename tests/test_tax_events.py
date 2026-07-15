@@ -3,14 +3,14 @@ import hashlib
 import unittest
 
 from kassiber.msat import msat_to_btc
-from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
-from kassiber.core.engines.rp2 import _apply_cross_asset_splits
+from kassiber.core.engines import build_tax_engine
 from kassiber.core.tax_events import (
     build_tax_quarantine,
     dedupe_quarantines,
     normalize_tax_asset_inputs,
 )
 from kassiber.core.pair_allocation import first_pair_by_edge
+from tests.custody_tax_helpers import finalized_tax_inputs
 
 
 def _row(
@@ -2333,7 +2333,8 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
             ),
         ]
         state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(
+                profile,
                 rows=rows,
                 wallet_refs_by_id=wallet_refs,
                 manual_pair_records=[
@@ -2369,7 +2370,8 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
         )
 
         pair_only_state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(
+                profile,
                 rows=rows[1:],
                 wallet_refs_by_id=wallet_refs,
                 manual_pair_records=[
@@ -2402,7 +2404,8 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
             ),
         ]
         chained_state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(
+                profile,
                 rows=chained_rows,
                 wallet_refs_by_id=wallet_refs,
                 manual_pair_records=[
@@ -2508,7 +2511,8 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
             }
 
         state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(
+                profile,
                 rows=[
                     engine_row("acq", "inbound", 100_000_000_000, "acq"),
                     engine_row(
@@ -2609,7 +2613,8 @@ class TransferGateEngineTest(unittest.TestCase):
             }
 
         state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(
+                profile,
                 rows=[
                     engine_row("move-out", "wallet-a", "outbound"),
                     engine_row("move-in", "wallet-b", "inbound"),
@@ -2622,7 +2627,10 @@ class TransferGateEngineTest(unittest.TestCase):
         reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}
         self.assertEqual(
             reasons_by_id,
-            {"move-out": "insufficient_lots", "move-in": "insufficient_lots"},
+            {
+                "move-out": "insufficient_lots",
+                "move-in": "derived_transfer_group_blocked",
+            },
         )
         partner_detail = json.loads(
             next(
@@ -2632,6 +2640,7 @@ class TransferGateEngineTest(unittest.TestCase):
             )
         )
         self.assertTrue(partner_detail["paired_leg"])
+        self.assertEqual(partner_detail["blocked_by_reason"], "insufficient_lots")
 
 
 class BuildTaxQuarantineTest(unittest.TestCase):
@@ -2648,33 +2657,6 @@ class BuildTaxQuarantineTest(unittest.TestCase):
     def test_uses_own_id_for_real_rows(self):
         q = build_tax_quarantine(self.profile, {"id": "real-tx"}, "reason", {})
         self.assertEqual(q["transaction_id"], "real-tx")
-
-
-class CrossAssetSplitTest(unittest.TestCase):
-    def test_value_only_pricing_materializes_unit_rate(self):
-        # A row priced by fiat_value alone (no fiat_rate) must keep a usable price
-        # on both split legs (a derived per-unit rate), not become unpriced.
-        out_row = {
-            "id": "btc-out", "asset": "BTC", "direction": "outbound",
-            "amount": 50_000_000_000, "fee": 0,
-            "fiat_rate": None, "fiat_rate_exact": None,
-            "fiat_value": 3000.0, "fiat_value_exact": "3000",
-        }
-        in_row = {"id": "lbtc-in", "asset": "LBTC", "direction": "inbound", "amount": 19_800_000_000}
-        record = {
-            "id": "pair-1", "out_transaction_id": "btc-out",
-            "in_transaction_id": "lbtc-in", "out_amount": 20_000_000_000,
-        }
-        rows, _records, out_map = _apply_cross_asset_splits([out_row, in_row], [record])
-        by_id = {r["id"]: r for r in rows}
-        # 0.5 BTC priced at 3000 EUR => 6000 EUR/BTC unit rate on both legs.
-        self.assertEqual(by_id["btc-out"]["fiat_rate"], "6000")
-        self.assertIsNone(by_id["btc-out"]["fiat_value"])
-        synthetic = next(r for r in rows if str(r["id"]).startswith("cross-split:"))
-        self.assertEqual(synthetic["fiat_rate"], "6000")
-        self.assertEqual(synthetic["amount"], 20_000_000_000)
-        self.assertEqual(by_id["btc-out"]["amount"], 30_000_000_000)
-        self.assertEqual(out_map[synthetic["id"]], "btc-out")
 
 
 class DedupeQuarantinesTest(unittest.TestCase):

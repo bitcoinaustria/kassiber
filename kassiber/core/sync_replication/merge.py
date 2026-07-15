@@ -52,6 +52,7 @@ _CUSTODY_COMPONENT_TABLES = frozenset(
         "custody_components",
         "custody_component_legs",
         "custody_component_allocations",
+        "custody_component_evidence_commitments",
     }
 )
 
@@ -734,6 +735,12 @@ def _prepare_actual_row(
                 table=referenced_table,
                 wire_id=actual[column],
             )
+    legacy_mapped_anchor = (
+        actual.get("transaction_id")
+        if spec.table == "custody_component_legs"
+        and "anchor_transaction_id" not in wire_row
+        else None
+    )
     if spec.table == "custody_component_legs":
         # Live FKs are intentionally retractable while the immutable anchor
         # survives. A peer may receive an older/live authored leg after its
@@ -784,7 +791,7 @@ def _prepare_actual_row(
         actual["anchor_transaction_id"] = (
             existing_anchor["anchor_transaction_id"]
             if existing_anchor
-            else actual.get("transaction_id")
+            else legacy_mapped_anchor
         )
     if spec.table == "custody_components" and (
         "expected_leg_count" not in wire_row
@@ -961,6 +968,70 @@ def _apply_row_upsert(
         raise AppError("row upsert event has no row", code="sync_bundle_invalid")
     spec = validate_wire_row(str(event["entity_table"]), wire_row)
     key = str(event["entity_key"])
+    if spec.table == "custody_component_evidence_commitments":
+        # Commitment ids are deterministic by component + ordinal.  Once a
+        # slot exists, an identical replay is a no-op and a differing payload
+        # is an explicit high-stakes conflict.  It must never be resolved by
+        # LWW because that would rewrite what the activating author committed.
+        actual, local_pk = _prepare_actual_row(
+            conn,
+            book=book,
+            spec=spec,
+            wire_row=wire_row,
+            blobs=parsed.blobs,
+            attachments_root=attachments_root,
+            created_files=created_files,
+        )
+        existing = conn.execute(
+            "SELECT * FROM custody_component_evidence_commitments WHERE id = ?",
+            local_pk,
+        ).fetchone()
+        if existing is not None:
+            differing = [
+                field
+                for field in sorted(spec.immutable_fields)
+                if existing[field] != actual[field]
+            ]
+            conflicts = 0
+            for field in differing:
+                _, old_event = _field_state(
+                    conn,
+                    profile_id=book["profile_id"],
+                    table=spec.table,
+                    key=key,
+                    field=field,
+                )
+                if old_event is None:
+                    prior = conn.execute(
+                        """
+                        SELECT * FROM sync_events
+                        WHERE profile_id = ? AND entity_table = ?
+                          AND entity_key = ? AND id != ?
+                        ORDER BY hlc DESC, replica_id DESC, replica_seq DESC, id DESC
+                        LIMIT 1
+                        """,
+                        (book["profile_id"], spec.table, key, event["id"]),
+                    ).fetchone()
+                    old_event = (
+                        _event_from_db(prior)
+                        if prior is not None
+                        else {"id": f"local-row:{existing['id']}"}
+                    )
+                conflicts += int(
+                    _create_conflict(
+                        conn,
+                        profile_id=book["profile_id"],
+                        workspace_id=book["workspace_id"],
+                        table=spec.table,
+                        key=key,
+                        field=field,
+                        old_event=old_event,
+                        new_event=event,
+                        old_value=existing[field],
+                        new_value=actual[field],
+                    )
+                )
+            return False, conflicts
     exists_state, exists_event = _field_state(
         conn,
         profile_id=book["profile_id"],
@@ -1400,17 +1471,20 @@ def _immutable_revision_rejection(
             # this authored row. Its explicit child tombstone is then a safe,
             # idempotent audit fence rather than an erasure.
             return None
-        parent_alive = (
-            conn.execute(
+        if spec.table in {
+            "custody_components",
+            "filed_report_snapshots",
+            "custody_filed_report_impact_resolutions",
+        }:
+            parent_alive = conn.execute(
                 "SELECT 1 FROM profiles WHERE id = ?",
                 (existing["profile_id"],),
             ).fetchone()
-            if spec.table == "custody_components"
-            else conn.execute(
+        else:
+            parent_alive = conn.execute(
                 "SELECT 1 FROM custody_components WHERE id = ?",
                 (existing["component_id"],),
             ).fetchone()
-        )
         if parent_alive:
             return {
                 "event_id": event["id"],
@@ -1448,6 +1522,7 @@ def _immutable_revision_rejection(
         if spec.table in {
             "custody_component_legs",
             "custody_component_allocations",
+            "custody_component_evidence_commitments",
         }:
             component_id = _mapped_id(
                 conn,
@@ -1455,11 +1530,20 @@ def _immutable_revision_rejection(
                 table="custody_components",
                 wire_id=wire_row.get("component_id"),
             )
-            count_field, child_table = (
-                ("expected_leg_count", "custody_component_legs")
-                if spec.table == "custody_component_legs"
-                else ("expected_allocation_count", "custody_component_allocations")
-            )
+            count_field, child_table = {
+                "custody_component_legs": (
+                    "expected_leg_count",
+                    "custody_component_legs",
+                ),
+                "custody_component_allocations": (
+                    "expected_allocation_count",
+                    "custody_component_allocations",
+                ),
+                "custody_component_evidence_commitments": (
+                    "expected_evidence_count",
+                    "custody_component_evidence_commitments",
+                ),
+            }[spec.table]
             component = conn.execute(
                 f"SELECT {count_field} AS expected FROM custody_components WHERE id = ?",
                 (component_id,),
@@ -1484,6 +1568,12 @@ def _immutable_revision_rejection(
                     }
         return None
 
+    # Commitment collisions are handled in ``_apply_row_upsert`` so they
+    # create durable high-stakes conflicts instead of becoming an ordinary
+    # immutable-row rejection.
+    if spec.table == "custody_component_evidence_commitments":
+        return None
+
     changed_fields: list[str] = []
     for field in sorted(spec.immutable_fields):
         # Additive fields omitted by an older signed bundle do not rewrite the
@@ -1501,6 +1591,28 @@ def _immutable_revision_rejection(
             )
         previous = existing[field]
         if previous == incoming:
+            continue
+        if (
+            spec.table == "custody_components"
+            and field == "expected_evidence_count"
+            and previous is None
+            and type(incoming) is int
+            and incoming >= 0
+            and (
+                (
+                    existing["state"] in {"active", "superseded"}
+                    and existing["state"] == wire_row.get("state")
+                )
+                or (
+                    existing["state"] == "draft"
+                    and wire_row.get("state") == "active"
+                )
+            )
+        ):
+            # New activations bind the count at draft -> active. Legacy local
+            # migrations may also fill a once-NULL count without changing the
+            # lifecycle state, but only author commitments (delivered as child
+            # rows) can make that header effective on a receiver.
             continue
         if spec.table == "custody_component_legs" and field == "transaction_id":
             if incoming is None or (
@@ -1671,12 +1783,14 @@ def _apply_contiguous_event(
             created_files=created_files,
         )
         custody_touched = bool(
-            mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+            (mutated or conflicts)
+            and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
         )
     elif event["event_type"] == "row.delete":
         mutated, conflicts = _apply_row_delete(conn, book=book, event=event)
         custody_touched = bool(
-            mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+            (mutated or conflicts)
+            and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
         )
     elif event["event_type"] == "conflict.resolve":
         from .conflicts import apply_resolution_event

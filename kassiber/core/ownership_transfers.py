@@ -673,17 +673,23 @@ def derive_ownership_transfers(
         by_dest: dict[str, dict[str, Any]] = {}
         ambiguous_output = False
         incomplete_owned_output = False
+        external_value_sats = 0
+        external_value_complete = True
         for output in parsed["outputs"]:
             matches = _matches_in_physical_scope(
                 index.lookup_script(output["script"]), physical_scope
             )
+            asset_relation = _leg_asset_relation(output, parsed, row)
             if not matches:
                 # External recipient, OP_RETURN, or a same-script-hex collision
                 # on another chain/network — never an owned leg; folded into the
                 # residual disposal.
+                if asset_relation == "same" and output.get("value_sats") is not None:
+                    external_value_sats += int(output["value_sats"])
+                elif asset_relation != "different":
+                    external_value_complete = False
                 continue
             owner_ids = {str(match.wallet_id) for match in matches}
-            asset_relation = _leg_asset_relation(output, parsed, row)
             if asset_relation == "different":
                 continue
             if asset_relation == "unknown" or output.get("value_sats") is None:
@@ -698,9 +704,10 @@ def derive_ownership_transfers(
             if len(owner_ids) > 1:
                 # Owned by two different non-source wallets (shared descriptor /
                 # address reuse): we cannot route the leg unambiguously. Decline
-                # the whole tx rather than guess a destination.
+                # the owned slice rather than guess a destination. Continue so
+                # graph-proven external outputs remain independently classifiable.
                 ambiguous_output = True
-                break
+                continue
             owner = matches[0]
             dest_wallet_id = str(owner.wallet_id)
             slot = by_dest.setdefault(
@@ -733,6 +740,15 @@ def derive_ownership_transfers(
                     "wallet": _get(row, "wallet_label") or source_wallet_id,
                     "asset": _get(row, "asset"),
                     "external_id": _get(row, "external_id"),
+                    **(
+                        {
+                            "verified_external_msat": (
+                                external_value_sats * SATS_TO_MSAT
+                            )
+                        }
+                        if external_value_complete and external_value_sats > 0
+                        else {}
+                    ),
                 },
             )
             continue
@@ -777,8 +793,14 @@ def derive_ownership_transfers(
         source_fee_msat = int(_get(row, "fee") or 0)
         source_total_msat = source_amount_msat
         fee_inclusive = bool(_get(row, "amount_includes_fee"))
+        fee_attribution = str(
+            _get(row, "observation_fee_attribution") or "unknown"
+        ).strip().lower()
+        implicit_wallet_delta = (
+            fee_inclusive and fee_attribution == "implicit_wallet_delta"
+        )
         exact_folded_fee_msat: int | None = None
-        if fee_inclusive:
+        if fee_inclusive and not implicit_wallet_delta:
             exact_folded_fee_msat = exact_onchain_fee_msat_from_parsed(
                 parsed, asset=str(_get(row, "asset") or "")
             )
@@ -833,7 +855,7 @@ def derive_ownership_transfers(
             continue
 
         folded_gap_msat = max(0, source_total_msat - legs_value_msat)
-        if fee_inclusive and folded_gap_msat > 0:
+        if fee_inclusive and not implicit_wallet_delta and folded_gap_msat > 0:
             if exact_folded_fee_msat is None:
                 _block_source(
                     result,

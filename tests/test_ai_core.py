@@ -234,6 +234,19 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_source_funds_suggest",
             "ui_source_funds_links_bulk_review",
             "ui_transfers_suggest",
+            "ui_custody_coverage_snapshot",
+            "ui_custody_gaps_list",
+            "ui_custody_gaps_review_context",
+            "ui_custody_gaps_history",
+            "ui_custody_gaps_bridge_preview",
+            "ui_custody_gaps_bridge_create",
+            "ui_custody_gaps_dismiss",
+            "ui_custody_gaps_reopen_preview",
+            "ui_custody_gaps_reopen",
+            "ui_custody_gaps_revise_preview",
+            "ui_custody_gaps_revise",
+            "ui_custody_gaps_residual_preview",
+            "ui_custody_gaps_residual_classify",
             "ui_transfers_review_context",
             "ui_transfers_list",
             "ui_transfers_payouts_list",
@@ -348,6 +361,12 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("valuation_amount", leg_properties)
         self.assertNotIn("location_ref", leg_properties)
         self.assertNotIn("wallet_id", leg_properties)
+        self.assertIn("suspense", leg_properties["role"]["enum"])
+        self.assertIn("incomplete draft", leg_properties["role"]["description"])
+        self.assertIn(
+            "Run dry_run=true first",
+            get_tool("ui_transfers_components_bulk_resolve").description,
+        )
         valid_component_arguments = {
             "components": [
                 {

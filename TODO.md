@@ -102,6 +102,52 @@ same verification surface.
     additionally proved pinned LWK 0.18.0's insecure Rustls verifier unusable;
     keep that named compatibility route until a packaged LWK release contains
     the upstream signature-scheme fix and passes the local oracle.
+- [ ] **Custody lineage and missing-wallet reconciliation.** Implement the
+  bounded architecture in
+  [`docs/plan/14-custody-lineage.md`](docs/plan/14-custody-lineage.md). One
+  profile is one legal owner; there is no "all wallets imported" attestation.
+  The terminal invariant is: every observed quantity is represented exactly
+  once, while unresolved custody never becomes a taxable event.
+  - [x] Publish the architecture, vocabulary, scope guards, executable gates,
+    flagship OG-treasury fixture, and terminal stop state.
+  - [x] **Gate 0 — honest pre-split behavior.** Remove row-deletion suspense;
+    retain the conservative disposal plus hard quarantine until the quantity
+    split exists; prove exact source debit, fee separation, wallet holdings,
+    and that the spent source quantity cannot fund a later disposal.
+  - [ ] **Gate 1 — evidence and projection boundary.** Add stable quantity
+    identities, immutable evidence snapshots for authored claims, and canonical
+    physical-event identity; define the single custody
+    claim arbitrator; split quantity projection from finalized tax input; add
+    custody suspense. Complete when a full-engine regression proves candidate,
+    suspense, conflict, and failed-component quantities cannot reach RP2 while
+    a known source-wallet debit still affects observed quantity. Run the first
+    architecture review here before continuing.
+  - [ ] **Gate 2 — interpretation parity.** Port exact same-txid moves,
+    policy/output ownership, fan-out/consolidation, manual pairs, direct payouts,
+    swaps/refunds, Lightning lifecycle, and active custody components into the
+    one arbitrator. Add deterministic, bounded, full-history 1:N/N:1/N:M custody
+    candidates and durable reviewed bridges. Complete when known-correct
+    differential fixtures match, the complete-policy and missing-Whirlpool
+    flagship cases pass, and no later phase can restore or fallback-book an
+    already decided quantity. Add an explicit activatable `suspense` component
+    sink and keep `unresolved` non-activatable. Because basis is global across
+    wallets, later tax output stays provisional when resolving an earlier
+    suspense slice can change lot selection.
+  - [ ] **Gate 3 — product completion.** Add the Custody gaps queue, lineage
+    timeline, guided bridge/residual workflow, downstream and filed-report
+    impact preview, CLI/daemon kinds, localized desktop allowlists, AI-safe read
+    and consented write tools, privacy receipts, migration, replication, and
+    audit history. Complete when the workflow works without raw component JSON,
+    old authored history survives migration, and deterministic operation remains
+    fully usable without AI.
+  - [ ] **Gate 4 — verification and stop.** Run differential, property,
+    migration, performance, fast replay, Bitcoin Core, Electrum, Silent
+    Payments, Liquid/Boltz, CLN/LND, desktop, and repository quality gates.
+    Delete superseded ownership/matching precedence, withholding/restoration,
+    and fallback-disposal paths. Run a simplicity pass plus an independent final
+    architecture/security/privacy and merge-readiness review. Complete only when
+    every terminal-stop condition in the plan is met and no issue-scoped P0/P1
+    remains; move unrelated P2+ findings to separate TODO items and stop.
 
 - [x] Harden the CLI for one-shot agents: `--machine` now implies
   `--non-interactive`; `commands describe` exposes an argparse-derived command
@@ -1220,10 +1266,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     Tests: `test_ownership_transfers.ConflictingSpendTests`. (The broader RBF
     *dropped-import* phantom-disposal P3 above — opposite shape — remains separate.)
   - [x] **Direct-payout common path returned engine rows unsorted (P3, latent,
-    round-2 deep audit).** `_direct_payout_synthetic_rows`' no-payout early-return
-    returned rows in caller order, skipping the `_transaction_row_sort_key` sort the
-    payout path applies — masked in production only because the caller pre-sorts via
-    SQL. Fixed: the early-return now sorts unconditionally. (The gate-ordering /
+    round-2 deep audit).** The former synthetic direct-payout path returned rows
+    in caller order on its no-payout branch. That path was fixed at the time and
+    has since been removed by the custody-lineage cutover: finalized custody tax
+    projection now owns event ordering before RP2. (The gate-ordering /
     same-timestamp determinism part of this finding was already addressed by the
     F5 same-timestamp fix, which removed the old `_gate_order_key`.)
   - [x] **Cross-chain script-collision guard defeated by blank chain/network (P3,

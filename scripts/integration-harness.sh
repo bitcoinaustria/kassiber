@@ -11,6 +11,7 @@ STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
 BOLTZ_COMPOSE_TEMP=""
+BOLTZ_REGTEST_ACTIVE_DIR=""
 SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_BTCPAY_PORT,KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT,KASSIBER_REGTEST_BTCPAY_IMAGE,KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE,KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE,KASSIBER_REGTEST_MEMPOOL_UI_PORT,KASSIBER_REGTEST_MEMPOOL_FRONTEND_IMAGE,KASSIBER_REGTEST_MEMPOOL_BACKEND_IMAGE,KASSIBER_REGTEST_MEMPOOL_DB_IMAGE,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT,KASSIBER_REGTEST_LND_IMAGE,KASSIBER_REGTEST_LND_BACKUP_P2P_PORT,KASSIBER_REGTEST_LND_BACKUP_REST_PORT,KASSIBER_REGTEST_LND_BACKUP_RPC_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
@@ -1593,13 +1594,14 @@ boltz_regtest_stop() {
 run_boltz_liquid() {
   local dir
   dir="$(boltz_regtest_dir)"
+  BOLTZ_REGTEST_ACTIVE_DIR="$dir"
   export KASSIBER_BOLTZ_API_URL="${KASSIBER_BOLTZ_API_URL:-http://127.0.0.1:9001}"
   export KASSIBER_BOLTZ_WS_URL="${KASSIBER_BOLTZ_WS_URL:-ws://127.0.0.1:9004}"
   export KASSIBER_BOLTZ_REGTEST=1
 
   cleanup_boltz() {
     if [ "$STARTED_BOLTZ" -eq 1 ] && [ -z "${KASSIBER_BOLTZ_REGTEST_KEEP:-}" ]; then
-      boltz_regtest_stop "$dir"
+      boltz_regtest_stop "$BOLTZ_REGTEST_ACTIVE_DIR"
     fi
     if [ -n "$BOLTZ_COMPOSE_TEMP" ]; then
       rm -f "$BOLTZ_COMPOSE_TEMP"
@@ -1618,6 +1620,17 @@ run_boltz_liquid() {
 
   wait_for_boltz_liquid
   py -m unittest tests.integration.test_boltz_liquid_regtest -v
+}
+
+run_custody_desktop() {
+  ensure_python_runtime
+  KASSIBER_NO_EGRESS=1 py -m unittest \
+    tests.test_custody_gap_acceptance \
+    tests.test_connection_catalog_drift \
+    -v
+  pnpm --dir ui-tauri exec vitest run \
+    src/routes/CustodyGaps.test.tsx \
+    src/daemon/mock.test.ts
 }
 
 case "$MODE" in
@@ -1648,6 +1661,9 @@ case "$MODE" in
   boltz-liquid)
     run_boltz_liquid
     ;;
+  custody-desktop)
+    run_custody_desktop
+    ;;
   lightning-business)
     run_lightning_business
     ;;
@@ -1667,7 +1683,7 @@ case "$MODE" in
     ( run_regtest_demo_full )
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|btcpay|silent-payments|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|custody-desktop|lightning-business|btcpay|silent-payments|all]" >&2
     exit 2
     ;;
 esac

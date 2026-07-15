@@ -653,7 +653,6 @@ def build_owned_index(
     wallet_id_set = set(wallet_ids)
 
     highest_used = _seed_from_inventory(conn, index, profile_id, wallet_id_set)
-    _seed_from_transactions(conn, index, profile_id, wallets)
 
     for wallet in wallets:
         config = _wallet_config(wallet)
@@ -838,7 +837,7 @@ def _seed_from_transactions(
         return
     placeholders = ", ".join("?" for _ in label_by_id)
     rows = conn.execute(
-        f"SELECT external_id, wallet_id FROM transactions "
+        f"SELECT external_id, wallet_id, raw_json FROM transactions "
         f"WHERE profile_id = ? AND external_id IS NOT NULL AND wallet_id IN ({placeholders})",
         (profile_id, *label_by_id.keys()),
     ).fetchall()
@@ -852,6 +851,75 @@ def _seed_from_transactions(
             chain=chain,
             network=network,
         )
+        _seed_historical_receive_outpoints(
+            index,
+            row["raw_json"],
+            external_id=row["external_id"],
+            wallet_id=wallet_id,
+            chain=chain,
+            network=network,
+        )
+
+
+def _seed_historical_receive_outpoints(
+    index: OwnedIndex,
+    raw_json: Any,
+    *,
+    external_id: Any,
+    wallet_id: str,
+    chain: str,
+    network: str,
+) -> None:
+    """Recover exact spent outpoints from bounded Core receive records.
+
+    ``wallet_utxos`` is a current inventory, so a later spend may remove the
+    only exact ``txid:vout`` ownership fact.  Bitcoin Core's imported receive
+    history retains that vout.  The record is not trusted on its own: its txid
+    must match the transaction row and its address must already resolve only to
+    this wallet in the same physical scope.
+    """
+
+    try:
+        payload = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return
+    if isinstance(payload, list):
+        records = payload
+    elif isinstance(payload, Mapping):
+        details = payload.get("details")
+        records = details if isinstance(details, list) else [payload]
+    else:
+        return
+    expected_txid = str(external_id or "").strip().lower()
+    if not expected_txid:
+        return
+    scope = _index_chain_network(chain, network)
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        if str(record.get("category") or "").strip().lower() not in {
+            "receive",
+            "generate",
+            "immature",
+        }:
+            continue
+        txid = str(record.get("txid") or expected_txid).strip().lower()
+        if txid != expected_txid:
+            continue
+        try:
+            vout = int(record.get("vout"))
+        except (TypeError, ValueError):
+            continue
+        if vout < 0:
+            continue
+        address_matches = [
+            match
+            for match in index.lookup_address(str(record.get("address") or ""))
+            if _index_chain_network(match.chain, match.network) == scope
+        ]
+        if {str(match.wallet_id) for match in address_matches} != {wallet_id}:
+            continue
+        index.add_outpoint(txid, vout, address_matches[0])
 
 
 def _seed_transaction_outpoints(

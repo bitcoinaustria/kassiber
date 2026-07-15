@@ -5,6 +5,7 @@ from pathlib import Path
 
 from kassiber.core import attachments as core_attachments
 from kassiber.core import audit_package
+from kassiber.core import custody_filed_reports
 from kassiber.core import source_funds
 from kassiber.db import open_db, resolve_attachments_root
 from kassiber.errors import AppError
@@ -721,6 +722,290 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertIn("url_references_excluded", warning_codes)
         attachments_root = resolve_attachments_root(self.data_root)
         self.assertTrue((attachments_root / file_attachment["stored_relpath"]).exists())
+
+    def test_audit_summary_includes_canonical_custody_totals_and_hashes_only(self):
+        self._mark_journals_current()
+        self.conn.execute(
+            """
+            INSERT INTO journal_quantity_issues(
+                issue_id, workspace_id, profile_id, issue_type, state, asset,
+                amount_msat, occurred_at, transaction_ids_json, reason,
+                detail_json, blocks_from, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "issue-btc",
+                self.workspace_id,
+                self.profile_id,
+                "unresolved_quantity",
+                "custody_suspense",
+                "BTC",
+                100_000_000,
+                "2026-03-01T00:00:00Z",
+                "[]",
+                "missing_wallet",
+                "{}",
+                "2026-03-01T00:00:00Z",
+                NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_authored_evidence_snapshots(
+                workspace_id, profile_id, subject_kind, subject_id,
+                detail_hash, quantity_hash, payload_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                self.workspace_id,
+                self.profile_id,
+                "custody_claim",
+                "claim-reviewed",
+                "detail-hash-safe",
+                "quantity-hash-safe",
+                '{"raw_secret":"MUST_NOT_LEAVE_LOCAL_DB"}',
+                NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO journal_quantity_postings(
+                posting_id, workspace_id, profile_id, transaction_id,
+                observation_hash, occurred_at, asset, location_kind,
+                location_id, amount_msat, state, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "presumed-external",
+                self.workspace_id,
+                self.profile_id,
+                self.tx_id,
+                "observation-hash",
+                "2026-04-01T09:00:00Z",
+                "BTC",
+                "external",
+                "fallback",
+                25_000_000,
+                "external_presumed",
+                NOW,
+            ),
+        )
+        self.conn.commit()
+
+        summary = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+        )
+
+        self.assertEqual(
+            summary["custody_quantity"]["status"], "known_custody_gaps"
+        )
+        self.assertEqual(
+            summary["custody_quantity"]["unresolved_by_asset"],
+            [{"asset": "BTC", "amount_msat": 100_000_000, "issue_count": 1}],
+        )
+        self.assertEqual(
+            summary["summary"]["custody_gap_status"], "known_custody_gaps"
+        )
+        self.assertEqual(
+            summary["custody_quantity"]["presumed_external"]["by_asset"],
+            [
+                {
+                    "asset": "BTC",
+                    "amount_msat": 25_000_000,
+                    "slice_count": 1,
+                    "transaction_count": 1,
+                }
+            ],
+        )
+        self.assertEqual(
+            summary["custody_quantity"]["warnings"][0]["code"],
+            "external_custody_presumed",
+        )
+        self.assertEqual(
+            summary["authored_custody_evidence"]["hashes"],
+            [
+                {
+                    "subject_kind": "custody_claim",
+                    "subject_id": "claim-reviewed",
+                    "detail_hash": "detail-hash-safe",
+                    "quantity_hash": "quantity-hash-safe",
+                    "created_at": NOW,
+                }
+            ],
+        )
+        warning_codes = {
+            warning["code"]
+            for warning in summary["transactions"][0]["readiness"]["warnings"]
+        }
+        self.assertIn("custody_quantity_unresolved", warning_codes)
+        exported = json.dumps(summary, sort_keys=True)
+        self.assertNotIn("payload_json", exported)
+        self.assertNotIn("MUST_NOT_LEAVE_LOCAL_DB", exported)
+
+    def test_audit_summary_never_calls_stale_empty_quantity_state_clear(self):
+        summary = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+        )
+
+        self.assertEqual(summary["custody_quantity"]["status"], "needs_processing")
+        self.assertNotEqual(
+            summary["custody_quantity"]["status_text"], "No known custody gaps"
+        )
+
+    def test_current_empty_quantity_state_is_qualified_no_known_gaps(self):
+        self._mark_journals_current()
+        summary = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+        )
+
+        self.assertEqual(
+            summary["custody_quantity"]["status"], "no_known_custody_gaps"
+        )
+        self.assertEqual(
+            summary["custody_quantity"]["status_text"], "No known custody gaps"
+        )
+        self.assertIn(
+            "does not assert that every wallet was imported",
+            summary["custody_quantity"]["qualification"],
+        )
+
+    def test_audit_summary_retains_filed_snapshot_and_amendment_history(self):
+        filed = custody_filed_reports.create_filed_report_snapshot(
+            self.conn,
+            workspace_id=self.workspace_id,
+            profile_id=self.profile_id,
+            report_kind="capital-gains",
+            report_state="filed",
+            period_start_year=2026,
+            period_end_year=2026,
+            content_sha256="ab" * 32,
+            classification_summary={
+                "external_presumed": {"count": 1, "amount_msat": 100_000_000}
+            },
+            gain_summary={
+                "fiat_currency": "EUR",
+                "gain_loss_exact": "50.00",
+                "status": "final",
+            },
+            created_at=NOW,
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_filed_report_impacts(
+                id, workspace_id, profile_id, filed_report_snapshot_id,
+                component_id, review_id, gap_id, affected_period_start_year,
+                affected_period_end_year, before_classification_summary_json,
+                after_classification_summary_json, before_gain_summary_json,
+                after_gain_summary_json, amendment_warning, created_at
+            ) VALUES('impact', ?, ?, ?, 'component', 'review', 'gap', 2026, 2026,
+                     '{"external_presumed":{"amount_msat":100000000,"count":1}}',
+                     '{"internal_retained":{"amount_msat":100000000,"count":1}}',
+                     '{"fiat_currency":"EUR","gain_loss_exact":"50.00","status":"final"}',
+                     '{"status":"pending_journal_rebuild"}', ?, ?)
+            """,
+            (
+                self.workspace_id,
+                self.profile_id,
+                filed["id"],
+                custody_filed_reports.AMENDMENT_WARNING,
+                NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO schema_migration_audits(
+                id, migration_name, schema_version, impact_json, created_at
+            ) VALUES('migration', 'custody-durable-evidence-v1', 1, ?, ?)
+            """,
+            (
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "migration": "custody-durable-evidence-v1",
+                        "secret": "MUST_NOT_LEAVE_LOCAL_DB",
+                        "changes": [
+                            {
+                                "name": "durable_transaction_anchors",
+                                "before": {"column_present": False},
+                                "after": {"column_present": True},
+                                "rows_changed": 1,
+                                "explanation": "Bounded migration explanation.",
+                                "raw_evidence": "MUST_NOT_LEAVE_LOCAL_DB",
+                            }
+                        ],
+                    }
+                ),
+                NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_filed_report_impact_resolutions(
+                id, workspace_id, profile_id, impact_id, rebuilt_at,
+                after_classification_summary_json, after_gain_summary_json,
+                classification_changed, gain_changed, amendment_status,
+                created_at
+            ) VALUES('impact-resolution', ?, ?, 'impact', ?,
+                     '{"internal_retained":{"amount_msat":100000000,"count":1}}',
+                     '{"fiat_currency":"EUR","gain_loss_exact":"0.00","status":"final"}',
+                     1, 1, 'review_required', ?)
+            """,
+            (self.workspace_id, self.profile_id, NOW, NOW),
+        )
+        self.conn.commit()
+
+        summary = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+        )
+
+        self.assertEqual(summary["summary"]["filed_report_snapshot_count"], 1)
+        self.assertEqual(summary["summary"]["custody_filed_report_impact_count"], 1)
+        self.assertEqual(
+            summary["summary"]["custody_filed_report_impact_resolution_count"], 1
+        )
+        self.assertEqual(
+            summary["filed_report_snapshots"][0]["content_sha256"], "ab" * 32
+        )
+        self.assertEqual(
+            summary["custody_filed_report_impacts"][0]["after_gain_summary"],
+            {"status": "pending_journal_rebuild"},
+        )
+        self.assertEqual(
+            summary["custody_filed_report_impacts"][0]["resolution"][
+                "amendment_status"
+            ],
+            "review_required",
+        )
+        self.assertEqual(
+            summary["custody_filed_report_impact_resolutions"][0][
+                "after_gain_summary"
+            ]["gain_loss_exact"],
+            "0.00",
+        )
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 1)
+        self.assertEqual(
+            summary["schema_migration_audits"][0]["impact"]["changes"][0][
+                "rows_changed"
+            ],
+            1,
+        )
+        self.assertNotIn("MUST_NOT_LEAVE_LOCAL_DB", json.dumps(summary))
 
 
 if __name__ == "__main__":

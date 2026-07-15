@@ -33,6 +33,11 @@ _PRIVATE_MATERIAL_FIELDS = frozenset(
         "synthesize_change",
     }
 )
+_PUBLIC_SCRIPT_FAMILIES = frozenset({"p2pkh", "p2sh-p2wpkh", "p2wpkh", "p2tr"})
+_PUBLIC_SAMOURAI_SECTIONS = frozenset(
+    {"deposit", "badbank", "premix", "postmix", "ricochet"}
+)
+_PUBLIC_BRANCHES = ("receive", "change")
 
 
 def _value(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
@@ -41,6 +46,59 @@ def _value(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
     if hasattr(row, "get"):
         return row.get(key, default)
     return row[key]
+
+
+def _public_policy_source_name(source_key: Any) -> str:
+    """Reduce a private observer source key to an allowlisted structural class."""
+
+    parts = str(source_key or "").split(":")
+    if parts[0] == "descriptor":
+        return "descriptor-policy"
+    if parts[0] == "xpub":
+        script_family = parts[1] if len(parts) > 1 else "unknown"
+        if script_family in _PUBLIC_SCRIPT_FAMILIES:
+            return f"extended-key:{script_family}"
+        return "extended-key-policy"
+    if parts[0] == "samourai":
+        section = parts[1] if len(parts) > 1 else "source"
+        if section in _PUBLIC_SAMOURAI_SECTIONS:
+            return f"samourai:{section}"
+        return "samourai:source"
+    return "imported-policy"
+
+
+def _public_observer_name(observer_kind: Any) -> str:
+    """Expose only built-in observer classes, never configured source names."""
+
+    value = str(observer_kind or "").lower()
+    if value in {"bdk", "lwk", "bitcoinrpc"}:
+        return value
+    if value.startswith("compatibility"):
+        return "compatibility"
+    return "observer"
+
+
+def _empty_coverage_branch(branch: str) -> dict[str, Any]:
+    return {
+        "branch": branch,
+        "scanned_to_exclusive": None,
+        "highest_used": None,
+        "observed_at": None,
+    }
+
+
+def _declared_coverage_branches(raw: Any) -> list[dict[str, Any]]:
+    try:
+        declared = json.loads(raw or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(declared, list):
+        return []
+    return [
+        _empty_coverage_branch(branch)
+        for branch in _PUBLIC_BRANCHES
+        if branch in declared
+    ]
 
 
 def private_policy_material(config: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -278,9 +336,13 @@ def technical_coverage_snapshot(
         SELECT
             epoch.id AS epoch_id,
             epoch.wallet_id,
+            wallet.label AS wallet_label,
             epoch.chain,
             epoch.network,
             epoch.status,
+            epoch.created_at AS epoch_created_at,
+            epoch.retired_at,
+            source.id AS source_id,
             source.source_key,
             source.observer_kind,
             source.branch_keys_json,
@@ -289,17 +351,96 @@ def technical_coverage_snapshot(
             coverage.highest_used,
             coverage.observed_at
         FROM wallet_policy_epochs epoch
+        JOIN wallets wallet ON wallet.id = epoch.wallet_id
         LEFT JOIN wallet_policy_sources source ON source.epoch_id = epoch.id
         LEFT JOIN wallet_policy_coverage_witnesses coverage ON coverage.source_id = source.id
         WHERE epoch.profile_id = ?
-        ORDER BY epoch.created_at, epoch.id, source.source_key, coverage.branch_key
+        ORDER BY wallet.label, epoch.created_at, epoch.id, source.source_key, coverage.branch_key
         """,
         (profile_id,),
     ).fetchall()
+
+    wallets_by_id: dict[str, dict[str, Any]] = {}
+    epochs_by_id: dict[str, dict[str, Any]] = {}
+    sources_by_id: dict[str, dict[str, Any]] = {}
+    covered_branch_count = 0
+    for row in rows:
+        wallet_label = str(row["wallet_label"] or "Wallet")
+        wallet = wallets_by_id.setdefault(
+            str(row["wallet_id"]),
+            {"wallet_label": wallet_label, "epochs": []},
+        )
+        epoch_id = str(row["epoch_id"])
+        epoch = epochs_by_id.get(epoch_id)
+        if epoch is None:
+            epoch = {
+                "epoch_id": epoch_id,
+                "status": str(row["status"]),
+                "chain": str(row["chain"]),
+                "network": str(row["network"]),
+                "created_at": row["epoch_created_at"],
+                "retired_at": row["retired_at"],
+                "sources": [],
+            }
+            epochs_by_id[epoch_id] = epoch
+            wallet["epochs"].append(epoch)
+
+        if row["source_id"] is None:
+            continue
+        source_id = str(row["source_id"])
+        source = sources_by_id.get(source_id)
+        if source is None:
+            source = {
+                "source": _public_policy_source_name(row["source_key"]),
+                "observer_kind": _public_observer_name(row["observer_kind"]),
+                "branches": _declared_coverage_branches(row["branch_keys_json"]),
+            }
+            sources_by_id[source_id] = source
+            epoch["sources"].append(source)
+
+        branch_key = row["branch_key"]
+        if branch_key not in _PUBLIC_BRANCHES:
+            continue
+        branch = next(
+            (item for item in source["branches"] if item["branch"] == branch_key),
+            None,
+        )
+        if branch is None:
+            branch = _empty_coverage_branch(str(branch_key))
+            source["branches"].append(branch)
+        if row["scanned_to_exclusive"] is not None:
+            branch.update(
+                {
+                    "scanned_to_exclusive": int(row["scanned_to_exclusive"]),
+                    "highest_used": (
+                        int(row["highest_used"])
+                        if row["highest_used"] is not None
+                        else None
+                    ),
+                    "observed_at": row["observed_at"],
+                }
+            )
+            covered_branch_count += 1
+
+    wallets = list(wallets_by_id.values())
+    epoch_count = len(epochs_by_id)
+    active_epoch_count = sum(
+        epoch["status"] == "active" for epoch in epochs_by_id.values()
+    )
     return {
+        "schema_version": 1,
         "scope": "imported_policy_technical_coverage",
         "ownership_universe_known": False,
-        "epochs": [dict(row) for row in rows],
+        "coverage_can_clear_custody_gaps": False,
+        "summary": {
+            "wallet_count": len(wallets),
+            "epoch_count": epoch_count,
+            "active_epoch_count": active_epoch_count,
+            "retired_epoch_count": epoch_count - active_epoch_count,
+            "source_count": len(sources_by_id),
+            "covered_branch_count": covered_branch_count,
+        },
+        "wallets": wallets,
     }
 
 

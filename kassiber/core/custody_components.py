@@ -38,6 +38,7 @@ from ..transfers import (
     onchain_transfer_scope,
 )
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
+from .chain_observer.provenance import row_has_current_authoritative_observation
 
 
 COMPONENT_TYPES = frozenset(
@@ -59,7 +60,19 @@ AUTHORED_SOURCES = frozenset({"user", "cli", "gui", "ai_tool"})
 # still rejecting materially reversed routes.
 CUSTODY_CHRONOLOGY_SKEW_TOLERANCE = timedelta(hours=48)
 LEG_ROLES = frozenset(
-    {"source", "destination", "fee", "external", "retained", "unresolved"}
+    {
+        "source",
+        "destination",
+        "fee",
+        "external",
+        "retained",
+        # ``unresolved`` is an incomplete authoring placeholder and therefore
+        # always blocks activation. ``suspense`` is different: it is an exact,
+        # explicitly reviewed residual quantity whose economic classification
+        # remains open while the rest of a manual bridge may become effective.
+        "unresolved",
+        "suspense",
+    }
 )
 SINK_ROLES = LEG_ROLES - {"source"}
 
@@ -540,7 +553,7 @@ def _inferred_allocation_leg_pairs(
     attributed_sinks = [
         sink
         for sink in positive_sinks
-        if sink.get("role") in {"fee", "external", "unresolved"}
+        if sink.get("role") in {"fee", "external", "unresolved", "suspense"}
     ]
     if len(owned_sinks) == 1 and not attributed_sinks:
         return [(source, owned_sinks[0]) for source in positive_sources]
@@ -1070,7 +1083,9 @@ def _validate_allocations(
     else:
         owned_sinks = [leg for leg in positive_sinks if leg["role"] in {"destination", "retained"}]
         attributed_sinks = [
-            leg for leg in positive_sinks if leg["role"] in {"fee", "external", "unresolved"}
+            leg
+            for leg in positive_sinks
+            if leg["role"] in {"fee", "external", "unresolved", "suspense"}
         ]
         unambiguous = (
             len(positive_sources) == 1 and len(positive_sinks) == 1
@@ -1157,8 +1172,15 @@ def _balance_rows(
     skip_missing: bool = False,
 ) -> list[dict[str, Any]]:
     buckets: dict[tuple[str, ...], dict[str, int]] = defaultdict(
-        lambda: {"source": 0, "destination": 0, "fee": 0, "external": 0,
-                 "retained": 0, "unresolved": 0}
+        lambda: {
+            "source": 0,
+            "destination": 0,
+            "fee": 0,
+            "external": 0,
+            "retained": 0,
+            "unresolved": 0,
+            "suspense": 0,
+        }
     )
     for leg in legs:
         values = tuple(leg.get(field) for field in key_fields)
@@ -1182,6 +1204,7 @@ def _balance_rows(
                 "external_msat" if amount_field == "amount_msat" else "external_amount": totals["external"],
                 "retained_msat" if amount_field == "amount_msat" else "retained_amount": totals["retained"],
                 "unresolved_msat" if amount_field == "amount_msat" else "unresolved_amount": totals["unresolved"],
+                "suspense_msat" if amount_field == "amount_msat" else "suspense_amount": totals["suspense"],
                 "sink_msat" if amount_field == "amount_msat" else "sink_amount": sinks,
                 "residual_msat" if amount_field == "amount_msat" else "residual_amount": totals["source"] - sinks,
             }
@@ -1295,6 +1318,8 @@ def validate_conservation(
     conservation_mode: str = "quantity",
     conversion_policy: str | None = None,
     conversion_reviewed: bool = False,
+    component_type: str | None = None,
+    evidence_grade: str | None = None,
 ) -> dict[str, Any]:
     """Return an audit-friendly, deterministic activation validation report.
 
@@ -1312,6 +1337,36 @@ def validate_conservation(
         leg.setdefault("ordinal", index)
     materialized_allocations = [dict(allocation) for allocation in (allocations or [])]
     issues: list[dict[str, Any]] = []
+    unknown_roles = sorted(
+        {
+            str(leg.get("role") or "")
+            for leg in materialized
+            if leg.get("role") not in LEG_ROLES
+        }
+    )
+    if unknown_roles:
+        # Replicated rows and newer databases can bypass the normal input
+        # normalizer. Return a typed validation result instead of indexing a
+        # fixed role bucket and crashing with KeyError.
+        return {
+            "conservation_mode": mode,
+            "activatable": False,
+            "issues": [
+                {
+                    "code": "custody_component_leg_role_unknown",
+                    "message": "component contains a leg role unsupported by this application",
+                    "roles": unknown_roles,
+                }
+            ],
+            "unresolved_msat": 0,
+            "suspense_msat": 0,
+            "source_msat": 0,
+            "owned_destination_msat": 0,
+            "by_asset": [],
+            "by_conservation_unit": [],
+            "by_valuation_unit": [],
+            "allocations": {"valid": False, "issues": [], "edges": []},
+        }
     source_total = sum(int(leg.get("amount_msat") or 0) for leg in materialized if leg.get("role") == "source")
     owned_destination_total = sum(
         int(leg.get("amount_msat") or 0)
@@ -1323,6 +1378,12 @@ def validate_conservation(
         for leg in materialized
         if leg.get("role") == "unresolved"
     )
+    suspense_legs = [
+        leg
+        for leg in materialized
+        if leg.get("role") == "suspense" and int(leg.get("amount_msat") or 0) > 0
+    ]
+    suspense_total = sum(int(leg["amount_msat"]) for leg in suspense_legs)
 
     if not materialized:
         issues.append({"code": "no_legs", "message": "component has no legs"})
@@ -1343,6 +1404,130 @@ def validate_conservation(
                 "amount_msat": unresolved_total,
             }
         )
+    if suspense_legs:
+        if mode != "quantity":
+            issues.append(
+                {
+                    "code": "custody_suspense_quantity_mode_required",
+                    "message": "custody suspense is supported only for exact quantity conservation",
+                }
+            )
+        if component_type != "manual_bridge" or str(evidence_grade or "").lower() != "reviewed":
+            issues.append(
+                {
+                    "code": "custody_suspense_review_required",
+                    "message": (
+                        "custody suspense requires an explicitly reviewed manual bridge"
+                    ),
+                }
+            )
+        if not materialized_allocations:
+            issues.append(
+                {
+                    "code": "custody_suspense_allocation_required",
+                    "message": "custody suspense requires exact explicit source allocations",
+                }
+            )
+        for leg in suspense_legs:
+            forbidden = [
+                field
+                for field in ("wallet_id", "transaction_id", "anchor_transaction_id")
+                if leg.get(field) not in (None, "")
+            ]
+            if forbidden:
+                issues.append(
+                    {
+                        "code": "custody_suspense_anchor_invalid",
+                        "message": "a suspense sink cannot claim a wallet or transaction location",
+                        "leg_id": leg["id"],
+                        "fields": forbidden,
+                    }
+                )
+            if not leg.get("occurred_at"):
+                issues.append(
+                    {
+                        "code": "custody_suspense_occurred_at_missing",
+                        "message": "a suspense sink begins at its observed source debit time",
+                        "leg_id": leg["id"],
+                    }
+                )
+
+        by_id = {str(leg["id"]): leg for leg in materialized}
+        for allocation in materialized_allocations:
+            sink = by_id.get(str(allocation.get("sink_leg_id")))
+            if sink is None or sink.get("role") != "suspense":
+                continue
+            source = by_id.get(str(allocation.get("source_leg_id")))
+            if source is None:
+                continue
+            issue_base = {
+                "allocation_id": allocation.get("id"),
+                "source_leg_id": source["id"],
+                "suspense_leg_id": sink["id"],
+            }
+            if source.get("transaction_id") in (None, ""):
+                issues.append(
+                    {
+                        "code": "custody_suspense_observed_source_required",
+                        "message": "a suspense allocation must begin at an observed outbound debit",
+                        **issue_base,
+                    }
+                )
+            if normalize_asset_code(source.get("asset")) != normalize_asset_code(
+                sink.get("asset")
+            ):
+                issues.append(
+                    {
+                        "code": "custody_suspense_asset_mismatch",
+                        "message": "a suspense residual must retain its source asset",
+                        **issue_base,
+                    }
+                )
+            if (
+                source.get("exposure") != sink.get("exposure")
+                or source.get("conservation_unit")
+                != sink.get("conservation_unit")
+                or int(allocation.get("source_amount_msat") or 0)
+                != int(allocation.get("sink_amount_msat") or 0)
+            ):
+                issues.append(
+                    {
+                        "code": "custody_suspense_quantity_mismatch",
+                        "message": "a suspense residual must preserve exact source quantity units",
+                        **issue_base,
+                    }
+                )
+            source_scope = _quantity_network_scope(source)
+            sink_scope = _quantity_network_scope(sink)
+            if (
+                not source_scope["valid"]
+                or not sink_scope["valid"]
+                or source_scope.get("domain") is None
+                or source_scope.get("domain") != sink_scope.get("domain")
+            ):
+                issues.append(
+                    {
+                        "code": "custody_suspense_network_mismatch",
+                        "message": "a suspense residual must remain in the source network domain",
+                        "source_scope": source_scope,
+                        "suspense_scope": sink_scope,
+                        **issue_base,
+                    }
+                )
+            if (
+                parse_iso_datetime_or_none(source.get("occurred_at")) is None
+                or parse_iso_datetime_or_none(sink.get("occurred_at"))
+                != parse_iso_datetime_or_none(source.get("occurred_at"))
+            ):
+                issues.append(
+                    {
+                        "code": "custody_suspense_time_mismatch",
+                        "message": "suspense must begin at the exact source debit time",
+                        "source_occurred_at": source.get("occurred_at"),
+                        "suspense_occurred_at": sink.get("occurred_at"),
+                        **issue_base,
+                    }
+                )
     value_only_losses = [
         str(leg.get("id") or int(leg.get("ordinal", index)))
         for index, leg in enumerate(materialized)
@@ -1515,6 +1700,7 @@ def validate_conservation(
         "activatable": not issues,
         "issues": issues,
         "unresolved_msat": unresolved_total,
+        "suspense_msat": suspense_total,
         "source_msat": source_total,
         "owned_destination_msat": owned_destination_total,
         "by_asset": by_asset,
@@ -1746,19 +1932,24 @@ def _active_membership_conflicts(
         {"transaction_id": row["transaction_id"], "component_id": row["component_id"]}
         for row in conn.execute(
             """
-            SELECT DISTINCT mine.transaction_id, other.component_id
+            SELECT DISTINCT
+                   COALESCE(mine.anchor_transaction_id, mine.transaction_id)
+                       AS transaction_id,
+                   other.component_id
             FROM custody_component_legs mine
             JOIN custody_component_legs other
               ON other.profile_id = mine.profile_id
-             AND other.transaction_id = mine.transaction_id
+             AND COALESCE(other.anchor_transaction_id, other.transaction_id)
+                 = COALESCE(mine.anchor_transaction_id, mine.transaction_id)
              AND other.component_id != mine.component_id
             JOIN custody_components other_component
               ON other_component.id = other.component_id
              AND other_component.state = 'active'
             WHERE mine.component_id = ?
               AND mine.profile_id = ?
-              AND mine.transaction_id IS NOT NULL
-            ORDER BY mine.transaction_id, other.component_id
+              AND COALESCE(mine.anchor_transaction_id, mine.transaction_id)
+                  IS NOT NULL
+            ORDER BY transaction_id, other.component_id
             """,
             (component_id, profile_id),
         ).fetchall()
@@ -1782,7 +1973,7 @@ def _replicated_lineage_issues(
           AND status = 'open'
           AND field IN (
               'state', 'activated_at', 'superseded_by_component_id',
-              'superseded_at', '__exists__'
+              'superseded_at', 'expected_evidence_count', '__exists__'
           )
         ORDER BY field, id
         """,
@@ -2054,6 +2245,16 @@ def _scoped_leg_copies(
             if (
                 transaction_id not in (None, "")
                 and canonical_occurred_at not in (None, "")
+                # A current authoritative observer may refine chronology after
+                # activation without changing event identity or quantity. Keep
+                # the authored timestamp for route-order validation in that
+                # case; _db_anchor_validation surfaces the drift as a typed
+                # review warning. Generic/unproven mismatches remain blocking.
+                and not (
+                    scoped_leg.get("occurred_at") not in (None, "")
+                    and scoped_leg.get("occurred_at") != canonical_occurred_at
+                    and row_has_current_authoritative_observation(evidence_row)
+                )
             ):
                 scoped_leg["occurred_at"] = canonical_occurred_at
         scoped_legs.append(scoped_leg)
@@ -2077,11 +2278,21 @@ def _load_scope_evidence(
         row = conn.execute(
             """
             SELECT t.id, t.wallet_id, t.direction, t.asset, t.amount, t.fee,
-                   t.amount_includes_fee, t.occurred_at, t.excluded,
+                   t.amount_includes_fee, t.occurred_at, t.confirmed_at,
+                   t.excluded,
                    t.external_id, t.raw_json,
+                   observation.authority_version
+                       AS observation_authority_version,
+                   observation.graph_hash AS observation_graph_hash,
+                   observation.quantity_hash AS observation_quantity_hash,
+                   observation.fee_attribution AS observation_fee_attribution,
+                   observation.application_revision
+                       AS observation_application_revision,
                    w.kind AS wallet_kind, w.config_json AS config_json
             FROM transactions t
             JOIN wallets w ON w.id = t.wallet_id
+            LEFT JOIN chain_observation_provenance observation
+              ON observation.transaction_id = t.id
             WHERE t.id = ?
             """,
             (transaction_id,),
@@ -2222,6 +2433,7 @@ def _db_anchor_validation(
     """Validate evidence-row direction, scope facts, and complete coverage."""
 
     issues: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
     by_transaction: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     transaction_rows: dict[str, sqlite3.Row] = {}
     wallet_rows: dict[str, sqlite3.Row] = {}
@@ -2243,10 +2455,20 @@ def _db_anchor_validation(
         transaction_id = leg.get("transaction_id")
         anchor_transaction_id = leg.get("anchor_transaction_id") or transaction_id
         role = str(leg["role"])
+        reviewed_untracked_location = bool(
+            role == "retained"
+            and str(leg.get("rail") or "") == "untracked"
+            and (
+                leg.get("location_ref")
+                or str(leg.get("notes") or "")
+                == "reviewed_residual:retained_custody"
+            )
+        )
         if (
             role in {"source", "destination", "retained"}
             and int(leg.get("amount_msat") or 0) > 0
             and not leg.get("wallet_id")
+            and not reviewed_untracked_location
         ):
             issues.append(
                 {
@@ -2270,7 +2492,7 @@ def _db_anchor_validation(
                 )
                 continue
             if role in {"source", "destination", "retained"} and int(leg["amount_msat"]) > 0:
-                if not leg.get("wallet_id"):
+                if not leg.get("wallet_id") and not reviewed_untracked_location:
                     issues.append(
                         {
                             "code": "transactionless_leg_wallet_missing",
@@ -2303,11 +2525,22 @@ def _db_anchor_validation(
             row = conn.execute(
                 """
                 SELECT t.id, t.wallet_id, t.direction, t.asset, t.amount, t.fee,
-                       t.amount_includes_fee, t.occurred_at, t.excluded,
+                       t.amount_includes_fee, t.occurred_at, t.confirmed_at,
+                       t.excluded,
                        t.external_id, t.raw_json,
+                       observation.authority_version
+                           AS observation_authority_version,
+                       observation.graph_hash AS observation_graph_hash,
+                       observation.quantity_hash AS observation_quantity_hash,
+                       observation.fee_attribution
+                           AS observation_fee_attribution,
+                       observation.application_revision
+                           AS observation_application_revision,
                        w.kind AS wallet_kind, w.config_json AS config_json
                 FROM transactions t
                 JOIN wallets w ON w.id = t.wallet_id
+                LEFT JOIN chain_observation_provenance observation
+                  ON observation.transaction_id = t.id
                 WHERE t.id = ?
                 """,
                 (tx_id,),
@@ -2389,7 +2622,7 @@ def _db_anchor_validation(
                     "transaction_id": tx_id,
                 }
             )
-        elif row_occurred_at is None or leg_occurred_at != row_occurred_at:
+        elif row_occurred_at is None:
             issues.append(
                 {
                     "code": "anchor_occurred_at_mismatch",
@@ -2399,6 +2632,39 @@ def _db_anchor_validation(
                     "transaction_occurred_at": row["occurred_at"],
                 }
             )
+        elif leg_occurred_at != row_occurred_at:
+            mismatch = {
+                "leg_id": leg["id"],
+                "transaction_id": tx_id,
+                "leg_occurred_at": leg.get("occurred_at"),
+                "transaction_occurred_at": row["occurred_at"],
+            }
+            if row_has_current_authoritative_observation(row):
+                warnings.append(
+                    {
+                        "code": "anchor_observer_chronology_changed",
+                        "severity": "warning",
+                        "review_required": True,
+                        "message": (
+                            "an authoritative observer refined this anchor's "
+                            "chronology without changing its event identity or quantity"
+                        ),
+                        "authority_version": int(
+                            row["observation_authority_version"]
+                        ),
+                        "application_revision": row[
+                            "observation_application_revision"
+                        ],
+                        **mismatch,
+                    }
+                )
+            else:
+                issues.append(
+                    {
+                        "code": "anchor_occurred_at_mismatch",
+                        **mismatch,
+                    }
+                )
 
     coverage: list[dict[str, Any]] = []
     for transaction_id in sorted(by_transaction):
@@ -2432,6 +2698,47 @@ def _db_anchor_validation(
                 {
                     "code": "anchor_coverage_mismatch",
                     **coverage_row,
+                }
+            )
+
+    # A reviewed suspense residual must never absorb an already-observed miner
+    # fee. Components containing suspense require explicit allocations, so the
+    # exact fee split can be checked per anchored source leg without inference.
+    legs_by_id = {str(leg["id"]): leg for leg in legs}
+    allocations_by_source: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for allocation in allocations:
+        allocations_by_source[str(allocation.get("source_leg_id"))].append(allocation)
+    for source_id, source_allocations in allocations_by_source.items():
+        source = legs_by_id.get(source_id)
+        if source is None:
+            continue
+        sinks = [
+            legs_by_id.get(str(allocation.get("sink_leg_id")))
+            for allocation in source_allocations
+        ]
+        if not any(sink is not None and sink.get("role") == "suspense" for sink in sinks):
+            continue
+        transaction_id = source.get("transaction_id")
+        row = transaction_rows.get(str(transaction_id)) if transaction_id else None
+        if row is None:
+            continue
+        allocated_fee = sum(
+            int(allocation.get("source_amount_msat") or 0)
+            for allocation, sink in zip(source_allocations, sinks)
+            if sink is not None and sink.get("role") == "fee"
+        )
+        observed_fee = int(row["fee"] or 0)
+        if allocated_fee != observed_fee:
+            issues.append(
+                {
+                    "code": "custody_suspense_fee_coverage_mismatch",
+                    "message": (
+                        "an observed miner fee must stay separate from custody suspense"
+                    ),
+                    "source_leg_id": source_id,
+                    "transaction_id": str(transaction_id),
+                    "observed_fee_msat": observed_fee,
+                    "allocated_fee_msat": allocated_fee,
                 }
             )
 
@@ -2551,7 +2858,12 @@ def _db_anchor_validation(
                 "message": "an effective component requires at least one imported transaction anchor",
             }
         )
-    return {"valid": not issues, "issues": issues, "transaction_coverage": coverage}
+    return {
+        "valid": not issues,
+        "issues": issues,
+        "warnings": warnings,
+        "transaction_coverage": coverage,
+    }
 
 
 def _profile_active_route_issues(
@@ -2653,10 +2965,13 @@ def _materialize_component(
         conservation_mode=row["conservation_mode"],
         conversion_policy=row["conversion_policy"],
         conversion_reviewed=bool(row["conversion_reviewed"]),
+        component_type=row["component_type"],
+        evidence_grade=row["evidence_grade"],
     )
     commitment_issues: list[dict[str, Any]] = []
     expected_leg_count = row["expected_leg_count"]
     expected_allocation_count = row["expected_allocation_count"]
+    expected_evidence_count = row["expected_evidence_count"]
     if expected_leg_count is None or expected_allocation_count is None:
         commitment_issues.append(
             {
@@ -2688,6 +3003,83 @@ def _materialize_component(
         validation = dict(validation)
         validation["activatable"] = False
         validation["issues"] = [*validation["issues"], *commitment_issues]
+    evidence_status: dict[str, Any] = {
+        "valid": row["state"] != "active",
+        "status": "not_required_until_activation",
+        "expected_count": (
+            None
+            if expected_evidence_count is None
+            else int(expected_evidence_count)
+        ),
+        "commitment_count": 0,
+    }
+    native_support_status: dict[str, Any] = {
+        "status": "unverified",
+        "usable": True,
+        "boundary_count": 0,
+        "supported_boundary_count": 0,
+        "partially_supported_boundary_count": 0,
+        "contradicted_boundary_count": 0,
+    }
+    if row["state"] == "active":
+        from .custody_quantity_store import (
+            component_evidence_status,
+            component_native_support_status,
+        )
+
+        evidence_status = component_evidence_status(
+            conn,
+            {
+                "id": row["id"],
+                "profile_id": row["profile_id"],
+                "expected_evidence_count": expected_evidence_count,
+                "legs": legs,
+            },
+        )
+        if not evidence_status["valid"]:
+            validation = dict(validation)
+            validation["activatable"] = False
+            validation["issues"] = [
+                *validation["issues"],
+                {
+                    "code": "component_evidence_commitment_invalid",
+                    "message": (
+                        "author-bound activation evidence is missing, incomplete, "
+                        "conflicted, or no longer matches local canonical anchors"
+                    ),
+                    "status": evidence_status["status"],
+                    "expected": evidence_status.get("expected_count"),
+                    "actual": evidence_status.get("commitment_count"),
+                },
+            ]
+        native_support_status = component_native_support_status(
+            conn,
+            {
+                "id": row["id"],
+                "profile_id": row["profile_id"],
+                "legs": legs,
+                "allocations": allocations,
+            },
+        )
+        if not native_support_status["usable"]:
+            validation = dict(validation)
+            validation["activatable"] = False
+            validation["issues"] = [
+                *validation["issues"],
+                {
+                    "code": "component_native_support_contradicted",
+                    "message": (
+                        "recovered same-native-event policy evidence conflicts "
+                        "with an authored component boundary"
+                    ),
+                    "supported_boundaries": native_support_status[
+                        "supported_boundary_count"
+                    ],
+                    "contradicted_boundaries": native_support_status[
+                        "contradicted_boundary_count"
+                    ],
+                },
+            ]
     anchor_validation = _db_anchor_validation(
         conn,
         legs,
@@ -2699,6 +3091,12 @@ def _materialize_component(
         validation = dict(validation)
         validation["activatable"] = False
         validation["issues"] = [*validation["issues"], *anchor_validation["issues"]]
+    if anchor_validation["warnings"]:
+        validation = dict(validation)
+        validation["warnings"] = [
+            *validation.get("warnings", ()),
+            *anchor_validation["warnings"],
+        ]
     validation["anchors"] = anchor_validation
     lineage_issues = _replicated_lineage_issues(conn, row)
     if lineage_issues:
@@ -2750,6 +3148,13 @@ def _materialize_component(
             if expected_allocation_count is None
             else int(expected_allocation_count)
         ),
+        "expected_evidence_count": (
+            None
+            if expected_evidence_count is None
+            else int(expected_evidence_count)
+        ),
+        "evidence_status": evidence_status,
+        "native_support_status": native_support_status,
         "authored_source": row["authored_source"] or "user",
         "notes": row["notes"],
         "change_reason": row["change_reason"],
@@ -3156,6 +3561,12 @@ def activate_component(
         failed = dict(component)
         failed["validation"] = validation
         raise _activation_error(failed)
+    if component["state"] == "active":
+        # Idempotent reads of a received active revision must not manufacture a
+        # device-local activation snapshot from the receiver's current rows.
+        # The author-bound replicated commitments remain the sole activation
+        # proof; membership reconciliation is handled by sync replay.
+        return component
 
     timestamp = activated_at or _now_iso()
     transaction_ids = sorted(
@@ -3201,15 +3612,26 @@ def activate_component(
                 "custody_component_membership_conflict",
                 details={"component_id": component_id, "transaction_ids": transaction_ids},
             ) from exc
+        # Bind the exact current observation evidence while the reviewed
+        # activation is still inside this savepoint.  Raw payload remains
+        # local; the deterministic payload-free commitments replicate.
+        from .custody_quantity_store import capture_component_evidence
+
+        expected_evidence_count = capture_component_evidence(
+            conn,
+            component,
+            created_at=timestamp,
+        )
         if component["state"] != "active":
             conn.execute(
                 """
                 UPDATE custody_components
                 SET state = 'active', activated_at = ?, superseded_at = NULL,
-                    superseded_by_component_id = NULL
+                    superseded_by_component_id = NULL,
+                    expected_evidence_count = ?
                 WHERE id = ? AND state = 'draft'
                 """,
-                (timestamp, component_id),
+                (timestamp, expected_evidence_count, component_id),
             )
             if not conn.execute(
                 "SELECT 1 FROM custody_components WHERE id = ? AND state = 'active'",
@@ -3321,7 +3743,8 @@ def list_components(
     if transaction_id is not None:
         where.append(
             "EXISTS (SELECT 1 FROM custody_component_legs l "
-            "WHERE l.component_id = c.id AND l.transaction_id = ?)"
+            "WHERE l.component_id = c.id "
+            "AND COALESCE(l.anchor_transaction_id, l.transaction_id) = ?)"
         )
         params.append(transaction_id)
     query_limit = "" if effective_only else "LIMIT ?"
@@ -3434,7 +3857,8 @@ def iter_authored_active_components(
     if transaction_id is not None:
         transaction_filter = (
             "AND EXISTS (SELECT 1 FROM custody_component_legs l "
-            "WHERE l.component_id = c.id AND l.transaction_id = ?)"
+            "WHERE l.component_id = c.id "
+            "AND COALESCE(l.anchor_transaction_id, l.transaction_id) = ?)"
         )
         params.append(transaction_id)
     rows = conn.execute(

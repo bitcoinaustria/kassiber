@@ -39,6 +39,7 @@ from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
 from . import custody_components as core_custody_components
+from . import custody_quantity_store as core_custody_quantity_store
 from . import lightning as core_lightning
 from . import rates as core_rates
 from . import silent_payments
@@ -1189,6 +1190,48 @@ def _journal_wallet_holdings_balances(
     return None
 
 
+def _canonical_quantity_processed(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> bool:
+    try:
+        row = conn.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM journal_quantity_postings WHERE profile_id = ?
+            ) OR EXISTS(
+                SELECT 1 FROM journal_quantity_issues WHERE profile_id = ?
+            ) AS present
+            """,
+            (profile_id, profile_id),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    return bool(row and row["present"])
+
+
+def _canonical_wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float] | None:
+    if not _canonical_quantity_processed(conn, profile_id):
+        return None
+    rows = conn.execute(
+        """
+        SELECT location_id AS wallet_id, SUM(amount_msat) AS amount_msat
+        FROM journal_quantity_balances
+        WHERE profile_id = ? AND location_kind = 'wallet'
+          AND asset IN ('BTC', 'LBTC')
+        GROUP BY location_id
+        """,
+        (profile_id,),
+    ).fetchall()
+    return {
+        str(row["wallet_id"]): float(msat_to_btc(row["amount_msat"] or 0))
+        for row in rows
+    }
+
+
 def _journal_entry_wallet_balances(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1215,6 +1258,23 @@ def _journal_quantity_deltas_by_transaction(
     conn: sqlite3.Connection,
     profile_id: str,
 ) -> dict[str, Decimal]:
+    if _canonical_quantity_processed(conn, profile_id):
+        rows = conn.execute(
+            """
+            SELECT transaction_id, SUM(amount_msat) AS amount_msat
+            FROM journal_quantity_postings
+            WHERE profile_id = ? AND location_kind = 'wallet'
+              AND state = 'observed' AND transaction_id IS NOT NULL
+              AND asset IN ('BTC', 'LBTC')
+            GROUP BY transaction_id
+            ORDER BY MIN(occurred_at), transaction_id
+            """,
+            (profile_id,),
+        ).fetchall()
+        return {
+            str(row["transaction_id"]): msat_to_btc(row["amount_msat"] or 0)
+            for row in rows
+        }
     rows = conn.execute(
         """
         SELECT transaction_id, entry_type, quantity
@@ -1240,6 +1300,24 @@ def _journal_quantity_deltas_by_day(
     conn: sqlite3.Connection,
     profile_id: str,
 ) -> dict[date, Decimal]:
+    if _canonical_quantity_processed(conn, profile_id):
+        rows = conn.execute(
+            """
+            SELECT occurred_at, SUM(amount_msat) AS amount_msat
+            FROM journal_quantity_postings
+            WHERE profile_id = ? AND location_kind = 'wallet'
+              AND state = 'observed' AND asset IN ('BTC', 'LBTC')
+            GROUP BY occurred_at
+            ORDER BY occurred_at
+            """,
+            (profile_id,),
+        ).fetchall()
+        deltas: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+        for row in rows:
+            day = _parse_day(row["occurred_at"])
+            if day is not None:
+                deltas[day] += msat_to_btc(row["amount_msat"] or 0)
+        return deltas
     rows = conn.execute(
         """
         SELECT
@@ -1270,6 +1348,9 @@ def _journal_wallet_balances(
 ) -> dict[str, float] | None:
     if not has_book_state:
         return None
+    canonical_balances = _canonical_wallet_balances(conn, profile_id)
+    if canonical_balances is not None:
+        return canonical_balances
     holdings_balances = _journal_wallet_holdings_balances(conn, profile_id)
     if holdings_balances is not None:
         return holdings_balances
@@ -2099,6 +2180,27 @@ def _journal_balance_series(
 ) -> list[float] | None:
     if not has_book_state:
         return None
+    if _canonical_quantity_processed(conn, profile_id):
+        rows = conn.execute(
+            """
+            SELECT SUBSTR(occurred_at, 1, 7) AS month,
+                   SUM(amount_msat) AS amount_msat
+            FROM journal_quantity_postings
+            WHERE profile_id = ? AND location_kind = 'wallet'
+              AND state = 'observed' AND asset IN ('BTC', 'LBTC')
+              AND occurred_at IS NOT NULL
+            GROUP BY SUBSTR(occurred_at, 1, 7)
+            ORDER BY month
+            """,
+            (profile_id,),
+        ).fetchall()
+        return _balance_series_from_month_deltas(
+            {
+                str(row["month"]): msat_to_btc(row["amount_msat"] or 0)
+                for row in rows
+                if row["month"]
+            }
+        )
     rows = conn.execute(
         """
         SELECT occurred_at, entry_type, quantity
@@ -6160,6 +6262,28 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     health = build_workspace_health_snapshot(conn)
     rates_coverage = build_rates_coverage_snapshot(conn, {"limit": 10})
     blockers: list[dict[str, Any]] = []
+    custody_quantity: dict[str, Any] = {
+        "status": "unavailable",
+        "status_text": "Custody gap status unavailable: no active profile",
+        "derived_state_current": False,
+        "issue_count": 0,
+        "quantified_issue_count": 0,
+        "unquantified_issue_count": 0,
+        "unresolved_by_asset": [],
+        "by_state": [],
+        "blocked_from": None,
+        "presumed_external": {
+            "slice_count": 0,
+            "transaction_count": 0,
+            "by_asset": [],
+            "treatment": "warning_not_blocker",
+        },
+        "warnings": [],
+        "qualification": (
+            "This reports gaps detectable from current imported evidence; it "
+            "does not assert that every wallet was imported."
+        ),
+    }
     if health["profile"] is None:
         blockers.append(
             {
@@ -6173,6 +6297,13 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     else:
         counts = health["counts"]
         journals = health["journals"]
+        custody_quantity = (
+            core_custody_quantity_store.custody_quantity_readiness_summary(
+                conn,
+                health["profile"]["id"],
+                journal_status=str(journals["status"]),
+            )
+        )
         edit_stale = transaction_history.stale_summary(
             conn,
             {"id": health["profile"]["id"], **journals},
@@ -6323,6 +6454,34 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.journals.quarantine",
                 }
             )
+        if custody_quantity["issue_count"]:
+            blockers.append(
+                {
+                    "id": "custody_quantity_unresolved",
+                    "severity": "blocking",
+                    "title": "Unresolved custody quantity",
+                    "detail": (
+                        f"{custody_quantity['issue_count']} exact quantity issue(s) block "
+                        "final basis from the earliest affected event onward."
+                    ),
+                    "daemon_kind": "ui.journals.process",
+                    "blocked_from": custody_quantity["blocked_from"],
+                    "states": [
+                        item["state"] for item in custody_quantity["by_state"]
+                    ],
+                    "unresolved_by_asset": custody_quantity[
+                        "unresolved_by_asset"
+                    ],
+                    "unresolved_msat": (
+                        custody_quantity["unresolved_by_asset"][0]["amount_msat"]
+                        if len(custody_quantity["unresolved_by_asset"]) == 1
+                        else None
+                    ),
+                    "unquantified_issue_count": custody_quantity[
+                        "unquantified_issue_count"
+                    ],
+                }
+            )
         ownership_blocker = _ownership_review_candidate_blocker(
             conn, health["profile"]["id"]
         )
@@ -6347,6 +6506,8 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "ready": not blockers,
         "blockers": blockers,
+        "warnings": custody_quantity["warnings"],
+        "custody_quantity": custody_quantity,
         "health": health,
         "rates_coverage": rates_coverage,
     }

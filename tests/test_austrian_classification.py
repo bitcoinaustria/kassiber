@@ -13,6 +13,7 @@ from kassiber.core.austrian import (
     resolve_pool_id,
 )
 from kassiber.core.tax_events import normalize_tax_asset_inputs
+from tests.custody_tax_helpers import finalized_tax_inputs
 
 
 def _row(
@@ -459,11 +460,9 @@ class ATCrossAssetValidationWiringTest(unittest.TestCase):
     """
 
     def setUp(self):
-        from kassiber.core.engines.base import TaxEngineLedgerInputs
         from kassiber.core.engines.rp2 import GenericRP2TaxEngine
 
         self.GenericRP2TaxEngine = GenericRP2TaxEngine
-        self.TaxEngineLedgerInputs = TaxEngineLedgerInputs
 
     def _profile(self):
         return {
@@ -515,7 +514,8 @@ class ATCrossAssetValidationWiringTest(unittest.TestCase):
             self._inbound_row("buy-btc", "wallet-a", "BTC", 100_000_000_000, "2025-05-01T00:00:00Z"),
             self._inbound_row("buy-eur", "wallet-b", "ETH", 1_000_000_000_000_000_000, "2025-05-02T00:00:00Z", fiat_rate=3_000),
         ]
-        return self.TaxEngineLedgerInputs(
+        return finalized_tax_inputs(
+            self._profile(),
             rows=rows,
             wallet_refs_by_id=self._wallet_refs(),
             manual_pair_records=[],

@@ -3052,23 +3052,35 @@ def _assert_ownership_self_transfer_matching(
         if row.get("pairing_source") == "ownership_derived"
     ]
     missing = []
+    duplicate = []
+    matched = []
     for route in expected_routes:
         expected = {
             "from_wallet": route["from_wallet"],
             "to_wallet": route["to_wallet"],
             "received_msat": route["received_msat"],
         }
-        if expected not in observed_routes:
+        occurrences = observed_routes.count(expected)
+        if occurrences == 0:
             missing.append(route)
+        elif occurrences > 1:
+            duplicate.append({**route, "occurrences": occurrences})
+        else:
+            matched.append(expected)
     expected_count = int(
         scenario.get("expected", {}).get("ownership_derived_transfer_pairs")
         or len(expected_routes)
     )
-    if len(observed_routes) != expected_count or missing:
+    # This expectation pins the deliberately graph-only fan-out routes, not a
+    # ceiling on every ownership proof in the book.  Exact historical outpoint
+    # evidence may also upgrade ordinary 1:1 self-transfers from row-matched to
+    # ownership-derived; rejecting those stronger proofs would make the harness
+    # fight the accounting model.
+    if expected_count != len(expected_routes) or len(matched) != expected_count or missing or duplicate:
         raise RuntimeError(
             "Ownership-derived self-transfer matching did not satisfy the regtest "
             f"expectation: expected_count={expected_count}, "
-            f"observed={observed_routes}, missing={missing}"
+            f"observed={observed_routes}, missing={missing}, duplicate={duplicate}"
         )
     return {
         "journal": journal,

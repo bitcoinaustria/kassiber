@@ -13,7 +13,6 @@ import json
 import unittest
 from decimal import Decimal
 
-from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine
 from kassiber.core.lightning.channel_lifecycle import channel_role_map, channel_transfer_pairs
 from kassiber.core.loans import (
@@ -22,6 +21,7 @@ from kassiber.core.loans import (
     CHANNEL_OPEN,
     CHANNEL_OPEN_MISMATCH,
 )
+from tests.custody_tax_helpers import finalized_tax_inputs
 
 FUNDING_TXID = "aa" * 32
 CLOSING_TXID = "bb" * 32
@@ -617,7 +617,8 @@ def _row(
 
 def _run(rows, channel_roles, channel_pairs=()):
     return GenericRP2TaxEngine(_profile()).build_ledger_state(
-        TaxEngineLedgerInputs(
+        finalized_tax_inputs(
+            _profile(),
             rows=rows,
             wallet_refs_by_id=_wallet_refs(),
             manual_pair_records=[],

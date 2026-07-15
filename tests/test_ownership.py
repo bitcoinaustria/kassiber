@@ -93,6 +93,62 @@ class ParseTokensTests(unittest.TestCase):
 
 
 class OwnedIndexPhysicalScopeTests(unittest.TestCase):
+    def test_imported_core_receive_history_preserves_spent_outpoint_owner(self):
+        conn = _engine_conn()
+        txid = "ab" * 32
+        address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+        conn.execute(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            (
+                "vault",
+                "p1",
+                "Vault",
+                "address",
+                json.dumps(
+                    {
+                        "chain": "bitcoin",
+                        "network": "main",
+                        "addresses": [address],
+                    }
+                ),
+                None,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO transactions(profile_id, wallet_id, external_id, raw_json) "
+            "VALUES(?,?,?,?)",
+            (
+                "p1",
+                "vault",
+                txid,
+                json.dumps(
+                    [
+                        {
+                            "category": "receive",
+                            "txid": txid,
+                            "vout": 7,
+                            "address": address,
+                        }
+                    ]
+                ),
+            ),
+        )
+        wallets = conn.execute(
+            "SELECT w.*, NULL AS account_code, NULL AS account_label "
+            "FROM wallets w"
+        ).fetchall()
+
+        index, warnings = ownership.build_owned_index(
+            conn, "p1", wallets, derive=False
+        )
+
+        self.assertEqual(warnings, [])
+        matches = index.lookup_outpoint(
+            f"{txid}:7", chain="bitcoin", network="main"
+        )
+        self.assertEqual({match.wallet_id for match in matches}, {"vault"})
+
     def test_same_outpoint_and_txid_are_separate_across_networks(self):
         index = OwnedIndex()
         txid = "ab" * 32

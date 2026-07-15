@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
+from kassiber.cli.handlers import build_ledger_state
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.custody_components import (
     activate_component,
@@ -18,6 +21,7 @@ from kassiber.core.custody_components import (
     supersede_component,
     update_component,
 )
+from kassiber.core import custody_filed_reports
 from kassiber.core.sync_replication.bundle import build_bundle
 from kassiber.core.sync_replication.capture import preferred_wire_id
 from kassiber.core.sync_replication.conflicts import resolve_conflict
@@ -135,7 +139,8 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             INSERT INTO wallets(
                 id, workspace_id, profile_id, account_id, label, kind,
                 config_json, created_at
-            ) VALUES(?, ?, ?, ?, 'Watch', 'xpub', '{}', ?)
+            ) VALUES(?, ?, ?, ?, 'Watch', 'xpub',
+                     '{"chain":"bitcoin","network":"regtest"}', ?)
             """,
             (
                 wallet_id,
@@ -146,23 +151,25 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             ),
         )
         for tx_id, direction in ((out_id, "outbound"), (in_id, "inbound")):
+            txid = hashlib.sha256(tx_id.encode("ascii")).hexdigest()
             self.owner.execute(
                 """
                 INSERT INTO transactions(
                     id, workspace_id, profile_id, wallet_id, external_id,
                     fingerprint, occurred_at, direction, asset, amount, fee,
                     raw_json, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'BTC', 100000, 0, '{}', ?)
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'BTC', 100000, 0, ?, ?)
                 """,
                 (
                     tx_id,
                     self.workspace["id"],
                     self.profile["id"],
                     wallet_id,
-                    f"external-{tx_id}",
+                    txid,
                     f"fingerprint-{tx_id}",
                     NOW,
                     direction,
+                    json.dumps({"txid": txid}),
                     NOW,
                 ),
             )
@@ -251,6 +258,360 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         remote = get_component(self.peer, component["id"])
         self.assertEqual(component["authored_source"], "ai_tool")
         self.assertEqual(remote["authored_source"], "ai_tool")
+
+    def test_complete_replicated_component_gets_commitments_not_raw_evidence(self):
+        self._join_peer()
+        component = self._create_component(active=True)
+
+        result = self._sync_owner_to_peer()
+
+        self.assertGreater(result.row_mutations, 0)
+        remote = get_component(self.peer, component["id"])
+        self.assertEqual(remote["effective_state"], "active")
+        replicated_transactions = self.peer.execute(
+            "SELECT external_id_kind, raw_json FROM transactions "
+            "WHERE id IN (?, ?) ORDER BY id",
+            tuple(leg["transaction_id"] for leg in component["legs"]),
+        ).fetchall()
+        self.assertEqual(2, len(replicated_transactions))
+        self.assertTrue(
+            all(row["external_id_kind"] == "txid" for row in replicated_transactions)
+        )
+        self.assertTrue(
+            all(row["raw_json"] == "{}" for row in replicated_transactions)
+        )
+        peer_snapshots = self.peer.execute(
+            """
+            SELECT quantity_hash, detail_hash, payload_json
+            FROM custody_authored_evidence_snapshots
+            WHERE profile_id = ? AND subject_kind = 'custody_component'
+              AND subject_id = ?
+            ORDER BY quantity_hash, detail_hash
+            """,
+            (self.profile["id"], component["id"]),
+        ).fetchall()
+        self.assertEqual(len(peer_snapshots), 0)
+        activate_component(self.peer, component["id"], activated_at=NOW)
+        self.assertEqual(
+            0,
+            self.peer.execute(
+                "SELECT COUNT(*) FROM custody_authored_evidence_snapshots "
+                "WHERE subject_id = ?",
+                (component["id"],),
+            ).fetchone()[0],
+        )
+
+    def test_filed_snapshot_and_sealed_custody_impact_converge(self):
+        self._join_peer()
+        component = self._create_component(active=True)
+        snapshot = custody_filed_reports.create_filed_report_snapshot(
+            self.owner,
+            workspace_id=self.workspace["id"],
+            profile_id=self.profile["id"],
+            report_kind="capital-gains",
+            report_state="filed",
+            period_start_year=2026,
+            period_end_year=2026,
+            content_sha256="ab" * 32,
+            classification_summary={
+                "external_presumed": {"count": 1, "amount_msat": 100000}
+            },
+            gain_summary={
+                "fiat_currency": "EUR",
+                "gain_loss_exact": "1.00",
+                "status": "final",
+            },
+            created_at=NOW,
+        )
+        self.owner.execute(
+            """
+            INSERT INTO custody_gap_reviews(
+                id, workspace_id, profile_id, gap_id, revision,
+                candidate_fingerprint, action, component_id, authored_source,
+                reason, snapshot_json, created_at
+            ) VALUES('filed-review', ?, ?, 'gap', 1, ?, 'resolved', ?, 'user',
+                     'reviewed bridge', '{}', ?)
+            """,
+            (
+                self.workspace["id"],
+                self.profile["id"],
+                "cd" * 32,
+                component["id"],
+                NOW,
+            ),
+        )
+        custody_filed_reports.append_custody_impacts(
+            self.owner,
+            workspace_id=self.workspace["id"],
+            profile_id=self.profile["id"],
+            component_id=component["id"],
+            review_id="filed-review",
+            gap_id="gap",
+            candidate=SimpleNamespace(
+                started_at=NOW,
+                ended_at=NOW,
+                retained_msat=100000,
+                residual_msat=0,
+                source_fee_msat=0,
+            ),
+            created_at=NOW,
+        )
+        owner_resolutions = custody_filed_reports.resolve_pending_custody_impacts(
+            self.owner,
+            workspace_id=self.workspace["id"],
+            profile_id=self.profile["id"],
+            rebuilt_at=NOW,
+            created_at=NOW,
+        )
+        self.assertEqual(len(owner_resolutions), 1)
+        self.owner.commit()
+
+        result = self._sync_owner_to_peer()
+
+        self.assertGreater(result.row_mutations, 0)
+        self.assertEqual(
+            custody_filed_reports.list_filed_report_snapshots(
+                self.peer, self.profile["id"]
+            ),
+            [snapshot],
+        )
+        owner_impacts = custody_filed_reports.list_custody_impacts(
+            self.owner, self.profile["id"]
+        )
+        peer_impacts = custody_filed_reports.list_custody_impacts(
+            self.peer, self.profile["id"]
+        )
+        self.assertEqual(peer_impacts, owner_impacts)
+        self.assertEqual(
+            peer_impacts[0]["after_gain_summary"],
+            {"status": "pending_journal_rebuild"},
+        )
+        self.assertEqual(peer_impacts[0]["resolution"], owner_resolutions[0])
+        owner_commitments = [
+            tuple(row)
+            for row in self.owner.execute(
+                """
+                SELECT ordinal, quantity_hash, detail_hash
+                FROM custody_component_evidence_commitments
+                WHERE component_id = ? ORDER BY ordinal
+                """,
+                (component["id"],),
+            ).fetchall()
+        ]
+        peer_commitments = [
+            tuple(row)
+            for row in self.peer.execute(
+                """
+                SELECT ordinal, quantity_hash, detail_hash
+                FROM custody_component_evidence_commitments
+                WHERE component_id = ? ORDER BY ordinal
+                """,
+                (component["id"],),
+            ).fetchall()
+        ]
+        self.assertEqual(owner_commitments, peer_commitments)
+        self.assertEqual(2, len(peer_commitments))
+        peer_profile = self.peer.execute(
+            "SELECT * FROM profiles WHERE id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+        ledger = build_ledger_state(self.peer, peer_profile)
+        quantity_state = ledger["custody_quantity"]
+        self.assertFalse(quantity_state.report_blocked)
+        self.assertTrue(
+            any(
+                decision.component_id == component["id"]
+                and decision.state == "internal_reviewed"
+                for decision in quantity_state.projection.decisions
+            )
+        )
+        self.assertNotIn(
+            "custody_authored_evidence_snapshots",
+            SYNC_TABLE_MAP,
+        )
+        self.assertIn("custody_component_evidence_commitments", SYNC_TABLE_MAP)
+        self.assertEqual(
+            0,
+            self.owner.execute(
+                "SELECT COUNT(*) FROM sync_events "
+                "WHERE entity_table = 'custody_authored_evidence_snapshots'"
+            ).fetchone()[0],
+        )
+
+    def test_changed_synced_evidence_drifts_on_author_and_receiver(self):
+        self._join_peer()
+        component = self._create_component(active=True)
+        self._sync_owner_to_peer()
+        transaction_id = component["legs"][0]["transaction_id"]
+
+        self.owner.execute(
+            "UPDATE transactions SET amount = amount + 1 WHERE id = ?",
+            (transaction_id,),
+        )
+        local = get_component(self.owner, component["id"])
+        self.assertEqual("draft", local["effective_state"])
+        self.assertEqual("evidence_mismatch", local["evidence_status"]["status"])
+
+        bundle = build_bundle(self.owner, profile_id=self.profile["id"])
+        self.assertIsNotNone(bundle)
+        result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+        self.assertGreater(result.row_mutations, 0)
+        remote = get_component(self.peer, component["id"])
+        self.assertEqual("draft", remote["effective_state"])
+        self.assertEqual("evidence_mismatch", remote["evidence_status"]["status"])
+
+    def test_synced_draft_can_receive_atomic_activation_commitments(self):
+        self._join_peer()
+        draft = self._create_component(active=False)
+        self._sync_owner_to_peer()
+        self.assertEqual("draft", get_component(self.peer, draft["id"])["state"])
+
+        activated = activate_component(self.owner, draft["id"], activated_at=NOW)
+        result = self._sync_owner_to_peer()
+
+        self.assertEqual(0, result.rejected_events)
+        remote = get_component(self.peer, draft["id"])
+        self.assertEqual("active", remote["state"])
+        self.assertEqual("active", remote["effective_state"])
+        self.assertEqual(
+            activated["expected_evidence_count"],
+            remote["expected_evidence_count"],
+        )
+        self.assertEqual("matched", remote["evidence_status"]["status"])
+
+    def test_missing_commitment_keeps_authored_active_component_ineffective(self):
+        component = self._create_component(active=True)
+        self.owner.execute(
+            "INSERT INTO custody_component_purge_authorizations(profile_id) VALUES(?)",
+            (self.profile["id"],),
+        )
+        self.owner.execute(
+            "DELETE FROM custody_component_evidence_commitments "
+            "WHERE component_id = ? AND ordinal = 1",
+            (component["id"],),
+        )
+        self.owner.execute(
+            "DELETE FROM custody_component_purge_authorizations WHERE profile_id = ?",
+            (self.profile["id"],),
+        )
+
+        blocked = get_component(self.owner, component["id"])
+        self.assertEqual("active", blocked["state"])
+        self.assertEqual("draft", blocked["effective_state"])
+        self.assertEqual("commitments_incomplete", blocked["evidence_status"]["status"])
+
+    def test_commitment_collision_creates_sync_conflict_and_fails_closed(self):
+        self._join_peer()
+        component = self._create_component(active=True)
+        self._sync_owner_to_peer()
+        row = self.peer.execute(
+            "SELECT * FROM custody_component_evidence_commitments "
+            "WHERE component_id = ? ORDER BY ordinal LIMIT 1",
+            (component["id"],),
+        ).fetchone()
+        spec = SYNC_TABLE_MAP["custody_component_evidence_commitments"]
+        book = self.peer.execute(
+            "SELECT hmac_key_b64 FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+        wire_row = serialize_row(spec, row, hmac_key_b64=book["hmac_key_b64"])
+        wire_row["detail_hash"] = "f" * 64
+        event = author_event(
+            self.peer,
+            profile_id=self.profile["id"],
+            event_type="row.upsert",
+            entity_table=spec.table,
+            entity_key=row_key(spec, row),
+            payload={"row": wire_row},
+        )
+        self.assertIsNotNone(event)
+        bundle = build_bundle(self.peer, profile_id=self.profile["id"])
+        self.assertIsNotNone(bundle)
+
+        result = import_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+
+        self.assertGreater(result.conflicts_created, 0)
+        self.assertEqual(
+            1,
+            self.owner.execute(
+                "SELECT COUNT(*) FROM sync_conflicts "
+                "WHERE entity_table = 'custody_component_evidence_commitments' "
+                "AND status = 'open'"
+            ).fetchone()[0],
+        )
+        conflicted = get_component(self.owner, component["id"])
+        self.assertEqual("draft", conflicted["effective_state"])
+        self.assertEqual("commitments_conflicted", conflicted["evidence_status"]["status"])
+        self.assertEqual(
+            0,
+            self.owner.execute(
+                "SELECT COUNT(*) FROM custody_component_transaction_memberships "
+                "WHERE component_id = ?",
+                (component["id"],),
+            ).fetchone()[0],
+        )
+
+    def test_open_db_backfills_only_preexisting_local_activation_snapshots(self):
+        self._join_peer()
+        component = self._create_component(active=True)
+        self._sync_owner_to_peer()
+
+        for conn in (self.owner, self.peer):
+            conn.execute("DROP TRIGGER trg_custody_component_revision_immutable")
+            conn.execute(
+                "DROP TRIGGER trg_custody_component_evidence_revision_delete_immutable"
+            )
+            conn.execute(
+                "DELETE FROM custody_component_evidence_commitments WHERE component_id = ?",
+                (component["id"],),
+            )
+            conn.execute(
+                "UPDATE custody_components SET expected_evidence_count = NULL WHERE id = ?",
+                (component["id"],),
+            )
+            conn.commit()
+        self.owner.close()
+        self.peer.close()
+        self.owner = open_db(
+            Path(self.temp_owner.name), passphrase="owner-passphrase"
+        )
+        self.peer = open_db(Path(self.temp_peer.name), passphrase="peer-passphrase")
+
+        owner_header = self.owner.execute(
+            "SELECT expected_evidence_count FROM custody_components WHERE id = ?",
+            (component["id"],),
+        ).fetchone()
+        peer_header = self.peer.execute(
+            "SELECT expected_evidence_count FROM custody_components WHERE id = ?",
+            (component["id"],),
+        ).fetchone()
+        self.assertEqual(2, owner_header["expected_evidence_count"])
+        self.assertEqual(
+            2,
+            self.owner.execute(
+                "SELECT COUNT(*) FROM custody_component_evidence_commitments "
+                "WHERE component_id = ?",
+                (component["id"],),
+            ).fetchone()[0],
+        )
+        self.assertIsNone(peer_header["expected_evidence_count"])
+        self.assertEqual(
+            0,
+            self.peer.execute(
+                "SELECT COUNT(*) FROM custody_component_evidence_commitments "
+                "WHERE component_id = ?",
+                (component["id"],),
+            ).fetchone()[0],
+        )
+        self.assertEqual("draft", get_component(self.peer, component["id"])["effective_state"])
 
     def test_concurrent_active_revisions_remain_visible_but_lose_memberships(self):
         original = self._create_component(active=True)
@@ -456,6 +817,11 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             ],
             created_at=NOW,
         )
+        component = activate_component(
+            self.peer,
+            component["id"],
+            activated_at="2026-01-01T00:00:01Z",
+        )
         component_bundle = build_bundle(self.peer, profile_id=self.profile["id"])
         self.assertIsNotNone(component_bundle)
 
@@ -471,6 +837,12 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 (component["id"],),
             ).fetchone()
         )
+        self.assertEqual(
+            0,
+            self.third.execute(
+                "SELECT COUNT(*) FROM custody_authored_evidence_snapshots"
+            ).fetchone()[0],
+        )
 
         replayed = import_bundle(
             self.third,
@@ -478,7 +850,25 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             ciphertext=dependency_bundle.ciphertext,
         )
         self.assertGreater(replayed.applied_events, 0)
-        self.assertEqual(component["id"], get_component(self.third, component["id"])["id"])
+        replayed_component = get_component(self.third, component["id"])
+        self.assertEqual(component["id"], replayed_component["id"])
+        self.assertEqual("active", replayed_component["effective_state"])
+        self.assertEqual(
+            0,
+            self.third.execute(
+                "SELECT COUNT(*) FROM custody_authored_evidence_snapshots "
+                "WHERE subject_id = ?",
+                (component["id"],),
+            ).fetchone()[0],
+        )
+        self.assertEqual(
+            2,
+            self.third.execute(
+                "SELECT COUNT(*) FROM custody_component_evidence_commitments "
+                "WHERE component_id = ?",
+                (component["id"],),
+            ).fetchone()[0],
+        )
         self.assertEqual(
             0,
             self.third.execute(
@@ -725,6 +1115,11 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         component = self._create_component(active=True)
         leg_id = component["legs"][0]["id"]
         allocation_id = component["allocations"][0]["id"]
+        commitment_id = self.owner.execute(
+            "SELECT id FROM custody_component_evidence_commitments "
+            "WHERE component_id = ? ORDER BY ordinal LIMIT 1",
+            (component["id"],),
+        ).fetchone()[0]
 
         for sql, params in (
             ("UPDATE custody_components SET notes = 'rewrite' WHERE id = ?", (component["id"],)),
@@ -734,12 +1129,21 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 "SET source_amount_msat = source_amount_msat + 1 WHERE id = ?",
                 (allocation_id,),
             ),
+            (
+                "UPDATE custody_component_evidence_commitments "
+                "SET detail_hash = lower(hex(randomblob(32))) WHERE id = ?",
+                (commitment_id,),
+            ),
         ):
             with self.assertRaises(require_sqlcipher().IntegrityError):
                 self.owner.execute(sql, params)
 
         for sql, params in (
             ("DELETE FROM custody_component_allocations WHERE id = ?", (allocation_id,)),
+            (
+                "DELETE FROM custody_component_evidence_commitments WHERE id = ?",
+                (commitment_id,),
+            ),
             ("DELETE FROM custody_component_legs WHERE id = ?", (leg_id,)),
             ("DELETE FROM custody_components WHERE id = ?", (component["id"],)),
             (
@@ -792,6 +1196,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         self._create_component(active=False)
         self.owner.execute("DELETE FROM profiles WHERE id = ?", (self.profile["id"],))
         for table in (
+            "custody_component_evidence_commitments",
             "custody_component_allocations",
             "custody_component_legs",
             "custody_components",
@@ -1138,6 +1543,73 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(leg["transaction_id"], preserved["transaction_id"])
         self.assertEqual(leg["transaction_id"], preserved["anchor_transaction_id"])
+
+    def test_legacy_leg_insert_preserves_anchor_after_live_transaction_retraction(self):
+        self._join_peer()
+        component = self._create_component(active=False)
+        self._sync_owner_to_peer()
+        source = self.owner.execute(
+            "SELECT * FROM custody_component_legs "
+            "WHERE component_id = ? ORDER BY ordinal LIMIT 1",
+            (component["id"],),
+        ).fetchone()
+        self.peer.execute(
+            "INSERT INTO custody_component_purge_authorizations(profile_id) VALUES(?)",
+            (self.profile["id"],),
+        )
+        self.peer.execute(
+            "DELETE FROM custody_component_legs WHERE id = ?",
+            (source["id"],),
+        )
+        self.peer.execute(
+            "DELETE FROM custody_component_purge_authorizations WHERE profile_id = ?",
+            (self.profile["id"],),
+        )
+        self.peer.execute(
+            "DELETE FROM transactions WHERE id = ?",
+            (source["transaction_id"],),
+        )
+
+        spec = SYNC_TABLE_MAP["custody_component_legs"]
+        book = self.owner.execute(
+            "SELECT hmac_key_b64 FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+        legacy_wire_row = serialize_row(
+            spec,
+            source,
+            hmac_key_b64=book["hmac_key_b64"],
+        )
+        legacy_wire_row.pop("anchor_transaction_id")
+        authored = author_event(
+            self.owner,
+            profile_id=self.profile["id"],
+            event_type="row.upsert",
+            entity_table=spec.table,
+            entity_key=row_key(spec, source),
+            payload={"row": legacy_wire_row},
+        )
+        self.assertIsNotNone(authored)
+        bundle = build_bundle(self.owner, profile_id=self.profile["id"])
+        self.assertIsNotNone(bundle)
+
+        result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+
+        self.assertEqual(0, result.rejected_events)
+        preserved = self.peer.execute(
+            "SELECT transaction_id, anchor_transaction_id "
+            "FROM custody_component_legs WHERE id = ?",
+            (legacy_wire_row["id"],),
+        ).fetchone()
+        self.assertIsNone(preserved["transaction_id"])
+        self.assertEqual(
+            source["transaction_id"],
+            preserved["anchor_transaction_id"],
+        )
 
     def test_replicated_custody_revision_rejects_invalid_created_at(self):
         self._join_peer()

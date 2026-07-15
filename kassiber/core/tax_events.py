@@ -1558,6 +1558,11 @@ def normalize_tax_asset_inputs(
         if _custody_component_id(row) is not None
         and _row_get(row, "custody_component_force_block") not in (None, "")
     }
+    forced_quantity_row_ids = {
+        str(row["id"])
+        for row in rows
+        if _row_get(row, "custody_quantity_force_block") not in (None, "")
+    }
     samourai_internal_groups = _samourai_internal_privacy_groups(rows)
     # A manual multi-pair component can claim the same outbound a tracked
     # Samourai group decomposes (the splitter's rows and the user's pairs both
@@ -1787,6 +1792,22 @@ def normalize_tax_asset_inputs(
     # the loser txid's legs are quarantined for review here rather than each being
     # booked as an independent carrying MOVE that inflates the destination.
     for row in rows:
+        if str(row["id"]) in forced_quantity_row_ids:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "custody_quantity_unresolved",
+                    {
+                        "blocker_code": str(
+                            _row_get(row, "custody_quantity_force_block")
+                        ),
+                        "asset": asset,
+                        "required_for": "resolved_custody_quantity",
+                    },
+                )
+            )
+            continue
         if str(row["id"]) in forced_component_row_ids:
             component_id = _custody_component_id(row)
             quarantines.append(

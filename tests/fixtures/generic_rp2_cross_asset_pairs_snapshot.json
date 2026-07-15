@@ -49,6 +49,14 @@
     "cross_asset_pairs": 1,
     "entries_created": 3,
     "processed_transactions": 3,
+    "custody_quantity": {
+      "balances": 5,
+      "blocked": false,
+      "blocked_from": null,
+      "differences": 0,
+      "issues": 0,
+      "postings": 7
+    },
     "quarantined": 0,
     "transfers_detected": 0
   }

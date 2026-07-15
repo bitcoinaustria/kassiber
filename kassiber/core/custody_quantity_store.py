@@ -1,0 +1,928 @@
+"""SQLite persistence for local derived custody-quantity artifacts."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import sqlite3
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
+
+from .custody_evidence import (
+    EvidenceSnapshot,
+    QuantityObservation,
+    build_canonical_quantity_input,
+    canonical_event_key,
+    enriched_quantity_rows,
+)
+
+if TYPE_CHECKING:
+    from .custody_quantity_runtime import CanonicalQuantityState
+
+
+def persist_authored_evidence_snapshots(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    subject_kind: str,
+    subject_id: str,
+    snapshots: Sequence[EvidenceSnapshot],
+    created_at: str,
+) -> int:
+    """Write evidence once for a durable authored subject.
+
+    Rows cannot be updated. Scoped book reset and profile teardown may delete
+    them together with the authored subject.
+    """
+
+    if subject_kind not in {"custody_component", "custody_claim"}:
+        raise ValueError("unsupported authored custody evidence subject")
+    inserted = 0
+    for snapshot in snapshots:
+        existing = conn.execute(
+            """
+            SELECT quantity_hash, payload_json
+            FROM custody_authored_evidence_snapshots
+            WHERE profile_id = ? AND subject_kind = ?
+              AND subject_id = ? AND detail_hash = ?
+            """,
+            (profile_id, subject_kind, subject_id, snapshot.detail_hash),
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing["quantity_hash"] != snapshot.quantity_hash
+                or existing["payload_json"] != snapshot.payload_json
+            ):
+                raise ValueError("custody evidence hash collision")
+            continue
+        conn.execute(
+            """
+            INSERT INTO custody_authored_evidence_snapshots(
+                workspace_id, profile_id, subject_kind, subject_id,
+                detail_hash, quantity_hash, payload_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                workspace_id,
+                profile_id,
+                subject_kind,
+                subject_id,
+                snapshot.detail_hash,
+                snapshot.quantity_hash,
+                snapshot.payload_json,
+                created_at,
+            ),
+        )
+        inserted += 1
+    return inserted
+
+
+def evidence_commitment_id(component_id: str, ordinal: int) -> str:
+    """Return the stable wire identity for one evidence commitment slot."""
+
+    encoded = json.dumps(
+        ["custody-component-evidence-v1", str(component_id), int(ordinal)],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _commitment_detail_hash(snapshot: EvidenceSnapshot) -> str:
+    """Hash decision-material evidence that survives private replication.
+
+    Raw JSON never leaves its device and transaction fingerprints are replaced
+    by a keyed sync identifier. Observation lifecycle fields may also change
+    without contradicting the reviewed custody quantity: a mempool transaction
+    can confirm, move during a reorg, receive a better timestamp, or gain richer
+    raw graph detail. Those fields remain in the author's immutable audit
+    snapshot, but they must not deactivate a component whose event identity and
+    quantity are unchanged.
+
+    Typed facts which can change the interpretation (kind, payment hash, and
+    refund linkage) remain committed. The separate ``quantity_hash`` commits
+    event identity, wallet, direction, asset, amount, fee, and fee semantics.
+    """
+
+    payload = json.loads(snapshot.payload_json)
+    if not isinstance(payload, dict):
+        raise ValueError("custody evidence payload is invalid")
+    for volatile_key in (
+        "fingerprint",
+        "occurred_at",
+        "confirmed_at",
+        "raw_json",
+    ):
+        payload.pop(volatile_key, None)
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _component_anchor_ids(component: Mapping[str, Any]) -> tuple[str, ...]:
+    legs = component.get("legs")
+    if legs is None:
+        return ()
+    return tuple(
+        sorted(
+            {
+                str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
+                for leg in legs
+                if leg.get("anchor_transaction_id") not in (None, "")
+                or leg.get("transaction_id") not in (None, "")
+            }
+        )
+    )
+
+
+def _canonical_component_snapshots(
+    conn: sqlite3.Connection,
+    component: Mapping[str, Any],
+) -> tuple[EvidenceSnapshot, ...]:
+    transaction_ids = _component_anchor_ids(component)
+    if not transaction_ids:
+        return ()
+    placeholders = ", ".join("?" for _ in transaction_ids)
+    rows = conn.execute(
+        f"""
+        SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.id IN ({placeholders})
+        ORDER BY t.occurred_at, t.created_at, t.id
+        """,
+        (component["profile_id"], *transaction_ids),
+    ).fetchall()
+    canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
+    rejected_ids = {
+        transaction_id
+        for issue in canonical.rejected_events
+        for transaction_id in issue.transaction_ids
+    }
+    if rejected_ids:
+        raise ValueError(
+            "component evidence contains a rejected canonical event: "
+            + ", ".join(sorted(rejected_ids))
+        )
+    alias_hashes = {
+        transaction_id: quantity_hash
+        for event in canonical.events
+        for transaction_id, quantity_hash in event.observation_aliases
+    }
+    missing = sorted(set(transaction_ids) - set(alias_hashes))
+    if missing:
+        raise ValueError(
+            "component evidence is unavailable for: " + ", ".join(missing)
+        )
+    relevant_hashes = {alias_hashes[value] for value in transaction_ids}
+    snapshots_by_detail = {
+        snapshot.detail_hash: snapshot
+        for event in canonical.events
+        for snapshot in event.evidence_snapshots
+        if snapshot.quantity_hash in relevant_hashes
+    }
+    return tuple(
+        sorted(
+            snapshots_by_detail.values(),
+            key=lambda item: (item.quantity_hash, item.detail_hash),
+        )
+    )
+
+
+def persist_component_evidence_commitments(
+    conn: sqlite3.Connection,
+    *,
+    component: Mapping[str, Any],
+    snapshots: Sequence[EvidenceSnapshot],
+    created_at: str,
+) -> int:
+    """Persist the payload-free, replicated commitment set exactly once."""
+
+    ordered = tuple(
+        sorted(
+            (
+                (snapshot, _commitment_detail_hash(snapshot))
+                for snapshot in snapshots
+            ),
+            key=lambda item: (item[0].quantity_hash, item[1]),
+        )
+    )
+    existing_rows = conn.execute(
+        """
+        SELECT id, ordinal, quantity_hash, detail_hash
+        FROM custody_component_evidence_commitments
+        WHERE component_id = ?
+        ORDER BY ordinal, id
+        """,
+        (component["id"],),
+    ).fetchall()
+    if existing_rows:
+        existing = tuple(
+            (int(row["ordinal"]), row["quantity_hash"], row["detail_hash"])
+            for row in existing_rows
+        )
+        expected = tuple(
+            (ordinal, snapshot.quantity_hash, detail_hash)
+            for ordinal, (snapshot, detail_hash) in enumerate(ordered)
+        )
+        if existing != expected:
+            raise ValueError("custody evidence commitment collision")
+        return len(existing)
+    for ordinal, (snapshot, detail_hash) in enumerate(ordered):
+        conn.execute(
+            """
+            INSERT INTO custody_component_evidence_commitments(
+                id, component_id, workspace_id, profile_id, ordinal,
+                quantity_hash, detail_hash, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                evidence_commitment_id(str(component["id"]), ordinal),
+                component["id"],
+                component["workspace_id"],
+                component["profile_id"],
+                ordinal,
+                snapshot.quantity_hash,
+                detail_hash,
+                created_at,
+            ),
+        )
+    return len(ordered)
+
+
+def capture_component_evidence(
+    conn: sqlite3.Connection,
+    component: Mapping[str, Any],
+    *,
+    created_at: str,
+) -> int:
+    """Bind raw local evidence and author commitments during activation.
+
+    The caller owns the surrounding activation savepoint and stores the
+    returned count in ``custody_components.expected_evidence_count`` before
+    commit.  Returning the total commitment count (not just newly inserted
+    rows) keeps repeated activation idempotent.
+    """
+
+    snapshots = _canonical_component_snapshots(conn, component)
+    persist_authored_evidence_snapshots(
+        conn,
+        workspace_id=component["workspace_id"],
+        profile_id=component["profile_id"],
+        subject_kind="custody_component",
+        subject_id=component["id"],
+        snapshots=snapshots,
+        created_at=created_at,
+    )
+    return persist_component_evidence_commitments(
+        conn,
+        component=component,
+        snapshots=snapshots,
+        created_at=created_at,
+    )
+
+
+def component_evidence_status(
+    conn: sqlite3.Connection,
+    component: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compare author commitments with this replica's canonical anchors.
+
+    This never reads or creates the author's raw activation snapshot.  The
+    status therefore has the same semantics on the author and on a receiver:
+    absent, incomplete, conflicted, or locally unverifiable commitments fail
+    closed.
+    """
+
+    component_id = str(component.get("id") or "")
+    profile_id = str(component.get("profile_id") or "")
+    expected = component.get("expected_evidence_count")
+    if expected is None and component_id:
+        header = conn.execute(
+            "SELECT expected_evidence_count FROM custody_components WHERE id = ?",
+            (component_id,),
+        ).fetchone()
+        expected = header["expected_evidence_count"] if header is not None else None
+    commitments = conn.execute(
+        """
+        SELECT id, ordinal, quantity_hash, detail_hash
+        FROM custody_component_evidence_commitments
+        WHERE component_id = ? AND profile_id = ?
+        ORDER BY ordinal, id
+        """,
+        (component_id, profile_id),
+    ).fetchall()
+    base = {
+        "expected_count": None if expected is None else int(expected),
+        "commitment_count": len(commitments),
+    }
+    def result(status: str, valid: bool, **details: Any) -> dict[str, Any]:
+        return {
+            **base,
+            "valid": valid,
+            "usable": valid,
+            "status": status,
+            "reason": status,
+            **details,
+        }
+
+    if expected is None:
+        return result("commitment_header_missing", False)
+    ordinal_values = [int(row["ordinal"]) for row in commitments]
+    if len(commitments) != int(expected) or ordinal_values != list(range(int(expected))):
+        return result("commitments_incomplete", False)
+
+    commitment_keys = {json.dumps([row["id"]], separators=(",", ":")) for row in commitments}
+    if commitment_keys:
+        placeholders = ", ".join("?" for _ in commitment_keys)
+        conflict = conn.execute(
+            f"""
+            SELECT 1 FROM sync_conflicts
+            WHERE profile_id = ?
+              AND entity_table = 'custody_component_evidence_commitments'
+              AND entity_key IN ({placeholders})
+              AND status = 'open'
+            LIMIT 1
+            """,
+            (profile_id, *sorted(commitment_keys)),
+        ).fetchone()
+        if conflict is not None:
+            return result("commitments_conflicted", False)
+
+    legs = component.get("legs")
+    if legs is None:
+        legs = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT transaction_id, anchor_transaction_id
+                FROM custody_component_legs
+                WHERE component_id = ?
+                ORDER BY ordinal, id
+                """,
+                (component_id,),
+            ).fetchall()
+        ]
+    comparison_component = dict(component)
+    comparison_component["legs"] = legs
+    anchors = _component_anchor_ids(comparison_component)
+    if int(expected) == 0:
+        return result(
+            "matched" if not anchors else "unexpected_transaction_anchors",
+            not anchors,
+            current_count=0,
+        )
+    if not anchors:
+        return result("transaction_anchors_missing", False)
+    try:
+        snapshots = _canonical_component_snapshots(conn, comparison_component)
+    except (sqlite3.Error, KeyError, TypeError, ValueError) as exc:
+        return result("current_evidence_unavailable", False, detail=str(exc))
+    current = tuple(
+        sorted(
+            (
+                (item.quantity_hash, _commitment_detail_hash(item))
+                for item in snapshots
+            )
+        )
+    )
+    committed = tuple(
+        (str(row["quantity_hash"]), str(row["detail_hash"])) for row in commitments
+    )
+    return result(
+        "matched" if current == committed else "evidence_mismatch",
+        current == committed,
+        current_count=len(current),
+    )
+
+
+def component_native_support_status(
+    conn: sqlite3.Connection,
+    component: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Derive bounded native-event corroboration for reviewed boundaries.
+
+    Recovered policies do not rewrite an authored component. Each observed
+    source/destination boundary is checked for opposite-direction observations
+    on imported profile wallets with the exact same protocol-qualified chain
+    event. Amount-only and equal-denomination matches never count.
+    """
+
+    boundary_legs = tuple(
+        leg
+        for leg in (component.get("legs") or ())
+        if str(leg.get("role") or "") in {"source", "destination", "retained"}
+        and (leg.get("anchor_transaction_id") or leg.get("transaction_id"))
+        and int(leg.get("amount_msat") or 0) > 0
+    )
+    base = {
+        "boundary_count": len(boundary_legs),
+        "supported_boundary_count": 0,
+        "partially_supported_boundary_count": 0,
+        "contradicted_boundary_count": 0,
+    }
+    if not boundary_legs:
+        return {**base, "status": "unverified", "usable": True}
+
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.profile_id = ? AND t.excluded = 0
+            ORDER BY t.occurred_at, t.created_at, t.id
+            """,
+            (str(component.get("profile_id") or ""),),
+        ).fetchall()
+    ]
+    observations: dict[str, QuantityObservation] = {}
+    keys: dict[str, Any] = {}
+    for row in enriched_quantity_rows(rows):
+        row_id = str(row.get("id") or "")
+        try:
+            key = canonical_event_key(row)
+            observations[row_id] = QuantityObservation.from_transaction(row, key)
+            keys[row_id] = key
+        except (TypeError, ValueError):
+            continue
+
+    supported = 0
+    partially_supported = 0
+    contradicted = 0
+    for leg in boundary_legs:
+        anchor_id = str(
+            leg.get("anchor_transaction_id") or leg.get("transaction_id") or ""
+        )
+        anchor = observations.get(anchor_id)
+        if (
+            anchor is None
+            or anchor.event_key.native_namespace != "chain"
+            or anchor.event_key.chain not in {"bitcoin", "liquid"}
+        ):
+            continue
+        opposite_direction = (
+            "inbound" if anchor.direction == "outbound" else "outbound"
+        )
+        same_event = [
+            observations[row_id]
+            for row_id, key in keys.items()
+            if row_id != anchor_id
+            and observations[row_id].direction == opposite_direction
+            and key == anchor.event_key
+        ]
+        if not same_event:
+            continue
+        # Liquid events can carry several assets. Other-asset observations are
+        # neither support nor contradiction for this boundary quantity.
+        compatible = [
+            item
+            for item in same_event
+            if item.asset == anchor.asset
+        ]
+        if not compatible:
+            continue
+        # Deduplicate repeated imports of the same wallet/event leg while
+        # retaining distinct owned outputs.
+        unique = {item.quantity_hash: item for item in compatible}
+        recovered_amount = sum(item.principal_msat for item in unique.values())
+        # Guided source legs include the separately reviewed network fee in
+        # their debit amount. Native owned counterparts cover principal; the
+        # fee remains its own component/observation fact.
+        if recovered_amount > anchor.principal_msat:
+            contradicted += 1
+            continue
+        if recovered_amount == anchor.principal_msat:
+            supported += 1
+        else:
+            partially_supported += 1
+
+    status = (
+        "contradicted"
+        if contradicted
+        else (
+            "corroborated"
+            if supported == len(boundary_legs)
+            else "partial" if supported or partially_supported else "unverified"
+        )
+    )
+    return {
+        **base,
+        "status": status,
+        "usable": status != "contradicted",
+        "supported_boundary_count": supported,
+        "partially_supported_boundary_count": partially_supported,
+        "contradicted_boundary_count": contradicted,
+    }
+
+
+def baseline_missing_component_evidence(
+    conn: sqlite3.Connection,
+    components: Sequence[Mapping[str, Any]],
+    *,
+    created_at: str,
+) -> dict[str, Any]:
+    """Legacy compatibility check that never blesses receiver-local evidence.
+
+    Old local activation snapshots are migrated by ``open_db``.  Keeping this
+    helper as a read-only status adapter avoids silently changing older callers
+    while ensuring a replicated/current row can never become an author
+    commitment source.
+    """
+
+    existing: list[str] = []
+    blocked: list[dict[str, str]] = []
+    for component in sorted(components, key=lambda item: str(item.get("id") or "")):
+        component_id = str(component.get("id") or "")
+        if not component_id:
+            blocked.append({"component_id": "", "reason": "component_id_missing"})
+            continue
+        if component.get("effective_state") != "active":
+            blocked.append(
+                {"component_id": component_id, "reason": "component_not_effective"}
+            )
+            continue
+        status = component_evidence_status(conn, component)
+        if status["valid"]:
+            existing.append(component_id)
+            continue
+        blocked.append({"component_id": component_id, "reason": status["status"]})
+    return {
+        "baselined_component_ids": [],
+        "existing_component_ids": existing,
+        "blocked": blocked,
+    }
+
+
+def load_component_evidence_snapshots(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, tuple[dict[str, str], ...]]:
+    """Load author-local activation snapshots for optional stronger checks."""
+
+    rows = conn.execute(
+        """
+        SELECT subject_id, detail_hash, quantity_hash, payload_json, created_at
+        FROM custody_authored_evidence_snapshots
+        WHERE profile_id = ? AND subject_kind = 'custody_component'
+        ORDER BY subject_id, quantity_hash, detail_hash
+        """,
+        (profile_id,),
+    ).fetchall()
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["subject_id"]), []).append(dict(row))
+    return {key: tuple(value) for key, value in grouped.items()}
+
+
+def replace_canonical_quantity_state(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    state: CanonicalQuantityState,
+    created_at: str,
+) -> dict[str, int]:
+    """Atomically replace derived postings, issues, and balances for a book."""
+
+    for table in (
+        "journal_quantity_postings",
+        "journal_quantity_issues",
+        "journal_quantity_balances",
+    ):
+        conn.execute(f"DELETE FROM {table} WHERE profile_id = ?", (profile_id,))
+
+    observations = {
+        item.quantity_hash: item for item in state.projection.observations
+    }
+    posting_rows = []
+    balances: dict[tuple[str, str, str], int] = {}
+    for posting in state.projection.postings:
+        observation = observations.get(posting.observation_hash or "")
+        posting_rows.append(
+            (
+                posting.posting_id,
+                workspace_id,
+                profile_id,
+                    (
+                        observation.anchor_transaction_id
+                        if observation is not None
+                        else None
+                    ),
+                posting.observation_hash,
+                observation.occurred_at if observation is not None else None,
+                posting.asset,
+                posting.location_kind,
+                posting.location_id,
+                posting.amount_msat,
+                posting.state,
+                created_at,
+            )
+        )
+        key = (posting.location_kind, posting.location_id, posting.asset)
+        balances[key] = balances.get(key, 0) + posting.amount_msat
+    conn.executemany(
+        """
+        INSERT INTO journal_quantity_postings(
+            posting_id, workspace_id, profile_id, transaction_id,
+            observation_hash, occurred_at, asset, location_kind, location_id,
+            amount_msat, state, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        posting_rows,
+    )
+    conn.executemany(
+        """
+        INSERT INTO journal_quantity_issues(
+            issue_id, workspace_id, profile_id, issue_type, state, asset,
+            amount_msat, occurred_at, transaction_ids_json, reason,
+            detail_json, blocks_from, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                issue.issue_id,
+                workspace_id,
+                profile_id,
+                issue.issue_type,
+                issue.state,
+                issue.asset,
+                issue.amount_msat,
+                issue.occurred_at or None,
+                json.dumps(list(issue.transaction_ids), sort_keys=True),
+                issue.reason,
+                json.dumps(dict(issue.details), sort_keys=True),
+                state.tax_eligibility.blocked_from,
+                created_at,
+            )
+            for issue in state.issues
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO journal_quantity_balances(
+            workspace_id, profile_id, location_kind, location_id,
+            asset, amount_msat, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                workspace_id,
+                profile_id,
+                location_kind,
+                location_id,
+                asset,
+                amount_msat,
+                created_at,
+            )
+            for (location_kind, location_id, asset), amount_msat in sorted(
+                balances.items()
+            )
+            if amount_msat != 0
+        ],
+    )
+    return {
+        "postings": len(posting_rows),
+        "issues": len(state.issues),
+        "balances": sum(amount != 0 for amount in balances.values()),
+    }
+
+
+def blocking_quantity_issues(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[Mapping[str, Any]]:
+    try:
+        rows = conn.execute(
+            """
+            SELECT issue_id, issue_type, state, asset, amount_msat,
+                   occurred_at, reason, blocks_from
+            FROM journal_quantity_issues
+            WHERE profile_id = ?
+            ORDER BY COALESCE(occurred_at, ''), issue_id
+            """,
+            (profile_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(row) for row in rows]
+
+
+def custody_quantity_readiness_summary(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    journal_status: str,
+    include_journal_state: bool = True,
+) -> dict[str, Any]:
+    """Return the canonical, privacy-safe custody-gap readiness summary.
+
+    An empty derived issue table is only described as clear when the journal
+    projection is current.  The wording is intentionally qualified: Kassiber
+    cannot prove that the user imported every wallet that ever existed.
+    """
+
+    issues = blocking_quantity_issues(conn, profile_id)
+    try:
+        presumed_rows = conn.execute(
+            """
+            SELECT asset, COUNT(*) AS slice_count,
+                   COUNT(DISTINCT transaction_id) AS transaction_count,
+                   SUM(amount_msat) AS amount_msat
+            FROM journal_quantity_postings
+            WHERE profile_id = ?
+              AND location_kind = 'external'
+              AND state = 'external_presumed'
+              AND amount_msat > 0
+            GROUP BY asset
+            ORDER BY asset
+            """,
+            (profile_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        presumed_rows = []
+    presumed_by_asset = [
+        {
+            "asset": str(row["asset"]),
+            "amount_msat": int(row["amount_msat"] or 0),
+            "slice_count": int(row["slice_count"] or 0),
+            "transaction_count": int(row["transaction_count"] or 0),
+        }
+        for row in presumed_rows
+    ]
+    presumed_external = {
+        "slice_count": sum(item["slice_count"] for item in presumed_by_asset),
+        "transaction_count": sum(
+            item["transaction_count"] for item in presumed_by_asset
+        ),
+        "by_asset": presumed_by_asset,
+        "treatment": "warning_not_blocker",
+    }
+    by_asset: dict[str, dict[str, int]] = {}
+    by_state: dict[str, dict[str, Any]] = {}
+    quantified_issue_count = 0
+    for issue in issues:
+        state = str(issue.get("state") or "unknown")
+        state_summary = by_state.setdefault(
+            state,
+            {"state": state, "issue_count": 0, "unresolved_by_asset": {}},
+        )
+        state_summary["issue_count"] += 1
+        amount = issue.get("amount_msat")
+        if amount is None:
+            continue
+        quantified_issue_count += 1
+        asset = str(issue.get("asset") or "UNKNOWN")
+        asset_summary = by_asset.setdefault(
+            asset,
+            {"asset": asset, "amount_msat": 0, "issue_count": 0},
+        )
+        asset_summary["amount_msat"] += int(amount)
+        asset_summary["issue_count"] += 1
+        state_assets = state_summary["unresolved_by_asset"]
+        state_assets[asset] = int(state_assets.get(asset, 0)) + int(amount)
+
+    unresolved_by_asset = [by_asset[key] for key in sorted(by_asset)]
+    state_rows = []
+    for state in sorted(by_state):
+        item = by_state[state]
+        state_rows.append(
+            {
+                "state": item["state"],
+                "issue_count": item["issue_count"],
+                "unresolved_by_asset": [
+                    {"asset": asset, "amount_msat": amount}
+                    for asset, amount in sorted(item["unresolved_by_asset"].items())
+                ],
+            }
+        )
+
+    blocked_from = min(
+        (str(item["blocks_from"]) for item in issues if item.get("blocks_from")),
+        default=None,
+    )
+    if not include_journal_state:
+        status = "excluded"
+        status_text = "Custody gap status excluded by export options"
+    elif journal_status == "current":
+        if issues:
+            status = "known_custody_gaps"
+            status_text = "Known custody gaps require review"
+        else:
+            status = "no_known_custody_gaps"
+            status_text = "No known custody gaps"
+    elif journal_status == "no_transactions":
+        status = "not_evaluated"
+        status_text = "Custody gaps not evaluated: no active transactions"
+    else:
+        status = "needs_processing"
+        status_text = "Custody gap status needs journal processing"
+
+    return {
+        "status": status,
+        "status_text": status_text,
+        "derived_state_current": journal_status == "current",
+        "issue_count": len(issues),
+        "quantified_issue_count": quantified_issue_count,
+        "unquantified_issue_count": len(issues) - quantified_issue_count,
+        "unresolved_by_asset": unresolved_by_asset,
+        "by_state": state_rows,
+        "blocked_from": blocked_from,
+        "presumed_external": presumed_external,
+        "warnings": (
+            [
+                {
+                    "code": "external_custody_presumed",
+                    "severity": "warning",
+                    "message": (
+                        "Unmatched outflows are treated as presumed external; "
+                        "this is visible but does not block reports."
+                    ),
+                }
+            ]
+            if presumed_external["slice_count"]
+            else []
+        ),
+        "qualification": (
+            "This reports gaps detectable from current imported evidence; it "
+            "does not assert that every wallet was imported."
+        ),
+    }
+
+
+def authored_evidence_hash_summary(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    transaction_ids: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Return authored evidence hash anchors without raw evidence payloads.
+
+    A transaction-scoped export includes component snapshots only when one of
+    that component's legs anchors a selected transaction.  Claim snapshots do
+    not currently have a transaction-scoping relation and are therefore only
+    included for full-profile exports.
+    """
+
+    params: list[Any] = [profile_id]
+    where = "s.profile_id = ?"
+    if transaction_ids is not None:
+        selected = tuple(sorted({str(value) for value in transaction_ids}))
+        if not selected:
+            return {"snapshot_count": 0, "subject_count": 0, "hashes": []}
+        placeholders = ", ".join("?" for _ in selected)
+        where += f"""
+            AND s.subject_kind = 'custody_component'
+            AND EXISTS (
+                SELECT 1
+                FROM custody_component_legs l
+                WHERE l.profile_id = s.profile_id
+                  AND l.component_id = s.subject_id
+                  AND COALESCE(l.anchor_transaction_id, l.transaction_id)
+                      IN ({placeholders})
+            )
+        """
+        params.extend(selected)
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT s.subject_kind, s.subject_id, s.detail_hash,
+                   s.quantity_hash, s.created_at
+            FROM custody_authored_evidence_snapshots s
+            WHERE {where}
+            ORDER BY s.subject_kind, s.subject_id, s.created_at,
+                     s.detail_hash, s.quantity_hash
+            """,
+            params,
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    hashes = [dict(row) for row in rows]
+    return {
+        "snapshot_count": len(hashes),
+        "subject_count": len(
+            {(item["subject_kind"], item["subject_id"]) for item in hashes}
+        ),
+        "hashes": hashes,
+    }
+
+
+__all__ = [
+    "authored_evidence_hash_summary",
+    "baseline_missing_component_evidence",
+    "blocking_quantity_issues",
+    "capture_component_evidence",
+    "component_evidence_status",
+    "component_native_support_status",
+    "custody_quantity_readiness_summary",
+    "evidence_commitment_id",
+    "load_component_evidence_snapshots",
+    "persist_authored_evidence_snapshots",
+    "persist_component_evidence_commitments",
+    "replace_canonical_quantity_state",
+]

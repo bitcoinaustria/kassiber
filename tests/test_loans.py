@@ -3,11 +3,11 @@ import unittest
 from decimal import Decimal
 
 from kassiber.core import loans as core_loans
-from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.time_utils import now_iso
+from tests.custody_tax_helpers import finalized_tax_inputs
 
 
 def _profile():
@@ -53,7 +53,8 @@ def _row(tx_id, direction, amount_msat, occurred_at, *, fiat_rate=50_000, wallet
 
 def _run(rows, loan_legs=()):
     return GenericRP2TaxEngine(_profile()).build_ledger_state(
-        TaxEngineLedgerInputs(
+        finalized_tax_inputs(
+            _profile(),
             rows=rows,
             wallet_refs_by_id=_wallet_refs(),
             manual_pair_records=[],

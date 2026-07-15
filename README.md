@@ -145,7 +145,7 @@ Launch the app. The Welcome screen walks you through optional database
 encryption, your books set and first book, tax policy, your first wallet
 or BTCPay connection, and the optional AI assistant. Every other flow —
 Overview, Connections, Imports, Transactions, Swap Matching, Journals,
-Quarantine, Reports, Source of Funds, Books, Settings, Logs,
+Custody Gaps, Quarantine, Reports, Source of Funds, Books, Settings, Logs,
 Assistant — is one click away in the sidebar.
 
 Open a wallet in Connections to refresh its source and review its read-only
@@ -192,6 +192,24 @@ same values under `data.page`. High-impact automatic reviews support previews:
 including missing historical wallets, use the versioned custody-component
 workflow documented in
 [docs/reference/custody-components.md](docs/reference/custody-components.md).
+
+For a likely return through wallet history that is no longer available, use
+the guided custody-gap workflow instead of writing component JSON:
+
+```bash
+kassiber transfers gaps list
+kassiber transfers gaps review --gap-id <gap-id>
+kassiber transfers gaps bridge --gap-id <gap-id> --dry-run
+kassiber transfers gaps bridge --gap-id <gap-id> \
+  --expected-fingerprint <fingerprint-from-preview>
+```
+
+Kassiber can suggest a 1:N/N:1/N:M bridge across a long time interval, but it
+never activates one automatically. A reviewed return and an unexplained
+residual remain separate; known fees are not inferred from the residual. The
+empty state is “No known custody gaps” for current imported evidence—not a
+claim that every wallet ever owned was imported. Dismissals are bound to the
+reviewed evidence fingerprint, so materially changed evidence reopens them.
 
 For an encrypted project, enroll prompt-free CLI unlock once on a trusted local
 user account:

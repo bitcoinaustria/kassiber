@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.core import samourai as core_samourai
-from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
+from kassiber.core.engines import build_tax_engine
 from kassiber.core.output_inventory import (
     list_wallet_output_inventory,
     update_wallet_output_inventory,
@@ -18,6 +18,7 @@ from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.wallet_descriptors import load_descriptor_plan
+from tests.custody_tax_helpers import finalized_tax_inputs
 
 
 NOW = "2026-06-05T00:00:00Z"
@@ -687,7 +688,7 @@ class SamouraiImportTest(unittest.TestCase):
             ),
         ]
         state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(profile,
                 rows=rows,
                 wallet_refs_by_id=wallet_refs,
                 manual_pair_records=[],
@@ -806,7 +807,7 @@ class SamouraiImportTest(unittest.TestCase):
             ),
         ]
         state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(profile,
                 rows=rows,
                 wallet_refs_by_id=wallet_refs,
                 manual_pair_records=[],

@@ -80,6 +80,9 @@ REFERENCE_TABLES: Mapping[str, str] = {
     "link_id": "source_funds_links",
     "case_id": "source_funds_cases",
     "component_id": "custody_components",
+    "filed_report_snapshot_id": "filed_report_snapshots",
+    "impact_id": "custody_filed_report_impacts",
+    "review_id": "custody_gap_reviews",
     "supersedes_component_id": "custody_components",
     "superseded_by_component_id": "custody_components",
     "source_leg_id": "custody_component_legs",
@@ -126,6 +129,38 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
         ),
     ),
     TableSpec(
+        "filed_report_snapshots",
+        (
+            "id", "workspace_id", "profile_id", "report_kind", "report_state",
+            "period_start_year", "period_end_year", "content_sha256",
+            "classification_summary_json", "gain_summary_json", "report_scope_json", "authored_source",
+            "notes", "created_at",
+        ),
+        ("id",),
+        _profile_scope("filed_report_snapshots"),
+        high_stakes_fields=frozenset(
+            {
+                "report_kind", "report_state", "period_start_year",
+                "period_end_year", "content_sha256",
+                "classification_summary_json", "gain_summary_json",
+                "report_scope_json",
+                "authored_source",
+            }
+        ),
+        json_columns=frozenset(
+            {"classification_summary_json", "gain_summary_json", "report_scope_json"}
+        ),
+        immutable_fields=frozenset(
+            {
+                "workspace_id", "profile_id", "report_kind", "report_state",
+                "period_start_year", "period_end_year", "content_sha256",
+                "classification_summary_json", "gain_summary_json",
+                "report_scope_json",
+                "authored_source", "notes", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
         "accounts",
         ("id", "workspace_id", "profile_id", "code", "label", "account_type", "asset", "created_at"),
         ("id",),
@@ -146,6 +181,7 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "profile_id",
             "wallet_id",
             "external_id",
+            "external_id_kind",
             "occurred_at",
             "confirmed_at",
             "direction",
@@ -197,7 +233,9 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
         )
         | _TRANSACTION_PRICING_FIELDS,
         add_win_fields=frozenset({"note"}),
-        optional_columns=frozenset({"swap_refund_funding_vout"}),
+        optional_columns=frozenset(
+            {"external_id_kind", "swap_refund_funding_vout"}
+        ),
     ),
     TableSpec(
         "tags",
@@ -219,7 +257,8 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "id", "lineage_id", "workspace_id", "profile_id", "revision",
             "component_type", "conservation_mode", "state", "evidence_kind",
             "evidence_grade", "conversion_policy", "conversion_reviewed",
-            "expected_leg_count", "expected_allocation_count", "authored_source", "notes",
+            "expected_leg_count", "expected_allocation_count",
+            "expected_evidence_count", "authored_source", "notes",
             "change_reason", "supersedes_component_id",
             "superseded_by_component_id", "activated_at", "superseded_at",
             "created_at",
@@ -231,7 +270,8 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "revision", "component_type", "conservation_mode", "state",
                 "evidence_kind", "evidence_grade", "conversion_policy",
                 "conversion_reviewed", "expected_leg_count",
-                "expected_allocation_count", "authored_source", "supersedes_component_id",
+                "expected_allocation_count", "expected_evidence_count",
+                "authored_source", "supersedes_component_id",
                 "superseded_by_component_id",
             }
         ),
@@ -240,12 +280,16 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "lineage_id", "workspace_id", "profile_id", "revision",
                 "component_type", "conservation_mode", "evidence_kind",
                 "evidence_grade", "conversion_policy", "conversion_reviewed",
-                "expected_leg_count", "expected_allocation_count", "authored_source", "notes",
+                "expected_leg_count", "expected_allocation_count",
+                "expected_evidence_count", "authored_source", "notes",
                 "supersedes_component_id", "created_at",
             }
         ),
         optional_columns=frozenset(
-            {"expected_leg_count", "expected_allocation_count", "authored_source"}
+            {
+                "expected_leg_count", "expected_allocation_count",
+                "expected_evidence_count", "authored_source",
+            }
         ),
     ),
     TableSpec(
@@ -299,6 +343,123 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "component_id", "workspace_id", "profile_id", "ordinal",
                 "source_leg_id", "sink_leg_id", "source_amount_msat",
                 "sink_amount_msat", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
+        "custody_component_evidence_commitments",
+        (
+            "id", "component_id", "workspace_id", "profile_id", "ordinal",
+            "quantity_hash", "detail_hash", "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_component_evidence_commitments"),
+        high_stakes_fields=frozenset(
+            {
+                "component_id", "workspace_id", "profile_id", "ordinal",
+                "quantity_hash", "detail_hash", "created_at",
+            }
+        ),
+        immutable_fields=frozenset(
+            {
+                "component_id", "workspace_id", "profile_id", "ordinal",
+                "quantity_hash", "detail_hash", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
+        "custody_gap_reviews",
+        (
+            "id", "workspace_id", "profile_id", "gap_id", "revision",
+            "candidate_fingerprint", "action", "event_kind", "component_id",
+            "authored_source", "reason", "snapshot_json", "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_gap_reviews"),
+        high_stakes_fields=frozenset(
+            {
+                "gap_id", "revision", "candidate_fingerprint", "action", "event_kind",
+                "component_id", "authored_source", "snapshot_json",
+            }
+        ),
+        json_columns=frozenset({"snapshot_json"}),
+        immutable_fields=frozenset(
+            {
+                "workspace_id", "profile_id", "gap_id", "revision",
+                "candidate_fingerprint", "action", "event_kind", "component_id",
+                "authored_source", "reason", "snapshot_json", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
+        "custody_filed_report_impacts",
+        (
+            "id", "workspace_id", "profile_id", "filed_report_snapshot_id",
+            "component_id", "review_id", "gap_id",
+            "affected_period_start_year", "affected_period_end_year",
+            "before_classification_summary_json",
+            "after_classification_summary_json", "before_gain_summary_json",
+            "after_gain_summary_json", "amendment_warning", "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_filed_report_impacts"),
+        high_stakes_fields=frozenset(
+            {
+                "filed_report_snapshot_id", "component_id", "review_id", "gap_id",
+                "affected_period_start_year", "affected_period_end_year",
+                "before_classification_summary_json",
+                "after_classification_summary_json", "before_gain_summary_json",
+                "after_gain_summary_json", "amendment_warning",
+            }
+        ),
+        json_columns=frozenset(
+            {
+                "before_classification_summary_json",
+                "after_classification_summary_json",
+                "before_gain_summary_json",
+                "after_gain_summary_json",
+            }
+        ),
+        immutable_fields=frozenset(
+            {
+                "workspace_id", "profile_id", "filed_report_snapshot_id",
+                "component_id", "review_id", "gap_id",
+                "affected_period_start_year", "affected_period_end_year",
+                "before_classification_summary_json",
+                "after_classification_summary_json", "before_gain_summary_json",
+                "after_gain_summary_json", "amendment_warning", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
+        "custody_filed_report_impact_resolutions",
+        (
+            "id", "workspace_id", "profile_id", "impact_id", "rebuilt_at",
+            "after_classification_summary_json", "after_gain_summary_json",
+            "classification_changed", "gain_changed", "amendment_status",
+            "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_filed_report_impact_resolutions"),
+        high_stakes_fields=frozenset(
+            {
+                "impact_id", "rebuilt_at", "after_classification_summary_json",
+                "after_gain_summary_json", "classification_changed",
+                "gain_changed", "amendment_status",
+            }
+        ),
+        json_columns=frozenset(
+            {
+                "after_classification_summary_json",
+                "after_gain_summary_json",
+            }
+        ),
+        immutable_fields=frozenset(
+            {
+                "workspace_id", "profile_id", "impact_id", "rebuilt_at",
+                "after_classification_summary_json", "after_gain_summary_json",
+                "classification_changed", "gain_changed", "amendment_status",
+                "created_at",
             }
         ),
     ),
@@ -483,6 +644,10 @@ SYNC_TABLE_MAP: Mapping[str, TableSpec] = {spec.table: spec for spec in SYNC_TAB
 NEVER_SYNC_TABLES = frozenset(
     {
         "settings",
+        "schema_migration_audits",
+        "custody_tax_migration_baselines",
+        "custody_tax_migration_baseline_events",
+        "custody_tax_migration_reports",
         "backends",
         "ai_providers",
         "ai_provider_secret_refs",
@@ -493,6 +658,10 @@ NEVER_SYNC_TABLES = frozenset(
         "journal_tax_summary",
         "journal_account_holdings",
         "journal_wallet_holdings",
+        "journal_quantity_postings",
+        "journal_quantity_issues",
+        "journal_quantity_balances",
+        "custody_authored_evidence_snapshots",
         "wallet_utxos",
         "wallet_utxo_refreshes",
         "chain_observer_instances",
@@ -597,6 +766,52 @@ def row_key(spec: TableSpec, row: Mapping[str, Any]) -> str:
     return json.dumps(values, ensure_ascii=True, separators=(",", ":"))
 
 
+_NATIVE_TXID_KEYS = frozenset(
+    {"txid", "txhash", "transactionid", "transactionhash", "onchaintxid"}
+)
+
+
+def _canonical_txid(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    return text if re.fullmatch(r"[0-9a-f]{64}", text) else None
+
+
+def _replicated_external_id_kind(row: Mapping[str, Any]) -> str | None:
+    """Return the minimal public type needed to interpret ``external_id``.
+
+    Raw transaction payloads never enter replication. An external identifier
+    is labelled as a txid only when the stored label already says so or an
+    explicit transaction-hash field in local raw evidence contains that exact
+    canonical identifier. A bare 64-hex provider/order id is not enough.
+    """
+
+    external_id = _canonical_txid(row["external_id"])
+    if external_id is None:
+        return None
+    declared = str(row["external_id_kind"] or "").strip().lower()
+    if declared == "txid":
+        return "txid"
+    raw = _json_value(row["raw_json"])
+    if not isinstance(raw, Mapping):
+        return None
+    payloads = [raw]
+    for key in ("tx", "ownership_graph"):
+        nested = raw.get(key)
+        if isinstance(nested, Mapping):
+            payloads.append(nested)
+    for payload in payloads:
+        for key, value in payload.items():
+            normalized_key = "".join(
+                char for char in str(key).lower() if char.isalnum()
+            )
+            if (
+                normalized_key in _NATIVE_TXID_KEYS
+                and _canonical_txid(value) == external_id
+            ):
+                return "txid"
+    return None
+
+
 def serialize_row(
     spec: TableSpec,
     row: Mapping[str, Any],
@@ -613,6 +828,7 @@ def serialize_row(
             payload[column] = _json_value(payload.get(column))
     book_key = decode_secret(hmac_key_b64)
     if spec.table == "transactions":
+        payload["external_id_kind"] = _replicated_external_id_kind(row)
         payload["fingerprint_hmac"] = hmac_identifier(
             book_key,
             "transaction-fingerprint",
@@ -671,6 +887,38 @@ def validate_wire_row(table: str, payload: Mapping[str, Any]) -> TableSpec:
             details={"table": table, "unknown_fields": unknown, "missing_fields": missing},
             retryable=False,
         )
+    if table == "custody_component_legs":
+        # Column allowlisting alone cannot protect an older/newer peer from a
+        # closed economic role it does not understand. Refuse before SQLite's
+        # CHECK constraint (or a later projector KeyError) turns version skew
+        # into a partial replay or untyped failure.
+        from ..custody_components import LEG_ROLES
+
+        role = str(payload.get("role") or "")
+        if role not in LEG_ROLES:
+            raise AppError(
+                "bundle contains a custody leg role unsupported by this application",
+                code="sync_schema_incompatible",
+                hint="Upgrade Kassiber on every replica before syncing this component.",
+                details={"table": table, "role": role},
+                retryable=False,
+            )
+    if table == "transactions":
+        external_id_kind = payload.get("external_id_kind")
+        if external_id_kind not in (None, "txid") or (
+            external_id_kind == "txid"
+            and _canonical_txid(payload.get("external_id")) is None
+        ):
+            raise AppError(
+                "bundle contains an unsupported transaction identity discriminator",
+                code="sync_schema_incompatible",
+                hint="Upgrade Kassiber on every replica before syncing this transaction.",
+                details={
+                    "table": table,
+                    "external_id_kind": external_id_kind,
+                },
+                retryable=False,
+            )
     return spec
 
 

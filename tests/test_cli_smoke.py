@@ -539,6 +539,13 @@ class CliSmokeTest(unittest.TestCase):
     def _assert_kind(self, payload, expected):
         self.assertEqual(payload.get("kind"), expected)
 
+    def _cli_error(self, *args):
+        payload, code = _run(self.data_root, *args)
+        self.assertNotEqual(code, 0, f"CLI unexpectedly succeeded for {args!r}")
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload.get("schema_version"), 1)
+        return payload
+
     # -- workflow -----------------------------------------------------
 
     def test_01_init_status(self):
@@ -1607,8 +1614,8 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("Cost Basis", csv_text)
 
     def test_07af_verify_transfer_fee_and_traceable_ids(self):
-        # A self-transfer with a network fee: the engine records transfer_out for
-        # the full sent amount (fee included) plus a separate transfer_fee row.
+        # A self-transfer with an explicitly imported network fee: the engine
+        # records the moved principal plus a separate transfer_fee row.
         # The holdings recompute must not subtract the fee twice, and the ledger
         # Transaction IDs must be the external txids (so they match the
         # Transactions sheet for evidence cross-reference).
@@ -1619,7 +1626,7 @@ class CliSmokeTest(unittest.TestCase):
             a_csv.write_text(
                 "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
                 "2024-01-01T00:00:00Z,buy-001,inbound,BTC,1.00000000,0,40000,Buy,buy\n"
-                "2024-06-01T00:00:00Z,xfer-001,outbound,BTC,0.50100000,0,50000,Move to cold,transfer\n",
+                "2024-06-01T00:00:00Z,xfer-001,outbound,BTC,0.50000000,0.00100000,50000,Move to cold,transfer\n",
                 encoding="utf-8",
             )
             b_csv.write_text(
@@ -1664,7 +1671,29 @@ class CliSmokeTest(unittest.TestCase):
                 "--kind", "manual", "--policy", "carrying-value",
             )
             run("rates", "set", "BTC-USD", "2025-06-01T00:00:00Z", "90000")
-            run("journals", "process", "--workspace", "Main", "--profile", "Default")
+            journal = run(
+                "journals", "process",
+                "--workspace", "Main",
+                "--profile", "Default",
+            )
+            quarantine = run(
+                "journals",
+                "quarantined",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+            )
+            self.assertFalse(
+                journal["data"]["custody_quantity"]["blocked"],
+                json.dumps(
+                    {
+                        "quantity": journal["data"]["custody_quantity"],
+                        "quarantine": quarantine["data"],
+                    },
+                    sort_keys=True,
+                ),
+            )
             run("reports", "export-xlsx", "--workspace", "Main", "--profile", "Default", "--file", str(xlsx_path))
 
             portfolio = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
@@ -2636,13 +2665,13 @@ class CliSmokeTest(unittest.TestCase):
         self.assertGreaterEqual(data["quarantined"], 1)
         self.assertEqual(data["entries_created"], 1)
 
-        # No fee/transfer disposal was created for the pegged residual.
-        payload = self._cli(
+        # No fee/transfer disposal is exposed as final: unresolved custody is a
+        # hard report boundary, not a provisional journal result.
+        payload = self._cli_error(
             "reports", "journal-entries",
             "--workspace", "Main", "--profile", "SplitPeg",
         )
-        entry_types = {e["entry_type"] for e in payload["data"]}
-        self.assertEqual(entry_types, {"acquisition"})
+        self.assertEqual(payload["error"]["code"], "custody_quantity_unresolved")
 
         # The quarantine names the implausible-fee reason and the right legs.
         payload = self._cli(
@@ -3021,7 +3050,7 @@ class CliSmokeTest(unittest.TestCase):
             "--profile", "RefundPair",
             "--tx-out", "failed-swap-send",
             "--tx-in", "failed-swap-refund",
-            "--kind", "manual",
+            "--kind", "swap-refund",
             "--policy", "carrying-value",
         )
         self._assert_kind(payload, "transfers.pair")
@@ -3048,6 +3077,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(data["cross_asset_pairs"], 0)
         self.assertEqual(data["quarantined"], 0)
         self.assertEqual(data["entries_created"], 4)
+        self.assertFalse(data["custody_quantity"]["blocked"])
 
         payload = self._cli(
             "reports", "journal-entries",
@@ -3134,11 +3164,12 @@ class CliSmokeTest(unittest.TestCase):
         self._assert_kind(payload, "transfers.pair")
         self.assertEqual(payload["data"]["kind"], "swap-refund")
 
-        self._cli(
+        journal = self._cli(
             "journals", "process",
             "--workspace", workspace,
             "--profile", "RefundLink",
         )
+        self.assertFalse(journal["data"]["custody_quantity"]["blocked"])
         payload = self._cli(
             "reports", "capital-gains",
             "--workspace", workspace,
@@ -3438,6 +3469,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(payload["data"]["quarantined"], 0)
         self.assertEqual(payload["data"]["transfers_detected"], 1)
         self.assertEqual(payload["data"]["direct_swap_payouts"], 1)
+        self.assertFalse(payload["data"]["custody_quantity"]["blocked"])
 
         payload = self._cli("reports", "journal-entries",
                             "--workspace", workspace, "--profile", "SplitPayout")
@@ -3484,6 +3516,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(payload["data"]["quarantined"], 0)
         self.assertEqual(payload["data"]["transfers_detected"], 1)
         self.assertEqual(payload["data"]["direct_swap_payouts"], 1)
+        self.assertFalse(payload["data"]["custody_quantity"]["blocked"])
 
         payload = self._cli("reports", "journal-entries",
                             "--workspace", workspace, "--profile", "SplitPayoutAT")

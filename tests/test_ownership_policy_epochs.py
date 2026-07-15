@@ -82,15 +82,33 @@ class OwnershipPolicyEpochTest(unittest.TestCase):
 
         snapshot = technical_coverage_snapshot(self.conn, "profile")
         self.assertFalse(snapshot["ownership_universe_known"])
+        self.assertFalse(snapshot["coverage_can_clear_custody_gaps"])
         self.assertEqual(snapshot["scope"], "imported_policy_technical_coverage")
-        self.assertEqual({row["epoch_id"] for row in snapshot["epochs"]}, {epoch_id})
+        self.assertEqual(snapshot["summary"]["wallet_count"], 1)
+        self.assertEqual(snapshot["summary"]["covered_branch_count"], 2)
+        wallet = snapshot["wallets"][0]
+        self.assertEqual(wallet["wallet_label"], "Cold")
+        self.assertEqual({row["epoch_id"] for row in wallet["epochs"]}, {epoch_id})
+        source = wallet["epochs"][0]["sources"][0]
+        self.assertEqual(source["source"], "descriptor-policy")
+        self.assertEqual(source["observer_kind"], "bdk")
         self.assertEqual(
             {
-                (row["branch_key"], row["scanned_to_exclusive"])
-                for row in snapshot["epochs"]
+                (row["branch"], row["scanned_to_exclusive"])
+                for row in source["branches"]
             },
             {("receive", 20), ("change", 20)},
         )
+        serialized = json.dumps(snapshot, sort_keys=True)
+        for private_value in (
+            "old-public-descriptor",
+            "private_material_json",
+            "source_key",
+            "wallet_id",
+            "descriptor:default",
+            "observer-structural-id",
+        ):
+            self.assertNotIn(private_value, serialized)
 
     def test_rollover_preserves_private_material_and_final_coverage(self):
         old_epoch_id = record_observer_policy_coverage(
@@ -134,6 +152,54 @@ class OwnershipPolicyEpochTest(unittest.TestCase):
             (old_epoch_id,),
         ).fetchone()
         self.assertEqual(witness["scanned_to_exclusive"], 50)
+
+        snapshot = technical_coverage_snapshot(self.conn, "profile")
+        timeline = snapshot["wallets"][0]["epochs"]
+        self.assertEqual(snapshot["summary"]["active_epoch_count"], 1)
+        self.assertEqual(snapshot["summary"]["retired_epoch_count"], 1)
+        self.assertEqual(
+            {epoch["epoch_id"]: epoch["status"] for epoch in timeline},
+            {old_epoch_id: "retired", new_epoch_id: "active"},
+        )
+        retired = next(epoch for epoch in timeline if epoch["status"] == "retired")
+        active = next(epoch for epoch in timeline if epoch["status"] == "active")
+        self.assertIsNotNone(retired["retired_at"])
+        self.assertEqual(
+            retired["sources"][0]["branches"][0]["scanned_to_exclusive"],
+            50,
+        )
+        self.assertEqual(active["sources"], [])
+        serialized = json.dumps(snapshot, sort_keys=True)
+        self.assertNotIn("old-public-descriptor", serialized)
+        self.assertNotIn("new-public-descriptor", serialized)
+
+    def test_snapshot_redacts_samourai_paths_and_unknown_observer_names(self):
+        identity = ObserverIdentity(
+            id="private-observer-id",
+            workspace_id="ws",
+            profile_id="profile",
+            logical_wallet_id="wallet",
+            source_wallet_id="wallet",
+            source_key="samourai:postmix:p2wpkh:m/84'/0'/2147483646'",
+            observer_kind="bdk:private-backend-name",
+            chain="bitcoin",
+            network="main",
+            branch_keys=("receive",),
+        )
+        record_observer_policy_coverage(
+            self.conn,
+            identity,
+            (CoveragePoint("receive", scanned_to=100, highest_used=11),),
+        )
+
+        snapshot = technical_coverage_snapshot(self.conn, "profile")
+        source = snapshot["wallets"][0]["epochs"][0]["sources"][0]
+        self.assertEqual(source["source"], "samourai:postmix")
+        self.assertEqual(source["observer_kind"], "observer")
+        serialized = json.dumps(snapshot, sort_keys=True)
+        self.assertNotIn("2147483646", serialized)
+        self.assertNotIn("private-backend-name", serialized)
+        self.assertNotIn("p2wpkh", serialized)
 
     def test_private_epoch_tables_are_not_replicated(self):
         self.assertTrue(

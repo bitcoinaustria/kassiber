@@ -14,6 +14,10 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
 from . import source_funds as core_source_funds
+from . import custody_filed_reports as core_custody_filed_reports
+from . import custody_ai_audit as core_custody_ai_audit
+from . import custody_quantity_store as core_custody_quantity_store
+from . import custody_tax_migration as core_custody_tax_migration
 from .attachments import attachment_display_label
 from . import transaction_history
 
@@ -32,8 +36,9 @@ SENSITIVE_MATERIAL_EXCLUSIONS = [
     "environment files",
     "logs",
     "AI settings",
+    "raw AI custody proposals (cryptographic hashes and consent outcomes only)",
     "unrelated books",
-    "technical wallet evidence",
+    "raw technical wallet evidence (cryptographic hashes only)",
     "chain observer state and derivation coverage",
 ]
 _DECISION_KEYWORDS = (
@@ -756,6 +761,91 @@ def _transaction_refs_from_case(
     }
 
 
+def _custody_quantity_warning(
+    tx: Mapping[str, Any],
+    summary: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    if summary.get("status") != "known_custody_gaps":
+        return None
+    blocked_from = str(summary.get("blocked_from") or "")
+    occurred_at = str(_row_get(tx, "occurred_at") or "")
+    if blocked_from and occurred_at and occurred_at < blocked_from:
+        return None
+    totals = ", ".join(
+        f"{item['amount_msat']} msat {item['asset']}"
+        for item in summary.get("unresolved_by_asset", [])
+    )
+    suffix = f" ({totals})" if totals else ""
+    return _warning(
+        "custody_quantity_unresolved",
+        "blocker",
+        "Known custody gaps withhold final tax basis from this point onward"
+        f"{suffix}.",
+    )
+
+
+def _schema_migration_audits(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return only the closed, payload-free migration report vocabulary."""
+
+    output: list[dict[str, Any]] = []
+    for row in conn.execute(
+        "SELECT migration_name, schema_version, impact_json, created_at "
+        "FROM schema_migration_audits ORDER BY created_at, migration_name"
+    ).fetchall():
+        try:
+            raw = json.loads(row["impact_json"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raw = {}
+        changes = []
+        for change in raw.get("changes", []) if isinstance(raw, dict) else []:
+            if not isinstance(change, Mapping):
+                continue
+            before = change.get("before")
+            after = change.get("after")
+            try:
+                rows_changed = max(0, int(change.get("rows_changed") or 0))
+            except (TypeError, ValueError):
+                rows_changed = 0
+            changes.append(
+                {
+                    "name": str(change.get("name") or "")[:64],
+                    "before": {
+                        str(key)[:64]: value
+                        for key, value in (
+                            before.items() if isinstance(before, Mapping) else ()
+                        )
+                        if isinstance(value, (bool, int))
+                    },
+                    "after": {
+                        str(key)[:64]: value
+                        for key, value in (
+                            after.items() if isinstance(after, Mapping) else ()
+                        )
+                        if isinstance(value, (bool, int))
+                    },
+                    "rows_changed": rows_changed,
+                    "explanation": str(change.get("explanation") or "")[:240],
+                }
+            )
+        output.append(
+            {
+                "migration_name": row["migration_name"],
+                "schema_version": int(row["schema_version"]),
+                "impact": {
+                    "schema_version": int(raw.get("schema_version") or 0)
+                    if isinstance(raw, dict)
+                    else 0,
+                    "migration": str(raw.get("migration") or "")[:64]
+                    if isinstance(raw, dict)
+                    else "",
+                    "changes": changes,
+                },
+                "created_at": row["created_at"],
+            }
+        )
+    return output
+
+
 def build_evidence_summary(
     conn: sqlite3.Connection,
     data_root: str,
@@ -792,6 +882,14 @@ def build_evidence_summary(
     readiness_freshness = _readiness_journal_freshness(
         freshness,
         include_journal_state=include_journal_state,
+    )
+    custody_quantity = (
+        core_custody_quantity_store.custody_quantity_readiness_summary(
+            conn,
+            profile["id"],
+            journal_status=str(freshness["status"]),
+            include_journal_state=include_journal_state,
+        )
     )
     transactions = []
     warning_counts: dict[str, int] = {}
@@ -837,6 +935,9 @@ def build_evidence_summary(
             quarantine,
             include_review_state=include_review_state,
         )
+        custody_warning = _custody_quantity_warning(tx, custody_quantity)
+        if custody_warning is not None:
+            warnings.append(custody_warning)
         if not include_review_state:
             warnings.append(
                 _warning(
@@ -879,12 +980,49 @@ def build_evidence_summary(
             item["edit_history"] = edit_history.get(tx["id"], [])
         transactions.append(item)
 
+    authored_evidence = core_custody_quantity_store.authored_evidence_hash_summary(
+        conn,
+        profile["id"],
+        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
+    )
+    filed_report_snapshots = core_custody_filed_reports.list_filed_report_snapshots(
+        conn, profile["id"]
+    )
+    custody_filed_report_impacts = core_custody_filed_reports.list_custody_impacts(
+        conn, profile["id"]
+    )
+    custody_filed_report_impact_resolutions = (
+        core_custody_filed_reports.list_custody_impact_resolutions(
+            conn, profile["id"]
+        )
+    )
+    custody_ai_assistance = core_custody_ai_audit.redacted_audit_summary(
+        conn,
+        profile["id"],
+        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
+    )
+    custody_tax_migration_audits = core_custody_tax_migration.list_redacted_reports(
+        conn,
+        profile["id"],
+        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
+    )
+    schema_migration_audits = _schema_migration_audits(conn)
     return {
         "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
         "workspace": {"id": workspace["id"], "label": workspace["label"]},
         "profile": {"id": profile["id"], "label": profile["label"]},
         "scope": scope,
         "journal_freshness": freshness,
+        "custody_quantity": custody_quantity,
+        "authored_custody_evidence": authored_evidence,
+        "filed_report_snapshots": filed_report_snapshots,
+        "custody_filed_report_impacts": custody_filed_report_impacts,
+        "custody_filed_report_impact_resolutions": (
+            custody_filed_report_impact_resolutions
+        ),
+        "custody_ai_assistance": custody_ai_assistance,
+        "custody_tax_migration_audits": custody_tax_migration_audits,
+        "schema_migration_audits": schema_migration_audits,
         "transactions": transactions,
         "summary": {
             "transaction_count": len(transactions),
@@ -894,6 +1032,21 @@ def build_evidence_summary(
             "warning_codes": dict(sorted(warning_counts.items())),
             "edit_history_event_count": edit_history_count,
             "edit_history_included": bool(include_edit_history),
+            "custody_gap_status": custody_quantity["status"],
+            "custody_issue_count": custody_quantity["issue_count"],
+            "authored_custody_evidence_hash_count": authored_evidence[
+                "snapshot_count"
+            ],
+            "filed_report_snapshot_count": len(filed_report_snapshots),
+            "custody_filed_report_impact_count": len(custody_filed_report_impacts),
+            "custody_filed_report_impact_resolution_count": len(
+                custody_filed_report_impact_resolutions
+            ),
+            "custody_ai_assistance_count": custody_ai_assistance["count"],
+            "custody_tax_migration_audit_count": len(
+                custody_tax_migration_audits
+            ),
+            "schema_migration_audit_count": len(schema_migration_audits),
         },
         "excluded_sensitive_material": SENSITIVE_MATERIAL_EXCLUSIONS,
     }
@@ -1120,11 +1273,24 @@ def export_audit_package(
                 "Transaction edit history exists but was excluded by export options.",
             )
         )
+    presumed_external = summary["custody_quantity"]["presumed_external"]
+    if presumed_external["slice_count"]:
+        package_warnings.append(
+            _warning(
+                "external_custody_presumed",
+                "warning",
+                (
+                    f"{presumed_external['slice_count']} unmatched custody slice(s) "
+                    "are treated as presumed external. This is disclosed but does "
+                    "not block reports."
+                ),
+            )
+        )
     package_warnings.append(
         _warning(
             "sensitive_material_excluded",
             "info",
-            "Descriptors, xpubs, backend URLs, credentials, wallet files, logs, AI settings, unrelated books, and technical wallet evidence were excluded.",
+            "Descriptors, xpubs, backend URLs, credentials, wallet files, logs, AI settings, unrelated books, and raw technical wallet evidence were excluded; authored evidence is represented by hashes only.",
         )
     )
 

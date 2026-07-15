@@ -2229,6 +2229,25 @@ class TransactionGraphTest(unittest.TestCase):
         )
 
     def test_partial_external_residual_annotation(self):
+        # A partial owned-output interpretation also books an external
+        # residual. Prove the source wallet's finite policy scope explicitly;
+        # an inventory hit alone is enough to recognize the owned output but
+        # deliberately insufficient to classify the remainder as external.
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = 'wallet-a'",
+            (
+                json.dumps(
+                    {
+                        "addresses": [ADDR_A],
+                        "ownership_policy": {
+                            "complete": True,
+                            "evidence": "wallet_export",
+                            "branch_last_issued": {},
+                        },
+                    }
+                ),
+            ),
+        )
         self._utxo("wallet-a", ADDR_A, "prev-partial", 0, amount=61_000_000)
         self._utxo("wallet-b", ADDR_B, "scan-b", 0, amount=50_000_000)
         raw = {
