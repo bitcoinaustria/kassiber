@@ -124,7 +124,7 @@ def _prepare_same_txid_roll(conn):
 
 
 class CustodyQuantityHandlerTests(unittest.TestCase):
-    def test_two_observed_same_txid_wallet_rows_auto_verify_without_full_graph(self):
+    def test_same_txid_rows_remain_external_without_observer_or_review(self):
         with tempfile.TemporaryDirectory() as root:
             conn = _book(root, "FIFO")
             try:
@@ -144,14 +144,16 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                     0,
                 )
                 self.assertEqual(
-                    conn.execute(
-                        """
-                        SELECT COUNT(*) FROM journal_entries
-                        WHERE transaction_id IN ('out', 'in')
-                          AND entry_type IN ('transfer_out', 'transfer_in')
-                        """
-                    ).fetchone()[0],
-                    2,
+                    {
+                        row["entry_type"]
+                        for row in conn.execute(
+                            """
+                            SELECT entry_type FROM journal_entries
+                            WHERE transaction_id IN ('out', 'in')
+                            """
+                        ).fetchall()
+                    },
+                    {"acquisition", "disposal"},
                 )
             finally:
                 conn.close()
