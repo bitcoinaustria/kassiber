@@ -5488,6 +5488,12 @@ def _migrate_msat_columns(conn):
                     pricing_method TEXT,
                     pricing_external_ref TEXT,
                     pricing_quality TEXT,
+                    commercial_applied_link_id TEXT,
+                    review_status TEXT,
+                    taxability_override INTEGER,
+                    at_regime_override TEXT,
+                    at_category_override TEXT,
+                    privacy_boundary TEXT,
                     kind TEXT,
                     description TEXT,
                     counterparty TEXT,
@@ -5506,6 +5512,9 @@ def _migrate_msat_columns(conn):
                     pricing_provider, pricing_pair, pricing_timestamp,
                     pricing_fetched_at, pricing_granularity, pricing_method,
                     pricing_external_ref, pricing_quality,
+                    commercial_applied_link_id, review_status,
+                    taxability_override, at_regime_override,
+                    at_category_override, privacy_boundary,
                     kind, description, counterparty, note, excluded, raw_json, created_at
                 FROM transactions;
                 DROP TABLE transactions;
