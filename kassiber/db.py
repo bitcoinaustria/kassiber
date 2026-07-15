@@ -174,6 +174,53 @@ CREATE TABLE IF NOT EXISTS chain_observer_coverage (
     PRIMARY KEY (observer_id, branch_key)
 );
 
+-- Wallet-policy epochs are the durable custody-facing interpretation of
+-- disposable observer state.  Their random ids do not fingerprint descriptor
+-- or xpub material.  ``private_material_json`` remains inside SQLCipher and is
+-- used only to recognize outputs from retired policies; it is excluded from
+-- public, AI, audit, diagnostic, and replication surfaces.
+CREATE TABLE IF NOT EXISTS wallet_policy_epochs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('active', 'retired')),
+    private_material_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    retired_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_policy_epochs_one_active
+    ON wallet_policy_epochs(wallet_id)
+    WHERE status = 'active';
+
+CREATE INDEX IF NOT EXISTS idx_wallet_policy_epochs_profile
+    ON wallet_policy_epochs(profile_id, wallet_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS wallet_policy_sources (
+    id TEXT PRIMARY KEY,
+    epoch_id TEXT NOT NULL REFERENCES wallet_policy_epochs(id) ON DELETE CASCADE,
+    source_wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    observer_kind TEXT NOT NULL,
+    branch_keys_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(epoch_id, source_wallet_id, source_key)
+);
+
+CREATE TABLE IF NOT EXISTS wallet_policy_coverage_witnesses (
+    source_id TEXT NOT NULL REFERENCES wallet_policy_sources(id) ON DELETE CASCADE,
+    branch_key TEXT NOT NULL,
+    scanned_to_exclusive INTEGER NOT NULL CHECK(scanned_to_exclusive >= 0),
+    highest_used INTEGER,
+    observer_kind TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY(source_id, branch_key)
+);
+
 -- Opaque dependency-owned key/value state. Values are intentionally BLOBs:
 -- Kassiber namespaces and versions them but never interprets their contents.
 -- The FK keeps the values inside the observer row's SQLCipher transaction.

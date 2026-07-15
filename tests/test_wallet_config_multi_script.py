@@ -20,6 +20,7 @@ from embit import bip32
 from kassiber.core import accounts as core_accounts
 from kassiber.core import freshness as core_freshness
 from kassiber.core import ownership
+from kassiber.core.ownership_policy_epochs import retired_policy_materials
 from kassiber.core.sync import classify_wallet_sync
 from kassiber.core.sync_backends import resolve_wallet_sync_targets
 from kassiber.core.ui_snapshot import _wallet_backend_summary
@@ -408,8 +409,10 @@ class WalletConfigFreshnessTests(unittest.TestCase):
             "SELECT * FROM wallets WHERE id = ?", (wallet["id"],)
         ).fetchone()
         stored = json.loads(migrated_row["config_json"])
+        self.assertNotIn(OWNERSHIP_HISTORY_CONFIG_KEY, stored)
         self.assertEqual(
-            stored[OWNERSHIP_HISTORY_CONFIG_KEY][0]["script_types"], ["p2wpkh"]
+            retired_policy_materials(conn, wallet["id"])[0]["script_types"],
+            ["p2wpkh"],
         )
 
         migrated_index, warnings = ownership.build_owned_index(

@@ -29,6 +29,7 @@ from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
 from .address_scripts import scriptpubkey_for_address_or_none
 from .chain_observer import delete_wallet_observer_state
+from .ownership_policy_epochs import roll_wallet_policy_epoch
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -690,6 +691,23 @@ def _ownership_material_snapshot(config):
     }
 
 
+def _ownership_material_identity_snapshot(config):
+    """Return script-policy identity without mutable coverage bookkeeping.
+
+    Coverage declarations, scan depth, and gap limits describe how thoroughly
+    existing material was searched. Updating them must not manufacture a
+    retired policy epoch or clear the wallet's synced inventory.
+    """
+
+    snapshot = _ownership_material_snapshot(config)
+    for field in (
+        OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
+        "gap_limit",
+    ):
+        snapshot.pop(field, None)
+    return snapshot
+
+
 def _historic_scan_floor(conn, wallet_id):
     row = conn.execute(
         "SELECT MAX(address_index) AS highest FROM wallet_utxos WHERE wallet_id = ?",
@@ -1042,6 +1060,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
     original_ownership_material = _ownership_material_snapshot(config)
+    original_ownership_identity = _ownership_material_identity_snapshot(config)
     original_sync_material_json = _sync_material_config_json(config)
     for field in clear_fields:
         if field not in config:
@@ -1058,12 +1077,19 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config[key] = value
 
     config = _validated_wallet_config(wallet["kind"], config)
-    if _ownership_material_snapshot(config) != original_ownership_material:
-        _archive_ownership_material(
+    ownership_identity_changed = (
+        _ownership_material_identity_snapshot(config) != original_ownership_identity
+    )
+    if ownership_identity_changed:
+        # Retain retired material and its last technical coverage in a durable,
+        # random-id policy epoch before disposable observer state is cleared.
+        # This records only imported policy history, never an attestation that
+        # every wallet owned by the profile has been supplied.
+        roll_wallet_policy_epoch(
             conn,
-            wallet["id"],
-            config,
+            wallet,
             original_ownership_material,
+            _ownership_material_snapshot(config),
         )
     config_json = json.dumps(config, sort_keys=True)
     sync_material_changed = (

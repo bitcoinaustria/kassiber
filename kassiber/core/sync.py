@@ -21,6 +21,7 @@ from .chain_observer import (
     apply_prepared_observer_update,
     discard_prepared_observer_updates,
 )
+from .ownership_policy_epochs import record_observer_policy_coverage
 from .wallets import (
     has_descriptor_sync_material,
     has_silent_payment_sync_material,
@@ -631,6 +632,7 @@ def apply_fetch_observer_updates(
     highest_used: dict[str, int] = {}
     for prepared in fetch.observer_updates:
         facts = apply_prepared_observer_update(conn, prepared)
+        record_observer_policy_coverage(conn, prepared.identity, facts.coverage)
         observer_records.extend(facts.transaction_records)
         for output in facts.outputs:
             key = (str(output.get("txid") or ""), int(output.get("vout") or 0))
