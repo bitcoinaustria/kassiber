@@ -2095,14 +2095,13 @@ def _normalize_review_transaction_relations(
 def _candidate_snapshot(
     conn: sqlite3.Connection, candidate: CustodyGapCandidate
 ) -> dict[str, Any]:
-    placeholders = ",".join("?" for _ in candidate.destination_wallet_ids)
     affected_rows = conn.execute(
-        f"""
+        """
         SELECT occurred_at FROM transactions
         WHERE profile_id = ? AND direction = 'outbound'
-          AND wallet_id IN ({placeholders}) AND occurred_at > ?
+          AND asset = ? AND occurred_at > ?
         """,
-        (candidate.profile_id, *candidate.destination_wallet_ids, candidate.ended_at),
+        (candidate.profile_id, candidate.asset, candidate.ended_at),
     ).fetchall()
     affected_years = sorted(
         {

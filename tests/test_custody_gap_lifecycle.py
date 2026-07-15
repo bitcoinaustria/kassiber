@@ -622,6 +622,55 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 ("ef" * 32, filed["id"]),
             )
 
+    def test_filed_report_impact_follows_profile_asset_pool_across_wallets(self):
+        self.conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(
+                'other', 'ws', 'profile', 'Unrelated wallet', 'descriptor',
+                '{"chain":"bitcoin","network":"main"}', 'now'
+            )
+            """
+        )
+        self._transaction(
+            "other-wallet-sale",
+            "other",
+            "outbound",
+            BTC,
+            "2023-06-01T00:00:00Z",
+        )
+        filed = custody_filed_reports.create_filed_report_snapshot(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            report_kind="capital-gains",
+            report_state="filed",
+            period_start_year=2023,
+            period_end_year=2023,
+            content_sha256="fa" * 32,
+            created_at="2024-04-01T00:00:00Z",
+        )
+        candidate = self._candidate()
+        snapshot = custody_gap_reviews._candidate_snapshot(self.conn, candidate)
+
+        preview = custody_gap_reviews.preview_guided_bridge(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            candidate=candidate,
+        )
+
+        self.assertEqual(snapshot["downstream"]["affected_disposals"], 1)
+        self.assertEqual(snapshot["downstream"]["affected_years"], [2023])
+        self.assertEqual(
+            [
+                impact["filed_report_snapshot_id"]
+                for impact in preview["filed_report_impacts"]
+            ],
+            [filed["id"]],
+        )
+
     def test_filed_report_impact_failure_rolls_back_bridge_and_review_atomically(self):
         custody_filed_reports.create_filed_report_snapshot(
             self.conn,
