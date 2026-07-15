@@ -13,6 +13,7 @@ import json
 from typing import Any, Mapping, Sequence
 
 from ..msat import msat_to_btc
+from ..time_utils import parse_iso_datetime_or_none
 from ..transfers import (
     apply_manual_pairs,
     bitcoin_network_domain,
@@ -27,6 +28,7 @@ from .loans import (
     CHANNEL_OPEN,
     CHANNEL_OPEN_MISMATCH,
 )
+from .custody_components import CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
 from .custody_evidence import CanonicalQuantityInput, QuantityObservation
 from .custody_quantity import (
     CUSTODY_SUSPENSE,
@@ -583,6 +585,43 @@ def _pair_claims(
             # txid across two observed wallet rows and a native-node payment
             # hash are different: both endpoints are independently observed,
             # so no graph-derived destination is being manufactured.
+            continue
+        source_when = parse_iso_datetime_or_none(source.occurred_at)
+        target_when = parse_iso_datetime_or_none(target.occurred_at)
+        if (
+            source_when is not None
+            and target_when is not None
+            and source_when
+            > target_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
+        ):
+            detail = {
+                "source_occurred_at": source.occurred_at,
+                "target_occurred_at": target.occurred_at,
+                "maximum_clock_skew_seconds": int(
+                    CUSTODY_CHRONOLOGY_SKEW_TOLERANCE.total_seconds()
+                ),
+                "required_for": "chronological_custody_continuity",
+            }
+            for transaction_id, row, paired_leg in (
+                (out_id, out_row, False),
+                (in_id, in_row, True),
+            ):
+                quarantines.append(
+                    {
+                        "transaction_id": transaction_id,
+                        "workspace_id": _field(row, "workspace_id"),
+                        "profile_id": _field(row, "profile_id"),
+                        "reason": "transfer_pair_chronology_mismatch",
+                        "detail_json": json.dumps(
+                            {
+                                **detail,
+                                **({"paired_leg": True} if paired_leg else {}),
+                            },
+                            sort_keys=True,
+                        ),
+                    }
+                )
+            blocked_transaction_ids.update((out_id, in_id))
             continue
         source_start = source_cursor.get(source.quantity_hash, 0)
         target_start = target_cursor.get(target.quantity_hash, 0)
