@@ -9,6 +9,7 @@ from typing import Any, Mapping, Sequence
 
 from ...errors import AppError
 from ...time_utils import now_iso
+from ...wallet_descriptors import normalize_asset_code
 
 
 AUTHORITY_VERSION = 1
@@ -50,7 +51,7 @@ def canonical_observed_quantity_hash(row: Mapping[str, Any]) -> str:
         "wallet_id": str(_field(row, "wallet_id") or ""),
         "external_id": str(_field(row, "external_id") or "").strip().lower(),
         "direction": str(_field(row, "direction") or "").strip().lower(),
-        "asset": str(_field(row, "asset") or "").strip().upper(),
+        "asset": normalize_asset_code(_field(row, "asset")),
         "amount_msat": int(_field(row, "amount") or 0),
         "fee_msat": int(_field(row, "fee") or 0),
         "amount_includes_fee": bool(_field(row, "amount_includes_fee")),
@@ -85,7 +86,7 @@ def fee_attribution_from_raw(raw_json: Any) -> str:
 def _record_key(record: Mapping[str, Any]) -> tuple[str, str, str]:
     return (
         str(record.get("txid") or record.get("external_id") or "").strip().lower(),
-        str(record.get("asset") or "").strip().upper(),
+        normalize_asset_code(record.get("asset")),
         str(record.get("direction") or "").strip().lower(),
     )
 
@@ -145,6 +146,7 @@ def persist_chain_observation_provenance(
     persisted = 0
     timestamp = now_iso()
     for entry in entries:
+        asset = normalize_asset_code(entry.get("asset"))
         rows = conn.execute(
             """
             SELECT * FROM transactions
@@ -157,7 +159,7 @@ def persist_chain_observation_provenance(
                 str(_field(profile, "id") or ""),
                 str(_field(wallet, "id") or ""),
                 str(entry.get("external_id") or ""),
-                str(entry.get("asset") or ""),
+                asset,
                 str(entry.get("direction") or ""),
             ),
         ).fetchall()
@@ -167,7 +169,7 @@ def persist_chain_observation_provenance(
                 code="observer_projection_conflict",
                 details={
                     "external_id": str(entry.get("external_id") or ""),
-                    "asset": str(entry.get("asset") or ""),
+                    "asset": asset,
                     "direction": str(entry.get("direction") or ""),
                     "match_count": len(rows),
                 },

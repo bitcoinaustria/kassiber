@@ -4,11 +4,13 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from kassiber.core.chain_observer.provenance import (
     canonical_graph_hash,
     canonical_observed_quantity_hash,
     persist_chain_observation_provenance,
+    provenance_entries_for_facts,
     row_has_current_authoritative_observation,
 )
 from kassiber.db import open_db
@@ -132,6 +134,49 @@ class ChainObservationProvenanceTest(unittest.TestCase):
             (self.raw,),
         )
         self.assertFalse(row_has_current_authoritative_observation(self._row()))
+
+    def test_issued_asset_identity_uses_canonical_lowercase_hex(self):
+        asset_id = "b2" * 32
+        self.conn.execute(
+            "UPDATE transactions SET asset = ? WHERE id = 'tx'",
+            (asset_id,),
+        )
+
+        entries = provenance_entries_for_facts(
+            (
+                (
+                    SimpleNamespace(id="descriptor:structural", observer_kind="lwk"),
+                    (
+                        {
+                            "external_id": "ab" * 32,
+                            "asset": asset_id.upper(),
+                            "direction": "outbound",
+                        },
+                    ),
+                ),
+            ),
+            (
+                {
+                    "external_id": "ab" * 32,
+                    "asset": asset_id,
+                    "direction": "outbound",
+                },
+            ),
+        )
+        self.assertEqual(entries[0]["asset"], asset_id)
+
+        persisted = persist_chain_observation_provenance(
+            self.conn,
+            self.profile,
+            self.wallet,
+            application_revision="issued-asset-apply",
+            chain="liquid",
+            network="regtest",
+            entries=entries,
+        )
+
+        self.assertEqual(persisted, 1)
+        self.assertTrue(row_has_current_authoritative_observation(self._row()))
 
 
 if __name__ == "__main__":
