@@ -343,15 +343,16 @@ must provide one complete output projection inside the atomic refresh result.
 ### Derivation ownership and source overlap
 
 - `core.ownership.build_owned_index`, `_seed_from_inventory`,
-  `_seed_from_transactions`, `_seed_transaction_outpoints`,
-  `_derive_wallet_into_index`, `classify_txid` and `identify` build the local
-  ownership graph.
+  `_seed_transaction_outpoints`, `_derive_wallet_into_index`, `classify_txid`
+  and `identify` build the local ownership graph from current/spent inventory,
+  exact stored receive observations, local transaction graphs, address lists,
+  and active/retired policy derivation.
 - `core.source_overlap._descriptor_config_scripts`,
   `scripts_from_sync_state`, `detect_profile_source_overlaps`,
   `filter_sync_state_for_canonical_owner` and
   `apply_address_list_overlap_repairs` decide canonical source ownership.
-- Wallet config retains bounded historic ownership material when a descriptor
-  changes.
+- Durable wallet-policy epochs retain new rollover material and its observed
+  scan coverage. Legacy inline `ownership_history` remains read-only compatible.
 
 Kassiber keeps ownership policy. BDK/LWK replace manual supported-route
 derivation and supply coverage/output facts; they do not decide beneficial

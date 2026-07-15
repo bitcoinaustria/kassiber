@@ -24,7 +24,6 @@ from kassiber.core.ownership_transfers import (
     derive_recorded_fanout_transfers,
     detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
-    graph_partial_payment_out_ids,
 )
 
 
@@ -455,30 +454,6 @@ class OwnershipDeriverTests(unittest.TestCase):
 
         self.assertEqual(result.derived_pairs, [])
         self.assertEqual(result.dropped_out_ids, set())
-
-    def test_partial_payment_detection_uses_single_input_recorded_source(self):
-        out = _outbound(
-            row_id="a-out", wallet_id="A", amount_sats=70_000_000, fee_sats=1000,
-            txid="partial", input_scripts=[SCRIPT["A"]],
-            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["EXT"], 20_000_000)],
-        )
-        index = _index({SCRIPT["B"]: ("B", "B")})
-        index.note_txid(_physical_txid("prev-0"), "A", "A")
-        flagged = graph_partial_payment_out_ids(
-            [
-                {
-                    "out": out,
-                    "in": _inbound(
-                        row_id="b-in",
-                        wallet_id="B",
-                        amount_sats=50_000_000,
-                        txid="partial",
-                    ),
-                }
-            ],
-            index,
-        )
-        self.assertEqual(flagged, {"a-out"})
 
     def test_sync_gap_without_ref_declines(self):
         # No ref for the destination wallet -> cannot book the MOVE target; the
@@ -2159,62 +2134,6 @@ class PendingOnchainTests(unittest.TestCase):
         self.assertEqual(detect_pending_onchain_ids([row]), {"pending-liquid-in"})
 
 
-class GraphPartialPaymentTests(unittest.TestCase):
-    """``graph_partial_payment_out_ids`` — which detect_intra pairs to withhold."""
-
-    def _pair(self, out_row, in_row):
-        return {"out": out_row, "in": in_row}
-
-    def test_multi_owned_destination_flagged_for_decomposition(self):
-        # Codex review (conflict+payout #1): A pays TWO owned wallets (B + C);
-        # detect_intra paired only A->B (C not synced). The pair must be flagged so
-        # the ownership deriver decomposes the full 1->N fan-out, instead of the C
-        # leg being absorbed as a (taxable) MOVE fee.
-        out = _outbound(
-            row_id="a-out", wallet_id="A", amount_sats=52_000_000, fee_sats=1000,
-            txid="fan", input_scripts=[SCRIPT["A"]],
-            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["C"], 2_000_000)],
-        )
-        b_in = _inbound(row_id="b-in", wallet_id="B", amount_sats=50_000_000, txid="fan")
-        flagged = graph_partial_payment_out_ids(
-            [self._pair(out, b_in)],
-            _index({SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")}),
-        )
-        self.assertEqual(flagged, {"a-out"})
-
-    def test_partial_payment_flagged(self):
-        # A spends to C (own) + an external recipient; C also recorded the
-        # receipt under the same txid (so detect_intra would pair A<->C). The
-        # outbound amount (0.7 = owned 0.5 + external 0.2) exceeds the owned-to-C
-        # value, so it is flagged for the graph deriver to split.
-        out = _outbound(
-            row_id="a-out", wallet_id="A", amount_sats=70_000_000, fee_sats=1000,
-            txid="pp", input_scripts=[SCRIPT["A"]],
-            outputs=[(SCRIPT["C"], 50_000_000), (SCRIPT["EXT"], 20_000_000)],
-        )
-        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=50_000_000, txid="pp")
-        flagged = graph_partial_payment_out_ids(
-            [self._pair(out, c_in)],
-            _index({SCRIPT["A"]: ("A", "A"), SCRIPT["C"]: ("C", "C")}),
-        )
-        self.assertEqual(flagged, {"a-out"})
-
-    def test_pure_self_transfer_not_flagged(self):
-        # A -> C with only change back to self besides the owned leg; no external
-        # residual, so detect_intra's pairing is correct and is left alone.
-        out = _outbound(
-            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
-            txid="st", input_scripts=[SCRIPT["A"]],
-            outputs=[(SCRIPT["C"], 50_000_000)],
-        )
-        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=50_000_000, txid="st")
-        flagged = graph_partial_payment_out_ids(
-            [self._pair(out, c_in)],
-            _index({SCRIPT["A"]: ("A", "A"), SCRIPT["C"]: ("C", "C")}),
-        )
-        self.assertEqual(flagged, set())
-
-
 LIQUID_ASSET = "11" * 32
 LIQUID_OTHER_ASSET = "22" * 32
 
@@ -2609,7 +2528,7 @@ class LiquidOwnershipDeriverTests(unittest.TestCase):
             "ownership_transfer_asset_evidence_incomplete",
         )
 
-    def test_graphless_liquid_shortfall_is_never_restored_as_fee(self):
+    def test_graphless_liquid_shortfall_blocks_instead_of_becoming_fee(self):
         txid = "78" * 32
         source = _liquid_row(
             row_id="a-out",
@@ -2643,9 +2562,7 @@ class LiquidOwnershipDeriverTests(unittest.TestCase):
                 }
             ),
         )
-        pair = {"out": source, "in": destination}
         index = _liquid_index()
-        self.assertEqual(graph_partial_payment_out_ids([pair], index), {"a-out"})
         result = derive_ownership_transfers(
             [source, destination],
             index=index,
@@ -2656,19 +2573,6 @@ class LiquidOwnershipDeriverTests(unittest.TestCase):
         self.assertEqual(
             result.blocked_sources[0]["reason"], "liquid_transfer_graph_incomplete"
         )
-
-    def test_graphless_pair_not_flagged(self):
-        out = {
-            "id": "a-out", "wallet_id": "A", "direction": "outbound", "asset": "BTC",
-            "amount": 50_000_000 * SATS, "fee": 0, "external_id": "csv", "raw_json": "{}",
-        }
-        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=50_000_000, txid="csv")
-        flagged = graph_partial_payment_out_ids(
-            [{"out": out, "in": c_in}],
-            _index({SCRIPT["C"]: ("C", "C")}),
-        )
-        self.assertEqual(flagged, set())
-
 
 if __name__ == "__main__":
     unittest.main()

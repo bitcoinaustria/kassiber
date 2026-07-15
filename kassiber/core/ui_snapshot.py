@@ -5499,7 +5499,8 @@ def build_wallet_identify_snapshot(
     """Reconcile pasted addresses / txids against the active profile's wallets.
 
     Read-only and cache-only: matches against the watch-only output inventory,
-    imported txids and offline descriptor derivation. It never contacts the
+    exact stored receive outpoints, local transaction graphs, address lists,
+    and offline active/retired policy derivation. It never contacts the
     network — on-chain verification is the separate ``ui.wallets.identify_onchain``
     action, so this read surface stays safe to call without consent.
     """

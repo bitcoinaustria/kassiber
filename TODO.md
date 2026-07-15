@@ -212,7 +212,8 @@ same verification surface.
   each transaction as a self-transfer / outbound payment / inbound receipt. Pure
   engine in [`kassiber/core/ownership.py`](kassiber/core/ownership.py) matches on
   canonical scriptPubKey (address-string fallback for Liquid confidential
-  addresses), seeds free from inventory + imported txids, derives descriptors
+  addresses), seeds from output inventory, exact stored receive outpoints,
+  local transaction graphs, and address lists, derives active/retired policies
   offline up to `--scan-to-index`, and accepts an injected on-chain fetcher
   (`--verify-on-chain`) so read surfaces stay cache-only. AI variant drops
   scriptPubKeys / derivation paths / address indices.
@@ -1072,21 +1073,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     `max(1% of out, 2500 sats)`. A real fix needs out-of-band fee recovery (raw
     tx / NBXplorer) or a surfaced "fee unknown" state on the disposal; the marker
     added here is the groundwork.
-  - [x] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
-    one tx pays an owned wallet + a small external address + change, and the
-    owned destination synced the shared txid, `detect_intra_transfers` paired the
-    self-transfer leg and pre-empted the on-chain ownership deriver, so the
-    external payment (under `max(1% of out, 2500 sats)`) fell through to a
-    non-taxable MOVE fee instead of a taxable disposal. Fixed via
-    `ownership_transfers.graph_partial_payment_out_ids`: after
-    `detect_intra_transfers`, the engine withholds any 1-out/1-in pair whose
-    outbound graph is single-source and shows value leaving to a non-owned
-    recipient (recorded `amount` > owned-to-other-wallets value), so
-    `derive_ownership_transfers` re-derives it — booking the owned MOVE and
-    keeping the external residual as a real disposal. `detect_intra` stays
-    authoritative for graph-less (CSV) rows and pure self-transfers. Tests:
-    `test_ownership_transfers.GraphPartialPaymentTests`,
-    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest`.
+  - [x] **Sub-ceiling external payment absorbed as a transfer fee (P2).** The
+    canonical custody interpreter now decomposes graph-proven owned legs and
+    external residuals before tax projection. Exact quantities are arbitrated
+    once, so the owned slice becomes a MOVE and the external slice remains a
+    disposal even when it is smaller than the old fee heuristic. Pure recorded
+    pairs still require exact conservation; graphless ambiguity fails closed.
+    Tests: `test_rp2_ownership_transfers.PartialPaymentCustodyArbitrationEngineTest`.
   - [x] **Cross-wallet consolidation quarantined instead of booked (was implicit
     in the fan-out limitation).** A spend funded by inputs from two or more owned
     wallets (consolidating e.g. Cold + Hot into Savings) was the one self-transfer
@@ -1103,17 +1096,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     readable esplora graph, exact conservation; anything else still quarantines.
     Tests: `test_ownership_transfers.MultiSourceConsolidationDeriverTests`,
     `test_rp2_ownership_transfers.MultiSourceConsolidationEngineTest`.
-  - [x] **Withheld partial-payment pair orphaned when the deriver declines (P1,
-    regression introduced with the withhold above).** `graph_partial_payment_out_ids`
-    withheld the `detect_intra` pair unconditionally; when `derive_ownership_transfers`
-    then DECLINED (ambiguous owned output shared by two wallets, ambiguous
-    destination, amount mismatch) it produced no derived pair and no override, so
-    the source booked a FULL disposal and the destination a phantom acquisition
-    with NO quarantine (the `fanout_holds` premise suppressed the block). Fixed in
-    `rp2.py`: the withheld pairs are kept and ROLLED BACK to their original
-    self-transfer when the deriver did not handle the source (not dropped, not
-    overridden); restored sources are excluded from the block quarantine. Test:
-    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest.test_withhold_rolls_back_when_owned_output_is_ambiguous`.
+  - [x] **Ambiguous partial payment cannot leak a phantom leg (P1).** If an
+    owned output maps to multiple wallets or the physical event does not
+    conserve, canonical arbitration emits a blocking custody conflict for the
+    complete event. No partial decision reaches the finalized tax projection,
+    so neither a full disposal nor a phantom acquisition can be booked. Test:
+    `test_rp2_ownership_transfers.PartialPaymentCustodyArbitrationEngineTest.test_graph_proven_external_residual_blocks_when_owned_output_is_ambiguous`.
   - [x] **Multi-source consolidation double-counts an off-group destination receipt
     (P1, regression).** `has_external_receipt` required EXACT amount equality, so a
     destination receipt recorded under a different id at a slightly different amount

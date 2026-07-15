@@ -640,12 +640,11 @@ def build_owned_index(
 ) -> tuple[OwnedIndex, list[str]]:
     """Build the ownership index for the given wallets.
 
-    Seeds the cheap tiers (output inventory + imported txids + address-list
-    wallets) unconditionally, then - when ``derive`` is set - derives descriptor
-    wallets up to a per-wallet inclusive ceiling (``max(scan_to_index,
-    highest_used + gap_limit)``) so historic addresses past the last synced
-    index are still found. Returns the index plus any non-fatal warnings (e.g.
-    a descriptor that could not be parsed).
+    Seeds the cheap tiers (output inventory, exact stored receive outpoints,
+    local transaction graphs, and address lists) unconditionally. When
+    ``derive`` is set, it derives active and retired descriptor policies to a
+    per-policy inclusive ceiling so historic addresses past the last synced
+    index remain recognizable. Returns the index plus non-fatal warnings.
     """
     index = OwnedIndex()
     warnings: list[str] = []
@@ -820,108 +819,6 @@ def _seed_from_inventory(
     return highest
 
 
-def _seed_from_transactions(
-    conn: sqlite3.Connection,
-    index: OwnedIndex,
-    profile_id: str,
-    wallets: Sequence[sqlite3.Row],
-) -> None:
-    label_by_id = {str(w["id"]): str(w["label"]) for w in wallets}
-    scope_by_id: dict[str, tuple[str, str]] = {}
-    for wallet in wallets:
-        config = _wallet_config(wallet)
-        scope_by_id[str(wallet["id"])] = _index_chain_network(
-            config.get("chain"), config.get("network")
-        )
-    if not label_by_id:
-        return
-    placeholders = ", ".join("?" for _ in label_by_id)
-    rows = conn.execute(
-        f"SELECT external_id, wallet_id, raw_json FROM transactions "
-        f"WHERE profile_id = ? AND external_id IS NOT NULL AND wallet_id IN ({placeholders})",
-        (profile_id, *label_by_id.keys()),
-    ).fetchall()
-    for row in rows:
-        wallet_id = str(row["wallet_id"])
-        chain, network = scope_by_id.get(wallet_id, ("bitcoin", "main"))
-        index.note_txid(
-            row["external_id"],
-            wallet_id,
-            label_by_id.get(wallet_id, wallet_id),
-            chain=chain,
-            network=network,
-        )
-        _seed_historical_receive_outpoints(
-            index,
-            row["raw_json"],
-            external_id=row["external_id"],
-            wallet_id=wallet_id,
-            chain=chain,
-            network=network,
-        )
-
-
-def _seed_historical_receive_outpoints(
-    index: OwnedIndex,
-    raw_json: Any,
-    *,
-    external_id: Any,
-    wallet_id: str,
-    chain: str,
-    network: str,
-) -> None:
-    """Recover exact spent outpoints from bounded Core receive records.
-
-    ``wallet_utxos`` is a current inventory, so a later spend may remove the
-    only exact ``txid:vout`` ownership fact.  Bitcoin Core's imported receive
-    history retains that vout.  The record is not trusted on its own: its txid
-    must match the transaction row and its address must already resolve only to
-    this wallet in the same physical scope.
-    """
-
-    try:
-        payload = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return
-    if isinstance(payload, list):
-        records = payload
-    elif isinstance(payload, Mapping):
-        details = payload.get("details")
-        records = details if isinstance(details, list) else [payload]
-    else:
-        return
-    expected_txid = str(external_id or "").strip().lower()
-    if not expected_txid:
-        return
-    scope = _index_chain_network(chain, network)
-    for record in records:
-        if not isinstance(record, Mapping):
-            continue
-        if str(record.get("category") or "").strip().lower() not in {
-            "receive",
-            "generate",
-            "immature",
-        }:
-            continue
-        txid = str(record.get("txid") or expected_txid).strip().lower()
-        if txid != expected_txid:
-            continue
-        try:
-            vout = int(record.get("vout"))
-        except (TypeError, ValueError):
-            continue
-        if vout < 0:
-            continue
-        address_matches = [
-            match
-            for match in index.lookup_address(str(record.get("address") or ""))
-            if _index_chain_network(match.chain, match.network) == scope
-        ]
-        if {str(match.wallet_id) for match in address_matches} != {wallet_id}:
-            continue
-        index.add_outpoint(txid, vout, address_matches[0])
-
-
 def _seed_transaction_outpoints(
     conn: sqlite3.Connection,
     index: OwnedIndex,
@@ -979,15 +876,6 @@ def _seed_transaction_outpoints(
             for match in matches:
                 if str(match.wallet_id) == wallet_id:
                     index.add_outpoint(external_txid, output_index, match)
-
-
-def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, str]:
-    return {
-        str(row["id"]): str(row["label"])
-        for row in conn.execute(
-            "SELECT id, label FROM wallets WHERE profile_id = ?", (profile_id,)
-        ).fetchall()
-    }
 
 
 def _wallet_summary_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, str]]:

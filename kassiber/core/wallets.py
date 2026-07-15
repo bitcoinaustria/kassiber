@@ -74,7 +74,6 @@ WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
 OWNERSHIP_HISTORY_CONFIG_KEY = "ownership_history"
 OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
 MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
-_OWNERSHIP_HISTORY_LIMIT = 8
 _OWNERSHIP_MATERIAL_FIELDS = (
     "descriptor",
     "change_descriptor",
@@ -706,33 +705,6 @@ def _ownership_material_identity_snapshot(config):
     ):
         snapshot.pop(field, None)
     return snapshot
-
-
-def _historic_scan_floor(conn, wallet_id):
-    row = conn.execute(
-        "SELECT MAX(address_index) AS highest FROM wallet_utxos WHERE wallet_id = ?",
-        (wallet_id,),
-    ).fetchone()
-    return max(0, int(row["highest"] or 0)) if row else 0
-
-
-def _archive_ownership_material(conn, wallet_id, config, snapshot):
-    if not snapshot:
-        return
-    archived = dict(snapshot)
-    archived["scan_to_index"] = _historic_scan_floor(conn, wallet_id)
-    existing = [
-        dict(item)
-        for item in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
-        if isinstance(item, dict)
-    ]
-    canonical = json.dumps(archived, sort_keys=True)
-    existing = [
-        item for item in existing if json.dumps(item, sort_keys=True) != canonical
-    ]
-    config[OWNERSHIP_HISTORY_CONFIG_KEY] = (existing + [archived])[
-        -_OWNERSHIP_HISTORY_LIMIT:
-    ]
 
 
 def _wallet_descriptor_state(config):

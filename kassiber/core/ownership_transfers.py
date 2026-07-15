@@ -36,11 +36,10 @@ existing row-matching + quarantine behavior, never mis-booked):
 * **Owned outputs only.** External recipients and OP_RETURN are never legs;
   the residual ``amount - Σ(legs)`` stays on the source as a real disposal.
 
-The journal now withholds a same-txid 1-out/1-in pair when the graph proves an
-external residual or multiple owned destinations, giving this deriver first
-refusal. If safe decomposition still declines, multi-owned cases stay blocked
-for ownership review; a simple partial-payment pair is restored so no leg is
-orphaned. Fully-recorded and fully sync-gapped fan-outs are decomposed normally.
+Canonical custody arbitration gives exact native-event and conserving recorded
+pair claims precedence over graph heuristics. Graph interpretation handles
+external residuals, sync-gapped fan-outs, and consolidations; ambiguity remains
+reviewable instead of being folded into a transfer fee.
 
 Amount model: an outbound row's spend capacity is ``amount + fee`` unless
 ``amount_includes_fee`` is set. Esplora-style rows usually have ``amount`` as
@@ -1429,141 +1428,6 @@ def derive_multi_source_consolidations(
                 result.dropped_in_ids.add(str(_get(row, "id")))
 
     return result
-
-
-def graph_partial_payment_out_ids(
-    pairs: Sequence[Mapping[str, Any]], index: Any
-) -> set[str]:
-    """Out-row ids of clean 1-out/1-in pairs that are graph-proven partial payments.
-
-    ``detect_intra_transfers`` pairs a same-txid 1-out/1-in self-transfer before
-    the address-ownership deriver runs. When that spend's outbound *also* paid a
-    non-owned recipient (a partial payment), the 1-out/1-in pairing absorbs the
-    external payment into the implied MOVE fee (``sent - received``) and never
-    taxes it as a disposal. Withholding such a pair lets
-    :func:`derive_ownership_transfers` re-derive it from the graph: it books the
-    owned leg as a MOVE and keeps the external residual as a real disposal.
-
-    A pair is flagged only when, from the outbound row's readable graph:
-
-    * the inputs are single-source (the contributor owns every input), and
-    * some value landed in *other* owned wallets (an owned destination exists),
-      and the recorded outbound ``amount`` (its non-change output total) exceeds
-      that owned-to-others value — i.e. the remainder left to a non-owned
-      recipient.
-
-    Pure self-transfers are left to ``detect_intra_transfers``. A graphless
-    Liquid shortfall is withheld even without an ownership index because its
-    miner fee is already stored separately; restoring it would hide an external
-    payment as a fee.
-    """
-    flagged: set[str] = set()
-    for pair in pairs:
-        out_row = pair.get("out") if hasattr(pair, "get") else pair["out"]
-        in_row = pair.get("in") if hasattr(pair, "get") else pair["in"]
-        if out_row is None:
-            continue
-        # On Liquid, amount excludes the separately recorded network fee.  A
-        # smaller owned receipt therefore proves that something besides the
-        # fee left the wallet, even when legacy raw_json lacks valued outputs.
-        if (
-            _row_is_liquid(out_row)
-            and in_row is not None
-            and int(_get(out_row, "amount") or 0)
-            != int(_get(in_row, "amount") or 0)
-        ):
-            flagged.add(str(_get(out_row, "id")))
-            continue
-        if index is None:
-            continue
-        observations = [
-            parsed
-            for candidate in (out_row, in_row)
-            if candidate is not None
-            and (
-                parsed := _parse_onchain_tx(
-                    _get(candidate, "raw_json"), allow_partial=True
-                )
-            )
-            is not None
-        ]
-        parsed = merge_ownership_txs(observations)
-        if parsed is None:
-            continue
-        own_parsed = _parse_onchain_tx(_get(out_row, "raw_json"), allow_partial=True)
-        if own_parsed is not None:
-            parsed["component"] = dict(own_parsed.get("component") or {})
-        canonical_scope = _ownership_onchain_scope(
-            out_row,
-            index=index,
-            parsed=own_parsed or parsed,
-        )
-        if canonical_scope is None:
-            continue
-        physical_scope = (canonical_scope[0], canonical_scope[1])
-        source_wallet_id = str(_get(out_row, "wallet_id"))
-        component_inputs, component_complete = _component_inputs(parsed, out_row)
-        if not component_complete or parsed.get("evidence_conflicts"):
-            flagged.add(str(_get(out_row, "id")))
-            continue
-        if not _inputs_are_single_source_or_recorded_source(
-            component_inputs,
-            index,
-            source_wallet_id,
-            out_row,
-            physical_scope=physical_scope,
-        ):
-            continue
-        owned_to_others_sats = 0
-        owned_dest_wallets: set[str] = set()
-        for output in parsed["outputs"]:
-            matches = _matches_in_physical_scope(
-                index.lookup_script(output["script"]), physical_scope
-            )
-            if not matches:
-                continue  # external recipient / OP_RETURN
-            owner_ids = {str(match.wallet_id) for match in matches}
-            relation = _leg_asset_relation(output, parsed, out_row)
-            if relation == "different":
-                continue
-            if relation == "unknown" or output.get("value_sats") is None:
-                flagged.add(str(_get(out_row, "id")))
-                owned_dest_wallets.add("__incomplete__")
-                continue
-            if source_wallet_id in owner_ids:
-                continue  # change back to self
-            owned_to_others_sats += int(output["value_sats"])
-            owned_dest_wallets |= owner_ids
-        owned_to_others_msat = owned_to_others_sats * SATS_TO_MSAT
-        amount_msat = int(_get(out_row, "amount") or 0)
-        principal_capacity_msat = amount_msat
-        if _get(out_row, "amount_includes_fee"):
-            exact_fee_msat = exact_onchain_fee_msat_from_parsed(
-                parsed,
-                asset=str(_get(out_row, "asset") or ""),
-            )
-            if exact_fee_msat is None:
-                # The folded gap could be either the miner fee or an external
-                # recipient.  Give the evidence-aware deriver first refusal; if
-                # it cannot prove the fee, the restored pair fails closed in tax
-                # normalization instead of absorbing the gap.
-                if amount_msat != owned_to_others_msat:
-                    flagged.add(str(_get(out_row, "id")))
-                continue
-            principal_capacity_msat -= exact_fee_msat
-        # Withhold so the ownership deriver re-derives this spend when EITHER it
-        # also paid a non-owned recipient (external residual) OR it fanned out to
-        # two or more owned wallets. In the fan-out case detect_intra_transfers
-        # pairs only the single destination that recorded a same-txid inbound,
-        # leaving the other owned legs to be absorbed as a (taxable) MOVE fee —
-        # so the deriver must decompose the full 1->N fan-out instead.
-        external_residual = (
-            owned_to_others_msat > 0
-            and principal_capacity_msat > owned_to_others_msat
-        )
-        if external_residual or len(owned_dest_wallets) >= 2:
-            flagged.add(str(_get(out_row, "id")))
-    return flagged
 
 
 def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:

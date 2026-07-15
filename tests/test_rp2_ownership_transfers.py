@@ -826,13 +826,10 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
             any(entry["entry_type"] == "disposal" for entry in state.entries)
         )
 
-    def test_whole_row_payout_with_readable_graph_not_restored_as_move(self):
-        # Codex review #1: the payout out row has a READABLE graph that also pays
-        # an owned sibling wallet + an external residual, so
-        # graph_partial_payment_out_ids WITHHOLDS its auto-pair before the payout
-        # prune runs. The payout-claimed id must also be dropped from the withheld
-        # set, or the restore-withheld path re-adds it and books the reviewed
-        # payout as a non-taxable MOVE (dropping the declared proceeds).
+    def test_whole_row_payout_with_readable_graph_remains_payout(self):
+        # A reviewed whole-row payout has precedence over weaker graph-derived
+        # custody interpretations, even when the graph also names an owned
+        # sibling output. It must remain a payout with declared proceeds.
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
@@ -1304,14 +1301,10 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             sorted(on_reasons), ["ownership_transfer_source_ambiguous"] * 2
         )
 
-    def test_off_group_fanout_destination_does_not_restore_partial_pair(self):
-        # Codex sidecar review: graph proves A paid B AND C, but only B shares
-        # A's external_id and C was imported under a provider id. The A->B pair is
-        # withheld so the deriver can decompose 1->N; when C's off-group inbound
-        # makes that derivation ambiguous, restoring only A->B would quarantine
-        # A/B as an implausible-fee transfer and still book C as an acquisition,
-        # inflating holdings to 1.3 BTC. Hold the unresolved timestamp behind the
-        # basis barrier and surface the precise review flag.
+    def test_off_group_fanout_destination_blocks_partial_pair(self):
+        # Graph evidence says A paid B and C, but C's off-group provider id makes
+        # the physical event ambiguous. Canonical arbitration must hold the
+        # complete timestamp behind the basis barrier, never finalize A->B alone.
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
@@ -1934,14 +1927,8 @@ class SameTimestampTransferOrderingEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.6, places=6)
 
 
-class PartialPaymentWithholdingEngineTest(unittest.TestCase):
-    """Fix: a same-txid 1-out/1-in pair that ALSO pays a (small) external party.
-
-    detect_intra_transfers would pair the owned leg and silently fold the
-    external payment into the implied MOVE fee (sub-ceiling, so not even
-    quarantined). Withholding the pair lets the graph deriver book the owned
-    MOVE and keep the external residual as a real taxable disposal.
-    """
+class PartialPaymentCustodyArbitrationEngineTest(unittest.TestCase):
+    """Canonical owned and external slices stay distinct through tax projection."""
 
     def _run_unverified_coverage_gap(self, *, include_later_out=False):
         index = OwnedIndex()
@@ -1998,7 +1985,7 @@ class PartialPaymentWithholdingEngineTest(unittest.TestCase):
         index.add_script(SCRIPT_B, _match("B", "Hot"))
         # A spends 0.5 to B (own) + 0.002 to an external recipient + 0.0001 fee.
         # The external leg (0.002) is under the swap-fee ceiling for a 0.502
-        # outbound, so without the withhold it is absorbed as a MOVE fee.
+        # outbound. Canonical graph interpretation must not absorb it as a fee.
         spend = json.dumps(
             {
                 "txid": "partial-pp",
@@ -2104,12 +2091,11 @@ class PartialPaymentWithholdingEngineTest(unittest.TestCase):
             {entry["transaction_id"] for entry in state.entries},
         )
 
-    def test_graph_proven_external_residual_never_rolls_back_when_owned_output_is_ambiguous(self):
+    def test_graph_proven_external_residual_blocks_when_owned_output_is_ambiguous(self):
         # The owned output is paid to a script owned by TWO of the user's wallets
         # (shared descriptor / reused address), so the ownership deriver cannot
-        # route the leg and DECLINES. The known external output means the original
-        # row pair is provably NOT a complete MOVE, so it must never be restored:
-        # doing so would silently absorb the external principal as a transfer fee.
+        # route the leg. The known external output means the physical event is
+        # not a complete MOVE, so the arbiter blocks the complete event.
         # The positive ambiguous-ownership evidence blocks the complete physical
         # event. This is not a scan-coverage guess: an explicit missing-wallet /
         # shared-policy workflow must resolve the owned slice before any sibling
