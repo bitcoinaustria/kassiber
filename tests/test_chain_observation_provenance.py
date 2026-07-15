@@ -64,7 +64,7 @@ class ChainObservationProvenanceTest(unittest.TestCase):
                 external_id_kind, fingerprint, occurred_at, direction, asset,
                 amount, fee, amount_includes_fee, raw_json, created_at
             ) VALUES(
-                'tx', 'ws', 'profile', 'wallet', ?, 'txid', 'fingerprint', ?,
+                'tx', 'ws', 'profile', 'wallet', ?, NULL, 'fingerprint', ?,
                 'outbound', 'LBTC', 100000, 0, 1, ?, ?
             )
             """,

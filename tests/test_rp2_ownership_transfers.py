@@ -220,6 +220,49 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         self.assertEqual(entry_types.count("transfer_out"), 2)
         self.assertEqual(entry_types.count("transfer_in"), 2)
 
+    def test_exact_recorded_fanout_preempts_untrusted_graph_candidate(self):
+        # Closed observer authority is required to manufacture a missing graph
+        # destination. It is not required when every owned wallet independently
+        # recorded the same physical event and the complete 1:N quantities
+        # conserve. That stronger row set must win before a graph candidate can
+        # consume it and then fail the authority gate.
+        rows = []
+        for original in _fanout_rows():
+            row = dict(original)
+            for key in (
+                "observation_authority_version",
+                "observation_graph_hash",
+                "observation_quantity_hash",
+                "observation_fee_attribution",
+            ):
+                row.pop(key, None)
+            rows.append(row)
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            finalized_tax_inputs(
+                PROFILE,
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=_fanout_index(),
+            )
+        )
+
+        self.assertEqual(
+            [
+                audit["pairing_source"]
+                for audit in state.intra_audit
+                if audit.get("pairing_source") == "recorded_fanout"
+            ],
+            ["recorded_fanout", "recorded_fanout"],
+        )
+        self.assertNotIn(
+            "disposal", [entry["entry_type"] for entry in state.entries]
+        )
+        self.assertNotIn(
+            "owned_fanout_unresolved",
+            {item["reason"] for item in state.quarantines},
+        )
+
     def test_fanout_becomes_moves_with_deriver(self):
         state = self._run(owned_index=_fanout_index())
         reasons = {q["reason"] for q in state.quarantines}
@@ -350,15 +393,14 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         self.assertNotIn("transfer_in", entry_types)
 
     def test_derived_move_provenance_is_surfaced(self):
-        # The non-taxable treatment must be auditable: every leg the deriver
-        # proved from the on-chain graph is tagged "ownership_derived" in the
-        # intra-transfer audit, and records the basis in its entry description so
-        # the report / transaction view shows WHY it is a MOVE.
+        # The non-taxable treatment must be auditable: a complete recorded
+        # fan-out identifies its exact proof class and records that basis in the
+        # entry description so reports show why this is a MOVE.
         state = self._run(owned_index=_fanout_index())
         derived = [
             audit
             for audit in state.intra_audit
-            if audit.get("pairing_source") == "ownership_derived"
+            if audit.get("pairing_source") == "recorded_fanout"
         ]
         self.assertEqual(len(derived), 2)  # both fan-out legs
         descriptions = [
@@ -368,7 +410,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         ]
         self.assertEqual(len(descriptions), 4)  # 2 fan-out legs x (out + in)
         self.assertTrue(
-            all("proven by address ownership" in d for d in descriptions),
+            all("proven by complete wallet observations" in d for d in descriptions),
             descriptions,
         )
 

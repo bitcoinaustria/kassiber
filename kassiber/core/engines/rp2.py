@@ -385,6 +385,10 @@ def _compose_transfer_notes(transfer: Any) -> str:
         # proven from the on-chain transaction graph (an output paid an address
         # owned by another of the user's wallets), not a same-txid row match.
         tokens.append("self-transfer proven by address ownership")
+    elif pairing_source == "recorded_fanout":
+        # Every destination wallet independently observed the same physical
+        # event and the complete 1:N quantities conserve exactly.
+        tokens.append("self-transfer proven by complete wallet observations")
     elif pairing_source == "multi_source_consolidation":
         # One leg of a consolidation funded by several owned wallets, split from
         # the graph + per-wallet rows so the network fee is booked once.
@@ -421,6 +425,8 @@ def _compose_transfer_journal_description(audit: Mapping[str, Any]) -> str:
         # so the audit/report shows this MOVE was proven from the on-chain
         # address graph rather than matched on a shared txid.
         tokens.append("(proven by address ownership)")
+    elif pairing_source == "recorded_fanout":
+        tokens.append("(proven by complete wallet observations)")
     elif pairing_source == "multi_source_consolidation":
         tokens.append("(multi-wallet consolidation)")
     return " ".join(tokens)
@@ -936,9 +942,8 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             "spot_price": (
                 float(transfer.spot_price) if transfer.spot_price is not None else 0.0
             ),
-            # Provenance for the audit trail: "ownership_derived" when this
-            # MOVE was proven from the on-chain graph rather than row-matched
-            # (None for same-txid / manual pairs).
+            # Provenance for the audit trail: graph ownership, complete
+            # recorded fan-out, consolidation, or row/review matching.
             "pairing_source": getattr(transfer, "pairing_source", None),
         }
         if getattr(transfer, "at_regime", None):

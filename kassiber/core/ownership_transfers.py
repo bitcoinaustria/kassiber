@@ -139,6 +139,7 @@ class ProfileTransferDerivation:
     """Shared ownership pipeline result for journal and graph preview."""
 
     rows_after_consolidation: list[Mapping[str, Any]]
+    rows_after_recorded_fanout: list[Mapping[str, Any]]
     rows_after_ownership: list[Mapping[str, Any]]
     rows: list[Mapping[str, Any]]
     consolidation: OwnershipDeriveResult
@@ -171,7 +172,7 @@ def derive_profile_transfers(
     already_paired_ids: set[str] | None = None,
     sort_key: Callable[[Mapping[str, Any]], Any] | None = None,
 ) -> ProfileTransferDerivation:
-    """Run the shared consolidation -> ownership -> fan-out pipeline.
+    """Run consolidation -> exact recorded fan-out -> graph ownership.
 
     Callers remain responsible for manual-pair, payout, quarantine, and tax
     policy. This function owns the ordering and the row set each deriver sees,
@@ -190,36 +191,33 @@ def derive_profile_transfers(
     )
     handled |= consolidation.dropped_out_ids | consolidation.dropped_in_ids
 
-    ownership = derive_ownership_transfers(
+    fanout = derive_recorded_fanout_transfers(
         rows_after_consolidation,
+        already_paired_ids=handled,
+    )
+    rows_after_recorded_fanout = _rows_after_derivation(
+        rows_after_consolidation, fanout, sort_key=sort_key
+    )
+    handled |= fanout.dropped_out_ids | fanout.dropped_in_ids
+    handled |= {str(out_id) for out_id in fanout.out_row_overrides}
+    handled |= {
+        str(_get(pair.get("in"), "id")) for pair in fanout.derived_pairs
+    }
+
+    ownership = derive_ownership_transfers(
+        rows_after_recorded_fanout,
         index=index,
         wallet_refs_by_id=wallet_refs_by_id,
         already_paired_ids=handled,
     )
     rows_after_ownership = _rows_after_derivation(
-        rows_after_consolidation, ownership, sort_key=sort_key
-    )
-    fanout_handled = set(handled)
-    fanout_handled |= ownership.dropped_out_ids
-    fanout_handled |= {str(out_id) for out_id in ownership.out_row_overrides}
-    fanout_handled |= {
-        str(_get(pair.get("in"), "id")) for pair in ownership.derived_pairs
-    }
-    fanout_handled |= {
-        str(_get(blocked.get("row"), "id"))
-        for blocked in ownership.blocked_sources
-        if blocked.get("row") is not None
-    }
-    fanout = derive_recorded_fanout_transfers(
-        rows_after_ownership, already_paired_ids=fanout_handled
-    )
-    final_rows = _rows_after_derivation(
-        rows_after_ownership, fanout, sort_key=sort_key
+        rows_after_recorded_fanout, ownership, sort_key=sort_key
     )
     return ProfileTransferDerivation(
         rows_after_consolidation=rows_after_consolidation,
+        rows_after_recorded_fanout=rows_after_recorded_fanout,
         rows_after_ownership=rows_after_ownership,
-        rows=final_rows,
+        rows=rows_after_ownership,
         consolidation=consolidation,
         ownership=ownership,
         fanout=fanout,
@@ -1036,9 +1034,10 @@ def derive_recorded_fanout_transfers(
 
     Pairs reuse the recorded inbound rows; the outbound is split into one MOVE
     leg per destination (whole fee on the first leg) and dropped from the row
-    set. Runs *after* the address-ownership deriver and must be given that
-    deriver's touched ids in ``already_paired_ids`` so a graph-readable Bitcoin
-    fan-out is not decomposed twice.
+    set. Runs before the address-ownership deriver: a complete, exactly
+    conserving set of independently recorded wallet rows is stronger than a
+    graph interpretation and must not be pre-empted by a weaker/ambiguous graph
+    candidate. The claim boundary independently revalidates the whole group.
     """
     result = OwnershipDeriveResult()
     groups: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = {}

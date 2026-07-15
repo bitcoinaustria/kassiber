@@ -19,6 +19,7 @@ from ..transfers import (
     canonical_payment_hash,
     detect_intra_transfers,
     is_lightning_payment_hash_row,
+    onchain_transfer_scope,
 )
 from .loans import (
     CHANNEL_CLOSE,
@@ -341,12 +342,102 @@ def _exact_native_pair_ids(
     return resolved
 
 
+def _exact_recorded_fanout_group_ids(
+    pairs: Sequence[Mapping[str, Any]],
+    observations: Mapping[str, QuantityObservation],
+    physical_scopes_by_anchor: Mapping[str, tuple[str, str, str, str]],
+) -> set[str]:
+    """Revalidate complete 1:N wallet observations at the claim boundary.
+
+    ``source=recorded_fanout`` is audit text, not authority. A group qualifies
+    only when every member resolves from the original imported rows to one
+    physical Bitcoin-family event, one source funds distinct owned wallets,
+    and their observed principal quantities conserve exactly.
+    """
+
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for pair in pairs:
+        group_id = str(_field(pair, "group_id") or "")
+        if group_id:
+            grouped.setdefault(group_id, []).append(pair)
+
+    exact: set[str] = set()
+    for group_id, members in grouped.items():
+        if len(members) < 2 or any(
+            _pair_source(pair) != "recorded_fanout" for pair in members
+        ):
+            continue
+        source_ids = {
+            _anchor_id(_field(pair, "out", {}) or {}) for pair in members
+        }
+        target_ids = [
+            _anchor_id(_field(pair, "in", {}) or {}) for pair in members
+        ]
+        if len(source_ids) != 1 or "" in source_ids:
+            continue
+        if len(set(target_ids)) != len(members) or any(
+            not item for item in target_ids
+        ):
+            continue
+        source_id = next(iter(source_ids))
+        source = observations.get(source_id)
+        targets = [observations.get(target_id) for target_id in target_ids]
+        source_scope = physical_scopes_by_anchor.get(source_id)
+        if (
+            source is None
+            or source_scope is None
+            or source.direction != "outbound"
+            or source.event_key.native_namespace != "chain"
+            or source.event_key.chain not in {"bitcoin", "liquid"}
+            or any(target is None for target in targets)
+        ):
+            continue
+        typed_targets = [target for target in targets if target is not None]
+        if any(
+            target.direction != "inbound"
+            or target.event_key != source.event_key
+            or target.asset != source.asset
+            or target.wallet_id == source.wallet_id
+            or physical_scopes_by_anchor.get(target_id) != source_scope
+            for target_id, target in zip(target_ids, typed_targets)
+        ):
+            continue
+        if len({target.wallet_id for target in typed_targets}) != len(members):
+            continue
+        requested_amounts: list[int] = []
+        valid_amounts = True
+        for pair, target in zip(members, typed_targets):
+            requested = _field(pair, "out_amount_msat")
+            if requested in (None, ""):
+                requested = _field(pair, "out_amount")
+            requested_msat = (
+                target.principal_msat
+                if requested in (None, "")
+                else int(requested)
+            )
+            synthetic_amount = int(
+                _field(_field(pair, "out", {}) or {}, "amount") or 0
+            )
+            if requested_msat <= 0 or requested_msat != target.principal_msat:
+                valid_amounts = False
+                break
+            if synthetic_amount != target.principal_msat:
+                valid_amounts = False
+                break
+            requested_amounts.append(requested_msat)
+        if not valid_amounts or sum(requested_amounts) != source.principal_msat:
+            continue
+        exact.add(group_id)
+    return exact
+
+
 def _pair_claims(
     pairs: Sequence[Mapping[str, Any]],
     observations: Mapping[str, QuantityObservation],
     *,
     excluded_transaction_ids: set[str],
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    physical_scopes_by_anchor: Mapping[str, tuple[str, str, str, str]],
 ) -> tuple[
     tuple[QuantityClaim, ...],
     tuple[str, ...],
@@ -359,6 +450,9 @@ def _pair_claims(
     claims: list[QuantityClaim] = []
     blocked_transaction_ids: set[str] = set()
     quarantines: list[Mapping[str, Any]] = []
+    exact_recorded_fanout_groups = _exact_recorded_fanout_group_ids(
+        pairs, observations, physical_scopes_by_anchor
+    )
     ordered_pairs = sorted(
         pairs,
         key=lambda item: (
@@ -433,10 +527,16 @@ def _pair_claims(
         exact_recorded_pair = _is_exact_recorded_pair(
             pair, out_row, in_row, source, target
         )
+        exact_recorded_fanout = (
+            source_name == "recorded_fanout"
+            and str(_field(pair, "group_id") or "")
+            in exact_recorded_fanout_groups
+        )
         if (
             not _pair_is_reviewed(pair)
             and source_name != "channel_lifecycle"
             and not exact_recorded_pair
+            and not exact_recorded_fanout
             and not exact_native_pair
         ):
             # Amount/time coincidence and imported graph-shaped JSON are
@@ -1115,6 +1215,11 @@ def compile_custody_interpreters(
         observations,
         excluded_transaction_ids=excluded,
         wallet_refs_by_id=wallet_refs_by_id,
+        physical_scopes_by_anchor={
+            _anchor_id(row): scope
+            for row in rows
+            if (scope := onchain_transfer_scope(row)) is not None
+        },
     )
     claims = tuple(
         (

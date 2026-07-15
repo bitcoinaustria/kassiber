@@ -3032,7 +3032,7 @@ def _assert_ownership_self_transfer_matching(
     data_root: Path,
     scenario: dict[str, Any],
 ) -> dict[str, Any]:
-    """Prove ownership-derived transfer matching before manual pairs hide it."""
+    """Prove exact automatic custody matching before manual pairs hide it."""
     scope = _scope(scenario)
     existing_pairs = run_cli(data_root, "transfers", "list", *scope)["data"]
     if existing_pairs:
@@ -3049,7 +3049,7 @@ def _assert_ownership_self_transfer_matching(
             "received_msat": int(row.get("received_msat") or 0),
         }
         for row in audit.get("same_asset_transfers") or []
-        if row.get("pairing_source") == "ownership_derived"
+        if row.get("pairing_source") in {"ownership_derived", "recorded_fanout"}
     ]
     missing = []
     duplicate = []
@@ -3078,7 +3078,7 @@ def _assert_ownership_self_transfer_matching(
     # fight the accounting model.
     if expected_count != len(expected_routes) or len(matched) != expected_count or missing or duplicate:
         raise RuntimeError(
-            "Ownership-derived self-transfer matching did not satisfy the regtest "
+            "Exact automatic self-transfer matching did not satisfy the regtest "
             f"expectation: expected_count={expected_count}, "
             f"observed={observed_routes}, missing={missing}, duplicate={duplicate}"
         )
