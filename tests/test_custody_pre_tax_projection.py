@@ -98,6 +98,52 @@ def test_residual_suspense_keeps_finalized_sibling_but_blocks_later_sale():
     )
 
 
+def test_suspense_principal_still_projects_separately_known_network_fee():
+    rows = [
+        _row("acquisition", "source", "inbound", 10_100, "2024-01-01T00:00:00Z"),
+        _row("gap", "source", "outbound", 10_000, "2025-01-01T00:00:00Z"),
+        _row("later-sale", "source", "outbound", 1_000, "2026-01-01T00:00:00Z"),
+    ]
+    rows[1]["fee"] = 100
+    baseline = build_canonical_quantity_state(rows)
+    gap = next(
+        item
+        for item in baseline.projection.observations
+        if item.transaction_id == "gap"
+    )
+    state = build_canonical_quantity_state(
+        rows,
+        interpreter_claims=(
+            QuantityClaim(
+                claim_id="gap-suspense",
+                source=QuantitySlice(gap.quantity_hash, 0, gap.principal_msat),
+                state=CUSTODY_SUSPENSE,
+                priority=ClaimPriority.ACCOUNTING_CONVENTION,
+                reason="missing_wallet",
+            ),
+        ),
+    )
+
+    projection = compile_finalized_tax_projection(
+        {"id": "profile", "workspace_id": "workspace", "label": "Book"},
+        rows,
+        state,
+    )
+
+    gap_rows = [
+        row for row in projection.rows if row["journal_transaction_id"] == "gap"
+    ]
+    assert [(row["amount"], row["fee"]) for row in gap_rows] == [(0, 100)]
+    assert all(
+        row["journal_transaction_id"] != "later-sale" for row in projection.rows
+    )
+    assert any(
+        item["transaction_id"] == "later-sale"
+        and item["reason"] == "custody_basis_barrier"
+        for item in projection.quarantines
+    )
+
+
 def test_basis_barrier_does_not_suppress_unrelated_asset_projection():
     rows = [
         _row("btc-acquisition", "source", "inbound", 100, "2024-01-01T00:00:00Z"),

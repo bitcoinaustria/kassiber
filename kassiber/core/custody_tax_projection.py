@@ -732,13 +732,16 @@ def compile_finalized_tax_projection(
             candidate = QuantitySlice(observation.quantity_hash, cursor, observation.principal_msat)
             projection_rows.append(_projected_slice_row(observation, candidate, rows_by_id, side="inbound"))
 
+    # A known network fee is a finalized sibling of the principal decision.
+    # If that principal remains in custody suspense, the fee still left the
+    # wallet at the barrier event and can consume the basis known immediately
+    # before it. Later events remain blocked by the normal pool barrier.
     projected_hashes = {
         str(_field(row, "custody_quantity_hash") or "") for row in projection_rows
     }
     for observation in state.projection.observations:
         if (
             observation.direction == "outbound"
-            and observation.principal_msat == 0
             and observation.fee_msat > 0
             and observation.quantity_hash not in projected_hashes
             and observation.anchor_transaction_id not in effectively_blocked
