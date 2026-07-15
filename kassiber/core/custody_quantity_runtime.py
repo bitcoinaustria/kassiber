@@ -526,6 +526,7 @@ def _gap_candidate_claims_and_issues(
     """Compile only unambiguous structured gap suggestions into canonical claims."""
 
     ignored = tuple(sorted({str(item) for item in ignored_transaction_ids if item}))
+    capacity_blocking_source_ids: set[str] = set()
     try:
         candidates = suggest_custody_gap_candidates(rows, ignored_ids=ignored)
     except CustodyGapSearchLimitError as exc:
@@ -535,13 +536,46 @@ def _gap_candidate_claims_and_issues(
         # candidates were completely scored. Preserve those candidates for
         # canonical accounting even though the UI queue remains bounded.
         candidates = tuple(exc.accounting_candidates)
-        if not candidates:
+        capacity_blocking_source_ids.update(exc.blocking_source_ids)
+        if not candidates and not capacity_blocking_source_ids:
             return (), (), ()
 
     observations = _observations_by_transaction(canonical)
     claims: list[QuantityClaim] = []
     issues: list[QuantityIssue] = []
     candidate_transaction_ids: set[str] = set()
+    # Capacity cannot prove a transfer, but it also must not silently finalize
+    # a typed privacy/Samourai boundary as an external disposal. Hold only the
+    # affected source principal in suspense; do not select an arbitrary sampled
+    # return. Dismissing one sampled relationship cannot classify the source as
+    # external while omitted candidates remain possible.
+    for transaction_id in sorted(capacity_blocking_source_ids):
+        observation = observations.get(transaction_id)
+        if (
+            observation is None
+            or observation.direction != "outbound"
+            or observation.principal_msat <= 0
+        ):
+            continue
+        candidate_transaction_ids.add(transaction_id)
+        claims.append(
+            QuantityClaim(
+                claim_id=(
+                    "gap-capacity-suspense:" + observation.quantity_hash
+                ),
+                source=QuantitySlice(
+                    observation.quantity_hash,
+                    0,
+                    observation.principal_msat,
+                ),
+                state=CUSTODY_SUSPENSE,
+                priority=ClaimPriority.ACCOUNTING_CONVENTION,
+                reason="custody_gap_search_incomplete_structured_source",
+                supporting_evidence_hashes=(
+                    observation.evidence_detail_hash,
+                ),
+            )
+        )
     for candidate in candidates:
         if not candidate.promotion_eligible:
             continue

@@ -1239,6 +1239,21 @@ CREATE TABLE IF NOT EXISTS custody_gap_reviews (
 CREATE INDEX IF NOT EXISTS idx_custody_gap_reviews_latest
     ON custody_gap_reviews(profile_id, gap_id, revision DESC);
 
+-- Replaceable, privacy-safe derived discovery pages. These rows are keyed to
+-- journal/review input versions, are never authored evidence, and are excluded
+-- from replication/audit surfaces. Stable cursors read this population without
+-- regenerating the expensive custody-gap matcher for every page.
+CREATE TABLE IF NOT EXISTS custody_gap_candidate_snapshots (
+    cache_token TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    version_json TEXT NOT NULL,
+    summary_json TEXT NOT NULL,
+    gaps_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_snapshots_profile
+    ON custody_gap_candidate_snapshots(profile_id);
+
 CREATE TRIGGER IF NOT EXISTS trg_custody_gap_reviews_immutable
 BEFORE UPDATE ON custody_gap_reviews
 BEGIN

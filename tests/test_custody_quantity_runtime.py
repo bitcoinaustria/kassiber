@@ -721,6 +721,81 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         self.assertIsNone(state.tax_eligibility.barrier_event_key)
         self.assertFalse(state.gap_candidate_transaction_ids)
 
+    def test_incomplete_structured_search_blocks_only_source_disposal(self):
+        rows = [
+            _row(
+                "out",
+                "wallet-a",
+                "outbound",
+                10_000,
+                "2020-01-01T00:00:00Z",
+                privacy_boundary="coinjoin",
+            ),
+            _row(
+                "return",
+                "wallet-c",
+                "inbound",
+                9_900,
+                "2021-01-01T00:00:00Z",
+            ),
+        ]
+        sampled_candidate = next(
+            candidate
+            for candidate in suggest_custody_gap_candidates(
+                enriched_quantity_rows(rows)
+            )
+            if candidate.promotion_eligible
+        )
+
+        with patch(
+            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
+            side_effect=CustodyGapSearchLimitError(
+                "structured boundary return worklist is incomplete",
+                blocking_source_ids=("out",),
+                partial_candidates=(sampled_candidate,),
+                limit_kind="boundary_worklist",
+            ),
+        ):
+            state = build_canonical_quantity_state(
+                rows,
+                dismissed_gap_fingerprints={
+                    sampled_candidate.gap_id: candidate_fingerprint(
+                        sampled_candidate
+                    )
+                },
+            )
+
+        decisions_by_transaction = {
+            next(
+                observation.transaction_id
+                for observation in state.projection.observations
+                if observation.quantity_hash == decision.source.observation_hash
+            ): decision
+            for decision in state.projection.decisions
+        }
+        self.assertEqual(decisions_by_transaction["out"].state, CUSTODY_SUSPENSE)
+        self.assertEqual(state.gap_candidate_transaction_ids, ("out",))
+        self.assertTrue(state.report_blocked)
+        self.assertFalse(state.tax_eligibility.eligible_decisions)
+
+        projection = compile_finalized_tax_projection(
+            {
+                "id": "profile-one",
+                "workspace_id": "workspace-one",
+                "label": "Book",
+            },
+            rows,
+            state,
+        )
+        self.assertFalse(projection.rows)
+        self.assertIn(
+            ("out", "custody_quantity_unresolved"),
+            {
+                (item["transaction_id"], item["reason"])
+                for item in projection.quarantines
+            },
+        )
+
     def test_structured_candidates_survive_the_display_population_limit(self):
         rows = [
             _row(

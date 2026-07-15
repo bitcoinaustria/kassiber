@@ -15,6 +15,7 @@ history nor turn that operational limit into a tax/report blocker.
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, replace
 from datetime import datetime
 import hashlib
@@ -31,9 +32,10 @@ from ..time_utils import parse_iso_datetime_or_none
 
 DEFAULT_MIN_COVERAGE_PPM = 800_000
 DEFAULT_MAX_EXCESS_PPM = 250_000
-# A long-lived CoinJoin wallet can easily exceed a few thousand observations.
-# Grouping and beam limits below bound the expensive work; this ceiling exists
-# to prevent a pathological caller from materializing an unlimited history.
+# Above this many eligible rows, discovery deliberately stops producing weak
+# amount/time-only hints and processes every typed privacy/Samourai boundary
+# plus a bounded tail of ordinary sources.  It is a worklist threshold, not a
+# global abort: structured boundaries must remain visible in large books.
 DEFAULT_MAX_INPUT_ROWS = 50_000
 DEFAULT_MAX_SOURCE_LEGS = 3
 DEFAULT_MAX_RETURN_LEGS = 16
@@ -70,12 +72,16 @@ _SAMOURAI_TRANSACTION_KINDS = frozenset(
 _EXTERNAL_ORIGIN_KINDS = frozenset(
     {"income", "revenue", "sale", "exchange_buy", "customer_payment"}
 )
+
+
 class CustodyGapSearchLimitError(ValueError):
     """Advisory search stopped at a configured capacity ceiling.
 
-    Capacity says nothing about custody or tax classification. Consumers may
-    show an incomplete-search warning, but must never turn this exception alone
-    into a global report blocker.
+    Capacity alone says nothing about custody or tax classification. Consumers
+    may show an incomplete-search warning, but must never turn the exception
+    into a global report blocker. ``blocking_source_ids`` is narrower: typed
+    privacy-boundary evidence plus incomplete source discovery requires suspense
+    for those exact sources only.
     """
 
     def __init__(
@@ -88,6 +94,7 @@ class CustodyGapSearchLimitError(ValueError):
         partial_candidates: Sequence[Any] = (),
         accounting_candidates: Sequence[Any] = (),
         normalized_legs: Sequence[Any] = (),
+        blocking_source_ids: Iterable[str] = (),
     ) -> None:
         super().__init__(message)
         self.candidate_count = candidate_count
@@ -100,6 +107,9 @@ class CustodyGapSearchLimitError(ValueError):
         # would let its boundary rows fall back into RP2.
         self.accounting_candidates = tuple(accounting_candidates)
         self.normalized_legs = tuple(normalized_legs)
+        self.blocking_source_ids = tuple(
+            sorted({str(item) for item in blocking_source_ids if item})
+        )
         self.blocking = False
         self.search_complete = False
 
@@ -169,6 +179,19 @@ class _Leg:
     disqualifier_codes: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class _CachedGapSnapshot:
+    version: tuple[Any, ...]
+    summary: dict[str, Any]
+    gaps: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class _ReturnEra:
+    legs: tuple[_Leg, ...]
+    total_msat: int
+
+
 def suggest_custody_gap_candidates(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -219,14 +242,10 @@ def suggest_custody_gap_candidates(
     )
     ignored = {str(value) for value in ignored_ids}
     legs = [leg for row in rows if (leg := _normalize_leg(row, ignored)) is not None]
-    if len(legs) > max_input_rows:
-        raise CustodyGapSearchLimitError(
-            f"custody-gap search received {len(legs)} eligible rows; "
-            f"configured maximum is {max_input_rows}",
-            candidate_count=None,
-            promotion_eligible_count=0,
-            limit_kind="input_rows",
-        )
+    worklist_limited = len(legs) > max_input_rows
+    capacity_limited_candidate_ids: set[str] = set()
+    capacity_limited_search = worklist_limited
+    blocking_source_ids: set[str] = set()
 
     by_scope: dict[tuple[str, str, str, str], list[_Leg]] = {}
     for leg in legs:
@@ -241,22 +260,81 @@ def suggest_custody_gap_candidates(
         returns = [leg for leg in scoped if leg.direction == "inbound"]
         if not sources or not returns:
             continue
+        source_group_count = sum(
+            max(0, len(sources) - size + 1)
+            for size in range(1, max_source_legs + 1)
+        )
+        source_worklist_limited = source_group_count > max_source_groups
+        if worklist_limited or source_worklist_limited:
+            # Weak amount/time hints are useful on small books, but they must
+            # not make a million-row book quadratic. Typed boundaries always
+            # remain in the worklist; skipped ordinary hints keep the search
+            # explicitly incomplete rather than creating a global empty cliff.
+            structured = [leg for leg in sources if leg.signal_codes]
+            blocking_source_ids.update(leg.id for leg in structured)
+            structured_worklist = structured[:max_source_groups]
+            ordinary_budget = max_source_groups - len(structured_worklist)
+            ordinary = [leg for leg in sources if not leg.signal_codes]
+            source_ids = {
+                leg.id
+                for leg in (
+                    *structured_worklist,
+                    *(ordinary[-ordinary_budget:] if ordinary_budget else ()),
+                )
+            }
+            sources = [leg for leg in sources if leg.id in source_ids]
+            capacity_limited_search = True
+            if not sources:
+                continue
+        return_keys = [_leg_sort_key(leg) for leg in returns]
+        returns_by_amount = (
+            sorted(returns, key=lambda leg: (leg.principal_msat, *_leg_sort_key(leg)))
+            if worklist_limited
+            else []
+        )
+        return_eras = (
+            _return_eras(returns, era_gap_seconds=return_era_gap_seconds)
+            if worklist_limited
+            else []
+        )
         source_groups = _source_groups(
             sources,
-            max_legs=max_source_legs,
+            # Filtering a large worklist destroys original adjacency. Never
+            # manufacture N:M source groups across the omitted history; exact
+            # singletons remain reviewable and the search stays incomplete.
+            max_legs=(
+                1 if worklist_limited or source_worklist_limited else max_source_legs
+            ),
             max_groups=max_source_groups,
         )
         for source_group in source_groups:
             boundary = max(leg.occurred_dt for leg in source_group)
-            eligible_returns = [leg for leg in returns if leg.occurred_dt > boundary]
-            if not eligible_returns:
-                continue
             target = sum(leg.principal_msat for leg in source_group)
-            return_pool = _bounded_return_pool(
-                eligible_returns,
-                target=target,
-                maximum=max_return_pool,
-            )
+            first_return = bisect_right(return_keys, (boundary, "\uffff"))
+            if first_return >= len(returns):
+                continue
+            if worklist_limited:
+                return_pool = _indexed_return_pool(
+                    returns_by_amount,
+                    boundary=boundary,
+                    target=target,
+                    maximum=max_return_pool,
+                )
+                return_pool_limited = True
+                eligible_returns: Sequence[_Leg] = ()
+            else:
+                eligible_returns = returns[first_return:]
+                return_pool_limited = len(eligible_returns) > max_return_pool
+                if return_pool_limited:
+                    capacity_limited_search = True
+                    blocking_source_ids.update(
+                        leg.id for leg in source_group if leg.signal_codes
+                    )
+                return_pool = _bounded_return_pool(
+                    eligible_returns,
+                    target=target,
+                    maximum=max_return_pool,
+                )
             return_groups = _return_groups(
                 return_pool,
                 target=target,
@@ -266,30 +344,89 @@ def suggest_custody_gap_candidates(
                 beam_width=beam_width,
                 result_limit=max_return_groups_per_source,
             )
-            aggregate_groups = _wallet_era_return_groups(
-                eligible_returns,
-                target=target,
-                min_coverage_ppm=min_coverage_ppm,
-                max_excess_ppm=max_excess_ppm,
-                max_legs=max_aggregate_return_legs,
-                era_gap_seconds=return_era_gap_seconds,
-                result_limit=max_return_groups_per_source,
-            )
+            aggregate_limited = False
+            try:
+                if worklist_limited:
+                    aggregate_groups = _matching_return_eras(
+                        return_eras,
+                        boundary=boundary,
+                        target=target,
+                        min_coverage_ppm=min_coverage_ppm,
+                        max_excess_ppm=max_excess_ppm,
+                        max_legs=max_aggregate_return_legs,
+                        result_limit=max_return_groups_per_source,
+                    )
+                else:
+                    aggregate_groups = _wallet_era_return_groups(
+                        eligible_returns,
+                        target=target,
+                        min_coverage_ppm=min_coverage_ppm,
+                        max_excess_ppm=max_excess_ppm,
+                        max_legs=max_aggregate_return_legs,
+                        era_gap_seconds=return_era_gap_seconds,
+                        result_limit=max_return_groups_per_source,
+                    )
+            except CustodyGapSearchLimitError:
+                # One over-large wallet era must not erase candidates already
+                # proved for unrelated source boundaries. The resulting source
+                # stays explicitly capacity-limited and therefore review-only.
+                aggregate_limited = True
+                capacity_limited_search = True
+                blocking_source_ids.update(
+                    leg.id for leg in source_group if leg.signal_codes
+                )
+                aggregate_groups = []
             return_groups = _dedupe_groups((*return_groups, *aggregate_groups))
             for return_group in return_groups:
                 candidate = _build_candidate(source_group, return_group)
                 if candidate.score < 650:
                     continue
                 generated[candidate.gap_id] = candidate
+                if (
+                    worklist_limited
+                    or source_worklist_limited
+                    or return_pool_limited
+                    or aggregate_limited
+                ):
+                    capacity_limited_candidate_ids.add(candidate.gap_id)
+            if source_worklist_limited and len(generated) > max_candidates:
+                break
 
     # Stamp conflicts and promotion eligibility before applying the display
     # ceiling. The exception carries a fully scored deterministic prefix plus
     # ``blocking=False`` / ``search_complete=False``. Candidate discovery is
     # advisory and capacity alone is never accounting evidence.
     stamped = _stamp_conflicts(list(generated.values()))
+    stamped = [
+        replace(
+            candidate,
+            reason_codes=tuple(
+                (*candidate.reason_codes, "search_capacity_incomplete")
+            ),
+        )
+        if candidate.gap_id in capacity_limited_candidate_ids
+        else candidate
+        for candidate in stamped
+    ]
     stamped = _stamp_promotion_eligibility(
         stamped, required_margin=promotion_score_margin
     )
+    stamped = [
+        replace(
+            candidate,
+            promotion_eligible=False,
+            reason_codes=tuple(
+                code
+                for code in candidate.reason_codes
+                if code != "promotion_eligible_structured_signal"
+            )
+            + ("capacity_source_suspense_required",),
+        )
+        if candidate.gap_id in capacity_limited_candidate_ids
+        and candidate.promotion_eligible
+        else candidate
+        for candidate in stamped
+    ]
     stamped.sort(key=_candidate_sort_key)
     if len(stamped) > max_candidates:
         promotion_count = sum(candidate.promotion_eligible for candidate in stamped)
@@ -305,6 +442,21 @@ def suggest_custody_gap_candidates(
             accounting_candidates=tuple(
                 candidate for candidate in stamped if candidate.promotion_eligible
             ),
+            blocking_source_ids=blocking_source_ids,
+        )
+    if capacity_limited_search or capacity_limited_candidate_ids:
+        promotion_count = sum(candidate.promotion_eligible for candidate in stamped)
+        raise CustodyGapSearchLimitError(
+            "custody-gap search used a bounded source/return worklist; "
+            "structured boundaries remain reviewable but discovery is incomplete",
+            candidate_count=len(stamped),
+            promotion_eligible_count=promotion_count,
+            limit_kind="boundary_worklist",
+            partial_candidates=stamped,
+            accounting_candidates=tuple(
+                candidate for candidate in stamped if candidate.promotion_eligible
+            ),
+            blocking_source_ids=blocking_source_ids,
         )
     return stamped
 
@@ -321,7 +473,9 @@ def build_gap_snapshot(
 
     This adapter reads only imported transaction/wallet labels and existing
     authored claims.  It never exposes addresses, scripts, descriptors, xpubs,
-    raw transaction graphs, or wallet configuration, and it performs no write.
+    raw transaction graphs, or wallet configuration. It persists only the
+    privacy-safe derived page population so subsequent pages neither rerun nor
+    reorder discovery; this cache is replaceable and never authored evidence.
     ``summary.search_complete`` says whether the bounded population is complete;
     ``gaps`` is the requested page and ``next_cursor`` continues that
     deterministic order.
@@ -331,15 +485,26 @@ def build_gap_snapshot(
         raise ValueError("profile_id is required")
     if type(limit) is not int or limit < 1 or limit > 500:
         raise ValueError("limit must be an integer between 1 and 500")
-    if cursor is not None and (
-        not isinstance(cursor, str) or not cursor.isdigit()
-    ):
-        raise ValueError("cursor must be a non-negative integer string")
-    offset = int(cursor or 0)
-    if offset > 2**31 - 1:
-        raise ValueError("cursor is out of range")
-    if gap_id is not None and offset:
+    if cursor is not None and not isinstance(cursor, str):
+        raise ValueError("cursor must be a string")
+    if gap_id is not None and cursor is not None:
         raise ValueError("cursor is not supported when gap_id is provided")
+
+    if cursor is not None:
+        token, offset = _decode_snapshot_cursor(cursor)
+        cached = _load_cached_snapshot(conn, profile_id, token)
+        if cached.version != _gap_snapshot_version(conn, profile_id):
+            raise ValueError("cursor expired because custody evidence changed")
+        page_end = offset + limit
+        return {
+            "summary": dict(cached.summary),
+            "gaps": list(cached.gaps[offset:page_end]),
+            "next_cursor": (
+                _encode_snapshot_cursor(token, page_end)
+                if page_end < len(cached.gaps)
+                else None
+            ),
+        }
 
     journal_status = _journal_status(conn, profile_id)
     # Page size must not change matcher semantics. Every page is cut from the
@@ -368,14 +533,18 @@ def build_gap_snapshot(
             item for item in exc.normalized_legs if isinstance(item, _Leg)
         ]
     if gap_id is not None:
-        candidates = [candidate for candidate in candidates if candidate.gap_id == gap_id]
+        candidates = [
+            candidate for candidate in candidates if candidate.gap_id == gap_id
+        ]
     from . import custody_gap_reviews
 
     reviews = custody_gap_reviews.latest_reviews(conn, profile_id)
     current_gaps: list[dict[str, Any]] = []
     for candidate in candidates:
         gap = _snapshot_gap(candidate, normalized)
-        gap["candidate_fingerprint"] = custody_gap_reviews.candidate_fingerprint(candidate)
+        gap["candidate_fingerprint"] = custody_gap_reviews.candidate_fingerprint(
+            candidate
+        )
         review = reviews.get(candidate.gap_id)
         state = custody_gap_reviews.review_state(conn, candidate, review)
         gap["status"] = state["status"]
@@ -390,7 +559,9 @@ def build_gap_snapshot(
             }
         current_gaps.append(gap)
     historical = custody_gap_reviews.historical_review_gaps(
-        conn, profile_id, exclude_gap_ids=[candidate.gap_id for candidate in candidates]
+        conn,
+        profile_id,
+        exclude_gap_ids=[candidate.gap_id for candidate in candidates],
     )
     if gap_id is not None:
         historical = [gap for gap in historical if gap.get("gap_id") == gap_id]
@@ -407,9 +578,8 @@ def build_gap_snapshot(
             else 1
         ),
     )
-    page_end = offset + limit
-    gaps = all_gaps[offset:page_end]
-    next_cursor = str(page_end) if page_end < len(all_gaps) else None
+    page_end = limit
+    gaps = all_gaps[:page_end]
 
     residual_by_cluster: dict[tuple[str, str], int] = {}
     for candidate, gap in zip(candidates, current_gaps):
@@ -449,43 +619,173 @@ def build_gap_snapshot(
         status: sum(gap.get("status") == status for gap in all_gaps)
         for status in ("needs_review", "conflicting", "resolved", "dismissed")
     }
+    summary = {
+        "total": len(candidates) + len(historical),
+        **counts,
+        "unresolved_msat": (
+            canonical_unresolved_msat
+            if canonical_issue_count
+            else candidate_residual_msat
+        ),
+        "candidate_residual_msat": candidate_residual_msat,
+        "candidate_residual_by_asset": candidate_residual_by_asset,
+        "canonical_unresolved_msat": canonical_unresolved_msat,
+        "canonical_issue_count": canonical_issue_count,
+        "canonical_unresolved_by_asset": canonical_unresolved_by_asset,
+        "canonical_unquantified_issue_count": canonical[
+            "unquantified_issue_count"
+        ],
+        "canonical_status": canonical["status"],
+        "canonical_status_text": canonical["status_text"],
+        "derived_state_current": canonical["derived_state_current"],
+        "qualification": canonical["qualification"],
+        "search_complete": search_limit is None,
+        "search_status": (
+            "complete" if search_limit is None else "capacity_limited"
+        ),
+        "search_limit_kind": (
+            None if search_limit is None else search_limit.limit_kind
+        ),
+        "search_candidate_count": (
+            len(candidates)
+            if search_limit is None or search_limit.candidate_count is None
+            else search_limit.candidate_count
+        ),
+    }
+    next_cursor = None
+    if page_end < len(all_gaps):
+        token = _store_cached_snapshot(
+            conn,
+            profile_id,
+            version=_gap_snapshot_version(conn, profile_id),
+            summary=summary,
+            gaps=all_gaps,
+        )
+        next_cursor = _encode_snapshot_cursor(token, page_end)
     return {
-        "summary": {
-            "total": len(candidates) + len(historical),
-            **counts,
-            "unresolved_msat": (
-                canonical_unresolved_msat
-                if canonical_issue_count
-                else candidate_residual_msat
-            ),
-            "candidate_residual_msat": candidate_residual_msat,
-            "candidate_residual_by_asset": candidate_residual_by_asset,
-            "canonical_unresolved_msat": canonical_unresolved_msat,
-            "canonical_issue_count": canonical_issue_count,
-            "canonical_unresolved_by_asset": canonical_unresolved_by_asset,
-            "canonical_unquantified_issue_count": canonical[
-                "unquantified_issue_count"
-            ],
-            "canonical_status": canonical["status"],
-            "canonical_status_text": canonical["status_text"],
-            "derived_state_current": canonical["derived_state_current"],
-            "qualification": canonical["qualification"],
-            "search_complete": search_limit is None,
-            "search_status": (
-                "complete" if search_limit is None else "capacity_limited"
-            ),
-            "search_limit_kind": (
-                None if search_limit is None else search_limit.limit_kind
-            ),
-            "search_candidate_count": (
-                len(candidates)
-                if search_limit is None or search_limit.candidate_count is None
-                else search_limit.candidate_count
-            ),
-        },
+        "summary": summary,
         "gaps": gaps,
         "next_cursor": next_cursor,
     }
+
+
+def _gap_snapshot_version(conn, profile_id: str) -> tuple[Any, ...]:
+    profile = conn.execute(
+        """
+        SELECT journal_input_version, last_processed_input_version,
+               last_processed_tx_count, last_processed_at
+        FROM profiles WHERE id = ?
+        """,
+        (profile_id,),
+    ).fetchone()
+    active_count = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM transactions "
+            "WHERE profile_id = ? AND excluded = 0",
+            (profile_id,),
+        ).fetchone()[0]
+    )
+    review_version: tuple[Any, ...] = (0, 0, "")
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*), COALESCE(MAX(revision), 0),
+                   COALESCE(MAX(created_at), '')
+            FROM custody_gap_reviews WHERE profile_id = ?
+            """,
+            (profile_id,),
+        ).fetchone()
+        review_version = (int(row[0]), int(row[1]), str(row[2]))
+    except sqlite3.OperationalError:
+        pass
+    if profile is None:
+        return (active_count, *review_version)
+    return (
+        active_count,
+        int(profile["journal_input_version"] or 0),
+        int(profile["last_processed_input_version"] or 0),
+        int(profile["last_processed_tx_count"] or 0),
+        str(profile["last_processed_at"] or ""),
+        *review_version,
+    )
+
+
+def _store_cached_snapshot(
+    conn,
+    profile_id: str,
+    *,
+    version: tuple[Any, ...],
+    summary: Mapping[str, Any],
+    gaps: Sequence[Mapping[str, Any]],
+) -> str:
+    version_json = json.dumps(version, separators=(",", ":"))
+    summary_json = json.dumps(summary, sort_keys=True, separators=(",", ":"))
+    gaps_json = json.dumps(gaps, sort_keys=True, separators=(",", ":"))
+    token = hashlib.sha256(
+        "\x1f".join((profile_id, version_json, gaps_json)).encode("utf-8")
+    ).hexdigest()[:24]
+    owns_transaction = not conn.in_transaction
+    try:
+        conn.execute(
+            "DELETE FROM custody_gap_candidate_snapshots WHERE profile_id = ?",
+            (profile_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO custody_gap_candidate_snapshots(
+                cache_token, profile_id, version_json, summary_json, gaps_json
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (token, profile_id, version_json, summary_json, gaps_json),
+        )
+        if owns_transaction:
+            conn.commit()
+    except Exception:
+        if owns_transaction:
+            conn.rollback()
+        raise
+    return token
+
+
+def _load_cached_snapshot(conn, profile_id: str, token: str) -> _CachedGapSnapshot:
+    try:
+        row = conn.execute(
+            """
+            SELECT version_json, summary_json, gaps_json
+            FROM custody_gap_candidate_snapshots
+            WHERE profile_id = ? AND cache_token = ?
+            """,
+            (profile_id, token),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if row is None:
+        raise ValueError("cursor is unknown or expired; reload the first page")
+    return _CachedGapSnapshot(
+        version=tuple(json.loads(row[0])),
+        summary=dict(json.loads(row[1])),
+        gaps=tuple(dict(item) for item in json.loads(row[2])),
+    )
+
+
+def _encode_snapshot_cursor(token: str, offset: int) -> str:
+    return f"cg1.{token}.{offset}"
+
+
+def _decode_snapshot_cursor(cursor: str) -> tuple[str, int]:
+    parts = cursor.split(".")
+    if (
+        len(parts) != 3
+        or parts[0] != "cg1"
+        or len(parts[1]) != 24
+        or any(character not in "0123456789abcdef" for character in parts[1])
+        or not parts[2].isdigit()
+    ):
+        raise ValueError("cursor is malformed")
+    offset = int(parts[2])
+    if offset < 1 or offset > 2**31 - 1:
+        raise ValueError("cursor is out of range")
+    return parts[1], offset
 
 
 def load_gap_candidates(
@@ -501,27 +801,14 @@ def load_gap_candidates(
         "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0",
         (profile_id,),
     ).fetchone()[0]
-    if row_count > DEFAULT_MAX_INPUT_ROWS:
-        raise CustodyGapSearchLimitError(
-            "Custody-gap scan is larger than the current bounded search ceiling",
-            candidate_count=None,
-            promotion_eligible_count=0,
-            limit_kind="input_rows",
-        )
-
-    raw_rows = conn.execute(
-        """
+    row_select = """
         SELECT t.id, t.profile_id, t.wallet_id, w.label AS wallet_label,
                w.kind AS wallet_kind, t.occurred_at, t.direction, t.asset,
                t.amount, t.fee, t.amount_includes_fee, t.excluded,
                t.kind, t.privacy_boundary, t.external_id, t.raw_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
-        WHERE t.profile_id = ? AND t.excluded = 0
-        ORDER BY t.occurred_at, t.created_at, t.id
-        """,
-        (profile_id,),
-    ).fetchall()
+    """
     wallet_configs: dict[str, Any] = {}
     try:
         wallet_configs = {
@@ -534,11 +821,131 @@ def load_gap_candidates(
     except sqlite3.OperationalError:
         # Narrow migration/surface fixtures may predate wallet config_json.
         pass
-    rows: list[dict[str, Any]] = []
-    for row in raw_rows:
-        mapped = {key: row[key] for key in row.keys()}
-        mapped["wallet_config_json"] = wallet_configs.get(str(mapped["wallet_id"]), "{}")
-        rows.append(mapped)
+
+    def mapped_rows(raw_rows: Sequence[sqlite3.Row]) -> list[dict[str, Any]]:
+        output: list[dict[str, Any]] = []
+        for raw_row in raw_rows:
+            mapped = {key: raw_row[key] for key in raw_row.keys()}
+            mapped["wallet_config_json"] = wallet_configs.get(
+                str(mapped["wallet_id"]), "{}"
+            )
+            output.append(mapped)
+        return output
+
+    large_book = row_count > DEFAULT_MAX_INPUT_ROWS
+    if not large_book:
+        raw_rows = conn.execute(
+            row_select
+            + """
+            WHERE t.profile_id = ? AND t.excluded = 0
+            ORDER BY t.occurred_at, t.created_at, t.id
+            """,
+            (profile_id,),
+        ).fetchall()
+        rows = mapped_rows(raw_rows)
+    else:
+        privacy = tuple(sorted(_PRIVACY_BOUNDARIES))
+        wallet_kinds = tuple(sorted(_SAMOURAI_WALLET_KINDS))
+        transaction_kinds = tuple(sorted(_SAMOURAI_TRANSACTION_KINDS))
+        structured_sql = f"""
+               LOWER(COALESCE(t.privacy_boundary, '')) IN ({','.join('?' for _ in privacy)})
+            OR LOWER(COALESCE(w.kind, '')) IN ({','.join('?' for _ in wallet_kinds)})
+            OR LOWER(COALESCE(t.kind, '')) IN ({','.join('?' for _ in transaction_kinds)})
+            OR LOWER(COALESCE(w.config_json, '')) LIKE '%\"samourai\"%'
+        """
+        structured_params = (*privacy, *wallet_kinds, *transaction_kinds)
+        source_rows = mapped_rows(
+            conn.execute(
+                row_select
+                + f"""
+                WHERE t.profile_id = ? AND t.excluded = 0
+                  AND t.direction = 'outbound'
+                  AND ({structured_sql})
+                ORDER BY t.occurred_at, t.created_at, t.id
+                LIMIT ?
+                """,
+                (
+                    profile_id,
+                    *structured_params,
+                    DEFAULT_MAX_SOURCE_GROUPS,
+                ),
+            ).fetchall()
+        )
+        ordinary_budget = DEFAULT_MAX_SOURCE_GROUPS - len(source_rows)
+        if ordinary_budget:
+            # A missing intermediary often leaves no typed marker on the old
+            # wallet's payment. Preserve a bounded high-value lane for that
+            # 10 BTC out / 9.9 BTC back shape. These remain review-only because
+            # the large-book search is explicitly incomplete.
+            source_rows.extend(
+                mapped_rows(
+                    conn.execute(
+                        row_select
+                        + f"""
+                        WHERE t.profile_id = ? AND t.excluded = 0
+                          AND t.direction = 'outbound'
+                          AND NOT ({structured_sql})
+                        ORDER BY t.amount DESC, t.occurred_at, t.created_at, t.id
+                        LIMIT ?
+                        """,
+                        (profile_id, *structured_params, ordinary_budget),
+                    ).fetchall()
+                )
+            )
+        source_legs = [
+            leg
+            for row in source_rows
+            if (leg := _normalize_leg(row, set())) is not None
+        ]
+        amount_ranges: dict[str, tuple[int, int]] = {}
+        for leg in source_legs:
+            minimum_total = (
+                leg.principal_msat * DEFAULT_MIN_COVERAGE_PPM // 1_000_000
+            )
+            minimum_leg = max(
+                1,
+                (minimum_total + DEFAULT_MAX_AGGREGATE_RETURN_LEGS - 1)
+                // DEFAULT_MAX_AGGREGATE_RETURN_LEGS,
+            )
+            maximum_total = leg.principal_msat + (
+                leg.principal_msat * DEFAULT_MAX_EXCESS_PPM // 1_000_000
+            )
+            previous = amount_ranges.get(leg.asset)
+            amount_ranges[leg.asset] = (
+                minimum_leg if previous is None else min(previous[0], minimum_leg),
+                maximum_total if previous is None else max(previous[1], maximum_total),
+            )
+        return_rows: list[dict[str, Any]] = []
+        if amount_ranges:
+            range_sql = " OR ".join(
+                "(t.asset = ? AND t.amount BETWEEN ? AND ?)"
+                for _asset in sorted(amount_ranges)
+            )
+            range_params = tuple(
+                value
+                for asset in sorted(amount_ranges)
+                for value in (asset, *amount_ranges[asset])
+            )
+            return_rows = mapped_rows(
+                conn.execute(
+                    row_select
+                    + f"""
+                    WHERE t.profile_id = ? AND t.excluded = 0
+                      AND t.direction = 'inbound'
+                      AND ({range_sql})
+                    ORDER BY t.occurred_at, t.created_at, t.id
+                    LIMIT ?
+                    """,
+                    (profile_id, *range_params, DEFAULT_MAX_INPUT_ROWS),
+                ).fetchall()
+            )
+        rows = [*source_rows, *return_rows]
+        rows.sort(
+            key=lambda row: (
+                str(row.get("occurred_at") or ""),
+                str(row.get("id") or ""),
+            )
+        )
     if include_journal_claims is None:
         include_journal_claims = _journal_status(conn, profile_id) == "current"
     claimed_ids = _claimed_transaction_ids(
@@ -548,11 +955,22 @@ def load_gap_candidates(
     )
     normalized = [leg for row in rows if (leg := _normalize_leg(row, set())) is not None]
     try:
+        worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
         candidates = suggest_custody_gap_candidates(
             rows,
             ignored_ids=claimed_ids,
+            max_input_rows=worklist_threshold,
             max_candidates=limit,
         )
+        if large_book:
+            raise CustodyGapSearchLimitError(
+                "custody-gap search used a bounded large-book worklist",
+                candidate_count=len(candidates),
+                promotion_eligible_count=0,
+                limit_kind="boundary_worklist",
+                partial_candidates=candidates,
+                normalized_legs=normalized,
+            )
     except CustodyGapSearchLimitError as exc:
         exc.normalized_legs = tuple(normalized)
         raise
@@ -696,27 +1114,17 @@ def _json_mapping(value: Any) -> dict[str, Any]:
 
 def _source_groups(
     rows: Sequence[_Leg], *, max_legs: int, max_groups: int
-) -> list[tuple[_Leg, ...]]:
+) -> Iterable[tuple[_Leg, ...]]:
     ordered = sorted(rows, key=_leg_sort_key)
-    groups: list[tuple[_Leg, ...]] = [(row,) for row in ordered]
-    # Adjacent chronological boundary rows cover staged wallet rolls without
-    # opening an unbounded powerset search.  Singletons are always retained.
-    for size in range(2, max_legs + 1):
-        for start in range(0, len(ordered) - size + 1):
-            groups.append(tuple(ordered[start : start + size]))
-    groups.sort(key=lambda group: (_group_end(group), len(group), _group_ids(group)))
-    if len(groups) <= max_groups:
-        return groups
-    # Sampling would make ``search_complete=true`` a lie and could let the UI
-    # show a qualified empty state after silently skipping a real wallet gap.
-    # Capacity is advisory, but it must be explicit.
-    raise CustodyGapSearchLimitError(
-        "custody-gap source grouping needs to inspect "
-        f"{len(groups)} groups; configured maximum is {max_groups}",
-        candidate_count=None,
-        promotion_eligible_count=0,
-        limit_kind="source_groups",
-    )
+    # Yield chronological partitions instead of materializing one global
+    # population. Every singleton and every allowed adjacent group is visited
+    # exactly once, so conflict discovery stays complete without the former
+    # 87-source all-or-nothing cliff. ``max_groups`` now controls the ordinary
+    # source tail selected by the caller when the input worklist is large.
+    del max_groups
+    for end in range(len(ordered)):
+        for size in range(1, min(max_legs, end + 1) + 1):
+            yield tuple(ordered[end - size + 1 : end + 1])
 
 
 def _bounded_return_pool(
@@ -731,13 +1139,147 @@ def _bounded_return_pool(
         for left, right in zip(ordered, ordered[1:])
     ):
         ordered.sort(key=_leg_sort_key)
-    if len(ordered) > maximum:
-        raise CustodyGapSearchLimitError(
-            "custody-gap beam needs to inspect "
-            f"{len(ordered)} return rows for source amount {target}; "
-            f"configured maximum is {maximum}"
+    if len(ordered) <= maximum:
+        return ordered
+    # The beam needs plausible individual legs, not the complete suffix. Keep
+    # the deterministic amount-nearest rows, then restore chronology for the
+    # beam. Wallet-era aggregation still inspects the full suffix separately.
+    selected = sorted(
+        ordered,
+        key=lambda leg: (
+            abs(target - leg.principal_msat),
+            leg.occurred_dt,
+            leg.id,
+        ),
+    )[:maximum]
+    selected.sort(key=_leg_sort_key)
+    return selected
+
+
+def _indexed_return_pool(
+    rows_by_amount: Sequence[_Leg],
+    *,
+    boundary: datetime,
+    target: int,
+    maximum: int,
+) -> list[_Leg]:
+    """Select a bounded amount-nearest pool without scanning all returns."""
+
+    pivot = bisect_left(
+        rows_by_amount,
+        target,
+        key=lambda leg: leg.principal_msat,
+    )
+    left = pivot - 1
+    right = pivot
+    selected: list[_Leg] = []
+    # Rows before the source boundary may occupy the nearest amount buckets.
+    # Bound that defensive scan as well; the enclosing large-book search is
+    # explicitly incomplete and never presents the sample as universe closure.
+    inspected = 0
+    inspection_limit = maximum * 8
+    while len(selected) < maximum and inspected < inspection_limit:
+        if left < 0 and right >= len(rows_by_amount):
+            break
+        left_distance = (
+            abs(target - rows_by_amount[left].principal_msat)
+            if left >= 0
+            else None
         )
-    return ordered
+        right_distance = (
+            abs(target - rows_by_amount[right].principal_msat)
+            if right < len(rows_by_amount)
+            else None
+        )
+        if right_distance is not None and (
+            left_distance is None or right_distance < left_distance
+        ):
+            leg = rows_by_amount[right]
+            right += 1
+        else:
+            leg = rows_by_amount[left]
+            left -= 1
+        inspected += 1
+        if leg.occurred_dt > boundary:
+            selected.append(leg)
+    selected.sort(key=_leg_sort_key)
+    return selected
+
+
+def _return_eras(
+    rows: Sequence[_Leg], *, era_gap_seconds: int
+) -> list[_ReturnEra]:
+    """Precompute wallet activity eras once for a large-book scope."""
+
+    by_wallet: dict[str, list[_Leg]] = {}
+    for row in rows:
+        by_wallet.setdefault(row.wallet_id, []).append(row)
+    groups: list[tuple[_Leg, ...]] = []
+    for wallet_id in sorted(by_wallet):
+        ordered = sorted(by_wallet[wallet_id], key=_leg_sort_key)
+        current: list[_Leg] = []
+        for row in ordered:
+            if current and int(
+                (row.occurred_dt - current[-1].occurred_dt).total_seconds()
+            ) > era_gap_seconds:
+                groups.append(tuple(current))
+                current = []
+            current.append(row)
+        if current:
+            groups.append(tuple(current))
+    eras = [
+        _ReturnEra(legs=group, total_msat=sum(row.principal_msat for row in group))
+        for group in groups
+    ]
+    eras.sort(
+        key=lambda era: (
+            era.total_msat,
+            _group_end(era.legs),
+            _group_ids(era.legs),
+        )
+    )
+    return eras
+
+
+def _matching_return_eras(
+    eras_by_amount: Sequence[_ReturnEra],
+    *,
+    boundary: datetime,
+    target: int,
+    min_coverage_ppm: int,
+    max_excess_ppm: int,
+    max_legs: int,
+    result_limit: int,
+) -> list[tuple[_Leg, ...]]:
+    minimum = target * min_coverage_ppm // 1_000_000
+    maximum = target + (target * max_excess_ppm // 1_000_000)
+
+    start = bisect_left(eras_by_amount, minimum, key=lambda era: era.total_msat)
+    end = bisect_right(eras_by_amount, maximum, key=lambda era: era.total_msat)
+    matches: list[_ReturnEra] = []
+    inspected = 0
+    for index in range(start, end):
+        inspected += 1
+        if inspected > DEFAULT_MAX_RETURN_POOL:
+            break
+        era = eras_by_amount[index]
+        group = era.legs
+        if group[0].occurred_dt <= boundary:
+            continue
+        if len(group) > max_legs:
+            raise CustodyGapSearchLimitError(
+                "custody-gap wallet/era aggregation needs "
+                f"{len(group)} return legs; configured maximum is {max_legs}"
+            )
+        matches.append(era)
+    matches.sort(
+        key=lambda era: (
+            abs(target - era.total_msat),
+            len(era.legs),
+            _group_ids(era.legs),
+        )
+    )
+    return [era.legs for era in matches[:result_limit]]
 
 
 def _return_groups(

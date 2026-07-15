@@ -70,11 +70,13 @@ class SyncSchemaBoundaryTests(unittest.TestCase):
             "chain_observer_instances",
             "chain_observer_coverage",
             "chain_observer_values",
+            "custody_gap_candidate_snapshots",
             "rates_cache",
             "sync_member_private_keys",
             "sync_device_private_keys",
         ):
             self.assertNotIn(forbidden, SYNC_TABLE_MAP)
+        self.assertIn("custody_gap_candidate_snapshots", NEVER_SYNC_TABLES)
 
     def test_wallet_config_is_positive_allowlist_and_rejects_private_material(self):
         safe = public_wallet_config(
