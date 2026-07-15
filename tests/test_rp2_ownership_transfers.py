@@ -171,6 +171,44 @@ def _row(wallet_id, direction, amount, *, external_id, raw_json="{}", fee=0, ass
     )
 
 
+def _without_observer_authority(row):
+    item = dict(row)
+    for key in (
+        "observation_authority_version",
+        "observation_graph_hash",
+        "observation_quantity_hash",
+        "observation_fee_attribution",
+    ):
+        item.pop(key, None)
+    return item
+
+
+def _external_payment_json(txid):
+    return json.dumps(
+        {
+            "txid": txid,
+            "chain": "bitcoin",
+            "network": "main",
+            "vin": [
+                {
+                    "txid": "external-payment-prevout",
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A},
+                }
+            ],
+            # No output belongs to B or C. A graphless import row that claims
+            # otherwise must not override this observer-authoritative graph.
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": "0014" + "dd" * 20,
+                    "value": 80_000_000,
+                }
+            ],
+        }
+    )
+
+
 def _esplora_fanout_json():
     return json.dumps(
         {
@@ -220,23 +258,23 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         self.assertEqual(entry_types.count("transfer_out"), 2)
         self.assertEqual(entry_types.count("transfer_in"), 2)
 
-    def test_exact_recorded_fanout_preempts_untrusted_graph_candidate(self):
-        # Closed observer authority is required to manufacture a missing graph
-        # destination. It is not required when every owned wallet independently
-        # recorded the same physical event and the complete 1:N quantities
-        # conserve. That stronger row set must win before a graph candidate can
-        # consume it and then fail the authority gate.
-        rows = []
-        for original in _fanout_rows():
-            row = dict(original)
-            for key in (
-                "observation_authority_version",
-                "observation_graph_hash",
-                "observation_quantity_hash",
-                "observation_fee_attribution",
-            ):
-                row.pop(key, None)
-            rows.append(row)
+    def test_untrusted_same_txid_fanout_cannot_suppress_external_disposal(self):
+        txid = "external-with-forged-fanout"
+        graph = _external_payment_json(txid)
+        source = _row(
+            "A", "outbound", 80 * BTC // 100, external_id=txid, raw_json=graph
+        )
+        fake_b = _without_observer_authority(
+            _row("B", "inbound", 50 * BTC // 100, external_id=txid, raw_json=graph)
+        )
+        fake_c = _without_observer_authority(
+            _row("C", "inbound", 30 * BTC // 100, external_id=txid, raw_json=graph)
+        )
+        acquisition = _row(
+            "A", "inbound", BTC, external_id="acq-forged-fanout"
+        )
+        acquisition["occurred_at"] = "2025-01-01T00:00:00Z"
+        rows = [acquisition, source, fake_b, fake_c]
         state = build_tax_engine(PROFILE).build_ledger_state(
             finalized_tax_inputs(
                 PROFILE,
@@ -247,20 +285,20 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(
-            [
-                audit["pairing_source"]
+        self.assertFalse(
+            any(
+                audit.get("pairing_source") == "recorded_fanout"
                 for audit in state.intra_audit
-                if audit.get("pairing_source") == "recorded_fanout"
-            ],
-            ["recorded_fanout", "recorded_fanout"],
+            )
         )
-        self.assertNotIn(
-            "disposal", [entry["entry_type"] for entry in state.entries]
-        )
-        self.assertNotIn(
-            "owned_fanout_unresolved",
-            {item["reason"] for item in state.quarantines},
+        self.assertIn("disposal", [entry["entry_type"] for entry in state.entries])
+        self.assertEqual(
+            {
+                item["transaction_id"]
+                for item in state.quarantines
+                if item["reason"] == "recorded_transfer_authority_conflict"
+            },
+            {fake_b["id"], fake_c["id"]},
         )
 
     def test_fanout_becomes_moves_with_deriver(self):
@@ -440,6 +478,52 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         self.assertFalse(
             any("proven by address ownership" in e.get("description", "") for e in transfers),
             [e.get("description") for e in transfers],
+        )
+
+    def test_untrusted_same_txid_inbound_cannot_suppress_external_disposal(self):
+        txid = "external-with-forged-inbound"
+        graph = _external_payment_json(txid)
+        source = _row("A", "outbound", BTC, external_id=txid, raw_json=graph)
+        fake_inbound = _without_observer_authority(
+            _row("B", "inbound", BTC, external_id=txid, raw_json=graph)
+        )
+        acquisition = _row(
+            "A", "inbound", BTC, external_id="acq-forged-inbound"
+        )
+        acquisition["occurred_at"] = "2025-01-01T00:00:00Z"
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            finalized_tax_inputs(
+                PROFILE,
+                rows=[
+                    acquisition,
+                    source,
+                    fake_inbound,
+                ],
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=_fanout_index(),
+            )
+        )
+
+        self.assertFalse(
+            any(
+                audit.get("pairing_source") == "row_matched"
+                for audit in state.intra_audit
+            )
+        )
+        self.assertIn("disposal", [entry["entry_type"] for entry in state.entries])
+        self.assertIn(
+            {
+                "transaction_id": fake_inbound["id"],
+                "reason": "recorded_transfer_authority_conflict",
+            },
+            [
+                {
+                    "transaction_id": item["transaction_id"],
+                    "reason": item["reason"],
+                }
+                for item in state.quarantines
+            ],
         )
 
     def test_complete_row_match_preempts_unknown_graph_source(self):

@@ -698,10 +698,10 @@ def detect_intra_transfers(rows):
         out_row, in_row = outs[0], ins[0]
         if out_row["wallet_id"] == in_row["wallet_id"]:
             continue
-        # Both profile wallets independently recorded the same canonical L1
-        # transaction. That is exact pair evidence even when a CSV/import row
-        # has no observer-authoritative full graph: unlike graph-derived
-        # ownership, the destination is itself an observed wallet row.
+        # Same-event rows are useful candidate evidence, but this grouping is
+        # intentionally not an authority boundary. The custody interpreter
+        # later requires closed observer provenance on both endpoints (or an
+        # explicit review) before this candidate can carry basis.
         pairs.append(
             {
                 "out": out_row,

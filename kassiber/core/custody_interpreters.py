@@ -134,7 +134,9 @@ def _is_exact_recorded_pair(
     source_name = _pair_source(pair)
     if source_name == "row_matched":
         return bool(
-            source.event_key == target.event_key
+            source.authoritative_chain_observation
+            and target.authoritative_chain_observation
+            and source.event_key == target.event_key
             and source.event_key.native_namespace == "chain"
             and source.event_key.chain in {"bitcoin", "liquid"}
             and source.wallet_id != target.wallet_id
@@ -428,6 +430,7 @@ def _exact_recorded_fanout_group_ids(
             source is None
             or source_scope is None
             or source.direction != "outbound"
+            or not source.authoritative_chain_observation
             or source.event_key.native_namespace != "chain"
             or source.event_key.chain not in {"bitcoin", "liquid"}
             or any(target is None for target in targets)
@@ -435,7 +438,8 @@ def _exact_recorded_fanout_group_ids(
             continue
         typed_targets = [target for target in targets if target is not None]
         if any(
-            target.direction != "inbound"
+            not target.authoritative_chain_observation
+            or target.direction != "inbound"
             or target.event_key != source.event_key
             or target.asset != source.asset
             or target.wallet_id == source.wallet_id
@@ -573,6 +577,56 @@ def _pair_claims(
             and str(_field(pair, "group_id") or "")
             in exact_recorded_fanout_groups
         )
+        recorded_chain_candidate = bool(
+            source_name in {"row_matched", "recorded_fanout"}
+            and source.event_key == target.event_key
+            and source.event_key.native_namespace == "chain"
+            and source.event_key.chain in {"bitcoin", "liquid"}
+        )
+        if (
+            not _pair_is_reviewed(pair)
+            and recorded_chain_candidate
+            and source.authoritative_chain_observation
+            != target.authoritative_chain_observation
+        ):
+            # A same-txid import row is candidate evidence, never permission to
+            # contradict a closed observer graph. Preserve the authoritative
+            # leg's ordinary tax treatment and fail closed only for the
+            # untrusted row. This is especially important for 1:N groups: a
+            # forged set of graphless inbounds must not consume the real
+            # outbound principal and suppress its disposal.
+            untrusted_id, untrusted_row, untrusted_observation = (
+                (in_id, in_row, target)
+                if source.authoritative_chain_observation
+                else (out_id, out_row, source)
+            )
+            quarantines.append(
+                {
+                    "transaction_id": untrusted_id,
+                    "workspace_id": _field(untrusted_row, "workspace_id"),
+                    "profile_id": _field(untrusted_row, "profile_id"),
+                    "reason": "recorded_transfer_authority_conflict",
+                    "detail_json": json.dumps(
+                        {
+                            "pairing_source": source_name,
+                            "authoritative_transaction_id": (
+                                out_id
+                                if source.authoritative_chain_observation
+                                else in_id
+                            ),
+                            "observation_authority_reason": (
+                                untrusted_observation.observation_authority_reason
+                            ),
+                            "required_for": (
+                                "authoritative_same_event_wallet_observation"
+                            ),
+                        },
+                        sort_keys=True,
+                    ),
+                }
+            )
+            blocked_transaction_ids.add(untrusted_id)
+            continue
         if (
             not _pair_is_reviewed(pair)
             and source_name != "channel_lifecycle"
@@ -582,9 +636,10 @@ def _pair_claims(
         ):
             # Amount/time coincidence and imported graph-shaped JSON are
             # suggestions, never native ownership proof. A shared canonical
-            # txid across two observed wallet rows and a native-node payment
-            # hash are different: both endpoints are independently observed,
-            # so no graph-derived destination is being manufactured.
+            # txid across two observer-authoritative wallet rows and a
+            # native-node payment hash are different: both endpoints are
+            # independently observed, so no graph-derived destination is being
+            # manufactured.
             continue
         source_when = parse_iso_datetime_or_none(source.occurred_at)
         target_when = parse_iso_datetime_or_none(target.occurred_at)
