@@ -16,7 +16,12 @@ from .identity import ObserverIdentity
 OBSERVER_STATE_VERSION = 1
 OBSERVER_COVERAGE_VERSION = 2
 PRIVATE_OBSERVER_TABLES = frozenset(
-    {"chain_observer_instances", "chain_observer_coverage", "chain_observer_values"}
+    {
+        "chain_observer_instances",
+        "chain_observer_coverage",
+        "chain_observer_values",
+        "chain_observation_provenance",
+    }
 )
 OBSERVER_VALUES_NAMESPACE_VERSION = 1
 

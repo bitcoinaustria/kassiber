@@ -285,6 +285,33 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TEXT NOT NULL
 );
 
+-- Closed authority channel from an applied dependency observer to the current
+-- normalized transaction projection. Generic imports cannot write this table;
+-- custody consumers must also verify the stored graph/quantity hashes against
+-- the current row before elevating native evidence.
+CREATE TABLE IF NOT EXISTS chain_observation_provenance (
+    transaction_id TEXT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    authority_version INTEGER NOT NULL CHECK(authority_version >= 1),
+    observer_ids_json TEXT NOT NULL,
+    observer_kinds_json TEXT NOT NULL,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    application_revision TEXT NOT NULL,
+    graph_hash TEXT NOT NULL,
+    quantity_hash TEXT NOT NULL,
+    fee_attribution TEXT NOT NULL CHECK(
+        fee_attribution IN ('exact', 'implicit_wallet_delta', 'unknown')
+    ),
+    observed_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chain_observation_provenance_profile
+    ON chain_observation_provenance(profile_id, wallet_id, chain, network);
+
 CREATE TABLE IF NOT EXISTS transaction_graph_cache (
     schema_version INTEGER NOT NULL,
     chain TEXT NOT NULL,

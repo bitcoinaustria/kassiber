@@ -373,7 +373,11 @@ class ChainObserverContractTest(unittest.TestCase):
             core_sync.source_overlap,
             "filter_sync_state_for_canonical_owner",
             side_effect=lambda _conn, _profile, _wallet, state: state,
-        ):
+        ), patch.object(
+            core_sync,
+            "persist_chain_observation_provenance",
+            return_value=0,
+        ) as persist_provenance:
             core_sync.sync_wallet_from_backend(
                 self.conn,
                 {},
@@ -386,6 +390,7 @@ class ChainObserverContractTest(unittest.TestCase):
         self.conn.execute("RELEASE SAVEPOINT observer_authority")
 
         self.assertEqual(insert_calls, [{"authoritative_chain_observer": True}])
+        persist_provenance.assert_called_once()
 
     def test_sync_fetch_projects_facts_and_rejects_shadow_projection(self):
         observer, prepared = self._prepare()

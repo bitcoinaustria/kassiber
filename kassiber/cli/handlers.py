@@ -5207,11 +5207,18 @@ def build_ledger_state(conn, profile):
             w.kind AS wallet_kind,
             w.account_id AS wallet_account_id,
             w.config_json AS config_json,
+            observation.authority_version AS observation_authority_version,
+            observation.graph_hash AS observation_graph_hash,
+            observation.quantity_hash AS observation_quantity_hash,
+            observation.fee_attribution AS observation_fee_attribution,
+            observation.application_revision AS observation_application_revision,
             COALESCE(a.code, 'treasury') AS account_code,
             COALESCE(a.label, 'Treasury') AS account_label
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN accounts a ON a.id = w.account_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
         WHERE t.profile_id = ? AND t.excluded = 0
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
