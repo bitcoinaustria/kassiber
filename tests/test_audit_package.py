@@ -882,6 +882,7 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
 
     def test_audit_summary_retains_filed_snapshot_and_amendment_history(self):
+        unrelated_tx_id = self._insert_source_transaction()
         filed = custody_filed_reports.create_filed_report_snapshot(
             self.conn,
             workspace_id=self.workspace_id,
@@ -899,7 +900,63 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "gain_loss_exact": "50.00",
                 "status": "final",
             },
+            notes="UNRELATED_REPORT_NOTE",
             created_at=NOW,
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_components(
+                id, lineage_id, workspace_id, profile_id, revision,
+                component_type, conservation_mode, state, evidence_json,
+                conversion_reviewed, conversion_metadata_json, created_at
+            ) VALUES('component', 'lineage', ?, ?, 1, 'reviewed_bridge',
+                     'quantity', 'active', '{}', 0, '{}', ?)
+            """,
+            (self.workspace_id, self.profile_id, NOW),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_component_legs(
+                id, component_id, workspace_id, profile_id, ordinal, role,
+                rail, chain, network, asset, exposure, conservation_unit,
+                amount_msat, occurred_at, transaction_id,
+                anchor_transaction_id, wallet_id, created_at
+            ) VALUES('component-leg', 'component', ?, ?, 0, 'source',
+                     'bitcoin', 'bitcoin', 'main', 'BTC', 'bitcoin', 'msat',
+                     100000000, ?, ?, ?, ?, ?)
+            """,
+            (
+                self.workspace_id,
+                self.profile_id,
+                NOW,
+                unrelated_tx_id,
+                unrelated_tx_id,
+                self.wallet_id,
+                NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_gap_reviews(
+                id, workspace_id, profile_id, gap_id, revision,
+                candidate_fingerprint, action, event_kind, component_id,
+                authored_source, reason, snapshot_json, created_at
+            ) VALUES('review', ?, ?, 'gap', 1, ?, 'resolved',
+                     'bridge_created', 'component', 'gui', 'Treasury review', ?, ?)
+            """,
+            (
+                self.workspace_id,
+                self.profile_id,
+                "f" * 64,
+                json.dumps(
+                    {
+                        "retained_msat": 100_000_000,
+                        "residual_msat": 1_000,
+                        "source_ids": ["MUST_NOT_LEAVE_LOCAL_DB"],
+                    }
+                ),
+                NOW,
+            ),
         )
         self.conn.execute(
             """
@@ -998,14 +1055,72 @@ class AuditPackageCoreTest(unittest.TestCase):
             ]["gain_loss_exact"],
             "0.00",
         )
+        review_history = summary["custody_gap_review_history"]
+        self.assertEqual(review_history["returned"], 1)
+        self.assertEqual(
+            review_history["records"][0],
+            {
+                "gap_id": "gap",
+                "revision": 1,
+                "event_kind": "bridge_created",
+                "status": "resolved",
+                "component_id": "component",
+                "component_revision": 1,
+                "authored_source": "gui",
+                "reason": "Treasury review",
+                "created_at": NOW,
+                "retained_msat": 100_000_000,
+                "residual_msat": 1_000,
+                "residual_classification": None,
+                "filed_report_impact_count": 1,
+            },
+        )
         self.assertEqual(summary["summary"]["schema_migration_audit_count"], 1)
         self.assertEqual(
-            summary["schema_migration_audits"][0]["impact"]["changes"][0][
-                "rows_changed"
-            ],
-            1,
+            summary["schema_migration_audits"][0]["scope"],
+            "database_schema_only",
         )
+        self.assertNotIn("changes", summary["schema_migration_audits"][0]["impact"])
         self.assertNotIn("MUST_NOT_LEAVE_LOCAL_DB", json.dumps(summary))
+
+        bounded = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+        )
+        self.assertEqual(
+            bounded["custody_quantity"]["status"],
+            "excluded_from_bounded_scope",
+        )
+        self.assertNotIn("active_transaction_count", bounded["journal_freshness"])
+        self.assertEqual(bounded["filed_report_snapshots"], [])
+        self.assertEqual(bounded["custody_filed_report_impacts"], [])
+        self.assertEqual(bounded["custody_filed_report_impact_resolutions"], [])
+        self.assertEqual(
+            bounded["custody_gap_review_history"],
+            {"count": 0, "returned": 0, "truncated": False, "records": []},
+        )
+        bounded_json = json.dumps(bounded)
+        self.assertNotIn("UNRELATED_REPORT_NOTE", bounded_json)
+        self.assertNotIn("rows_changed", bounded_json)
+
+        related = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=[unrelated_tx_id],
+        )
+        self.assertEqual(len(related["filed_report_snapshots"]), 1)
+        self.assertEqual(len(related["custody_filed_report_impacts"]), 1)
+        self.assertEqual(
+            related["custody_gap_review_history"]["records"][0]["gap_id"],
+            "gap",
+        )
 
 
 if __name__ == "__main__":

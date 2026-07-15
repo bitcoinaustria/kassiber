@@ -746,12 +746,28 @@ def list_custody_impacts(
     profile_id: str,
     *,
     review_id: str | None = None,
+    transaction_ids: Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
     where = "profile_id = ?"
     params: list[Any] = [profile_id]
     if review_id is not None:
         where += " AND review_id = ?"
         params.append(review_id)
+    if transaction_ids is not None:
+        selected = tuple(sorted({str(value) for value in transaction_ids if value}))
+        if not selected:
+            return []
+        placeholders = ",".join("?" for _ in selected)
+        where += f"""
+            AND EXISTS (
+                SELECT 1 FROM custody_component_legs l
+                WHERE l.profile_id = custody_filed_report_impacts.profile_id
+                  AND l.component_id = custody_filed_report_impacts.component_id
+                  AND COALESCE(l.anchor_transaction_id, l.transaction_id)
+                      IN ({placeholders})
+            )
+        """
+        params.extend(selected)
     rows = conn.execute(
         f"SELECT * FROM custody_filed_report_impacts WHERE {where} "
         "ORDER BY affected_period_start_year, created_at, id",

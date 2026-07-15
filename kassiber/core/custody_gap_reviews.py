@@ -473,47 +473,115 @@ def list_review_history(
         """,
         (profile_id, gap_id, limit),
     ).fetchall()
-    history = []
-    for row in reversed(rows):
-        try:
-            snapshot = json.loads(str(row["snapshot_json"] or "{}"))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            snapshot = {}
-        event_kind = str(row["event_kind"] or "review_decision")
-        status = (
-            "needs_review"
-            if event_kind == "bridge_reopened"
-            else ("resolved" if row["action"] == "resolved" else "dismissed")
-        )
-        residual = snapshot.get("residual_classification")
-        history.append(
-            {
-                "revision": int(row["revision"]),
-                "event_kind": event_kind,
-                "status": status,
-                "component_id": row["component_id"],
-                "component_revision": (
-                    int(row["component_revision"])
-                    if row["component_revision"] is not None
-                    else None
-                ),
-                "authored_source": row["authored_source"],
-                "reason": row["reason"],
-                "created_at": row["created_at"],
-                "retained_msat": int(snapshot.get("retained_msat") or 0),
-                "residual_msat": int(snapshot.get("residual_msat") or 0),
-                "residual_classification": (
-                    str(residual.get("classification"))
-                    if isinstance(residual, Mapping)
-                    and residual.get("classification")
-                    else None
-                ),
-                "filed_report_impact_count": int(
-                    row["filed_report_impact_count"] or 0
-                ),
-            }
-        )
+    history = [_redacted_review_history_row(row) for row in reversed(rows)]
     return {"gap_id": gap_id, "count": len(history), "history": history}
+
+
+def list_audit_review_history(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    transaction_ids: Sequence[str] | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Return bounded review facts for auditor handoff, never raw snapshots.
+
+    A transaction-scoped package includes only reviews whose authored component
+    has a durable leg anchor in the selected set. Unanchored dismissals and
+    unrelated components are intentionally omitted because their raw candidate
+    snapshot is not an export-safe scoping relation.
+    """
+
+    if type(limit) is not int or not 1 <= limit <= 500:
+        raise AppError(
+            "Custody audit review history limit must be between 1 and 500",
+            code="custody_gap_review_validation",
+        )
+    where = "r.profile_id = ?"
+    params: list[Any] = [profile_id]
+    if transaction_ids is not None:
+        selected = tuple(sorted({str(value) for value in transaction_ids if value}))
+        if not selected:
+            return {"count": 0, "returned": 0, "truncated": False, "records": []}
+        placeholders = ",".join("?" for _ in selected)
+        where += f"""
+            AND r.component_id IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM custody_component_legs l
+                WHERE l.profile_id = r.profile_id
+                  AND l.component_id = r.component_id
+                  AND COALESCE(l.anchor_transaction_id, l.transaction_id)
+                      IN ({placeholders})
+            )
+        """
+        params.extend(selected)
+    count = int(
+        conn.execute(
+            f"SELECT COUNT(*) FROM custody_gap_reviews r WHERE {where}",
+            params,
+        ).fetchone()[0]
+    )
+    rows = conn.execute(
+        f"""
+        SELECT r.*, c.revision AS component_revision,
+               (SELECT COUNT(*) FROM custody_filed_report_impacts i
+                WHERE i.review_id = r.id) AS filed_report_impact_count
+        FROM custody_gap_reviews r
+        LEFT JOIN custody_components c ON c.id = r.component_id
+        WHERE {where}
+        ORDER BY r.created_at, r.id
+        LIMIT ?
+        """,
+        (*params, limit),
+    ).fetchall()
+    records = [_redacted_review_history_row(row, include_gap_id=True) for row in rows]
+    return {
+        "count": count,
+        "returned": len(records),
+        "truncated": count > len(records),
+        "records": records,
+    }
+
+
+def _redacted_review_history_row(
+    row: Mapping[str, Any], *, include_gap_id: bool = False
+) -> dict[str, Any]:
+    try:
+        snapshot = json.loads(str(row["snapshot_json"] or "{}"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        snapshot = {}
+    event_kind = str(row["event_kind"] or "review_decision")
+    status = (
+        "needs_review"
+        if event_kind == "bridge_reopened"
+        else ("resolved" if row["action"] == "resolved" else "dismissed")
+    )
+    residual = snapshot.get("residual_classification")
+    output = {
+        "revision": int(row["revision"]),
+        "event_kind": event_kind,
+        "status": status,
+        "component_id": row["component_id"],
+        "component_revision": (
+            int(row["component_revision"])
+            if row["component_revision"] is not None
+            else None
+        ),
+        "authored_source": row["authored_source"],
+        "reason": row["reason"],
+        "created_at": row["created_at"],
+        "retained_msat": int(snapshot.get("retained_msat") or 0),
+        "residual_msat": int(snapshot.get("residual_msat") or 0),
+        "residual_classification": (
+            str(residual.get("classification"))
+            if isinstance(residual, Mapping) and residual.get("classification")
+            else None
+        ),
+        "filed_report_impact_count": int(row["filed_report_impact_count"] or 0),
+    }
+    if include_gap_id:
+        output["gap_id"] = row["gap_id"]
+    return output
 
 
 def preview_reopen_guided_bridge(
