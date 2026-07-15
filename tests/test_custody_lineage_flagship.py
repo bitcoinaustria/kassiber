@@ -16,9 +16,15 @@ import tempfile
 import unittest
 
 from kassiber.cli import handlers
-from kassiber.core import custody_components, custody_gap_reviews, custody_gaps
+from kassiber.core import (
+    custody_components,
+    custody_gap_reviews,
+    custody_gaps,
+    reports as core_reports,
+)
 from kassiber.core.custody_quantity_store import component_native_support_status
 from kassiber.db import open_db
+from kassiber.errors import AppError
 from tests.custody_tax_helpers import persist_authoritative_chain_observation
 
 
@@ -536,6 +542,104 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                         (created["component_id"],),
                     ).fetchone()[0],
                     1,
+                )
+            finally:
+                book.close()
+
+    def test_exit_tax_blocks_until_exact_missing_wallet_bridge_carries_basis(self):
+        with tempfile.TemporaryDirectory() as root:
+            book = _FlagshipTreasury(root)
+            try:
+                rows = _FlagshipTreasury.missing_whirlpool_boundaries()
+                rows = [
+                    (
+                        _Transaction(
+                            "2021-return-2",
+                            "c",
+                            "inbound",
+                            4 * BTC,
+                            "2021-02-01T00:00:00Z",
+                            txid=_FlagshipTreasury._txid(12),
+                        )
+                        if row.row_id == "2021-return-2"
+                        else row
+                    )
+                    for row in rows
+                ]
+                book.insert(rows)
+                # If the returns were booked as acquisitions these rates would
+                # manufacture EUR 500k of basis. The reviewed bridge must carry
+                # the original EUR 20k/BTC lot instead.
+                book.conn.execute(
+                    "UPDATE transactions SET fiat_rate = 50000, "
+                    "fiat_rate_exact = '50000' "
+                    "WHERE id IN ('2021-return-1', '2021-return-2')"
+                )
+                book.conn.execute(
+                    "INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at) "
+                    "VALUES('BTC-EUR', '2026-06-15T00:00:00Z', 30000, 'manual', "
+                    "'2026-06-15T00:00:00Z')"
+                )
+                book.conn.commit()
+
+                before = book.process()
+                self.assertTrue(before["custody_quantity"]["blocked"])
+                with self.assertRaises(AppError) as blocked:
+                    core_reports.report_exit_tax(
+                        book.conn,
+                        "Books",
+                        "OG Treasury",
+                        handlers._report_hooks(),
+                        departure_date="2026-06-16",
+                        destination="eu_eea",
+                    )
+                self.assertEqual(blocked.exception.code, "custody_quantity_unresolved")
+
+                candidate = next(
+                    item
+                    for item in custody_gaps.load_gap_candidates(
+                        book.conn, "profile"
+                    )[0]
+                    if item.source_ids == ("2020-whirlpool-out",)
+                    and item.return_ids == ("2021-return-1", "2021-return-2")
+                )
+                preview = custody_gap_reviews.preview_guided_bridge(
+                    book.conn,
+                    workspace_id="ws",
+                    profile_id="profile",
+                    candidate=candidate,
+                )
+                created = custody_gap_reviews.create_guided_bridge(
+                    book.conn,
+                    workspace_id="ws",
+                    profile_id="profile",
+                    candidate=candidate,
+                    expected_fingerprint=preview["candidate_fingerprint"],
+                    authored_source="gui",
+                )
+                self.assertEqual(created["retained_msat"], 10 * BTC)
+                self.assertEqual(created["residual_msat"], 0)
+
+                after = book.process()
+                self.assertFalse(after["custody_quantity"]["blocked"])
+                report = core_reports.report_exit_tax(
+                    book.conn,
+                    "Books",
+                    "OG Treasury",
+                    handlers._report_hooks(),
+                    departure_date="2026-06-16",
+                    destination="eu_eea",
+                )
+                self.assertEqual(report["totals"]["neuQuantitySats"], 950_900_000)
+                self.assertEqual(report["totals"]["neuCostBasis"], 190_180.0)
+                self.assertFalse(
+                    book.conn.execute(
+                        """
+                        SELECT 1 FROM journal_entries
+                        WHERE transaction_id IN ('2021-return-1', '2021-return-2')
+                          AND entry_type = 'acquisition'
+                        """
+                    ).fetchone()
                 )
             finally:
                 book.close()
