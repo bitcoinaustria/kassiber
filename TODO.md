@@ -156,7 +156,7 @@ same verification surface.
   outbound legs and a plausible return: useful candidates must still surface,
   and an incomplete search must never be presented as complete.
 
-- [ ] Harden the pre-msat legacy schema migration so rebuilding a very old
+- [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an
   ancient-schema fixture and assert column/data parity after migration. This
   predates the custody-lineage branch and is intentionally outside its stop

@@ -22,6 +22,8 @@ def _open_fixture(name: str):
     data_root = Path(temporary.name) / "data"
     data_root.mkdir(parents=True)
     (data_root / "kassiber.sqlite3").write_bytes(database)
+    migrated = open_db(data_root)
+    migrated.close()
     return temporary, open_db(data_root)
 
 
