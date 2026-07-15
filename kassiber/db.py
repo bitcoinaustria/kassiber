@@ -5390,7 +5390,7 @@ def _migrate_msat_columns(conn):
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
         if migrate_transactions:
-            # The custody leg scope triggers query ``transactions``. SQLite
+            # Custody scope triggers query ``transactions``. SQLite
             # validates trigger bodies while the legacy REAL table is dropped /
             # renamed, even with foreign keys disabled, so suspend only those
             # derived guards for the atomic rebuild and restore the idempotent
@@ -5399,6 +5399,7 @@ def _migrate_msat_columns(conn):
                 """
                 DROP TRIGGER IF EXISTS trg_custody_component_scope_insert;
                 DROP TRIGGER IF EXISTS trg_custody_component_scope_update;
+                DROP TRIGGER IF EXISTS trg_custody_gap_review_transaction_scope_insert;
                 """
             )
             conn.executescript(
@@ -5591,6 +5592,7 @@ def _migrate_msat_columns(conn):
         _recreate_msat_migration_indexes(conn)
         if migrate_transactions:
             conn.executescript(CUSTODY_COMPONENT_SCHEMA)
+            _create_custody_gap_review_transaction_aux_schema(conn)
     except Exception:
         conn.rollback()
         raise
