@@ -14,7 +14,7 @@ from .identity import ObserverIdentity
 
 
 OBSERVER_STATE_VERSION = 1
-OBSERVER_COVERAGE_VERSION = 1
+OBSERVER_COVERAGE_VERSION = 2
 PRIVATE_OBSERVER_TABLES = frozenset(
     {"chain_observer_instances", "chain_observer_coverage", "chain_observer_values"}
 )
@@ -23,6 +23,14 @@ OBSERVER_VALUES_NAMESPACE_VERSION = 1
 
 @dataclass(frozen=True, slots=True)
 class CoveragePoint:
+    """One observer branch's exact derivation-index coverage.
+
+    ``scanned_to`` is an exclusive boundary: a value of ``20`` means that
+    indices ``0`` through ``19`` were included in the successful observation.
+    It is a technical scan fact for one imported source, not an attestation
+    that every wallet or policy belonging to the profile is known.
+    """
+
     branch_key: str
     scanned_to: int
     highest_used: int | None = None
@@ -247,6 +255,20 @@ def persist_observer_state(
                 "Observer coverage indices must be non-negative",
                 code="observer_state_invalid",
                 details={"branch_key": point.branch_key},
+                retryable=False,
+            )
+        if (
+            point.highest_used is not None
+            and point.highest_used >= point.scanned_to
+        ):
+            raise AppError(
+                "Observer coverage cannot contain a used index outside its exclusive scan boundary",
+                code="observer_state_invalid",
+                details={
+                    "branch_key": point.branch_key,
+                    "highest_used": point.highest_used,
+                    "scanned_to": point.scanned_to,
+                },
                 retryable=False,
             )
         coverage_json[point.branch_key] = encode_json_payload(

@@ -156,6 +156,42 @@ def _lwk_scan_to_index(
     return max([gap_limit - 1, *(value + gap_limit for value in highest_used)])
 
 
+def _lwk_coverage(
+    *,
+    branch_keys: tuple[str, ...],
+    scan_to_index: int,
+    highest_used: Mapping[str, int],
+) -> tuple[CoveragePoint, ...]:
+    """Return the exact exclusive boundary submitted to LWK's full scan."""
+
+    requested_index = int(scan_to_index)
+    if requested_index < 0:
+        raise AppError(
+            "LWK scan horizon must be non-negative",
+            code="observer_state_invalid",
+            retryable=False,
+        )
+    points = []
+    for branch_key in branch_keys:
+        used = highest_used.get(branch_key)
+        # LWK documents the request as a minimum and may scan farther using
+        # wollet state. A discovered index proves only that branch was scanned
+        # through that point, not that another gap or the other branch was.
+        scanned_to = max(
+            requested_index + 1,
+            int(used) + 1 if used is not None else 0,
+        )
+        points.append(
+            CoveragePoint(
+                branch_key=branch_key,
+                scanned_to=scanned_to,
+                highest_used=used,
+                details={"observer": "lwk"},
+            )
+        )
+    return tuple(points)
+
+
 def _canonical_liquid_multipath_text(plan: Any) -> str | None:
     """Combine only provably-equivalent separate receive/change descriptors."""
 
@@ -511,7 +547,14 @@ class LwkObserver:
             )
         return records
 
-    def _facts(self, wollet: Any, tip: Any, prior_state: StoredObserverState | None) -> ChainFacts:
+    def _facts(
+        self,
+        wollet: Any,
+        tip: Any,
+        prior_state: StoredObserverState | None,
+        *,
+        scan_to_index: int,
+    ) -> ChainFacts:
         transactions = list(wollet.transactions())
         records = [record for wallet_tx in transactions for record in self._records(wallet_tx)]
         current_txids = {str(wallet_tx.txid()) for wallet_tx in transactions}
@@ -547,14 +590,10 @@ class LwkObserver:
                     "raw": {"source": "lwk_wollet", "confidential": True},
                 }
             )
-        coverage = tuple(
-            CoveragePoint(
-                branch_key=key,
-                scanned_to=max(1, int(self.plan.gap_limit), highest.get(key, -1) + int(self.plan.gap_limit) + 1),
-                highest_used=highest.get(key),
-                details={"observer": "lwk"},
-            )
-            for key in self.identity.branch_keys
+        coverage = _lwk_coverage(
+            branch_keys=self.identity.branch_keys,
+            scan_to_index=scan_to_index,
+            highest_used=highest,
         )
         checkpoint = {
             "observer": "lwk", "tip_height": tip_height, "tip_hash": str(tip.block_hash()),
@@ -605,7 +644,12 @@ class LwkObserver:
             if update is not None:
                 self._wallet.apply_update(update)
             tip = client.tip()
-            facts = self._facts(self._wallet, tip, retraction_state)
+            facts = self._facts(
+                self._wallet,
+                tip,
+                retraction_state,
+                scan_to_index=scan_to,
+            )
         except AppError:
             raise
         except Exception as exc:

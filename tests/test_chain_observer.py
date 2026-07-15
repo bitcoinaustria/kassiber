@@ -175,6 +175,50 @@ class ChainObserverContractTest(unittest.TestCase):
             [("change", 20), ("receive", 40)],
         )
 
+    def test_used_index_must_be_inside_exclusive_coverage_boundary(self):
+        observer = FakeObserver(self.conn)
+        _observer, prepared = self._prepare(observer)
+        original_apply = observer.apply
+
+        def invalid_apply(prepared_update, prior_state):
+            application = original_apply(prepared_update, prior_state)
+            return ObserverApplication(
+                state=application.state,
+                facts=ChainFacts(
+                    coverage=(
+                        CoveragePoint(
+                            "receive",
+                            scanned_to=3,
+                            highest_used=3,
+                        ),
+                    ),
+                ),
+            )
+
+        observer.apply = invalid_apply
+        self.conn.execute("SAVEPOINT invalid_coverage")
+        with self.assertRaises(AppError) as raised:
+            apply_prepared_observer_update(self.conn, prepared)
+        self.conn.execute("ROLLBACK TO SAVEPOINT invalid_coverage")
+        self.conn.execute("RELEASE SAVEPOINT invalid_coverage")
+
+        self.assertEqual(raised.exception.code, "observer_state_invalid")
+
+    def test_version_one_coverage_requires_rebuild_under_exclusive_semantics(self):
+        _observer, prepared = self._prepare()
+        self._apply_and_commit(prepared)
+        self.conn.execute(
+            "UPDATE chain_observer_coverage SET coverage_version = 1 WHERE observer_id = ?",
+            (self.identity.id,),
+        )
+        self.conn.commit()
+
+        with self.assertRaises(AppError) as raised:
+            load_observer_state(self.conn, self.identity)
+
+        self.assertEqual(raised.exception.code, "observer_state_rebuild_required")
+        self.assertEqual(raised.exception.details["representation"], "coverage")
+
     def test_observer_boundary_exposes_no_spending_or_broadcast_capability(self):
         methods = {
             name

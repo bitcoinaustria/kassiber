@@ -363,6 +363,42 @@ class BdkObserver:
                 changed = True
         return changed
 
+    def _coverage_point(
+        self,
+        wallet: Any,
+        branch: BdkBranch,
+        highest_used: int | None,
+    ) -> CoveragePoint:
+        """Project only the scripts actually included in BDK's scan request."""
+
+        import bdkpython as bdk
+
+        keychain = (
+            bdk.KeychainKind.INTERNAL
+            if branch.internal
+            else bdk.KeychainKind.EXTERNAL
+        )
+        last_revealed = wallet.derivation_index(keychain)
+        scanned_to = 0 if last_revealed is None else int(last_revealed) + 1
+        if highest_used is not None and int(highest_used) >= scanned_to:
+            raise AppError(
+                "BDK reported a used output outside its revealed scan horizon",
+                code="observer_accounting_ambiguous",
+                details={
+                    "observer": "bdk",
+                    "branch_key": branch.branch_key,
+                    "highest_used": int(highest_used),
+                    "scanned_to": scanned_to,
+                },
+                retryable=False,
+            )
+        return CoveragePoint(
+            branch_key=branch.branch_key,
+            scanned_to=scanned_to,
+            highest_used=highest_used,
+            details={"branch_index": branch.branch_index, "observer": "bdk"},
+        )
+
     def _full_scan(self, client: Any, wallet: Any) -> Any:
         scan_request = wallet.start_full_scan().build()
         if self.backend_kind == "esplora":
@@ -576,25 +612,9 @@ class BdkObserver:
 
         coverage = []
         checkpoint_highest = {}
-        import bdkpython as bdk
-
         for branch in self.branches:
-            keychain = bdk.KeychainKind.INTERNAL if branch.internal else bdk.KeychainKind.EXTERNAL
             used = highest_used.get(branch.internal)
-            revealed = wallet.derivation_index(keychain)
-            scanned_to = max(
-                self.gap_limit,
-                (int(revealed) + self.gap_limit + 1) if revealed is not None else self.gap_limit,
-                (int(used) + self.gap_limit + 1) if used is not None else self.gap_limit,
-            )
-            coverage.append(
-                CoveragePoint(
-                    branch_key=branch.branch_key,
-                    scanned_to=scanned_to,
-                    highest_used=used,
-                    details={"branch_index": branch.branch_index, "observer": "bdk"},
-                )
-            )
+            coverage.append(self._coverage_point(wallet, branch, used))
             if used is not None:
                 checkpoint_highest[str(branch.branch_index)] = int(used)
         previous_txids = set(

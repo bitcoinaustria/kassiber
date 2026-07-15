@@ -78,6 +78,26 @@ Observer JSON state uses two private main-database tables:
   stable logical-wallet/source identity;
 - `chain_observer_coverage` stores versioned per-branch scan coverage.
 
+Every coverage row uses one exact convention: `scanned_to` is an exclusive
+derivation-index boundary. For example, `scanned_to = 20` means indices 0
+through 19 were included in the successful observation. BDK projects this
+from the last revealed script included in its completed request. LWK uses the
+requested inclusive `full_scan_to_index` bound plus one, widened only when the
+dependency returns a discovered index beyond that documented minimum.
+Coverage is never inferred by adding a gap to `highest_used`, because a newly
+discovered output at the edge of a request does not prove that the following
+gap was scanned in that same refresh. `highest_used`, when present, must
+therefore be strictly less than `scanned_to`.
+
+This semantic correction is coverage representation version 2. Version-1
+rows fail closed with `observer_state_rebuild_required` and are replaced by a
+successful full wallet refresh; an old overestimated boundary is never read as
+version-2 evidence.
+
+Coverage describes only one imported observer source. It does not assert that
+the profile contains every wallet or historical policy, and it cannot by
+itself prove that an unmatched output left the legal or beneficial owner.
+
 LWK additionally uses `chain_observer_values`, a versioned string-keyed byte
 store implementing its `ForeignStore` callback. Values are opaque to Kassiber,
 loaded only for the matching observer identity, and replaced only inside the
