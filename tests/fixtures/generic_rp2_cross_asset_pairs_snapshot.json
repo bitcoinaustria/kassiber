@@ -53,6 +53,7 @@
       "balances": 5,
       "blocked": false,
       "blocked_from": null,
+      "decisions": 0,
       "differences": 0,
       "issues": 0,
       "postings": 7

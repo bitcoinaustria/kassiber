@@ -29,6 +29,7 @@
       "balances": 2,
       "blocked": false,
       "blocked_from": null,
+      "decisions": 0,
       "differences": 1,
       "issues": 0,
       "postings": 2
