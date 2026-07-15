@@ -118,6 +118,12 @@ class HistoricalCustodyCompatibilityTests(unittest.TestCase):
             "5d232097",
         )
 
+    def test_pre_435_database_upgrades_without_reinterpreting_custody(self):
+        self._assert_migrated_fixture(
+            "pre_435_16b7bdc1.sqlite3.gz.b64",
+            "16b7bdc1",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
