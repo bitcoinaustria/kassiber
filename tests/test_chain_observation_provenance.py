@@ -13,6 +13,7 @@ from kassiber.core.chain_observer.provenance import (
     provenance_entries_for_facts,
     row_has_current_authoritative_observation,
 )
+from kassiber.core.custody_evidence import assess_authoritative_chain_observation
 from kassiber.db import open_db
 from kassiber.time_utils import now_iso
 
@@ -116,6 +117,8 @@ class ChainObservationProvenanceTest(unittest.TestCase):
         self.assertEqual(persisted, 1)
         row = self._row()
         self.assertTrue(row_has_current_authoritative_observation(row))
+        self.assertEqual(row["external_id_kind"], "txid")
+        self.assertTrue(assess_authoritative_chain_observation(row).authoritative)
         self.assertEqual(row["observation_fee_attribution"], "implicit_wallet_delta")
         self.assertEqual(row["observation_graph_hash"], canonical_graph_hash(self.raw))
         self.assertEqual(

@@ -15,6 +15,17 @@ from ...wallet_descriptors import normalize_asset_code
 AUTHORITY_VERSION = 1
 
 
+def _canonical_txid(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if len(text) != 64:
+        return None
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return None
+    return text
+
+
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
     if hasattr(row, "keys") and key not in row.keys():
         return default
@@ -147,10 +158,17 @@ def persist_chain_observation_provenance(
     timestamp = now_iso()
     for entry in entries:
         asset = normalize_asset_code(entry.get("asset"))
+        external_id = str(entry.get("external_id") or "").strip()
+        canonical_txid = (
+            _canonical_txid(external_id)
+            if str(chain).strip().lower() in {"bitcoin", "liquid"}
+            else None
+        )
         rows = conn.execute(
-            """
+            f"""
             SELECT * FROM transactions
-            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
+            WHERE profile_id = ? AND wallet_id = ?
+              AND {"LOWER(external_id)" if canonical_txid else "external_id"} = ?
               AND asset = ? AND direction = ?
             ORDER BY created_at DESC
             LIMIT 2
@@ -158,7 +176,7 @@ def persist_chain_observation_provenance(
             (
                 str(_field(profile, "id") or ""),
                 str(_field(wallet, "id") or ""),
-                str(entry.get("external_id") or ""),
+                canonical_txid or external_id,
                 asset,
                 str(entry.get("direction") or ""),
             ),
@@ -168,7 +186,7 @@ def persist_chain_observation_provenance(
                 "Authoritative observation did not resolve to one transaction row",
                 code="observer_projection_conflict",
                 details={
-                    "external_id": str(entry.get("external_id") or ""),
+                    "external_id": canonical_txid or external_id,
                     "asset": asset,
                     "direction": str(entry.get("direction") or ""),
                     "match_count": len(rows),
@@ -176,6 +194,15 @@ def persist_chain_observation_provenance(
                 retryable=False,
             )
         row = rows[0]
+        if canonical_txid is not None and str(row["external_id_kind"] or "") != "txid":
+            # Native identity typing is part of the same closed authority
+            # channel as graph/quantity provenance. Core receive payloads are
+            # commonly JSON arrays with no embedded txid; raw payload shape or
+            # a generic import must never be responsible for this promotion.
+            conn.execute(
+                "UPDATE transactions SET external_id_kind = 'txid' WHERE id = ?",
+                (str(row["id"]),),
+            )
         conn.execute(
             """
             INSERT INTO chain_observation_provenance(
