@@ -392,6 +392,27 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
         ),
     ),
     TableSpec(
+        "custody_gap_review_relation_sets",
+        (
+            "id", "review_id", "workspace_id", "profile_id",
+            "expected_source_count", "expected_return_count", "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_gap_review_relation_sets"),
+        high_stakes_fields=frozenset(
+            {
+                "review_id", "workspace_id", "profile_id",
+                "expected_source_count", "expected_return_count", "created_at",
+            }
+        ),
+        immutable_fields=frozenset(
+            {
+                "review_id", "workspace_id", "profile_id",
+                "expected_source_count", "expected_return_count", "created_at",
+            }
+        ),
+    ),
+    TableSpec(
         "custody_gap_review_transactions",
         (
             "id", "review_id", "workspace_id", "profile_id",

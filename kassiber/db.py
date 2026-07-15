@@ -1244,6 +1244,41 @@ BEGIN
     SELECT RAISE(ABORT, 'custody_gap_reviews_immutable');
 END;
 
+-- Immutable completeness commitment for the normalized transaction boundary
+-- authored by one custody review.  Keeping this as a child header allows an
+-- upgraded peer to distinguish a complete relation set from a prefix received
+-- in an earlier bundle without changing the signed shape of legacy reviews.
+CREATE TABLE IF NOT EXISTS custody_gap_review_relation_sets (
+    id TEXT PRIMARY KEY,
+    review_id TEXT NOT NULL UNIQUE
+        REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    expected_source_count INTEGER NOT NULL CHECK(expected_source_count >= 0),
+    expected_return_count INTEGER NOT NULL CHECK(expected_return_count >= 0),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_review_relation_sets_scope
+    ON custody_gap_review_relation_sets(profile_id, review_id, id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_relation_set_scope_insert
+BEFORE INSERT ON custody_gap_review_relation_sets
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1 FROM custody_gap_reviews r
+        WHERE r.id = NEW.review_id
+          AND r.workspace_id = NEW.workspace_id
+          AND r.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_gap_review_relation_set_scope_mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_relation_sets_immutable
+BEFORE UPDATE ON custody_gap_review_relation_sets
+BEGIN
+    SELECT RAISE(ABORT, 'custody_gap_review_relation_sets_immutable');
+END;
+
 -- Export-safe transaction scope for each authored custody-gap review.  The
 -- review snapshot remains local/private and the candidate fingerprint is
 -- intentionally one-way, so neither can answer whether a bounded auditor
@@ -3075,6 +3110,65 @@ def custody_gap_review_transaction_id(review_id, role, transaction_id):
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def custody_gap_review_transaction_v1_id(review_id, role, ordinal):
+    """Return the retired ordinal-keyed wire id accepted during replay."""
+
+    encoded = json.dumps(
+        [
+            "custody-gap-review-transaction-v1",
+            str(review_id),
+            str(role),
+            int(ordinal),
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def custody_gap_review_relation_set_id(review_id):
+    """Return the stable authored id for a review boundary commitment."""
+
+    encoded = json.dumps(
+        ["custody-gap-review-relation-set-v1", str(review_id)],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def backfill_custody_gap_review_relation_set(
+    conn,
+    *,
+    review_id,
+    workspace_id,
+    profile_id,
+    created_at,
+    expected_source_count,
+    expected_return_count,
+):
+    """Persist a missing immutable completeness header without rewriting it."""
+
+    cursor = conn.execute(
+        """
+        INSERT OR IGNORE INTO custody_gap_review_relation_sets(
+            id, review_id, workspace_id, profile_id,
+            expected_source_count, expected_return_count, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            custody_gap_review_relation_set_id(review_id),
+            review_id,
+            workspace_id,
+            profile_id,
+            int(expected_source_count),
+            int(expected_return_count),
+            created_at,
+        ),
+    )
+    return max(0, int(cursor.rowcount))
+
+
 def _create_custody_gap_review_transaction_aux_schema(conn):
     conn.executescript(
         """
@@ -3117,6 +3211,50 @@ def _create_custody_gap_review_transaction_aux_schema(conn):
     )
 
 
+def _v1_review_relation_wire_identity(conn, row):
+    """Recover the portable relation tuple from its original signed upsert.
+
+    Alias catalogs are intentionally device-local projections and two peers
+    may know different subsets.  A migrated v1 row therefore takes its review
+    and transaction identities from the immutable signed event that authored
+    that exact ordinal row. A row never captured before upgrade has no portable
+    identity yet and safely falls back to its local tuple; capture will derive
+    its first v2 wire identity after migration.
+    """
+
+    entity_key = json.dumps([str(row["id"])], ensure_ascii=True, separators=(",", ":"))
+    events = conn.execute(
+        """
+        SELECT payload_json
+        FROM sync_events
+        WHERE profile_id = ?
+          AND entity_table = 'custody_gap_review_transactions'
+          AND entity_key = ?
+          AND event_type = 'row.upsert'
+        ORDER BY replica_id, replica_seq, id
+        """,
+        (row["profile_id"], entity_key),
+    ).fetchall()
+    for event in events:
+        try:
+            payload = json.loads(str(event["payload_json"] or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        wire_row = payload.get("row") if isinstance(payload, dict) else None
+        if not isinstance(wire_row, dict):
+            continue
+        if (
+            str(wire_row.get("id") or "") == str(row["id"])
+            and str(wire_row.get("role") or "") == str(row["role"])
+            and type(wire_row.get("ordinal")) is int
+        ):
+            review_id = str(wire_row.get("review_id") or "")
+            transaction_id = str(wire_row.get("transaction_id") or "")
+            if review_id and transaction_id:
+                return review_id, transaction_id
+    return str(row["review_id"]), str(row["transaction_id"])
+
+
 def _ensure_custody_gap_review_transaction_schema(conn):
     """Replace the unreleased ordinal-keyed relation shape with set identity."""
 
@@ -3130,7 +3268,7 @@ def _ensure_custody_gap_review_transaction_schema(conn):
         return False
     rows = conn.execute(
         """
-        SELECT review_id, workspace_id, profile_id, role,
+        SELECT id, review_id, workspace_id, profile_id, role,
                transaction_id, created_at
         FROM custody_gap_review_transactions
         ORDER BY review_id, role, transaction_id, id
@@ -3162,6 +3300,14 @@ def _ensure_custody_gap_review_transaction_schema(conn):
         """
     )
     for row in rows:
+        wire_review_id, wire_transaction_id = _v1_review_relation_wire_identity(
+            conn, row
+        )
+        relation_id = custody_gap_review_transaction_id(
+            wire_review_id,
+            row["role"],
+            wire_transaction_id,
+        )
         conn.execute(
             """
             INSERT OR IGNORE INTO custody_gap_review_transactions(
@@ -3170,14 +3316,40 @@ def _ensure_custody_gap_review_transaction_schema(conn):
             ) VALUES(?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                custody_gap_review_transaction_id(
-                    row["review_id"], row["role"], row["transaction_id"]
-                ),
+                relation_id,
                 row["review_id"],
                 row["workspace_id"],
                 row["profile_id"],
                 row["role"],
                 row["transaction_id"],
+                row["created_at"],
+            ),
+        )
+        # A delayed signed v1 tombstone/upsert still names the ordinal row id.
+        # Redirect that portable alias to the v2 set row before dropping the
+        # legacy table so replay can advance the replica sequence normally.
+        conn.execute(
+            """
+            UPDATE sync_id_map
+            SET local_id = ?
+            WHERE profile_id = ?
+              AND entity_table = 'custody_gap_review_transactions'
+              AND local_id = ?
+            """,
+            (relation_id, row["profile_id"], row["id"]),
+        )
+        conn.execute(
+            """
+            INSERT INTO sync_id_map(
+                profile_id, entity_table, wire_id, local_id, created_at
+            ) VALUES(?, 'custody_gap_review_transactions', ?, ?, ?)
+            ON CONFLICT(profile_id, entity_table, wire_id)
+            DO UPDATE SET local_id = excluded.local_id
+            """,
+            (
+                row["profile_id"],
+                row["id"],
+                relation_id,
                 row["created_at"],
             ),
         )
@@ -3343,6 +3515,16 @@ def _backfill_custody_gap_review_transactions(conn):
                 *(("return", value) for value in relation_ids["return"]),
             ),
         )
+        if relation_ids["source"] or relation_ids["return"]:
+            backfill_custody_gap_review_relation_set(
+                conn,
+                review_id=review["id"],
+                workspace_id=review["workspace_id"],
+                profile_id=review["profile_id"],
+                created_at=review["created_at"],
+                expected_source_count=len(relation_ids["source"]),
+                expected_return_count=len(relation_ids["return"]),
+            )
     return inserted
 
 
@@ -3362,9 +3544,28 @@ def _backfill_legacy_componentless_review_transactions(conn):
         WHERE r.component_id IS NULL
           AND r.action = 'dismissed'
           AND COALESCE(r.event_kind, 'review_decision') = 'review_decision'
-          AND NOT EXISTS (
-              SELECT 1 FROM custody_gap_review_transactions x
-              WHERE x.review_id = r.id
+          AND (
+              NOT EXISTS (
+                  SELECT 1 FROM custody_gap_review_relation_sets s
+                  WHERE s.review_id = r.id
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM custody_gap_review_relation_sets s
+                  WHERE s.review_id = r.id
+                    AND (
+                        s.expected_source_count != (
+                            SELECT COUNT(*)
+                            FROM custody_gap_review_transactions x
+                            WHERE x.review_id = r.id AND x.role = 'source'
+                        )
+                        OR s.expected_return_count != (
+                            SELECT COUNT(*)
+                            FROM custody_gap_review_transactions x
+                            WHERE x.review_id = r.id AND x.role = 'return'
+                        )
+                    )
+              )
           )
         LIMIT 1
         """

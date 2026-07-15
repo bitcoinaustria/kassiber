@@ -224,6 +224,9 @@ def reset_current_profile_data(
         "custody_gap_reviews": _count_profile_rows(
             conn, "custody_gap_reviews", profile_id
         ),
+        "custody_gap_review_relation_sets": _count_profile_rows(
+            conn, "custody_gap_review_relation_sets", profile_id
+        ),
         "custody_gap_review_transactions": _count_profile_rows(
             conn, "custody_gap_review_transactions", profile_id
         ),
@@ -352,6 +355,10 @@ def reset_current_profile_data(
             (profile_id,),
         )
         conn.execute(
+            "DELETE FROM custody_gap_review_relation_sets WHERE profile_id = ?",
+            (profile_id,),
+        )
+        conn.execute(
             "DELETE FROM custody_gap_reviews WHERE profile_id = ?", (profile_id,)
         )
         conn.execute(
@@ -424,6 +431,7 @@ def reset_current_profile_data(
             "journal_quantity_issues",
             "journal_quantity_postings",
             "custody_gap_review_transactions",
+            "custody_gap_review_relation_sets",
             "custody_gap_reviews",
             "custody_filed_report_impact_resolutions",
             "custody_filed_report_impacts",

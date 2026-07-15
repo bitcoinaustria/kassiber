@@ -9,6 +9,7 @@ import unittest
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from kassiber.cli.handlers import build_ledger_state
 from kassiber.core.accounts import create_profile, create_workspace
@@ -38,7 +39,12 @@ from kassiber.core.sync_replication.schema_allowlist import (
     row_key,
     serialize_row,
 )
-from kassiber.db import open_db
+from kassiber.db import (
+    custody_gap_review_relation_set_id,
+    custody_gap_review_transaction_id,
+    custody_gap_review_transaction_v1_id,
+    open_db,
+)
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import require_sqlcipher, sqlcipher_available
 
@@ -224,6 +230,84 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             authored_source=authored_source,
         )
         return activate_component(self.owner, component["id"], activated_at=NOW) if active else component
+
+    def _insert_review_boundary(
+        self,
+        *,
+        review_id: str,
+        source_ids: tuple[str, ...],
+        return_ids: tuple[str, ...],
+        include_relations: bool = True,
+    ) -> None:
+        self.owner.execute(
+            """
+            INSERT INTO custody_gap_reviews(
+                id, workspace_id, profile_id, gap_id, revision,
+                candidate_fingerprint, action, event_kind, component_id,
+                authored_source, reason, snapshot_json, created_at
+            ) VALUES(?, ?, ?, ?, 1, ?, 'dismissed', 'review_decision', NULL,
+                     'user', 'private review reason', ?, ?)
+            """,
+            (
+                review_id,
+                self.workspace["id"],
+                self.profile["id"],
+                f"gap-{review_id}",
+                "cd" * 32,
+                json.dumps(
+                    {
+                        "source_ids": list(source_ids),
+                        "return_ids": list(return_ids),
+                        "retained_msat": 99000,
+                    },
+                    separators=(",", ":"),
+                ),
+                NOW,
+            ),
+        )
+        self.owner.execute(
+            """
+            INSERT INTO custody_gap_review_relation_sets(
+                id, review_id, workspace_id, profile_id,
+                expected_source_count, expected_return_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                custody_gap_review_relation_set_id(review_id),
+                review_id,
+                self.workspace["id"],
+                self.profile["id"],
+                len(source_ids),
+                len(return_ids),
+                NOW,
+            ),
+        )
+        if not include_relations:
+            return
+        for role, transaction_ids in (
+            ("source", source_ids),
+            ("return", return_ids),
+        ):
+            for transaction_id in transaction_ids:
+                self.owner.execute(
+                    """
+                    INSERT INTO custody_gap_review_transactions(
+                        id, review_id, workspace_id, profile_id,
+                        role, transaction_id, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        custody_gap_review_transaction_id(
+                            review_id, role, transaction_id
+                        ),
+                        review_id,
+                        self.workspace["id"],
+                        self.profile["id"],
+                        role,
+                        transaction_id,
+                        NOW,
+                    ),
+                )
 
     def test_mutually_linked_headers_replay_without_row_order_dependency(self):
         self._join_peer()
@@ -629,6 +713,277 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 transaction_ids,
             ).fetchone()[0],
             0,
+        )
+
+    def test_split_review_relation_bundle_stays_redacted_until_exactly_complete(self):
+        self._join_peer()
+        _, source_id, return_id = self._insert_wallet_and_transactions()
+        self._sync_owner_to_peer()
+        self._insert_review_boundary(
+            review_id="split-review",
+            source_ids=(source_id,),
+            return_ids=(return_id,),
+        )
+        self.owner.commit()
+
+        with patch(
+            "kassiber.core.sync_replication.bundle.MAX_BUNDLE_EVENTS",
+            3,
+        ):
+            first_bundle = build_bundle(
+                self.owner,
+                profile_id=self.profile["id"],
+            )
+        self.assertIsNotNone(first_bundle)
+        self.assertEqual(first_bundle.event_count, 3)
+        first_result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=first_bundle.ciphertext,
+        )
+        self.assertEqual(first_result.rejected_events, 0)
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT COUNT(*) FROM custody_gap_review_transactions "
+                "WHERE review_id = 'split-review'"
+            ).fetchone()[0],
+            1,
+        )
+        partial = custody_gap_reviews.list_audit_review_history(
+            self.peer,
+            self.profile["id"],
+            transaction_ids=[source_id, return_id],
+        )
+        self.assertTrue(
+            partial["records"][0]["candidate_wide_payload_excluded"]
+        )
+        self.assertEqual(
+            custody_gap_reviews.complete_selected_review_ids(
+                self.peer,
+                self.profile["id"],
+                [source_id, return_id],
+            ),
+            frozenset(),
+        )
+
+        second_bundle = build_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+        )
+        self.assertIsNotNone(second_bundle)
+        second_result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=second_bundle.ciphertext,
+        )
+        self.assertEqual(second_result.rejected_events, 0)
+        complete = custody_gap_reviews.list_audit_review_history(
+            self.peer,
+            self.profile["id"],
+            transaction_ids=[source_id, return_id],
+        )
+        self.assertNotIn(
+            "candidate_wide_payload_excluded",
+            complete["records"][0],
+        )
+        self.assertEqual(complete["records"][0]["reason"], "private review reason")
+        self.assertEqual(
+            custody_gap_reviews.complete_selected_review_ids(
+                self.peer,
+                self.profile["id"],
+                [source_id, return_id],
+            ),
+            frozenset({"split-review"}),
+        )
+
+    def test_delayed_signed_v1_relations_translate_dedup_and_advance_sequence(self):
+        self._join_peer()
+        self._sync_owner_to_peer()
+        _, source_id, return_id = self._insert_wallet_and_transactions()
+        peer_source_id = "peer-local-source"
+        source = self.owner.execute(
+            "SELECT * FROM transactions WHERE id = ?",
+            (source_id,),
+        ).fetchone()
+        peer_account_id = self.peer.execute(
+            "SELECT id FROM accounts WHERE profile_id = ? ORDER BY id LIMIT 1",
+            (self.profile["id"],),
+        ).fetchone()[0]
+        self.peer.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind,
+                config_json, created_at
+            ) VALUES('peer-local-wallet', ?, ?, ?, 'Peer local', 'custom', '{}', ?)
+            """,
+            (
+                self.workspace["id"],
+                self.profile["id"],
+                peer_account_id,
+                NOW,
+            ),
+        )
+        self.peer.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id,
+                fingerprint, occurred_at, direction, asset, amount, fee,
+                raw_json, created_at
+            ) VALUES(?, ?, ?, 'peer-local-wallet', 'peer-local', ?, ?, ?, ?, ?, ?, '{}', ?)
+            """,
+            (
+                peer_source_id,
+                self.workspace["id"],
+                self.profile["id"],
+                source["fingerprint"],
+                source["occurred_at"],
+                source["direction"],
+                source["asset"],
+                source["amount"],
+                source["fee"],
+                source["created_at"],
+            ),
+        )
+        self.peer.commit()
+        self._sync_owner_to_peer()
+        mapped_source = self.peer.execute(
+            """
+            SELECT local_id FROM sync_id_map
+            WHERE profile_id = ? AND entity_table = 'transactions'
+              AND wire_id = ?
+            """,
+            (self.profile["id"], source_id),
+        ).fetchone()
+        self.assertEqual(str(mapped_source["local_id"]), peer_source_id)
+
+        self._insert_review_boundary(
+            review_id="legacy-wire-review",
+            source_ids=(source_id,),
+            return_ids=(return_id,),
+            include_relations=False,
+        )
+        self.owner.commit()
+        self._sync_owner_to_peer()
+
+        authored = []
+        legacy_ids: dict[str, str] = {}
+        for ordinal, (role, transaction_id) in enumerate(
+            (("source", source_id), ("return", return_id))
+        ):
+            legacy_id = custody_gap_review_transaction_v1_id(
+                "legacy-wire-review", role, ordinal
+            )
+            legacy_ids[role] = legacy_id
+            wire_row = {
+                "id": legacy_id,
+                "review_id": "legacy-wire-review",
+                "workspace_id": self.workspace["id"],
+                "profile_id": self.profile["id"],
+                "ordinal": ordinal,
+                "role": role,
+                "transaction_id": transaction_id,
+                "created_at": NOW,
+            }
+            event = author_event(
+                self.owner,
+                profile_id=self.profile["id"],
+                event_type="row.upsert",
+                entity_table="custody_gap_review_transactions",
+                entity_key=json.dumps([legacy_id], separators=(",", ":")),
+                payload={"row": wire_row},
+            )
+            self.assertIsNotNone(event)
+            authored.append(event)
+            if role == "source":
+                v2_id = custody_gap_review_transaction_id(
+                    "legacy-wire-review", role, transaction_id
+                )
+                v2_row = dict(wire_row)
+                v2_row.pop("ordinal")
+                v2_row["id"] = v2_id
+                replay = author_event(
+                    self.owner,
+                    profile_id=self.profile["id"],
+                    event_type="row.upsert",
+                    entity_table="custody_gap_review_transactions",
+                    entity_key=json.dumps([v2_id], separators=(",", ":")),
+                    payload={"row": v2_row},
+                )
+                self.assertIsNotNone(replay)
+                authored.append(replay)
+
+        tombstone = author_event(
+            self.owner,
+            profile_id=self.profile["id"],
+            event_type="row.delete",
+            entity_table="custody_gap_review_transactions",
+            entity_key=json.dumps([legacy_ids["source"]], separators=(",", ":")),
+            payload={
+                "key": json.dumps([legacy_ids["source"]], separators=(",", ":")),
+                "reason": "legacy-delete",
+            },
+        )
+        self.assertIsNotNone(tombstone)
+        self.owner.execute(
+            "UPDATE profiles SET label = 'after delayed v1' WHERE id = ?",
+            (self.profile["id"],),
+        )
+        bundle = build_bundle(self.owner, profile_id=self.profile["id"])
+        self.assertIsNotNone(bundle)
+        result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=bundle.ciphertext,
+        )
+
+        self.assertEqual(result.rejected_events, 1)
+        rows = self.peer.execute(
+            """
+            SELECT id, role, transaction_id
+            FROM custody_gap_review_transactions
+            WHERE review_id = 'legacy-wire-review'
+            ORDER BY role
+            """
+        ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            {str(row["role"]): str(row["transaction_id"]) for row in rows},
+            {"source": peer_source_id, "return": return_id},
+        )
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT label FROM profiles WHERE id = ?",
+                (self.profile["id"],),
+            ).fetchone()[0],
+            "after delayed v1",
+        )
+        for role, legacy_id in legacy_ids.items():
+            mapped = self.peer.execute(
+                """
+                SELECT local_id FROM sync_id_map
+                WHERE profile_id = ?
+                  AND entity_table = 'custody_gap_review_transactions'
+                  AND wire_id = ?
+                """,
+                (self.profile["id"], legacy_id),
+            ).fetchone()
+            expected_local_id = next(
+                str(row["id"]) for row in rows if str(row["role"]) == role
+            )
+            self.assertEqual(str(mapped["local_id"]), expected_local_id)
+        owner_replica_id = self.owner.execute(
+            "SELECT local_replica_id FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()[0]
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT last_seq FROM sync_replicas WHERE id = ?",
+                (owner_replica_id,),
+            ).fetchone()[0],
+            self.owner.execute(
+                "SELECT last_seq FROM sync_replicas WHERE id = ?",
+                (owner_replica_id,),
+            ).fetchone()[0],
         )
 
     def test_changed_synced_evidence_drifts_on_author_and_receiver(self):

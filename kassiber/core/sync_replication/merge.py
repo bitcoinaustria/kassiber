@@ -11,6 +11,10 @@ import sqlite3
 import uuid
 from typing import Any, Mapping
 
+from ...db import (
+    custody_gap_review_transaction_id,
+    custody_gap_review_transaction_v1_id,
+)
 from ...errors import AppError
 from ...time_utils import now_iso, parse_timestamp
 from .. import freshness as core_freshness
@@ -82,6 +86,86 @@ class BundleImportResult:
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+
+
+def _normalized_review_relation_wire_row(
+    event: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], str | None]:
+    """Translate one verified ordinal v1 relation to the strict v2 row shape.
+
+    Signature verification always happens against the untouched event.  This
+    compatibility adapter runs only at validation/apply time so a signed event
+    delayed in a mailbox across an application upgrade can advance its replica
+    stream without making ``ordinal`` part of the current sync schema again.
+    """
+
+    payload = event.get("payload") or {}
+    wire_row = payload.get("row") if isinstance(payload, Mapping) else None
+    if not isinstance(wire_row, Mapping):
+        raise AppError("row upsert event has no row", code="sync_bundle_invalid")
+    if str(event.get("entity_table")) != "custody_gap_review_transactions" or (
+        "ordinal" not in wire_row
+    ):
+        return wire_row, None
+    v1_fields = {
+        "id",
+        "review_id",
+        "workspace_id",
+        "profile_id",
+        "ordinal",
+        "role",
+        "transaction_id",
+        "created_at",
+    }
+    if set(wire_row) != v1_fields:
+        raise AppError(
+            "legacy custody review relation does not match its signed schema",
+            code="sync_schema_forbidden",
+            details={
+                "table": "custody_gap_review_transactions",
+                "unknown_fields": sorted(set(wire_row) - v1_fields),
+                "missing_fields": sorted(v1_fields - set(wire_row)),
+            },
+            retryable=False,
+        )
+    ordinal = wire_row.get("ordinal")
+    role = str(wire_row.get("role") or "")
+    review_id = str(wire_row.get("review_id") or "")
+    transaction_id = str(wire_row.get("transaction_id") or "")
+    legacy_id = str(wire_row.get("id") or "")
+    if (
+        type(ordinal) is not int
+        or ordinal < 0
+        or role not in {"source", "return"}
+        or not review_id
+        or not transaction_id
+        or legacy_id
+        != custody_gap_review_transaction_v1_id(review_id, role, ordinal)
+    ):
+        raise AppError(
+            "legacy custody review relation identity is invalid",
+            code="sync_bundle_invalid",
+        )
+    try:
+        entity_key = json.loads(str(event.get("entity_key")))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError(
+            "legacy custody review relation key is invalid",
+            code="sync_bundle_invalid",
+        ) from exc
+    if entity_key != [legacy_id]:
+        raise AppError(
+            "legacy custody review relation key does not match its row",
+            code="sync_bundle_invalid",
+        )
+    normalized = dict(wire_row)
+    normalized.pop("ordinal")
+    normalized["id"] = custody_gap_review_transaction_id(
+        review_id,
+        role,
+        transaction_id,
+    )
+    return normalized, legacy_id
 
 
 def _event_from_db(row) -> dict[str, Any]:
@@ -894,6 +978,25 @@ def _prepare_actual_row(
                 ),
             )
             actual["document_id"] = document_id
+    if spec.table == "custody_gap_review_transactions":
+        # A delayed v1 event and a current v2 replay can name the same authored
+        # set member with different row ids.  The semantic uniqueness is the
+        # review/role/transaction tuple; converge on the materialized row and
+        # record both wire ids as aliases instead of tripping the UNIQUE fence.
+        existing_relation = conn.execute(
+            """
+            SELECT id
+            FROM custody_gap_review_transactions
+            WHERE review_id = ? AND role = ? AND transaction_id = ?
+            """,
+            (
+                actual.get("review_id"),
+                actual.get("role"),
+                actual.get("transaction_id"),
+            ),
+        ).fetchone()
+        if existing_relation is not None:
+            actual["id"] = str(existing_relation["id"])
     local_pk = tuple(actual[column] for column in spec.primary_key)
     if len(spec.primary_key) == 1 and local_pk[0] is not None:
         _record_id_map(
@@ -979,10 +1082,7 @@ def _apply_row_upsert(
     attachments_root: Path | None,
     created_files: list[Path],
 ) -> tuple[bool, int]:
-    payload = event.get("payload") or {}
-    wire_row = payload.get("row") if isinstance(payload, Mapping) else None
-    if not isinstance(wire_row, Mapping):
-        raise AppError("row upsert event has no row", code="sync_bundle_invalid")
+    wire_row, legacy_relation_wire_id = _normalized_review_relation_wire_row(event)
     spec = validate_wire_row(str(event["entity_table"]), wire_row)
     key = str(event["entity_key"])
     if spec.table == "custody_component_evidence_commitments":
@@ -1154,7 +1254,32 @@ def _apply_row_upsert(
         attachments_root=attachments_root,
         created_files=created_files,
     )
-    _insert_or_update_with_collision_notice(conn, book=book, spec=spec, actual=actual, event=event)
+    if legacy_relation_wire_id is not None:
+        _record_id_map(
+            conn,
+            profile_id=book["profile_id"],
+            table="custody_gap_review_transactions",
+            wire_id=legacy_relation_wire_id,
+            local_id=str(actual["id"]),
+        )
+    identical_relation_replay = False
+    if spec.table == "custody_gap_review_transactions":
+        existing_relation = conn.execute(
+            "SELECT * FROM custody_gap_review_transactions WHERE id = ?",
+            (actual["id"],),
+        ).fetchone()
+        identical_relation_replay = bool(
+            existing_relation is not None
+            and all(existing_relation[column] == actual[column] for column in spec.columns)
+        )
+    if not identical_relation_replay:
+        _insert_or_update_with_collision_notice(
+            conn,
+            book=book,
+            spec=spec,
+            actual=actual,
+            event=event,
+        )
     if private_policy_review_required and prior_wallet is not None:
         _notice(
             conn,
@@ -1569,10 +1694,19 @@ def _immutable_revision_rejection(
             "custody_components",
             "filed_report_snapshots",
             "custody_filed_report_impact_resolutions",
+            "custody_gap_reviews",
         }:
             parent_alive = conn.execute(
                 "SELECT 1 FROM profiles WHERE id = ?",
                 (existing["profile_id"],),
+            ).fetchone()
+        elif spec.table in {
+            "custody_gap_review_relation_sets",
+            "custody_gap_review_transactions",
+        }:
+            parent_alive = conn.execute(
+                "SELECT 1 FROM custody_gap_reviews WHERE id = ?",
+                (existing["review_id"],),
             ).fetchone()
         else:
             parent_alive = conn.execute(
@@ -1591,9 +1725,11 @@ def _immutable_revision_rejection(
         return None
     if event["event_type"] != "row.upsert":
         return None
-    payload = event.get("payload") or {}
-    wire_row = payload.get("row") if isinstance(payload, Mapping) else None
-    if not isinstance(wire_row, Mapping):
+    try:
+        wire_row, _ = _normalized_review_relation_wire_row(event)
+    except AppError:
+        # The strict apply path will reject malformed wire data with its typed
+        # schema error; immutable inspection must not interpret it first.
         return None
     spec = validate_wire_row(str(event["entity_table"]), wire_row)
 

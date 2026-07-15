@@ -20,6 +20,7 @@ import uuid
 from typing import Any, Mapping, Sequence
 
 from ..db import (
+    backfill_custody_gap_review_relation_set,
     backfill_custody_gap_review_relations,
     custody_gap_review_transaction_id,
 )
@@ -561,29 +562,14 @@ def list_audit_review_history(
         """,
         (*params, limit),
     ).fetchall()
-    fully_selected_review_ids: set[str] = set()
+    fully_selected_review_ids: frozenset[str] = frozenset()
     if selected_transaction_ids is not None and rows:
-        review_ids = tuple(str(row["id"]) for row in rows)
-        review_placeholders = ",".join("?" for _ in review_ids)
-        normalized_by_review: dict[str, set[str]] = {}
-        for normalized in conn.execute(
-            f"""
-            SELECT review_id, transaction_id
-            FROM custody_gap_review_transactions
-            WHERE review_id IN ({review_placeholders})
-            """,
-            review_ids,
-        ).fetchall():
-            normalized_by_review.setdefault(str(normalized["review_id"]), set()).add(
-                str(normalized["transaction_id"])
-            )
-        fully_selected_review_ids = {
-            review_id
-            for review_id, normalized_transaction_ids in normalized_by_review.items()
-            if normalized_transaction_ids
-            and normalized_transaction_ids.issubset(selected_transaction_ids)
-            and review_id not in incomplete_review_ids
-        }
+        fully_selected_review_ids = complete_selected_review_ids(
+            conn,
+            profile_id,
+            tuple(selected_transaction_ids),
+            review_ids=tuple(str(row["id"]) for row in rows),
+        )
     records = [
         _redacted_review_history_row(
             row,
@@ -627,80 +613,130 @@ def _audit_review_history_result(
     return result
 
 
-def _snapshot_review_relations(snapshot_json: Any) -> tuple[tuple[str, str], ...]:
-    try:
-        snapshot = json.loads(str(snapshot_json or "{}"))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return ()
-    if not isinstance(snapshot, Mapping):
-        return ()
-    relations: list[tuple[str, str]] = []
-    for role, key in (("source", "source_ids"), ("return", "return_ids")):
-        values = snapshot.get(key)
-        if not isinstance(values, list):
-            continue
-        for value in values:
-            if isinstance(value, str) and value:
-                relation = (role, value)
-                if relation not in relations:
-                    relations.append(relation)
-    return tuple(relations)
-
-
 def _incomplete_review_scope_ids(
     conn: sqlite3.Connection, profile_id: str
 ) -> set[str]:
-    """Identify legacy reviews whose complete authored boundary is unknowable."""
+    """Identify reviews without an exactly satisfied durable boundary header."""
 
-    reviews = conn.execute(
+    rows = conn.execute(
         """
-        SELECT id, component_id, snapshot_json
-        FROM custody_gap_reviews
-        WHERE profile_id = ?
-        ORDER BY created_at, id
+        SELECT r.id,
+               s.expected_source_count,
+               s.expected_return_count,
+               SUM(CASE WHEN x.role = 'source' THEN 1 ELSE 0 END)
+                   AS actual_source_count,
+               SUM(CASE WHEN x.role = 'return' THEN 1 ELSE 0 END)
+                   AS actual_return_count
+        FROM custody_gap_reviews r
+        LEFT JOIN custody_gap_review_relation_sets s ON s.review_id = r.id
+        LEFT JOIN custody_gap_review_transactions x ON x.review_id = r.id
+        WHERE r.profile_id = ?
+        GROUP BY r.id, s.expected_source_count, s.expected_return_count
+        ORDER BY r.created_at, r.id
         """,
         (profile_id,),
     ).fetchall()
-    incomplete: set[str] = set()
-    for review in reviews:
-        normalized = {
-            (str(row["role"]), str(row["transaction_id"]))
-            for row in conn.execute(
-                """
-                SELECT role, transaction_id
-                FROM custody_gap_review_transactions
-                WHERE review_id = ?
-                """,
-                (review["id"],),
-            ).fetchall()
-        }
-        expected = set(_snapshot_review_relations(review["snapshot_json"]))
-        if review["component_id"]:
-            expected.update(
-                (
-                    "return" if row["role"] == "destination" else "source",
-                    str(row["transaction_id"]),
-                )
-                for row in conn.execute(
-                    """
-                    SELECT role,
-                           COALESCE(anchor_transaction_id, transaction_id)
-                               AS transaction_id
-                    FROM custody_component_legs
-                    WHERE profile_id = ? AND component_id = ?
-                      AND role IN ('source', 'fee', 'destination')
-                      AND COALESCE(anchor_transaction_id, transaction_id)
-                          IS NOT NULL
-                    """,
-                    (profile_id, review["component_id"]),
-                ).fetchall()
-            )
-        if expected:
-            if not expected.issubset(normalized):
-                incomplete.add(str(review["id"]))
-        elif not normalized:
-            incomplete.add(str(review["id"]))
-    return incomplete
+    return {
+        str(row["id"])
+        for row in rows
+        if row["expected_source_count"] is None
+        or row["expected_return_count"] is None
+        or int(row["expected_source_count"]) <= 0
+        or int(row["expected_return_count"]) <= 0
+        or int(row["expected_source_count"]) != int(row["actual_source_count"])
+        or int(row["expected_return_count"]) != int(row["actual_return_count"])
+    }
+
+
+def complete_selected_review_ids(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    transaction_ids: Sequence[str],
+    *,
+    review_ids: Sequence[str] | None = None,
+) -> frozenset[str]:
+    """Return exactly complete review boundaries contained in a selection.
+
+    This is deliberately read-only.  A signed relation prefix cannot unlock a
+    candidate-wide payload: a review qualifies only when its immutable header
+    is present, each role count matches exactly, the boundary is non-empty,
+    and every authored transaction anchor is selected.
+    """
+
+    selected = frozenset(str(value) for value in transaction_ids if value)
+    if not selected:
+        return frozenset()
+    where = "r.profile_id = ?"
+    params: list[Any] = [profile_id]
+    if review_ids is not None:
+        candidates = tuple(sorted({str(value) for value in review_ids if value}))
+        if not candidates:
+            return frozenset()
+        placeholders = ",".join("?" for _ in candidates)
+        where += f" AND r.id IN ({placeholders})"
+        params.extend(candidates)
+    rows = conn.execute(
+        f"""
+        SELECT r.id, s.expected_source_count, s.expected_return_count,
+               x.role, x.transaction_id
+        FROM custody_gap_reviews r
+        JOIN custody_gap_review_relation_sets s ON s.review_id = r.id
+        LEFT JOIN custody_gap_review_transactions x ON x.review_id = r.id
+        WHERE {where}
+        ORDER BY r.id, x.role, x.transaction_id, x.id
+        """,
+        params,
+    ).fetchall()
+    state: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        review_id = str(row["id"])
+        current = state.setdefault(
+            review_id,
+            {
+                "expected_source": int(row["expected_source_count"]),
+                "expected_return": int(row["expected_return_count"]),
+                "source": set(),
+                "return": set(),
+            },
+        )
+        if row["role"] is not None and row["transaction_id"] is not None:
+            current[str(row["role"])].add(str(row["transaction_id"]))
+    complete: set[str] = set()
+    for review_id, current in state.items():
+        boundary = current["source"] | current["return"]
+        if (
+            current["expected_source"] > 0
+            and current["expected_return"] > 0
+            and len(current["source"]) == current["expected_source"]
+            and len(current["return"]) == current["expected_return"]
+            and boundary.issubset(selected)
+        ):
+            complete.add(review_id)
+    return frozenset(complete)
+
+
+def selected_review_ids(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    transaction_ids: Sequence[str],
+) -> frozenset[str]:
+    """Return reviews overlapping any selected durable boundary anchor."""
+
+    selected = tuple(sorted({str(value) for value in transaction_ids if value}))
+    if not selected:
+        return frozenset()
+    placeholders = ",".join("?" for _ in selected)
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT x.review_id
+        FROM custody_gap_review_transactions x
+        JOIN custody_gap_reviews r ON r.id = x.review_id
+        WHERE r.profile_id = ? AND x.profile_id = r.profile_id
+          AND x.transaction_id IN ({placeholders})
+        """,
+        (profile_id, *selected),
+    ).fetchall()
+    return frozenset(str(row["review_id"]) for row in rows)
 
 
 def backfill_legacy_componentless_review_relations(
@@ -724,10 +760,6 @@ def backfill_legacy_componentless_review_relations(
         WHERE r.component_id IS NULL
           AND r.action = 'dismissed'
           AND COALESCE(r.event_kind, 'review_decision') = 'review_decision'
-          AND NOT EXISTS (
-              SELECT 1 FROM custody_gap_review_transactions x
-              WHERE x.review_id = r.id
-          )
         ORDER BY r.profile_id, r.created_at, r.id
         """
     ).fetchall()
@@ -773,6 +805,15 @@ def backfill_legacy_componentless_review_relations(
                     *(("source", value) for value in candidate.source_ids),
                     *(("return", value) for value in candidate.return_ids),
                 ),
+            )
+            backfill_custody_gap_review_relation_set(
+                conn,
+                review_id=review["id"],
+                workspace_id=review["workspace_id"],
+                profile_id=review["profile_id"],
+                created_at=review["created_at"],
+                expected_source_count=len(set(candidate.source_ids)),
+                expected_return_count=len(set(candidate.return_ids)),
             )
     return inserted
 
@@ -1920,6 +1961,9 @@ def _append_review_snapshot(
             gap_id=gap_id,
             component_id=component_id,
         )
+    transaction_relations = _normalize_review_transaction_relations(
+        transaction_relations
+    )
     conn.execute(
         """
         INSERT INTO custody_gap_reviews(
@@ -1932,6 +1976,19 @@ def _append_review_snapshot(
             review_id, workspace_id, profile_id, gap_id, revision,
             fingerprint, action, event_kind, component_id, authored_source, reason,
             json.dumps(snapshot, sort_keys=True, separators=(",", ":")), created_at,
+        ),
+    )
+    backfill_custody_gap_review_relation_set(
+        conn,
+        review_id=review_id,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        created_at=created_at,
+        expected_source_count=sum(
+            1 for role, _ in transaction_relations if role == "source"
+        ),
+        expected_return_count=sum(
+            1 for role, _ in transaction_relations if role == "return"
         ),
     )
     _append_review_transaction_relations(
@@ -2011,6 +2068,32 @@ def _append_review_transaction_relations(
     created_at: str,
     relations: Sequence[tuple[str, str]],
 ) -> None:
+    relations = _normalize_review_transaction_relations(relations)
+    for role, transaction_id in relations:
+        conn.execute(
+            """
+            INSERT INTO custody_gap_review_transactions(
+                id, review_id, workspace_id, profile_id,
+                role, transaction_id, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                custody_gap_review_transaction_id(
+                    review_id, role, transaction_id
+                ),
+                review_id,
+                workspace_id,
+                profile_id,
+                role,
+                transaction_id,
+                created_at,
+            ),
+        )
+
+
+def _normalize_review_transaction_relations(
+    relations: Sequence[tuple[str, str]],
+) -> tuple[tuple[str, str], ...]:
     grouped: dict[str, list[str]] = {"source": [], "return": []}
     for role, transaction_id in relations:
         if role not in grouped:
@@ -2026,27 +2109,11 @@ def _append_review_transaction_relations(
             )
         if normalized_id not in grouped[role]:
             grouped[role].append(normalized_id)
-    for role in ("source", "return"):
-        for transaction_id in sorted(grouped[role]):
-            conn.execute(
-                """
-                INSERT INTO custody_gap_review_transactions(
-                    id, review_id, workspace_id, profile_id,
-                    role, transaction_id, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    custody_gap_review_transaction_id(
-                        review_id, role, transaction_id
-                    ),
-                    review_id,
-                    workspace_id,
-                    profile_id,
-                    role,
-                    transaction_id,
-                    created_at,
-                ),
-            )
+    return tuple(
+        (role, transaction_id)
+        for role in ("source", "return")
+        for transaction_id in sorted(grouped[role])
+    )
 
 
 def _candidate_snapshot(

@@ -5,7 +5,11 @@ import tempfile
 import unittest
 
 from kassiber.core import custody_gap_reviews, custody_gaps
-from kassiber.db import custody_gap_review_transaction_id, open_db
+from kassiber.db import (
+    custody_gap_review_transaction_id,
+    custody_gap_review_transaction_v1_id,
+    open_db,
+)
 
 
 BTC = 100_000_000_000
@@ -261,6 +265,22 @@ class CustodyReviewScopeMigrationTests(unittest.TestCase):
             ).fetchone()[0],
             1,
         )
+        header = self.conn.execute(
+            """
+            SELECT expected_source_count, expected_return_count
+            FROM custody_gap_review_relation_sets
+            WHERE review_id = 'snapshot'
+            """
+        ).fetchone()
+        self.assertEqual(tuple(header), (1, 1))
+        partial = custody_gap_reviews.list_audit_review_history(
+            self.conn,
+            "profile",
+            transaction_ids=["return", "missing-source"],
+        )
+        self.assertTrue(
+            partial["records"][0]["candidate_wide_payload_excluded"]
+        )
         full = custody_gap_reviews.list_audit_review_history(self.conn, "profile")
         self.assertEqual(
             full["scope_completeness"], "legacy_unscoped_history_present"
@@ -285,6 +305,139 @@ class CustodyReviewScopeMigrationTests(unittest.TestCase):
             ],
             "complete",
         )
+        complete = custody_gap_reviews.list_audit_review_history(
+            self.conn,
+            "profile",
+            transaction_ids=["return", "missing-source"],
+        )
+        self.assertNotIn(
+            "candidate_wide_payload_excluded",
+            complete["records"][0],
+        )
+
+    def test_v1_migration_uses_signed_wire_tuple_across_divergent_alias_sets(self):
+        roots = [tempfile.TemporaryDirectory(), tempfile.TemporaryDirectory()]
+        for root in roots:
+            self.addCleanup(root.cleanup)
+
+        migrated_ids: list[str] = []
+        for index, root in enumerate(roots):
+            conn = open_db(root.name)
+            conn.execute(
+                "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Books', ?)",
+                (NOW,),
+            )
+            conn.execute(
+                "INSERT INTO profiles(id, workspace_id, label, created_at) "
+                "VALUES('profile', 'ws', 'Book', ?)",
+                (NOW,),
+            )
+            local_review_id = f"local-review-{index}"
+            local_transaction_id = f"local-transaction-{index}"
+            self._insert_legacy_review_on(
+                conn,
+                local_review_id,
+                snapshot={"source_ids": [local_transaction_id]},
+            )
+            conn.execute(
+                "INSERT INTO sync_id_map(profile_id, entity_table, wire_id, local_id, created_at) "
+                "VALUES('profile', 'custody_gap_reviews', 'wire-review', ?, ?)",
+                (local_review_id, NOW),
+            )
+            conn.executemany(
+                "INSERT INTO sync_id_map(profile_id, entity_table, wire_id, local_id, created_at) "
+                "VALUES('profile', 'transactions', ?, ?, ?)",
+                (
+                    ("wire-transaction", local_transaction_id, NOW),
+                    (f"device-only-alias-{index}", local_transaction_id, NOW),
+                ),
+            )
+            conn.execute("DROP TRIGGER trg_custody_gap_review_transaction_scope_insert")
+            conn.execute("DROP TRIGGER trg_custody_gap_review_transactions_immutable")
+            conn.execute("DROP TABLE custody_gap_review_transactions")
+            conn.execute(
+                """
+                CREATE TABLE custody_gap_review_transactions(
+                    id TEXT PRIMARY KEY,
+                    review_id TEXT NOT NULL,
+                    workspace_id TEXT NOT NULL,
+                    profile_id TEXT NOT NULL,
+                    ordinal INTEGER NOT NULL,
+                    role TEXT NOT NULL,
+                    transaction_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(review_id, role, ordinal),
+                    UNIQUE(review_id, role, transaction_id)
+                )
+                """
+            )
+            legacy_id = custody_gap_review_transaction_v1_id(
+                "wire-review", "source", 0
+            )
+            conn.execute(
+                """
+                INSERT INTO custody_gap_review_transactions(
+                    id, review_id, workspace_id, profile_id, ordinal,
+                    role, transaction_id, created_at
+                ) VALUES(?, ?, 'ws', 'profile', 0, 'source', ?, ?)
+                """,
+                (legacy_id, local_review_id, local_transaction_id, NOW),
+            )
+            wire_row = {
+                "id": legacy_id,
+                "review_id": "wire-review",
+                "workspace_id": "ws",
+                "profile_id": "profile",
+                "ordinal": 0,
+                "role": "source",
+                "transaction_id": "wire-transaction",
+                "created_at": NOW,
+            }
+            conn.execute(
+                """
+                INSERT INTO sync_events(
+                    id, workspace_id, profile_id, replica_id, replica_seq, hlc,
+                    author_member_id, event_type, entity_table, entity_key,
+                    payload_json, context_json, previous_hash, event_hash,
+                    signature, created_at, applied_at
+                ) VALUES(?, 'ws', 'profile', ?, 1, ?, 'member', 'row.upsert',
+                         'custody_gap_review_transactions', ?, ?, '{}', NULL,
+                         ?, 'signed-v1', ?, ?)
+                """,
+                (
+                    f"event-{index}",
+                    f"replica-{index}",
+                    f"1:0:replica-{index}",
+                    json.dumps([legacy_id], separators=(",", ":")),
+                    json.dumps({"row": wire_row}, separators=(",", ":")),
+                    f"{index + 1:064x}",
+                    NOW,
+                    NOW,
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            migrated = open_db(root.name)
+            self.addCleanup(migrated.close)
+            migrated_ids.append(
+                str(
+                    migrated.execute(
+                        "SELECT id FROM custody_gap_review_transactions"
+                    ).fetchone()[0]
+                )
+            )
+            mapped = migrated.execute(
+                "SELECT local_id FROM sync_id_map WHERE profile_id = 'profile' "
+                "AND entity_table = 'custody_gap_review_transactions' AND wire_id = ?",
+                (legacy_id,),
+            ).fetchone()
+            self.assertEqual(str(mapped["local_id"]), migrated_ids[-1])
+
+        expected = custody_gap_review_transaction_id(
+            "wire-review", "source", "wire-transaction"
+        )
+        self.assertEqual(migrated_ids, [expected, expected])
 
     def test_ordinal_v1_replicas_converge_to_transaction_set_identity(self):
         roots = [tempfile.TemporaryDirectory(), tempfile.TemporaryDirectory()]
