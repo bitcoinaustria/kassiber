@@ -1,7 +1,9 @@
 # Custody Lineage And Missing-Wallet Reconciliation
 
-**Status:** Approved implementation target; executable work is tracked in
+**Status:** Implemented; the terminal stop state was verified on 2026-07-15.
+Deferred scalability and ancient-schema hardening remain tracked separately in
 [`TODO.md`](../../TODO.md).
+
 **Scope:** One profile is one legal owner. Kassiber reconciles that owner's
 Bitcoin custody history; it does not model shareholders, fractional interests,
 or a general ledger.
