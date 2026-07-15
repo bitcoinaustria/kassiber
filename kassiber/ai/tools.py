@@ -105,6 +105,7 @@ CORE_TOOL_NAMES = frozenset(
         "ui.transfers.suggest", "ui.transfers.review_context",
         "ui.transfers.list", "ui.transfers.rules.list",
         "ui.custody.coverage.snapshot",
+        "ui.custody.lineage.snapshot",
         "ui.custody.gaps.list", "ui.custody.gaps.review_context",
         "ui.custody.gaps.history",
         "ui.custody.gaps.bridge.preview", "ui.custody.gaps.bridge.create",
@@ -1618,6 +1619,36 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_custody_coverage_snapshot",
         daemon_kind="ui.custody.coverage.snapshot",
         summary_template="Read imported-policy technical coverage",
+    ),
+    ToolEntry(
+        name="ui.custody.lineage.snapshot",
+        description=(
+            "Read the redacted canonical internal-custody edges derived for the "
+            "active local book. Each row names the source and destination wallet, "
+            "exact amount, evidence reason, custody finality, and separate tax-basis "
+            "eligibility. A verified custody edge can remain visible when an earlier "
+            "unresolved gap blocks later tax projection. Observation commitments and "
+            "quantity-slice offsets are never exposed. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                "transaction_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": (
+                        "Optional internal transaction id; returns edges where it is "
+                        "either the source or destination."
+                    ),
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_lineage_snapshot",
+        daemon_kind="ui.custody.lineage.snapshot",
+        summary_template="Read canonical custody lineage",
     ),
     ToolEntry(
         name="ui.custody.gaps.list",

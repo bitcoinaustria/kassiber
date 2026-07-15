@@ -661,6 +661,7 @@ NEVER_SYNC_TABLES = frozenset(
         "journal_quantity_postings",
         "journal_quantity_issues",
         "journal_quantity_balances",
+        "journal_custody_decisions",
         "custody_authored_evidence_snapshots",
         "wallet_utxos",
         "wallet_utxo_refreshes",

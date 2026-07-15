@@ -3,11 +3,13 @@ from __future__ import annotations
 import queue
 import sqlite3
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from kassiber.ai.tools import get_tool
 from kassiber.ai.prompt import build_openai_tools
 from kassiber.core.custody_gaps import CustodyGapSearchLimitError
+from kassiber.core.ui_snapshot import build_custody_lineage_snapshot
 from kassiber.daemon import (
     AiToolRuntime,
     AI_TOOL_ONCE_ONLY_CONSENT,
@@ -15,6 +17,7 @@ from kassiber.daemon import (
     SUPPORTED_KINDS,
     _execute_read_only_ai_tool,
     _execute_mutating_ai_tool,
+    handle_request,
     _ui_custody_coverage_payload_from_conn,
     _ui_custody_gap_payload_from_conn,
 )
@@ -25,6 +28,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
     def test_read_kinds_are_supported_and_ai_read_only(self):
         for kind in (
             "ui.custody.coverage.snapshot",
+            "ui.custody.lineage.snapshot",
             "ui.custody.gaps.list",
             "ui.custody.gaps.review_context",
             "ui.custody.gaps.history",
@@ -70,6 +74,13 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         coverage = get_tool("ui.custody.coverage.snapshot")
         self.assertEqual(coverage.parameters["properties"], {})
         self.assertFalse(coverage.parameters["additionalProperties"])
+        lineage = get_tool("ui.custody.lineage.snapshot")
+        self.assertEqual(lineage.parameters["properties"]["limit"]["maximum"], 500)
+        self.assertEqual(
+            lineage.parameters["properties"]["transaction_id"]["type"],
+            "string",
+        )
+        self.assertFalse(lineage.parameters["additionalProperties"])
 
         advertised = {
             item["function"]["name"]
@@ -86,6 +97,124 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         self.assertIn("ui_custody_gaps_review_context", advertised)
         self.assertIn("ui_custody_gaps_history", advertised)
         self.assertIn("ui_custody_coverage_snapshot", advertised)
+        self.assertIn("ui_custody_lineage_snapshot", advertised)
+
+    def test_lineage_snapshot_keeps_custody_and_basis_states_separate(self):
+        conn = sqlite3.connect(":memory:")
+        result = {
+            "records": [
+                {
+                    "source_transaction_id": "out-1",
+                    "target_transaction_id": "in-1",
+                    "source_wallet_id": "wallet-old",
+                    "source_wallet_label": "Old vault",
+                    "target_wallet_id": "wallet-new",
+                    "target_wallet_label": "New vault",
+                    "source_asset": "BTC",
+                    "target_asset": "BTC",
+                    "amount_msat": 10**20,
+                    "custody_state": "internal_verified",
+                    "basis_state": "blocked_by_prior_custody_basis",
+                    "basis_barrier_at": "2019-01-01T00:00:00Z",
+                    "reason": "recorded_exact_pair",
+                    "atomic_group_id": None,
+                    "component_id": None,
+                    "occurred_at": "2020-01-01T00:00:00Z",
+                    "target_occurred_at": "2020-01-02T00:00:00Z",
+                    "created_at": "2026-01-01T00:00:00Z",
+                }
+            ],
+            "count": 1,
+            "returned": 1,
+            "truncated": False,
+            "observation_commitments_included": False,
+            "replicated": False,
+        }
+        context = {
+            "workspace_id": "workspace",
+            "workspace_label": "Treasury",
+            "profile_id": "profile",
+            "profile_label": "Company",
+        }
+        with (
+            patch(
+                "kassiber.core.ui_snapshot._active_context_and_profile",
+                return_value=(context, {"id": "profile"}),
+            ),
+            patch(
+                "kassiber.core.ui_snapshot.core_custody_quantity_store.custody_decision_rows",
+                return_value=result,
+            ) as read_rows,
+        ):
+            payload = build_custody_lineage_snapshot(
+                conn,
+                {"limit": 25, "transaction_id": " in-1 "},
+            )
+
+        read_rows.assert_called_once_with(
+            conn,
+            "profile",
+            limit=25,
+            transaction_ids=["in-1"],
+        )
+        self.assertEqual(payload["items"][0]["amount_msat"], str(10**20))
+        self.assertEqual(payload["items"][0]["out_transaction_id"], "out-1")
+        self.assertEqual(payload["items"][0]["from_wallet_label"], "Old vault")
+        self.assertEqual(payload["items"][0]["to_wallet_label"], "New vault")
+        self.assertEqual(
+            payload["items"][0]["evidence_reason"], "recorded_exact_pair"
+        )
+        self.assertEqual(
+            payload["items"][0]["custody_state"], "internal_verified"
+        )
+        self.assertEqual(
+            payload["items"][0]["basis_state"],
+            "blocked_by_prior_custody_basis",
+        )
+        self.assertEqual(
+            payload["summary"]["internal_verified"],
+            1,
+        )
+        self.assertEqual(
+            payload["summary"]["basis_blocked"],
+            1,
+        )
+        self.assertIn(
+            "Custody finality is separate",
+            payload["summary"]["qualification"],
+        )
+        self.assertFalse(payload["observation_commitments_included"])
+
+        with self.assertRaises(AppError) as raised:
+            build_custody_lineage_snapshot(conn, {"transaction_id": " "})
+        self.assertEqual(raised.exception.code, "validation")
+
+        with self.assertRaises(AppError) as raised:
+            build_custody_lineage_snapshot(conn, {"descriptor": "private"})
+        self.assertEqual(raised.exception.code, "validation")
+
+    def test_lineage_daemon_dispatch_forwards_bounded_args(self):
+        conn = sqlite3.connect(":memory:")
+        expected = {"items": [], "summary": {"total_count": 0}}
+        with patch(
+            "kassiber.daemon.build_custody_lineage_snapshot",
+            return_value=expected,
+        ) as snapshot:
+            envelope, shutdown = handle_request(
+                SimpleNamespace(conn=conn),
+                {
+                    "kind": "ui.custody.lineage.snapshot",
+                    "request_id": "lineage-1",
+                    "args": {"limit": 20},
+                },
+                Mock(),
+            )
+
+        snapshot.assert_called_once_with(conn, {"limit": 20})
+        self.assertFalse(shutdown)
+        self.assertEqual(envelope["kind"], "ui.custody.lineage.snapshot")
+        self.assertEqual(envelope["request_id"], "lineage-1")
+        self.assertEqual(envelope["data"], expected)
 
     def test_history_and_residual_dispatch_are_bounded_and_exact(self):
         conn = sqlite3.connect(":memory:")
@@ -375,6 +504,22 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         )
         self.assertEqual(coverage["ok"], False)
         self.assertEqual(coverage["reason"], "local_provider_required")
+
+        lineage = _execute_read_only_ai_tool(
+            ParsedAiToolCall(
+                call_id="call-lineage",
+                name="ui.custody.lineage.snapshot",
+                arguments={},
+            ),
+            AiToolRuntime(
+                data_root="/tmp",
+                runtime_config={},
+                main_thread_tasks=queue.Queue(),
+                maintenance_state={"provider_kind": "openai"},
+            ),
+        )
+        self.assertEqual(lineage["ok"], False)
+        self.assertEqual(lineage["reason"], "local_provider_required")
 
     def test_remote_ai_provider_cannot_preview_or_mutate_gap_linkage(self):
         runtime = AiToolRuntime(

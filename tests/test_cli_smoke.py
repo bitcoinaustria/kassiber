@@ -2426,6 +2426,7 @@ class CliSmokeTest(unittest.TestCase):
         self._assert_kind(payload, "journals.transfers.list")
         audit = payload["data"]
         self.assertEqual(audit["summary"]["same_asset_transfers"], 1)
+        self.assertEqual(audit["summary"]["custody_transfers"], 1)
         self.assertEqual(audit["summary"]["cross_asset_pairs"], 0)
         transfer_row = audit["same_asset_transfers"][0]
         self.assertEqual(transfer_row["from_wallet"], "Cold")
@@ -2433,6 +2434,12 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(transfer_row["sent_msat"], 50100000000)
         self.assertEqual(transfer_row["received_msat"], 50000000000)
         self.assertEqual(transfer_row["fee_msat"], 100000000)
+        custody_row = audit["custody_transfers"][0]
+        self.assertEqual(custody_row["from_wallet"], "Cold")
+        self.assertEqual(custody_row["to_wallet"], "Hot")
+        self.assertEqual(custody_row["amount_msat"], 50000000000)
+        self.assertEqual(custody_row["custody_state"], "internal_verified")
+        self.assertEqual(custody_row["basis_state"], "eligible")
 
         # Network fees are recorded for holdings/audit, but they are not
         # capital-gains disposals.

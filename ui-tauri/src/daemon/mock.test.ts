@@ -118,6 +118,28 @@ describe("mock daemon custody gaps", () => {
     expect(JSON.stringify(response.data)).not.toContain("private_material");
   });
 
+  it("keeps custody finality separate from downstream tax-basis readiness", async () => {
+    const response = await mockDaemon.invoke<{
+      summary: { total_count: number; basis_blocked: number };
+      items: Array<{
+        custody_state: string;
+        basis_state: string;
+        amount_msat: string;
+      }>;
+    }>({ kind: "ui.custody.lineage.snapshot", args: { limit: 100 } });
+
+    expect(response.error).toBeUndefined();
+    expect(response.data?.summary).toMatchObject({
+      total_count: 2,
+      basis_blocked: 1,
+    });
+    expect(response.data?.items[0]).toMatchObject({
+      custody_state: "internal_verified",
+      basis_state: "blocked_by_prior_custody_basis",
+      amount_msat: "609000000000",
+    });
+  });
+
   it("exposes a bounded privacy-safe long-horizon review packet", async () => {
     const response = await mockDaemon.invoke<{
       summary: { needs_review: number; unresolved_msat: string };

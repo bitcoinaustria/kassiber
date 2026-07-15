@@ -164,6 +164,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.journals.transfers.list",
   "ui.journals.process",
   "ui.custody.coverage.snapshot",
+  "ui.custody.lineage.snapshot",
   "ui.custody.gaps.list",
   "ui.custody.gaps.review_context",
   "ui.custody.gaps.history",

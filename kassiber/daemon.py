@@ -143,6 +143,7 @@ from .core.ui_snapshot import (
     build_audit_changes_since_last_answer_snapshot,
     build_backends_list_snapshot,
     build_capital_gains_snapshot,
+    build_custody_lineage_snapshot,
     build_journal_events_list_snapshot,
     build_journals_snapshot,
     build_journals_quarantine_snapshot,
@@ -428,6 +429,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.components.undo",
     "ui.transfers.components.bulk_resolve",
     "ui.custody.coverage.snapshot",
+    "ui.custody.lineage.snapshot",
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",
@@ -580,8 +582,11 @@ _CUSTODY_GAP_READ_DAEMON_KINDS = {
     "ui.custody.gaps.residual.preview",
 }
 _CUSTODY_COVERAGE_READ_DAEMON_KINDS = {"ui.custody.coverage.snapshot"}
+_CUSTODY_LINEAGE_READ_DAEMON_KINDS = {"ui.custody.lineage.snapshot"}
 _LOCAL_CUSTODY_READ_DAEMON_KINDS = (
-    _CUSTODY_GAP_READ_DAEMON_KINDS | _CUSTODY_COVERAGE_READ_DAEMON_KINDS
+    _CUSTODY_GAP_READ_DAEMON_KINDS
+    | _CUSTODY_COVERAGE_READ_DAEMON_KINDS
+    | _CUSTODY_LINEAGE_READ_DAEMON_KINDS
 )
 _CUSTODY_GAP_MUTATING_DAEMON_KINDS = {
     "ui.custody.gaps.dismiss",
@@ -6041,6 +6046,8 @@ def _execute_read_only_ai_tool(
                     conn,
                     call.arguments,
                 )
+            elif entry.daemon_kind in _CUSTODY_LINEAGE_READ_DAEMON_KINDS:
+                payload = build_custody_lineage_snapshot(conn, call.arguments)
             elif entry.daemon_kind in _CUSTODY_GAP_READ_DAEMON_KINDS:
                 payload = _ui_custody_gap_payload_from_conn(
                     conn,
@@ -7495,6 +7502,7 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
     ):
         add("ui.custody.gaps.list", {"limit": 20})
         add("ui.custody.coverage.snapshot")
+        add("ui.custody.lineage.snapshot", {"limit": 100})
 
     if _message_has_any(text, "auto-pair", "autopair", "rule", "rules", "regel"):
         add("ui.transfers.rules.list")
@@ -14783,6 +14791,21 @@ def handle_request(
                 build_envelope(
                     kind,
                     _ui_custody_coverage_payload_from_conn(
+                        _require_conn(ctx),
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in _CUSTODY_LINEAGE_READ_DAEMON_KINDS:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    build_custody_lineage_snapshot(
                         _require_conn(ctx),
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

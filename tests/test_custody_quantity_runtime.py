@@ -14,11 +14,13 @@ from kassiber.core.custody_quantity import (
     ClaimPriority,
     EXTERNAL_CONFIRMED,
     INTERNAL_REVIEWED,
+    INTERNAL_VERIFIED,
     QuantityClaim,
     QuantitySlice,
 )
 from kassiber.core.custody_quantity_runtime import (
     build_canonical_quantity_state,
+    canonical_internal_transfer_rows,
     compare_wallet_balances,
     enriched_quantity_rows,
 )
@@ -27,6 +29,7 @@ from kassiber.core.custody_quantity_store import (
     baseline_missing_component_evidence,
     blocking_quantity_issues,
     capture_component_evidence,
+    custody_decision_rows,
     custody_quantity_readiness_summary,
     persist_authored_evidence_snapshots,
     replace_canonical_quantity_state,
@@ -760,6 +763,69 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             state.tax_eligibility.ineligible_slices,
         )
 
+    def test_exact_custody_transfer_remains_visible_behind_prior_basis_barrier(self):
+        rows = [
+            _row("gap", "wallet-a", "outbound", 20, "2025-01-01T00:00:00Z"),
+            _row("move-out", "wallet-a", "outbound", 30, "2026-01-01T00:00:00Z"),
+            _row("move-in", "wallet-b", "inbound", 30, "2026-01-01T00:00:00Z"),
+        ]
+        baseline = build_canonical_quantity_state(rows)
+        observations = {
+            item.transaction_id: item for item in baseline.projection.observations
+        }
+        state = build_canonical_quantity_state(
+            rows,
+            interpreter_claims=[
+                QuantityClaim(
+                    claim_id="gap-suspense",
+                    source=QuantitySlice(observations["gap"].quantity_hash, 0, 20),
+                    state=CUSTODY_SUSPENSE,
+                    priority=ClaimPriority.ACCOUNTING_CONVENTION,
+                    reason="missing_wallet",
+                ),
+                QuantityClaim(
+                    claim_id="exact-move",
+                    source=QuantitySlice(
+                        observations["move-out"].quantity_hash, 0, 30
+                    ),
+                    target=QuantitySlice(
+                        observations["move-in"].quantity_hash, 0, 30
+                    ),
+                    state="internal_verified",
+                    priority=ClaimPriority.EXACT_NATIVE_EVENT,
+                    reason="recorded_fanout",
+                ),
+            ],
+        )
+
+        self.assertEqual(
+            canonical_internal_transfer_rows(
+                state,
+                {
+                    "wallet-a": {"label": "Cold"},
+                    "wallet-b": {"label": "Hot"},
+                },
+            ),
+            (
+                {
+                    "out_transaction_id": "move-out",
+                    "in_transaction_id": "move-in",
+                    "occurred_at": "2026-01-01T00:00:00Z",
+                    "asset": "BTC",
+                    "amount_msat": 30,
+                    "from_wallet_id": "wallet-a",
+                    "from_wallet": "Cold",
+                    "to_wallet_id": "wallet-b",
+                    "to_wallet": "Hot",
+                    "custody_state": "internal_verified",
+                    "basis_state": "blocked_by_prior_custody_basis",
+                    "evidence_reason": "recorded_fanout",
+                    "network": "main",
+                    "rail": "bitcoin",
+                },
+            ),
+        )
+
     def test_basis_barrier_is_scoped_to_profile_exposure_pool(self):
         rows = [
             _row("early", "wallet-a", "outbound", 10, "2024-01-01T00:00:00Z"),
@@ -1168,7 +1234,10 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             state=state,
             created_at="now",
         )
-        self.assertEqual(counts, {"postings": 2, "issues": 0, "balances": 2})
+        self.assertEqual(
+            counts,
+            {"postings": 2, "issues": 0, "balances": 2, "decisions": 0},
+        )
         readiness = custody_quantity_readiness_summary(
             self.conn,
             "profile",
@@ -1197,6 +1266,172 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         self.assertEqual(
             self.conn.execute(
                 "SELECT COUNT(*) FROM journal_entries"
+            ).fetchone()[0],
+            0,
+        )
+
+    def test_finalized_internal_decisions_are_durable_and_redacted(self):
+        self.conn.executemany(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, created_at
+            ) VALUES(?, 'ws', 'profile', ?, 'descriptor', 'now')
+            """,
+            (("wallet-b", "Hot"), ("wallet-c", "Vault")),
+        )
+        rows = [
+            _row(
+                "source", "wallet-a", "outbound", 100,
+                "2025-01-01T00:00:00Z",
+            ),
+            _row(
+                "target-reviewed", "wallet-b", "inbound", 40,
+                "2025-01-02T00:00:00Z",
+            ),
+            _row(
+                "target-verified", "wallet-c", "inbound", 60,
+                "2025-01-03T00:00:00Z",
+            ),
+        ]
+        for row in rows:
+            self._insert_transaction(row)
+        preliminary = build_canonical_quantity_state(rows)
+        observations = {
+            item.transaction_id: item
+            for item in preliminary.canonical_input.observations
+        }
+        claims = [
+            QuantityClaim(
+                claim_id="reviewed-edge",
+                source=QuantitySlice(observations["source"].quantity_hash, 0, 40),
+                target=QuantitySlice(
+                    observations["target-reviewed"].quantity_hash, 0, 40
+                ),
+                state=INTERNAL_REVIEWED,
+                priority=ClaimPriority.REVIEWED_PAIR,
+                reason="reviewed_gap_bridge",
+                atomic_bundle_id="bridge:reviewed",
+                component_id="component-reviewed",
+            ),
+            QuantityClaim(
+                claim_id="verified-edge",
+                source=QuantitySlice(
+                    observations["source"].quantity_hash, 40, 100
+                ),
+                target=QuantitySlice(
+                    observations["target-verified"].quantity_hash, 0, 60
+                ),
+                state=INTERNAL_VERIFIED,
+                priority=ClaimPriority.EXACT_NATIVE_EVENT,
+                reason="verified_native_transfer",
+                atomic_bundle_id="native:verified",
+            ),
+        ]
+        state = build_canonical_quantity_state(rows, interpreter_claims=claims)
+
+        counts = replace_canonical_quantity_state(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            state=state,
+            created_at="rebuilt",
+        )
+
+        self.assertEqual(counts["decisions"], 2)
+        private_rows = self.conn.execute(
+            """
+            SELECT source_observation_hash, source_start_msat, source_end_msat,
+                   target_observation_hash, target_start_msat, target_end_msat
+            FROM journal_custody_decisions
+            ORDER BY state
+            """
+        ).fetchall()
+        self.assertEqual(len(private_rows), 2)
+        self.assertTrue(
+            all(len(row["source_observation_hash"]) == 64 for row in private_rows)
+        )
+        self.assertEqual(
+            {
+                row["source_end_msat"] - row["source_start_msat"]
+                for row in private_rows
+            },
+            {40, 60},
+        )
+
+        summary = custody_decision_rows(self.conn, "profile", limit=1)
+        self.assertEqual(summary["count"], 2)
+        self.assertEqual(summary["returned"], 1)
+        self.assertTrue(summary["truncated"])
+        self.assertFalse(summary["observation_commitments_included"])
+        record = summary["records"][0]
+        self.assertEqual(record["source_transaction_id"], "source")
+        self.assertIn(record["custody_state"], {INTERNAL_REVIEWED, INTERNAL_VERIFIED})
+        self.assertEqual(record["source_network"], "main")
+        self.assertEqual(record["target_network"], "main")
+        self.assertEqual(record["source_rail"], "bitcoin")
+        self.assertEqual(record["target_rail"], "bitcoin")
+        self.assertNotIn("state", record)
+        self.assertFalse(any("hash" in key or "slice" in key for key in record))
+
+        reviewed = custody_decision_rows(
+            self.conn,
+            "profile",
+            transaction_ids=["target-reviewed"],
+        )
+        self.assertEqual(reviewed["count"], 1)
+        self.assertEqual(reviewed["records"][0]["target_wallet_label"], "Hot")
+        self.assertEqual(reviewed["records"][0]["amount_msat"], 40)
+        self.assertEqual(
+            reviewed["records"][0]["custody_state"], INTERNAL_REVIEWED
+        )
+        self.assertEqual(
+            reviewed["records"][0]["component_id"], "component-reviewed"
+        )
+
+        fallback = build_canonical_quantity_state([rows[0]])
+        replacement_counts = replace_canonical_quantity_state(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            state=fallback,
+            created_at="replaced",
+        )
+        self.assertEqual(replacement_counts["decisions"], 0)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM journal_custody_decisions"
+            ).fetchone()[0],
+            0,
+        )
+        self.conn.execute(
+            """
+            CREATE TRIGGER reject_test_custody_decision
+            BEFORE INSERT ON journal_custody_decisions
+            BEGIN
+                SELECT RAISE(ABORT, 'test_decision_rejected');
+            END
+            """
+        )
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "test_decision_rejected"):
+            replace_canonical_quantity_state(
+                self.conn,
+                workspace_id="ws",
+                profile_id="profile",
+                state=state,
+                created_at="must-roll-back",
+            )
+        self.assertEqual(
+            {
+                row["created_at"]
+                for row in self.conn.execute(
+                    "SELECT created_at FROM journal_quantity_postings"
+                ).fetchall()
+            },
+            {"replaced"},
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM journal_custody_decisions"
             ).fetchone()[0],
             0,
         )

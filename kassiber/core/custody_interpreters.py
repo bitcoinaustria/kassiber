@@ -342,6 +342,45 @@ def _exact_native_pair_ids(
     return resolved
 
 
+def _complete_recorded_pair_ids(
+    pairs: Sequence[Mapping[str, Any]],
+    observations: Mapping[str, QuantityObservation],
+) -> set[str]:
+    """Return complete two-ended native rows that graph inference cannot beat.
+
+    A readable graph remains necessary for missing destinations and external
+    residuals. When two different imported wallets already observed the same
+    physical event and their principal amounts are equal, however, an unknown
+    historical input cannot weaken that complete evidence into suspense.
+    """
+
+    resolved: set[str] = set()
+    for pair in pairs:
+        out_row = _field(pair, "out", {}) or {}
+        in_row = _field(pair, "in", {}) or {}
+        out_id = _anchor_id(out_row)
+        in_id = _anchor_id(in_row)
+        source = observations.get(out_id)
+        target = observations.get(in_id)
+        if (
+            source is None
+            or target is None
+            or source.direction != "outbound"
+            or target.direction != "inbound"
+            or source.principal_msat != target.principal_msat
+            or not _is_exact_recorded_pair(
+                pair,
+                out_row,
+                in_row,
+                source,
+                target,
+            )
+        ):
+            continue
+        resolved.update((out_id, in_id))
+    return resolved
+
+
 def _exact_recorded_fanout_group_ids(
     pairs: Sequence[Mapping[str, Any]],
     observations: Mapping[str, QuantityObservation],
@@ -1106,10 +1145,9 @@ def compile_custody_interpreters(
         }
         for pair in cross_asset_pairs
     ]
-    # Exact transaction-graph ownership gets the first opportunity to explain
-    # an automatic row match. A 1:N spend may look like a valid A->B pair until
-    # the graph reveals the sibling C output; feeding every auto pair into the
-    # handled set first would hide that stronger evidence.
+    # Graph ownership gets first opportunity only where the imported endpoints
+    # are incomplete. A complete, conserving 1:1 physical event is already
+    # stronger evidence; an unavailable historic prevout must not weaken it.
     paired_ids: set[str] = set()
     paired_ids.update(samourai_touched_ids)
     paired_ids.update(whole_payout_source_ids)
@@ -1119,6 +1157,7 @@ def compile_custody_interpreters(
         for record in manual_pair_records
         for key in ("out_transaction_id", "in_transaction_id")
     )
+    paired_ids.update(_complete_recorded_pair_ids(auto_pairs, observations))
     derivation = derive_profile_transfers(
         rows,
         index=owned_index,

@@ -130,6 +130,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.btcpay.provenance.{list,suggest,links}`, `ui.documents.list`,
   `ui.source_funds.{evidence.list,coverage,cases.list}`,
   `ui.reports.exit_tax_preview`, `ui.egress.snapshot`,
+  `ui.custody.lineage.snapshot`,
   `ui.wallets.utxos`, `ui.wallets.identify`, `ui.maintenance.settings`, `ui.workspace.health`,
   `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter

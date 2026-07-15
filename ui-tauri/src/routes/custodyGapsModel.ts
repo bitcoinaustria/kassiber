@@ -302,6 +302,48 @@ export interface CustodyCoverageSnapshot {
   wallets: CustodyCoverageWallet[];
 }
 
+export type CustodyLineageState =
+  | "internal_verified"
+  | "internal_reviewed";
+
+export type CustodyLineageBasisState =
+  | "eligible"
+  | "blocked_by_prior_custody_basis";
+
+export interface CustodyLineageItem {
+  out_transaction_id: string;
+  in_transaction_id: string;
+  occurred_at: string | null;
+  asset: string;
+  amount_msat: string | number;
+  from_wallet_id: string;
+  from_wallet_label: string;
+  to_wallet_id: string;
+  to_wallet_label: string;
+  custody_state: CustodyLineageState;
+  basis_state: CustodyLineageBasisState;
+  basis_barrier_at: string | null;
+  evidence_reason: string;
+  network: string;
+  rail: string;
+  atomic_bundle_id?: string | null;
+  component_id?: string | null;
+}
+
+export interface CustodyLineageSnapshot {
+  summary: {
+    total_count: number;
+    returned_count?: number;
+    truncated: boolean;
+    internal_verified?: number;
+    internal_reviewed?: number;
+    basis_eligible?: number;
+    basis_blocked?: number;
+    qualification?: string;
+  };
+  items: CustodyLineageItem[];
+}
+
 export function collectCustodyGapPages(
   pages: readonly CustodyGapSnapshot[],
 ): CustodyGap[] {

@@ -3046,10 +3046,12 @@ def _assert_ownership_self_transfer_matching(
         {
             "from_wallet": row.get("from_wallet"),
             "to_wallet": row.get("to_wallet"),
-            "received_msat": int(row.get("received_msat") or 0),
+            "received_msat": int(row.get("amount_msat") or 0),
         }
-        for row in audit.get("same_asset_transfers") or []
-        if row.get("pairing_source") in {"ownership_derived", "recorded_fanout"}
+        for row in audit.get("custody_transfers") or []
+        if row.get("custody_state") in {"internal_verified", "internal_reviewed"}
+        and row.get("evidence_reason")
+        in {"ownership_derived", "recorded_fanout"}
     ]
     missing = []
     duplicate = []
@@ -3071,11 +3073,9 @@ def _assert_ownership_self_transfer_matching(
         scenario.get("expected", {}).get("ownership_derived_transfer_pairs")
         or len(expected_routes)
     )
-    # This expectation pins the deliberately graph-only fan-out routes, not a
-    # ceiling on every ownership proof in the book.  Exact historical outpoint
-    # evidence may also upgrade ordinary 1:1 self-transfers from row-matched to
-    # ownership-derived; rejecting those stronger proofs would make the harness
-    # fight the accounting model.
+    # This expectation pins the deliberately exact fan-out routes in canonical
+    # custody, not RP2's later basis projection. An earlier suspense gap may
+    # legitimately block the tax audit while these ownership facts remain final.
     if expected_count != len(expected_routes) or len(matched) != expected_count or missing or duplicate:
         raise RuntimeError(
             "Exact automatic self-transfer matching did not satisfy the regtest "

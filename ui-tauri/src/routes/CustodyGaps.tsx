@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   ArrowRight,
   CheckCircle2,
@@ -41,6 +42,8 @@ import {
   type CustodyGapStatus,
   type CustodyResidualClassification,
   type CustodyCoverageSnapshot,
+  type CustodyLineageItem,
+  type CustodyLineageSnapshot,
   type BridgePreview,
   type FiledReportImpactPreview,
   type GuidedCorrectionPreview,
@@ -227,6 +230,126 @@ export function CustodyCoverageTimeline({
         <Card className="gap-2 py-5">
           <CardContent className="px-5 text-sm text-muted-foreground">
             {t("coverage.empty")}
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+const LINEAGE_EVIDENCE_KEYS: Record<string, string> = {
+  recorded_fanout: "recordedFanout",
+  row_matched: "rowMatched",
+  verified_native_transfer: "nativeTransfer",
+  reviewed_transfer_pair: "reviewedTransfer",
+  reviewed_gap_bridge: "reviewedGapBridge",
+  manual: "reviewedTransfer",
+  bulk_exact: "reviewedTransfer",
+  bulk_selected: "reviewedTransfer",
+  rule_auto: "reviewedTransfer",
+  channel_lifecycle: "channelLifecycle",
+};
+
+function lineageEvidenceLabel(
+  item: CustodyLineageItem,
+  t: TFunction,
+): string {
+  const key = LINEAGE_EVIDENCE_KEYS[item.evidence_reason];
+  if (key) return t(`lineage.evidence.${key}`);
+  return item.custody_state === "internal_reviewed"
+    ? t("lineage.evidence.reviewedDefault")
+    : t("lineage.evidence.verifiedDefault");
+}
+
+export function CustodyLineageTimeline({
+  snapshot,
+}: {
+  snapshot: CustodyLineageSnapshot;
+}) {
+  const { t, i18n } = useTranslation("custodyGaps");
+  const hideSensitive = useUiStore((state) => state.hideSensitive);
+
+  return (
+    <section className="space-y-3" aria-labelledby="custody-lineage-title">
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 id="custody-lineage-title" className="font-semibold">
+            {t("lineage.title")}
+          </h2>
+          <Badge variant="outline">
+            {t("lineage.edgeCount", { count: snapshot.summary.total_count })}
+          </Badge>
+        </div>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          {t("lineage.description")}
+        </p>
+      </div>
+
+      {snapshot.items.length ? (
+        <div className="space-y-3">
+          {snapshot.items.map((item, index) => (
+            <Card
+              className="gap-3 py-4"
+              key={`${item.occurred_at ?? "unknown"}-${item.from_wallet_label}-${item.to_wallet_label}-${item.amount_msat}-${index}`}
+            >
+              <CardContent className="space-y-3 px-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {formatDate(item.occurred_at, i18n.language)}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      variant={
+                        item.custody_state === "internal_verified"
+                          ? "default"
+                          : "outline"
+                      }
+                    >
+                      {t(`lineage.custodyState.${item.custody_state}`)}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        item.basis_state === "eligible"
+                          ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
+                          : "border-amber-500/50 bg-amber-500/5 text-amber-700 dark:text-amber-400",
+                      )}
+                    >
+                      {t(`lineage.basisState.${item.basis_state}`)}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  <span>{item.from_wallet_label}</span>
+                  <ArrowRight
+                    className="size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <span>{item.to_wallet_label}</span>
+                  <span className={cn("ml-auto", hideSensitive && "sensitive")}>
+                    {formatCustodyMsat(item.amount_msat, item.asset)}
+                  </span>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {t("lineage.evidenceLabel", {
+                    evidence: lineageEvidenceLabel(item, t),
+                  })}
+                </p>
+                {item.basis_state === "blocked_by_prior_custody_basis" ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {t("lineage.basisBlocked")}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="gap-2 py-5">
+          <CardContent className="px-5 text-sm text-muted-foreground">
+            {t("lineage.empty")}
           </CardContent>
         </Card>
       )}
@@ -1036,6 +1159,10 @@ export function CustodyGaps() {
   const coverageQuery = useDaemon<CustodyCoverageSnapshot>(
     "ui.custody.coverage.snapshot",
   );
+  const lineageQuery = useDaemon<CustodyLineageSnapshot>(
+    "ui.custody.lineage.snapshot",
+    { limit: 100 },
+  );
   const gapsQuery = useDaemonInfinite<CustodyGapSnapshot>(
     "ui.custody.gaps.list",
     { limit: 100 },
@@ -1207,6 +1334,24 @@ export function CustodyGaps() {
           <CardHeader className="px-5">
             <CardTitle className="text-base">{t("coverage.title")}</CardTitle>
             <CardDescription>{t("coverage.unavailable")}</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {lineageQuery.data?.data ? (
+        <CustodyLineageTimeline snapshot={lineageQuery.data.data} />
+      ) : lineageQuery.isLoading ? (
+        <Card className="gap-2 py-5">
+          <CardHeader className="px-5">
+            <CardTitle className="text-base">{t("lineage.title")}</CardTitle>
+            <CardDescription>{t("lineage.loading")}</CardDescription>
+          </CardHeader>
+        </Card>
+      ) : (
+        <Card className="gap-2 py-5">
+          <CardHeader className="px-5">
+            <CardTitle className="text-base">{t("lineage.title")}</CardTitle>
+            <CardDescription>{t("lineage.unavailable")}</CardDescription>
           </CardHeader>
         </Card>
       )}

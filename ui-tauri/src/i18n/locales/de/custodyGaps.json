@@ -39,6 +39,35 @@
       "change": "Wechselgeldzweig"
     }
   },
+  "lineage": {
+    "title": "Verwahrungslinie",
+    "description": "Endgültige Wallet-Bewegungen desselben Rechtsträgers aus dem kanonischen Verwahrungsmodell. Verwahrungsfinalität und steuerliche Basisbereitschaft werden getrennt dargestellt.",
+    "edgeCount_one": "{{count}} Wallet-Bewegung",
+    "edgeCount_other": "{{count}} Wallet-Bewegungen",
+    "loading": "Kanonische Verwahrungslinie wird geladen…",
+    "unavailable": "Die kanonische Verwahrungslinie ist erst nach Verarbeitung des Journals verfügbar.",
+    "empty": "Es wurden noch keine endgültigen internen Wallet-Bewegungen aufgezeichnet.",
+    "evidenceLabel": "Nachweis: {{evidence}}",
+    "basisBlocked": "Die Verwahrung ist geklärt, aber die Steuerbasis bleibt durch eine frühere ungeklärte Verwahrungsgrenze blockiert.",
+    "custodyState": {
+      "internal_verified": "Verwahrung verifiziert",
+      "internal_reviewed": "Verwahrung geprüft"
+    },
+    "basisState": {
+      "eligible": "Steuerbasis verfügbar",
+      "blocked_by_prior_custody_basis": "Steuerbasis blockiert"
+    },
+    "evidence": {
+      "recordedFanout": "Exakte Ausgänge einer aufgezeichneten Chain-Transaktion",
+      "rowMatched": "Exakt übereinstimmende Wallet-Beobachtungen",
+      "nativeTransfer": "Exaktes natives Wallet-Ereignis",
+      "reviewedTransfer": "Geprüfter interner Transferdatensatz",
+      "reviewedGapBridge": "Geprüfte Verwahrungsbrücke über eine fehlende Wallet",
+      "channelLifecycle": "Verifizierter Kanal-Lebenszyklus",
+      "reviewedDefault": "Geprüfter interner Verwahrungsnachweis",
+      "verifiedDefault": "Verifizierter Wallet- oder Chain-Nachweis"
+    }
+  },
   "reviewQueue": {
     "title": "Mögliche Rückflüsse aus fehlenden Wallets",
     "description": "Vorschläge sind deterministisch und erstellen niemals automatisch eine Verwahrungsbrücke. Ein langer Zeitraum senkt die Sicherheit, blendet einen plausiblen langfristigen Rückfluss aber nicht aus."

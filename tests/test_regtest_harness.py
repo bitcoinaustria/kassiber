@@ -484,8 +484,9 @@ class RegtestHarnessTest(unittest.TestCase):
             {
                 "from_wallet": route["from_wallet"],
                 "to_wallet": route["to_wallet"],
-                "received_msat": route["received_msat"],
-                "pairing_source": "ownership_derived",
+                "amount_msat": route["received_msat"],
+                "custody_state": "internal_verified",
+                "evidence_reason": "ownership_derived",
             }
             for route in expected_routes
         ]
@@ -496,7 +497,7 @@ class RegtestHarnessTest(unittest.TestCase):
             if args[:2] == ("transfers", "list"):
                 return {"data": []}
             if args[:3] == ("journals", "transfers", "list"):
-                return {"data": {"same_asset_transfers": observed_rows}}
+                return {"data": {"custody_transfers": observed_rows}}
             raise AssertionError(f"Unexpected CLI call: {args!r}")
 
         with patch.object(regtest_demo, "run_cli", side_effect=fake_run_cli), patch.object(
@@ -539,8 +540,9 @@ class RegtestHarnessTest(unittest.TestCase):
             {
                 "from_wallet": route["from_wallet"],
                 "to_wallet": route["to_wallet"],
-                "received_msat": route["received_msat"],
-                "pairing_source": "recorded_fanout",
+                "amount_msat": route["received_msat"],
+                "custody_state": "internal_verified",
+                "evidence_reason": "recorded_fanout",
             }
             for route in regtest_demo._expected_ownership_fanout_routes(scenario)
         ]
@@ -549,7 +551,7 @@ class RegtestHarnessTest(unittest.TestCase):
             if args[:2] == ("transfers", "list"):
                 return {"data": []}
             if args[:3] == ("journals", "transfers", "list"):
-                return {"data": {"same_asset_transfers": observed_rows}}
+                return {"data": {"custody_transfers": observed_rows}}
             raise AssertionError(f"Unexpected CLI call: {args!r}")
 
         with patch.object(regtest_demo, "run_cli", side_effect=fake_run_cli), patch.object(

@@ -473,6 +473,12 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         self.assertIn("ui.egress.snapshot", self._rust_allowlist())
         self.assertIn("ui.egress.snapshot", self._vite_allowlist())
 
+    def test_custody_lineage_kind_is_allowed_by_desktop_boundaries(self):
+        kind = "ui.custody.lineage.snapshot"
+        self.assertIn(kind, set(SUPPORTED_KINDS))
+        self.assertIn(kind, self._rust_allowlist())
+        self.assertIn(kind, self._vite_allowlist())
+
     def test_refresh_kinds_are_stream_capable_in_desktop_boundaries(self):
         tauri_streaming = re.search(
             r"STREAMING_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",

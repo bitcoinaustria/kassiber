@@ -39,6 +39,35 @@
       "change": "Change branch"
     }
   },
+  "lineage": {
+    "title": "Custody lineage",
+    "description": "Finalized same-owner wallet moves from the canonical custody model. Custody finality and tax-basis readiness are shown separately.",
+    "edgeCount_one": "{{count}} wallet move",
+    "edgeCount_other": "{{count}} wallet moves",
+    "loading": "Loading canonical custody lineage…",
+    "unavailable": "Canonical custody lineage is unavailable until the journal has been processed.",
+    "empty": "No finalized internal wallet moves have been recorded yet.",
+    "evidenceLabel": "Evidence: {{evidence}}",
+    "basisBlocked": "Custody is settled, but tax basis remains blocked by an earlier unresolved custody boundary.",
+    "custodyState": {
+      "internal_verified": "Custody verified",
+      "internal_reviewed": "Custody reviewed"
+    },
+    "basisState": {
+      "eligible": "Tax basis eligible",
+      "blocked_by_prior_custody_basis": "Tax basis blocked"
+    },
+    "evidence": {
+      "recordedFanout": "Exact outputs from one recorded chain transaction",
+      "rowMatched": "Exact matched wallet observations",
+      "nativeTransfer": "Exact native wallet event",
+      "reviewedTransfer": "Reviewed internal transfer record",
+      "reviewedGapBridge": "Reviewed missing-wallet custody bridge",
+      "channelLifecycle": "Verified channel lifecycle",
+      "reviewedDefault": "Reviewed internal custody evidence",
+      "verifiedDefault": "Verified wallet or chain evidence"
+    }
+  },
   "reviewQueue": {
     "title": "Possible missing-wallet returns",
     "description": "Suggestions are deterministic and never create a custody bridge automatically. Time reduces confidence but does not hide a plausible long-term return."

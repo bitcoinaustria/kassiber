@@ -4647,6 +4647,147 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def build_custody_lineage_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return canonical internal-custody edges for the active local book.
+
+    The persisted reader deliberately omits observation commitments and exact
+    quantity-slice offsets.  This snapshot keeps custody finality distinct from
+    tax-basis eligibility: an exact wallet-to-wallet edge remains visible even
+    when an earlier custody gap prevents later tax projection.
+    """
+
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"limit", "transaction_id"})
+    if unknown:
+        raise AppError(
+            "ui.custody.lineage.snapshot received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=100, maximum=500)
+    transaction_id = raw_args.get("transaction_id")
+    if transaction_id is not None:
+        if not isinstance(transaction_id, str) or not transaction_id.strip():
+            raise AppError(
+                "ui.custody.lineage.snapshot transaction_id must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+        transaction_id = transaction_id.strip()
+
+    context, profile = _active_context_and_profile(conn)
+    qualification = (
+        "Derived locally from canonical evidence in the active project and selected "
+        "book. Custody finality is separate from tax-basis eligibility: a verified "
+        "custody edge may remain basis-blocked by an earlier unresolved gap. State "
+        "counters describe the returned rows when the result is truncated."
+    )
+    scope = {
+        "workspace_id": context["workspace_id"] or None,
+        "workspace_label": context["workspace_label"] or None,
+        "profile_id": context["profile_id"] or None,
+        "profile_label": context["profile_label"] or None,
+    }
+    if profile is None:
+        return {
+            "scope": scope,
+            "items": [],
+            "summary": {
+                "total_count": 0,
+                "returned_count": 0,
+                "truncated": False,
+                "internal_verified": 0,
+                "internal_reviewed": 0,
+                "basis_eligible": 0,
+                "basis_blocked": 0,
+                "qualification": qualification,
+            },
+            "observation_commitments_included": False,
+            "replicated": False,
+        }
+
+    result = core_custody_quantity_store.custody_decision_rows(
+        conn,
+        str(profile["id"]),
+        limit=limit,
+        transaction_ids=[transaction_id] if transaction_id is not None else None,
+    )
+    items = []
+    custody_counts: dict[str, int] = defaultdict(int)
+    basis_counts: dict[str, int] = defaultdict(int)
+    for raw_record in result.get("records", []):
+        record = dict(raw_record)
+        custody_state = str(record.get("custody_state") or "unknown")
+        basis_state = str(record.get("basis_state") or "unknown")
+        custody_counts[custody_state] += 1
+        basis_counts[basis_state] += 1
+        asset = str(record.get("source_asset") or record.get("target_asset") or "")
+        source_network = str(record.get("source_network") or "unknown")
+        target_network = str(record.get("target_network") or "unknown")
+        source_rail = str(record.get("source_rail") or "unknown")
+        target_rail = str(record.get("target_rail") or "unknown")
+        items.append(
+            {
+                "out_transaction_id": record.get("source_transaction_id"),
+                "in_transaction_id": record.get("target_transaction_id"),
+                "occurred_at": record.get("occurred_at"),
+                "asset": asset,
+                "source_asset": record.get("source_asset"),
+                "target_asset": record.get("target_asset"),
+                "amount_msat": str(int(record.get("amount_msat") or 0)),
+                "from_wallet_id": record.get("source_wallet_id"),
+                "from_wallet_label": record.get("source_wallet_label"),
+                "to_wallet_id": record.get("target_wallet_id"),
+                "to_wallet_label": record.get("target_wallet_label"),
+                "custody_state": custody_state,
+                "basis_state": basis_state,
+                "basis_barrier_at": record.get("basis_barrier_at"),
+                "evidence_reason": record.get("reason"),
+                "network": (
+                    source_network
+                    if source_network == target_network
+                    else f"{source_network}->{target_network}"
+                ),
+                "source_network": source_network,
+                "target_network": target_network,
+                "rail": (
+                    source_rail
+                    if source_rail == target_rail
+                    else f"{source_rail}->{target_rail}"
+                ),
+                "source_rail": source_rail,
+                "target_rail": target_rail,
+                "atomic_bundle_id": record.get("atomic_group_id"),
+                "component_id": record.get("component_id"),
+            }
+        )
+
+    return {
+        "scope": scope,
+        "items": items,
+        "summary": {
+            "total_count": int(result.get("count") or 0),
+            "returned_count": int(result.get("returned", len(items)) or 0),
+            "truncated": bool(result.get("truncated")),
+            "internal_verified": custody_counts.get("internal_verified", 0),
+            "internal_reviewed": custody_counts.get("internal_reviewed", 0),
+            "basis_eligible": basis_counts.get("eligible", 0),
+            "basis_blocked": basis_counts.get(
+                "blocked_by_prior_custody_basis", 0
+            ),
+            "qualification": qualification,
+        },
+        "observation_commitments_included": bool(
+            result.get("observation_commitments_included", False)
+        ),
+        "replicated": bool(result.get("replicated", False)),
+    }
+
+
 def build_journal_events_list_snapshot(
     conn: sqlite3.Connection,
     args: dict[str, Any] | None = None,

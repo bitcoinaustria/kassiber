@@ -442,6 +442,55 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             [e.get("description") for e in transfers],
         )
 
+    def test_complete_row_match_preempts_unknown_graph_source(self):
+        txid = "move-unknown-source"
+        graph = json.dumps(
+            {
+                "txid": txid,
+                "vin": [
+                    {
+                        "txid": "historic-prevout",
+                        "vout": 0,
+                        "prevout": {"scriptpubkey": "0014" + "ee" * 20},
+                    }
+                ],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 100_000_000}
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acq"),
+            _row(
+                "A",
+                "outbound",
+                BTC,
+                external_id=txid,
+                raw_json=graph,
+            ),
+            _row("B", "inbound", BTC, external_id=txid),
+        ]
+        index = OwnedIndex()
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            finalized_tax_inputs(
+                PROFILE,
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+
+        self.assertEqual(
+            [entry["entry_type"] for entry in state.entries].count("transfer_in"),
+            1,
+        )
+        self.assertNotIn(
+            "ownership_transfer_source_ambiguous",
+            {item["reason"] for item in state.quarantines},
+        )
+
 
 SCRIPT_EXT = "0014" + "ee" * 20  # external recipient, never owned
 

@@ -1041,6 +1041,66 @@ CREATE TABLE IF NOT EXISTS journal_quantity_balances (
     PRIMARY KEY(profile_id, location_kind, location_id, asset)
 );
 
+-- Canonical target-bearing custody decisions.  These rows are a derived,
+-- local-only navigation index over the exact quantity arbiter: they make the
+-- durable source -> destination lineage available without re-interpreting tax
+-- rows or trusting presentation labels.  The observation commitments and
+-- half-open slices stay stored for replacement/integrity checks, while normal
+-- readers use a redacted semantic projection.
+CREATE TABLE IF NOT EXISTS journal_custody_decisions (
+    decision_id TEXT NOT NULL CHECK(length(decision_id) = 64),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    source_transaction_id TEXT NOT NULL
+        REFERENCES transactions(id) ON DELETE CASCADE,
+    target_transaction_id TEXT NOT NULL
+        REFERENCES transactions(id) ON DELETE CASCADE,
+    source_observation_hash TEXT NOT NULL
+        CHECK(length(source_observation_hash) = 64),
+    source_start_msat INTEGER NOT NULL
+        CHECK(typeof(source_start_msat) = 'integer' AND source_start_msat >= 0),
+    source_end_msat INTEGER NOT NULL
+        CHECK(
+            typeof(source_end_msat) = 'integer'
+            AND source_end_msat > source_start_msat
+        ),
+    target_observation_hash TEXT NOT NULL
+        CHECK(length(target_observation_hash) = 64),
+    target_start_msat INTEGER NOT NULL
+        CHECK(typeof(target_start_msat) = 'integer' AND target_start_msat >= 0),
+    target_end_msat INTEGER NOT NULL
+        CHECK(
+            typeof(target_end_msat) = 'integer'
+            AND target_end_msat > target_start_msat
+        ),
+    source_wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+    target_wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+    source_network TEXT NOT NULL,
+    target_network TEXT NOT NULL,
+    source_rail TEXT NOT NULL,
+    target_rail TEXT NOT NULL,
+    source_asset TEXT NOT NULL,
+    target_asset TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN (
+        'internal_verified', 'internal_reviewed'
+    )),
+    basis_state TEXT NOT NULL CHECK(basis_state IN (
+        'eligible', 'blocked_by_prior_custody_basis'
+    )),
+    basis_barrier_at TEXT,
+    reason TEXT NOT NULL,
+    atomic_group_id TEXT,
+    component_id TEXT,
+    occurred_at TEXT,
+    target_occurred_at TEXT,
+    created_at TEXT NOT NULL,
+    CHECK(
+        source_end_msat - source_start_msat =
+        target_end_msat - target_start_msat
+    ),
+    PRIMARY KEY(profile_id, decision_id)
+);
+
 -- Evidence detail is written once when a durable authored claim/component
 -- explicitly binds it. Rows cannot be updated; scoped book reset/profile
 -- teardown may delete them. Journal refresh never snapshots every import row.
@@ -1099,6 +1159,15 @@ CREATE INDEX IF NOT EXISTS idx_journal_quantity_issues_profile_time
 
 CREATE INDEX IF NOT EXISTS idx_journal_quantity_balances_profile_asset
     ON journal_quantity_balances(profile_id, asset, location_kind, location_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_profile_time
+    ON journal_custody_decisions(profile_id, occurred_at, decision_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_source
+    ON journal_custody_decisions(profile_id, source_transaction_id, decision_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_target
+    ON journal_custody_decisions(profile_id, target_transaction_id, decision_id);
 
 CREATE INDEX IF NOT EXISTS idx_custody_authored_evidence_subject
     ON custody_authored_evidence_snapshots(
@@ -3286,6 +3355,30 @@ def ensure_schema_compat(conn):
         "transactions",
         "external_id_kind",
         "TEXT CHECK(external_id_kind IS NULL OR external_id_kind = 'txid')",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "source_network",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "target_network",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "source_rail",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "target_rail",
+        "TEXT NOT NULL DEFAULT 'unknown'",
     )
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")

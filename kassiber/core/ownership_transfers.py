@@ -83,6 +83,7 @@ SATS_TO_MSAT = 1000
 # re-decompose; skip them by id prefix.
 _SYNTHETIC_ID_PREFIXES = (
     "owned-derive:",
+    "recorded-fanout:",
     "cross-split:",
     "direct-payout:",
     "multi-consol:",

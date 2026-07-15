@@ -7,6 +7,7 @@ import {
   BridgePreviewPanel,
   CorrectionPreviewPanel,
   CustodyCoverageTimeline,
+  CustodyLineageTimeline,
   ResidualPreviewPanel,
   ReviewHistoryPanel,
 } from "./CustodyGaps";
@@ -31,6 +32,7 @@ import {
   type CustodyGapReviewHistoryEntry,
   type CustodyGapSnapshot,
   type CustodyCoverageSnapshot,
+  type CustodyLineageSnapshot,
 } from "./custodyGapsModel";
 
 const reviewedBridgePreview: BridgePreview = {
@@ -423,6 +425,73 @@ describe("CustodyGaps imported-policy coverage", () => {
     expect(html).not.toContain("xpub6PrivateMaterial");
     expect(html).not.toContain("wpkh(secret-descriptor)");
     expect(html).not.toContain("bc1privateaddress");
+  });
+});
+
+describe("CustodyGaps canonical custody lineage", () => {
+  const lineage: CustodyLineageSnapshot = {
+    summary: {
+      total_count: 1,
+      returned_count: 1,
+      truncated: false,
+      internal_verified: 1,
+      internal_reviewed: 0,
+      basis_eligible: 0,
+      basis_blocked: 1,
+    },
+    items: [
+      {
+        out_transaction_id: "private-out-transaction-id",
+        in_transaction_id: "private-in-transaction-id",
+        occurred_at: "2026-03-12T11:00:00Z",
+        asset: "BTC",
+        amount_msat: "609000000000",
+        from_wallet_id: "private-source-wallet-id",
+        from_wallet_label: "Treasury vault",
+        to_wallet_id: "private-target-wallet-id",
+        to_wallet_label: "Spending wallet",
+        custody_state: "internal_verified",
+        basis_state: "blocked_by_prior_custody_basis",
+        basis_barrier_at: "2024-08-01T10:00:00Z",
+        evidence_reason: "recorded_fanout",
+        network: "main",
+        rail: "bitcoin",
+        atomic_bundle_id: "private-atomic-bundle-id",
+        component_id: "private-component-id",
+      },
+    ],
+  };
+
+  it("shows exact custody finality separately from a prior tax-basis barrier", () => {
+    const html = renderToStaticMarkup(
+      <CustodyLineageTimeline snapshot={lineage} />,
+    );
+
+    expect(html).toContain("Custody lineage");
+    expect(html).toContain("Treasury vault");
+    expect(html).toContain("Spending wallet");
+    expect(html).toContain("6.09 BTC");
+    expect(html).toContain("Custody verified");
+    expect(html).toContain("Tax basis blocked");
+    expect(html).toContain(
+      "Custody is settled, but tax basis remains blocked",
+    );
+    expect(html).toContain(
+      "Exact outputs from one recorded chain transaction",
+    );
+  });
+
+  it("does not render transaction, wallet, component, or bundle identifiers", () => {
+    const html = renderToStaticMarkup(
+      <CustodyLineageTimeline snapshot={lineage} />,
+    );
+
+    expect(html).not.toContain("private-out-transaction-id");
+    expect(html).not.toContain("private-in-transaction-id");
+    expect(html).not.toContain("private-source-wallet-id");
+    expect(html).not.toContain("private-target-wallet-id");
+    expect(html).not.toContain("private-atomic-bundle-id");
+    expect(html).not.toContain("private-component-id");
   });
 });
 

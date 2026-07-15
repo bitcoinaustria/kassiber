@@ -163,6 +163,80 @@ class CanonicalQuantityState:
         return bool(self.issues)
 
 
+def canonical_internal_transfer_rows(
+    state: CanonicalQuantityState,
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[dict[str, Any], ...]:
+    """Return finalized custody edges independently of tax-basis readiness.
+
+    An earlier suspense slice may correctly stop RP2 from projecting a later
+    MOVE while the custody fact itself remains exact. Keeping both states on
+    one row prevents UI, AI, CLI, and integration checks from mistaking a tax
+    basis barrier for missing ownership evidence.
+    """
+
+    refs = wallet_refs_by_id or {}
+    observations = {
+        item.quantity_hash: item for item in state.projection.observations
+    }
+    eligible = set(state.tax_eligibility.eligible_decisions)
+    rows: list[dict[str, Any]] = []
+    for decision in state.projection.decisions:
+        if (
+            decision.state not in {INTERNAL_VERIFIED, INTERNAL_REVIEWED}
+            or decision.target is None
+        ):
+            continue
+        source = observations[decision.source.observation_hash]
+        target = observations[decision.target.observation_hash]
+        source_ref = refs.get(source.wallet_id, {})
+        target_ref = refs.get(target.wallet_id, {})
+        source_domain = QuantityDomain.from_observation(source)
+        rows.append(
+            {
+                "out_transaction_id": source.anchor_transaction_id,
+                "in_transaction_id": target.anchor_transaction_id,
+                "occurred_at": source.occurred_at,
+                "asset": source.asset,
+                "amount_msat": decision.source.amount_msat,
+                "from_wallet_id": source.wallet_id,
+                "from_wallet": _field(source_ref, "label", source.wallet_id),
+                "to_wallet_id": target.wallet_id,
+                "to_wallet": _field(target_ref, "label", target.wallet_id),
+                "custody_state": decision.state,
+                "basis_state": (
+                    "eligible"
+                    if decision in eligible
+                    else "blocked_by_prior_custody_basis"
+                ),
+                "evidence_reason": decision.reason,
+                "network": source_domain.network,
+                "rail": source_domain.rail,
+                **(
+                    {"atomic_bundle_id": decision.atomic_bundle_id}
+                    if decision.atomic_bundle_id
+                    else {}
+                ),
+                **(
+                    {"component_id": decision.component_id}
+                    if decision.component_id
+                    else {}
+                ),
+            }
+        )
+    return tuple(
+        sorted(
+            rows,
+            key=lambda item: (
+                item["occurred_at"],
+                item["out_transaction_id"],
+                item["in_transaction_id"],
+                item["amount_msat"],
+            ),
+        )
+    )
+
+
 def _issue_id(parts: Iterable[Any]) -> str:
     encoded = json.dumps(
         [str(value) for value in parts],

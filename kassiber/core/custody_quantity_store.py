@@ -14,6 +14,11 @@ from .custody_evidence import (
     canonical_event_key,
     enriched_quantity_rows,
 )
+from .custody_quantity import (
+    INTERNAL_REVIEWED,
+    INTERNAL_VERIFIED,
+    QuantityDomain,
+)
 
 if TYPE_CHECKING:
     from .custody_quantity_runtime import CanonicalQuantityState
@@ -588,12 +593,41 @@ def replace_canonical_quantity_state(
     state: CanonicalQuantityState,
     created_at: str,
 ) -> dict[str, int]:
-    """Atomically replace derived postings, issues, and balances for a book."""
+    """Atomically replace all derived canonical quantity state for a book."""
+
+    savepoint = "replace_canonical_quantity_state"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        result = _replace_canonical_quantity_state(
+            conn,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            state=state,
+            created_at=created_at,
+        )
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    return result
+
+
+def _replace_canonical_quantity_state(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    state: CanonicalQuantityState,
+    created_at: str,
+) -> dict[str, int]:
+    """Replace derived rows inside the caller's active savepoint."""
 
     for table in (
         "journal_quantity_postings",
         "journal_quantity_issues",
         "journal_quantity_balances",
+        "journal_custody_decisions",
     ):
         conn.execute(f"DELETE FROM {table} WHERE profile_id = ?", (profile_id,))
 
@@ -609,11 +643,11 @@ def replace_canonical_quantity_state(
                 posting.posting_id,
                 workspace_id,
                 profile_id,
-                    (
-                        observation.anchor_transaction_id
-                        if observation is not None
-                        else None
-                    ),
+                (
+                    observation.anchor_transaction_id
+                    if observation is not None
+                    else None
+                ),
                 posting.observation_hash,
                 observation.occurred_at if observation is not None else None,
                 posting.asset,
@@ -686,10 +720,176 @@ def replace_canonical_quantity_state(
             if amount_msat != 0
         ],
     )
+    decision_rows = []
+    eligible_decisions = set(state.tax_eligibility.eligible_decisions)
+    for decision in state.projection.decisions:
+        if (
+            decision.state not in {INTERNAL_VERIFIED, INTERNAL_REVIEWED}
+            or decision.target is None
+        ):
+            continue
+        source = observations[decision.source.observation_hash]
+        target = observations[decision.target.observation_hash]
+        source_domain = QuantityDomain.from_observation(source)
+        target_domain = QuantityDomain.from_observation(target)
+        decision_payload = [
+            "canonical-custody-decision-v1",
+            decision.source.observation_hash,
+            decision.source.start_msat,
+            decision.source.end_msat,
+            decision.target.observation_hash,
+            decision.target.start_msat,
+            decision.target.end_msat,
+            decision.state,
+            decision.reason,
+            decision.atomic_bundle_id,
+            decision.component_id,
+        ]
+        decision_id = hashlib.sha256(
+            json.dumps(
+                decision_payload,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        basis_barrier = state.tax_eligibility.barrier_for(source)
+        decision_rows.append(
+            (
+                decision_id,
+                workspace_id,
+                profile_id,
+                source.anchor_transaction_id,
+                target.anchor_transaction_id,
+                decision.source.observation_hash,
+                decision.source.start_msat,
+                decision.source.end_msat,
+                decision.target.observation_hash,
+                decision.target.start_msat,
+                decision.target.end_msat,
+                source.wallet_id,
+                target.wallet_id,
+                source_domain.network,
+                target_domain.network,
+                source_domain.rail,
+                target_domain.rail,
+                source.asset,
+                target.asset,
+                decision.state,
+                (
+                    "eligible"
+                    if decision in eligible_decisions
+                    else "blocked_by_prior_custody_basis"
+                ),
+                (
+                    basis_barrier[0] if basis_barrier is not None else None
+                ),
+                decision.reason,
+                decision.atomic_bundle_id,
+                decision.component_id,
+                source.occurred_at or None,
+                target.occurred_at or None,
+                created_at,
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO journal_custody_decisions(
+            decision_id, workspace_id, profile_id,
+            source_transaction_id, target_transaction_id,
+            source_observation_hash, source_start_msat, source_end_msat,
+            target_observation_hash, target_start_msat, target_end_msat,
+            source_wallet_id, target_wallet_id,
+            source_network, target_network, source_rail, target_rail,
+            source_asset, target_asset,
+            state, basis_state, basis_barrier_at, reason,
+            atomic_group_id, component_id, occurred_at,
+            target_occurred_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        decision_rows,
+    )
     return {
         "postings": len(posting_rows),
         "issues": len(state.issues),
         "balances": sum(amount != 0 for amount in balances.values()),
+        "decisions": len(decision_rows),
+    }
+
+
+def custody_decision_rows(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    limit: int = 100,
+    transaction_ids: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Return a bounded, redacted semantic view of canonical custody edges.
+
+    Observation commitments and exact slice offsets remain private storage
+    details.  This reader exposes the amount and durable transaction/wallet
+    anchors needed by transaction graphs and audit summaries, with custody
+    finality named separately from downstream tax state.
+    """
+
+    bounded_limit = max(1, min(int(limit), 500))
+    where = "d.profile_id = ?"
+    params: list[Any] = [profile_id]
+    if transaction_ids is not None:
+        selected = tuple(
+            sorted({str(value) for value in transaction_ids if str(value)})
+        )
+        if not selected:
+            return {
+                "records": [],
+                "count": 0,
+                "returned": 0,
+                "truncated": False,
+                "observation_commitments_included": False,
+                "replicated": False,
+            }
+        placeholders = ",".join("?" for _ in selected)
+        where += (
+            f" AND (d.source_transaction_id IN ({placeholders})"
+            f" OR d.target_transaction_id IN ({placeholders}))"
+        )
+        params.extend(selected)
+        params.extend(selected)
+    total_count = int(
+        conn.execute(
+            f"SELECT COUNT(*) FROM journal_custody_decisions d WHERE {where}",
+            params,
+        ).fetchone()[0]
+    )
+    rows = conn.execute(
+        f"""
+        SELECT d.source_transaction_id, d.target_transaction_id,
+               d.source_wallet_id, source_wallet.label AS source_wallet_label,
+               d.target_wallet_id, target_wallet.label AS target_wallet_label,
+               d.source_network, d.target_network,
+               d.source_rail, d.target_rail,
+               d.source_asset, d.target_asset,
+               d.source_end_msat - d.source_start_msat AS amount_msat,
+               d.state AS custody_state, d.basis_state, d.basis_barrier_at,
+               d.reason, d.atomic_group_id,
+               d.component_id, d.occurred_at, d.target_occurred_at,
+               d.created_at
+        FROM journal_custody_decisions d
+        LEFT JOIN wallets source_wallet ON source_wallet.id = d.source_wallet_id
+        LEFT JOIN wallets target_wallet ON target_wallet.id = d.target_wallet_id
+        WHERE {where}
+        ORDER BY COALESCE(d.occurred_at, '') DESC, d.decision_id DESC
+        LIMIT ?
+        """,
+        [*params, bounded_limit],
+    ).fetchall()
+    records = [dict(row) for row in rows]
+    return {
+        "records": records,
+        "count": total_count,
+        "returned": len(records),
+        "truncated": total_count > len(records),
+        "observation_commitments_included": False,
+        "replicated": False,
     }
 
 
@@ -920,6 +1120,7 @@ __all__ = [
     "component_evidence_status",
     "component_native_support_status",
     "custody_quantity_readiness_summary",
+    "custody_decision_rows",
     "evidence_commitment_id",
     "load_component_evidence_snapshots",
     "persist_authored_evidence_snapshots",

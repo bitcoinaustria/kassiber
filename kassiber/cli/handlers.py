@@ -5462,6 +5462,10 @@ def build_ledger_state(conn, profile):
         component_evidence_snapshots=component_evidence_snapshots,
         dismissed_gap_fingerprints=dismissed_gap_fingerprints,
     )
+    custody_transfers = core_custody_quantity_runtime.canonical_internal_transfer_rows(
+        custody_quantity,
+        wallet_refs_by_id,
+    )
     channel_non_event_ids = {
         str(transaction_id)
         for transaction_id, role in channel_roles.items()
@@ -5543,6 +5547,7 @@ def build_ledger_state(conn, profile):
         "ownership_review_counts": ownership_review_counts,
         "custody_component_blockers": custody_component_blockers,
         "custody_quantity": custody_quantity,
+        "custody_transfers": custody_transfers,
         "quantity_differences": quantity_differences,
         "latest_rates": rates,
         "warnings": warnings,
@@ -5769,7 +5774,12 @@ def process_journals(conn, workspace_ref, profile_ref):
         conn.execute("DELETE FROM journal_wallet_holdings WHERE profile_id = ?", (profile["id"],))
         created_at = now_iso()
         custody_quantity = state.get("custody_quantity")
-        quantity_counts = {"postings": 0, "issues": 0, "balances": 0}
+        quantity_counts = {
+            "postings": 0,
+            "issues": 0,
+            "balances": 0,
+            "decisions": 0,
+        }
         if custody_quantity is not None:
             quantity_counts = core_custody_quantity_store.replace_canonical_quantity_state(
                 conn,
@@ -6210,6 +6220,13 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
         [row["out_id"] for row in state["direct_swap_payouts"]],
     )
     intra_transfers = _serialize_intra_audit(state["intra_audit"])
+    custody_transfers = [
+        {
+            **row,
+            "amount": float(msat_to_btc(row["amount_msat"])),
+        }
+        for row in state["custody_transfers"]
+    ]
     cross_asset_pairs = _serialize_cross_asset_pairs(state["cross_asset_pairs"], tx_refs)
     direct_swap_payouts = _serialize_direct_swap_payouts(
         state["direct_swap_payouts"],
@@ -6220,11 +6237,13 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
         "processing": _journal_processing_status(conn, profile),
         "summary": {
             "same_asset_transfers": len(intra_transfers),
+            "custody_transfers": len(custody_transfers),
             "cross_asset_pairs": len(cross_asset_pairs),
             "direct_swap_payouts": len(direct_swap_payouts),
             "quarantines": len(core_tax_events.dedupe_quarantines(state["quarantines"])),
         },
         "same_asset_transfers": intra_transfers,
+        "custody_transfers": custody_transfers,
         "cross_asset_pairs": cross_asset_pairs,
         "direct_swap_payouts": direct_swap_payouts,
     }

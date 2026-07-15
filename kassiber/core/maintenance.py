@@ -215,6 +215,9 @@ def reset_current_profile_data(
         "journal_quantity_balances": _count_profile_rows(
             conn, "journal_quantity_balances", profile_id
         ),
+        "journal_custody_decisions": _count_profile_rows(
+            conn, "journal_custody_decisions", profile_id
+        ),
         "custody_authored_evidence_snapshots": _count_profile_rows(
             conn, "custody_authored_evidence_snapshots", profile_id
         ),
@@ -410,6 +413,7 @@ def reset_current_profile_data(
             "bip329_labels",
             "journal_wallet_holdings",
             "journal_quantity_balances",
+            "journal_custody_decisions",
             "journal_quantity_issues",
             "journal_quantity_postings",
             "custody_gap_reviews",

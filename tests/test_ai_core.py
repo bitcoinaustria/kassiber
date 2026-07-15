@@ -235,6 +235,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_source_funds_links_bulk_review",
             "ui_transfers_suggest",
             "ui_custody_coverage_snapshot",
+            "ui_custody_lineage_snapshot",
             "ui_custody_gaps_list",
             "ui_custody_gaps_review_context",
             "ui_custody_gaps_history",
