@@ -5,7 +5,10 @@ import unittest
 from pathlib import Path
 
 from kassiber.core import custody_ai_audit
-from kassiber.core.sync_replication.schema_allowlist import SYNC_TABLES
+from kassiber.core.sync_replication.schema_allowlist import (
+    NEVER_SYNC_TABLES,
+    SYNC_TABLE_MAP,
+)
 from kassiber.db import open_db
 
 
@@ -120,7 +123,8 @@ class CustodyAiAuditTest(unittest.TestCase):
             "FROM custody_ai_assistance_audits"
         ).fetchone()
         self.assertEqual(tuple(row), ("deny", "denied", "user_denied"))
-        self.assertNotIn("custody_ai_assistance_audits", SYNC_TABLES)
+        self.assertNotIn("custody_ai_assistance_audits", SYNC_TABLE_MAP)
+        self.assertIn("custody_ai_assistance_audits", NEVER_SYNC_TABLES)
 
     def test_transaction_scoped_summary_excludes_unrelated_assistance(self):
         for component_id, anchor in (

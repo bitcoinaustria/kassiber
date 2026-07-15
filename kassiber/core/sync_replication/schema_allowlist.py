@@ -696,6 +696,7 @@ NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset(
         "ai_provider_secret_refs",
         "ai_chat_sessions",
         "ai_chat_messages",
+        "custody_ai_assistance_audits",
         "journal_entries",
         "journal_quarantines",
         "journal_tax_summary",
