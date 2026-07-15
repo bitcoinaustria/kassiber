@@ -52,6 +52,7 @@ from .schema_allowlist import (
     SYNC_TABLE_MAP,
     TableSpec,
     merge_public_wallet_config,
+    private_wallet_policy_requires_review,
     public_wallet_config,
     validate_wire_row,
 )
@@ -1123,6 +1124,7 @@ def _apply_row_upsert(
     prior_wallet_material: dict[str, Any] | None = None
     prior_wallet_identity: dict[str, Any] | None = None
     prior_public_wallet_config: dict[str, Any] | None = None
+    private_policy_review_required = False
     if spec.table == "wallets":
         prior_wallet = conn.execute(
             "SELECT * FROM wallets WHERE id = ?",
@@ -1138,6 +1140,10 @@ def _apply_row_upsert(
             prior_wallet_material = private_policy_material(prior_config)
             prior_wallet_identity = policy_identity_material(prior_config)
             prior_public_wallet_config = public_wallet_config(prior_config)
+            private_policy_review_required = private_wallet_policy_requires_review(
+                prior_config,
+                merged.get("config_json"),
+            )
 
     actual, _ = _prepare_actual_row(
         conn,
@@ -1149,6 +1155,16 @@ def _apply_row_upsert(
         created_files=created_files,
     )
     _insert_or_update_with_collision_notice(conn, book=book, spec=spec, actual=actual, event=event)
+    if private_policy_review_required and prior_wallet is not None:
+        _notice(
+            conn,
+            profile_id=book["profile_id"],
+            code="sync_wallet_policy_requires_local_review",
+            severity="warning",
+            replica_id=str(event["replica_id"]),
+            member_id=str(event["author_member_id"]),
+            details={"wallet_id": str(prior_wallet["id"])},
+        )
     if prior_wallet is not None and prior_wallet_identity is not None:
         try:
             updated_config = json.loads(actual["config_json"] or "{}")

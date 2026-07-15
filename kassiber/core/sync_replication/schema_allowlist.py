@@ -710,6 +710,20 @@ _SYNC_WALLET_CONFIG_FIELDS = frozenset(
         "deprecated",
     }
 )
+_WATCH_POLICY_FIELDS = frozenset(
+    {
+        "addresses",
+        "chain",
+        "network",
+        "policy_asset",
+        "descriptor_source",
+        "synthesize_change",
+        "script_types",
+        "descriptor",
+        "change_descriptor",
+        "xpub",
+    }
+)
 
 
 def _is_public_watch_material(value: Any) -> bool:
@@ -756,10 +770,10 @@ def merge_public_wallet_config(local: Any, incoming: Any) -> dict[str, Any]:
 
     Synchronized fields are snapshot state, not a JSON merge-patch: omission
     removes an old public xpub, address set, script family, or coverage setting.
-    Fields outside the positive allowlist remain device-local.  A private
-    descriptor omitted by serialization is also retained for an unrelated
-    remote metadata change, but an incoming public watch policy explicitly
-    replaces every local watch-material variant to avoid hybrid policies.
+    Fields outside the positive allowlist remain device-local. A private
+    descriptor omitted by serialization is always retained: replication may
+    flag a competing public policy for local review, but it must never delete
+    device-local secret material or construct a hybrid active policy.
     """
 
     local_config = dict(local) if isinstance(local, Mapping) else {}
@@ -774,14 +788,37 @@ def merge_public_wallet_config(local: Any, incoming: Any) -> dict[str, Any]:
         for key in ("descriptor", "change_descriptor", "xpub")
         if key in local_config and not _is_public_watch_material(local_config[key])
     }
-    incoming_replaces_watch_policy = any(
-        key in incoming_config
-        for key in ("addresses", "descriptor", "change_descriptor", "xpub")
-    )
-    if not incoming_replaces_watch_policy:
+    if private_watch_material:
+        for key in _WATCH_POLICY_FIELDS:
+            incoming_config.pop(key, None)
+            if key in local_config:
+                merged[key] = local_config[key]
         merged.update(private_watch_material)
     merged.update(incoming_config)
     return merged
+
+
+def private_wallet_policy_requires_review(local: Any, incoming: Any) -> bool:
+    """Return whether a replicated public policy conflicts with local secrets."""
+
+    local_config = dict(local) if isinstance(local, Mapping) else {}
+    private_watch_material = any(
+        key in local_config and not _is_public_watch_material(local_config[key])
+        for key in ("descriptor", "change_descriptor", "xpub")
+    )
+    if not private_watch_material:
+        return False
+    incoming_config = public_wallet_config(incoming)
+    if any(
+        key in incoming_config
+        for key in ("addresses", "descriptor", "change_descriptor", "xpub")
+    ):
+        return True
+    return any(
+        key in incoming_config
+        and incoming_config[key] != local_config.get(key)
+        for key in ("chain", "network", "policy_asset", "script_types")
+    )
 
 
 def _json_value(value: Any) -> Any:

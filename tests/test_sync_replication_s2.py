@@ -589,6 +589,71 @@ class SyncBundleReplayTests(unittest.TestCase):
         )
         self.assertNotIn("xpub", peer_config)
 
+    def test_replicated_public_policy_never_deletes_peer_private_material(self):
+        self._join_peer("editor")
+        wallet_id, _, _, _ = self._insert_wallet_transaction_attachment()
+        initial = build_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            attachments_root=self.attachments_a,
+        )
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=initial.ciphertext,
+            attachments_root=self.attachments_b,
+        )
+        private_descriptor = "wpkh(xprv-device-local-private-material/0/*)"
+        peer_config = json.loads(
+            self.peer.execute(
+                "SELECT config_json FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()[0]
+        )
+        peer_config.pop("xpub")
+        peer_config["descriptor"] = private_descriptor
+        self.peer.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(peer_config), wallet_id),
+        )
+        self.peer.commit()
+
+        owner_config = json.loads(
+            self.owner.execute(
+                "SELECT config_json FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()[0]
+        )
+        owner_config.pop("xpub")
+        owner_config["addresses"] = ["bc1qreplacement"]
+        self.owner.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(owner_config), wallet_id),
+        )
+        rotated = build_bundle(self.owner, profile_id=self.profile["id"])
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=rotated.ciphertext,
+        )
+
+        preserved = json.loads(
+            self.peer.execute(
+                "SELECT config_json FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()[0]
+        )
+        self.assertEqual(preserved["descriptor"], private_descriptor)
+        self.assertNotIn("addresses", preserved)
+        notice = self.peer.execute(
+            """
+            SELECT code, details_json FROM sync_notices
+            WHERE code = 'sync_wallet_policy_requires_local_review'
+            """
+        ).fetchone()
+        self.assertIsNotNone(notice)
+        self.assertEqual(json.loads(notice["details_json"])["wallet_id"], wallet_id)
+
     def test_duplicate_reordered_bundles_are_idempotent_and_converge(self):
         self._initial_sync()
         self.owner.execute(

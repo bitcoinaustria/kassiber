@@ -23,6 +23,7 @@ from kassiber.core.sync_replication.schema_allowlist import (
     NEVER_SYNC_TABLES,
     SYNC_TABLE_MAP,
     merge_public_wallet_config,
+    private_wallet_policy_requires_review,
     public_wallet_config,
     serialize_row,
     validate_wire_row,
@@ -141,6 +142,30 @@ class SyncSchemaBoundaryTests(unittest.TestCase):
 
         self.assertEqual(merged["descriptor"], private_descriptor)
         self.assertEqual(merged["gap_limit"], 40)
+
+        competing = {
+            "chain": "bitcoin",
+            "network": "main",
+            "addresses": ["bc1qreplacement"],
+        }
+        preserved = merge_public_wallet_config(
+            {
+                "descriptor": private_descriptor,
+                "chain": "liquid",
+                "network": "main",
+                "policy_asset": "device-local-policy-asset",
+            },
+            competing,
+        )
+        self.assertEqual(preserved["descriptor"], private_descriptor)
+        self.assertEqual(preserved["chain"], "liquid")
+        self.assertNotIn("addresses", preserved)
+        self.assertTrue(
+            private_wallet_policy_requires_review(
+                {"descriptor": private_descriptor, "chain": "liquid"},
+                competing,
+            )
+        )
 
     def test_wire_upsert_requires_every_allowlisted_column(self):
         with self.assertRaisesRegex(AppError, "sync schema allowlist"):
