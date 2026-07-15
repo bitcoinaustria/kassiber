@@ -344,6 +344,50 @@ class CustodyQuantityTests(unittest.TestCase):
         )
         self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
 
+    def test_malformed_bundle_suspends_its_source_without_aborting_other_wallets(self):
+        bad_source = _observation("bad-out", "wallet-a", "outbound", 100)
+        good_source = _observation("good-out", "wallet-b", "outbound", 200)
+        good_target = _observation("good-in", "wallet-c", "inbound", 200)
+        bad_claim = QuantityClaim(
+            claim_id="bad-missing-target",
+            source=QuantitySlice(bad_source.quantity_hash, 0, 100),
+            target=QuantitySlice("missing-observation", 0, 100),
+            state=INTERNAL_REVIEWED,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
+            reason="malformed_component",
+            atomic_bundle_id="component:bad",
+        )
+        good_claim = QuantityClaim(
+            claim_id="good-move",
+            source=QuantitySlice(good_source.quantity_hash, 0, 200),
+            target=QuantitySlice(good_target.quantity_hash, 0, 200),
+            state=INTERNAL_REVIEWED,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
+            reason="reviewed_component",
+            atomic_bundle_id="component:good",
+        )
+
+        projection = project_quantities(
+            [bad_source, good_source, good_target],
+            [bad_claim, good_claim],
+        )
+        observations = {
+            item.quantity_hash: item for item in projection.observations
+        }
+        decisions = {
+            observations[item.source.observation_hash].transaction_id: item
+            for item in projection.decisions
+        }
+
+        self.assertEqual(decisions["bad-out"].state, CUSTODY_SUSPENSE)
+        self.assertEqual(decisions["bad-out"].reason, "malformed_claim_bundle")
+        self.assertEqual(decisions["good-out"].state, INTERNAL_REVIEWED)
+        self.assertEqual(
+            [(item.bundle_id, item.reasons) for item in projection.claim_errors],
+            [("component:bad", ("claim_target_invalid",))],
+        )
+        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+
     def test_reviewed_target_and_residual_suspense_activate_as_one_bundle(self):
         source = _observation("out", "wallet-a", "outbound", 1_000)
         target = _observation("in", "wallet-b", "inbound", 900)
@@ -410,7 +454,7 @@ class CustodyQuantityTests(unittest.TestCase):
             [(0, 400, 100, 500), (600, 1_000, 700, 1_100)],
         )
 
-    def test_cross_network_claim_is_rejected(self):
+    def test_cross_network_claim_isolated_as_source_suspense(self):
         source = _observation(
             "out", "wallet-a", "outbound", 100, network="main"
         )
@@ -425,8 +469,14 @@ class CustodyQuantityTests(unittest.TestCase):
             priority=ClaimPriority.EXACT_NATIVE_EVENT,
             reason="invalid_scope",
         )
-        with self.assertRaisesRegex(ValueError, "cannot cross networks"):
-            project_quantities([source, target], [claim])
+        projection = project_quantities([source, target], [claim])
+
+        self.assertEqual(projection.decisions[0].state, CUSTODY_SUSPENSE)
+        self.assertEqual(projection.decisions[0].reason, "malformed_claim_bundle")
+        self.assertEqual(
+            projection.claim_errors[0].reasons,
+            ("claim_domain_incompatible",),
+        )
 
     def test_unclaimed_inbound_has_an_external_origin_counterposting(self):
         inbound = _observation("in", "wallet-a", "inbound", 500)

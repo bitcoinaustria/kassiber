@@ -298,6 +298,84 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         )
         self.assertFalse(projection.quarantines)
 
+    def test_malformed_interpreter_bundle_isolated_as_quantity_issue(self):
+        rows = [
+            _row("bad-out", "wallet-a", "outbound", 100, "2025-01-01T00:00:00Z"),
+            _row(
+                "good-out",
+                "wallet-b",
+                "outbound",
+                200,
+                "2025-02-01T00:00:00Z",
+                config={"chain": "bitcoin", "network": "test"},
+            ),
+            _row(
+                "good-in",
+                "wallet-c",
+                "inbound",
+                200,
+                "2025-02-01T00:00:00Z",
+                config={"chain": "bitcoin", "network": "test"},
+            ),
+        ]
+        baseline = build_canonical_quantity_state(rows)
+        observations = {
+            item.transaction_id: item
+            for item in baseline.canonical_input.observations
+        }
+        malformed = QuantityClaim(
+            claim_id="malformed",
+            source=QuantitySlice(
+                observations["bad-out"].quantity_hash, 0, 100
+            ),
+            target=QuantitySlice("missing-observation", 0, 100),
+            state=INTERNAL_REVIEWED,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
+            reason="malformed_interpreter",
+            atomic_bundle_id="interpreter:bad",
+        )
+        valid = QuantityClaim(
+            claim_id="valid",
+            source=QuantitySlice(
+                observations["good-out"].quantity_hash, 0, 200
+            ),
+            target=QuantitySlice(
+                observations["good-in"].quantity_hash, 0, 200
+            ),
+            state=INTERNAL_REVIEWED,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
+            reason="valid_interpreter",
+            atomic_bundle_id="interpreter:good",
+        )
+
+        state = build_canonical_quantity_state(
+            rows, interpreter_claims=[malformed, valid]
+        )
+        decisions = {
+            next(
+                item.transaction_id
+                for item in state.projection.observations
+                if item.quantity_hash == decision.source.observation_hash
+            ): decision
+            for decision in state.projection.decisions
+        }
+
+        self.assertEqual(decisions["bad-out"].state, CUSTODY_SUSPENSE)
+        self.assertEqual(decisions["good-out"].state, INTERNAL_REVIEWED)
+        self.assertIn(
+            decisions["good-out"], state.tax_eligibility.eligible_decisions
+        )
+        compiler_issue = next(
+            item
+            for item in state.issues
+            if item.issue_type == "quantity_claim_bundle_invalid"
+        )
+        self.assertEqual(compiler_issue.transaction_ids, ("bad-out",))
+        self.assertEqual(
+            compiler_issue.details["validation_reasons"],
+            ["claim_target_invalid"],
+        )
+
     def test_native_audit_reuses_exact_real_inbound_without_double_counting(self):
         occurred_at = "2025-01-01T00:00:00Z"
         txid = "bc" * 32

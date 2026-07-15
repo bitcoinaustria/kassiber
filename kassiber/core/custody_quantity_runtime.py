@@ -941,6 +941,40 @@ def build_canonical_quantity_state(
         )
         for item in native_audit.issues
     )
+    for error in projection.claim_errors:
+        source_observations = [
+            by_hash[quantity_hash]
+            for quantity_hash in error.source_observation_hashes
+            if quantity_hash in by_hash
+        ]
+        assets = {item.asset for item in source_observations}
+        issues.append(
+            QuantityIssue(
+                issue_id=_issue_id(("claim_bundle_invalid", error.bundle_id)),
+                issue_type="quantity_claim_bundle_invalid",
+                state=CONFLICTING,
+                asset=next(iter(assets)) if len(assets) == 1 else None,
+                amount_msat=None,
+                occurred_at=min(
+                    (item.occurred_at for item in source_observations),
+                    default="",
+                ),
+                transaction_ids=tuple(
+                    sorted(
+                        {
+                            item.anchor_transaction_id
+                            for item in source_observations
+                        }
+                    )
+                ),
+                reason="malformed_claim_bundle",
+                details={
+                    "bundle_id": error.bundle_id,
+                    "claim_ids": list(error.claim_ids),
+                    "validation_reasons": list(error.reasons),
+                },
+            )
+        )
     for ordinal, blocker in enumerate(interpreter_blockers):
         transaction_id = str(_field(blocker, "transaction_id") or "")
         row = rows_by_id.get(transaction_id, {})

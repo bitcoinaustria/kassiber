@@ -341,6 +341,7 @@ class QuantityProjection:
     observations: tuple[QuantityObservation, ...]
     decisions: tuple[ArbitratedSlice, ...]
     postings: tuple[QuantityPosting, ...]
+    claim_errors: tuple["QuantityClaimError", ...] = ()
 
     def totals_by_asset(self) -> dict[str, int]:
         totals: dict[str, int] = {}
@@ -380,12 +381,23 @@ class QuantityProjection:
         return totals
 
 
+@dataclass(frozen=True)
+class QuantityClaimError:
+    """One rejected claim bundle, isolated from independent arbitration."""
+
+    bundle_id: str
+    reasons: tuple[str, ...]
+    claim_ids: tuple[str, ...]
+    source_observation_hashes: tuple[str, ...]
+
+
 def _validated_inputs(
     observations: Sequence[QuantityObservation],
     claims: Iterable[QuantityClaim],
 ) -> tuple[
     dict[str, QuantityObservation],
     tuple[QuantityClaim, ...],
+    tuple[QuantityClaimError, ...],
 ]:
     by_hash: dict[str, QuantityObservation] = {}
     for observation in observations:
@@ -397,40 +409,91 @@ def _validated_inputs(
         by_hash[observation.quantity_hash] = observation
 
     normalized_claims = tuple(sorted(claims, key=lambda item: (item.priority, item.claim_id)))
-    ids: set[str] = set()
-    bundle_priorities: dict[str, ClaimPriority] = {}
+    claim_id_counts: dict[str, int] = {}
+    bundles: dict[str, list[QuantityClaim]] = {}
     for claim in normalized_claims:
-        if claim.claim_id in ids:
-            raise ValueError(f"duplicate quantity claim id: {claim.claim_id}")
-        ids.add(claim.claim_id)
-        source = by_hash.get(claim.source.observation_hash)
-        if source is None or source.direction != "outbound":
-            raise ValueError("quantity claim source must be an outbound observation")
-        if claim.source.end_msat > source.principal_msat:
-            raise ValueError("quantity claim exceeds its observed source principal")
-        if claim.effective_bundle_id is not None:
-            prior = bundle_priorities.setdefault(
-                claim.effective_bundle_id,
-                claim.priority,
-            )
-            if claim.priority != prior:
-                raise ValueError("every claim in an atomic bundle needs one priority")
-        if claim.target is None:
+        claim_id_counts[claim.claim_id] = claim_id_counts.get(claim.claim_id, 0) + 1
+        bundle_id = claim.effective_bundle_id or f"claim:{claim.claim_id}"
+        bundles.setdefault(bundle_id, []).append(claim)
+
+    valid_claims: list[QuantityClaim] = []
+    errors: list[QuantityClaimError] = []
+    invalid_sources: dict[str, ClaimPriority] = {}
+    suspense_priorities = STATE_PRIORITIES[CUSTODY_SUSPENSE]
+    for bundle_id, members in sorted(bundles.items()):
+        reasons: set[str] = set()
+        priorities = {claim.priority for claim in members}
+        if len(priorities) != 1:
+            reasons.add("atomic_bundle_priority_mismatch")
+        if any(claim_id_counts[claim.claim_id] > 1 for claim in members):
+            reasons.add("duplicate_claim_id")
+        source_hashes: set[str] = set()
+        for claim in members:
+            source = by_hash.get(claim.source.observation_hash)
+            if source is None or source.direction != "outbound":
+                reasons.add("claim_source_invalid")
+            else:
+                source_hashes.add(source.quantity_hash)
+                if claim.source.end_msat > source.principal_msat:
+                    reasons.add("claim_source_exceeds_principal")
+            if claim.target is None:
+                continue
+            target = by_hash.get(claim.target.observation_hash)
+            if target is None or target.direction != "inbound":
+                reasons.add("claim_target_invalid")
+                continue
+            if claim.target.end_msat > target.principal_msat:
+                reasons.add("claim_target_exceeds_principal")
+            if source is not None and source.direction == "outbound":
+                source_domain = QuantityDomain.from_observation(source)
+                target_domain = QuantityDomain.from_observation(target)
+                if not source_domain.compatible_with(
+                    target_domain, allow_cross_rail=claim.allow_cross_rail
+                ):
+                    reasons.add("claim_domain_incompatible")
+        if not reasons:
+            valid_claims.extend(members)
             continue
-        target = by_hash.get(claim.target.observation_hash)
-        if target is None or target.direction != "inbound":
-            raise ValueError("quantity claim target must be an inbound observation")
-        if claim.target.end_msat > target.principal_msat:
-            raise ValueError("quantity claim exceeds its observed target principal")
-        source_domain = QuantityDomain.from_observation(source)
-        target_domain = QuantityDomain.from_observation(target)
-        if not source_domain.compatible_with(
-            target_domain, allow_cross_rail=claim.allow_cross_rail
-        ):
-            raise ValueError(
-                "quantity claims cannot cross networks or incompatible exposure/rail domains"
+        errors.append(
+            QuantityClaimError(
+                bundle_id=bundle_id,
+                reasons=tuple(sorted(reasons)),
+                claim_ids=tuple(sorted({claim.claim_id for claim in members})),
+                source_observation_hashes=tuple(sorted(source_hashes)),
             )
-    return by_hash, normalized_claims
+        )
+        eligible_priorities = [
+            claim.priority
+            for claim in members
+            if claim.priority in suspense_priorities
+        ]
+        priority = (
+            min(eligible_priorities)
+            if eligible_priorities
+            else ClaimPriority.ACCOUNTING_CONVENTION
+        )
+        for source_hash in source_hashes:
+            prior = invalid_sources.get(source_hash)
+            if prior is None or priority < prior:
+                invalid_sources[source_hash] = priority
+
+    for source_hash, priority in sorted(invalid_sources.items()):
+        source = by_hash[source_hash]
+        valid_claims.append(
+            QuantityClaim(
+                claim_id=f"malformed-claim-bundle:{source_hash}",
+                source=QuantitySlice(source_hash, 0, source.principal_msat),
+                state=CUSTODY_SUSPENSE,
+                priority=priority,
+                reason="malformed_claim_bundle",
+                supporting_evidence_hashes=(source.evidence_detail_hash,),
+            )
+        )
+    return (
+        by_hash,
+        tuple(sorted(valid_claims, key=lambda item: (item.priority, item.claim_id))),
+        tuple(errors),
+    )
 
 
 def _source_decisions(
@@ -828,7 +891,9 @@ def project_quantities(
 ) -> QuantityProjection:
     """Arbitrate exact slices and return a balanced quantity artifact."""
 
-    by_hash, normalized_claims = _validated_inputs(observations, claims)
+    by_hash, normalized_claims, claim_errors = _validated_inputs(
+        observations, claims
+    )
     decisions = _fail_closed_atomic_bundles(
         _fail_closed_destination_overlaps(
             _source_decisions(by_hash, normalized_claims)
@@ -849,6 +914,7 @@ def project_quantities(
             )
         ),
         postings=postings,
+        claim_errors=claim_errors,
     )
     unbalanced = {
         domain: amount
@@ -878,6 +944,7 @@ __all__ = [
     "INTERNAL_REVIEWED",
     "INTERNAL_VERIFIED",
     "QuantityClaim",
+    "QuantityClaimError",
     "QuantityDomain",
     "QuantityObservation",
     "QuantityPosting",
