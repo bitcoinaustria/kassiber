@@ -547,7 +547,10 @@ class SyncBundleReplayTests(unittest.TestCase):
                 (wallet_id,),
             ).fetchone()[0]
         )
-        owner_config["xpub"] = "xpub-rotated-public-material"
+        owner_config.pop("xpub")
+        owner_config["addresses"] = [
+            "bc1q4d3w6m4r7z6j2l0u7w9q5y6v5y8u3l8h0s3p4q"
+        ]
         self.owner.execute(
             "UPDATE wallets SET config_json = ? WHERE id = ?",
             (json.dumps(owner_config), wallet_id),
@@ -575,9 +578,16 @@ class SyncBundleReplayTests(unittest.TestCase):
             "xpub-public-material",
         )
         self.assertEqual(
-            json.loads(epochs_by_status["active"]["private_material_json"])["xpub"],
-            "xpub-rotated-public-material",
+            json.loads(epochs_by_status["active"]["private_material_json"])["addresses"],
+            ["bc1q4d3w6m4r7z6j2l0u7w9q5y6v5y8u3l8h0s3p4q"],
         )
+        peer_config = json.loads(
+            self.peer.execute(
+                "SELECT config_json FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()[0]
+        )
+        self.assertNotIn("xpub", peer_config)
 
     def test_duplicate_reordered_bundles_are_idempotent_and_converge(self):
         self._initial_sync()

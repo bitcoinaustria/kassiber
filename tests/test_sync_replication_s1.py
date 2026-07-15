@@ -22,6 +22,7 @@ from kassiber.core.sync_replication.merge import (
 from kassiber.core.sync_replication.schema_allowlist import (
     NEVER_SYNC_TABLES,
     SYNC_TABLE_MAP,
+    merge_public_wallet_config,
     public_wallet_config,
     serialize_row,
     validate_wire_row,
@@ -98,6 +99,48 @@ class SyncSchemaBoundaryTests(unittest.TestCase):
                 "descriptor",
                 public_wallet_config({"descriptor": private_descriptor}),
             )
+
+    def test_public_wallet_config_merge_removes_omitted_synced_fields(self):
+        merged = merge_public_wallet_config(
+            {
+                "chain": "bitcoin",
+                "network": "main",
+                "xpub": "xpub-old-public-watch-material",
+                "script_types": ["p2wpkh"],
+                "gap_limit": 40,
+                "token": "device-local-secret",
+            },
+            {
+                "chain": "bitcoin",
+                "network": "main",
+                "addresses": ["bc1qreplacement"],
+            },
+        )
+
+        self.assertNotIn("xpub", merged)
+        self.assertNotIn("script_types", merged)
+        self.assertNotIn("gap_limit", merged)
+        self.assertEqual(merged["addresses"], ["bc1qreplacement"])
+        self.assertEqual(merged["token"], "device-local-secret")
+
+    def test_public_wallet_config_merge_preserves_omitted_private_descriptor(self):
+        private_descriptor = "wpkh(xprv-device-local-private-material/0/*)"
+        merged = merge_public_wallet_config(
+            {
+                "descriptor": private_descriptor,
+                "chain": "bitcoin",
+                "network": "main",
+                "gap_limit": 20,
+            },
+            {
+                "chain": "bitcoin",
+                "network": "main",
+                "gap_limit": 40,
+            },
+        )
+
+        self.assertEqual(merged["descriptor"], private_descriptor)
+        self.assertEqual(merged["gap_limit"], 40)
 
     def test_wire_upsert_requires_every_allowlisted_column(self):
         with self.assertRaisesRegex(AppError, "sync schema allowlist"):

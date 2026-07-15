@@ -751,6 +751,39 @@ def public_wallet_config(raw: Any) -> dict[str, Any]:
     return output
 
 
+def merge_public_wallet_config(local: Any, incoming: Any) -> dict[str, Any]:
+    """Merge one complete replicated public projection into local config.
+
+    Synchronized fields are snapshot state, not a JSON merge-patch: omission
+    removes an old public xpub, address set, script family, or coverage setting.
+    Fields outside the positive allowlist remain device-local.  A private
+    descriptor omitted by serialization is also retained for an unrelated
+    remote metadata change, but an incoming public watch policy explicitly
+    replaces every local watch-material variant to avoid hybrid policies.
+    """
+
+    local_config = dict(local) if isinstance(local, Mapping) else {}
+    incoming_config = public_wallet_config(incoming)
+    merged = {
+        key: value
+        for key, value in local_config.items()
+        if key not in _SYNC_WALLET_CONFIG_FIELDS
+    }
+    private_watch_material = {
+        key: local_config[key]
+        for key in ("descriptor", "change_descriptor", "xpub")
+        if key in local_config and not _is_public_watch_material(local_config[key])
+    }
+    incoming_replaces_watch_policy = any(
+        key in incoming_config
+        for key in ("addresses", "descriptor", "change_descriptor", "xpub")
+    )
+    if not incoming_replaces_watch_policy:
+        merged.update(private_watch_material)
+    merged.update(incoming_config)
+    return merged
+
+
 def _json_value(value: Any) -> Any:
     if value in (None, ""):
         return None

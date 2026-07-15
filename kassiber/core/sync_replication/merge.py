@@ -51,6 +51,8 @@ from .schema_allowlist import (
     REFERENCE_TABLES,
     SYNC_TABLE_MAP,
     TableSpec,
+    merge_public_wallet_config,
+    public_wallet_config,
     validate_wire_row,
 )
 
@@ -707,8 +709,14 @@ def _prepare_actual_row(
                 # A malformed local wallet config must not abort a remote
                 # merge; treat it as empty and retain only safe incoming keys.
                 pass
-        incoming_config = wire_row.get("config_json") if isinstance(wire_row.get("config_json"), dict) else {}
-        actual["config_json"] = _json(local_config | incoming_config)
+        incoming_config = (
+            wire_row.get("config_json")
+            if isinstance(wire_row.get("config_json"), dict)
+            else {}
+        )
+        actual["config_json"] = _json(
+            merge_public_wallet_config(local_config, incoming_config)
+        )
     else:
         for column in spec.json_columns:
             actual[column] = _json(actual[column]) if actual[column] is not None else None
@@ -1114,6 +1122,7 @@ def _apply_row_upsert(
     prior_wallet = None
     prior_wallet_material: dict[str, Any] | None = None
     prior_wallet_identity: dict[str, Any] | None = None
+    prior_public_wallet_config: dict[str, Any] | None = None
     if spec.table == "wallets":
         prior_wallet = conn.execute(
             "SELECT * FROM wallets WHERE id = ?",
@@ -1128,6 +1137,7 @@ def _apply_row_upsert(
                 prior_config = {}
             prior_wallet_material = private_policy_material(prior_config)
             prior_wallet_identity = policy_identity_material(prior_config)
+            prior_public_wallet_config = public_wallet_config(prior_config)
 
     actual, _ = _prepare_actual_row(
         conn,
@@ -1146,7 +1156,10 @@ def _apply_row_upsert(
             updated_config = {}
         if not isinstance(updated_config, Mapping):
             updated_config = {}
-        if policy_identity_material(updated_config) != prior_wallet_identity:
+        identity_changed = (
+            policy_identity_material(updated_config) != prior_wallet_identity
+        )
+        if identity_changed:
             # Policy epochs are deliberately device-local because they may
             # contain descriptor material.  Reconstruct the rotation on this
             # peer when the signed public wallet row changes script identity;
@@ -1158,6 +1171,11 @@ def _apply_row_upsert(
                 prior_wallet_material or {},
                 private_policy_material(updated_config),
             )
+        observer_config_changed = (
+            public_wallet_config(updated_config)
+            != (prior_public_wallet_config or {})
+        )
+        if identity_changed or observer_config_changed:
             delete_wallet_observer_state(conn, str(prior_wallet["id"]))
             core_output_inventory.clear_wallet_output_inventory(
                 conn,
