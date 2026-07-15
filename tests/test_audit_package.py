@@ -915,7 +915,8 @@ class AuditPackageCoreTest(unittest.TestCase):
                 authored_source, reason, snapshot_json, created_at
             ) VALUES('componentless-review', ?, ?, 'componentless-gap', 1, ?,
                      'dismissed', 'review_decision', NULL, 'user',
-                     'componentless dismissal', '{not-valid-json', ?)
+                     'componentless dismissal',
+                     '{"retained_msat":987654321,"residual_msat":123456789,"residual_classification":{"classification":"external_disposal"}}', ?)
             """,
             (self.workspace_id, self.profile_id, "a" * 64, NOW),
         )
@@ -960,8 +961,30 @@ class AuditPackageCoreTest(unittest.TestCase):
             self.assertEqual(history["count"], 1)
             self.assertEqual(history["records"][0]["gap_id"], "componentless-gap")
             self.assertEqual(history["records"][0]["status"], "dismissed")
+            self.assertTrue(
+                history["records"][0]["candidate_wide_payload_excluded"]
+            )
+            self.assertNotIn("retained_msat", history["records"][0])
+            self.assertNotIn("residual_msat", history["records"][0])
+            self.assertNotIn("residual_classification", history["records"][0])
             self.assertNotIn("transaction_id", history["records"][0])
             self.assertNotIn("source_ids", history["records"][0])
+
+        complete = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id, return_tx_id],
+        )
+        complete_review = complete["custody_gap_review_history"]["records"][0]
+        self.assertNotIn("candidate_wide_payload_excluded", complete_review)
+        self.assertEqual(complete_review["retained_msat"], 987_654_321)
+        self.assertEqual(complete_review["residual_msat"], 123_456_789)
+        self.assertEqual(
+            complete_review["residual_classification"], "external_disposal"
+        )
 
         unrelated = audit_package.build_evidence_summary(
             self.conn,

@@ -500,10 +500,12 @@ def list_audit_review_history(
         )
     where = "r.profile_id = ?"
     params: list[Any] = [profile_id]
+    selected_transaction_ids: frozenset[str] | None = None
     if transaction_ids is not None:
         selected = tuple(sorted({str(value) for value in transaction_ids if value}))
         if not selected:
             return {"count": 0, "returned": 0, "truncated": False, "records": []}
+        selected_transaction_ids = frozenset(selected)
         placeholders = ",".join("?" for _ in selected)
         where += f"""
             AND (
@@ -550,7 +552,39 @@ def list_audit_review_history(
         """,
         (*params, limit),
     ).fetchall()
-    records = [_redacted_review_history_row(row, include_gap_id=True) for row in rows]
+    fully_selected_review_ids: set[str] = set()
+    if selected_transaction_ids is not None and rows:
+        review_ids = tuple(str(row["id"]) for row in rows)
+        review_placeholders = ",".join("?" for _ in review_ids)
+        normalized_by_review: dict[str, set[str]] = {}
+        for normalized in conn.execute(
+            f"""
+            SELECT review_id, transaction_id
+            FROM custody_gap_review_transactions
+            WHERE review_id IN ({review_placeholders})
+            """,
+            review_ids,
+        ).fetchall():
+            normalized_by_review.setdefault(str(normalized["review_id"]), set()).add(
+                str(normalized["transaction_id"])
+            )
+        fully_selected_review_ids = {
+            review_id
+            for review_id, normalized_transaction_ids in normalized_by_review.items()
+            if normalized_transaction_ids
+            and normalized_transaction_ids.issubset(selected_transaction_ids)
+        }
+    records = [
+        _redacted_review_history_row(
+            row,
+            include_gap_id=True,
+            include_candidate_wide_payload=(
+                selected_transaction_ids is None
+                or str(row["id"]) in fully_selected_review_ids
+            ),
+        )
+        for row in rows
+    ]
     return {
         "count": count,
         "returned": len(records),
@@ -560,7 +594,10 @@ def list_audit_review_history(
 
 
 def _redacted_review_history_row(
-    row: Mapping[str, Any], *, include_gap_id: bool = False
+    row: Mapping[str, Any],
+    *,
+    include_gap_id: bool = False,
+    include_candidate_wide_payload: bool = True,
 ) -> dict[str, Any]:
     try:
         snapshot = json.loads(str(row["snapshot_json"] or "{}"))
@@ -572,7 +609,6 @@ def _redacted_review_history_row(
         if event_kind == "bridge_reopened"
         else ("resolved" if row["action"] == "resolved" else "dismissed")
     )
-    residual = snapshot.get("residual_classification")
     output = {
         "revision": int(row["revision"]),
         "event_kind": event_kind,
@@ -586,15 +622,24 @@ def _redacted_review_history_row(
         "authored_source": row["authored_source"],
         "reason": row["reason"],
         "created_at": row["created_at"],
-        "retained_msat": int(snapshot.get("retained_msat") or 0),
-        "residual_msat": int(snapshot.get("residual_msat") or 0),
-        "residual_classification": (
-            str(residual.get("classification"))
-            if isinstance(residual, Mapping) and residual.get("classification")
-            else None
-        ),
         "filed_report_impact_count": int(row["filed_report_impact_count"] or 0),
     }
+    if include_candidate_wide_payload:
+        residual = snapshot.get("residual_classification")
+        output.update(
+            {
+                "retained_msat": int(snapshot.get("retained_msat") or 0),
+                "residual_msat": int(snapshot.get("residual_msat") or 0),
+                "residual_classification": (
+                    str(residual.get("classification"))
+                    if isinstance(residual, Mapping)
+                    and residual.get("classification")
+                    else None
+                ),
+            }
+        )
+    else:
+        output["candidate_wide_payload_excluded"] = True
     if include_gap_id:
         output["gap_id"] = row["gap_id"]
     return output
