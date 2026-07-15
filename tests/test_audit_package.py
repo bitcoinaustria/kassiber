@@ -106,8 +106,17 @@ class AuditPackageCoreTest(unittest.TestCase):
             ),
         )
 
-    def _insert_source_transaction(self):
-        source_tx_id = "tx-source"
+    def _insert_source_transaction(self, source_tx_id="tx-source"):
+        external_id = (
+            "recurring-approval-jan"
+            if source_tx_id == "tx-source"
+            else f"{source_tx_id}-external"
+        )
+        fingerprint = (
+            "fp-source"
+            if source_tx_id == "tx-source"
+            else f"{source_tx_id}-fingerprint"
+        )
         self.conn.execute(
             """
             INSERT INTO transactions(
@@ -121,8 +130,8 @@ class AuditPackageCoreTest(unittest.TestCase):
                 self.workspace_id,
                 self.profile_id,
                 self.wallet_id,
-                "recurring-approval-jan",
-                "fp-source",
+                external_id,
+                fingerprint,
                 "2026-01-31T09:00:00Z",
                 "inbound",
                 "BTC",
@@ -860,6 +869,62 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertNotIn("payload_json", exported)
         self.assertNotIn("MUST_NOT_LEAVE_LOCAL_DB", exported)
 
+    def test_bounded_audit_custody_warning_excludes_profile_totals_and_timing(self):
+        self._mark_journals_current()
+        distinctive_total = 987_654_321_123
+        distinctive_blocked_from = "2037-12-31T23:59:59Z"
+        self.conn.execute(
+            """
+            INSERT INTO journal_quantity_issues(
+                issue_id, workspace_id, profile_id, issue_type, state, asset,
+                amount_msat, occurred_at, transaction_ids_json, reason,
+                detail_json, blocks_from, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "future-profile-gap",
+                self.workspace_id,
+                self.profile_id,
+                "unresolved_quantity",
+                "custody_suspense",
+                "BTC",
+                distinctive_total,
+                distinctive_blocked_from,
+                "[]",
+                "missing_wallet",
+                "{}",
+                distinctive_blocked_from,
+                NOW,
+            ),
+        )
+        self.conn.commit()
+
+        bounded = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+        )
+
+        warnings = bounded["transactions"][0]["readiness"]["warnings"]
+        custody_warnings = [
+            warning
+            for warning in warnings
+            if warning["code"] == "custody_quantity_unresolved"
+        ]
+        self.assertEqual(len(custody_warnings), 1)
+        self.assertEqual(custody_warnings[0]["severity"], "blocker")
+        self.assertEqual(
+            custody_warnings[0]["message"],
+            "Known custody gaps may affect final tax basis; profile-wide "
+            "quantity and timing details were excluded from this bounded package.",
+        )
+        exported = json.dumps(bounded, sort_keys=True)
+        self.assertNotIn(str(distinctive_total), exported)
+        self.assertNotIn(distinctive_blocked_from, exported)
+
     def test_audit_summary_never_calls_stale_empty_quantity_state_clear(self):
         summary = audit_package.build_evidence_summary(
             self.conn,
@@ -919,6 +984,16 @@ class AuditPackageCoreTest(unittest.TestCase):
                      '{"retained_msat":987654321,"residual_msat":123456789,"residual_classification":{"classification":"external_disposal"}}', ?)
             """,
             (self.workspace_id, self.profile_id, "a" * 64, NOW),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_gap_review_relation_sets(
+                id, review_id, workspace_id, profile_id,
+                expected_source_count, expected_return_count, created_at
+            ) VALUES('componentless-boundary', 'componentless-review',
+                     ?, ?, 1, 1, ?)
+            """,
+            (self.workspace_id, self.profile_id, NOW),
         )
         self.conn.executemany(
             """
@@ -981,6 +1056,21 @@ class AuditPackageCoreTest(unittest.TestCase):
             self.assertNotIn("filed_report_impact_count", history["records"][0])
             self.assertNotIn("transaction_id", history["records"][0])
             self.assertNotIn("source_ids", history["records"][0])
+            exclusion = {
+                "status": "excluded_from_bounded_scope",
+                "reason": "complete_custody_review_boundary_required",
+            }
+            self.assertEqual(bounded["filed_report_snapshots"], exclusion)
+            self.assertEqual(bounded["custody_filed_report_impacts"], exclusion)
+            self.assertEqual(
+                bounded["custody_filed_report_impact_resolutions"], exclusion
+            )
+            for count_key in (
+                "filed_report_snapshot_count",
+                "custody_filed_report_impact_count",
+                "custody_filed_report_impact_resolution_count",
+            ):
+                self.assertNotIn(count_key, bounded["summary"])
 
         complete = audit_package.build_evidence_summary(
             self.conn,
@@ -1000,6 +1090,19 @@ class AuditPackageCoreTest(unittest.TestCase):
             complete_review["residual_classification"], "external_disposal"
         )
         self.assertEqual(complete_review["filed_report_impact_count"], 0)
+        self.assertEqual(complete["filed_report_snapshots"], [])
+        self.assertEqual(complete["custody_filed_report_impacts"], [])
+        self.assertEqual(
+            complete["custody_filed_report_impact_resolutions"], []
+        )
+        self.assertEqual(complete["summary"]["filed_report_snapshot_count"], 0)
+        self.assertEqual(
+            complete["summary"]["custody_filed_report_impact_count"], 0
+        )
+        self.assertEqual(
+            complete["summary"]["custody_filed_report_impact_resolution_count"],
+            0,
+        )
 
         unrelated = audit_package.build_evidence_summary(
             self.conn,
@@ -1021,7 +1124,10 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
 
     def test_audit_summary_retains_filed_snapshot_and_amendment_history(self):
-        unrelated_tx_id = self._insert_source_transaction()
+        boundary_source_tx_id = self._insert_source_transaction()
+        boundary_return_tx_id = self._insert_source_transaction(
+            "tx-boundary-return"
+        )
         filed = custody_filed_reports.create_filed_report_snapshot(
             self.conn,
             workspace_id=self.workspace_id,
@@ -1077,8 +1183,29 @@ class AuditPackageCoreTest(unittest.TestCase):
                 self.workspace_id,
                 self.profile_id,
                 NOW,
-                unrelated_tx_id,
-                unrelated_tx_id,
+                boundary_source_tx_id,
+                boundary_source_tx_id,
+                self.wallet_id,
+                NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_component_legs(
+                id, component_id, workspace_id, profile_id, ordinal, role,
+                rail, chain, network, asset, exposure, conservation_unit,
+                amount_msat, occurred_at, transaction_id,
+                anchor_transaction_id, wallet_id, created_at
+            ) VALUES('component-return-leg', 'component', ?, ?, 1, 'destination',
+                     'bitcoin', 'bitcoin', 'main', 'BTC', 'bitcoin', 'msat',
+                     100000000, ?, ?, ?, ?, ?)
+            """,
+            (
+                self.workspace_id,
+                self.profile_id,
+                NOW,
+                boundary_return_tx_id,
+                boundary_return_tx_id,
                 self.wallet_id,
                 NOW,
             ),
@@ -1100,10 +1227,46 @@ class AuditPackageCoreTest(unittest.TestCase):
                     {
                         "retained_msat": 100_000_000,
                         "residual_msat": 1_000,
-                        "source_ids": ["MUST_NOT_LEAVE_LOCAL_DB"],
+                        "source_ids": [boundary_source_tx_id],
+                        "return_ids": [boundary_return_tx_id],
                     }
                 ),
                 NOW,
+            ),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_gap_review_relation_sets(
+                id, review_id, workspace_id, profile_id,
+                expected_source_count, expected_return_count, created_at
+            ) VALUES('review-boundary', 'review', ?, ?, 1, 1, ?)
+            """,
+            (self.workspace_id, self.profile_id, NOW),
+        )
+        self.conn.executemany(
+            """
+            INSERT INTO custody_gap_review_transactions(
+                id, review_id, workspace_id, profile_id,
+                role, transaction_id, created_at
+            ) VALUES(?, 'review', ?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    "review-source-boundary",
+                    self.workspace_id,
+                    self.profile_id,
+                    "source",
+                    boundary_source_tx_id,
+                    NOW,
+                ),
+                (
+                    "review-return-boundary",
+                    self.workspace_id,
+                    self.profile_id,
+                    "return",
+                    boundary_return_tx_id,
+                    NOW,
+                ),
             ),
         )
         self.conn.execute(
@@ -1266,7 +1429,7 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "count": 0,
                 "returned": 0,
                 "truncated": False,
-                "scope_completeness": "legacy_unscoped_history_present",
+                "scope_completeness": "complete",
                 "records": [],
             },
         )
@@ -1278,16 +1441,65 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertNotIn("UNSELECTED_B_REPORT_NOTE", bounded_json)
         self.assertNotIn("rows_changed", bounded_json)
 
+        exclusion = {
+            "status": "excluded_from_bounded_scope",
+            "reason": "complete_custody_review_boundary_required",
+        }
+        for partial_tx_id in (boundary_source_tx_id, boundary_return_tx_id):
+            partial = audit_package.build_evidence_summary(
+                self.conn,
+                str(self.data_root),
+                None,
+                None,
+                self.audit_hooks,
+                transaction_refs=[partial_tx_id],
+            )
+            self.assertEqual(partial["filed_report_snapshots"], exclusion)
+            self.assertEqual(partial["custody_filed_report_impacts"], exclusion)
+            self.assertEqual(
+                partial["custody_filed_report_impact_resolutions"], exclusion
+            )
+            for count_key in (
+                "filed_report_snapshot_count",
+                "custody_filed_report_impact_count",
+                "custody_filed_report_impact_resolution_count",
+            ):
+                self.assertNotIn(count_key, partial["summary"])
+            partial_review = partial["custody_gap_review_history"]["records"][0]
+            self.assertTrue(partial_review["candidate_wide_payload_excluded"])
+            self.assertNotIn("filed_report_impact_count", partial_review)
+            partial_json = json.dumps(partial)
+            for unselected_value in (
+                "UNSELECTED_B_REPORT_NOTE",
+                "wallet-unselected-b",
+                "unselected_b_marker",
+                "unselected_b_impact_marker",
+                "unselected_b_after_marker",
+                "unselected_b_resolution_marker",
+                "98765.43",
+                "87654.32",
+                "987654321",
+            ):
+                self.assertNotIn(unselected_value, partial_json)
+
         related = audit_package.build_evidence_summary(
             self.conn,
             str(self.data_root),
             None,
             None,
             self.audit_hooks,
-            transaction_refs=[unrelated_tx_id],
+            transaction_refs=[boundary_source_tx_id, boundary_return_tx_id],
         )
         self.assertEqual(len(related["filed_report_snapshots"]), 1)
         self.assertEqual(len(related["custody_filed_report_impacts"]), 1)
+        self.assertEqual(related["summary"]["filed_report_snapshot_count"], 1)
+        self.assertEqual(
+            related["summary"]["custody_filed_report_impact_count"], 1
+        )
+        self.assertEqual(
+            related["summary"]["custody_filed_report_impact_resolution_count"],
+            1,
+        )
         related_snapshot = related["filed_report_snapshots"][0]
         self.assertTrue(related_snapshot["report_wide_payload_excluded"])
         self.assertEqual(related_snapshot["content_sha256"], "ab" * 32)

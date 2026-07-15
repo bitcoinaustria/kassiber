@@ -62,6 +62,10 @@ _SECRET_URL_QUERY_HINTS = (
     "sig",
     "token",
 )
+_BOUNDED_FILED_REPORT_EXCLUSION = {
+    "status": "excluded_from_bounded_scope",
+    "reason": "complete_custody_review_boundary_required",
+}
 
 
 @dataclass(frozen=True)
@@ -765,9 +769,18 @@ def _transaction_refs_from_case(
 def _custody_quantity_warning(
     tx: Mapping[str, Any],
     summary: Mapping[str, Any],
+    *,
+    bounded_scope: bool = False,
 ) -> dict[str, Any] | None:
     if summary.get("status") != "known_custody_gaps":
         return None
+    if bounded_scope:
+        return _warning(
+            "custody_quantity_unresolved",
+            "blocker",
+            "Known custody gaps may affect final tax basis; profile-wide "
+            "quantity and timing details were excluded from this bounded package.",
+        )
     blocked_from = str(summary.get("blocked_from") or "")
     occurred_at = str(_row_get(tx, "occurred_at") or "")
     if blocked_from and occurred_at and occurred_at < blocked_from:
@@ -1002,7 +1015,11 @@ def build_evidence_summary(
             quarantine,
             include_review_state=include_review_state,
         )
-        custody_warning = _custody_quantity_warning(tx, profile_custody_quantity)
+        custody_warning = _custody_quantity_warning(
+            tx,
+            profile_custody_quantity,
+            bounded_scope=bounded_scope,
+        )
         if custody_warning is not None:
             warnings.append(custody_warning)
         if not include_review_state:
@@ -1052,38 +1069,81 @@ def build_evidence_summary(
         profile["id"],
         transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
     )
-    filed_report_snapshots = core_custody_filed_reports.list_filed_report_snapshots(
-        conn, profile["id"]
-    )
-    custody_filed_report_impacts = core_custody_filed_reports.list_custody_impacts(
-        conn,
-        profile["id"],
-        transaction_ids=(tx_ids if bounded_scope else None),
-    )
-    if bounded_scope:
-        referenced_snapshot_ids = {
-            str(item["filed_report_snapshot_id"])
-            for item in custody_filed_report_impacts
-        }
-        filed_report_snapshots = [
-            _bounded_filed_report_snapshot(item)
-            for item in filed_report_snapshots
-            if str(item["id"]) in referenced_snapshot_ids
-        ]
-        custody_filed_report_impacts = [
-            _bounded_filed_report_impact(item)
-            for item in custody_filed_report_impacts
-        ]
-    custody_filed_report_impact_resolutions = [
-        item["resolution"]
-        for item in custody_filed_report_impacts
-        if item.get("resolution") is not None
-    ]
     custody_gap_review_history = core_custody_gap_reviews.list_audit_review_history(
         conn,
         profile["id"],
         transaction_ids=(tx_ids if bounded_scope else None),
     )
+    all_filed_report_snapshots = (
+        core_custody_filed_reports.list_filed_report_snapshots(conn, profile["id"])
+    )
+    matching_custody_filed_report_impacts = (
+        core_custody_filed_reports.list_custody_impacts(
+            conn,
+            profile["id"],
+            transaction_ids=(tx_ids if bounded_scope else None),
+        )
+    )
+    filed_report_projection_excluded = bounded_scope and (
+        bool(custody_gap_review_history["truncated"])
+        or any(
+            bool(record.get("candidate_wide_payload_excluded"))
+            for record in custody_gap_review_history["records"]
+        )
+    )
+    if bounded_scope and matching_custody_filed_report_impacts:
+        candidate_review_ids = frozenset(
+            str(item["review_id"])
+            for item in matching_custody_filed_report_impacts
+        )
+        complete_review_ids = core_custody_gap_reviews.complete_selected_review_ids(
+            conn,
+            profile["id"],
+            tx_ids,
+            review_ids=tuple(sorted(candidate_review_ids)),
+        )
+        filed_report_projection_excluded = (
+            filed_report_projection_excluded
+            or complete_review_ids != candidate_review_ids
+        )
+    if filed_report_projection_excluded:
+        filed_report_snapshot_section = dict(_BOUNDED_FILED_REPORT_EXCLUSION)
+        custody_filed_report_impact_section = dict(
+            _BOUNDED_FILED_REPORT_EXCLUSION
+        )
+        custody_filed_report_impact_resolution_section = dict(
+            _BOUNDED_FILED_REPORT_EXCLUSION
+        )
+    else:
+        if bounded_scope:
+            referenced_snapshot_ids = {
+                str(item["filed_report_snapshot_id"])
+                for item in matching_custody_filed_report_impacts
+            }
+            filed_report_snapshot_records = [
+                _bounded_filed_report_snapshot(item)
+                for item in all_filed_report_snapshots
+                if str(item["id"]) in referenced_snapshot_ids
+            ]
+            custody_filed_report_impact_records = [
+                _bounded_filed_report_impact(item)
+                for item in matching_custody_filed_report_impacts
+            ]
+        else:
+            filed_report_snapshot_records = all_filed_report_snapshots
+            custody_filed_report_impact_records = (
+                matching_custody_filed_report_impacts
+            )
+        custody_filed_report_impact_resolution_records = [
+            item["resolution"]
+            for item in custody_filed_report_impact_records
+            if item.get("resolution") is not None
+        ]
+        filed_report_snapshot_section = filed_report_snapshot_records
+        custody_filed_report_impact_section = custody_filed_report_impact_records
+        custody_filed_report_impact_resolution_section = (
+            custody_filed_report_impact_resolution_records
+        )
     custody_ai_assistance = core_custody_ai_audit.redacted_audit_summary(
         conn,
         profile["id"],
@@ -1095,7 +1155,7 @@ def build_evidence_summary(
         transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
     )
     schema_migration_audits = _schema_migration_audits(conn)
-    return {
+    result = {
         "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
         "workspace": {"id": workspace["id"], "label": workspace["label"]},
         "profile": {"id": profile["id"], "label": profile["label"]},
@@ -1103,10 +1163,10 @@ def build_evidence_summary(
         "journal_freshness": freshness,
         "custody_quantity": custody_quantity,
         "authored_custody_evidence": authored_evidence,
-        "filed_report_snapshots": filed_report_snapshots,
-        "custody_filed_report_impacts": custody_filed_report_impacts,
+        "filed_report_snapshots": filed_report_snapshot_section,
+        "custody_filed_report_impacts": custody_filed_report_impact_section,
         "custody_filed_report_impact_resolutions": (
-            custody_filed_report_impact_resolutions
+            custody_filed_report_impact_resolution_section
         ),
         "custody_gap_review_history": custody_gap_review_history,
         "custody_ai_assistance": custody_ai_assistance,
@@ -1126,11 +1186,6 @@ def build_evidence_summary(
             "authored_custody_evidence_hash_count": authored_evidence[
                 "snapshot_count"
             ],
-            "filed_report_snapshot_count": len(filed_report_snapshots),
-            "custody_filed_report_impact_count": len(custody_filed_report_impacts),
-            "custody_filed_report_impact_resolution_count": len(
-                custody_filed_report_impact_resolutions
-            ),
             "custody_gap_review_event_count": custody_gap_review_history[
                 "returned"
             ],
@@ -1142,6 +1197,21 @@ def build_evidence_summary(
         },
         "excluded_sensitive_material": SENSITIVE_MATERIAL_EXCLUSIONS,
     }
+    if not filed_report_projection_excluded:
+        result["summary"].update(
+            {
+                "filed_report_snapshot_count": len(
+                    filed_report_snapshot_records
+                ),
+                "custody_filed_report_impact_count": len(
+                    custody_filed_report_impact_records
+                ),
+                "custody_filed_report_impact_resolution_count": len(
+                    custody_filed_report_impact_resolution_records
+                ),
+            }
+        )
+    return result
 
 
 def _collect_attachment_ids(summary: Mapping[str, Any], *, include_review_state: bool) -> set[str]:
