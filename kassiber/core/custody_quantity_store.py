@@ -7,6 +7,7 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
+from ..errors import AppError
 from .custody_evidence import (
     EvidenceSnapshot,
     QuantityObservation,
@@ -908,8 +909,25 @@ def blocking_quantity_issues(
             """,
             (profile_id,),
         ).fetchall()
-    except sqlite3.OperationalError:
-        return []
+    except Exception as exc:
+        # This table is the persisted accounting stop signal. Treating a
+        # missing table, stale column set, unreadable page, or driver-specific
+        # SQLCipher OperationalError as an empty result would turn an unknown
+        # custody state into report clearance.
+        raise AppError(
+            "Custody quantity blocker state is unavailable.",
+            code="custody_quantity_state_unavailable",
+            hint=(
+                "Repair or migrate the local book, then rebuild journals before "
+                "relying on reports."
+            ),
+            details={
+                "profile_id": profile_id,
+                "operation": "read_journal_quantity_issues",
+                "error_type": type(exc).__name__,
+            },
+            retryable=False,
+        ) from exc
     return [dict(row) for row in rows]
 
 

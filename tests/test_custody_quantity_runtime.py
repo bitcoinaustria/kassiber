@@ -1420,6 +1420,21 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             0,
         )
 
+    def test_missing_blocker_table_fails_closed(self):
+        self.conn.execute("DROP TABLE journal_quantity_issues")
+
+        with self.assertRaises(AppError) as unavailable:
+            blocking_quantity_issues(self.conn, "profile")
+
+        self.assertEqual(
+            unavailable.exception.code,
+            "custody_quantity_state_unavailable",
+        )
+        self.assertEqual(
+            unavailable.exception.details["operation"],
+            "read_journal_quantity_issues",
+        )
+
     def test_finalized_internal_decisions_are_durable_and_redacted(self):
         self.conn.executemany(
             """
