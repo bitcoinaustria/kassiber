@@ -205,11 +205,16 @@ The arbitrator applies an explicit evidence order:
 
 1. active reviewed custody component/bridge;
 2. exact native event evidence;
-3. verified policy recognition valid for the event;
-4. reviewed pair or payout;
-5. declared deterministic accounting convention;
-6. heuristic candidate, which cannot book automatically; and
-7. custody suspense.
+3. reviewed pair or payout;
+4. declared deterministic accounting convention;
+5. heuristic candidate, which cannot book automatically; and
+6. custody suspense.
+
+An imported descriptor or registered policy is not an observation and does
+not get its own arbitration tier. Policy knowledge may help decode exact
+observer-backed graph evidence, but destination observation (or an explicit
+reviewed component) is required before basis moves. This prevents mere wallet
+registration from claiming an unobserved payment as internally owned.
 
 It enforces:
 

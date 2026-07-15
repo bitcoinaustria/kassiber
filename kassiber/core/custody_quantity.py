@@ -126,17 +126,14 @@ class ClaimPriority(IntEnum):
 
     REVIEWED_COMPONENT = 10
     EXACT_NATIVE_EVENT = 20
-    VERIFIED_POLICY = 30
-    REVIEWED_PAIR = 40
-    ACCOUNTING_CONVENTION = 50
-    HEURISTIC_CANDIDATE = 60
-    PRESUMED_EXTERNAL_FALLBACK = 70
+    REVIEWED_PAIR = 30
+    ACCOUNTING_CONVENTION = 40
+    HEURISTIC_CANDIDATE = 50
+    PRESUMED_EXTERNAL_FALLBACK = 60
 
 
 STATE_PRIORITIES = {
-    INTERNAL_VERIFIED: frozenset(
-        {ClaimPriority.EXACT_NATIVE_EVENT, ClaimPriority.VERIFIED_POLICY}
-    ),
+    INTERNAL_VERIFIED: frozenset({ClaimPriority.EXACT_NATIVE_EVENT}),
     INTERNAL_REVIEWED: frozenset(
         {ClaimPriority.REVIEWED_COMPONENT, ClaimPriority.REVIEWED_PAIR}
     ),
@@ -144,7 +141,6 @@ STATE_PRIORITIES = {
         {
             ClaimPriority.REVIEWED_COMPONENT,
             ClaimPriority.EXACT_NATIVE_EVENT,
-            ClaimPriority.VERIFIED_POLICY,
             ClaimPriority.REVIEWED_PAIR,
         }
     ),
@@ -156,7 +152,6 @@ STATE_PRIORITIES = {
         {
             ClaimPriority.REVIEWED_COMPONENT,
             ClaimPriority.EXACT_NATIVE_EVENT,
-            ClaimPriority.VERIFIED_POLICY,
             ClaimPriority.REVIEWED_PAIR,
             ClaimPriority.ACCOUNTING_CONVENTION,
         }
