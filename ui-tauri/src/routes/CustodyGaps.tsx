@@ -237,25 +237,33 @@ export function CustodyCoverageTimeline({
   );
 }
 
-const LINEAGE_EVIDENCE_KEYS: Record<string, string> = {
-  recorded_fanout: "recordedFanout",
-  row_matched: "rowMatched",
-  verified_native_transfer: "nativeTransfer",
-  reviewed_transfer_pair: "reviewedTransfer",
-  reviewed_gap_bridge: "reviewedGapBridge",
-  manual: "reviewedTransfer",
-  bulk_exact: "reviewedTransfer",
-  bulk_selected: "reviewedTransfer",
-  rule_auto: "reviewedTransfer",
-  channel_lifecycle: "channelLifecycle",
+type LineageEvidenceKey =
+  | "lineage.evidence.recordedFanout"
+  | "lineage.evidence.rowMatched"
+  | "lineage.evidence.nativeTransfer"
+  | "lineage.evidence.reviewedTransfer"
+  | "lineage.evidence.reviewedGapBridge"
+  | "lineage.evidence.channelLifecycle";
+
+const LINEAGE_EVIDENCE_KEYS: Record<string, LineageEvidenceKey> = {
+  recorded_fanout: "lineage.evidence.recordedFanout",
+  row_matched: "lineage.evidence.rowMatched",
+  verified_native_transfer: "lineage.evidence.nativeTransfer",
+  reviewed_transfer_pair: "lineage.evidence.reviewedTransfer",
+  reviewed_gap_bridge: "lineage.evidence.reviewedGapBridge",
+  manual: "lineage.evidence.reviewedTransfer",
+  bulk_exact: "lineage.evidence.reviewedTransfer",
+  bulk_selected: "lineage.evidence.reviewedTransfer",
+  rule_auto: "lineage.evidence.reviewedTransfer",
+  channel_lifecycle: "lineage.evidence.channelLifecycle",
 };
 
 function lineageEvidenceLabel(
   item: CustodyLineageItem,
-  t: TFunction,
+  t: TFunction<"custodyGaps">,
 ): string {
   const key = LINEAGE_EVIDENCE_KEYS[item.evidence_reason];
-  if (key) return t(`lineage.evidence.${key}`);
+  if (key) return t(key);
   return item.custody_state === "internal_reviewed"
     ? t("lineage.evidence.reviewedDefault")
     : t("lineage.evidence.verifiedDefault");
