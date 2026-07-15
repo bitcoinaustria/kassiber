@@ -25,6 +25,13 @@ from kassiber.secrets.sqlcipher import sqlcipher_available
 
 
 class ProjectCatalogTests(unittest.TestCase):
+    def test_workspace_split_inventory_keeps_review_transaction_scope(self):
+        tables = WORKSPACE_SPLIT_POLICY["workspace_profile_scoped_tables"]
+        self.assertLess(
+            tables.index("custody_gap_reviews"),
+            tables.index("custody_gap_review_transactions"),
+        )
+
     def test_catalog_stores_only_non_secret_project_metadata(self):
         with tempfile.TemporaryDirectory() as root:
             entry = create_project("Family Treasury", state_root=root)

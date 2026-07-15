@@ -492,6 +492,9 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
 
         assert before_tax == after_tax
         assert before_rows == after_rows
+        assert migrated.execute(
+            "SELECT COUNT(*) FROM custody_gap_review_transactions"
+        ).fetchone()[0] == 2
         assert actual_impacts == {
             "durable_transaction_anchors": 6,
             "payload_free_evidence_commitments": 6,

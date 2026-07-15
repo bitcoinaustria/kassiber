@@ -75,6 +75,7 @@ WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
         "custody_component_allocations",
         "custody_component_evidence_commitments",
         "custody_gap_reviews",
+        "custody_gap_review_transactions",
         "filed_report_snapshots",
         "custody_filed_report_impacts",
         "custody_filed_report_impact_resolutions",

@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import uuid
 from typing import Any, Mapping, Sequence
 
+from ..db import custody_gap_review_transaction_id
 from ..errors import AppError
 from ..time_utils import now_iso
 from . import custody_components
@@ -486,10 +487,10 @@ def list_audit_review_history(
 ) -> dict[str, Any]:
     """Return bounded review facts for auditor handoff, never raw snapshots.
 
-    A transaction-scoped package includes only reviews whose authored component
-    has a durable leg anchor in the selected set. Unanchored dismissals and
-    unrelated components are intentionally omitted because their raw candidate
-    snapshot is not an export-safe scoping relation.
+    A transaction-scoped package includes reviews with a normalized authored
+    boundary anchor in the selected set. Legacy component reviews without a
+    normalized row may still use their durable leg anchor. Raw candidate
+    snapshots are never used to decide transaction scope.
     """
 
     if type(limit) is not int or not 1 <= limit <= 500:
@@ -505,15 +506,30 @@ def list_audit_review_history(
             return {"count": 0, "returned": 0, "truncated": False, "records": []}
         placeholders = ",".join("?" for _ in selected)
         where += f"""
-            AND r.component_id IS NOT NULL
-            AND EXISTS (
-                SELECT 1 FROM custody_component_legs l
-                WHERE l.profile_id = r.profile_id
-                  AND l.component_id = r.component_id
-                  AND COALESCE(l.anchor_transaction_id, l.transaction_id)
-                      IN ({placeholders})
+            AND (
+                EXISTS (
+                    SELECT 1 FROM custody_gap_review_transactions x
+                    WHERE x.review_id = r.id
+                      AND x.profile_id = r.profile_id
+                      AND x.transaction_id IN ({placeholders})
+                )
+                OR (
+                    NOT EXISTS (
+                        SELECT 1 FROM custody_gap_review_transactions x
+                        WHERE x.review_id = r.id
+                    )
+                    AND r.component_id IS NOT NULL
+                    AND EXISTS (
+                        SELECT 1 FROM custody_component_legs l
+                        WHERE l.profile_id = r.profile_id
+                          AND l.component_id = r.component_id
+                          AND COALESCE(l.anchor_transaction_id, l.transaction_id)
+                              IN ({placeholders})
+                    )
+                )
             )
         """
+        params.extend(selected)
         params.extend(selected)
     count = int(
         conn.execute(
@@ -1619,6 +1635,10 @@ def _append_review(
         authored_source=authored_source,
         reason=reason,
         snapshot=_candidate_snapshot(conn, candidate),
+        transaction_relations=(
+            *(("source", transaction_id) for transaction_id in candidate.source_ids),
+            *(("return", transaction_id) for transaction_id in candidate.return_ids),
+        ),
     )
 
 
@@ -1635,6 +1655,7 @@ def _append_review_snapshot(
     authored_source: str,
     reason: str | None,
     snapshot: Mapping[str, Any],
+    transaction_relations: Sequence[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     if event_kind not in _REVIEW_EVENT_KINDS:
         raise AppError(
@@ -1650,6 +1671,13 @@ def _append_review_snapshot(
     )
     review_id = str(uuid.uuid4())
     created_at = now_iso()
+    if transaction_relations is None:
+        transaction_relations = _prior_review_transaction_relations(
+            conn,
+            profile_id=profile_id,
+            gap_id=gap_id,
+            component_id=component_id,
+        )
     conn.execute(
         """
         INSERT INTO custody_gap_reviews(
@@ -1664,6 +1692,14 @@ def _append_review_snapshot(
             json.dumps(snapshot, sort_keys=True, separators=(",", ":")), created_at,
         ),
     )
+    _append_review_transaction_relations(
+        conn,
+        review_id=review_id,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        created_at=created_at,
+        relations=transaction_relations,
+    )
     return {
         "id": review_id,
         "gap_id": gap_id,
@@ -1676,6 +1712,98 @@ def _append_review_snapshot(
         "reason": reason,
         "created_at": created_at,
     }
+
+
+def _prior_review_transaction_relations(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    gap_id: str,
+    component_id: str | None,
+) -> tuple[tuple[str, str], ...]:
+    rows = conn.execute(
+        """
+        SELECT x.role, x.transaction_id
+        FROM custody_gap_review_transactions x
+        JOIN custody_gap_reviews r ON r.id = x.review_id
+        WHERE r.profile_id = ? AND r.gap_id = ?
+          AND r.revision = (
+              SELECT MAX(revision) FROM custody_gap_reviews
+              WHERE profile_id = ? AND gap_id = ?
+          )
+        ORDER BY r.created_at DESC, r.id DESC,
+                 CASE x.role WHEN 'source' THEN 0 ELSE 1 END,
+                 x.ordinal, x.id
+        """,
+        (profile_id, gap_id, profile_id, gap_id),
+    ).fetchall()
+    if not rows and component_id:
+        rows = conn.execute(
+            """
+            SELECT CASE role WHEN 'destination' THEN 'return' ELSE 'source' END AS role,
+                   COALESCE(anchor_transaction_id, transaction_id) AS transaction_id
+            FROM custody_component_legs
+            WHERE profile_id = ? AND component_id = ?
+              AND role IN ('source', 'fee', 'destination')
+              AND COALESCE(anchor_transaction_id, transaction_id) IS NOT NULL
+            ORDER BY ordinal, id
+            """,
+            (profile_id, component_id),
+        ).fetchall()
+    relations: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        relation = (str(row["role"]), str(row["transaction_id"]))
+        if relation not in seen:
+            seen.add(relation)
+            relations.append(relation)
+    return tuple(relations)
+
+
+def _append_review_transaction_relations(
+    conn: sqlite3.Connection,
+    *,
+    review_id: str,
+    workspace_id: str,
+    profile_id: str,
+    created_at: str,
+    relations: Sequence[tuple[str, str]],
+) -> None:
+    grouped: dict[str, list[str]] = {"source": [], "return": []}
+    for role, transaction_id in relations:
+        if role not in grouped:
+            raise AppError(
+                "Custody review transaction role is unsupported",
+                code="custody_gap_review_validation",
+            )
+        normalized_id = str(transaction_id or "")
+        if not normalized_id:
+            raise AppError(
+                "Custody review transaction identity is missing",
+                code="custody_gap_review_validation",
+            )
+        if normalized_id not in grouped[role]:
+            grouped[role].append(normalized_id)
+    for role in ("source", "return"):
+        for ordinal, transaction_id in enumerate(grouped[role]):
+            conn.execute(
+                """
+                INSERT INTO custody_gap_review_transactions(
+                    id, review_id, workspace_id, profile_id, ordinal,
+                    role, transaction_id, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    custody_gap_review_transaction_id(review_id, role, ordinal),
+                    review_id,
+                    workspace_id,
+                    profile_id,
+                    ordinal,
+                    role,
+                    transaction_id,
+                    created_at,
+                ),
+            )
 
 
 def _candidate_snapshot(

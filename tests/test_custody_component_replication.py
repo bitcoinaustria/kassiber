@@ -340,6 +340,22 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 NOW,
             ),
         )
+        review_transaction_id = component["legs"][0]["transaction_id"]
+        self.owner.execute(
+            """
+            INSERT INTO custody_gap_review_transactions(
+                id, review_id, workspace_id, profile_id, ordinal,
+                role, transaction_id, created_at
+            ) VALUES('filed-review-source', 'filed-review', ?, ?, 0,
+                     'source', ?, ?)
+            """,
+            (
+                self.workspace["id"],
+                self.profile["id"],
+                review_transaction_id,
+                NOW,
+            ),
+        )
         custody_filed_reports.append_custody_impacts(
             self.owner,
             workspace_id=self.workspace["id"],
@@ -369,6 +385,41 @@ class CustodyComponentReplicationTests(unittest.TestCase):
         result = self._sync_owner_to_peer()
 
         self.assertGreater(result.row_mutations, 0)
+        authored_tables = [
+            row["entity_table"]
+            for row in self.owner.execute(
+                "SELECT entity_table FROM sync_events ORDER BY replica_seq"
+            ).fetchall()
+        ]
+        self.assertLess(
+            authored_tables.index("transactions"),
+            authored_tables.index("custody_gap_reviews"),
+        )
+        self.assertLess(
+            authored_tables.index("custody_gap_reviews"),
+            authored_tables.index("custody_gap_review_transactions"),
+        )
+        owner_review_transactions = [
+            dict(row)
+            for row in self.owner.execute(
+                """
+                SELECT review_id, workspace_id, profile_id, ordinal,
+                       role, transaction_id, created_at
+                FROM custody_gap_review_transactions WHERE review_id = 'filed-review'
+                """
+            ).fetchall()
+        ]
+        peer_review_transactions = [
+            dict(row)
+            for row in self.peer.execute(
+                """
+                SELECT review_id, workspace_id, profile_id, ordinal,
+                       role, transaction_id, created_at
+                FROM custody_gap_review_transactions WHERE review_id = 'filed-review'
+                """
+            ).fetchall()
+        ]
+        self.assertEqual(peer_review_transactions, owner_review_transactions)
         self.assertEqual(
             custody_filed_reports.list_filed_report_snapshots(
                 self.peer, self.profile["id"]
@@ -430,6 +481,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             SYNC_TABLE_MAP,
         )
         self.assertIn("custody_component_evidence_commitments", SYNC_TABLE_MAP)
+        self.assertIn("custody_gap_review_transactions", SYNC_TABLE_MAP)
         self.assertEqual(
             0,
             self.owner.execute(

@@ -881,6 +881,87 @@ class AuditPackageCoreTest(unittest.TestCase):
             summary["custody_quantity"]["qualification"],
         )
 
+    def test_bounded_audit_scopes_componentless_dismissal_by_normalized_boundary(self):
+        return_tx_id = self._insert_source_transaction()
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, raw_json, created_at
+            ) VALUES('tx-unrelated', ?, ?, ?, 'unrelated-ext', 'fp-unrelated',
+                     '2026-04-02T09:00:00Z', 'inbound', 'BTC', 1, 0, '{}', ?)
+            """,
+            (self.workspace_id, self.profile_id, self.wallet_id, NOW),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_gap_reviews(
+                id, workspace_id, profile_id, gap_id, revision,
+                candidate_fingerprint, action, event_kind, component_id,
+                authored_source, reason, snapshot_json, created_at
+            ) VALUES('componentless-review', ?, ?, 'componentless-gap', 1, ?,
+                     'dismissed', 'review_decision', NULL, 'user',
+                     'componentless dismissal', '{not-valid-json', ?)
+            """,
+            (self.workspace_id, self.profile_id, "a" * 64, NOW),
+        )
+        self.conn.executemany(
+            """
+            INSERT INTO custody_gap_review_transactions(
+                id, review_id, workspace_id, profile_id, ordinal,
+                role, transaction_id, created_at
+            ) VALUES(?, 'componentless-review', ?, ?, 0, ?, ?, ?)
+            """,
+            (
+                (
+                    "componentless-source",
+                    self.workspace_id,
+                    self.profile_id,
+                    "source",
+                    self.tx_id,
+                    NOW,
+                ),
+                (
+                    "componentless-return",
+                    self.workspace_id,
+                    self.profile_id,
+                    "return",
+                    return_tx_id,
+                    NOW,
+                ),
+            ),
+        )
+        self.conn.commit()
+
+        for selected in (self.tx_id, return_tx_id):
+            bounded = audit_package.build_evidence_summary(
+                self.conn,
+                str(self.data_root),
+                None,
+                None,
+                self.audit_hooks,
+                transaction_refs=[selected],
+            )
+            history = bounded["custody_gap_review_history"]
+            self.assertEqual(history["count"], 1)
+            self.assertEqual(history["records"][0]["gap_id"], "componentless-gap")
+            self.assertEqual(history["records"][0]["status"], "dismissed")
+            self.assertNotIn("transaction_id", history["records"][0])
+            self.assertNotIn("source_ids", history["records"][0])
+
+        unrelated = audit_package.build_evidence_summary(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            self.audit_hooks,
+            transaction_refs=["tx-unrelated"],
+        )
+        self.assertEqual(
+            unrelated["custody_gap_review_history"],
+            {"count": 0, "returned": 0, "truncated": False, "records": []},
+        )
+
     def test_audit_summary_retains_filed_snapshot_and_amendment_history(self):
         unrelated_tx_id = self._insert_source_transaction()
         filed = custody_filed_reports.create_filed_report_snapshot(

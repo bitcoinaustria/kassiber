@@ -230,6 +230,94 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self.assertEqual(reopened["gaps"][0]["status"], "needs_review")
         self.assertNotEqual(reopened["gaps"][0]["candidate_fingerprint"], fingerprint)
 
+    def test_dismissal_transaction_relations_are_atomic_and_survive_retraction(self):
+        candidate = self._candidate()
+        fingerprint = custody_gap_reviews.candidate_fingerprint(candidate)
+        with patch(
+            "kassiber.core.custody_gap_reviews._append_review_transaction_relations",
+            side_effect=RuntimeError("relation write failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "relation write failed"):
+                custody_gap_reviews.append_dismissal(
+                    self.conn,
+                    workspace_id="ws",
+                    profile_id="profile",
+                    candidate=candidate,
+                    expected_fingerprint=fingerprint,
+                )
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_gap_reviews").fetchone()[0],
+            0,
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_review_transactions"
+            ).fetchone()[0],
+            0,
+        )
+
+        review = custody_gap_reviews.append_dismissal(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            candidate=candidate,
+            expected_fingerprint=fingerprint,
+        )
+        review_id = self.conn.execute(
+            "SELECT id FROM custody_gap_reviews WHERE profile_id = 'profile' AND gap_id = ?",
+            (review["gap_id"],),
+        ).fetchone()[0]
+        relations = [
+            (row["role"], row["ordinal"], row["transaction_id"])
+            for row in self.conn.execute(
+                """
+                SELECT role, ordinal, transaction_id
+                FROM custody_gap_review_transactions
+                WHERE review_id = ? ORDER BY role, ordinal
+                """,
+                (review_id,),
+            ).fetchall()
+        ]
+        self.assertEqual(
+            relations,
+            [("return", 0, "return"), ("source", 0, "out")],
+        )
+
+        self.conn.execute("DELETE FROM transactions WHERE id = 'out'")
+        self.conn.commit()
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT transaction_id FROM custody_gap_review_transactions "
+                "WHERE review_id = ? AND role = 'source'",
+                (review_id,),
+            ).fetchone()[0],
+            "out",
+        )
+
+    def test_legacy_resolved_review_relations_backfill_from_component_anchors(self):
+        candidate, created = self._create_bridge()
+        self.conn.execute("DROP TABLE custody_gap_review_transactions")
+        self.conn.commit()
+        self.conn.close()
+        self.conn = open_db(self.root.name)
+
+        relations = [
+            (row["role"], row["ordinal"], row["transaction_id"])
+            for row in self.conn.execute(
+                """
+                SELECT role, ordinal, transaction_id
+                FROM custody_gap_review_transactions
+                WHERE review_id = ? ORDER BY role, ordinal
+                """,
+                (created["review_id"],),
+            ).fetchall()
+        ]
+        self.assertEqual(
+            relations,
+            [("return", 0, "return"), ("source", 0, "out")],
+        )
+        self.assertEqual(candidate.source_ids, ("out",))
+
     def test_dismissal_rolls_back_if_journal_invalidation_fails(self):
         self._mark_journal_current()
         candidate = self._candidate()
