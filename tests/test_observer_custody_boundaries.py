@@ -253,6 +253,54 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
             {issue.reason for issue in state.issues},
         )
 
+    def test_recorded_pair_source_label_cannot_join_different_native_events(self):
+        """The audit label is not itself a custody authority token."""
+
+        for transaction_id, wallet_id, txid, direction in (
+            ("spoofed-out", "source", "71" * 32, "outbound"),
+            ("spoofed-in", "operative", "72" * 32, "inbound"),
+        ):
+            self._insert_transaction(
+                transaction_id,
+                wallet_id,
+                external_id=txid,
+                occurred_at="2025-01-15T00:00:00Z",
+                direction=direction,
+                asset="BTC",
+                amount_msat=1_000,
+                raw={"txid": txid, "chain": "bitcoin", "network": "main"},
+            )
+        rows = [self._row("spoofed-out"), self._row("spoofed-in")]
+        safe_rows = enriched_quantity_rows(rows)
+        canonical = build_canonical_quantity_input(safe_rows)
+        compilation = compile_custody_interpreters(
+            safe_rows,
+            canonical,
+            wallet_refs_by_id={row["wallet_id"]: row for row in rows},
+            channel_transfer_pairs=(
+                {
+                    "out": rows[0],
+                    "in": rows[1],
+                    "source": "row_matched",
+                },
+            ),
+        )
+        state = build_canonical_quantity_state(
+            rows,
+            interpreter_claims=compilation.claims,
+            native_evidence=compilation.native_audits,
+            ignored_gap_transaction_ids=("spoofed-out", "spoofed-in"),
+        )
+
+        self.assertNotIn(
+            INTERNAL_VERIFIED,
+            {decision.state for decision in state.projection.decisions},
+        )
+        self.assertEqual(
+            [decision.state for decision in state.projection.decisions],
+            [EXTERNAL_PRESUMED],
+        )
+
     def test_source_technical_coverage_cannot_confirm_an_unknown_destination(self):
         identity = ObserverIdentity(
             id="bdk-source",
