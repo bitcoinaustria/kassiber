@@ -14,6 +14,7 @@ from .store import (
     StoredObserverState,
     encode_json_payload,
     load_observer_state,
+    observer_state_epoch,
     persist_observer_state,
 )
 
@@ -76,6 +77,7 @@ class PreparedObserverUpdate:
     identity: ObserverIdentity
     update: Mapping[str, Any]
     prior_state: StoredObserverState | None
+    expected_epoch: int | None
     _observer: ChainObserver = field(repr=False)
     applied: bool = False
     discarded: bool = False
@@ -119,14 +121,22 @@ def prepare_observer_update(
             code="observer_prepare_in_transaction",
             retryable=False,
         )
+    conn.execute("BEGIN")
     try:
-        prior_state = load_observer_state(conn, identity)
-    except AppError as exc:
-        if not request.force_full or exc.code != "observer_state_rebuild_required":
-            raise
-        # Rebuild in memory first. The incompatible encrypted rows remain
-        # untouched until the coordinator atomically applies the replacement.
-        prior_state = None
+        try:
+            prior_state = load_observer_state(conn, identity)
+            expected_epoch = prior_state.epoch if prior_state is not None else None
+        except AppError as exc:
+            if not request.force_full or exc.code != "observer_state_rebuild_required":
+                raise
+            # Rebuild in memory first. The incompatible encrypted rows remain
+            # untouched until the coordinator atomically applies the replacement.
+            prior_state = None
+            expected_epoch = observer_state_epoch(conn, identity)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     prepared = observer.prepare(request, prior_state)
     if not isinstance(prepared, Mapping):
         raise AppError(
@@ -138,6 +148,7 @@ def prepare_observer_update(
         identity=identity,
         update=_plain_object(prepared),
         prior_state=prior_state,
+        expected_epoch=expected_epoch,
         _observer=observer,
     )
 
@@ -202,6 +213,7 @@ def apply_prepared_observer_update(
         prepared.identity,
         normalized_state,
         normalized_facts.coverage,
+        expected_epoch=prepared.expected_epoch,
     )
     persist_opaque = getattr(prepared._observer, "persist_opaque_state", None)
     if callable(persist_opaque):

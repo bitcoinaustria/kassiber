@@ -262,6 +262,7 @@ CREATE TABLE IF NOT EXISTS chain_observer_instances (
     chain TEXT NOT NULL,
     network TEXT NOT NULL,
     state_version INTEGER NOT NULL,
+    state_epoch INTEGER NOT NULL DEFAULT 0,
     state_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -3813,6 +3814,12 @@ def ensure_schema_compat(conn):
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
+    ensure_column(
+        conn,
+        "chain_observer_instances",
+        "state_epoch",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
     ensure_column(
         conn,
         "filed_report_snapshots",

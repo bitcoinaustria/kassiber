@@ -47,6 +47,27 @@ class StoredObserverState:
     identity: ObserverIdentity
     payload: Mapping[str, Any]
     coverage: tuple[CoveragePoint, ...]
+    epoch: int = 0
+
+
+_UNCONDITIONAL_EPOCH = object()
+
+
+def _stale_observer_state(
+    identity: ObserverIdentity,
+    *,
+    expected_epoch: int | None,
+) -> AppError:
+    return AppError(
+        "Chain observer state changed after this refresh was prepared",
+        code="observer_state_stale",
+        hint="Retry the wallet refresh against the latest observer state.",
+        details={
+            "observer_id": identity.id,
+            "expected_epoch": expected_epoch,
+        },
+        retryable=True,
+    )
 
 
 def _rebuild_required(
@@ -216,7 +237,21 @@ def load_observer_state(
         identity=identity,
         payload=payload,
         coverage=tuple(coverage),
+        epoch=int(row["state_epoch"]),
     )
+
+
+def observer_state_epoch(
+    conn: sqlite3.Connection,
+    identity: ObserverIdentity,
+) -> int | None:
+    """Return the raw persistence epoch without decoding incompatible state."""
+
+    row = conn.execute(
+        "SELECT state_epoch FROM chain_observer_instances WHERE id = ?",
+        (identity.id,),
+    ).fetchone()
+    return int(row["state_epoch"]) if row is not None else None
 
 
 def persist_observer_state(
@@ -224,8 +259,16 @@ def persist_observer_state(
     identity: ObserverIdentity,
     payload: Mapping[str, Any],
     coverage: Sequence[CoveragePoint],
+    *,
+    expected_epoch: int | None | object = _UNCONDITIONAL_EPOCH,
 ) -> None:
-    """Persist one applied state without starting or committing a transaction."""
+    """Persist one applied state without starting or committing a transaction.
+
+    Contract callers pass the epoch captured during preparation.  The state
+    row is then the compare-and-swap fence for both JSON and opaque dependency
+    state written later in the same wallet savepoint.  Direct maintenance
+    callers may omit the epoch and retain unconditional replacement semantics.
+    """
 
     if not conn.in_transaction:
         raise AppError(
@@ -280,42 +323,74 @@ def persist_observer_state(
             dict(point.details or {})
         )
     timestamp = now_iso()
-    conn.execute(
-        """
-        INSERT INTO chain_observer_instances(
-            id, workspace_id, profile_id, logical_wallet_id, source_wallet_id,
-            source_key, observer_kind, chain, network, state_version,
-            state_json, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            workspace_id = excluded.workspace_id,
-            profile_id = excluded.profile_id,
-            logical_wallet_id = excluded.logical_wallet_id,
-            source_wallet_id = excluded.source_wallet_id,
-            source_key = excluded.source_key,
-            observer_kind = excluded.observer_kind,
-            chain = excluded.chain,
-            network = excluded.network,
-            state_version = excluded.state_version,
-            state_json = excluded.state_json,
-            updated_at = excluded.updated_at
-        """,
-        (
-            identity.id,
-            identity.workspace_id,
-            identity.profile_id,
-            identity.logical_wallet_id,
-            identity.source_wallet_id,
-            identity.source_key,
-            identity.observer_kind,
-            identity.chain,
-            identity.network,
-            OBSERVER_STATE_VERSION,
-            state_json,
-            timestamp,
-            timestamp,
-        ),
+    values = (
+        identity.workspace_id,
+        identity.profile_id,
+        identity.logical_wallet_id,
+        identity.source_wallet_id,
+        identity.source_key,
+        identity.observer_kind,
+        identity.chain,
+        identity.network,
+        OBSERVER_STATE_VERSION,
+        state_json,
+        timestamp,
     )
+    if expected_epoch is _UNCONDITIONAL_EPOCH:
+        conn.execute(
+            """
+            INSERT INTO chain_observer_instances(
+                id, workspace_id, profile_id, logical_wallet_id, source_wallet_id,
+                source_key, observer_kind, chain, network, state_version,
+                state_epoch, state_json, created_at, updated_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                workspace_id = excluded.workspace_id,
+                profile_id = excluded.profile_id,
+                logical_wallet_id = excluded.logical_wallet_id,
+                source_wallet_id = excluded.source_wallet_id,
+                source_key = excluded.source_key,
+                observer_kind = excluded.observer_kind,
+                chain = excluded.chain,
+                network = excluded.network,
+                state_version = excluded.state_version,
+                state_epoch = chain_observer_instances.state_epoch + 1,
+                state_json = excluded.state_json,
+                updated_at = excluded.updated_at
+            """,
+            (identity.id, *values, timestamp),
+        )
+    elif expected_epoch is None:
+        cursor = conn.execute(
+            """
+            INSERT INTO chain_observer_instances(
+                id, workspace_id, profile_id, logical_wallet_id, source_wallet_id,
+                source_key, observer_kind, chain, network, state_version,
+                state_epoch, state_json, created_at, updated_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+            """,
+            (identity.id, *values, timestamp),
+        )
+        if cursor.rowcount != 1:
+            raise _stale_observer_state(identity, expected_epoch=None)
+    else:
+        cursor = conn.execute(
+            """
+            UPDATE chain_observer_instances
+            SET workspace_id = ?, profile_id = ?, logical_wallet_id = ?,
+                source_wallet_id = ?, source_key = ?, observer_kind = ?,
+                chain = ?, network = ?, state_version = ?, state_json = ?,
+                state_epoch = state_epoch + 1, updated_at = ?
+            WHERE id = ? AND state_epoch = ?
+            """,
+            (*values, identity.id, int(expected_epoch)),
+        )
+        if cursor.rowcount != 1:
+            raise _stale_observer_state(
+                identity,
+                expected_epoch=int(expected_epoch),
+            )
     conn.execute(
         "DELETE FROM chain_observer_coverage WHERE observer_id = ?",
         (identity.id,),
@@ -448,6 +523,7 @@ __all__ = [
     "delete_wallet_observer_state",
     "encode_json_payload",
     "load_observer_state",
+    "observer_state_epoch",
     "load_observer_values",
     "persist_observer_state",
     "persist_observer_values",

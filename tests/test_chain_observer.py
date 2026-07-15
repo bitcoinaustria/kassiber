@@ -175,6 +175,34 @@ class ChainObserverContractTest(unittest.TestCase):
             [("change", 20), ("receive", 40)],
         )
 
+    def test_stale_prepared_update_cannot_overwrite_newer_observer_state(self):
+        _first_observer, first = self._prepare()
+        _stale_observer, stale = self._prepare()
+        self.assertIsNone(first.expected_epoch)
+        self.assertIsNone(stale.expected_epoch)
+
+        self._apply_and_commit(first)
+
+        self.conn.execute("SAVEPOINT stale_observer_apply")
+        with self.assertRaises(AppError) as raised:
+            apply_prepared_observer_update(self.conn, stale)
+        self.conn.execute("ROLLBACK TO SAVEPOINT stale_observer_apply")
+        self.conn.execute("RELEASE SAVEPOINT stale_observer_apply")
+
+        self.assertEqual(raised.exception.code, "observer_state_stale")
+        self.assertTrue(raised.exception.retryable)
+        self.assertFalse(stale.applied)
+        stored = load_observer_state(self.conn, self.identity)
+        self.assertEqual(stored.epoch, 1)
+        self.assertEqual(stored.payload["generation"], 1)
+
+        _retry_observer, retry = self._prepare()
+        self.assertEqual(retry.expected_epoch, 1)
+        self._apply_and_commit(retry)
+        refreshed = load_observer_state(self.conn, self.identity)
+        self.assertEqual(refreshed.epoch, 2)
+        self.assertEqual(refreshed.payload["generation"], 2)
+
     def test_used_index_must_be_inside_exclusive_coverage_boundary(self):
         observer = FakeObserver(self.conn)
         _observer, prepared = self._prepare(observer)
