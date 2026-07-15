@@ -816,6 +816,79 @@ def _schema_migration_audits(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return output
 
 
+def _bounded_filed_report_snapshot(
+    snapshot: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return report identity without profile-wide accounting payloads.
+
+    A saved report can cover many transactions, wallets, or a whole period.
+    Referencing its immutable identity from a transaction-bounded custody
+    impact does not make its summaries, scope, or free-form notes safe to
+    disclose in that bounded package.
+    """
+
+    return {
+        "id": snapshot["id"],
+        "report_kind": snapshot["report_kind"],
+        "report_state": snapshot["report_state"],
+        "period_start_year": int(snapshot["period_start_year"]),
+        "period_end_year": int(snapshot["period_end_year"]),
+        "content_sha256": snapshot["content_sha256"],
+        "authored_source": snapshot["authored_source"],
+        "created_at": snapshot["created_at"],
+        "report_wide_payload_excluded": True,
+        "excluded_fields": [
+            "classification_summary",
+            "gain_summary",
+            "report_scope",
+            "notes",
+        ],
+    }
+
+
+def _bounded_filed_report_impact(
+    impact: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return transaction-safe impact provenance without report totals."""
+
+    resolution = impact.get("resolution")
+    bounded_resolution = None
+    if isinstance(resolution, Mapping):
+        bounded_resolution = {
+            "id": resolution["id"],
+            "impact_id": resolution["impact_id"],
+            "rebuilt_at": resolution["rebuilt_at"],
+            "classification_changed": bool(resolution["classification_changed"]),
+            "gain_changed": bool(resolution["gain_changed"]),
+            "amendment_status": resolution["amendment_status"],
+            "created_at": resolution["created_at"],
+            "report_wide_payload_excluded": True,
+            "excluded_fields": [
+                "after_classification_summary",
+                "after_gain_summary",
+            ],
+        }
+    return {
+        "id": impact["id"],
+        "filed_report_snapshot_id": impact["filed_report_snapshot_id"],
+        "component_id": impact["component_id"],
+        "review_id": impact["review_id"],
+        "gap_id": impact["gap_id"],
+        "affected_period_start_year": int(impact["affected_period_start_year"]),
+        "affected_period_end_year": int(impact["affected_period_end_year"]),
+        "amendment_warning": impact["amendment_warning"],
+        "resolution": bounded_resolution,
+        "created_at": impact["created_at"],
+        "report_wide_payload_excluded": True,
+        "excluded_fields": [
+            "before_classification_summary",
+            "after_classification_summary",
+            "before_gain_summary",
+            "after_gain_summary",
+        ],
+    }
+
+
 def build_evidence_summary(
     conn: sqlite3.Connection,
     data_root: str,
@@ -993,9 +1066,13 @@ def build_evidence_summary(
             for item in custody_filed_report_impacts
         }
         filed_report_snapshots = [
-            item
+            _bounded_filed_report_snapshot(item)
             for item in filed_report_snapshots
             if str(item["id"]) in referenced_snapshot_ids
+        ]
+        custody_filed_report_impacts = [
+            _bounded_filed_report_impact(item)
+            for item in custody_filed_report_impacts
         ]
     custody_filed_report_impact_resolutions = [
         item["resolution"]

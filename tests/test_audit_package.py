@@ -893,14 +893,23 @@ class AuditPackageCoreTest(unittest.TestCase):
             period_end_year=2026,
             content_sha256="ab" * 32,
             classification_summary={
-                "external_presumed": {"count": 1, "amount_msat": 100_000_000}
+                "selected_a": {"count": 1, "amount_msat": 100_000_000},
+                "unselected_b_marker": {
+                    "count": 1,
+                    "amount_msat": 987_654_321,
+                },
             },
             gain_summary={
                 "fiat_currency": "EUR",
-                "gain_loss_exact": "50.00",
+                "gain_loss_exact": "98765.43",
                 "status": "final",
             },
-            notes="UNRELATED_REPORT_NOTE",
+            report_scope={
+                "wallet_ids": [self.wallet_id, "wallet-unselected-b"],
+                "occurred_at_start": "2026-01-01T00:00:00Z",
+                "occurred_at_end": "2026-12-31T23:59:59Z",
+            },
+            notes="UNSELECTED_B_REPORT_NOTE",
             created_at=NOW,
         )
         self.conn.execute(
@@ -967,9 +976,9 @@ class AuditPackageCoreTest(unittest.TestCase):
                 after_classification_summary_json, before_gain_summary_json,
                 after_gain_summary_json, amendment_warning, created_at
             ) VALUES('impact', ?, ?, ?, 'component', 'review', 'gap', 2026, 2026,
-                     '{"external_presumed":{"amount_msat":100000000,"count":1}}',
-                     '{"internal_retained":{"amount_msat":100000000,"count":1}}',
-                     '{"fiat_currency":"EUR","gain_loss_exact":"50.00","status":"final"}',
+                     '{"selected_a":{"amount_msat":100000000,"count":1},"unselected_b_impact_marker":{"amount_msat":987654321,"count":1}}',
+                     '{"internal_retained":{"amount_msat":100000000,"count":1},"unselected_b_after_marker":{"amount_msat":987654321,"count":1}}',
+                     '{"fiat_currency":"EUR","gain_loss_exact":"98765.43","status":"final"}',
                      '{"status":"pending_journal_rebuild"}', ?, ?)
             """,
             (
@@ -1015,8 +1024,8 @@ class AuditPackageCoreTest(unittest.TestCase):
                 classification_changed, gain_changed, amendment_status,
                 created_at
             ) VALUES('impact-resolution', ?, ?, 'impact', ?,
-                     '{"internal_retained":{"amount_msat":100000000,"count":1}}',
-                     '{"fiat_currency":"EUR","gain_loss_exact":"0.00","status":"final"}',
+                     '{"internal_retained":{"amount_msat":100000000,"count":1},"unselected_b_resolution_marker":{"amount_msat":987654321,"count":1}}',
+                     '{"fiat_currency":"EUR","proceeds_exact":"87654.32","gain_loss_exact":"0.00","status":"final"}',
                      1, 1, 'review_required', ?)
             """,
             (self.workspace_id, self.profile_id, NOW, NOW),
@@ -1082,6 +1091,19 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
         self.assertNotIn("changes", summary["schema_migration_audits"][0]["impact"])
         self.assertNotIn("MUST_NOT_LEAVE_LOCAL_DB", json.dumps(summary))
+        full_scope_json = json.dumps(summary)
+        for unselected_value in (
+            "UNSELECTED_B_REPORT_NOTE",
+            "wallet-unselected-b",
+            "unselected_b_marker",
+            "unselected_b_impact_marker",
+            "unselected_b_after_marker",
+            "unselected_b_resolution_marker",
+            "98765.43",
+            "87654.32",
+            "987654321",
+        ):
+            self.assertIn(unselected_value, full_scope_json)
 
         bounded = audit_package.build_evidence_summary(
             self.conn,
@@ -1104,7 +1126,7 @@ class AuditPackageCoreTest(unittest.TestCase):
             {"count": 0, "returned": 0, "truncated": False, "records": []},
         )
         bounded_json = json.dumps(bounded)
-        self.assertNotIn("UNRELATED_REPORT_NOTE", bounded_json)
+        self.assertNotIn("UNSELECTED_B_REPORT_NOTE", bounded_json)
         self.assertNotIn("rows_changed", bounded_json)
 
         related = audit_package.build_evidence_summary(
@@ -1117,10 +1139,43 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
         self.assertEqual(len(related["filed_report_snapshots"]), 1)
         self.assertEqual(len(related["custody_filed_report_impacts"]), 1)
+        related_snapshot = related["filed_report_snapshots"][0]
+        self.assertTrue(related_snapshot["report_wide_payload_excluded"])
+        self.assertEqual(related_snapshot["content_sha256"], "ab" * 32)
+        self.assertNotIn("classification_summary", related_snapshot)
+        self.assertNotIn("gain_summary", related_snapshot)
+        self.assertNotIn("report_scope", related_snapshot)
+        self.assertNotIn("notes", related_snapshot)
+        related_impact = related["custody_filed_report_impacts"][0]
+        self.assertTrue(related_impact["report_wide_payload_excluded"])
+        self.assertNotIn("before_classification_summary", related_impact)
+        self.assertNotIn("after_classification_summary", related_impact)
+        self.assertNotIn("before_gain_summary", related_impact)
+        self.assertNotIn("after_gain_summary", related_impact)
+        self.assertTrue(
+            related_impact["resolution"]["report_wide_payload_excluded"]
+        )
+        self.assertNotIn(
+            "after_classification_summary", related_impact["resolution"]
+        )
+        self.assertNotIn("after_gain_summary", related_impact["resolution"])
         self.assertEqual(
             related["custody_gap_review_history"]["records"][0]["gap_id"],
             "gap",
         )
+        related_json = json.dumps(related)
+        for unselected_value in (
+            "UNSELECTED_B_REPORT_NOTE",
+            "wallet-unselected-b",
+            "unselected_b_marker",
+            "unselected_b_impact_marker",
+            "unselected_b_after_marker",
+            "unselected_b_resolution_marker",
+            "98765.43",
+            "87654.32",
+            "987654321",
+        ):
+            self.assertNotIn(unselected_value, related_json)
 
 
 if __name__ == "__main__":
