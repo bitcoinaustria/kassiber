@@ -487,6 +487,11 @@ def build_gap_snapshot(
         raise ValueError("limit must be an integer between 1 and 500")
     if cursor is not None and not isinstance(cursor, str):
         raise ValueError("cursor must be a string")
+    # The CLI historically used ``--cursor 0`` as its explicit first-page
+    # sentinel. Later pages are opaque/version-bound; retain only this neutral
+    # sentinel so scripted review flows do not need a migration alias.
+    if cursor == "0":
+        cursor = None
     if gap_id is not None and cursor is not None:
         raise ValueError("cursor is not supported when gap_id is provided")
 
