@@ -149,6 +149,19 @@ same verification surface.
     every terminal-stop condition in the plan is met and no issue-scoped P0/P1
     remains; move unrelated P2+ findings to separate TODO items and stop.
 
+- [ ] Scale custody-gap discovery beyond the current conflict-complete
+  in-memory source-group ceiling. Replace the adjacent-group expansion with
+  indexed or chunked amount/time partitioning that preserves deterministic
+  conflict completeness. Add a long-lived-book regression with at least 87
+  outbound legs and a plausible return: useful candidates must still surface,
+  and an incomplete search must never be presented as complete.
+
+- [ ] Harden the pre-msat legacy schema migration so rebuilding a very old
+  database preserves columns added after that historical table shape. Add an
+  ancient-schema fixture and assert column/data parity after migration. This
+  predates the custody-lineage branch and is intentionally outside its stop
+  state.
+
 - [x] Harden the CLI for one-shot agents: `--machine` now implies
   `--non-interactive`; `commands describe` exposes an argparse-derived command
   contract; `health` / `next-actions` expose shared readiness snapshots;
