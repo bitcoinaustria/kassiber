@@ -1263,17 +1263,20 @@ def _apply_row_upsert(
             wire_id=legacy_relation_wire_id,
             local_id=str(actual["id"]),
         )
-    identical_relation_replay = False
-    if spec.table == "custody_gap_review_transactions":
+    identical_immutable_replay = False
+    if spec.table in {
+        "custody_gap_review_relation_sets",
+        "custody_gap_review_transactions",
+    }:
         existing_relation = conn.execute(
-            "SELECT * FROM custody_gap_review_transactions WHERE id = ?",
+            f"SELECT * FROM {spec.table} WHERE id = ?",
             (actual["id"],),
         ).fetchone()
-        identical_relation_replay = bool(
+        identical_immutable_replay = bool(
             existing_relation is not None
             and all(existing_relation[column] == actual[column] for column in spec.columns)
         )
-    if not identical_relation_replay:
+    if not identical_immutable_replay:
         _insert_or_update_with_collision_notice(
             conn,
             book=book,

@@ -715,30 +715,6 @@ def complete_selected_review_ids(
     return frozenset(complete)
 
 
-def selected_review_ids(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    transaction_ids: Sequence[str],
-) -> frozenset[str]:
-    """Return reviews overlapping any selected durable boundary anchor."""
-
-    selected = tuple(sorted({str(value) for value in transaction_ids if value}))
-    if not selected:
-        return frozenset()
-    placeholders = ",".join("?" for _ in selected)
-    rows = conn.execute(
-        f"""
-        SELECT DISTINCT x.review_id
-        FROM custody_gap_review_transactions x
-        JOIN custody_gap_reviews r ON r.id = x.review_id
-        WHERE r.profile_id = ? AND x.profile_id = r.profile_id
-          AND x.transaction_id IN ({placeholders})
-        """,
-        (profile_id, *selected),
-    ).fetchall()
-    return frozenset(str(row["review_id"]) for row in rows)
-
-
 def backfill_legacy_componentless_review_relations(
     conn: sqlite3.Connection,
 ) -> int:

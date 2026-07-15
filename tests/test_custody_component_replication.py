@@ -24,7 +24,10 @@ from kassiber.core.custody_components import (
 )
 from kassiber.core import custody_filed_reports, custody_gap_reviews, custody_gaps
 from kassiber.core.sync_replication.bundle import build_bundle
-from kassiber.core.sync_replication.capture import preferred_wire_id
+from kassiber.core.sync_replication.capture import (
+    capture_local_changes,
+    preferred_wire_id,
+)
 from kassiber.core.sync_replication.conflicts import resolve_conflict
 from kassiber.core.sync_replication.events import author_event
 from kassiber.core.sync_replication.identity import enable_sync
@@ -40,6 +43,7 @@ from kassiber.core.sync_replication.schema_allowlist import (
     serialize_row,
 )
 from kassiber.db import (
+    backfill_custody_gap_review_relation_set,
     custody_gap_review_relation_set_id,
     custody_gap_review_transaction_id,
     custody_gap_review_transaction_v1_id,
@@ -794,6 +798,102 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 [source_id, return_id],
             ),
             frozenset({"split-review"}),
+        )
+
+    def test_dual_authored_legacy_relation_header_replay_is_idempotent(self):
+        self._join_peer()
+        self._insert_review_boundary(
+            review_id="dual-header-review",
+            source_ids=("legacy-source",),
+            return_ids=("legacy-return",),
+            include_relations=False,
+        )
+        self.owner.execute(
+            "DELETE FROM custody_gap_review_relation_sets "
+            "WHERE review_id = 'dual-header-review'"
+        )
+        self.owner.commit()
+        self._sync_owner_to_peer()
+
+        for conn in (self.owner, self.peer):
+            self.assertEqual(
+                backfill_custody_gap_review_relation_set(
+                    conn,
+                    review_id="dual-header-review",
+                    workspace_id=self.workspace["id"],
+                    profile_id=self.profile["id"],
+                    created_at=NOW,
+                    expected_source_count=1,
+                    expected_return_count=1,
+                ),
+                1,
+            )
+            header_events = capture_local_changes(
+                conn,
+                profile_id=self.profile["id"],
+            )
+            self.assertTrue(
+                any(
+                    event.entity_table == "custody_gap_review_relation_sets"
+                    for event in header_events
+                )
+            )
+            conn.execute(
+                "UPDATE profiles SET label = ? WHERE id = ?",
+                (
+                    "Owner after header" if conn is self.owner else "Peer after header",
+                    self.profile["id"],
+                ),
+            )
+            trailing_events = capture_local_changes(
+                conn,
+                profile_id=self.profile["id"],
+            )
+            self.assertTrue(
+                any(event.entity_table == "profiles" for event in trailing_events)
+            )
+
+        owner_bundle = build_bundle(self.owner, profile_id=self.profile["id"])
+        peer_bundle = build_bundle(self.peer, profile_id=self.profile["id"])
+        self.assertIsNotNone(owner_bundle)
+        self.assertIsNotNone(peer_bundle)
+        owner_replica_id = owner_bundle.manifest["sender_replica_id"]
+        peer_replica_id = peer_bundle.manifest["sender_replica_id"]
+
+        peer_result = import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=owner_bundle.ciphertext,
+        )
+        owner_result = import_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            ciphertext=peer_bundle.ciphertext,
+        )
+
+        self.assertEqual(peer_result.rejected_events, 0)
+        self.assertEqual(owner_result.rejected_events, 0)
+        for conn in (self.owner, self.peer):
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM custody_gap_review_relation_sets "
+                    "WHERE review_id = 'dual-header-review'"
+                ).fetchone()[0],
+                1,
+            )
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT last_seq FROM sync_replicas WHERE id = ?",
+                (owner_replica_id,),
+            ).fetchone()[0],
+            owner_bundle.last_seq,
+        )
+        self.assertEqual(
+            self.owner.execute(
+                "SELECT last_seq FROM sync_replicas WHERE id = ?",
+                (peer_replica_id,),
+            ).fetchone()[0],
+            peer_bundle.last_seq,
         )
 
     def test_delayed_signed_v1_relations_translate_dedup_and_advance_sequence(self):
