@@ -52,6 +52,7 @@ import {
   bridgePreviewArgs,
   canShowNoKnownCustodyGaps,
   collectCustodyGapPages,
+  collectCustodyLineagePages,
   custodyGapActionMode,
   formatCustodyMsat,
   reopenConfirmArgs,
@@ -1167,9 +1168,10 @@ export function CustodyGaps() {
   const coverageQuery = useDaemon<CustodyCoverageSnapshot>(
     "ui.custody.coverage.snapshot",
   );
-  const lineageQuery = useDaemon<CustodyLineageSnapshot>(
+  const lineageQuery = useDaemonInfinite<CustodyLineageSnapshot>(
     "ui.custody.lineage.snapshot",
     { limit: 100 },
+    (lastPage) => lastPage.data?.next_cursor ?? undefined,
   );
   const gapsQuery = useDaemonInfinite<CustodyGapSnapshot>(
     "ui.custody.gaps.list",
@@ -1182,6 +1184,10 @@ export function CustodyGaps() {
     .filter((page): page is CustodyGapSnapshot => Boolean(page));
   const snapshot = pages[0];
   const gaps = collectCustodyGapPages(pages);
+  const lineagePages = (lineageQuery.data?.pages ?? [])
+    .map((page) => page.data)
+    .filter((page): page is CustodyLineageSnapshot => Boolean(page));
+  const lineageSnapshot = collectCustodyLineagePages(lineagePages);
 
   if (gapsQuery.isLoading) return <ScreenSkeleton titleWidth="w-48" />;
   if (gapsQuery.isError || !snapshot) {
@@ -1346,8 +1352,30 @@ export function CustodyGaps() {
         </Card>
       )}
 
-      {lineageQuery.data?.data ? (
-        <CustodyLineageTimeline snapshot={lineageQuery.data.data} />
+      {lineageSnapshot ? (
+        <>
+          <CustodyLineageTimeline snapshot={lineageSnapshot} />
+          {lineageQuery.hasNextPage ? (
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                {t("lineage.pagination.loaded", {
+                  loaded: lineageSnapshot.items.length,
+                  total: lineageSnapshot.summary.total_count,
+                })}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={lineageQuery.isFetchingNextPage}
+                onClick={() => void lineageQuery.fetchNextPage()}
+              >
+                {lineageQuery.isFetchingNextPage
+                  ? t("lineage.pagination.loading")
+                  : t("lineage.pagination.loadMore")}
+              </Button>
+            </div>
+          ) : null}
+        </>
       ) : lineageQuery.isLoading ? (
         <Card className="gap-2 py-5">
           <CardHeader className="px-5">

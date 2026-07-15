@@ -1605,6 +1605,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         self.assertEqual(summary["count"], 2)
         self.assertEqual(summary["returned"], 1)
         self.assertTrue(summary["truncated"])
+        self.assertIsNotNone(summary["next_cursor"])
         self.assertFalse(summary["observation_commitments_included"])
         record = summary["records"][0]
         self.assertEqual(record["source_transaction_id"], "source")
@@ -1615,6 +1616,38 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         self.assertEqual(record["target_rail"], "bitcoin")
         self.assertNotIn("state", record)
         self.assertFalse(any("hash" in key or "slice" in key for key in record))
+
+        older = custody_decision_rows(
+            self.conn,
+            "profile",
+            limit=1,
+            cursor=summary["next_cursor"],
+        )
+        self.assertEqual(older["count"], 2)
+        self.assertEqual(older["returned"], 1)
+        self.assertFalse(older["truncated"])
+        self.assertIsNone(older["next_cursor"])
+        self.assertNotEqual(
+            older["records"][0]["target_transaction_id"],
+            record["target_transaction_id"],
+        )
+
+        with self.assertRaises(AppError) as mismatched_cursor:
+            custody_decision_rows(
+                self.conn,
+                "profile",
+                transaction_ids=["target-reviewed"],
+                cursor=summary["next_cursor"],
+            )
+        self.assertEqual(mismatched_cursor.exception.code, "validation")
+
+        with self.assertRaises(AppError) as mismatched_profile:
+            custody_decision_rows(
+                self.conn,
+                "another-profile",
+                cursor=summary["next_cursor"],
+            )
+        self.assertEqual(mismatched_profile.exception.code, "validation")
 
         reviewed = custody_decision_rows(
             self.conn,
@@ -1630,6 +1663,81 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         self.assertEqual(
             reviewed["records"][0]["component_id"], "component-reviewed"
         )
+
+        self.conn.execute(
+            "UPDATE journal_custody_decisions SET occurred_at = NULL "
+            "WHERE component_id = 'component-reviewed'"
+        )
+        page_before_null = custody_decision_rows(self.conn, "profile", limit=1)
+        null_timestamp_page = custody_decision_rows(
+            self.conn,
+            "profile",
+            limit=1,
+            cursor=page_before_null["next_cursor"],
+        )
+        self.assertIsNone(null_timestamp_page["records"][0]["occurred_at"])
+        self.assertIsNone(null_timestamp_page["next_cursor"])
+
+        profile_plan = self.conn.execute(
+            """
+            EXPLAIN QUERY PLAN
+            SELECT d.decision_id, source_wallet.label, target_wallet.label
+            FROM journal_custody_decisions d
+            LEFT JOIN wallets source_wallet
+              ON source_wallet.id = d.source_wallet_id
+            LEFT JOIN wallets target_wallet
+              ON target_wallet.id = d.target_wallet_id
+            WHERE d.profile_id = ?
+            ORDER BY d.occurred_at DESC, d.decision_id DESC
+            LIMIT ?
+            """,
+            ("profile", 100),
+        ).fetchall()
+        profile_plan_text = " ".join(str(row["detail"]) for row in profile_plan)
+        self.assertIn(
+            "idx_journal_custody_decisions_profile_time", profile_plan_text
+        )
+        self.assertNotIn("TEMP B-TREE", profile_plan_text)
+
+        next_page_plan = self.conn.execute(
+            """
+            EXPLAIN QUERY PLAN
+            SELECT d.decision_id, source_wallet.label, target_wallet.label
+            FROM journal_custody_decisions d
+            LEFT JOIN wallets source_wallet
+              ON source_wallet.id = d.source_wallet_id
+            LEFT JOIN wallets target_wallet
+              ON target_wallet.id = d.target_wallet_id
+            WHERE d.profile_id = ?
+              AND (d.occurred_at < ? OR d.occurred_at IS NULL
+                   OR (d.occurred_at = ? AND d.decision_id < ?))
+            ORDER BY d.occurred_at DESC, d.decision_id DESC
+            LIMIT ?
+            """,
+            (
+                "profile",
+                "2025-01-01T00:00:00Z",
+                "2025-01-01T00:00:00Z",
+                "f" * 64,
+                100,
+            ),
+        ).fetchall()
+        next_page_plan_text = " ".join(
+            str(row["detail"]) for row in next_page_plan
+        )
+        self.assertIn(
+            "idx_journal_custody_decisions_profile_time", next_page_plan_text
+        )
+        self.assertNotIn("TEMP B-TREE", next_page_plan_text)
+
+        decision_indexes = {
+            row["name"]
+            for row in self.conn.execute(
+                "PRAGMA index_list('journal_custody_decisions')"
+            ).fetchall()
+        }
+        self.assertIn("idx_journal_custody_decisions_source", decision_indexes)
+        self.assertIn("idx_journal_custody_decisions_target", decision_indexes)
 
         fallback = build_canonical_quantity_state([rows[0]])
         replacement_counts = replace_canonical_quantity_state(

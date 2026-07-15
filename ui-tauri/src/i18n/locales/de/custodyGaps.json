@@ -49,6 +49,11 @@
     "empty": "Es wurden noch keine endgültigen internen Wallet-Bewegungen aufgezeichnet.",
     "evidenceLabel": "Nachweis: {{evidence}}",
     "basisBlocked": "Die Verwahrung ist geklärt, aber die Steuerbasis bleibt durch eine frühere ungeklärte Verwahrungsgrenze blockiert.",
+    "pagination": {
+      "loaded": "{{loaded}} von {{total}} Wallet-Bewegungen angezeigt",
+      "loadMore": "Ältere Verwahrungslinie laden",
+      "loading": "Ältere Verwahrungslinie wird geladen…"
+    },
     "custodyState": {
       "internal_verified": "Verwahrung verifiziert",
       "internal_reviewed": "Verwahrung geprüft"

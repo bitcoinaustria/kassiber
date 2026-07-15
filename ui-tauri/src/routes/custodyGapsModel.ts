@@ -331,6 +331,7 @@ export interface CustodyLineageItem {
 }
 
 export interface CustodyLineageSnapshot {
+  next_cursor?: string | null;
   summary: {
     total_count: number;
     returned_count?: number;
@@ -342,6 +343,41 @@ export interface CustodyLineageSnapshot {
     qualification?: string;
   };
   items: CustodyLineageItem[];
+}
+
+export function collectCustodyLineagePages(
+  pages: readonly CustodyLineageSnapshot[],
+): CustodyLineageSnapshot | undefined {
+  const first = pages[0];
+  if (!first) return undefined;
+  const items = pages.flatMap((page) => page.items);
+  const last = pages.at(-1);
+  return {
+    ...first,
+    items,
+    next_cursor: last?.next_cursor ?? null,
+    summary: {
+      ...first.summary,
+      returned_count: items.length,
+      truncated: Boolean(last?.next_cursor),
+      internal_verified: pages.reduce(
+        (total, page) => total + (page.summary.internal_verified ?? 0),
+        0,
+      ),
+      internal_reviewed: pages.reduce(
+        (total, page) => total + (page.summary.internal_reviewed ?? 0),
+        0,
+      ),
+      basis_eligible: pages.reduce(
+        (total, page) => total + (page.summary.basis_eligible ?? 0),
+        0,
+      ),
+      basis_blocked: pages.reduce(
+        (total, page) => total + (page.summary.basis_blocked ?? 0),
+        0,
+      ),
+    },
+  };
 }
 
 export function collectCustodyGapPages(

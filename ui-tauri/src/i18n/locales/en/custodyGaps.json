@@ -49,6 +49,11 @@
     "empty": "No finalized internal wallet moves have been recorded yet.",
     "evidenceLabel": "Evidence: {{evidence}}",
     "basisBlocked": "Custody is settled, but tax basis remains blocked by an earlier unresolved custody boundary.",
+    "pagination": {
+      "loaded": "Showing {{loaded}} of {{total}} wallet moves",
+      "loadMore": "Load older custody lineage",
+      "loading": "Loading older custody lineage…"
+    },
     "custodyState": {
       "internal_verified": "Custody verified",
       "internal_reviewed": "Custody reviewed"

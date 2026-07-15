@@ -26,6 +26,7 @@ import {
   type ResidualClassificationPreview,
   canShowNoKnownCustodyGaps,
   collectCustodyGapPages,
+  collectCustodyLineagePages,
   custodyGapActionMode,
   formatCustodyMsat,
   type CustodyGap,
@@ -492,6 +493,52 @@ describe("CustodyGaps canonical custody lineage", () => {
     expect(html).not.toContain("private-target-wallet-id");
     expect(html).not.toContain("private-atomic-bundle-id");
     expect(html).not.toContain("private-component-id");
+  });
+
+  it("keeps older lineage reachable and summarizes all loaded pages", () => {
+    const older = {
+      ...lineage.items[0],
+      occurred_at: "2018-01-01T00:00:00Z",
+      from_wallet_label: "Legacy vault",
+      to_wallet_label: "Treasury vault",
+      custody_state: "internal_reviewed" as const,
+      basis_state: "eligible" as const,
+    };
+    const collected = collectCustodyLineagePages([
+      {
+        ...lineage,
+        next_cursor: "opaque-older-page",
+        summary: { ...lineage.summary, total_count: 2, truncated: true },
+      },
+      {
+        items: [older],
+        next_cursor: null,
+        summary: {
+          total_count: 2,
+          returned_count: 1,
+          truncated: false,
+          internal_verified: 0,
+          internal_reviewed: 1,
+          basis_eligible: 1,
+          basis_blocked: 0,
+        },
+      },
+    ]);
+
+    expect(collected?.items.map((item) => item.from_wallet_label)).toEqual([
+      "Treasury vault",
+      "Legacy vault",
+    ]);
+    expect(collected?.summary).toMatchObject({
+      total_count: 2,
+      returned_count: 2,
+      truncated: false,
+      internal_verified: 1,
+      internal_reviewed: 1,
+      basis_eligible: 1,
+      basis_blocked: 1,
+    });
+    expect(collected?.next_cursor).toBeNull();
   });
 });
 

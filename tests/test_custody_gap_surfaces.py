@@ -77,6 +77,9 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         lineage = get_tool("ui.custody.lineage.snapshot")
         self.assertEqual(lineage.parameters["properties"]["limit"]["maximum"], 500)
         self.assertEqual(
+            lineage.parameters["properties"]["cursor"]["type"], "string"
+        )
+        self.assertEqual(
             lineage.parameters["properties"]["transaction_id"]["type"],
             "string",
         )
@@ -127,6 +130,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             "count": 1,
             "returned": 1,
             "truncated": False,
+            "next_cursor": "opaque-next-page",
             "observation_commitments_included": False,
             "replicated": False,
         }
@@ -148,7 +152,11 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         ):
             payload = build_custody_lineage_snapshot(
                 conn,
-                {"limit": 25, "transaction_id": " in-1 "},
+                {
+                    "cursor": "opaque-current-page",
+                    "limit": 25,
+                    "transaction_id": " in-1 ",
+                },
             )
 
         read_rows.assert_called_once_with(
@@ -156,6 +164,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             "profile",
             limit=25,
             transaction_ids=["in-1"],
+            cursor="opaque-current-page",
         )
         self.assertEqual(payload["items"][0]["amount_msat"], str(10**20))
         self.assertEqual(payload["items"][0]["out_transaction_id"], "out-1")
@@ -183,6 +192,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             "Custody finality is separate",
             payload["summary"]["qualification"],
         )
+        self.assertEqual(payload["next_cursor"], "opaque-next-page")
         self.assertFalse(payload["observation_commitments_included"])
 
         with self.assertRaises(AppError) as raised:
@@ -191,6 +201,10 @@ class CustodyGapSurfaceTest(unittest.TestCase):
 
         with self.assertRaises(AppError) as raised:
             build_custody_lineage_snapshot(conn, {"descriptor": "private"})
+        self.assertEqual(raised.exception.code, "validation")
+
+        with self.assertRaises(AppError) as raised:
+            build_custody_lineage_snapshot(conn, {"cursor": ""})
         self.assertEqual(raised.exception.code, "validation")
 
     def test_lineage_daemon_dispatch_forwards_bounded_args(self):

@@ -1635,6 +1635,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "additionalProperties": False,
             "properties": {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                "cursor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": (
+                        "Opaque pagination cursor returned as next_cursor by the "
+                        "previous page."
+                    ),
+                },
                 "transaction_id": {
                     "type": "string",
                     "minLength": 1,

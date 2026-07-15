@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import sqlite3
@@ -823,6 +825,7 @@ def custody_decision_rows(
     *,
     limit: int = 100,
     transaction_ids: Sequence[str] | None = None,
+    cursor: str | None = None,
 ) -> dict[str, Any]:
     """Return a bounded, redacted semantic view of canonical custody edges.
 
@@ -835,6 +838,7 @@ def custody_decision_rows(
     bounded_limit = max(1, min(int(limit), 500))
     where = "d.profile_id = ?"
     params: list[Any] = [profile_id]
+    selected: tuple[str, ...] | None = None
     if transaction_ids is not None:
         selected = tuple(
             sorted({str(value) for value in transaction_ids if str(value)})
@@ -845,6 +849,7 @@ def custody_decision_rows(
                 "count": 0,
                 "returned": 0,
                 "truncated": False,
+                "next_cursor": None,
                 "observation_commitments_included": False,
                 "replicated": False,
             }
@@ -855,15 +860,40 @@ def custody_decision_rows(
         )
         params.extend(selected)
         params.extend(selected)
+    scope_where = where
+    scope_params = list(params)
+    cursor_filters = {
+        "profile_scope_hash": hashlib.sha256(
+            profile_id.encode("utf-8")
+        ).hexdigest(),
+        "transaction_ids": list(selected) if selected is not None else None,
+    }
+    cursor_data = _decode_custody_decision_cursor(cursor, cursor_filters)
+    if cursor_data is not None:
+        cursor_occurred_at = cursor_data["occurred_at"]
+        cursor_decision_id = cursor_data["decision_id"]
+        if cursor_occurred_at is None:
+            where += " AND d.occurred_at IS NULL AND d.decision_id < ?"
+            params.append(cursor_decision_id)
+        else:
+            where += (
+                " AND (d.occurred_at < ? OR d.occurred_at IS NULL"
+                " OR (d.occurred_at = ? AND d.decision_id < ?))"
+            )
+            params.extend(
+                [cursor_occurred_at, cursor_occurred_at, cursor_decision_id]
+            )
     total_count = int(
         conn.execute(
-            f"SELECT COUNT(*) FROM journal_custody_decisions d WHERE {where}",
-            params,
+            f"SELECT COUNT(*) FROM journal_custody_decisions d "
+            f"WHERE {scope_where}",
+            scope_params,
         ).fetchone()[0]
     )
     rows = conn.execute(
         f"""
-        SELECT d.source_transaction_id, d.target_transaction_id,
+        SELECT d.decision_id AS _cursor_decision_id,
+               d.source_transaction_id, d.target_transaction_id,
                d.source_wallet_id, source_wallet.label AS source_wallet_label,
                d.target_wallet_id, target_wallet.label AS target_wallet_label,
                d.source_network, d.target_network,
@@ -878,20 +908,86 @@ def custody_decision_rows(
         LEFT JOIN wallets source_wallet ON source_wallet.id = d.source_wallet_id
         LEFT JOIN wallets target_wallet ON target_wallet.id = d.target_wallet_id
         WHERE {where}
-        ORDER BY COALESCE(d.occurred_at, '') DESC, d.decision_id DESC
+        ORDER BY d.occurred_at DESC, d.decision_id DESC
         LIMIT ?
         """,
-        [*params, bounded_limit],
+        [*params, bounded_limit + 1],
     ).fetchall()
-    records = [dict(row) for row in rows]
+    has_more = len(rows) > bounded_limit
+    page = rows[:bounded_limit]
+    next_cursor = (
+        _encode_custody_decision_cursor(page[-1], cursor_filters)
+        if has_more and page
+        else None
+    )
+    records = []
+    for row in page:
+        record = dict(row)
+        record.pop("_cursor_decision_id", None)
+        records.append(record)
     return {
         "records": records,
         "count": total_count,
         "returned": len(records),
-        "truncated": total_count > len(records),
+        "truncated": has_more,
+        "next_cursor": next_cursor,
         "observation_commitments_included": False,
         "replicated": False,
     }
+
+
+def _encode_custody_decision_cursor(
+    row: Mapping[str, Any],
+    filters: Mapping[str, Any],
+) -> str:
+    payload = {
+        "decision_id": row["_cursor_decision_id"],
+        "filters": filters,
+        "occurred_at": row["occurred_at"],
+        "version": 1,
+    }
+    token = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _decode_custody_decision_cursor(
+    cursor: str | None,
+    filters: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    if cursor in (None, ""):
+        return None
+    if not isinstance(cursor, str):
+        raise AppError("cursor must be a string", code="validation", retryable=False)
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        payload = json.loads(
+            base64.urlsafe_b64decode(cursor + padding).decode("utf-8")
+        )
+        if payload.get("version") != 1 or payload.get("filters") != filters:
+            raise ValueError("cursor scope mismatch")
+        if not isinstance(payload.get("decision_id"), str) or not payload[
+            "decision_id"
+        ]:
+            raise ValueError("missing cursor decision id")
+        occurred_at = payload.get("occurred_at")
+        if occurred_at is not None and not isinstance(occurred_at, str):
+            raise ValueError("invalid cursor timestamp")
+        return payload
+    except (ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError) as exc:
+        raise AppError(
+            "Invalid cursor",
+            code="validation",
+            hint=(
+                "Pass the exact next_cursor value from the previous response; "
+                "do not modify it or change filters."
+            ),
+            retryable=False,
+        ) from exc
 
 
 def blocking_quantity_issues(

@@ -4660,7 +4660,7 @@ def build_custody_lineage_snapshot(
     """
 
     raw_args = _coerce_args(args)
-    unknown = sorted(set(raw_args) - {"limit", "transaction_id"})
+    unknown = sorted(set(raw_args) - {"cursor", "limit", "transaction_id"})
     if unknown:
         raise AppError(
             "ui.custody.lineage.snapshot received unsupported arguments",
@@ -4669,6 +4669,13 @@ def build_custody_lineage_snapshot(
             retryable=False,
         )
     limit = _coerce_limit(raw_args, default=100, maximum=500)
+    cursor = raw_args.get("cursor")
+    if cursor is not None and (not isinstance(cursor, str) or not cursor):
+        raise AppError(
+            "ui.custody.lineage.snapshot cursor must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
     transaction_id = raw_args.get("transaction_id")
     if transaction_id is not None:
         if not isinstance(transaction_id, str) or not transaction_id.strip():
@@ -4696,6 +4703,7 @@ def build_custody_lineage_snapshot(
         return {
             "scope": scope,
             "items": [],
+            "next_cursor": None,
             "summary": {
                 "total_count": 0,
                 "returned_count": 0,
@@ -4715,6 +4723,7 @@ def build_custody_lineage_snapshot(
         str(profile["id"]),
         limit=limit,
         transaction_ids=[transaction_id] if transaction_id is not None else None,
+        cursor=cursor,
     )
     items = []
     custody_counts: dict[str, int] = defaultdict(int)
@@ -4769,6 +4778,7 @@ def build_custody_lineage_snapshot(
     return {
         "scope": scope,
         "items": items,
+        "next_cursor": result.get("next_cursor"),
         "summary": {
             "total_count": int(result.get("count") or 0),
             "returned_count": int(result.get("returned", len(items)) or 0),
