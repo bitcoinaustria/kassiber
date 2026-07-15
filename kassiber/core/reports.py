@@ -7315,7 +7315,6 @@ def export_transactions_csv_report(conn, workspace_ref, profile_ref, file_path, 
         "rows": len(spec["rows"]),
     }
     return result
-    return result
 
 
 def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):

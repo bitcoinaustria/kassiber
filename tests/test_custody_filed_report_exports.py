@@ -123,6 +123,52 @@ def test_completed_full_report_export_registers_computed_saved_snapshot(tmp_path
         conn.close()
 
 
+def test_standalone_transaction_exports_are_evidence_not_saved_reports(tmp_path):
+    conn = open_db(tmp_path / "book")
+    try:
+        _scope(conn)
+        context = {
+            "workspace": {"id": "ws", "label": "Books"},
+            "profile": {
+                "id": "profile",
+                "workspace_id": "ws",
+                "label": "Book",
+            },
+            "wallet": None,
+            "title": "Kassiber Transactions - Book",
+            "spec": {
+                "sheet_name": "Transactions",
+                "title": "Transactions",
+                "headers": reports.TRANSACTIONS_EXPORT_HEADERS,
+                "rows": (),
+            },
+        }
+        csv_path = tmp_path / "transactions.csv"
+        xlsx_path = tmp_path / "transactions.xlsx"
+
+        with patch(
+            "kassiber.core.reports._transactions_export_context",
+            return_value=context,
+        ):
+            csv_result = reports.export_transactions_csv_report(
+                conn, "ws", "profile", csv_path, object()
+            )
+            xlsx_result = reports.export_transactions_xlsx_report(
+                conn, "ws", "profile", xlsx_path, object()
+            )
+
+        assert csv_path.is_file()
+        assert xlsx_path.is_file()
+        assert "report_snapshot" not in csv_result
+        assert "report_snapshot" not in xlsx_result
+        assert (
+            conn.execute("SELECT COUNT(*) FROM filed_report_snapshots").fetchone()[0]
+            == 0
+        )
+    finally:
+        conn.close()
+
+
 def test_pending_impact_gets_one_immutable_exact_post_rebuild_resolution(tmp_path):
     conn = open_db(tmp_path / "book")
     try:
