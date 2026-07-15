@@ -44,11 +44,14 @@ from kassiber.core.sync_backends import (
     scriptpubkey_scripthash,
 )
 from kassiber.core import imports as core_imports
+from kassiber.core.chain_observer.provenance import (
+    row_has_current_authoritative_observation,
+)
 from kassiber.core.imports import ImportCoordinatorHooks
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.proxy import _connect_via_socks5, _read_exact, _socks5_address
-from kassiber.time_utils import iso_to_unix, timestamp_to_iso
+from kassiber.time_utils import iso_to_unix, now_iso, timestamp_to_iso
 from kassiber.wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     DescriptorBranch,
@@ -256,6 +259,137 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(outcome["retracted"], 1)
         self.assertTrue(outcome["journal_invalidated"])
         self.assertEqual(outcome["bitcoinrpc_retracted_txids"], ["aa" * 32])
+
+    def test_bitcoinrpc_apply_persists_closed_observer_provenance(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-core-provenance-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            self.addCleanup(conn.close)
+            timestamp = now_iso()
+            conn.execute(
+                "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'WS', ?)",
+                (timestamp,),
+            )
+            conn.execute(
+                """
+                INSERT INTO profiles(
+                    id, workspace_id, label, fiat_currency, tax_country,
+                    tax_long_term_days, gains_algorithm, created_at
+                ) VALUES('profile', 'ws', 'Profile', 'EUR', 'generic', 365, 'FIFO', ?)
+                """,
+                (timestamp,),
+            )
+            conn.execute(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, label, kind, config_json, created_at
+                ) VALUES('wallet', 'ws', 'profile', 'Core', 'descriptor', '{}', ?)
+                """,
+                (timestamp,),
+            )
+            profile = conn.execute(
+                "SELECT * FROM profiles WHERE id = 'profile'"
+            ).fetchone()
+            wallet = conn.execute(
+                "SELECT * FROM wallets WHERE id = 'wallet'"
+            ).fetchone()
+            txid = "ab" * 32
+            record = {
+                "txid": txid,
+                "occurred_at": "2026-01-02T00:00:00Z",
+                "confirmed_at": "2026-01-02T00:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": "1",
+                "fee": "0.0001",
+                "raw_json": json.dumps(
+                    {
+                        "txid": txid,
+                        "chain": "bitcoin",
+                        "network": "regtest",
+                        "observer": "bitcoinrpc",
+                        "vin": [],
+                        "vout": [],
+                    },
+                    sort_keys=True,
+                ),
+            }
+            sync_state = WalletSyncState(
+                chain="bitcoin",
+                network="regtest",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=(),
+                tracked_scripts={},
+                history_cache={},
+            )
+            hooks = WalletSyncHooks(
+                import_file=lambda *_args: {},
+                insert_records=lambda db, scoped_profile, scoped_wallet, records, source, **kwargs: (
+                    cli_handlers._insert_records_for_sync(
+                        db,
+                        scoped_profile,
+                        scoped_wallet,
+                        records,
+                        source,
+                        commit=False,
+                        **kwargs,
+                    )
+                ),
+                resolve_backend=lambda *_args: {},
+                resolve_sync_state=lambda *_args: sync_state,
+                normalize_addresses=lambda values: list(values or []),
+                backend_adapters={},
+            )
+            fetch = WalletBackendFetch(
+                backend={
+                    "name": "core",
+                    "kind": "bitcoinrpc",
+                    "url": "http://127.0.0.1:18443",
+                },
+                sync_state=sync_state,
+                normalized_records=(record,),
+                adapter_meta={},
+                kind="bitcoinrpc",
+                started=0.0,
+                force_full=False,
+                authoritative_chain_observer=True,
+            )
+
+            with patch.object(
+                core_sync.source_overlap,
+                "filter_sync_state_for_canonical_owner",
+                side_effect=lambda _conn, _profile, _wallet, state: state,
+            ):
+                sync_wallet_from_backend(
+                    conn,
+                    {},
+                    profile,
+                    wallet,
+                    hooks,
+                    prefetched=fetch,
+                )
+
+            observed = conn.execute(
+                """
+                SELECT
+                    tx.*,
+                    proof.authority_version AS observation_authority_version,
+                    proof.graph_hash AS observation_graph_hash,
+                    proof.quantity_hash AS observation_quantity_hash,
+                    proof.fee_attribution AS observation_fee_attribution
+                FROM transactions tx
+                LEFT JOIN chain_observation_provenance proof
+                  ON proof.transaction_id = tx.id
+                WHERE tx.external_id = ?
+                """,
+                (txid,),
+            ).fetchone()
+            self.assertIsNotNone(observed)
+            self.assertTrue(row_has_current_authoritative_observation(observed))
+            proof = conn.execute(
+                "SELECT observer_kinds_json FROM chain_observation_provenance"
+            ).fetchone()
+            self.assertEqual(json.loads(proof["observer_kinds_json"]), ["bitcoinrpc"])
 
     def test_backend_progress_reuses_known_counters_for_ui_progress(self):
         progress = []

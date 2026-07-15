@@ -187,6 +187,50 @@ class WalletBackendFetch:
 
 
 @dataclass(frozen=True)
+class _StructuralAdapterIdentity:
+    """Private identity for a trusted non-dependency chain adapter apply."""
+
+    id: str
+    observer_kind: str
+
+
+def _authoritative_adapter_observation_provenance(
+    fetch: WalletBackendFetch,
+    wallet: WalletRow,
+) -> Mapping[str, Any] | None:
+    """Close provenance for Bitcoin Core and named compatibility adapters.
+
+    BDK/LWK prepare their own state-bound provenance.  Bitcoin Core and the
+    explicitly supported compatibility routes instead return normalized facts
+    through the internal adapter contract.  Their boolean authority marker is
+    process-local, so convert it to the same graph/quantity-bound persistence
+    record before the sync result leaves its atomic apply transaction.
+    """
+
+    if (
+        not fetch.authoritative_chain_observer
+        or fetch.observer_updates
+        or not fetch.normalized_records
+    ):
+        return None
+    kind = str(fetch.kind or fetch.backend.get("kind") or "adapter").strip().lower()
+    identity = _StructuralAdapterIdentity(
+        id=f"adapter:{kind}:{wallet['id']}",
+        observer_kind=kind,
+    )
+    entries = provenance_entries_for_facts(
+        ((identity, fetch.normalized_records),),
+        fetch.normalized_records,
+    )
+    if not entries:
+        return None
+    return {
+        "application_revision": str(uuid.uuid4()),
+        "entries": entries,
+    }
+
+
+@dataclass(frozen=True)
 class WalletBackendDiscovery:
     """Resolved backend targets before any backend adapter side effects run."""
 
@@ -851,6 +895,11 @@ def sync_wallet_from_backend(
         "_chain_observation_provenance",
         None,
     )
+    if observation_provenance is None:
+        observation_provenance = _authoritative_adapter_observation_provenance(
+            fetch,
+            wallet,
+        )
     prepared_negative_balance_rescan = adapter_meta.pop(
         "_prepared_negative_balance_rescan",
         None,
