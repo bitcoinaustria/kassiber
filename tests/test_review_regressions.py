@@ -7975,7 +7975,15 @@ class ReviewRegressionTest(unittest.TestCase):
             profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=[],
+            manual_pair_records=[
+                {
+                    "id": "reviewed-self-transfer",
+                    "out_transaction_id": "onchain-self-transfer-1-out",
+                    "in_transaction_id": "onchain-self-transfer-1-in",
+                    "kind": "manual",
+                    "policy": "carrying-value",
+                }
+            ],
         )
 
     def _direct_austrian_engine_inputs(self):
@@ -8235,7 +8243,8 @@ class ReviewRegressionTest(unittest.TestCase):
 
         rows = [
             _row("neu-buy", "wallet-a", "inbound", 100_000_000_000, "2024-06-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Vienna Neu buy", external_id="neu-buy"),
-            # Same-asset A -> B transfer: shared external_id auto-pairs the two legs into a MOVE.
+            # Same-asset A -> B transfer, explicitly reviewed because these are
+            # synthetic/import-shaped rows rather than observer authority.
             _row("xfer-out", "wallet-a", "outbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="withdrawal", description="Move A->B", external_id=_AT_TRANSFER_TXID),
             _row("xfer-in", "wallet-b", "inbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Move A->B", external_id=_AT_TRANSFER_TXID),
             _row("neu-sell", "wallet-b", "outbound", 30_000_000_000, "2025-03-01T09:00:00Z", fiat_rate=50000, fiat_value=15000, kind="withdrawal", description="Sell from B", external_id="neu-sell"),
@@ -8244,7 +8253,15 @@ class ReviewRegressionTest(unittest.TestCase):
             profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=[],
+            manual_pair_records=[
+                {
+                    "id": "reviewed-at-transfer",
+                    "out_transaction_id": "xfer-out",
+                    "in_transaction_id": "xfer-in",
+                    "kind": "manual",
+                    "policy": "carrying-value",
+                }
+            ],
         )
 
     def _direct_austrian_swap_payout_inputs(self):
@@ -11446,6 +11463,16 @@ class ReviewRegressionTest(unittest.TestCase):
             "--file", str(hot_csv),
         )
         self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--tx-out", _FIXTURE_SELF_TRANSFER_TXID,
+            "--tx-in", _FIXTURE_SELF_TRANSFER_TXID,
+            "--kind", "manual",
+            "--policy", "carrying-value",
+        )
+        self._assert_ok(payload, result, "transfers.pair")
 
         summary, result = self._run_json(
             "journals", "process",
@@ -11508,7 +11535,7 @@ class ReviewRegressionTest(unittest.TestCase):
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
         self.assertEqual(_legacy_snapshot_identity(actual), expected)
-        self.assertEqual(actual["intra_audit"][0]["pairing_source"], "row_matched")
+        self.assertEqual(actual["intra_audit"][0]["pairing_source"], "manual")
         self.assertTrue(
             actual["intra_audit"][0]["transfer_group_id"].startswith("pair:")
         )
@@ -11807,7 +11834,15 @@ class ReviewRegressionTest(unittest.TestCase):
                     ),
                 ],
                 wallet_refs_by_id=wallet_refs_by_id,
-                manual_pair_records=[],
+                manual_pair_records=[
+                    {
+                        "id": "reviewed-alt-transfer",
+                        "out_transaction_id": "xfer-out",
+                        "in_transaction_id": "xfer-in",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    }
+                ],
             )
         )
 
@@ -11926,7 +11961,15 @@ class ReviewRegressionTest(unittest.TestCase):
                     ),
                 ],
                 wallet_refs_by_id=wallet_refs_by_id,
-                manual_pair_records=[],
+                manual_pair_records=[
+                    {
+                        "id": "reviewed-mixed-transfer",
+                        "out_transaction_id": "xfer-out",
+                        "in_transaction_id": "xfer-in",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    }
+                ],
             )
         )
 
@@ -12576,7 +12619,15 @@ class ReviewRegressionTest(unittest.TestCase):
                     "account_label": "Treasury",
                 },
             },
-            manual_pair_records=[],
+            manual_pair_records=[
+                {
+                    "id": "reviewed-unfunded-transfer",
+                    "out_transaction_id": "transfer-out",
+                    "in_transaction_id": "transfer-in",
+                    "kind": "manual",
+                    "policy": "carrying-value",
+                }
+            ],
         )
         state = build_tax_engine(profile).build_ledger_state(inputs)
         self.assertEqual(state.entries, [])
@@ -12950,6 +13001,16 @@ class ReviewRegressionTest(unittest.TestCase):
             "--file", str(hot_csv),
         )
         self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--tx-out", _FIXTURE_SELF_TRANSFER_TXID,
+            "--tx-in", _FIXTURE_SELF_TRANSFER_TXID,
+            "--kind", "manual",
+            "--policy", "carrying-value",
+        )
+        self._assert_ok(payload, result, "transfers.pair")
         summary, result = self._run_json(
             "journals", "process",
             "--workspace", "Main",
