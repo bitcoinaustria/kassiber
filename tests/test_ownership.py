@@ -20,6 +20,10 @@ def _engine_conn():
             id TEXT, profile_id TEXT, label TEXT, kind TEXT,
             config_json TEXT, account_id TEXT
         );
+        CREATE TABLE wallet_policy_epochs (
+            id TEXT, wallet_id TEXT, status TEXT,
+            private_material_json TEXT, created_at TEXT
+        );
         CREATE TABLE wallet_utxos (
             profile_id TEXT, wallet_id TEXT, txid TEXT, vout INTEGER,
             address TEXT, branch_label TEXT, branch_index INTEGER,
@@ -680,7 +684,7 @@ class BuildOwnedIndexTests(unittest.TestCase):
         match = index.lookup_address("legacy-owned")[0]
         self.assertEqual((match.chain, match.network), ("bitcoin", "main"))
 
-    def test_imported_txid_history_is_indexed_per_wallet_network(self):
+    def test_imported_txid_history_does_not_imply_transaction_wide_ownership(self):
         conn = _engine_conn()
         txid = "cd" * 32
         conn.executemany(
@@ -725,13 +729,13 @@ class BuildOwnedIndexTests(unittest.TestCase):
         self.assertEqual(warnings, [])
         self.assertEqual(
             index.lookup_txid_wallets(txid, chain="bitcoin", network="main"),
-            {("main", "Main")},
+            set(),
         )
         self.assertEqual(
             index.lookup_txid_wallets(
                 txid, chain="bitcoin", network="regtest"
             ),
-            {("regtest", "Regtest")},
+            set(),
         )
 
     def test_core_receive_history_seeds_exact_scoped_outpoints(self):
@@ -809,11 +813,14 @@ class BuildOwnedIndexTests(unittest.TestCase):
             ],
             ["merchant"],
         )
+        # Exact receive observations establish only their named outpoints.
+        # A transaction row's wallet association is not proof that every leg
+        # of a fan-out transaction belongs to that wallet.
         self.assertEqual(
             index.lookup_txid_wallets(
                 txid, chain="bitcoin", network="regtest"
             ),
-            {("merchant", "Merchant"), ("treasury", "Treasury")},
+            set(),
         )
 
     def test_core_receive_history_does_not_seed_ambiguous_address(self):

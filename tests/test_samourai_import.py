@@ -18,7 +18,10 @@ from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.wallet_descriptors import load_descriptor_plan
-from tests.custody_tax_helpers import finalized_tax_inputs
+from tests.custody_tax_helpers import (
+    authoritative_chain_observation,
+    finalized_tax_inputs,
+)
 
 
 NOW = "2026-06-05T00:00:00Z"
@@ -646,6 +649,9 @@ class SamouraiImportTest(unittest.TestCase):
                 "created_at": row["occurred_at"],
             }
 
+        def observed_row(row):
+            return authoritative_chain_observation(engine_row(row))
+
         rows = [
             engine_row(
                 _tax_row(
@@ -657,7 +663,7 @@ class SamouraiImportTest(unittest.TestCase):
                     fiat_rate=60_000,
                 )
             ),
-            engine_row(
+            observed_row(
                 _tax_row(
                     "tx0-out",
                     "deposit",
@@ -668,7 +674,7 @@ class SamouraiImportTest(unittest.TestCase):
                     fiat_rate=60_000,
                 )
             ),
-            engine_row(
+            observed_row(
                 _tax_row(
                     "tx0-premix",
                     "premix",
@@ -677,7 +683,7 @@ class SamouraiImportTest(unittest.TestCase):
                     amount=80_000_000,
                 )
             ),
-            engine_row(
+            observed_row(
                 _tax_row(
                     "tx0-badbank",
                     "badbank",
@@ -716,6 +722,62 @@ class SamouraiImportTest(unittest.TestCase):
                 "transfer_out",
             ],
         )
+
+    def test_tx0_imported_residual_stays_in_custody_suspense(self):
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "ws-1",
+            "tax_country": "generic",
+        }
+        wallet_refs = {
+            f"wallet-{section}": {
+                "id": f"wallet-{section}",
+                "label": section.title(),
+            }
+            for section in ("deposit", "premix", "badbank")
+        }
+        rows = [
+            _tax_row(
+                "tx0-out",
+                "deposit",
+                "outbound",
+                external_id="unverified-tx0",
+                amount=100_000_000,
+                fee=1_000,
+                fiat_rate=60_000,
+            ),
+            _tax_row(
+                "tx0-premix",
+                "premix",
+                "inbound",
+                external_id="unverified-tx0",
+                amount=80_000_000,
+            ),
+            _tax_row(
+                "tx0-badbank",
+                "badbank",
+                "inbound",
+                external_id="unverified-tx0",
+                amount=19_999_000,
+            ),
+        ]
+
+        projection = finalized_tax_inputs(
+            profile,
+            rows=rows,
+            wallet_refs_by_id=wallet_refs,
+        ).finalized_tax_projection
+
+        self.assertEqual(projection.rows, ())
+        quarantine_reasons = {item["reason"] for item in projection.quarantines}
+        self.assertIn("samourai_native_event_unverified", quarantine_reasons)
+        self.assertNotIn("privacy_hop_unresolved", quarantine_reasons)
+        blocker_codes = {
+            json.loads(item["detail_json"])["blocker_code"]
+            for item in projection.quarantines
+            if item["reason"] == "custody_quantity_unresolved"
+        }
+        self.assertIn("implicit_wallet_delta_unallocated", blocker_codes)
 
     def test_tx0_group_quarantines_atomically_when_one_leg_fails_gate(self):
         # A tx0's N MOVE legs carry a shared group_id: when the source can fund
@@ -765,6 +827,9 @@ class SamouraiImportTest(unittest.TestCase):
                 "created_at": row["occurred_at"],
             }
 
+        def observed_row(row):
+            return authoritative_chain_observation(engine_row(row))
+
         rows = [
             engine_row(
                 _tax_row(
@@ -776,7 +841,7 @@ class SamouraiImportTest(unittest.TestCase):
                     fiat_rate=60_000,
                 )
             ),
-            engine_row(
+            observed_row(
                 _tax_row(
                     "tx0-out",
                     "deposit",
@@ -787,7 +852,7 @@ class SamouraiImportTest(unittest.TestCase):
                     fiat_rate=60_000,
                 )
             ),
-            engine_row(
+            observed_row(
                 _tax_row(
                     "tx0-premix",
                     "premix",
@@ -796,7 +861,7 @@ class SamouraiImportTest(unittest.TestCase):
                     amount=80_000_000,
                 )
             ),
-            engine_row(
+            observed_row(
                 _tax_row(
                     "tx0-badbank",
                     "badbank",

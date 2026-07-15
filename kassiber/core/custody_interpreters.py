@@ -163,7 +163,12 @@ def _anchor_id(row: Mapping[str, Any]) -> str:
 def _samourai_privacy_pairs(
     rows: Sequence[Mapping[str, Any]],
     observations: Mapping[str, QuantityObservation],
-) -> tuple[list[Mapping[str, Any]], list[QuantityClaim], set[str]]:
+) -> tuple[
+    list[Mapping[str, Any]],
+    list[QuantityClaim],
+    set[str],
+    set[str],
+]:
     """Compile tracked Whirlpool lifecycle fan-outs before generic matching."""
 
     grouped: dict[tuple[str, object], list[tuple[Mapping[str, Any], str]]] = {}
@@ -184,6 +189,7 @@ def _samourai_privacy_pairs(
 
     pairs: list[Mapping[str, Any]] = []
     fee_claims: list[QuantityClaim] = []
+    candidate_ids: set[str] = set()
     touched_ids: set[str] = set()
     for (wallet_group_id, event_key), entries in sorted(
         grouped.items(), key=lambda item: (item[0][0], str(item[0][1]))
@@ -196,8 +202,11 @@ def _samourai_privacy_pairs(
         in_sections = {
             section for row, section in entries if _field(row, "direction") == "inbound"
         }
+        is_tx0 = "deposit" in out_sections and bool(
+            in_sections & {"premix", "badbank"}
+        )
         lifecycle = (
-            ("deposit" in out_sections and bool(in_sections & {"premix", "badbank"}))
+            is_tx0
             or ("premix" in out_sections and "postmix" in in_sections)
             or ("postmix" in out_sections and "postmix" in in_sections)
         )
@@ -210,14 +219,28 @@ def _samourai_privacy_pairs(
         group_id = (
             f"samourai:{wallet_group_id}:{event_key.native_event_id}"
         )
+        group_candidate_ids = {
+            _anchor_id(row) for row in (*outs, *ins) if _anchor_id(row)
+        }
+        candidate_ids.update(group_candidate_ids)
         allocated = 0
+        allocated_targets: list[QuantityObservation] = []
+        group_touched_ids: set[str] = set()
+        authoritative_native_group = source.authoritative_chain_observation
         for in_row in sorted(ins, key=_row_id):
             target = observations.get(_anchor_id(in_row))
             if target is None or target.asset != source.asset:
+                authoritative_native_group = False
                 continue
             amount_msat = target.principal_msat
             if amount_msat <= 0 or allocated + amount_msat > source.principal_msat:
+                authoritative_native_group = False
                 continue
+            if (
+                not target.authoritative_chain_observation
+                or target.event_key != source.event_key
+            ):
+                authoritative_native_group = False
             pairs.append(
                 {
                     "out": out_row,
@@ -229,10 +252,19 @@ def _samourai_privacy_pairs(
                 }
             )
             allocated += amount_msat
-            touched_ids.update((_anchor_id(out_row), _anchor_id(in_row)))
+            allocated_targets.append(target)
+            group_touched_ids.update((_anchor_id(out_row), _anchor_id(in_row)))
         residual_msat = source.principal_msat - allocated
         if allocated and residual_msat > 0:
-            exact_fee = source.fee_attribution == "exact"
+            exact_coordinator_fee = bool(
+                is_tx0
+                and authoritative_native_group
+                and source.fee_attribution == "exact"
+            )
+            supporting_evidence_hashes = {source.evidence_detail_hash}
+            supporting_evidence_hashes.update(
+                target.evidence_detail_hash for target in allocated_targets
+            )
             fee_claims.append(
                 QuantityClaim(
                     claim_id=f"samourai-fee:{source.quantity_hash}:{residual_msat}",
@@ -241,23 +273,37 @@ def _samourai_privacy_pairs(
                         allocated,
                         source.principal_msat,
                     ),
-                    state=(EXTERNAL_CONFIRMED if exact_fee else CUSTODY_SUSPENSE),
+                    state=(
+                        EXTERNAL_CONFIRMED
+                        if exact_coordinator_fee
+                        else CUSTODY_SUSPENSE
+                    ),
                     priority=(
                         ClaimPriority.EXACT_NATIVE_EVENT
-                        if exact_fee
+                        if exact_coordinator_fee
                         else ClaimPriority.ACCOUNTING_CONVENTION
                     ),
                     reason=(
-                        "samourai_internal_fee"
-                        if exact_fee
+                        "samourai_coordinator_fee"
+                        if exact_coordinator_fee
                         else "implicit_wallet_delta_unallocated"
                     ),
-                    supporting_evidence_hashes=(source.evidence_detail_hash,),
+                    supporting_evidence_hashes=tuple(
+                        sorted(supporting_evidence_hashes)
+                    ),
                     atomic_bundle_id=f"pair-group:{group_id}",
-                    destination_kind="fee",
+                    # A targetless fee is a finalized external classification.
+                    # An imported or implicit wallet delta is only a custody
+                    # discrepancy and must remain destination-neutral suspense.
+                    destination_kind="fee" if exact_coordinator_fee else None,
                 )
             )
-    return pairs, fee_claims, touched_ids
+        # Structured wallet metadata groups candidates; it is not authority.
+        # Suppress the ordinary privacy-hop blocker only after every used leg
+        # in a Tx0 group was independently observed at the canonical boundary.
+        if authoritative_native_group:
+            touched_ids.update(group_touched_ids)
+    return pairs, fee_claims, candidate_ids, touched_ids
 
 
 def _exact_native_pair_ids(
@@ -740,7 +786,12 @@ def compile_custody_interpreters(
 
     excluded = {str(item) for item in component_transaction_ids if item}
     observations = _observations_by_transaction(canonical)
-    samourai_pairs, samourai_fee_claims, samourai_touched_ids = (
+    (
+        samourai_pairs,
+        samourai_fee_claims,
+        samourai_candidate_ids,
+        samourai_touched_ids,
+    ) = (
         _samourai_privacy_pairs(rows, observations)
     )
     auto_pairs, _ = detect_intra_transfers(rows)
@@ -751,7 +802,11 @@ def compile_custody_interpreters(
         if _is_reviewed_privacy_kind(_field(record, "kind"))
         for key in ("out_transaction_id", "in_transaction_id")
     }
-    resolved_privacy_ids.update(samourai_touched_ids)
+    # Structured Samourai groups get their own exact quarantine below. Avoid a
+    # second generic privacy-hop blocker for the same rows; authoritative groups
+    # are resolved, while unverified groups remain blocked by the specific
+    # native-event requirement.
+    resolved_privacy_ids.update(samourai_candidate_ids)
     # Canonical native-event identity is stronger than the generic privacy-hop
     # warning. This does not trust amount-only CoinJoin matches: both rows must
     # resolve to the same protocol-qualified txid above.
@@ -787,6 +842,23 @@ def compile_custody_interpreters(
         str(_field(item, "transaction_id") or "")
         for item in privacy_quarantines
     }
+    samourai_unverified_ids = samourai_candidate_ids - samourai_touched_ids - excluded
+    samourai_unverified_quarantines = tuple(
+        {
+            "transaction_id": transaction_id,
+            "workspace_id": _field(rows_by_id.get(transaction_id, {}), "workspace_id"),
+            "profile_id": _field(rows_by_id.get(transaction_id, {}), "profile_id"),
+            "reason": "samourai_native_event_unverified",
+            "detail_json": json.dumps(
+                {
+                    "required_for": "authoritative_same_event_observation",
+                    "resolution": "sync every imported Samourai source with a chain observer",
+                },
+                sort_keys=True,
+            ),
+        }
+        for transaction_id in sorted(samourai_unverified_ids)
+    )
     channel_roles = {
         str(transaction_id): str(role)
         for transaction_id, role in (channel_roles or {}).items()
@@ -1087,6 +1159,7 @@ def compile_custody_interpreters(
                     *invalid_payout_source_ids,
                     *derivation_blocked_ids,
                     *privacy_blocked_ids,
+                    *samourai_unverified_ids,
                 }
             )
         ),
@@ -1101,6 +1174,7 @@ def compile_custody_interpreters(
                 *direct_payout_conflict_quarantines,
                 *direct_payout_quarantines,
                 *privacy_quarantines,
+                *samourai_unverified_quarantines,
             )
         ),
     )

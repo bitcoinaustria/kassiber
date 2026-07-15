@@ -124,7 +124,7 @@ def _prepare_same_txid_roll(conn):
 
 
 class CustodyQuantityHandlerTests(unittest.TestCase):
-    def test_same_txid_without_closed_observer_provenance_is_not_auto_verified(self):
+    def test_two_observed_same_txid_wallet_rows_auto_verify_without_full_graph(self):
         with tempfile.TemporaryDirectory() as root:
             conn = _book(root, "FIFO")
             try:
@@ -133,6 +133,16 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                 result = handlers.process_journals(conn, "Books", "Book")
 
                 self.assertEqual(result["custody_quantity"]["differences"], 0)
+                self.assertFalse(result["custody_quantity"]["blocked"])
+                self.assertEqual(
+                    conn.execute(
+                        """
+                        SELECT COUNT(*) FROM chain_observation_provenance
+                        WHERE transaction_id IN ('out', 'in')
+                        """
+                    ).fetchone()[0],
+                    0,
+                )
                 self.assertEqual(
                     conn.execute(
                         """
@@ -141,7 +151,7 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                           AND entry_type IN ('transfer_out', 'transfer_in')
                         """
                     ).fetchone()[0],
-                    0,
+                    2,
                 )
             finally:
                 conn.close()
