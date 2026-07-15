@@ -37,8 +37,6 @@ def _row(
     privacy_boundary: str | None = None,
     wallet_config_json: str = "{}",
     raw_json: str = "{}",
-    custody_chronology_signal: str | None = None,
-    custody_topology_signal: str | None = None,
 ):
     # Tests use decimal literals whose BTC->msat products are exact integers.
     return {
@@ -58,8 +56,6 @@ def _row(
         "excluded": 0,
         "kind": kind,
         "privacy_boundary": privacy_boundary,
-        "custody_chronology_signal": custody_chronology_signal,
-        "custody_topology_signal": custody_topology_signal,
     }
 
 
@@ -717,7 +713,7 @@ class CustodyGapMatcherTests(unittest.TestCase):
                     occurred_at="2021-01-01T00:00:00Z",
                     wallet_id="new-a",
                     privacy_boundary="coinjoin",
-                    custody_topology_signal="direct_ancestry",
+                    wallet_kind="samourai",
                 ),
                 _row(
                     "return-weak",
@@ -948,6 +944,17 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 profile_id TEXT NOT NULL,
                 transaction_id TEXT NOT NULL,
                 entry_type TEXT NOT NULL
+            );
+            CREATE TABLE journal_quantity_issues (
+                issue_id TEXT PRIMARY KEY,
+                profile_id TEXT NOT NULL,
+                issue_type TEXT NOT NULL,
+                state TEXT NOT NULL,
+                asset TEXT,
+                amount_msat INTEGER,
+                occurred_at TEXT,
+                reason TEXT NOT NULL,
+                blocks_from TEXT
             );
             """
         )

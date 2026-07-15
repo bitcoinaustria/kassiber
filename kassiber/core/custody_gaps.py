@@ -70,14 +70,6 @@ _SAMOURAI_TRANSACTION_KINDS = frozenset(
 _EXTERNAL_ORIGIN_KINDS = frozenset(
     {"income", "revenue", "sale", "exchange_buy", "customer_payment"}
 )
-_CHRONOLOGY_SIGNALS = frozenset(
-    {"source_retired_before_destination_active", "wallet_roll_overlap"}
-)
-_TOPOLOGY_SIGNALS = frozenset(
-    {"direct_ancestry", "native_path", "shared_policy_epoch"}
-)
-
-
 class CustodyGapSearchLimitError(ValueError):
     """Advisory search stopped at a configured capacity ceiling.
 
@@ -687,12 +679,6 @@ def _structured_evidence_codes(
     if samourai_role in {"parent", "child"} and samourai_section in _SAMOURAI_SECTIONS:
         signals.add("structured_samourai_policy")
 
-    chronology = str(_get(row, "custody_chronology_signal") or "").strip().lower()
-    if chronology in _CHRONOLOGY_SIGNALS:
-        signals.add("structured_custody_chronology")
-    topology = str(_get(row, "custody_topology_signal") or "").strip().lower()
-    if topology in _TOPOLOGY_SIGNALS:
-        signals.add("structured_custody_topology")
     return tuple(sorted(signals)), tuple(sorted(disqualifiers))
 
 
