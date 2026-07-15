@@ -652,6 +652,7 @@ def _tax_eligibility(
     barriers_by_pool: dict[
         TaxExposurePool, tuple[str, str, str, str, str]
     ] = {}
+    directly_blocked_hashes: set[str] = set()
 
     def row_pool(row: Mapping[str, Any]) -> TaxExposurePool | None:
         """Resolve a rejected row's pool without accepting its event identity."""
@@ -687,6 +688,12 @@ def _tax_eligibility(
             barriers_by_pool[pool] = barrier
 
     for issue in issues:
+        if issue.issue_type == "native_audit_evidence_invalid":
+            directly_blocked_hashes.update(
+                transaction_to_hash[transaction_id]
+                for transaction_id in issue.transaction_ids
+                if transaction_id in transaction_to_hash
+            )
         known = [
             (
                 pool_by_hash[transaction_to_hash[transaction_id]],
@@ -732,6 +739,14 @@ def _tax_eligibility(
 
     def eligible_decision(item: ArbitratedSlice) -> bool:
         if not item.finalized:
+            return False
+        # A finalized fallback at the first barrier event is normally useful:
+        # an unresolved sibling slice must not erase unrelated conclusions from
+        # the same physical transaction. It is not useful when the issue names
+        # this observation itself. In that case (for example a failed native
+        # ownership proof) projecting the fallback would book the exact
+        # quantity whose custody evidence failed.
+        if item.source.observation_hash in directly_blocked_hashes:
             return False
         item_barrier = barriers_by_pool.get(
             pool_by_hash[item.source.observation_hash]

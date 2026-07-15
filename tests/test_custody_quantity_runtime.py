@@ -192,6 +192,112 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         ]
         self.assertEqual([item.amount_msat for item in fee_postings], [10])
 
+    def test_failed_rowless_native_proof_never_projects_fallback_disposal(self):
+        occurred_at = "2025-01-01T00:00:00Z"
+        source = _row(
+            "source",
+            "wallet-a",
+            "outbound",
+            1_000,
+            occurred_at,
+            txid="aa" * 32,
+        )
+        for key in (
+            "observation_authority_version",
+            "observation_graph_hash",
+            "observation_quantity_hash",
+            "observation_fee_attribution",
+        ):
+            source.pop(key, None)
+        later = _row(
+            "later",
+            "wallet-a",
+            "outbound",
+            500,
+            "2026-01-01T00:00:00Z",
+            txid="bb" * 32,
+        )
+        audit = self._native_audit(
+            source_id="source",
+            out_id="owned-derive:out:0",
+            in_id="owned-derive:in:0",
+            from_wallet="wallet-a",
+            to_wallet="wallet-b",
+            received=1_000,
+            fee=0,
+            occurred_at=occurred_at,
+        )
+
+        state = build_canonical_quantity_state(
+            [source, later], native_evidence=[audit]
+        )
+        projection = compile_finalized_tax_projection(
+            {
+                "id": "profile-one",
+                "workspace_id": "workspace-one",
+                "label": "Book",
+            },
+            [source, later],
+            state,
+        )
+
+        self.assertFalse(projection.rows)
+        self.assertIn(
+            ("source", "custody_quantity_unresolved"),
+            {
+                (item["transaction_id"], item["reason"])
+                for item in projection.quarantines
+            },
+        )
+        self.assertIn(
+            ("later", "custody_basis_barrier"),
+            {
+                (item["transaction_id"], item["reason"])
+                for item in projection.quarantines
+            },
+        )
+        self.assertFalse(state.tax_eligibility.eligible_decisions)
+
+    def test_authoritative_rowless_native_proof_projects_only_internal_move(self):
+        occurred_at = "2025-01-01T00:00:00Z"
+        source = _row(
+            "source",
+            "wallet-a",
+            "outbound",
+            1_000,
+            occurred_at,
+            txid="ac" * 32,
+        )
+        audit = self._native_audit(
+            source_id="source",
+            out_id="owned-derive:out:0",
+            in_id="owned-derive:in:0",
+            from_wallet="wallet-a",
+            to_wallet="wallet-b",
+            received=1_000,
+            fee=0,
+            occurred_at=occurred_at,
+        )
+
+        state = build_canonical_quantity_state([source], native_evidence=[audit])
+        projection = compile_finalized_tax_projection(
+            {
+                "id": "profile-one",
+                "workspace_id": "workspace-one",
+                "label": "Book",
+            },
+            [source],
+            state,
+        )
+
+        self.assertFalse(state.issues)
+        self.assertEqual(len(projection.intra_pairs), 1)
+        self.assertEqual(
+            {row["direction"] for row in projection.rows},
+            {"inbound", "outbound"},
+        )
+        self.assertFalse(projection.quarantines)
+
     def test_native_audit_reuses_exact_real_inbound_without_double_counting(self):
         occurred_at = "2025-01-01T00:00:00Z"
         txid = "bc" * 32
