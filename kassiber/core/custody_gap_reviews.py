@@ -599,10 +599,6 @@ def _redacted_review_history_row(
     include_gap_id: bool = False,
     include_candidate_wide_payload: bool = True,
 ) -> dict[str, Any]:
-    try:
-        snapshot = json.loads(str(row["snapshot_json"] or "{}"))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        snapshot = {}
     event_kind = str(row["event_kind"] or "review_decision")
     status = (
         "needs_review"
@@ -620,14 +616,17 @@ def _redacted_review_history_row(
             else None
         ),
         "authored_source": row["authored_source"],
-        "reason": row["reason"],
         "created_at": row["created_at"],
-        "filed_report_impact_count": int(row["filed_report_impact_count"] or 0),
     }
     if include_candidate_wide_payload:
+        try:
+            snapshot = json.loads(str(row["snapshot_json"] or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            snapshot = {}
         residual = snapshot.get("residual_classification")
         output.update(
             {
+                "reason": row["reason"],
                 "retained_msat": int(snapshot.get("retained_msat") or 0),
                 "residual_msat": int(snapshot.get("residual_msat") or 0),
                 "residual_classification": (
@@ -636,10 +635,24 @@ def _redacted_review_history_row(
                     and residual.get("classification")
                     else None
                 ),
+                "filed_report_impact_count": int(
+                    row["filed_report_impact_count"] or 0
+                ),
             }
         )
     else:
-        output["candidate_wide_payload_excluded"] = True
+        output.update(
+            {
+                "candidate_wide_payload_excluded": True,
+                "excluded_fields": [
+                    "reason",
+                    "retained_msat",
+                    "residual_msat",
+                    "residual_classification",
+                    "filed_report_impact_count",
+                ],
+            }
+        )
     if include_gap_id:
         output["gap_id"] = row["gap_id"]
     return output

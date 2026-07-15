@@ -964,9 +964,21 @@ class AuditPackageCoreTest(unittest.TestCase):
             self.assertTrue(
                 history["records"][0]["candidate_wide_payload_excluded"]
             )
+            self.assertEqual(
+                history["records"][0]["excluded_fields"],
+                [
+                    "reason",
+                    "retained_msat",
+                    "residual_msat",
+                    "residual_classification",
+                    "filed_report_impact_count",
+                ],
+            )
+            self.assertNotIn("reason", history["records"][0])
             self.assertNotIn("retained_msat", history["records"][0])
             self.assertNotIn("residual_msat", history["records"][0])
             self.assertNotIn("residual_classification", history["records"][0])
+            self.assertNotIn("filed_report_impact_count", history["records"][0])
             self.assertNotIn("transaction_id", history["records"][0])
             self.assertNotIn("source_ids", history["records"][0])
 
@@ -980,11 +992,14 @@ class AuditPackageCoreTest(unittest.TestCase):
         )
         complete_review = complete["custody_gap_review_history"]["records"][0]
         self.assertNotIn("candidate_wide_payload_excluded", complete_review)
+        self.assertNotIn("excluded_fields", complete_review)
+        self.assertEqual(complete_review["reason"], "componentless dismissal")
         self.assertEqual(complete_review["retained_msat"], 987_654_321)
         self.assertEqual(complete_review["residual_msat"], 123_456_789)
         self.assertEqual(
             complete_review["residual_classification"], "external_disposal"
         )
+        self.assertEqual(complete_review["filed_report_impact_count"], 0)
 
         unrelated = audit_package.build_evidence_summary(
             self.conn,
