@@ -1,8 +1,8 @@
 # Custody Lineage And Missing-Wallet Reconciliation
 
 **Status:** Implemented; the terminal stop state was verified on 2026-07-15.
-Deferred scalability and ancient-schema hardening remain tracked separately in
-[`TODO.md`](../../TODO.md).
+Ancient-schema hardening and the 100k-1m scalability follow-up are complete.
+Unrelated future work remains tracked in [`TODO.md`](../../TODO.md).
 
 **Scope:** One profile is one legal owner. Kassiber reconciles that owner's
 Bitcoin custody history; it does not model shareholders, fractional interests,
@@ -524,6 +524,26 @@ equality for known-correct books and a named explanation for every deliberate
 change. Property tests generate bounded graphs for conservation, exclusivity,
 permutation invariance, supersession monotonicity, and no unresolved-to-tax
 path. Performance tests enforce bounded full-history candidate generation.
+
+The reproducible scalability harness is
+`scripts/benchmark-custody-scalability.py`. Its CI smoke test asserts structural
+contracts rather than machine-specific time limits: atomic-bundle validation is
+linear, lineage pages use the profile/time and transaction indexes without a
+full-profile sort, and large-book gap discovery remains useful and explicitly
+incomplete. A 2026-07-15 local run at 100k, 250k, 500k, and 1m transactions
+kept every invariant. At 1m, 400k decisions arbitrated in 1.39s, first/next
+lineage pages took 29/28ms, and the seeded >87-source missing-wallet candidate
+surfaced in 0.38s. These timings are observations, not pass/fail thresholds.
+
+Large-book gap discovery uses a bounded worklist: typed privacy/Samourai
+boundaries first, then high-value untyped outflows so an unlabelled 10 BTC out /
+9.9 BTC back pattern remains reviewable. Amount-indexed return ranges apply a
+per-slot coverage floor to bound this advisory scan; unusual groups containing
+smaller legs may be omitted, so the search is explicitly incomplete. It never
+promotes a sampled destination; only the exact typed source is held in suspense,
+while untyped hints remain advisory. Opaque,
+version-bound cursors read a replaceable SQLCipher-local snapshot, which is
+purged on profile reset and denied replication.
 
 Integration lanes include fast replay, Bitcoin Core, Electrum parity, Silent
 Payments, Liquid/Boltz, CLN/LND, migration followed by journal rebuild, and

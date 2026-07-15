@@ -149,12 +149,13 @@ same verification surface.
     every terminal-stop condition in the plan is met and no issue-scoped P0/P1
     remains; move unrelated P2+ findings to separate TODO items and stop.
 
-- [ ] Scale custody-gap discovery beyond the current conflict-complete
-  in-memory source-group ceiling. Replace the adjacent-group expansion with
-  indexed or chunked amount/time partitioning that preserves deterministic
-  conflict completeness. Add a long-lived-book regression with at least 87
-  outbound legs and a plausible return: useful candidates must still surface,
-  and an incomplete search must never be presented as complete.
+- [x] Scale custody-gap discovery beyond the former 50k-input and 87-source
+  all-or-nothing ceilings. Large books now use a bounded typed/high-value source
+  worklist and amount-indexed return ranges, keep incomplete sampled candidates
+  review-only, quarantine only exact typed source boundaries, and expose stable
+  version-bound pages without rerunning discovery. Long-lived-book regressions
+  and the 100k-1m benchmark prove useful candidates still surface while
+  incomplete searches remain explicit.
 
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an

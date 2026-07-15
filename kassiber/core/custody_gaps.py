@@ -902,6 +902,9 @@ def load_gap_candidates(
             minimum_total = (
                 leg.principal_msat * DEFAULT_MIN_COVERAGE_PPM // 1_000_000
             )
+            # This is an advisory per-slot floor, not a completeness proof: a
+            # valid uneven group may contain smaller legs. Large-book results
+            # therefore stay review-only and explicitly capacity-limited.
             minimum_leg = max(
                 1,
                 (minimum_total + DEFAULT_MAX_AGGREGATE_RETURN_LEGS - 1)
