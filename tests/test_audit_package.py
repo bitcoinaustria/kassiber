@@ -643,7 +643,14 @@ class AuditPackageCoreTest(unittest.TestCase):
             warning["code"]
             for warning in tx_summary["readiness"]["warnings"]
         }
-        self.assertEqual(summary["journal_freshness"]["status"], "not_processed")
+        self.assertEqual(
+            summary["journal_freshness"]["status"],
+            "excluded_from_bounded_scope",
+        )
+        self.assertNotIn(
+            "active_transaction_count",
+            summary["journal_freshness"],
+        )
         self.assertEqual(tx_summary["readiness"]["status"], "ready")
         self.assertIn("journal_state_excluded", warning_codes)
         self.assertNotIn("journal_stale", warning_codes)
@@ -677,7 +684,14 @@ class AuditPackageCoreTest(unittest.TestCase):
             warning["code"]
             for warning in tx_manifest["readiness"]["warnings"]
         }
-        self.assertEqual(manifest["journal_freshness"]["status"], "not_processed")
+        self.assertEqual(
+            manifest["journal_freshness"]["status"],
+            "excluded_from_bounded_scope",
+        )
+        self.assertNotIn(
+            "active_transaction_count",
+            manifest["journal_freshness"],
+        )
         self.assertNotIn("journal", tx_manifest)
         self.assertEqual(tx_manifest["readiness"]["status"], "ready")
         self.assertIn("journal_state_excluded", warning_codes)
