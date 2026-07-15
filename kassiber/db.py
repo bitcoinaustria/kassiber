@@ -3170,16 +3170,27 @@ def backfill_custody_gap_review_relation_set(
 
 
 def _create_custody_gap_review_transaction_aux_schema(conn):
-    conn.executescript(
+    # ``executescript`` commits any pending transaction before running. Keep
+    # these statements individually executable so the v1 table rebuild can
+    # include its indexes and triggers in one savepoint.
+    conn.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_review
             ON custody_gap_review_transactions(
                 review_id, role, transaction_id, id
-            );
+            )
+        """
+    )
+    conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_scope
             ON custody_gap_review_transactions(
                 profile_id, transaction_id, review_id
-            );
+            )
+        """
+    )
+    conn.execute(
+        """
         CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transaction_scope_insert
         BEFORE INSERT ON custody_gap_review_transactions
         BEGIN
@@ -3201,12 +3212,36 @@ def _create_custody_gap_review_transaction_aux_schema(conn):
             ) THEN RAISE(
                 ABORT, 'custody_gap_review_transaction_scope_mismatch'
             ) END;
-        END;
+        END
+        """
+    )
+    conn.execute(
+        """
         CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transactions_immutable
         BEFORE UPDATE ON custody_gap_review_transactions
         BEGIN
             SELECT RAISE(ABORT, 'custody_gap_review_transactions_immutable');
-        END;
+        END
+        """
+    )
+
+
+def _create_custody_gap_review_transaction_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS custody_gap_review_transactions (
+            id TEXT PRIMARY KEY,
+            review_id TEXT NOT NULL
+                REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
+            workspace_id TEXT NOT NULL
+                REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL
+                REFERENCES profiles(id) ON DELETE CASCADE,
+            role TEXT NOT NULL CHECK (role IN ('source', 'return')),
+            transaction_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE (review_id, role, transaction_id)
+        )
         """
     )
 
@@ -3258,103 +3293,116 @@ def _v1_review_relation_wire_identity(conn, row):
 def _ensure_custody_gap_review_transaction_schema(conn):
     """Replace the unreleased ordinal-keyed relation shape with set identity."""
 
+    table_names = {
+        str(row["name"])
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
     columns = {
         str(row["name"])
         for row in conn.execute(
             "PRAGMA table_info(custody_gap_review_transactions)"
         ).fetchall()
     }
-    if "ordinal" not in columns:
+    legacy_exists = "custody_gap_review_transactions_v1" in table_names
+    if "ordinal" not in columns and not legacy_exists:
         return False
-    rows = conn.execute(
-        """
-        SELECT id, review_id, workspace_id, profile_id, role,
-               transaction_id, created_at
-        FROM custody_gap_review_transactions
-        ORDER BY review_id, role, transaction_id, id
-        """
-    ).fetchall()
-    conn.execute("DROP TRIGGER IF EXISTS trg_custody_gap_review_transaction_scope_insert")
-    conn.execute("DROP TRIGGER IF EXISTS trg_custody_gap_review_transactions_immutable")
-    conn.execute("DROP INDEX IF EXISTS idx_custody_gap_review_transactions_review")
-    conn.execute("DROP INDEX IF EXISTS idx_custody_gap_review_transactions_scope")
-    conn.execute(
-        "ALTER TABLE custody_gap_review_transactions "
-        "RENAME TO custody_gap_review_transactions_v1"
-    )
-    conn.execute(
-        """
-        CREATE TABLE custody_gap_review_transactions (
-            id TEXT PRIMARY KEY,
-            review_id TEXT NOT NULL
-                REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
-            workspace_id TEXT NOT NULL
-                REFERENCES workspaces(id) ON DELETE CASCADE,
-            profile_id TEXT NOT NULL
-                REFERENCES profiles(id) ON DELETE CASCADE,
-            role TEXT NOT NULL CHECK (role IN ('source', 'return')),
-            transaction_id TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            UNIQUE (review_id, role, transaction_id)
-        )
-        """
-    )
-    for row in rows:
-        wire_review_id, wire_transaction_id = _v1_review_relation_wire_identity(
-            conn, row
-        )
-        relation_id = custody_gap_review_transaction_id(
-            wire_review_id,
-            row["role"],
-            wire_transaction_id,
-        )
-        conn.execute(
+    savepoint = "migrate_custody_gap_review_transactions_v2"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        for object_kind, object_name in (
+            ("TRIGGER", "trg_custody_gap_review_transaction_scope_insert"),
+            ("TRIGGER", "trg_custody_gap_review_transactions_immutable"),
+            ("INDEX", "idx_custody_gap_review_transactions_review"),
+            ("INDEX", "idx_custody_gap_review_transactions_scope"),
+        ):
+            conn.execute(f"DROP {object_kind} IF EXISTS {object_name}")
+        if "ordinal" in columns:
+            if legacy_exists:
+                raise AppError(
+                    "Custody review relation migration state is ambiguous.",
+                    code="custody_review_relation_migration_conflict",
+                    retryable=False,
+                )
+            conn.execute(
+                "ALTER TABLE custody_gap_review_transactions "
+                "RENAME TO custody_gap_review_transactions_v1"
+            )
+            _create_custody_gap_review_transaction_table(conn)
+        else:
+            # Recover a database left by the old non-atomic rebuild after its
+            # legacy rename. SCHEMA may already have recreated an empty/partial
+            # v2 table, so merge by stable relation id instead of replacing it.
+            _create_custody_gap_review_transaction_table(conn)
+        rows = conn.execute(
             """
-            INSERT OR IGNORE INTO custody_gap_review_transactions(
-                id, review_id, workspace_id, profile_id,
-                role, transaction_id, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            SELECT id, review_id, workspace_id, profile_id, role,
+                   transaction_id, created_at
+            FROM custody_gap_review_transactions_v1
+            ORDER BY review_id, role, transaction_id, id
             """,
-            (
-                relation_id,
-                row["review_id"],
-                row["workspace_id"],
-                row["profile_id"],
+        ).fetchall()
+        for row in rows:
+            wire_review_id, wire_transaction_id = _v1_review_relation_wire_identity(
+                conn, row
+            )
+            relation_id = custody_gap_review_transaction_id(
+                wire_review_id,
                 row["role"],
-                row["transaction_id"],
-                row["created_at"],
-            ),
-        )
-        # A delayed signed v1 tombstone/upsert still names the ordinal row id.
-        # Redirect that portable alias to the v2 set row before dropping the
-        # legacy table so replay can advance the replica sequence normally.
-        conn.execute(
-            """
-            UPDATE sync_id_map
-            SET local_id = ?
-            WHERE profile_id = ?
-              AND entity_table = 'custody_gap_review_transactions'
-              AND local_id = ?
-            """,
-            (relation_id, row["profile_id"], row["id"]),
-        )
-        conn.execute(
-            """
-            INSERT INTO sync_id_map(
-                profile_id, entity_table, wire_id, local_id, created_at
-            ) VALUES(?, 'custody_gap_review_transactions', ?, ?, ?)
-            ON CONFLICT(profile_id, entity_table, wire_id)
-            DO UPDATE SET local_id = excluded.local_id
-            """,
-            (
-                row["profile_id"],
-                row["id"],
-                relation_id,
-                row["created_at"],
-            ),
-        )
-    conn.execute("DROP TABLE custody_gap_review_transactions_v1")
-    _create_custody_gap_review_transaction_aux_schema(conn)
+                wire_transaction_id,
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO custody_gap_review_transactions(
+                    id, review_id, workspace_id, profile_id,
+                    role, transaction_id, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    relation_id,
+                    row["review_id"],
+                    row["workspace_id"],
+                    row["profile_id"],
+                    row["role"],
+                    row["transaction_id"],
+                    row["created_at"],
+                ),
+            )
+            # A delayed signed v1 tombstone/upsert still names the ordinal row
+            # id. Redirect that portable alias before dropping the legacy row.
+            conn.execute(
+                """
+                UPDATE sync_id_map
+                SET local_id = ?
+                WHERE profile_id = ?
+                  AND entity_table = 'custody_gap_review_transactions'
+                  AND local_id = ?
+                """,
+                (relation_id, row["profile_id"], row["id"]),
+            )
+            conn.execute(
+                """
+                INSERT INTO sync_id_map(
+                    profile_id, entity_table, wire_id, local_id, created_at
+                ) VALUES(?, 'custody_gap_review_transactions', ?, ?, ?)
+                ON CONFLICT(profile_id, entity_table, wire_id)
+                DO UPDATE SET local_id = excluded.local_id
+                """,
+                (
+                    row["profile_id"],
+                    row["id"],
+                    relation_id,
+                    row["created_at"],
+                ),
+            )
+        conn.execute("DROP TABLE custody_gap_review_transactions_v1")
+        _create_custody_gap_review_transaction_aux_schema(conn)
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
     return True
 
 

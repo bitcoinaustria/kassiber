@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from kassiber.core import custody_gap_reviews, custody_gaps
 from kassiber.db import (
@@ -90,6 +92,151 @@ class CustodyReviewScopeMigrationTests(unittest.TestCase):
                     occurred_at,
                 ),
             )
+
+    def _install_v1_relation_table(self, review_id: str) -> str:
+        self.conn.execute(
+            "DROP TRIGGER IF EXISTS trg_custody_gap_review_transaction_scope_insert"
+        )
+        self.conn.execute(
+            "DROP TRIGGER IF EXISTS trg_custody_gap_review_transactions_immutable"
+        )
+        self.conn.execute("DROP TABLE custody_gap_review_transactions")
+        self.conn.execute(
+            """
+            CREATE TABLE custody_gap_review_transactions(
+                id TEXT PRIMARY KEY,
+                review_id TEXT NOT NULL,
+                workspace_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                transaction_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(review_id, role, ordinal),
+                UNIQUE(review_id, role, transaction_id)
+            )
+            """
+        )
+        legacy_id = custody_gap_review_transaction_v1_id(
+            review_id, "source", 0
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_gap_review_transactions(
+                id, review_id, workspace_id, profile_id, ordinal,
+                role, transaction_id, created_at
+            ) VALUES(?, ?, 'ws', 'profile', 0, 'source', 'out', ?)
+            """,
+            (legacy_id, review_id, NOW),
+        )
+        return legacy_id
+
+    def test_v1_relation_rebuild_rolls_back_every_schema_step_on_failure(self):
+        self._insert_legacy_review_on(
+            self.conn,
+            "crash-review",
+            snapshot={"source_ids": ["out"]},
+        )
+        self._install_v1_relation_table("crash-review")
+        db_path = str(
+            self.conn.execute("PRAGMA database_list").fetchone()[2]
+        )
+        self.conn.commit()
+        self.conn.close()
+
+        with (
+            patch(
+                "kassiber.db.custody_gap_review_transaction_id",
+                side_effect=RuntimeError("injected migration failure"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            open_db(self.root.name)
+
+        raw = sqlite3.connect(db_path)
+        try:
+            columns = {
+                row[1]
+                for row in raw.execute(
+                    "PRAGMA table_info(custody_gap_review_transactions)"
+                ).fetchall()
+            }
+            tables = {
+                row[0]
+                for row in raw.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            self.assertIn("ordinal", columns)
+            self.assertNotIn("custody_gap_review_transactions_v1", tables)
+        finally:
+            raw.close()
+
+        self.conn = open_db(self.root.name)
+        self.assertNotIn(
+            "ordinal",
+            {
+                row["name"]
+                for row in self.conn.execute(
+                    "PRAGMA table_info(custody_gap_review_transactions)"
+                ).fetchall()
+            },
+        )
+
+    def test_open_recovers_legacy_table_left_by_old_half_migration(self):
+        self._insert_legacy_review_on(
+            self.conn,
+            "half-review",
+            snapshot={"source_ids": ["out"]},
+        )
+        self._install_v1_relation_table("half-review")
+        self.conn.execute(
+            "ALTER TABLE custody_gap_review_transactions "
+            "RENAME TO custody_gap_review_transactions_v1"
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE custody_gap_review_transactions(
+                id TEXT PRIMARY KEY,
+                review_id TEXT NOT NULL,
+                workspace_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                transaction_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(review_id, role, transaction_id)
+            )
+            """
+        )
+        self.conn.commit()
+        self.conn.close()
+
+        self.conn = open_db(self.root.name)
+        tables = {
+            row["name"]
+            for row in self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        self.assertNotIn("custody_gap_review_transactions_v1", tables)
+        relation = self.conn.execute(
+            """
+            SELECT id, review_id, role, transaction_id
+            FROM custody_gap_review_transactions
+            WHERE review_id = 'half-review'
+            """
+        ).fetchone()
+        self.assertEqual(
+            tuple(relation),
+            (
+                custody_gap_review_transaction_id(
+                    "half-review", "source", "out"
+                ),
+                "half-review",
+                "source",
+                "out",
+            ),
+        )
 
     def _candidate(self):
         candidates, _ = custody_gaps.load_gap_candidates(
