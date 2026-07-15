@@ -693,6 +693,20 @@ const CUSTODY_LOCAL_ISSUE_KEYS = {
   ownedDestinationRequired: "swap.components.localIssue.ownedDestinationRequired",
   anchorRequired: "swap.components.localIssue.anchorRequired",
   unresolvedValue: "swap.components.localIssue.unresolvedValue",
+  suspenseReviewRequired:
+    "swap.components.localIssue.suspenseReviewRequired",
+  suspenseQuantityModeRequired:
+    "swap.components.localIssue.suspenseQuantityModeRequired",
+  suspenseLocationInvalid:
+    "swap.components.localIssue.suspenseLocationInvalid",
+  suspenseTimeRequired: "swap.components.localIssue.suspenseTimeRequired",
+  suspenseAllocationRequired:
+    "swap.components.localIssue.suspenseAllocationRequired",
+  suspenseObservedSourceRequired:
+    "swap.components.localIssue.suspenseObservedSourceRequired",
+  suspenseAssetMismatch:
+    "swap.components.localIssue.suspenseAssetMismatch",
+  suspenseTimeMismatch: "swap.components.localIssue.suspenseTimeMismatch",
   quantityUnbalanced: "swap.components.localIssue.quantityUnbalanced",
   conversionReviewRequired: "swap.components.localIssue.conversionReviewRequired",
   conversionValuationUnbalanced:

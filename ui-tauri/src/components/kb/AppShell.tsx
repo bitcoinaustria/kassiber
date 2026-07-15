@@ -39,6 +39,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Route,
   Search,
   Server,
   Settings,
@@ -330,6 +331,7 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
+      { labelKey: "book.custodyGaps", icon: Route, href: "/custody-gaps" },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
     ],
@@ -466,6 +468,14 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       titleKey: "nav:book.reconcile",
       icon: Fingerprint,
       searchKey: "routeMeta.reconcile",
+    },
+  ],
+  [
+    "/custody-gaps",
+    {
+      titleKey: "nav:book.custodyGaps",
+      icon: Route,
+      searchKey: "routeMeta.custodyGaps",
     },
   ],
   [

@@ -199,6 +199,13 @@ export function assistantScreenContextFor(
     });
   }
 
+  if (path === "/custody-gaps") {
+    const gap = firstSafeEntity(params, ["gap", "gap_id"]);
+    return context("/custody-gaps", ["transfers", "transactions", "wallets"], {
+      ...(gap ? { entityType: "custody_gap" as const, entityId: gap } : {}),
+    });
+  }
+
   if (path === "/reconcile") {
     return context("/reconcile", ["wallets", "transactions"]);
   }

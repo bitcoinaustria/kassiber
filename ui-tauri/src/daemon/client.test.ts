@@ -206,6 +206,27 @@ describe("daemon mutation invalidation scope", () => {
     );
   });
 
+  it("refreshes custody lineage, journals, and blockers after guided corrections", () => {
+    for (const kind of [
+      "ui.custody.gaps.reopen",
+      "ui.custody.gaps.revise",
+      "ui.custody.gaps.residual.classify",
+    ]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
+        expect.arrayContaining([
+          "ui.custody.gaps.list",
+          "ui.custody.gaps.review_context",
+          "ui.custody.gaps.history",
+          "ui.transfers.components.list",
+          "ui.journals.snapshot",
+          "ui.journals.quarantine",
+          "ui.report.blockers",
+          "ui.workspace.health",
+        ]),
+      );
+    }
+  });
+
   it("does not invalidate daemon reads after read-only backend probes", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.backends.electrum.test"),

@@ -4530,6 +4530,39 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (
+      req.kind === "ui.custody.gaps.residual.preview" ||
+      req.kind === "ui.custody.gaps.residual.classify"
+    ) {
+      const args = (req.args ?? {}) as { classification?: unknown };
+      const classification =
+        typeof args.classification === "string"
+          ? args.classification
+          : "suspense_continuation";
+      const custodyState = [
+        "external_payment",
+        "external_disposal",
+        "external_gift",
+        "external_loss",
+      ].includes(classification)
+        ? "external_confirmed"
+        : classification === "retained_custody"
+          ? "internal_reviewed"
+          : "custody_suspense";
+      const fixture = structuredClone(fixtures[req.kind]) as Record<string, unknown>;
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          ...fixture,
+          classification,
+          custody_state: custodyState,
+          country_tax_meaning: "not_assigned",
+        } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

@@ -64,6 +64,10 @@ const SwapMatching = lazyRouteComponent(
   () => import("./routes/SwapMatching"),
   "SwapMatching",
 );
+const CustodyGaps = lazyRouteComponent(
+  () => import("./routes/CustodyGaps"),
+  "CustodyGaps",
+);
 const Quarantine = lazyRouteComponent(
   () => import("./routes/Quarantine"),
   "Quarantine",
@@ -202,6 +206,12 @@ const swapMatchingRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/swaps",
   component: SwapMatching,
+});
+
+const custodyGapsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/custody-gaps",
+  component: CustodyGaps,
 });
 
 const transferMatchingRoute = createRoute({
@@ -349,6 +359,7 @@ const routeTree = rootRoute.addChildren([
     sourceFundsRoute,
     journalsRoute,
     swapMatchingRoute,
+    custodyGapsRoute,
     transferMatchingRoute,
     taxEventsRoute,
     quarantineRoute,

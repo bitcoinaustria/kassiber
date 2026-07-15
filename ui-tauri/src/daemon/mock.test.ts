@@ -102,6 +102,94 @@ describe("mock daemon custody component bulk resolution", () => {
   });
 });
 
+describe("mock daemon custody gaps", () => {
+  it("keeps imported-policy coverage technical and incomplete by definition", async () => {
+    const response = await mockDaemon.invoke<{
+      ownership_universe_known: boolean;
+      coverage_can_clear_custody_gaps: boolean;
+      wallets: Array<{ wallet_label: string }>;
+    }>({ kind: "ui.custody.coverage.snapshot" });
+
+    expect(response.error).toBeUndefined();
+    expect(response.data?.ownership_universe_known).toBe(false);
+    expect(response.data?.coverage_can_clear_custody_gaps).toBe(false);
+    expect(response.data?.wallets[0].wallet_label).toBe("Operative C");
+    expect(JSON.stringify(response.data)).not.toContain("xpub");
+    expect(JSON.stringify(response.data)).not.toContain("private_material");
+  });
+
+  it("exposes a bounded privacy-safe long-horizon review packet", async () => {
+    const response = await mockDaemon.invoke<{
+      summary: { needs_review: number; unresolved_msat: string };
+      gaps: Array<{
+        gap_id: string;
+        source_wallet_label: string;
+        destination_wallet_labels: string[];
+        reason_codes: string[];
+      }>;
+    }>({ kind: "ui.custody.gaps.list", args: { limit: 100 } });
+
+    expect(response.error).toBeUndefined();
+    expect(response.data?.summary.needs_review).toBe(1);
+    expect(response.data?.gaps[0]).toMatchObject({
+      gap_id: "custody-gap:og-treasury",
+      source_wallet_label: "Multisig B",
+      destination_wallet_labels: ["Operative C"],
+    });
+    expect(response.data?.gaps[0]).not.toHaveProperty("descriptor");
+    expect(response.data?.gaps[0]).not.toHaveProperty("address");
+  });
+
+  it("exposes bounded append-only correction history", async () => {
+    const response = await mockDaemon.invoke<{
+      count: number;
+      history: Array<{
+        event_kind: string;
+        retained_msat: string;
+        residual_msat: string;
+      }>;
+    }>({
+      kind: "ui.custody.gaps.history",
+      args: { gap_id: "custody-gap:og-treasury", limit: 100 },
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(response.data?.count).toBe(2);
+    expect(response.data?.history.map((entry) => entry.event_kind)).toEqual([
+      "bridge_created",
+      "residual_classified",
+    ]);
+    expect(response.data?.history[0]).toMatchObject({
+      retained_msat: "990000000000",
+      residual_msat: "10000000000",
+    });
+    expect(JSON.stringify(response.data)).not.toContain("raw_json");
+  });
+
+  it("mirrors the exact guided residual choice without assigning tax meaning", async () => {
+    const response = await mockDaemon.invoke<{
+      classification: string;
+      custody_state: string;
+      country_tax_meaning: string;
+      residual_msat: string;
+    }>({
+      kind: "ui.custody.gaps.residual.preview",
+      args: {
+        gap_id: "custody-gap:og-treasury",
+        classification: "retained_custody",
+      },
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(response.data).toMatchObject({
+      classification: "retained_custody",
+      custody_state: "internal_reviewed",
+      country_tax_meaning: "not_assigned",
+      residual_msat: "10000000000",
+    });
+  });
+});
+
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
     const list = await mockDaemon.invoke<{

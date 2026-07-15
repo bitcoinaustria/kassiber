@@ -18,6 +18,7 @@ export type AssistantReturnPath =
   | "/books"
   | "/journals"
   | "/swaps"
+  | "/custody-gaps"
   | "/quarantine"
   | "/reconcile"
   | "/egress"
@@ -46,6 +47,7 @@ export interface AssistantScreenContext {
     | "report"
     | "source_funds_case"
     | "connection"
+    | "custody_gap"
     | "profile";
   entityId?: string;
   filters?: Record<string, unknown>;
