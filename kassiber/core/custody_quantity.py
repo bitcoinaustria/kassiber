@@ -693,28 +693,52 @@ def _fail_closed_destination_overlaps(
     return result
 
 
+@dataclass
+class _SelectedClaimTotals:
+    """One-pass selection totals used by atomic-bundle validation."""
+
+    source_amount_msat: int = 0
+    target_amount_msat: int = 0
+    has_target: bool = False
+
+
+def _selected_claim_totals(
+    decisions: Sequence[ArbitratedSlice],
+) -> dict[str, _SelectedClaimTotals]:
+    totals: dict[str, _SelectedClaimTotals] = {}
+    for decision in decisions:
+        if decision.selected_claim_id is None:
+            continue
+        selected = totals.get(decision.selected_claim_id)
+        if selected is None:
+            selected = _SelectedClaimTotals()
+            totals[decision.selected_claim_id] = selected
+        selected.source_amount_msat += decision.source.amount_msat
+        if decision.target is not None:
+            selected.has_target = True
+            selected.target_amount_msat += decision.target.amount_msat
+    return totals
+
+
 def _claim_fully_selected(
     claim: QuantityClaim,
-    decisions: Sequence[ArbitratedSlice],
+    selected_claim_totals: Mapping[str, _SelectedClaimTotals],
 ) -> bool:
-    selected = [
-        decision
-        for decision in decisions
-        if decision.selected_claim_id == claim.claim_id
-    ]
-    if sum(item.source.amount_msat for item in selected) != claim.source.amount_msat:
+    selected = selected_claim_totals.get(claim.claim_id)
+    if selected is None:
+        return False
+    if selected.source_amount_msat != claim.source.amount_msat:
         return False
     if claim.target is None:
-        return all(item.target is None for item in selected)
-    return sum(
-        item.target.amount_msat for item in selected if item.target is not None
-    ) == claim.target.amount_msat
+        return not selected.has_target
+    return selected.target_amount_msat == claim.target.amount_msat
 
 
 def _fail_closed_atomic_bundles(
     decisions: Sequence[ArbitratedSlice],
     claims: Sequence[QuantityClaim],
 ) -> list[ArbitratedSlice]:
+    selected_claim_totals = _selected_claim_totals(decisions)
     bundles: dict[str, list[QuantityClaim]] = {}
     for claim in claims:
         if claim.effective_bundle_id is not None:
@@ -722,7 +746,10 @@ def _fail_closed_atomic_bundles(
     invalid = {
         bundle_id
         for bundle_id, members in bundles.items()
-        if not all(_claim_fully_selected(member, decisions) for member in members)
+        if not all(
+            _claim_fully_selected(member, selected_claim_totals)
+            for member in members
+        )
     }
     if not invalid:
         return list(decisions)

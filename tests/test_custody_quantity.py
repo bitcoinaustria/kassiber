@@ -8,6 +8,7 @@ from kassiber.core.chain_observer.provenance import (
 )
 
 from kassiber.core.custody_quantity import (
+    ArbitratedSlice,
     CONFLICTING,
     CUSTODY_CANDIDATE,
     CUSTODY_SUSPENSE,
@@ -19,6 +20,9 @@ from kassiber.core.custody_quantity import (
     QuantityClaim,
     QuantityObservation,
     QuantitySlice,
+    _claim_fully_selected,
+    _fail_closed_atomic_bundles,
+    _selected_claim_totals,
     build_canonical_quantity_input,
     observation_hash,
     project_quantities,
@@ -64,6 +68,170 @@ def _observation(*args, **kwargs):
 
 
 class CustodyQuantityTests(unittest.TestCase):
+    def test_atomic_bundle_selection_index_matches_legacy_semantics(self):
+        source = QuantitySlice("source", 0, 100)
+        target = QuantitySlice("target", 0, 100)
+        targeted_claim = QuantityClaim(
+            claim_id="targeted",
+            source=source,
+            target=target,
+            state=INTERNAL_REVIEWED,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
+            reason="reviewed",
+        )
+        targetless_claim = QuantityClaim(
+            claim_id="targetless",
+            source=source,
+            state=CUSTODY_SUSPENSE,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
+            reason="reviewed_residual",
+        )
+
+        def legacy_fully_selected(claim, decisions):
+            selected = [
+                decision
+                for decision in decisions
+                if decision.selected_claim_id == claim.claim_id
+            ]
+            if (
+                sum(item.source.amount_msat for item in selected)
+                != claim.source.amount_msat
+            ):
+                return False
+            if claim.target is None:
+                return all(item.target is None for item in selected)
+            return sum(
+                item.target.amount_msat
+                for item in selected
+                if item.target is not None
+            ) == claim.target.amount_msat
+
+        cases = [
+            [],
+            [
+                ArbitratedSlice(
+                    source=source,
+                    target=target,
+                    state=INTERNAL_REVIEWED,
+                    reason="reviewed",
+                    selected_claim_id="targeted",
+                )
+            ],
+            [
+                ArbitratedSlice(
+                    source=QuantitySlice("source", 0, 50),
+                    target=QuantitySlice("target", 0, 50),
+                    state=INTERNAL_REVIEWED,
+                    reason="reviewed",
+                    selected_claim_id="targeted",
+                ),
+                ArbitratedSlice(
+                    source=QuantitySlice("source", 50, 100),
+                    target=QuantitySlice("target", 50, 100),
+                    state=INTERNAL_REVIEWED,
+                    reason="reviewed",
+                    selected_claim_id="targeted",
+                ),
+            ],
+            [
+                ArbitratedSlice(
+                    source=QuantitySlice("source", 0, 50),
+                    target=QuantitySlice("target", 0, 50),
+                    state=INTERNAL_REVIEWED,
+                    reason="reviewed",
+                    selected_claim_id="targeted",
+                )
+            ],
+            [
+                ArbitratedSlice(
+                    source=source,
+                    state=CUSTODY_SUSPENSE,
+                    reason="reviewed_residual",
+                    selected_claim_id="targetless",
+                )
+            ],
+            [
+                ArbitratedSlice(
+                    source=QuantitySlice("source", 0, 50),
+                    state=CUSTODY_SUSPENSE,
+                    reason="reviewed_residual",
+                    selected_claim_id="targetless",
+                ),
+                ArbitratedSlice(
+                    source=QuantitySlice("source", 50, 100),
+                    state=CUSTODY_SUSPENSE,
+                    reason="reviewed_residual",
+                    selected_claim_id="targetless",
+                ),
+            ],
+            [
+                ArbitratedSlice(
+                    source=source,
+                    target=target,
+                    state=INTERNAL_REVIEWED,
+                    reason="unexpected_target",
+                    selected_claim_id="targetless",
+                )
+            ],
+        ]
+        for claim in (targeted_claim, targetless_claim):
+            for decisions in cases:
+                with self.subTest(claim=claim.claim_id, decisions=decisions):
+                    self.assertEqual(
+                        _claim_fully_selected(
+                            claim,
+                            _selected_claim_totals(decisions),
+                        ),
+                        legacy_fully_selected(claim, decisions),
+                    )
+
+    def test_atomic_bundle_validation_scans_decisions_only_twice(self):
+        claim_count = 2_000
+        claims = []
+        decisions = []
+        for index in range(claim_count):
+            source = QuantitySlice(f"source-{index}", 0, 1)
+            target = QuantitySlice(f"target-{index}", 0, 1)
+            claim_id = f"claim-{index}"
+            claims.append(
+                QuantityClaim(
+                    claim_id=claim_id,
+                    source=source,
+                    target=target,
+                    state=INTERNAL_REVIEWED,
+                    priority=ClaimPriority.REVIEWED_COMPONENT,
+                    reason="reviewed",
+                )
+            )
+            decisions.append(
+                ArbitratedSlice(
+                    source=source,
+                    target=target,
+                    state=INTERNAL_REVIEWED,
+                    reason="reviewed",
+                    selected_claim_id=claim_id,
+                )
+            )
+
+        class CountingDecisions:
+            def __init__(self, items):
+                self.items = items
+                self.yield_count = 0
+
+            def __iter__(self):
+                for item in self.items:
+                    self.yield_count += 1
+                    yield item
+
+            def __len__(self):
+                return len(self.items)
+
+        counted = CountingDecisions(decisions)
+        result = _fail_closed_atomic_bundles(counted, claims)
+
+        self.assertEqual(len(result), claim_count)
+        self.assertEqual(counted.yield_count, claim_count * 2)
+
     def test_native_authority_requires_closed_persisted_hash_commitments(self):
         row = _row(
             "observed",
