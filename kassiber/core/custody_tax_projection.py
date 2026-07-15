@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
 from ..msat import msat_to_btc
 from ..transfers import is_bitcoin_rail_pair
 from .privacy_hops import privacy_hop_evidence_from_row
+from .custody_evidence import row_principal_msat
 from .custody_quantity import (
     EXTERNAL_CONFIRMED,
     EXTERNAL_PRESUMED,
@@ -51,7 +52,7 @@ def _valid_direct_payouts_by_source(
         source_row = rows_by_id.get(source_id)
         if source_row is None:
             continue
-        source_amount = int(_field(source_row, "amount") or 0)
+        source_amount = row_principal_msat(source_row)
         reviewed_value = _field(record, "out_amount")
         reviewed_amount = (
             source_amount

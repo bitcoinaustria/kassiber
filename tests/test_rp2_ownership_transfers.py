@@ -684,6 +684,101 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
+    def test_fee_inclusive_direct_payout_uses_principal_at_every_stage(self):
+        principal_msat = 50 * BTC // 100
+        fee_msat = 1_000_000
+        acquisition = _row(
+            "A",
+            "inbound",
+            principal_msat + fee_msat,
+            external_id="acq-fee-inclusive-payout",
+        )
+        acquisition["occurred_at"] = "2025-01-01T00:00:00Z"
+        outbound = _row(
+            "A",
+            "outbound",
+            principal_msat + fee_msat,
+            external_id="fee-inclusive-payout",
+            fee=fee_msat,
+        )
+        outbound["amount_includes_fee"] = True
+        outbound = authoritative_chain_observation(outbound)
+        direct_payout = {
+            "id": "direct-payout-fee-inclusive",
+            "out_transaction_id": outbound["id"],
+            "kind": "direct-swap-payout",
+            "policy": "taxable",
+            "payout_asset": "BTC",
+            "payout_amount": principal_msat,
+            "payout_occurred_at": NOW,
+            "payout_fiat_value": 20_000,
+            "out_amount": principal_msat,
+        }
+
+        inputs = finalized_tax_inputs(
+            PROFILE,
+            rows=[acquisition, outbound],
+            wallet_refs_by_id=WALLET_REFS,
+            direct_payout_records=[direct_payout],
+        )
+        projected_out = next(
+            row
+            for row in inputs.finalized_tax_projection.rows
+            if row["direction"] == "outbound"
+        )
+        self.assertEqual(projected_out["amount"], principal_msat)
+        self.assertEqual(projected_out["fee"], fee_msat)
+
+        state = build_tax_engine(PROFILE).build_ledger_state(inputs)
+        self.assertFalse(state.quarantines)
+        self.assertEqual(
+            [entry["entry_type"] for entry in state.entries].count("disposal"),
+            1,
+        )
+
+    def test_fee_inclusive_payout_cannot_allocate_gross_as_principal(self):
+        principal_msat = 50 * BTC // 100
+        fee_msat = 1_000_000
+        outbound = _row(
+            "A",
+            "outbound",
+            principal_msat + fee_msat,
+            external_id="fee-inclusive-invalid-payout",
+            fee=fee_msat,
+        )
+        outbound["amount_includes_fee"] = True
+        outbound = authoritative_chain_observation(outbound)
+        direct_payout = {
+            "id": "direct-payout-fee-inclusive-invalid",
+            "out_transaction_id": outbound["id"],
+            "kind": "direct-swap-payout",
+            "policy": "taxable",
+            "payout_asset": "BTC",
+            "payout_amount": principal_msat,
+            "payout_occurred_at": NOW,
+            "payout_fiat_value": 20_000,
+            # A legacy gross allocation includes the network fee and must fail
+            # closed instead of disappearing into the presumed-disposal path.
+            "out_amount": principal_msat + fee_msat,
+        }
+
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            finalized_tax_inputs(
+                PROFILE,
+                rows=[outbound],
+                wallet_refs_by_id=WALLET_REFS,
+                direct_payout_records=[direct_payout],
+            )
+        )
+
+        self.assertIn(
+            "direct_payout_out_amount_invalid",
+            {item["reason"] for item in state.quarantines},
+        )
+        self.assertNotIn(
+            "disposal", [entry["entry_type"] for entry in state.entries]
+        )
+
     def test_whole_row_payout_not_hijacked_by_same_txid_inbound(self):
         # #2: a reviewed WHOLE-row taxable direct payout whose out tx shares a
         # txid with another owned wallet's recorded inbound (a batched tx) must

@@ -45,7 +45,11 @@ from ..core import custody_quantity_store as core_custody_quantity_store
 from ..core import custody_tax_projection as core_custody_tax_projection
 from ..core import custody_tax_migration as core_custody_tax_migration
 from ..core import custody_filed_reports as core_custody_filed_reports
-from ..core.custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
+from ..core.custody_evidence import (
+    build_canonical_quantity_input,
+    enriched_quantity_rows,
+    row_principal_msat,
+)
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
 from ..core import imports as core_imports
@@ -728,7 +732,7 @@ def create_transaction_pair(
                 code="validation",
             )
         out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
-        full_out_msat = int(out_row["amount"] or 0)
+        full_out_msat = row_principal_msat(out_row)
         if out_amount_msat > full_out_msat:
             raise AppError(
                 f"--out-amount exceeds the outbound amount "
@@ -861,7 +865,7 @@ def create_direct_swap_payout(
     out_amount_msat = None
     if out_amount is not None:
         out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
-        full_out_msat = int(out_row["amount"] or 0)
+        full_out_msat = row_principal_msat(out_row)
         if out_amount_msat > full_out_msat:
             raise AppError(
                 f"--out-amount exceeds the outbound amount "
@@ -919,7 +923,11 @@ def create_direct_swap_payout(
         )
 
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0),
+        (
+            out_amount_msat
+            if out_amount_msat is not None
+            else row_principal_msat(out_row)
+        ),
         payout_amount_msat,
         _outbound_pair_fee_component_msat(
             out_row,

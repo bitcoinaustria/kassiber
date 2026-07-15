@@ -54,6 +54,23 @@ def _json_object(value: Any) -> dict[str, Any]:
     return dict(payload) if isinstance(payload, Mapping) else {}
 
 
+def row_principal_msat(row: Mapping[str, Any]) -> int:
+    """Return the spend principal represented by an imported transaction row.
+
+    Outbound rows from some observers store the complete wallet debit in
+    ``amount`` and mark that the fee is already included. Every custody review
+    allocates principal, while the fee remains a separate sibling quantity.
+    """
+
+    amount_msat = int(_field(row, "amount") or 0)
+    if (
+        str(_field(row, "direction") or "").strip().lower() == "outbound"
+        and bool(_field(row, "amount_includes_fee", False))
+    ):
+        return amount_msat - int(_field(row, "fee") or 0)
+    return amount_msat
+
+
 def enriched_quantity_rows(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[dict[str, Any], ...]:
@@ -109,7 +126,8 @@ def enriched_quantity_rows(
             if item is keeper:
                 continue
             duplicate_fee = int(item.get("fee") or 0)
-            item["amount"] = int(item.get("amount") or 0) + duplicate_fee
+            if not bool(item.get("amount_includes_fee", False)):
+                item["amount"] = int(item.get("amount") or 0) + duplicate_fee
             item["fee"] = 0
             item["custody_duplicate_event_fee_normalized"] = True
     return tuple(enriched)
@@ -836,5 +854,6 @@ __all__ = [
     "canonical_quantity_payload",
     "enriched_quantity_rows",
     "observation_hash",
+    "row_principal_msat",
     "resolve_protocol_scope",
 ]

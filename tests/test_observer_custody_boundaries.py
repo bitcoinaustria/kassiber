@@ -483,6 +483,56 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
         self.assertEqual(sum(item.fee_msat for item in observations), 1)
         self.assertEqual(sum(item.principal_msat for item in observations), 799)
 
+    def test_fee_inclusive_duplicate_observation_never_inflates_principal(self):
+        txid = "67" * 32
+        raw = {
+            "txid": txid,
+            "chain": "bitcoin",
+            "network": "main",
+            "observer": "bdk",
+            "vin": [],
+            "vout": [],
+        }
+        for transaction_id, wallet_id, gross_msat in (
+            ("inclusive-a", "source", 500),
+            ("inclusive-b", "destination-incomplete", 300),
+        ):
+            self._insert_transaction(
+                transaction_id,
+                wallet_id,
+                external_id=txid,
+                occurred_at="2025-02-16T00:00:00Z",
+                direction="outbound",
+                asset="BTC",
+                amount_msat=gross_msat,
+                fee_msat=1,
+                amount_includes_fee=True,
+                raw=raw,
+            )
+            self._authorize(
+                transaction_id,
+                observer_kind="bdk",
+                chain="bitcoin",
+                network="main",
+            )
+
+        canonical = build_canonical_quantity_input(
+            enriched_quantity_rows(
+                [self._row("inclusive-a"), self._row("inclusive-b")]
+            )
+        )
+        observations = sorted(
+            canonical.observations,
+            key=lambda observation: observation.transaction_id,
+        )
+
+        self.assertEqual(
+            [item.wallet_delta_msat for item in observations],
+            [-500, -300],
+        )
+        self.assertEqual(sum(item.fee_msat for item in observations), 1)
+        self.assertEqual(sum(item.principal_msat for item in observations), 799)
+
     def test_authoritative_lwk_implicit_delta_residual_is_suspense_not_fee(self):
         txid = "55" * 32
         occurred_at = "2025-03-01T00:00:00Z"

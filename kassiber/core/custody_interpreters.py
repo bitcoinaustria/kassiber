@@ -29,7 +29,11 @@ from .loans import (
     CHANNEL_OPEN_MISMATCH,
 )
 from .custody_components import CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
-from .custody_evidence import CanonicalQuantityInput, QuantityObservation
+from .custody_evidence import (
+    CanonicalQuantityInput,
+    QuantityObservation,
+    row_principal_msat,
+)
 from .custody_quantity import (
     CUSTODY_SUSPENSE,
     EXTERNAL_CONFIRMED,
@@ -1129,7 +1133,7 @@ def compile_custody_interpreters(
         source_row = rows_by_id.get(out_id)
         if source_row is None:
             continue
-        source_amount = int(_field(source_row, "amount") or 0)
+        source_amount = row_principal_msat(source_row)
         reviewed_amount = _field(record, "out_amount")
         reviewed_amount = (
             source_amount if reviewed_amount in (None, "") else int(reviewed_amount)
@@ -1146,7 +1150,7 @@ def compile_custody_interpreters(
                         {
                             "payout_id": _field(record, "id"),
                             "out_amount_msat": reviewed_amount,
-                            "full_out_amount_msat": source_amount,
+                            "full_out_principal_msat": source_amount,
                         },
                         sort_keys=True,
                     ),

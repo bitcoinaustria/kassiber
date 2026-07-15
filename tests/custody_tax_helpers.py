@@ -163,7 +163,6 @@ def finalized_tax_inputs(
             str(_field(record, "out_transaction_id") or ""), {}
         )
         enriched.setdefault("out_asset", _field(source, "asset"))
-        enriched.setdefault("out_amount_msat", _field(source, "amount"))
         enriched_direct_payout_records.append(enriched)
 
     canonical = build_canonical_quantity_input(enriched_quantity_rows(prepared_rows))

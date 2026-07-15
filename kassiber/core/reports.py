@@ -29,6 +29,7 @@ from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_rep
     report_exit_tax,
 )
 from .privacy_linkage import analyze_psbt_privacy, build_privacy_linkage_graph
+from .custody_evidence import row_principal_msat
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
@@ -2900,7 +2901,7 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         if out_row is None:
             continue
         reviewed = record["out_amount"]
-        full_amount = int(out_row["amount"] or 0)
+        full_amount = row_principal_msat(out_row)
         if reviewed in (None, "") or int(reviewed) == full_amount:
             payout_claimed_ids.add(out_row["id"])
     auto_pairs = [
