@@ -1010,17 +1010,6 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     ownership_identity_changed = (
         policy_identity_material(config) != original_ownership_identity
     )
-    if ownership_identity_changed:
-        # Retain retired material and its last technical coverage in a durable,
-        # random-id policy epoch before disposable observer state is cleared.
-        # This records only imported policy history, never an attestation that
-        # every wallet owned by the profile has been supplied.
-        roll_wallet_policy_epoch(
-            conn,
-            wallet,
-            original_ownership_material,
-            private_policy_material(config),
-        )
     config_json = json.dumps(config, sort_keys=True)
     sync_material_changed = (
         _sync_material_config_json(config) != original_sync_material_json
@@ -1036,21 +1025,40 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             (label_value, account_id, config_json, wallet["id"]),
         )
     except sqlite3.IntegrityError as exc:
+        conn.rollback()
         raise AppError(
             f"Wallet '{label_value}' already exists in profile '{profile['label']}'",
             code="conflict",
             hint="Choose a different wallet label.",
         ) from exc
-    if sync_material_changed:
-        delete_wallet_observer_state(conn, wallet["id"])
-        core_output_inventory.clear_wallet_output_inventory(
-            conn,
-            wallet["id"],
-            commit=False,
-        )
-        _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
+    try:
+        if ownership_identity_changed:
+            # Retain retired material and its last technical coverage in a
+            # durable, random-id policy epoch before disposable observer state
+            # is cleared. This records only imported policy history, never an
+            # attestation that every wallet owned by the profile was supplied.
+            roll_wallet_policy_epoch(
+                conn,
+                wallet,
+                original_ownership_material,
+                private_policy_material(config),
+            )
+        if sync_material_changed:
+            delete_wallet_observer_state(conn, wallet["id"])
+            core_output_inventory.clear_wallet_output_inventory(
+                conn,
+                wallet["id"],
+                commit=False,
+            )
+            _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
+        invalidate_journals(conn, profile["id"])
+        conn.commit()
+    except Exception:
+        # The daemon reuses its connection. Never leave a successful wallet
+        # row update or a partial epoch rollover pending for an unrelated later
+        # command to commit.
+        conn.rollback()
+        raise
     updated = fetch_wallet_with_account(conn, wallet["id"])
     return wallet_row_to_dict(updated)
 

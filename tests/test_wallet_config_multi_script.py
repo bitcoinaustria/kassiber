@@ -360,6 +360,78 @@ class WalletConfigFreshnessTests(unittest.TestCase):
         self.assertEqual(state["stale_reason"], "wallet_config_changed")
         self.assertEqual(state["status"], core_freshness.STATUS_PARTIALLY_STALE)
 
+    def test_failed_update_cannot_leave_a_policy_rollover_pending(self):
+        conn = self._db()
+        workspace = core_accounts.create_workspace(conn, "Main")
+        profile = core_accounts.create_profile(
+            conn,
+            workspace["id"],
+            "Book",
+            "EUR",
+            "FIFO",
+            "generic",
+            365,
+        )
+        first = create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "First",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh"],
+                "chain": "bitcoin",
+                "network": "main",
+            },
+        )
+        create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "Duplicate",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh"],
+                "chain": "bitcoin",
+                "network": "main",
+            },
+        )
+
+        with self.assertRaises(AppError) as raised:
+            update_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                first["id"],
+                {
+                    "label": "Duplicate",
+                    "config": {"script_types": ["p2tr"]},
+                },
+            )
+        self.assertEqual(raised.exception.code, "conflict")
+
+        # Simulate a later successful daemon request on the same connection.
+        conn.execute(
+            "UPDATE profiles SET label = label WHERE id = ?",
+            (profile["id"],),
+        )
+        conn.commit()
+        stored = conn.execute(
+            "SELECT label, config_json FROM wallets WHERE id = ?",
+            (first["id"],),
+        ).fetchone()
+        self.assertEqual(stored["label"], "First")
+        self.assertEqual(json.loads(stored["config_json"])["script_types"], ["p2wpkh"])
+        self.assertEqual(
+            conn.execute(
+                "SELECT COUNT(*) FROM wallet_policy_epochs WHERE wallet_id = ?",
+                (first["id"],),
+            ).fetchone()[0],
+            0,
+        )
+
     def test_script_type_migration_keeps_prior_scripts_in_owned_index(self):
         conn = self._db()
         workspace = core_accounts.create_workspace(conn, "Main")
