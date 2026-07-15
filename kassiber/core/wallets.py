@@ -29,7 +29,11 @@ from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
 from .address_scripts import scriptpubkey_for_address_or_none
 from .chain_observer import delete_wallet_observer_state
-from .ownership_policy_epochs import roll_wallet_policy_epoch
+from .ownership_policy_epochs import (
+    policy_identity_material,
+    private_policy_material,
+    roll_wallet_policy_epoch,
+)
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -74,18 +78,6 @@ WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
 OWNERSHIP_HISTORY_CONFIG_KEY = "ownership_history"
 OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
 MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
-_OWNERSHIP_MATERIAL_FIELDS = (
-    "descriptor",
-    "change_descriptor",
-    "xpub",
-    "script_types",
-    OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
-    "addresses",
-    "chain",
-    "network",
-    "gap_limit",
-    "synthesize_change",
-)
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -673,40 +665,6 @@ def _sync_material_config_json(config):
     return json.dumps(sync_config, sort_keys=True)
 
 
-def _ownership_material_snapshot(config):
-    """The minimum private config needed to recognize historic scripts.
-
-    This stays inside the encrypted wallet config. It is intentionally absent
-    from ``WALLET_SAFE_CONFIG_FIELDS`` and therefore never appears in normal
-    CLI, daemon, UI, or AI wallet payloads.
-    """
-
-    if not isinstance(config, dict):
-        return {}
-    return {
-        field: config[field]
-        for field in _OWNERSHIP_MATERIAL_FIELDS
-        if config.get(field) not in (None, "", [])
-    }
-
-
-def _ownership_material_identity_snapshot(config):
-    """Return script-policy identity without mutable coverage bookkeeping.
-
-    Coverage declarations, scan depth, and gap limits describe how thoroughly
-    existing material was searched. Updating them must not manufacture a
-    retired policy epoch or clear the wallet's synced inventory.
-    """
-
-    snapshot = _ownership_material_snapshot(config)
-    for field in (
-        OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
-        "gap_limit",
-    ):
-        snapshot.pop(field, None)
-    return snapshot
-
-
 def _wallet_descriptor_state(config):
     descriptor_state = ""
     chain, network = wallet_live_chain_config(config)
@@ -1031,8 +989,8 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
-    original_ownership_material = _ownership_material_snapshot(config)
-    original_ownership_identity = _ownership_material_identity_snapshot(config)
+    original_ownership_material = private_policy_material(config)
+    original_ownership_identity = policy_identity_material(config)
     original_sync_material_json = _sync_material_config_json(config)
     for field in clear_fields:
         if field not in config:
@@ -1050,7 +1008,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     config = _validated_wallet_config(wallet["kind"], config)
     ownership_identity_changed = (
-        _ownership_material_identity_snapshot(config) != original_ownership_identity
+        policy_identity_material(config) != original_ownership_identity
     )
     if ownership_identity_changed:
         # Retain retired material and its last technical coverage in a durable,
@@ -1061,7 +1019,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             conn,
             wallet,
             original_ownership_material,
-            _ownership_material_snapshot(config),
+            private_policy_material(config),
         )
     config_json = json.dumps(config, sort_keys=True)
     sync_material_changed = (

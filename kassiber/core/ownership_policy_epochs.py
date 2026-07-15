@@ -113,6 +113,21 @@ def private_policy_material(config: Mapping[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def policy_identity_material(config: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return script-policy identity without mutable coverage bookkeeping.
+
+    Scan depth and gap limit describe how thoroughly a policy was searched;
+    changing either must not manufacture a wallet rotation.  Every other
+    retained private-policy field can change the scripts or assets the wallet
+    recognizes and therefore belongs to the epoch identity.
+    """
+
+    material = private_policy_material(config)
+    material.pop("ownership_scan_to_index", None)
+    material.pop("gap_limit", None)
+    return material
+
+
 def _wallet_config(wallet: Mapping[str, Any]) -> dict[str, Any]:
     raw = _value(wallet, "config_json", "{}")
     if isinstance(raw, Mapping):

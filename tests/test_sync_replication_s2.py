@@ -13,6 +13,7 @@ from pathlib import Path
 
 from kassiber.cli.handlers import process_journals
 from kassiber.core.accounts import create_profile, create_workspace
+from kassiber.core.ownership_policy_epochs import ensure_active_wallet_epoch
 from kassiber.core.sync_replication.bundle import (
     MAX_SYNC_SEQUENCE,
     _membership_catalog,
@@ -519,6 +520,64 @@ class SyncBundleReplayTests(unittest.TestCase):
         remote_path = self.attachments_b / remote_attachment["stored_relpath"]
         self.assertEqual(remote_path.read_bytes(), content)
         self.assertEqual(hashlib.sha256(content).hexdigest(), remote_attachment["sha256"])
+
+    def test_replicated_wallet_rotation_rolls_the_peer_local_policy_epoch(self):
+        self._join_peer("editor")
+        wallet_id, _, _, _ = self._insert_wallet_transaction_attachment()
+        initial = build_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            attachments_root=self.attachments_a,
+        )
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=initial.ciphertext,
+            attachments_root=self.attachments_b,
+        )
+        peer_wallet = self.peer.execute(
+            "SELECT * FROM wallets WHERE id = ?",
+            (wallet_id,),
+        ).fetchone()
+        ensure_active_wallet_epoch(self.peer, peer_wallet)
+
+        owner_config = json.loads(
+            self.owner.execute(
+                "SELECT config_json FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()[0]
+        )
+        owner_config["xpub"] = "xpub-rotated-public-material"
+        self.owner.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(owner_config), wallet_id),
+        )
+        rotated = build_bundle(self.owner, profile_id=self.profile["id"])
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=rotated.ciphertext,
+        )
+
+        epochs = self.peer.execute(
+            """
+            SELECT status, private_material_json
+            FROM wallet_policy_epochs
+            WHERE wallet_id = ?
+            ORDER BY created_at, id
+            """,
+            (wallet_id,),
+        ).fetchall()
+        epochs_by_status = {row["status"]: row for row in epochs}
+        self.assertEqual(set(epochs_by_status), {"retired", "active"})
+        self.assertEqual(
+            json.loads(epochs_by_status["retired"]["private_material_json"])["xpub"],
+            "xpub-public-material",
+        )
+        self.assertEqual(
+            json.loads(epochs_by_status["active"]["private_material_json"])["xpub"],
+            "xpub-rotated-public-material",
+        )
 
     def test_duplicate_reordered_bundles_are_idempotent_and_converge(self):
         self._initial_sync()

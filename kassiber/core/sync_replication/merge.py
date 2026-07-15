@@ -13,6 +13,11 @@ from typing import Any, Mapping
 
 from ...errors import AppError
 from ...time_utils import now_iso, parse_timestamp
+from ..ownership_policy_epochs import (
+    policy_identity_material,
+    private_policy_material,
+    roll_wallet_policy_epoch,
+)
 from ..repo import invalidate_journals
 from .bundle import (
     BUNDLE_MANIFEST_DOMAIN,
@@ -1103,6 +1108,24 @@ def _apply_row_upsert(
             merged[field] = old_value
             winning_events[field] = old_event
 
+    prior_wallet = None
+    prior_wallet_material: dict[str, Any] | None = None
+    prior_wallet_identity: dict[str, Any] | None = None
+    if spec.table == "wallets":
+        prior_wallet = conn.execute(
+            "SELECT * FROM wallets WHERE id = ?",
+            (merged["id"],),
+        ).fetchone()
+        if prior_wallet is not None:
+            try:
+                prior_config = json.loads(prior_wallet["config_json"] or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                prior_config = {}
+            if not isinstance(prior_config, Mapping):
+                prior_config = {}
+            prior_wallet_material = private_policy_material(prior_config)
+            prior_wallet_identity = policy_identity_material(prior_config)
+
     actual, _ = _prepare_actual_row(
         conn,
         book=book,
@@ -1113,6 +1136,25 @@ def _apply_row_upsert(
         created_files=created_files,
     )
     _insert_or_update_with_collision_notice(conn, book=book, spec=spec, actual=actual, event=event)
+    if prior_wallet is not None and prior_wallet_identity is not None:
+        try:
+            updated_config = json.loads(actual["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            updated_config = {}
+        if not isinstance(updated_config, Mapping):
+            updated_config = {}
+        if policy_identity_material(updated_config) != prior_wallet_identity:
+            # Policy epochs are deliberately device-local because they may
+            # contain descriptor material.  Reconstruct the rotation on this
+            # peer when the signed public wallet row changes script identity;
+            # otherwise later observer coverage would be attached to the
+            # superseded active epoch.
+            roll_wallet_policy_epoch(
+                conn,
+                prior_wallet,
+                prior_wallet_material or {},
+                private_policy_material(updated_config),
+            )
     for field, value in merged.items():
         winner = winning_events.get(field, event)
         _write_field_state(
