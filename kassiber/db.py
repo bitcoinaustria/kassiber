@@ -3125,10 +3125,23 @@ def _rebuild_custody_leg_role_schema(conn):
         "id, component_id, workspace_id, profile_id, ordinal, source_leg_id, "
         "sink_leg_id, source_amount_msat, sink_amount_msat, created_at"
     )
+    term_columns = (
+        "id, component_id, workspace_id, profile_id, ordinal, source_leg_id, "
+        "target_leg_id, term_kind, legacy_source_id, source_row_hash, "
+        "review_kind, tax_policy, reviewed_source_amount_msat, swap_fee_msat, "
+        "swap_fee_kind, confidence_at_review, review_source, payout_asset, "
+        "payout_amount_msat, payout_occurred_at, payout_fiat_value_exact, "
+        "payout_external_id, counterparty, created_at"
+    )
     counts_before = {
         "legs": int(conn.execute("SELECT COUNT(*) FROM custody_component_legs").fetchone()[0]),
         "allocations": int(
             conn.execute("SELECT COUNT(*) FROM custody_component_allocations").fetchone()[0]
+        ),
+        "economic_terms": int(
+            conn.execute(
+                "SELECT COUNT(*) FROM custody_component_economic_terms"
+            ).fetchone()[0]
         ),
     }
     previous_fk = int(conn.execute("PRAGMA foreign_keys").fetchone()[0])
@@ -3148,6 +3161,10 @@ def _rebuild_custody_leg_role_schema(conn):
             "trg_custody_component_allocation_revision_delete_immutable",
             "trg_custody_component_leg_count_commitment",
             "trg_custody_component_allocation_count_commitment",
+            "trg_custody_component_economic_term_count_commitment",
+            "trg_custody_component_terms_scope_insert",
+            "trg_custody_component_terms_immutable",
+            "trg_custody_component_terms_delete_immutable",
         ):
             conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
         for index in (
@@ -3157,9 +3174,19 @@ def _rebuild_custody_leg_role_schema(conn):
             "idx_custody_allocations_component",
             "idx_custody_allocations_source",
             "idx_custody_allocations_sink",
+            "idx_custody_component_terms_profile_kind",
+            "idx_custody_component_terms_component",
+            "idx_custody_component_terms_legacy_source",
         ):
             conn.execute(f"DROP INDEX IF EXISTS {index}")
 
+        # SQLite rewrites dependent foreign keys when a referenced table is
+        # renamed. Move the terms table too, otherwise it keeps pointing at
+        # ``custody_component_legs__pre_suspense`` after this migration.
+        conn.execute(
+            "ALTER TABLE custody_component_economic_terms "
+            "RENAME TO custody_component_economic_terms__pre_suspense"
+        )
         conn.execute(
             "ALTER TABLE custody_component_allocations "
             "RENAME TO custody_component_allocations__pre_suspense"
@@ -3228,6 +3255,51 @@ def _rebuild_custody_leg_role_schema(conn):
             """
         )
         conn.execute(
+            """
+            CREATE TABLE custody_component_economic_terms (
+                id TEXT PRIMARY KEY,
+                component_id TEXT NOT NULL
+                    REFERENCES custody_components(id) ON DELETE CASCADE,
+                workspace_id TEXT NOT NULL
+                    REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL
+                    REFERENCES profiles(id) ON DELETE CASCADE,
+                ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+                source_leg_id TEXT NOT NULL
+                    REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+                target_leg_id TEXT NOT NULL
+                    REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+                term_kind TEXT NOT NULL CHECK(
+                    term_kind IN ('transaction_pair', 'direct_swap_payout')
+                ),
+                legacy_source_id TEXT NOT NULL,
+                source_row_hash TEXT NOT NULL CHECK(length(source_row_hash) = 64),
+                review_kind TEXT NOT NULL,
+                tax_policy TEXT NOT NULL,
+                reviewed_source_amount_msat INTEGER CHECK(
+                    reviewed_source_amount_msat IS NULL OR
+                    typeof(reviewed_source_amount_msat) = 'integer'
+                ),
+                swap_fee_msat INTEGER,
+                swap_fee_kind TEXT,
+                confidence_at_review TEXT,
+                review_source TEXT,
+                payout_asset TEXT,
+                payout_amount_msat INTEGER CHECK(
+                    payout_amount_msat IS NULL OR
+                    typeof(payout_amount_msat) = 'integer'
+                ),
+                payout_occurred_at TEXT,
+                payout_fiat_value_exact TEXT,
+                payout_external_id TEXT,
+                counterparty TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(component_id, ordinal),
+                UNIQUE(component_id, term_kind, legacy_source_id)
+            )
+            """
+        )
+        conn.execute(
             f"INSERT INTO custody_component_legs({leg_columns}) "
             f"SELECT {leg_columns} FROM custody_component_legs__pre_suspense"
         )
@@ -3236,25 +3308,104 @@ def _rebuild_custody_leg_role_schema(conn):
             f"SELECT {allocation_columns} "
             "FROM custody_component_allocations__pre_suspense"
         )
+        conn.execute(
+            f"INSERT INTO custody_component_economic_terms({term_columns}) "
+            f"SELECT {term_columns} "
+            "FROM custody_component_economic_terms__pre_suspense"
+        )
         counts_after = {
             "legs": int(conn.execute("SELECT COUNT(*) FROM custody_component_legs").fetchone()[0]),
             "allocations": int(
                 conn.execute("SELECT COUNT(*) FROM custody_component_allocations").fetchone()[0]
+            ),
+            "economic_terms": int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM custody_component_economic_terms"
+                ).fetchone()[0]
             ),
         }
         if counts_after != counts_before:
             raise RuntimeError(
                 f"custody child row counts changed: {counts_before} -> {counts_after}"
             )
+        conn.execute("DROP TABLE custody_component_economic_terms__pre_suspense")
         conn.execute("DROP TABLE custody_component_allocations__pre_suspense")
         conn.execute("DROP TABLE custody_component_legs__pre_suspense")
+        conn.execute(
+            "CREATE INDEX idx_custody_component_terms_profile_kind "
+            "ON custody_component_economic_terms("
+            "profile_id, term_kind, created_at, component_id)"
+        )
+        conn.execute(
+            "CREATE INDEX idx_custody_component_terms_component "
+            "ON custody_component_economic_terms(component_id, ordinal, id)"
+        )
+        conn.execute(
+            "CREATE INDEX idx_custody_component_terms_legacy_source "
+            "ON custody_component_economic_terms("
+            "profile_id, term_kind, legacy_source_id, created_at, component_id)"
+        )
+        conn.execute(
+            """
+            CREATE TRIGGER trg_custody_component_terms_scope_insert
+            BEFORE INSERT ON custody_component_economic_terms
+            BEGIN
+                SELECT CASE WHEN NOT EXISTS (
+                    SELECT 1
+                    FROM custody_components c
+                    JOIN custody_component_legs source
+                      ON source.id = NEW.source_leg_id
+                    JOIN custody_component_legs target
+                      ON target.id = NEW.target_leg_id
+                    WHERE c.id = NEW.component_id
+                      AND c.workspace_id = NEW.workspace_id
+                      AND c.profile_id = NEW.profile_id
+                      AND source.component_id = c.id
+                      AND target.component_id = c.id
+                      AND source.role = 'source'
+                      AND target.role != 'source'
+                ) THEN RAISE(
+                    ABORT, 'custody_component_terms_scope_mismatch'
+                ) END;
+            END
+            """
+        )
+        conn.execute(
+            """
+            CREATE TRIGGER trg_custody_component_terms_immutable
+            BEFORE UPDATE ON custody_component_economic_terms
+            BEGIN
+                SELECT RAISE(ABORT, 'custody_component_terms_immutable');
+            END
+            """
+        )
+        conn.execute(
+            """
+            CREATE TRIGGER trg_custody_component_terms_delete_immutable
+            BEFORE DELETE ON custody_component_economic_terms
+            WHEN EXISTS (
+                SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
+            )
+            AND NOT EXISTS (
+                SELECT 1
+                FROM custody_component_purge_authorizations authorization
+                WHERE authorization.profile_id = OLD.profile_id
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'custody_component_terms_delete_immutable');
+            END
+            """
+        )
         _create_custody_leg_indexes_and_scope_triggers(conn)
         _ensure_custody_revision_immutability_triggers(conn)
         violations = [
             dict(row)
             for row in conn.execute("PRAGMA foreign_key_check").fetchall()
-            if row["table"]
-            in {"custody_component_legs", "custody_component_allocations"}
+            if row["table"] in {
+                "custody_component_legs",
+                "custody_component_allocations",
+                "custody_component_economic_terms",
+            }
         ]
         if violations:
             raise RuntimeError(
@@ -3278,8 +3429,11 @@ def _rebuild_custody_leg_role_schema(conn):
     violations = [
         dict(row)
         for row in conn.execute("PRAGMA foreign_key_check").fetchall()
-        if row["table"]
-        in {"custody_component_legs", "custody_component_allocations"}
+        if row["table"] in {
+            "custody_component_legs",
+            "custody_component_allocations",
+            "custody_component_economic_terms",
+        }
     ]
     if violations:
         raise AppError(
@@ -4223,6 +4377,7 @@ def ensure_schema_compat(conn):
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
+    _ensure_legacy_custody_write_freeze_triggers(conn)
     legacy_leg_columns = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(custody_component_legs)")
@@ -4348,9 +4503,12 @@ def ensure_schema_compat(conn):
     # aggregates without changing which substrate currently drives journals.
     # The import is local to keep the core module independent from schema
     # bootstrap and to avoid a module-level db -> core -> db cycle.
-    from .core.custody_authored_migration import backfill_legacy_authored_components
+    from .core.custody_authored_migration import (
+        refresh_legacy_authored_components,
+    )
 
-    if backfill_legacy_authored_components(conn).changed:
+    staged, pairs, payouts = refresh_legacy_authored_components(conn)
+    if staged.changed or pairs.changed or payouts.changed:
         conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
@@ -5440,6 +5598,75 @@ def _ensure_direct_swap_payout_schema(conn):
         "ON direct_swap_payouts(component_id) WHERE component_id IS NOT NULL"
     )
     conn.commit()
+
+
+def _ensure_legacy_custody_write_freeze_triggers(conn):
+    """Reject compatibility-row changes while their component is active.
+
+    Local mutation services retire the linked revision first. Replication or
+    older code that tries to mutate a booked compatibility row therefore fails
+    closed instead of leaving the row and authored aggregate inconsistent.
+    """
+
+    conn.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_transaction_pairs_component_write_frozen
+        BEFORE UPDATE ON transaction_pairs
+        WHEN OLD.component_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM custody_components c
+              WHERE c.id = OLD.component_id AND c.state = 'active'
+          )
+          AND (
+              NEW.out_transaction_id IS NOT OLD.out_transaction_id OR
+              NEW.in_transaction_id IS NOT OLD.in_transaction_id OR
+              NEW.kind IS NOT OLD.kind OR
+              NEW.policy IS NOT OLD.policy OR
+              NEW.notes IS NOT OLD.notes OR
+              NEW.swap_fee_msat IS NOT OLD.swap_fee_msat OR
+              NEW.swap_fee_kind IS NOT OLD.swap_fee_kind OR
+              NEW.confidence_at_pair IS NOT OLD.confidence_at_pair OR
+              NEW.pair_source IS NOT OLD.pair_source OR
+              NEW.out_amount IS NOT OLD.out_amount OR
+              NEW.component_id IS NOT OLD.component_id OR
+              NEW.deleted_at IS NOT OLD.deleted_at
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'legacy_custody_review_write_frozen');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_direct_swap_payouts_component_write_frozen
+        BEFORE UPDATE ON direct_swap_payouts
+        WHEN OLD.component_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1 FROM custody_components c
+              WHERE c.id = OLD.component_id AND c.state = 'active'
+          )
+          AND (
+              NEW.out_transaction_id IS NOT OLD.out_transaction_id OR
+              NEW.kind IS NOT OLD.kind OR
+              NEW.policy IS NOT OLD.policy OR
+              NEW.payout_asset IS NOT OLD.payout_asset OR
+              NEW.payout_amount IS NOT OLD.payout_amount OR
+              NEW.payout_occurred_at IS NOT OLD.payout_occurred_at OR
+              NEW.payout_fiat_value IS NOT OLD.payout_fiat_value OR
+              NEW.payout_external_id IS NOT OLD.payout_external_id OR
+              NEW.counterparty IS NOT OLD.counterparty OR
+              NEW.notes IS NOT OLD.notes OR
+              NEW.swap_fee_msat IS NOT OLD.swap_fee_msat OR
+              NEW.swap_fee_kind IS NOT OLD.swap_fee_kind OR
+              NEW.out_amount IS NOT OLD.out_amount OR
+              NEW.component_id IS NOT OLD.component_id OR
+              NEW.deleted_at IS NOT OLD.deleted_at
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'legacy_custody_review_write_frozen');
+        END
+        """
+    )
 
 
 def _backfill_payment_hash_from_raw_json(conn):

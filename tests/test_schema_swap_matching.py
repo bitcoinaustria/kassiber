@@ -26,7 +26,10 @@ import unittest
 import uuid
 
 from kassiber.cli.handlers import (
+    create_direct_swap_payout,
     create_transaction_pair,
+    delete_direct_swap_payout,
+    delete_transaction_pair,
     dismiss_transfer_candidate,
     update_transaction_pair,
 )
@@ -428,6 +431,159 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertEqual(reverted["kind"], "manual")
                 self.assertIsNone(reverted["swap_fee_msat"])
                 self.assertIsNone(reverted["swap_fee_kind"])
+            finally:
+                conn.close()
+
+    def test_active_pair_component_freezes_compatibility_row_until_revision(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                for tx_id, direction in (
+                    ("tx-out", "outbound"),
+                    ("tx-in", "inbound"),
+                ):
+                    _insert_tx(
+                        conn,
+                        tx_id=tx_id,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        asset="BTC",
+                        direction=direction,
+                        amount_msat=100_000,
+                    )
+                pair = create_transaction_pair(
+                    conn, workspace_id, profile_id, "tx-out", "tx-in"
+                )
+                first_component_id = conn.execute(
+                    "SELECT component_id FROM transaction_pairs WHERE id = ?",
+                    (pair["id"],),
+                ).fetchone()[0]
+                self.assertIsNotNone(first_component_id)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (first_component_id,),
+                    ).fetchone()[0],
+                    "active",
+                )
+
+                with self.assertRaisesRegex(
+                    sqlite3.IntegrityError,
+                    "legacy_custody_review_write_frozen",
+                ):
+                    conn.execute(
+                        "UPDATE transaction_pairs SET notes = 'bypass' WHERE id = ?",
+                        (pair["id"],),
+                    )
+
+                revised = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    pair["id"],
+                    notes="reviewed revision",
+                )
+                revised_component_id = conn.execute(
+                    "SELECT component_id FROM transaction_pairs WHERE id = ?",
+                    (pair["id"],),
+                ).fetchone()[0]
+                self.assertNotEqual(revised_component_id, first_component_id)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (first_component_id,),
+                    ).fetchone()[0],
+                    "superseded",
+                )
+                current_component_id = revised_component_id
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (current_component_id,),
+                    ).fetchone()[0],
+                    "active",
+                )
+
+                delete_transaction_pair(
+                    conn, workspace_id, profile_id, pair["id"]
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (current_component_id,),
+                    ).fetchone()[0],
+                    "superseded",
+                )
+                self.assertIsNotNone(
+                    conn.execute(
+                        "SELECT deleted_at FROM transaction_pairs WHERE id = ?",
+                        (pair["id"],),
+                    ).fetchone()[0]
+                )
+            finally:
+                conn.close()
+
+    def test_active_payout_component_freezes_and_retires_with_review(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                payout = create_direct_swap_payout(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    "tx-out",
+                    payout_asset="BTC",
+                    payout_amount="0.000001",
+                )
+                component_id = conn.execute(
+                    "SELECT component_id FROM direct_swap_payouts WHERE id = ?",
+                    (payout["id"],),
+                ).fetchone()[0]
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (component_id,),
+                    ).fetchone()[0],
+                    "active",
+                )
+                with self.assertRaisesRegex(
+                    sqlite3.IntegrityError,
+                    "legacy_custody_review_write_frozen",
+                ):
+                    conn.execute(
+                        "UPDATE direct_swap_payouts SET notes = 'bypass' WHERE id = ?",
+                        (payout["id"],),
+                    )
+
+                delete_direct_swap_payout(
+                    conn, workspace_id, profile_id, payout["id"]
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (component_id,),
+                    ).fetchone()[0],
+                    "superseded",
+                )
+                self.assertIsNotNone(
+                    conn.execute(
+                        "SELECT deleted_at FROM direct_swap_payouts WHERE id = ?",
+                        (payout["id"],),
+                    ).fetchone()[0]
+                )
             finally:
                 conn.close()
 

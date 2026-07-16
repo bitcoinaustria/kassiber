@@ -1,9 +1,9 @@
 """Crash-safe compatibility migration into the authored custody aggregate.
 
-The first convergence step intentionally creates *draft* components.  Legacy
-pair/payout rows remain the effective accounting input until the journal
-consumer is switched in a later, separately testable commit.  The nullable
-``component_id`` on each legacy row is the bounded compatibility link.
+Legacy rows are first staged as exact draft revisions, then valid payout
+revisions and connected pair groups are activated atomically.  The nullable
+``component_id`` on each legacy row is the bounded compatibility link; only an
+effective active component replaces that row at the journal boundary.
 
 Every migrated revision carries two kinds of immutable data:
 
@@ -11,9 +11,8 @@ Every migrated revision carries two kinds of immutable data:
 * a typed economic-terms row for policy, swap-fee, payout and review metadata
   which cannot coherently be represented as physical quantity legs.
 
-Re-running the migration is a no-op.  If an unactivated legacy review changes
-during the compatibility window, a deterministic new draft revision is made
-and the old draft is retained as superseded history.
+Re-running the migration is a no-op.  Compatibility-row edits after activation
+fail closed because reviewed economics must be revised on the component.
 """
 
 from __future__ import annotations
@@ -30,9 +29,11 @@ import uuid
 from ..errors import AppError
 from ..wallet_descriptors import normalize_asset_code
 from .custody_components import (
+    activate_component,
     create_component,
     get_component,
     seal_component_economic_terms,
+    supersede_component,
     update_component,
 )
 from .custody_evidence import resolve_protocol_scope, row_boundary_amounts
@@ -51,6 +52,17 @@ class MigrationResult:
     @property
     def changed(self) -> bool:
         return bool(self.created or self.revised)
+
+
+@dataclass(frozen=True)
+class ConsolidationResult:
+    activated: int = 0
+    unchanged: int = 0
+    skipped: int = 0
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.activated)
 
 
 @contextmanager
@@ -337,16 +349,20 @@ def _payout_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
                 occurred_at=_field(row, "out_occurred_at"),
                 valuation_amount=physical_source_amount,
             ),
-            _leg(
-                None,
-                leg_id=target_leg_id,
-                role="retained",
-                asset=payout_asset,
-                amount_msat=physical_payout_amount,
-                occurred_at=_field(row, "payout_occurred_at") or _field(row, "out_occurred_at"),
-                location_ref=f"legacy-payout:{_field(row, 'id')}",
-                valuation_amount=physical_source_amount,
-            ),
+            {
+                **_leg(
+                    None,
+                    leg_id=target_leg_id,
+                    role="retained",
+                    asset=payout_asset,
+                    amount_msat=physical_payout_amount,
+                    occurred_at=_field(row, "payout_occurred_at")
+                    or _field(row, "out_occurred_at"),
+                    location_ref=f"legacy-payout:{_field(row, 'id')}",
+                    valuation_amount=physical_source_amount,
+                ),
+                "rail": "untracked",
+            },
         ],
         "allocations": [
             _allocation(
@@ -379,6 +395,41 @@ def _component_kwargs(row: Mapping[str, Any], spec: Mapping[str, Any]) -> dict[s
         "change_reason": "migrate legacy authored custody review",
         "created_at": _field(row, "created_at"),
         "authored_source": "migration",
+    }
+
+
+def _retarget_revision_spec(
+    spec: Mapping[str, Any],
+    *,
+    supersedes_component_id: str,
+) -> dict[str, Any]:
+    """Give a repeated source payload fresh deterministic immutable row ids."""
+
+    component_id = _stable_id(
+        "legacy_review_revision",
+        str(spec["component_id"]),
+        supersedes_component_id,
+    )
+    leg_ids = {
+        str(leg["id"]): _stable_id(component_id, "leg", str(index))
+        for index, leg in enumerate(spec["legs"])
+    }
+    return {
+        **spec,
+        "component_id": component_id,
+        "legs": [
+            {**leg, "id": leg_ids[str(leg["id"])]}
+            for leg in spec["legs"]
+        ],
+        "allocations": [
+            {
+                **allocation,
+                "id": _stable_id(component_id, "allocation", str(index)),
+                "source_leg_id": leg_ids[str(allocation["source_leg_id"])],
+                "sink_leg_id": leg_ids[str(allocation["sink_leg_id"])],
+            }
+            for index, allocation in enumerate(spec["allocations"])
+        ],
     }
 
 
@@ -488,6 +539,14 @@ def _migrate_row(
                 conn, row, spec, term_kind=term_kind, source_hash=source_hash
             )
             return "revised"
+        if conn.execute(
+            "SELECT 1 FROM custody_components WHERE id = ?",
+            (spec["component_id"],),
+        ).fetchone() is not None:
+            spec = _retarget_revision_spec(
+                spec,
+                supersedes_component_id=str(linked_id),
+            )
         kwargs = _component_kwargs(row, spec)
         revised = update_component(
             conn,
@@ -602,3 +661,389 @@ def backfill_legacy_authored_components(conn: sqlite3.Connection) -> MigrationRe
                 )
                 counts[outcome] += 1
     return MigrationResult(**counts)
+
+
+def _connected_pair_groups(rows: Sequence[Mapping[str, Any]]) -> list[list[Mapping[str, Any]]]:
+    by_transaction: dict[str, set[int]] = {}
+    for index, row in enumerate(rows):
+        for field in ("out_transaction_id", "in_transaction_id"):
+            by_transaction.setdefault(str(_field(row, field)), set()).add(index)
+    remaining = set(range(len(rows)))
+    groups: list[list[Mapping[str, Any]]] = []
+    while remaining:
+        pending = [min(remaining)]
+        indexes: set[int] = set()
+        while pending:
+            index = pending.pop()
+            if index in indexes:
+                continue
+            indexes.add(index)
+            remaining.discard(index)
+            row = rows[index]
+            neighbors: set[int] = set()
+            for field in ("out_transaction_id", "in_transaction_id"):
+                neighbors.update(by_transaction[str(_field(row, field))])
+            pending.extend(sorted(neighbors - indexes, reverse=True))
+        groups.append([rows[index] for index in sorted(indexes)])
+    return groups
+
+
+def _pair_group_spec(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    ordered = sorted(
+        rows,
+        key=lambda row: (str(_field(row, "created_at")), str(_field(row, "id"))),
+    )
+    identities = [str(_field(row, "id")) for row in ordered]
+    hashes = [
+        _hash_payload(_canonical_payload(row, _PAIR_HASH_FIELDS)) for row in ordered
+    ]
+    profile_id = str(_field(ordered[0], "profile_id"))
+    component_id = _stable_id("transaction_pair_group", profile_id, *hashes)
+    conversion = any(
+        normalize_asset_code(_field(row, "out_asset"))
+        != normalize_asset_code(_field(row, "in_asset"))
+        or str(_field(row, "policy")) != "carrying-value"
+        for row in ordered
+    )
+    if conversion and len(ordered) != 1:
+        raise AppError(
+            "a connected reviewed conversion group is ambiguous",
+            code="custody_legacy_group_ambiguous",
+            details={"pair_ids": identities},
+            retryable=False,
+        )
+    source_used: dict[str, int] = {}
+    source_totals: dict[str, int] = {}
+    target_used: dict[str, int] = {}
+    legs: list[dict[str, Any]] = []
+    allocations: list[dict[str, Any]] = []
+    terms: list[dict[str, Any]] = []
+    for ordinal, (row, source_hash) in enumerate(zip(ordered, hashes)):
+        source_id = str(_field(row, "out_transaction_id"))
+        target_id = str(_field(row, "in_transaction_id"))
+        source_principal = row_boundary_amounts(
+            {
+                "direction": _field(row, "out_direction"),
+                "amount": _field(row, "out_tx_amount"),
+                "fee": _field(row, "out_fee"),
+                "amount_includes_fee": _field(row, "out_amount_includes_fee"),
+            }
+        ).principal_msat
+        target_principal = row_boundary_amounts(
+            {
+                "direction": _field(row, "in_direction"),
+                "amount": _field(row, "in_tx_amount"),
+                "fee": _field(row, "in_fee"),
+                "amount_includes_fee": _field(row, "in_amount_includes_fee"),
+            }
+        ).principal_msat
+        available_source = source_principal - source_used.get(source_id, 0)
+        source_totals[source_id] = source_principal
+        available_target = target_principal - target_used.get(target_id, 0)
+        explicit = _field(row, "out_amount")
+        requested = available_source if explicit in (None, "") else int(explicit)
+        source_amount = min(requested, available_source)
+        target_amount = available_target if conversion else min(source_amount, available_target)
+        if source_amount <= 0 or target_amount <= 0:
+            raise AppError(
+                "a reviewed pair has no remaining positive component slice",
+                code="custody_legacy_group_invalid",
+                details={"pair_id": _field(row, "id")},
+                retryable=False,
+            )
+        source_used[source_id] = source_used.get(source_id, 0) + source_amount
+        target_used[target_id] = target_used.get(target_id, 0) + target_amount
+        source_leg_id = _stable_id(component_id, "source", str(ordinal))
+        target_leg_id = _stable_id(component_id, "target", str(ordinal))
+        source_row = {
+            "transaction_id": source_id,
+            "wallet_id": _field(row, "out_wallet_id"),
+            "wallet_kind": _field(row, "out_wallet_kind"),
+            "config_json": _field(row, "out_wallet_config_json"),
+            "raw_json": _field(row, "out_raw_json"),
+            "asset": _field(row, "out_asset"),
+        }
+        target_row = {
+            "transaction_id": target_id,
+            "wallet_id": _field(row, "in_wallet_id"),
+            "wallet_kind": _field(row, "in_wallet_kind"),
+            "config_json": _field(row, "in_wallet_config_json"),
+            "raw_json": _field(row, "in_raw_json"),
+            "asset": _field(row, "in_asset"),
+        }
+        legs.extend(
+            (
+                _leg(
+                    source_row,
+                    leg_id=source_leg_id,
+                    role="source",
+                    asset=str(_field(row, "out_asset")),
+                    amount_msat=source_amount,
+                    occurred_at=_field(row, "out_occurred_at"),
+                    valuation_amount=source_amount if conversion else None,
+                ),
+                _leg(
+                    target_row,
+                    leg_id=target_leg_id,
+                    role="destination",
+                    asset=str(_field(row, "in_asset")),
+                    amount_msat=target_amount,
+                    occurred_at=_field(row, "in_occurred_at"),
+                    valuation_amount=source_amount if conversion else None,
+                ),
+            )
+        )
+        allocations.append(
+            _allocation(
+                allocation_id=_stable_id(component_id, "allocation", str(ordinal)),
+                source_leg_id=source_leg_id,
+                sink_leg_id=target_leg_id,
+                source_amount_msat=source_amount,
+                sink_amount_msat=target_amount,
+            )
+        )
+        terms.append(
+            {
+                "id": _stable_id(component_id, "term", str(ordinal)),
+                "source_leg_id": source_leg_id,
+                "target_leg_id": target_leg_id,
+                "term_kind": "transaction_pair",
+                "legacy_source_id": str(_field(row, "id")),
+                "source_row_hash": source_hash,
+                "review_kind": str(_field(row, "kind")),
+                "tax_policy": str(_field(row, "policy")),
+                "reviewed_source_amount_msat": requested,
+                "swap_fee_msat": _field(row, "swap_fee_msat"),
+                "swap_fee_kind": _field(row, "swap_fee_kind"),
+                "confidence_at_review": _field(row, "confidence_at_pair"),
+                "review_source": _field(row, "pair_source"),
+            }
+        )
+    partial_sources = {
+        source_id: {
+            "reviewed_msat": source_used.get(source_id, 0),
+            "principal_msat": principal_msat,
+        }
+        for source_id, principal_msat in source_totals.items()
+        if source_used.get(source_id, 0) != principal_msat
+    }
+    if partial_sources:
+        # The legacy interpreter still owns the unreviewed tail. Activating a
+        # component before that residual becomes an explicit authored decision
+        # would either lose it or falsely upgrade a presumed disposal to a
+        # reviewed external allocation.
+        raise AppError(
+            "a reviewed pair group has an unclassified source residual",
+            code="custody_legacy_group_requires_residual",
+            details={"sources": partial_sources, "pair_ids": identities},
+            retryable=False,
+        )
+    return {
+        "component_id": component_id,
+        "lineage_id": _stable_id("transaction_pair_group", profile_id, *identities),
+        "component_type": "swap" if conversion else "manual_bridge",
+        "conservation_mode": "conversion" if conversion else "quantity",
+        "conversion_policy": (
+            str(_field(ordered[0], "policy")) if conversion else None
+        ),
+        "conversion_reviewed": conversion,
+        "legs": legs,
+        "allocations": allocations,
+        "terms": terms,
+        "created_at": min(str(_field(row, "created_at")) for row in ordered),
+    }
+
+
+def consolidate_legacy_pair_components(
+    conn: sqlite3.Connection,
+) -> ConsolidationResult:
+    """Activate one atomic component for each connected active pair group."""
+
+    rows = _pair_rows(conn)
+    activated = 0
+    unchanged = 0
+    skipped = 0
+    with _savepoint(conn, "custody_pair_consolidation"):
+        for group in _connected_pair_groups(rows):
+            try:
+                outcome = _consolidate_pair_group(conn, group)
+            except AppError:
+                # Malformed historical rows remain on the compatibility
+                # interpreter, which already emits the precise quarantine.
+                # One bad review must not prevent unrelated valid groups from
+                # converging during database open.
+                skipped += 1
+                continue
+            if outcome == "unchanged":
+                unchanged += 1
+            else:
+                activated += 1
+    return ConsolidationResult(
+        activated=activated, unchanged=unchanged, skipped=skipped
+    )
+
+
+def consolidate_legacy_payout_components(
+    conn: sqlite3.Connection,
+) -> ConsolidationResult:
+    """Activate staged one-source direct-payout component aggregates."""
+
+    activated = 0
+    unchanged = 0
+    skipped = 0
+    with _savepoint(conn, "custody_payout_consolidation"):
+        for row in _payout_rows(conn):
+            component_id = str(_field(row, "component_id") or "")
+            if not component_id:
+                skipped += 1
+                continue
+            try:
+                component = get_component(conn, component_id)
+                if component["effective_state"] == "active":
+                    unchanged += 1
+                    continue
+                source_principal = row_boundary_amounts(
+                    {
+                        "direction": _field(row, "out_direction"),
+                        "amount": _field(row, "out_tx_amount"),
+                        "fee": _field(row, "out_fee"),
+                        "amount_includes_fee": _field(
+                            row, "out_amount_includes_fee"
+                        ),
+                    }
+                ).principal_msat
+                reviewed_source = _field(row, "out_amount")
+                if reviewed_source not in (None, "") and int(
+                    reviewed_source
+                ) != source_principal:
+                    raise AppError(
+                        "a direct payout has an unclassified source residual",
+                        code="custody_legacy_group_requires_residual",
+                        details={"payout_id": _field(row, "id")},
+                        retryable=False,
+                    )
+                if not component["validation"]["activatable"]:
+                    raise AppError(
+                        "a migrated direct payout cannot activate",
+                        code="custody_legacy_group_invalid",
+                        details={
+                            "payout_id": _field(row, "id"),
+                            "issues": component["validation"]["issues"],
+                        },
+                        retryable=False,
+                    )
+                activate_component(conn, component_id)
+            except AppError:
+                skipped += 1
+                continue
+            activated += 1
+    return ConsolidationResult(
+        activated=activated, unchanged=unchanged, skipped=skipped
+    )
+
+
+def _consolidate_pair_group(
+    conn: sqlite3.Connection,
+    group: Sequence[Mapping[str, Any]],
+) -> str:
+    with _savepoint(conn, f"custody_pair_group_{uuid.uuid4().hex}"):
+        spec = _pair_group_spec(group)
+        linked = {
+            str(_field(row, "component_id"))
+            for row in group
+            if _field(row, "component_id") not in (None, "")
+        }
+        if len(linked) == 1:
+            current = get_component(conn, next(iter(linked)))
+            if current["effective_state"] == "active" and len(
+                current["economic_terms"]
+            ) == len(group):
+                return "unchanged"
+            if (
+                len(group) == 1
+                and current["state"] == "draft"
+                and current["validation"]["activatable"]
+            ):
+                activate_component(conn, current["id"])
+                return "activated"
+        existing = conn.execute(
+            "SELECT state FROM custody_components WHERE id = ?",
+            (spec["component_id"],),
+        ).fetchone()
+        if existing is None:
+            component = create_component(
+                conn,
+                workspace_id=str(_field(group[0], "workspace_id")),
+                profile_id=str(_field(group[0], "profile_id")),
+                component_id=spec["component_id"],
+                lineage_id=spec["lineage_id"],
+                component_type=spec["component_type"],
+                conservation_mode=spec["conservation_mode"],
+                conversion_policy=spec["conversion_policy"],
+                conversion_reviewed=spec["conversion_reviewed"],
+                evidence_kind="legacy_review_migration",
+                evidence_grade="reviewed",
+                evidence={
+                    "legacy_table": "transaction_pairs",
+                    "legacy_source_ids": sorted(
+                        str(_field(row, "id")) for row in group
+                    ),
+                },
+                legs=spec["legs"],
+                allocations=spec["allocations"],
+                authored_source="migration",
+                change_reason="consolidate legacy reviewed pair group",
+                created_at=spec["created_at"],
+            )
+            seal_component_economic_terms(conn, component["id"], spec["terms"])
+        component = get_component(conn, spec["component_id"])
+        if not component["validation"]["activatable"]:
+            raise AppError(
+                "a migrated reviewed pair group cannot activate",
+                code="custody_legacy_group_invalid",
+                details={
+                    "pair_ids": sorted(str(_field(row, "id")) for row in group),
+                    "issues": component["validation"]["issues"],
+                },
+                retryable=False,
+            )
+        for old_id in sorted(linked - {component["id"]}):
+            supersede_component(
+                conn, old_id, reason="consolidated into authored pair group"
+            )
+        if component["state"] != "active":
+            activate_component(conn, component["id"])
+        for row in group:
+            _link_legacy_row(
+                conn,
+                legacy_table="transaction_pairs",
+                legacy_source_id=str(_field(row, "id")),
+                component_id=component["id"],
+            )
+    return "activated"
+
+
+def refresh_legacy_authored_components(
+    conn: sqlite3.Connection,
+) -> tuple[MigrationResult, ConsolidationResult, ConsolidationResult]:
+    """Synchronize the bounded compatibility rows inside the caller's txn."""
+
+    staged = backfill_legacy_authored_components(conn)
+    pairs = consolidate_legacy_pair_components(conn)
+    payouts = consolidate_legacy_payout_components(conn)
+    return staged, pairs, payouts
+
+
+def retire_linked_component(
+    conn: sqlite3.Connection,
+    component_id: Any,
+    *,
+    reason: str,
+) -> None:
+    """Retire an effective compatibility aggregate before changing its row."""
+
+    if component_id in (None, ""):
+        return
+    component = get_component(conn, str(component_id))
+    if component["state"] == "active":
+        supersede_component(conn, component["id"], reason=reason)

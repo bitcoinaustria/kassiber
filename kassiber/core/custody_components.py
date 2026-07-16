@@ -2086,7 +2086,7 @@ def seal_component_economic_terms(
             "custody_component_state_conflict",
             details={"component_id": component_id, "state": row["state"]},
         )
-    legs = [
+    stored_legs = [
         _leg_dict(leg)
         for leg in conn.execute(
             "SELECT * FROM custody_component_legs "
@@ -2094,7 +2094,7 @@ def seal_component_economic_terms(
             (component_id,),
         ).fetchall()
     ]
-    normalized = normalize_economic_terms(terms, legs)
+    normalized = normalize_economic_terms(terms, stored_legs)
     existing_count = int(
         conn.execute(
             "SELECT COUNT(*) FROM custody_component_economic_terms "
@@ -2805,6 +2805,7 @@ def _db_anchor_validation(
     *,
     allocations: Sequence[Mapping[str, Any]] = (),
     conservation_mode: str = "quantity",
+    partial_anchor_leg_ids: frozenset[str] = frozenset(),
     profile_route_issues: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate evidence-row direction, scope facts, and complete coverage."""
@@ -3059,16 +3060,28 @@ def _db_anchor_validation(
                 )
             )
         )
-        expected = row_boundary_amounts(row).wallet_movement_msat
+        boundary = row_boundary_amounts(row)
+        partial_review = any(
+            str(leg["id"]) in partial_anchor_leg_ids
+            for leg in by_transaction[transaction_id]
+        )
+        expected = (
+            boundary.principal_msat
+            if partial_review
+            else boundary.wallet_movement_msat
+        )
         coverage_row = {
             "transaction_id": transaction_id,
             "direction": row["direction"],
+            "partial_review": partial_review,
             "raw_economic_msat": expected,
             "reviewed_component_msat": actual,
             "reviewed_minus_raw_msat": actual - expected,
         }
         coverage.append(coverage_row)
-        if actual != expected:
+        if (partial_review and not 0 < actual <= expected) or (
+            not partial_review and actual != expected
+        ):
             issues.append(
                 {
                     "code": "anchor_coverage_mismatch",
@@ -3311,13 +3324,14 @@ def _materialize_component(
     include_local_evidence: bool = True,
     profile_route_issues: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    legs = [
+    stored_legs = [
         _leg_dict(leg)
         for leg in conn.execute(
             "SELECT * FROM custody_component_legs WHERE component_id = ? ORDER BY ordinal, id",
             (row["id"],),
         ).fetchall()
     ]
+    legs = stored_legs
     if not include_local_evidence:
         # ``location_ref`` may identify a private node/channel, local file, or
         # other Tier-3 custody location. Keep it in SQLite/explicit local CLI
@@ -3343,7 +3357,7 @@ def _materialize_component(
         ).fetchall()
     ]
     validation = validate_conservation(
-        legs,
+        stored_legs,
         allocations=allocations,
         conservation_mode=row["conservation_mode"],
         conversion_policy=row["conversion_policy"],
@@ -3371,12 +3385,12 @@ def _materialize_component(
             }
         )
     else:
-        if int(expected_leg_count) != len(legs):
+        if int(expected_leg_count) != len(stored_legs):
             commitment_issues.append(
                 {
                     "code": "component_leg_count_mismatch",
                     "expected": int(expected_leg_count),
-                    "actual": len(legs),
+                    "actual": len(stored_legs),
                 }
             )
         if int(expected_allocation_count) != len(allocations):
@@ -3429,7 +3443,7 @@ def _materialize_component(
                 "id": row["id"],
                 "profile_id": row["profile_id"],
                 "expected_evidence_count": expected_evidence_count,
-                "legs": legs,
+                "legs": stored_legs,
             },
         )
         if not evidence_status["valid"]:
@@ -3453,7 +3467,7 @@ def _materialize_component(
             {
                 "id": row["id"],
                 "profile_id": row["profile_id"],
-                "legs": legs,
+                "legs": stored_legs,
                 "allocations": allocations,
             },
         )
@@ -3478,9 +3492,13 @@ def _materialize_component(
             ]
     anchor_validation = _db_anchor_validation(
         conn,
-        legs,
+        stored_legs,
         allocations=allocations,
         conservation_mode=row["conservation_mode"],
+        partial_anchor_leg_ids=frozenset(
+            str(term["source_leg_id"]) for term in economic_terms
+        )
+        | frozenset(str(term["target_leg_id"]) for term in economic_terms),
         profile_route_issues=profile_route_issues,
     )
     if anchor_validation["issues"]:

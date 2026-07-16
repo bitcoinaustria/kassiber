@@ -151,15 +151,22 @@ binary.
    drift before performing the reviewed mutation. Existing CLI/daemon kinds
    are redacted compatibility wrappers over those two operations.
 4. Add typed replicated component economic terms, migrate pair/payout authored
-   state deterministically, and freeze legacy writes. The additive staging
-   half is complete: each active legacy row receives a deterministic inert
-   draft revision and compatibility link inside one savepoint; immutable,
-   replicated, leg-bound economic terms preserve policy, signed swap fee,
-   review provenance and direct-payout settlement fields. Reopening is
-   idempotent, a changed unactivated source creates a new retained revision,
-   and terms are one-to-many so the activation half can consolidate connected
-   1:N/N:M reviews into one atomic component. Journals still consume only the
-   legacy rows until that consolidation and write freeze land together.
+   state deterministically, and freeze legacy writes. Staging and activation
+   are complete: each active legacy review receives deterministic immutable,
+   replicated, leg-bound economics; full-source connected pair graphs
+   consolidate into one atomic 1:N/N:M component and valid payout components
+   activate directly. Partial-source legacy pairs stay on compatibility reads
+   until their unreviewed tail can be authored as an explicit residual rather
+   than silently upgraded from presumed disposal to reviewed classification.
+   Journal interpretation now uses effective active components, while invalid
+   or historically malformed rows stay on the compatibility interpreter and
+   fail closed. Reopening is idempotent, including pre-432/pre-435 schema
+   upgrades whose term foreign keys are rebuilt with their custody legs.
+   Linked active legacy rows are write-frozen below the handlers; revision and
+   deletion retire the active aggregate before changing compatibility history,
+   and bypass or replication writes fail closed. Component-native mutations
+   must still remove creation of new compatibility rows before physical legacy
+   deletion can be considered.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.

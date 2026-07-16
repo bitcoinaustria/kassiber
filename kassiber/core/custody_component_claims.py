@@ -32,6 +32,7 @@ class ComponentClaimCompilation:
     claims: tuple[QuantityClaim, ...]
     suspense_msat: int
     reviewed_conversion_pairs: tuple[Mapping[str, Any], ...] = ()
+    reviewed_direct_payouts: tuple[Mapping[str, Any], ...] = ()
 
 
 def _error(message: str, **details: Any) -> AppError:
@@ -61,6 +62,35 @@ def _location_key(leg: Mapping[str, Any]) -> tuple[str, str, str, str, str]:
         str(leg.get("conservation_unit") or "msat"),
         str(leg.get("rail") or ""),
     )
+
+
+def _direct_payout_record(
+    term: Mapping[str, Any],
+    sink: Mapping[str, Any],
+    source_observation: QuantityObservation,
+    *,
+    component_id: str,
+    source_amount_msat: int,
+    sink_amount_msat: int,
+) -> dict[str, Any]:
+    return {
+        "id": str(term.get("legacy_source_id")),
+        "component_id": component_id,
+        "out_transaction_id": source_observation.anchor_transaction_id,
+        "deleted_at": None,
+        "kind": str(term.get("review_kind") or "direct-swap-payout"),
+        "policy": str(term.get("tax_policy") or "taxable"),
+        "out_amount": source_amount_msat,
+        "payout_asset": term.get("payout_asset") or sink.get("asset"),
+        "payout_amount": term.get("payout_amount_msat") or sink_amount_msat,
+        "payout_occurred_at": term.get("payout_occurred_at")
+        or sink.get("occurred_at"),
+        "payout_fiat_value": term.get("payout_fiat_value_exact"),
+        "payout_external_id": term.get("payout_external_id"),
+        "counterparty": term.get("counterparty"),
+        "swap_fee_msat": term.get("swap_fee_msat"),
+        "swap_fee_kind": term.get("swap_fee_kind"),
+    }
 
 
 def _flatten_transactionless_routes(
@@ -252,6 +282,11 @@ def compile_component_quantity_claims(
         and not _transaction_id(leg)
         and str(leg.get("notes") or "")
         == "reviewed_residual:retained_custody"
+    ) | frozenset(
+        str(term.get("target_leg_id"))
+        for term in component.get("economic_terms", ())
+        if term.get("term_kind") == "direct_swap_payout"
+        and term.get("target_leg_id") not in (None, "")
     )
     explicit_allocations = component.get("allocations", ())
     if not explicit_allocations and any(
@@ -297,8 +332,13 @@ def compile_component_quantity_claims(
     target_cursors: dict[str, int] = {}
     claims: list[QuantityClaim] = []
     reviewed_conversion_pairs: list[Mapping[str, Any]] = []
+    reviewed_direct_payouts: list[Mapping[str, Any]] = []
     suspense_msat = 0
     bundle_id = f"component:{component_id}"
+    terms_by_edge = {
+        (str(term.get("source_leg_id")), str(term.get("target_leg_id"))): term
+        for term in component.get("economic_terms", ())
+    }
 
     for index, allocation in enumerate(allocations):
         source = legs.get(str(allocation.get("source_leg_id")))
@@ -361,14 +401,34 @@ def compile_component_quantity_claims(
         if sink_role in {"destination", "retained"}:
             sink_transaction_id = _transaction_id(sink)
             if not sink_transaction_id:
-                if str(sink.get("id") or "") not in finalized_retained_leg_ids:
+                term = terms_by_edge.get(
+                    (str(source.get("id")), str(sink.get("id"))), {}
+                )
+                if (
+                    conservation_mode == "conversion"
+                    and term.get("term_kind") == "direct_swap_payout"
+                ):
+                    state = EXTERNAL_CONFIRMED
+                    reason = "reviewed_direct_payout_source"
+                    reviewed_direct_payouts.append(
+                        _direct_payout_record(
+                            term,
+                            sink,
+                            source_observation,
+                            component_id=component_id,
+                            source_amount_msat=source_amount,
+                            sink_amount_msat=sink_amount,
+                        )
+                    )
+                elif str(sink.get("id") or "") not in finalized_retained_leg_ids:
                     raise _error(
                         "flattened component target is not observed",
                         component_id=component_id,
                         sink_leg_id=sink.get("id"),
                     )
-                state = INTERNAL_REVIEWED
-                reason = "reviewed_retained_custody"
+                else:
+                    state = INTERNAL_REVIEWED
+                    reason = "reviewed_retained_custody"
             else:
                 target_observation = observation(sink_transaction_id)
                 if target_observation.direction != "inbound":
@@ -396,12 +456,14 @@ def compile_component_quantity_claims(
                     state = EXTERNAL_CONFIRMED
                     reason = "reviewed_taxable_conversion_source"
                     allocation_key = str(allocation.get("id") or index)
+                    term = terms_by_edge.get(
+                        (str(source.get("id")), str(sink.get("id"))), {}
+                    )
                     reviewed_conversion_pairs.append(
                         {
-                            "pair_id": (
-                                f"component:{component_id}:conversion:"
-                                f"{allocation_key}"
-                            ),
+                            "pair_id": str(term.get("legacy_source_id") or (
+                                f"component:{component_id}:conversion:{allocation_key}"
+                            )),
                             "component_id": component_id,
                             "out_id": source_observation.anchor_transaction_id,
                             "in_id": target_observation.anchor_transaction_id,
@@ -410,9 +472,15 @@ def compile_component_quantity_claims(
                             "out_asset": source_observation.asset,
                             "in_asset": target_observation.asset,
                             "policy": str(
-                                component.get("conversion_policy") or "taxable"
+                                term.get("tax_policy")
+                                or component.get("conversion_policy")
+                                or "taxable"
                             ),
-                            "kind": str(component.get("component_type") or "swap"),
+                            "kind": str(
+                                term.get("review_kind")
+                                or component.get("component_type")
+                                or "swap"
+                            ),
                         }
                     )
                 else:
@@ -441,6 +509,21 @@ def compile_component_quantity_claims(
         elif sink_role == "external":
             state = EXTERNAL_CONFIRMED
             reason = "reviewed_external_component_allocation"
+            term = terms_by_edge.get(
+                (str(source.get("id")), str(sink.get("id"))), {}
+            )
+            if term.get("term_kind") == "direct_swap_payout":
+                reason = "reviewed_direct_payout_source"
+                reviewed_direct_payouts.append(
+                    _direct_payout_record(
+                        term,
+                        sink,
+                        source_observation,
+                        component_id=component_id,
+                        source_amount_msat=source_amount,
+                        sink_amount_msat=sink_amount,
+                    )
+                )
         elif sink_role == "unresolved":
             raise _error(
                 "an unresolved draft leg cannot emit an active quantity claim",
@@ -544,6 +627,7 @@ def compile_component_quantity_claims(
         claims=tuple(claims),
         suspense_msat=suspense_msat,
         reviewed_conversion_pairs=tuple(reviewed_conversion_pairs),
+        reviewed_direct_payouts=tuple(reviewed_direct_payouts),
     )
 
 

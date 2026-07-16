@@ -367,6 +367,21 @@ class CustodyJournalBuilder:
                 include_local_evidence=False,
             )
         )
+        effective_component_ids = {
+            str(component["id"])
+            for component in active_components
+            if component.get("effective_state") == "active"
+        }
+        manual_pair_records = [
+            record
+            for record in manual_pair_records
+            if record["component_id"] not in effective_component_ids
+        ]
+        direct_payout_records = [
+            record
+            for record in direct_payout_records
+            if record["component_id"] not in effective_component_ids
+        ]
         component_blockers = component_integrity_blockers(
             self.conn,
             self.profile_id,
@@ -478,6 +493,10 @@ class CustodyJournalBuilder:
             dismissed_gap_fingerprints=dismissed_fingerprints,
             gap_search_result=gap_search_result,
         )
+        direct_payout_records = [
+            *direct_payout_records,
+            *quantity_state.reviewed_direct_payouts,
+        ]
         custody_transfers = custody_quantity_runtime.canonical_internal_transfer_rows(
             quantity_state,
             wallet_refs_by_id,

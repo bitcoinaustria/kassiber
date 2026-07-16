@@ -158,6 +158,7 @@ class CanonicalQuantityState:
     gap_candidate_transaction_ids: tuple[str, ...] = ()
     gap_holds: tuple[CustodyGapHold, ...] = ()
     reviewed_conversion_pairs: tuple[Mapping[str, Any], ...] = ()
+    reviewed_direct_payouts: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def report_blocked(self) -> bool:
@@ -315,6 +316,7 @@ def _component_claims_and_issues(
     tuple[QuantityClaim, ...],
     tuple[QuantityIssue, ...],
     tuple[Mapping[str, Any], ...],
+    tuple[Mapping[str, Any], ...],
 ]:
     observations_by_hash = {
         item.quantity_hash: item for item in canonical.observations
@@ -327,6 +329,7 @@ def _component_claims_and_issues(
     claims: list[QuantityClaim] = []
     issues: list[QuantityIssue] = []
     reviewed_conversion_pairs: list[Mapping[str, Any]] = []
+    reviewed_direct_payouts: list[Mapping[str, Any]] = []
     for component in sorted(components, key=lambda item: str(item.get("id") or "")):
         component_id = str(component.get("id") or "")
         transaction_ids = tuple(
@@ -442,7 +445,13 @@ def _component_claims_and_issues(
         else:
             claims.extend(compiled.claims)
             reviewed_conversion_pairs.extend(compiled.reviewed_conversion_pairs)
-    return tuple(claims), tuple(issues), tuple(reviewed_conversion_pairs)
+            reviewed_direct_payouts.extend(compiled.reviewed_direct_payouts)
+    return (
+        tuple(claims),
+        tuple(issues),
+        tuple(reviewed_conversion_pairs),
+        tuple(reviewed_direct_payouts),
+    )
 
 
 def _component_evidence_drift(
@@ -965,7 +974,12 @@ def build_canonical_quantity_state(
     interpreter_claims = tuple(interpreter_claims)
     safe_rows = enriched_quantity_rows(rows)
     canonical = build_canonical_quantity_input(safe_rows)
-    component_claims, component_issues, reviewed_conversion_pairs = (
+    (
+        component_claims,
+        component_issues,
+        reviewed_conversion_pairs,
+        reviewed_direct_payouts,
+    ) = (
         _component_claims_and_issues(
             effective_components,
             canonical,
@@ -1145,6 +1159,7 @@ def build_canonical_quantity_state(
         gap_candidate_transaction_ids=gap_candidate_transaction_ids,
         gap_holds=gap_holds,
         reviewed_conversion_pairs=reviewed_conversion_pairs,
+        reviewed_direct_payouts=reviewed_direct_payouts,
     )
 
 

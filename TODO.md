@@ -180,9 +180,15 @@ same verification surface.
     perform zero SQLite writes.
   - [ ] Migrate pair/payout authored meaning into components with typed
     replicated economic terms; freeze legacy writes and retain replay history.
-    Deterministic inert draft backfill, one-to-many leg-bound terms,
-    compatibility links, idempotence and atomic rollback coverage are complete;
-    connected 1:N/N:M consolidation, activation and the write freeze remain.
+    Deterministic draft staging, one-to-many leg-bound terms, compatibility
+    links, full-source connected 1:N/N:M consolidation, activation,
+    idempotence and atomic rollback coverage are complete. The journal consumes
+    effective active components and falls back to legacy interpretation for
+    skipped, ineffective, or partial-source historical rows; component-native
+    residual decisions and writes remain. Linked active compatibility rows are
+    database-write-frozen, and current mutation handlers retire/revise their
+    component atomically; removing new compatibility-row writes is the final
+    producer cutover.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state.

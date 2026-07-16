@@ -15,6 +15,7 @@ from contextlib import redirect_stdout
 from kassiber.cli.handlers import process_journals
 from kassiber.cli.main import build_parser, dispatch
 from kassiber.core import custody_filed_reports
+from kassiber.core.custody_journal import CustodyJournalBuilder
 from kassiber.core.custody_components import (
     activate_component,
     create_component,
@@ -457,6 +458,12 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
     migrated = open_db(tmp_path)
     try:
         after_tax = _tax_snapshot(migrated)
+        profile = migrated.execute(
+            "SELECT * FROM profiles WHERE id = 'profile'"
+        ).fetchone()
+        decisions = CustodyJournalBuilder(
+            migrated, profile
+        ).build_custody_decisions()
         after_rows = {
             table: int(
                 migrated.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -476,7 +483,10 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
             ),
             "payload_free_evidence_commitments": int(
                 migrated.execute(
-                    "SELECT COUNT(*) FROM custody_component_evidence_commitments"
+                    "SELECT COUNT(*) FROM custody_component_evidence_commitments e "
+                    "WHERE e.component_id NOT IN ("
+                    "  SELECT component_id FROM custody_component_economic_terms"
+                    ")"
                 ).fetchone()[0]
             ),
         }
@@ -494,10 +504,14 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
 
         assert before_tax == after_tax
-        # The authored-substrate convergence migration adds one inert draft
-        # component for each active legacy pair/payout. Legacy rows remain the
-        # journal input in this compatibility slice, proven by the unchanged
-        # tax snapshot above.
+        assert decisions.manual_pair_records == []
+        assert [record["id"] for record in decisions.direct_payout_records] == [
+            "direct-payout"
+        ]
+        assert decisions.direct_payout_records[0]["component_id"] is not None
+        # Convergence adds one active pair component and one active payout
+        # component. The unchanged tax snapshot above proves both cutovers
+        # preserve behavior.
         assert {
             **before_rows,
             "custody_components": before_rows["custody_components"] + 2,

@@ -11,8 +11,11 @@ from kassiber.core.custody_authored_migration import (
 from kassiber.core.custody_components import (
     create_component,
     get_component,
+    iter_authored_active_components,
     seal_component_economic_terms,
 )
+from kassiber.core.custody_journal import CustodyJournalBuilder
+from kassiber import db as db_module
 from kassiber.db import open_db
 
 
@@ -149,6 +152,7 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
 
         pair = get_component(migrated, pair_link)
         assert pair["state"] == "draft"
+        assert pair["effective_state"] == "draft"
         assert pair["authored_source"] == "migration"
         assert pair["component_type"] == "manual_bridge"
         assert [leg["amount_msat"] for leg in pair["legs"]] == [900, 900]
@@ -166,7 +170,8 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
         assert terms["review_source"] == "manual"
 
         payout = get_component(migrated, payout_link)
-        assert payout["state"] == "draft"
+        assert payout["state"] == "active"
+        assert payout["effective_state"] == "active"
         assert payout["component_type"] == "swap"
         assert payout["conservation_mode"] == "conversion"
         assert [leg["amount_msat"] for leg in payout["legs"]] == [2000, 1950]
@@ -179,8 +184,46 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
         assert terms["payout_external_id"] == "settlement-1"
         assert terms["counterparty"] == "swap desk"
         assert terms["swap_fee_msat"] == -50
+
+        safe_components = {
+            component["id"]: component
+            for component in iter_authored_active_components(
+                migrated,
+                profile_id="profile",
+                include_local_evidence=False,
+            )
+        }
+        safe_payout = safe_components[payout["id"]]
+        assert safe_payout["effective_state"] == "active"
+        assert safe_payout["validation"]["activatable"] is True
+        assert all("location_ref" not in leg for leg in safe_payout["legs"])
+
+        profile = migrated.execute(
+            "SELECT * FROM profiles WHERE id = 'profile'"
+        ).fetchone()
+        decisions = CustodyJournalBuilder(
+            migrated, profile
+        ).build_custody_decisions()
+        assert [record["id"] for record in decisions.manual_pair_records] == [
+            "pair"
+        ]
+        assert [record["id"] for record in decisions.direct_payout_records] == [
+            "payout"
+        ]
+        assert decisions.direct_payout_records[0]["component_id"] == payout["id"]
     finally:
         migrated.close()
+
+    reopened = open_db(tmp_path)
+    try:
+        assert reopened.execute(
+            "SELECT COUNT(*) FROM custody_components"
+        ).fetchone()[0] == 2
+        assert reopened.execute(
+            "SELECT COUNT(*) FROM custody_components WHERE state = 'active'"
+        ).fetchone()[0] == 1
+    finally:
+        reopened.close()
 
 
 def test_backfill_is_idempotent_and_legacy_edits_create_a_revision(tmp_path):
@@ -216,6 +259,67 @@ def test_backfill_is_idempotent_and_legacy_edits_create_a_revision(tmp_path):
         "WHERE legacy_source_id = 'pair'"
     ).fetchone()[0] == 2
     conn.close()
+
+
+def test_connected_fanout_pairs_activate_as_one_atomic_component(tmp_path):
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    _tx(
+        conn,
+        "pair-in-2",
+        "btc",
+        "inbound",
+        "BTC",
+        100,
+        "2026-01-02T01:00:00Z",
+    )
+    conn.execute(
+        """
+        INSERT INTO transaction_pairs(
+            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+            kind, policy, notes, pair_source, out_amount, created_at
+        ) VALUES('pair-2', 'ws', 'profile', 'pair-out', 'pair-in-2',
+                 'manual', 'carrying-value', 'fanout remainder', 'manual', 100, ?)
+        """,
+        (NOW,),
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = open_db(tmp_path)
+    try:
+        links = {
+            row["component_id"]
+            for row in migrated.execute(
+                "SELECT component_id FROM transaction_pairs "
+                "WHERE id IN ('pair', 'pair-2')"
+            )
+        }
+        assert len(links) == 1
+        component = get_component(migrated, links.pop())
+        assert component["effective_state"] == "active"
+        assert len(component["economic_terms"]) == 2
+        assert sum(
+            allocation["source_amount_msat"]
+            for allocation in component["allocations"]
+        ) == 1000
+        assert {
+            leg["anchor_transaction_id"]
+            for leg in component["legs"]
+            if leg["role"] == "destination"
+        } == {"pair-in", "pair-in-2"}
+        memberships = migrated.execute(
+            "SELECT transaction_id FROM custody_component_transaction_memberships "
+            "WHERE component_id = ? ORDER BY transaction_id",
+            (component["id"],),
+        ).fetchall()
+        assert [row["transaction_id"] for row in memberships] == [
+            "pair-in",
+            "pair-in-2",
+            "pair-out",
+        ]
+    finally:
+        migrated.close()
 
 
 def test_backfill_rolls_back_component_terms_and_links_together(tmp_path):
@@ -349,4 +453,36 @@ def test_component_aggregate_accepts_multiple_leg_bound_economic_terms(tmp_path)
     assert "component_economic_term_count_mismatch" in {
         issue["code"] for issue in partial["validation"]["issues"]
     }
+    conn.close()
+
+
+def test_leg_role_rebuild_preserves_existing_economic_term_foreign_keys(tmp_path):
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    assert backfill_legacy_authored_components(conn).created == 2
+    before = [
+        tuple(row)
+        for row in conn.execute(
+            "SELECT id, component_id, source_leg_id, target_leg_id "
+            "FROM custody_component_economic_terms ORDER BY id"
+        )
+    ]
+
+    db_module._rebuild_custody_leg_role_schema(conn)
+
+    after = [
+        tuple(row)
+        for row in conn.execute(
+            "SELECT id, component_id, source_leg_id, target_leg_id "
+            "FROM custody_component_economic_terms ORDER BY id"
+        )
+    ]
+    assert after == before
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert {
+        row["table"]
+        for row in conn.execute(
+            "PRAGMA foreign_key_list(custody_component_economic_terms)"
+        )
+    } >= {"custody_components", "custody_component_legs"}
     conn.close()

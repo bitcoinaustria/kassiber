@@ -47,22 +47,39 @@ class HistoricalCustodyCompatibilityTests(unittest.TestCase):
         self.assertEqual(pair["kind"], "manual")
         self.assertEqual(pair["pair_source"], "user")
         self.assertEqual(pair["out_amount"], 100_000_000_000)
-        self.assertIsNone(pair["component_id"])
+        self.assertIsNotNone(pair["component_id"])
 
         authored_active = list_components(conn, profile_id="pf", state="active")
         self.assertEqual(
             {item["id"] for item in authored_active},
-            {"component-replica-a", "component-replica-b"},
+            {
+                "component-replica-a",
+                "component-replica-b",
+                pair["component_id"],
+            },
         )
-        self.assertEqual({item["effective_state"] for item in authored_active}, {"draft"})
-        for item in authored_active:
+        conflicted = [
+            item
+            for item in authored_active
+            if item["id"] in {"component-replica-a", "component-replica-b"}
+        ]
+        self.assertEqual({item["effective_state"] for item in conflicted}, {"draft"})
+        for item in conflicted:
             issue_codes = {issue["code"] for issue in item["validation"]["issues"]}
             self.assertIn("active_lineage_conflict", issue_codes)
             self.assertIn("component_evidence_commitment_invalid", issue_codes)
-        self.assertEqual(
-            list_components(conn, profile_id="pf", effective_only=True),
-            [],
-        )
+        effective = list_components(conn, profile_id="pf", effective_only=True)
+        self.assertEqual([item["id"] for item in effective], [pair["component_id"]])
+        self.assertEqual(len(effective[0]["economic_terms"]), 1)
+        self.assertEqual(effective[0]["economic_terms"][0]["legacy_source_id"], "manual-pair")
+        term_foreign_tables = {
+            row["table"]
+            for row in conn.execute(
+                "PRAGMA foreign_key_list(custody_component_economic_terms)"
+            )
+        }
+        self.assertIn("custody_component_legs", term_foreign_tables)
+        self.assertNotIn("custody_component_legs__pre_suspense", term_foreign_tables)
 
         samourai_config = json.loads(
             conn.execute(

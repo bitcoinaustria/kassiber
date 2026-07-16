@@ -37,6 +37,7 @@ from ..backends import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_components as core_custody_components
 from ..core import custody_journal as core_custody_journal
 from ..core import custody_quantity_store as core_custody_quantity_store
@@ -813,6 +814,7 @@ def create_transaction_pair(
             now_iso(),
         ),
     )
+    core_custody_authored_migration.refresh_legacy_authored_components(conn)
     invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
@@ -957,6 +959,7 @@ def create_direct_swap_payout(
             now_iso(),
         ),
     )
+    core_custody_authored_migration.refresh_legacy_authored_components(conn)
     invalidate_journals(conn, profile["id"])
     conn.commit()
     return _direct_payout_to_dict(
@@ -1022,6 +1025,11 @@ def delete_direct_swap_payout(conn, workspace_ref, profile_ref, payout_id):
     if row["deleted_at"]:
         return _direct_payout_to_dict(row)
     deleted_at = now_iso()
+    core_custody_authored_migration.retire_linked_component(
+        conn,
+        row["component_id"],
+        reason="direct payout review deleted",
+    )
     conn.execute(
         "UPDATE direct_swap_payouts SET deleted_at = ? WHERE id = ?",
         (deleted_at, payout_id),
@@ -2516,6 +2524,11 @@ def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
     if not row:
         raise AppError(f"Pair '{pair_id}' not found", code="not_found")
     if row["deleted_at"] is None:
+        core_custody_authored_migration.retire_linked_component(
+            conn,
+            row["component_id"],
+            reason="transaction pair review deleted",
+        )
         conn.execute(
             "UPDATE transaction_pairs SET deleted_at = ? WHERE id = ?",
             (now_iso(), pair_id),
@@ -2645,6 +2658,11 @@ def update_transaction_pair(
                 )
             else:
                 new_fee_msat, new_fee_kind = None, None
+        core_custody_authored_migration.retire_linked_component(
+            conn,
+            row["component_id"],
+            reason="transaction pair review revised",
+        )
         conn.execute(
             "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ?, "
             "swap_fee_msat = ?, swap_fee_kind = ? "
@@ -2659,6 +2677,7 @@ def update_transaction_pair(
                 profile["id"],
             ),
         )
+        core_custody_authored_migration.refresh_legacy_authored_components(conn)
         invalidate_journals(conn, profile["id"])
         if commit:
             conn.commit()
