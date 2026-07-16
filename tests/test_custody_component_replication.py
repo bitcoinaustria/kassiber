@@ -1207,6 +1207,50 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             ).fetchone()[0],
         )
 
+    def test_arriving_legacy_payout_event_is_migrated_in_same_import(self):
+        self._join_peer()
+        _wallet_id, out_id, _in_id = self._insert_wallet_and_transactions()
+        payout_id = str(uuid.uuid4())
+        self.owner.execute(
+            """
+            INSERT INTO direct_swap_payouts(
+                id, workspace_id, profile_id, out_transaction_id,
+                kind, policy, payout_asset, payout_amount,
+                payout_occurred_at, payout_fiat_value, payout_external_id,
+                counterparty, notes, swap_fee_msat, swap_fee_kind,
+                out_amount, created_at
+            ) VALUES(?, ?, ?, ?, 'direct-swap-payout', 'taxable',
+                     'BTC', 100000, ?, 100, 'legacy-settlement',
+                     'legacy provider', 'delayed signed event', 0,
+                     'combined', 100000, ?)
+            """,
+            (
+                payout_id,
+                self.workspace["id"],
+                self.profile["id"],
+                out_id,
+                NOW,
+                NOW,
+            ),
+        )
+        self.owner.commit()
+
+        result = self._sync_owner_to_peer()
+
+        self.assertEqual(result.rejected_events, 0)
+        legacy = self.peer.execute(
+            "SELECT component_id FROM direct_swap_payouts WHERE id = ?",
+            (payout_id,),
+        ).fetchone()
+        self.assertIsNotNone(legacy)
+        self.assertIsNotNone(legacy["component_id"])
+        component = get_component(self.peer, legacy["component_id"])
+        self.assertEqual(component["effective_state"], "active")
+        self.assertEqual(
+            [term["legacy_source_id"] for term in component["economic_terms"]],
+            [payout_id],
+        )
+
     def test_open_db_backfills_only_preexisting_local_activation_snapshots(self):
         self._join_peer()
         component = self._create_component(active=True)

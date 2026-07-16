@@ -15,6 +15,9 @@ from contextlib import redirect_stdout
 from kassiber.cli.handlers import process_journals
 from kassiber.cli.main import build_parser, dispatch
 from kassiber.core import custody_filed_reports
+from kassiber.core.custody_authored_migration import (
+    refresh_legacy_authored_components,
+)
 from kassiber.core.custody_journal import CustodyJournalBuilder
 from kassiber.core.custody_components import (
     activate_component,
@@ -358,6 +361,7 @@ def _build_current_fixture(root) -> sqlite3.Connection:
         "INSERT INTO settings(key, value) VALUES('test_fixture_schema_version', ?)",
         (LEGACY_FIXTURE_VERSION,),
     )
+    refresh_legacy_authored_components(conn)
     conn.commit()
     assert get_component(conn, conflicted["id"])["effective_state"] == "draft"
     return conn
@@ -504,18 +508,11 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
 
         assert before_tax == after_tax
-        assert decisions.manual_pair_records == []
         assert [record["id"] for record in decisions.direct_payout_records] == [
             "direct-payout"
         ]
         assert decisions.direct_payout_records[0]["component_id"] is not None
-        # Convergence adds one active pair component and one active payout
-        # component. The unchanged tax snapshot above proves both cutovers
-        # preserve behavior.
-        assert {
-            **before_rows,
-            "custody_components": before_rows["custody_components"] + 2,
-        } == after_rows
+        assert before_rows == after_rows
         assert migrated.execute(
             "SELECT COUNT(*) FROM custody_gap_review_transactions"
         ).fetchone()[0] == 2
@@ -532,7 +529,7 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
         assert reported_changes["durable_transaction_anchors"]["after"] == {
             "column_present": True,
-            "anchored_leg_count": 6,
+            "anchored_leg_count": 9,
         }
         assert reported_changes["payload_free_evidence_commitments"]["before"] == {
             "header_column_present": False,
@@ -540,7 +537,7 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
         assert reported_changes["payload_free_evidence_commitments"]["after"] == {
             "header_column_present": True,
-            "commitment_count": 6,
+            "commitment_count": 9,
         }
         assert all(
             1 <= len(change["explanation"]) <= 240

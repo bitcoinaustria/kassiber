@@ -235,7 +235,6 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
             self.index,
             quarantines,
             [],
-            [],
         )
         self.assertEqual(
             counts,

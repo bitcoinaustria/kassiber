@@ -11654,9 +11654,14 @@ class ReviewRegressionTest(unittest.TestCase):
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
         self.assertEqual(_legacy_snapshot_identity(actual), expected)
-        self.assertEqual(actual["intra_audit"][0]["pairing_source"], "manual")
+        self.assertEqual(
+            actual["intra_audit"][0]["pairing_source"],
+            "reviewed_custody_component",
+        )
         self.assertTrue(
-            actual["intra_audit"][0]["transfer_group_id"].startswith("pair:")
+            actual["intra_audit"][0]["transfer_group_id"].startswith(
+                "component:"
+            )
         )
 
     def test_austrian_rp2_engine_snapshot_matches_fixture(self):

@@ -593,49 +593,6 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
             )
 
         rows = [self._row("liquid-out"), self._row("liquid-in")]
-        safe_rows = enriched_quantity_rows(rows)
-        canonical = build_canonical_quantity_input(safe_rows)
-        compilation = compile_custody_interpreters(
-            safe_rows,
-            canonical,
-            wallet_refs_by_id={row["wallet_id"]: row for row in rows},
-            manual_pair_records=(
-                {
-                    "id": "reviewed-liquid-pair",
-                    "out_transaction_id": "liquid-out",
-                    "in_transaction_id": "liquid-in",
-                    "policy": "carrying-value",
-                    "kind": "self-transfer",
-                    "pair_source": "manual",
-                    "out_amount": 900,
-                },
-            ),
-        )
-
-        state = build_canonical_quantity_state(
-            rows,
-            interpreter_claims=compilation.claims,
-            native_evidence=compilation.native_audits,
-            interpreter_blockers=compilation.blocking_quarantines,
-        )
-
-        suspense = [
-            decision
-            for decision in state.projection.decisions
-            if decision.state == CUSTODY_SUSPENSE
-        ]
-        self.assertEqual(
-            [(decision.source.amount_msat, decision.reason) for decision in suspense],
-            [(100, "implicit_wallet_delta_unallocated")],
-        )
-        self.assertFalse(
-            [posting for posting in state.projection.postings if posting.location_kind == "fee"]
-        )
-        self.assertNotIn(
-            EXTERNAL_CONFIRMED,
-            {decision.state for decision in state.projection.decisions},
-        )
-
         native_state = build_canonical_quantity_state(
             rows,
             native_evidence=(

@@ -873,67 +873,12 @@ def _tax_eligibility(
     )
 
 
-def _direct_payout_claims(
-    direct_payout_records: Sequence[Mapping[str, Any]],
-    canonical: CanonicalQuantityInput,
-    *,
-    component_transaction_ids: set[str],
-) -> tuple[QuantityClaim, ...]:
-    """Compile each active reviewed payout into its exact outbound source tail."""
-
-    observations = _observations_by_transaction(canonical)
-    claims: list[QuantityClaim] = []
-    for record in sorted(
-        direct_payout_records,
-        key=lambda item: (
-            str(_field(item, "out_transaction_id") or ""),
-            str(_field(item, "id") or ""),
-        ),
-    ):
-        out_id = str(_field(record, "out_transaction_id") or "")
-        if not out_id or out_id in component_transaction_ids:
-            continue
-        source = observations.get(out_id)
-        if source is None or source.direction != "outbound":
-            continue
-        raw_amount = _field(record, "out_amount")
-        if raw_amount in (None, ""):
-            raw_amount = _field(record, "out_amount_msat")
-        amount_msat = (
-            source.principal_msat
-            if raw_amount in (None, "")
-            else int(raw_amount)
-        )
-        if amount_msat <= 0 or amount_msat > source.principal_msat:
-            continue
-        start_msat = source.principal_msat - amount_msat
-        payout_id = str(_field(record, "id") or out_id)
-        claims.append(
-            QuantityClaim(
-                claim_id=f"direct-payout:{payout_id}:source",
-                source=QuantitySlice(
-                    source.quantity_hash,
-                    start_msat,
-                    source.principal_msat,
-                ),
-                state=EXTERNAL_CONFIRMED,
-                priority=ClaimPriority.REVIEWED_PAIR,
-                reason="reviewed_direct_payout_source",
-                supporting_evidence_hashes=(source.evidence_detail_hash,),
-                atomic_bundle_id=f"direct-payout:{payout_id}",
-                destination_kind="external",
-            )
-        )
-    return tuple(claims)
-
-
 def build_canonical_quantity_state(
     rows: Sequence[Mapping[str, Any]],
     *,
     interpreter_claims: Iterable[QuantityClaim] = (),
     effective_components: Sequence[Mapping[str, Any]] = (),
     native_evidence: Sequence[Mapping[str, Any]] = (),
-    direct_payout_records: Sequence[Mapping[str, Any]] = (),
     interpreter_blockers: Sequence[Mapping[str, Any]] = (),
     ignored_gap_transaction_ids: Iterable[str] = (),
     component_evidence_snapshots: (
@@ -990,28 +935,16 @@ def build_canonical_quantity_state(
             search_result=gap_search_result,
         )
     )
-    direct_payout_claims = _direct_payout_claims(
-        direct_payout_records,
-        canonical,
-        component_transaction_ids=component_transaction_ids,
-    )
-    reserved_source_msat: dict[str, int] = {}
-    for claim in direct_payout_claims:
-        reserved_source_msat[claim.source.observation_hash] = (
-            reserved_source_msat.get(claim.source.observation_hash, 0)
-            + claim.source.amount_msat
-        )
     native_audit = compile_verified_native_claims(
         canonical,
         native_evidence,
         component_transaction_ids=component_transaction_ids,
-        reserved_source_msat=reserved_source_msat,
+        reserved_source_msat={},
     )
     canonical = native_audit.canonical_input
     claims = (
         *component_claims,
         *gap_hold_claims,
-        *direct_payout_claims,
         *native_audit.claims,
         *interpreter_claims,
     )
@@ -1043,12 +976,12 @@ def build_canonical_quantity_state(
         for item in native_audit.issues
     )
     for error in projection.claim_errors:
-        source_observations = [
+        involved_observations = [
             by_hash[quantity_hash]
-            for quantity_hash in error.source_observation_hashes
+            for quantity_hash in error.involved_observation_hashes
             if quantity_hash in by_hash
         ]
-        assets = {item.asset for item in source_observations}
+        assets = {item.asset for item in involved_observations}
         issues.append(
             QuantityIssue(
                 issue_id=_issue_id(("claim_bundle_invalid", error.bundle_id)),
@@ -1057,14 +990,14 @@ def build_canonical_quantity_state(
                 asset=next(iter(assets)) if len(assets) == 1 else None,
                 amount_msat=None,
                 occurred_at=min(
-                    (item.occurred_at for item in source_observations),
+                    (item.occurred_at for item in involved_observations),
                     default="",
                 ),
                 transaction_ids=tuple(
                     sorted(
                         {
                             item.anchor_transaction_id
-                            for item in source_observations
+                            for item in involved_observations
                         }
                     )
                 ),

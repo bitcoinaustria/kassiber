@@ -94,8 +94,8 @@ class OwnershipDeriveResult:
     """What :func:`derive_ownership_transfers` contributes to the engine run.
 
     * ``derived_pairs`` — ``{"out": out_leg, "in": in_row, "source": ...}`` in
-      the shape the journal pipeline's intra path consumes (same as
-      ``apply_manual_pairs`` output) plus a provenance marker.
+      the shape the journal pipeline's native interpreter consumes, plus a
+      provenance marker.
     * ``synthetic_rows`` — the split out-legs and any synthesized inbound legs
       that must be appended to the engine row set.
     * ``out_row_overrides`` — ``{out_id: reduced_row}`` for sources that also

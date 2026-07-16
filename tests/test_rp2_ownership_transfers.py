@@ -637,7 +637,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         # Source fully spent (0.5 moved + 0.2 sold + 0.0001 fee == 0.7001 acquired).
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
-    def test_direct_payout_remainder_can_still_be_derived(self):
+    def test_partial_direct_payout_leaves_unreviewed_remainder_in_suspense(self):
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
@@ -671,19 +671,14 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(state.quarantines, [])
+        self.assertIn(
+            "custody_quantity_unresolved",
+            {item["reason"] for item in state.quarantines},
+        )
         entry_types = [entry["entry_type"] for entry in state.entries]
-        self.assertIn("transfer_in", entry_types)
-        self.assertIn("transfer_out", entry_types)
-        disposals = [entry for entry in state.entries if entry["entry_type"] == "disposal"]
-        self.assertEqual(len(disposals), 1)
-        self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.2, places=6)
-        holdings = {
-            label: float(totals["quantity"])
-            for (_, label, _, _), totals in state.wallet_holdings.items()
-        }
-        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
-        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
+        self.assertNotIn("transfer_in", entry_types)
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertNotIn("disposal", entry_types)
 
     def test_fee_inclusive_direct_payout_uses_principal_at_every_stage(self):
         principal_msat = 50 * BTC // 100
@@ -758,7 +753,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
             "payout_amount": principal_msat,
             "payout_occurred_at": NOW,
             "payout_fiat_value": 20_000,
-            # A legacy gross allocation includes the network fee and must fail
+            # A gross allocation includes the network fee and must fail
             # closed instead of disappearing into the presumed-disposal path.
             "out_amount": principal_msat + fee_msat,
         }
@@ -773,7 +768,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         )
 
         self.assertIn(
-            "direct_payout_out_amount_invalid",
+            "custody_quantity_unresolved",
             {item["reason"] for item in state.quarantines},
         )
         self.assertNotIn(
@@ -781,11 +776,10 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         )
 
     def test_whole_row_payout_not_hijacked_by_same_txid_inbound(self):
-        # #2: a reviewed WHOLE-row taxable direct payout whose out tx shares a
-        # txid with another owned wallet's recorded inbound (a batched tx) must
-        # book its declared disposal — detect_intra_transfers must NOT pair the
-        # payout's proceeds row with the sibling inbound into a non-taxable MOVE
-        # (which would silently drop the 20000 proceeds).
+        # A reviewed whole-row payout owns only the authored source slice. A
+        # separate imported receipt remains an acquisition unless it is also
+        # included in the component; it cannot silently turn the payout into a
+        # MOVE.
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
@@ -826,7 +820,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         entry_types = [e["entry_type"] for e in state.entries]
         # The payout disposal is booked, not hijacked into a MOVE.
         self.assertNotIn("transfer_out", entry_types)
-        self.assertFalse(
+        self.assertTrue(
             any(
                 e["entry_type"] == "acquisition" and e["wallet_id"] == "B"
                 for e in state.entries
@@ -836,19 +830,14 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertEqual(len(disposals), 1)
         self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.5, places=6)
         self.assertAlmostEqual(float(disposals[0]["proceeds"]), 20000, places=2)
-        # The suppressed sibling receipt is a real synced row contradicting the
-        # whole-row review — it must surface for review, not vanish silently.
-        conflicts = [
-            q
-            for q in state.quarantines
-            if q["reason"] == "direct_payout_conflicting_receipt"
-        ]
-        self.assertEqual(len(conflicts), 1)
-        self.assertEqual(conflicts[0]["transaction_id"], "B-inbound-payout-tx")
+        self.assertNotIn(
+            "direct_payout_conflicting_receipt",
+            {q["reason"] for q in state.quarantines},
+        )
 
-    def test_conflicting_receipt_quarantine_survives_sqlite_rows(self):
-        # The real CLI/daemon path feeds sqlite3.Row objects (no .get) into the
-        # engine; the conflict-quarantine block must use _row_get accessors.
+    def test_component_payout_accepts_sqlite_rows_without_legacy_interpreter(self):
+        # The real CLI/daemon path feeds sqlite3.Row objects through component
+        # compilation; the removed payout interpreter is not needed.
         import sqlite3
 
         def _as_sqlite_rows(dict_rows):
@@ -903,19 +892,16 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
                 owned_index=index,
             )
         )
-        conflicts = [
-            q
-            for q in state.quarantines
-            if q["reason"] == "direct_payout_conflicting_receipt"
-        ]
-        self.assertEqual(len(conflicts), 1)
-        self.assertEqual(conflicts[0]["transaction_id"], "B-inbound-payout-tx")
+        self.assertTrue(state.direct_swap_payouts)
+        self.assertNotIn(
+            "transfer_out", [entry["entry_type"] for entry in state.entries]
+        )
 
-    def test_invalid_payout_blocks_connected_self_transfer_atomically(self):
+    def test_invalid_payout_blocks_only_its_authored_component_boundary(self):
         # An impossible reviewed allocation is a failed authored interpretation,
-        # not an absent payout. The source and its connected move must both remain
-        # outside tax booking; otherwise either a disposal or phantom acquisition
-        # can survive the invalid review.
+        # not an absent payout. Its source stays outside tax booking, while an
+        # inbound row that was never authored into the component remains an
+        # independent acquisition rather than being suppressed by txid alone.
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
@@ -953,12 +939,12 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
             )
         )
         reasons = [q["reason"] for q in state.quarantines]
-        self.assertIn("direct_payout_out_amount_invalid", reasons)
+        self.assertIn("custody_quantity_unresolved", reasons)
         entry_types = [e["entry_type"] for e in state.entries]
         self.assertNotIn("transfer_in", entry_types)
         self.assertNotIn("transfer_out", entry_types)
         self.assertNotIn("disposal", entry_types)
-        self.assertFalse(
+        self.assertTrue(
             any(e["entry_type"] == "acquisition" and e["wallet_id"] == "B" for e in state.entries)
         )
 
@@ -999,7 +985,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         )
 
         self.assertIn(
-            "direct_payout_out_amount_invalid",
+            "custody_quantity_unresolved",
             {quarantine["reason"] for quarantine in state.quarantines},
         )
         self.assertFalse(
@@ -1059,7 +1045,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         )
         entry_types = [e["entry_type"] for e in state.entries]
         self.assertNotIn("transfer_out", entry_types)  # not hijacked into a MOVE
-        self.assertFalse(
+        self.assertTrue(
             any(
                 e["entry_type"] == "acquisition" and e["wallet_id"] == "B"
                 for e in state.entries
@@ -1275,7 +1261,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             )
         )
         reasons = [q["reason"] for q in state.quarantines]
-        self.assertIn("ownership_transfer_source_ambiguous", reasons)
+        self.assertNotIn("ownership_transfer_source_ambiguous", reasons)
 
     def test_multi_source_sync_gap_quarantines_source(self):
         index = OwnedIndex()

@@ -66,6 +66,74 @@ class ConsolidationResult:
         return bool(self.activated)
 
 
+def _record_migration_issue(
+    conn: sqlite3.Connection,
+    rows: Sequence[Mapping[str, Any]],
+    error: AppError,
+) -> None:
+    timestamp = now_iso()
+    for row in rows:
+        legacy_table = str(_field(row, "legacy_table"))
+        legacy_source_id = str(_field(row, "id"))
+        transaction_ids = sorted(
+            {
+                str(value)
+                for value in (
+                    _field(row, "out_transaction_id"),
+                    _field(row, "in_transaction_id"),
+                )
+                if value not in (None, "")
+            }
+        )
+        conn.execute(
+            """
+            INSERT INTO custody_authored_migration_issues(
+                id, workspace_id, profile_id, legacy_table, legacy_source_id,
+                issue_code, transaction_ids_json, details_json,
+                resolved_at, created_at, updated_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+            ON CONFLICT(legacy_table, legacy_source_id) DO UPDATE SET
+                issue_code = excluded.issue_code,
+                transaction_ids_json = excluded.transaction_ids_json,
+                details_json = excluded.details_json,
+                resolved_at = NULL,
+                updated_at = excluded.updated_at
+            """,
+            (
+                _stable_id("custody_authored_migration_issue", legacy_table, legacy_source_id),
+                _field(row, "workspace_id"),
+                _field(row, "profile_id"),
+                legacy_table,
+                legacy_source_id,
+                error.code or "custody_legacy_migration_failed",
+                json.dumps(transaction_ids, separators=(",", ":")),
+                json.dumps(error.details or {}, sort_keys=True, separators=(",", ":")),
+                timestamp,
+                timestamp,
+            ),
+        )
+
+
+def _resolve_migration_issues(
+    conn: sqlite3.Connection,
+    rows: Sequence[Mapping[str, Any]],
+) -> None:
+    timestamp = now_iso()
+    for row in rows:
+        conn.execute(
+            "UPDATE custody_authored_migration_issues "
+            "SET resolved_at = COALESCE(resolved_at, ?), updated_at = ? "
+            "WHERE legacy_table = ? AND legacy_source_id = ? "
+            "AND resolved_at IS NULL",
+            (
+                timestamp,
+                timestamp,
+                _field(row, "legacy_table"),
+                _field(row, "id"),
+            ),
+        )
+
+
 @contextmanager
 def _savepoint(conn: sqlite3.Connection, name: str) -> Iterator[None]:
     conn.execute(f"SAVEPOINT {name}")
@@ -601,9 +669,14 @@ def _migrate_row(
     return "created"
 
 
-def _pair_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def _pair_rows(
+    conn: sqlite3.Connection,
+    *,
+    include_deleted: bool = False,
+) -> list[sqlite3.Row]:
+    deleted_filter = "" if include_deleted else "WHERE p.deleted_at IS NULL"
     return conn.execute(
-        """
+        f"""
         SELECT p.*, 'transaction_pairs' AS legacy_table,
                out_tx.asset AS out_asset, out_tx.amount AS out_tx_amount,
                out_tx.fee AS out_fee,
@@ -628,15 +701,20 @@ def _pair_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         JOIN wallets out_wallet ON out_wallet.id = out_tx.wallet_id
         JOIN transactions in_tx ON in_tx.id = p.in_transaction_id
         JOIN wallets in_wallet ON in_wallet.id = in_tx.wallet_id
-        WHERE p.deleted_at IS NULL
+        {deleted_filter}
         ORDER BY p.profile_id, p.created_at, p.id
         """
     ).fetchall()
 
 
-def _payout_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def _payout_rows(
+    conn: sqlite3.Connection,
+    *,
+    include_deleted: bool = False,
+) -> list[sqlite3.Row]:
+    deleted_filter = "" if include_deleted else "WHERE p.deleted_at IS NULL"
     return conn.execute(
-        """
+        f"""
         SELECT p.*, 'direct_swap_payouts' AS legacy_table,
                out_tx.asset AS out_asset, out_tx.amount AS out_tx_amount,
                out_tx.fee AS out_fee,
@@ -650,7 +728,7 @@ def _payout_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         FROM direct_swap_payouts p
         JOIN transactions out_tx ON out_tx.id = p.out_transaction_id
         JOIN wallets out_wallet ON out_wallet.id = out_tx.wallet_id
-        WHERE p.deleted_at IS NULL
+        {deleted_filter}
         ORDER BY p.profile_id, p.created_at, p.id
         """
     ).fetchall()
@@ -662,17 +740,47 @@ def backfill_legacy_authored_components(conn: sqlite3.Connection) -> MigrationRe
     counts = {"created": 0, "revised": 0, "unchanged": 0}
     with _savepoint(conn, "custody_authored_backfill"):
         for rows, term_kind, fields, builder in (
-            (_pair_rows(conn), "transaction_pair", _PAIR_HASH_FIELDS, _pair_spec),
-            (_payout_rows(conn), "direct_swap_payout", _PAYOUT_HASH_FIELDS, _payout_spec),
+            (
+                _pair_rows(conn, include_deleted=True),
+                "transaction_pair",
+                _PAIR_HASH_FIELDS,
+                _pair_spec,
+            ),
+            (
+                _payout_rows(conn, include_deleted=True),
+                "direct_swap_payout",
+                _PAYOUT_HASH_FIELDS,
+                _payout_spec,
+            ),
         ):
             for row in rows:
-                outcome = _migrate_row(
-                    conn,
-                    row,
-                    term_kind=term_kind,
-                    hash_fields=fields,
-                    build_spec=builder,
-                )
+                try:
+                    outcome = _migrate_row(
+                        conn,
+                        row,
+                        term_kind=term_kind,
+                        hash_fields=fields,
+                        build_spec=builder,
+                    )
+                except AppError as error:
+                    _record_migration_issue(conn, [row], error)
+                    continue
+                if _field(row, "deleted_at") not in (None, ""):
+                    component_id = str(
+                        conn.execute(
+                            f"SELECT component_id FROM {_field(row, 'legacy_table')} "
+                            "WHERE id = ?",
+                            (_field(row, "id"),),
+                        ).fetchone()["component_id"]
+                        or ""
+                    )
+                    if component_id:
+                        supersede_component(
+                            conn,
+                            component_id,
+                            reason="migrate deleted legacy custody review",
+                            superseded_at=str(_field(row, "deleted_at")),
+                        )
                 counts[outcome] += 1
     return MigrationResult(**counts)
 
@@ -881,18 +989,7 @@ def _pair_group_spec(
         for source_id, principal_msat in source_totals.items()
         if source_used.get(source_id, 0) != principal_msat
     }
-    if partial_sources and require_full_source:
-        # The legacy interpreter still owns the unreviewed tail. Activating a
-        # component before that residual becomes an explicit authored decision
-        # would either lose it or falsely upgrade a presumed disposal to a
-        # reviewed external allocation.
-        raise AppError(
-            "a reviewed pair group has an unclassified source residual",
-            code="custody_legacy_group_requires_residual",
-            details={"sources": partial_sources, "pair_ids": identities},
-            retryable=False,
-        )
-    return {
+    spec = {
         "component_id": component_id,
         "lineage_id": _stable_id("transaction_pair_group", profile_id, *identities),
         "component_type": "swap" if conversion else "manual_bridge",
@@ -906,6 +1003,23 @@ def _pair_group_spec(
         "terms": terms,
         "created_at": min(str(_field(row, "created_at")) for row in ordered),
     }
+    if partial_sources and require_full_source:
+        rows_by_source: dict[str, list[Mapping[str, Any]]] = {}
+        source_leg_ids: dict[str, str] = {}
+        for row, leg in zip(ordered, legs[::2]):
+            source_id = str(_field(row, "out_transaction_id"))
+            rows_by_source.setdefault(source_id, []).append(row)
+            source_leg_ids.setdefault(source_id, str(leg["id"]))
+        for source_id, amounts in sorted(partial_sources.items()):
+            source_rows = rows_by_source[source_id]
+            _append_source_residual(
+                spec,
+                source_rows[0],
+                reviewed_source_msat=int(amounts["reviewed_msat"]),
+                classification="suspense_continuation",
+                source_leg_id=source_leg_ids[source_id],
+            )
+    return spec
 
 
 def consolidate_legacy_pair_components(
@@ -921,13 +1035,11 @@ def consolidate_legacy_pair_components(
         for group in _connected_pair_groups(rows):
             try:
                 outcome = _consolidate_pair_group(conn, group)
-            except AppError:
-                # Malformed historical rows remain on the compatibility
-                # interpreter, which already emits the precise quarantine.
-                # One bad review must not prevent unrelated valid groups from
-                # converging during database open.
+            except AppError as error:
+                _record_migration_issue(conn, group, error)
                 skipped += 1
                 continue
+            _resolve_migration_issues(conn, group)
             if outcome == "unchanged":
                 unchanged += 1
             else:
@@ -967,14 +1079,39 @@ def consolidate_legacy_payout_components(
                     }
                 ).principal_msat
                 reviewed_source = _field(row, "out_amount")
-                if reviewed_source not in (None, "") and int(
-                    reviewed_source
-                ) != source_principal:
-                    raise AppError(
-                        "a direct payout has an unclassified source residual",
-                        code="custody_legacy_group_requires_residual",
-                        details={"payout_id": _field(row, "id")},
-                        retryable=False,
+                if reviewed_source not in (None, "") and int(reviewed_source) < source_principal:
+                    source_hash = _hash_payload(
+                        _canonical_payload(row, _PAYOUT_HASH_FIELDS)
+                    )
+                    spec = _payout_spec(row, source_hash)
+                    _append_source_residual(
+                        spec,
+                        row,
+                        reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
+                        classification="suspense_continuation",
+                    )
+                    spec = _retarget_revision_spec(
+                        spec, supersedes_component_id=component["id"]
+                    )
+                    component = update_component(
+                        conn,
+                        component["id"],
+                        new_component_id=spec["component_id"],
+                        preserve_planned_row_ids=True,
+                        **_component_kwargs(row, spec),
+                    )
+                    _insert_terms(
+                        conn,
+                        row,
+                        spec,
+                        term_kind="direct_swap_payout",
+                        source_hash=source_hash,
+                    )
+                    _link_legacy_row(
+                        conn,
+                        legacy_table="direct_swap_payouts",
+                        legacy_source_id=str(_field(row, "id")),
+                        component_id=component["id"],
                     )
                 if not component["validation"]["activatable"]:
                     raise AppError(
@@ -986,10 +1123,12 @@ def consolidate_legacy_payout_components(
                         },
                         retryable=False,
                     )
-                activate_component(conn, component_id)
-            except AppError:
+                activate_component(conn, component["id"])
+            except AppError as error:
+                _record_migration_issue(conn, [row], error)
                 skipped += 1
                 continue
+            _resolve_migration_issues(conn, [row])
             activated += 1
     return ConsolidationResult(
         activated=activated, unchanged=unchanged, skipped=skipped
@@ -1092,50 +1231,47 @@ def refresh_legacy_authored_components(
     return staged, pairs, payouts
 
 
-def load_legacy_compatibility_records(
+def load_migration_quarantines(
     conn: sqlite3.Connection,
     *,
     profile_id: str,
-    effective_component_ids: set[str],
-) -> tuple[list[sqlite3.Row], list[sqlite3.Row]]:
-    """Load only historical reviews that lack an effective component.
+) -> tuple[dict[str, Any], ...]:
+    """Materialize unresolved legacy upgrade failures as fail-closed holds."""
 
-    This is the bounded compatibility exception for partial-source reviews
-    whose unreviewed residual cannot be silently reclassified during
-    migration. The producer cutover must replace these rows with an explicitly
-    planned residual before this loader can be deleted.
-    """
-
-    pairs = conn.execute(
-        "SELECT * FROM transaction_pairs "
-        "WHERE profile_id = ? AND deleted_at IS NULL "
+    quarantines: list[dict[str, Any]] = []
+    for row in conn.execute(
+        "SELECT * FROM custody_authored_migration_issues "
+        "WHERE profile_id = ? AND resolved_at IS NULL "
         "ORDER BY created_at, id",
         (profile_id,),
-    ).fetchall()
-    payouts = conn.execute(
-        """
-        SELECT p.*, t.asset AS out_asset, t.amount AS out_amount_msat
-        FROM direct_swap_payouts p
-        JOIN transactions t ON t.id = p.out_transaction_id
-        WHERE p.profile_id = ? AND p.deleted_at IS NULL
-        ORDER BY p.created_at, p.id
-        """,
-        (profile_id,),
-    ).fetchall()
-    return (
-        [
-            row
-            for row in pairs
-            if str(_field(row, "component_id") or "")
-            not in effective_component_ids
-        ],
-        [
-            row
-            for row in payouts
-            if str(_field(row, "component_id") or "")
-            not in effective_component_ids
-        ],
-    )
+    ).fetchall():
+        try:
+            transaction_ids = json.loads(row["transaction_ids_json"] or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            transaction_ids = []
+        detail = {
+            "migration_issue_id": row["id"],
+            "legacy_table": row["legacy_table"],
+            "legacy_source_id": row["legacy_source_id"],
+            "issue_code": row["issue_code"],
+        }
+        try:
+            stored_details = json.loads(row["details_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            stored_details = {}
+        if isinstance(stored_details, Mapping):
+            detail["migration_details"] = dict(stored_details)
+        for transaction_id in transaction_ids:
+            quarantines.append(
+                {
+                    "transaction_id": str(transaction_id),
+                    "workspace_id": row["workspace_id"],
+                    "profile_id": row["profile_id"],
+                    "reason": "custody_authored_migration_incomplete",
+                    "detail_json": json.dumps(detail, sort_keys=True),
+                }
+            )
+    return tuple(quarantines)
 
 
 def effective_component_ids(
@@ -1239,23 +1375,7 @@ def list_active_review_refs(
             ).fetchall()
             if str(row["transaction_id"]) not in claimed_transaction_ids
         )
-    pairs, payouts = load_legacy_compatibility_records(
-        conn,
-        profile_id=profile_id,
-        effective_component_ids=effective_ids,
-    )
-    compatibility_rows = [
-        {**dict(row), "term_kind": "transaction_pair", "compatibility": True}
-        for row in pairs
-    ] + [
-        {
-            **dict(row),
-            "term_kind": "direct_swap_payout",
-            "compatibility": True,
-        }
-        for row in payouts
-    ]
-    rows = [*component_rows, *compatibility_rows]
+    rows = component_rows
     transaction_ids = sorted(
         {
             str(transaction_id)
@@ -1325,27 +1445,6 @@ def find_active_review_for_transaction(
             "compatibility": False,
         }
 
-    effective_ids = effective_component_ids(conn, profile_id=profile_id)
-    pairs, payouts = load_legacy_compatibility_records(
-        conn,
-        profile_id=profile_id,
-        effective_component_ids=effective_ids,
-    )
-    for term_kind, records in (
-        ("transaction_pair", pairs),
-        ("direct_swap_payout", payouts),
-    ):
-        for row in records:
-            if transaction_id in {
-                str(_field(row, "out_transaction_id") or ""),
-                str(_field(row, "in_transaction_id") or ""),
-            }:
-                return {
-                    "id": str(_field(row, "id")),
-                    "component_id": _field(row, "component_id"),
-                    "term_kind": term_kind,
-                    "compatibility": True,
-                }
     return None
 
 
@@ -1429,24 +1528,7 @@ def list_pair_review_records(
     profile_id: str,
     include_deleted: bool = False,
 ) -> list[dict[str, Any]]:
-    """Materialize pair list rows from effective terms plus exceptions."""
-
-    effective_ids = effective_component_ids(conn, profile_id=profile_id)
-    legacy_pairs, _ = load_legacy_compatibility_records(
-        conn,
-        profile_id=profile_id,
-        effective_component_ids=effective_ids,
-    )
-    compatibility_rows = [dict(row) for row in legacy_pairs]
-    if include_deleted:
-        compatibility_rows.extend(
-            dict(row)
-            for row in conn.execute(
-                "SELECT * FROM transaction_pairs "
-                "WHERE profile_id = ? AND deleted_at IS NOT NULL",
-                (profile_id,),
-            ).fetchall()
-        )
+    """Materialize current pair list rows from authored component terms."""
     component_rows = _current_component_term_rows(
         conn,
         profile_id=profile_id,
@@ -1456,7 +1538,7 @@ def list_pair_review_records(
     transaction_ids = sorted(
         {
             str(transaction_id)
-            for row in (*component_rows, *compatibility_rows)
+            for row in component_rows
             for transaction_id in (
                 _field(row, "out_transaction_id"),
                 _field(row, "in_transaction_id"),
@@ -1509,32 +1591,6 @@ def list_pair_review_records(
                 "in_wallet_kind": in_context["wallet_kind"],
             }
         )
-    for row in compatibility_rows:
-        out_context = contexts[str(row["out_transaction_id"])]
-        in_context = contexts[str(row["in_transaction_id"])]
-        reviewed_out = row.get("out_amount")
-        records.append(
-            {
-                **row,
-                "out_external_id": out_context["external_id"],
-                "out_asset": out_context["asset"],
-                "out_amount_msat": (
-                    int(reviewed_out)
-                    if reviewed_out is not None
-                    else int(out_context["amount"])
-                ),
-                "out_full_amount_msat": int(out_context["amount"]),
-                "out_occurred_at": out_context["occurred_at"],
-                "out_wallet": out_context["wallet"],
-                "out_wallet_kind": out_context["wallet_kind"],
-                "in_external_id": in_context["external_id"],
-                "in_asset": in_context["asset"],
-                "in_amount_msat": int(in_context["amount"]),
-                "in_occurred_at": in_context["occurred_at"],
-                "in_wallet": in_context["wallet"],
-                "in_wallet_kind": in_context["wallet_kind"],
-            }
-        )
     current_by_review_id = {str(row["id"]): row for row in records}
     return sorted(
         current_by_review_id.values(),
@@ -1549,24 +1605,7 @@ def list_payout_review_records(
     profile_id: str,
     include_deleted: bool = False,
 ) -> list[dict[str, Any]]:
-    """Materialize payout list rows from effective terms plus exceptions."""
-
-    effective_ids = effective_component_ids(conn, profile_id=profile_id)
-    _, legacy_payouts = load_legacy_compatibility_records(
-        conn,
-        profile_id=profile_id,
-        effective_component_ids=effective_ids,
-    )
-    compatibility_rows = [dict(row) for row in legacy_payouts]
-    if include_deleted:
-        compatibility_rows.extend(
-            dict(row)
-            for row in conn.execute(
-                "SELECT * FROM direct_swap_payouts "
-                "WHERE profile_id = ? AND deleted_at IS NOT NULL",
-                (profile_id,),
-            ).fetchall()
-        )
+    """Materialize current payout list rows from authored component terms."""
     component_rows = _current_component_term_rows(
         conn,
         profile_id=profile_id,
@@ -1576,7 +1615,7 @@ def list_payout_review_records(
     transaction_ids = sorted(
         {
             str(row["out_transaction_id"])
-            for row in (*component_rows, *compatibility_rows)
+            for row in component_rows
         }
     )
     contexts = _review_transaction_contexts(conn, transaction_ids)
@@ -1618,77 +1657,12 @@ def list_payout_review_records(
                 "out_wallet": out_context["wallet"],
             }
         )
-    for row in compatibility_rows:
-        out_context = contexts[str(row["out_transaction_id"])]
-        reviewed_out = row.get("out_amount")
-        records.append(
-            {
-                **row,
-                "out_external_id": out_context["external_id"],
-                "out_asset": out_context["asset"],
-                "reviewed_out_amount_msat": (
-                    int(reviewed_out)
-                    if reviewed_out is not None
-                    else int(out_context["amount"])
-                ),
-                "full_out_amount_msat": int(out_context["amount"]),
-                "out_occurred_at": out_context["occurred_at"],
-                "out_wallet": out_context["wallet"],
-            }
-        )
     current_by_review_id = {str(row["id"]): row for row in records}
     return sorted(
         current_by_review_id.values(),
         key=lambda row: (row["created_at"], row["id"]),
         reverse=True,
     )
-
-
-def get_compatibility_review_projection(
-    conn: sqlite3.Connection,
-    *,
-    profile_id: str,
-    review_id: str,
-    term_kind: str,
-    active_only: bool = False,
-    include_pair_assets: bool = False,
-) -> Mapping[str, Any] | None:
-    """Load the frozen row needed only by the bounded mutation bridge."""
-
-    tables = {
-        "transaction_pair": "transaction_pairs",
-        "direct_swap_payout": "direct_swap_payouts",
-    }
-    table = tables.get(term_kind)
-    if table is None:
-        raise AssertionError(f"unsupported review term kind: {term_kind}")
-    active_sql = " AND projection.deleted_at IS NULL" if active_only else ""
-    if include_pair_assets:
-        if term_kind != "transaction_pair":
-            raise AssertionError("pair assets requested for a non-pair review")
-        return conn.execute(
-            f"""
-            SELECT projection.*,
-                   out_transaction.asset AS out_asset,
-                   in_transaction.asset AS in_asset
-            FROM {table} projection
-            JOIN transactions out_transaction
-              ON out_transaction.id = projection.out_transaction_id
-            JOIN transactions in_transaction
-              ON in_transaction.id = projection.in_transaction_id
-            WHERE projection.id = ? AND projection.profile_id = ?
-              {active_sql}
-            """,
-            (review_id, profile_id),
-        ).fetchone()
-    return conn.execute(
-        f"""
-        SELECT projection.* FROM {table} projection
-        WHERE projection.id = ? AND projection.profile_id = ?
-          {active_sql}
-        """,
-        (review_id, profile_id),
-    ).fetchone()
 
 
 def _active_review_component(
@@ -1715,21 +1689,6 @@ def _active_review_component(
         """,
         (profile_id, review_id, term_kind, *sorted(effective_ids)),
     ).fetchone()
-
-
-def retire_linked_component(
-    conn: sqlite3.Connection,
-    component_id: Any,
-    *,
-    reason: str,
-) -> None:
-    """Retire an effective compatibility aggregate before changing its row."""
-
-    if component_id in (None, ""):
-        return
-    component = get_component(conn, str(component_id))
-    if component["state"] == "active":
-        supersede_component(conn, component["id"], reason=reason)
 
 
 def _review_boundary_row(
@@ -1786,6 +1745,7 @@ def _append_source_residual(
     *,
     reviewed_source_msat: int,
     classification: str,
+    source_leg_id: str | None = None,
 ) -> None:
     boundary = row_boundary_amounts(
         {
@@ -1802,64 +1762,97 @@ def _append_source_residual(
     # suspense.  Historical pair matching commonly represented a destination
     # shortfall equal to that fee, so preserve it as an explicit fee sink.  A
     # larger or fee-less shortfall remains unresolved custody until reviewed.
-    residual_classification = classification
-    if classification == "suspense_continuation" and residual == boundary.fee_msat:
-        residual_classification = "network_fee"
+    residual_parts = [(classification, residual)]
+    if (
+        classification == "suspense_continuation"
+        and 0 < boundary.fee_msat <= residual
+    ):
+        residual_parts = [("network_fee", boundary.fee_msat)]
+        if residual > boundary.fee_msat:
+            residual_parts.append(
+                ("suspense_continuation", residual - boundary.fee_msat)
+            )
     component_id = str(spec["component_id"])
-    source = spec["legs"][0]
+    source = next(
+        (
+            leg
+            for leg in spec["legs"]
+            if source_leg_id is None or str(leg["id"]) == source_leg_id
+        ),
+        None,
+    )
+    if source is None or source.get("role") != "source":
+        raise AppError(
+            "Custody residual source leg was not found",
+            code="custody_component_validation",
+            retryable=False,
+        )
     source_id = str(source["id"])
     source["amount_msat"] = int(source["amount_msat"]) + residual
-    if (
-        spec.get("conservation_mode") == "conversion"
-        and residual_classification == "retained_custody"
+    if spec.get("conservation_mode") == "conversion" and any(
+        classification == "retained_custody"
+        for classification, _amount in residual_parts
     ):
         source["valuation_amount"] = int(source.get("valuation_amount") or 0) + residual
-    sink_id = _stable_id(component_id, "leg", "residual-sink")
-    sink = {
-        **source,
-        "id": sink_id,
-        "amount_msat": residual,
-        "valuation_unit": (
-            source.get("valuation_unit")
-            if spec.get("conservation_mode") == "conversion"
-            and residual_classification == "retained_custody"
-            else None
-        ),
-        "valuation_amount": (
-            residual
-            if spec.get("conservation_mode") == "conversion"
-            and residual_classification == "retained_custody"
-            else None
-        ),
-        "role": {
-            "retained_custody": "retained",
-            "network_fee": "fee",
-        }.get(residual_classification, "suspense"),
-        "transaction_id": None,
-        "anchor_transaction_id": None,
-        "location_ref": (
-            f"reviewed-retained-custody:{row['id']}"
-            if residual_classification == "retained_custody"
-            else (
-                f"network-fee:{row['id']}"
-                if residual_classification == "network_fee"
-                else f"reviewed-custody-suspense:{row['id']}"
-            )
-        ),
-        "notes": f"reviewed_residual:{residual_classification}",
-    }
-    if residual_classification != "retained_custody":
-        sink["wallet_id"] = None
-    spec["legs"].append(sink)
-    spec["allocations"].append(
-        _allocation(
-            allocation_id=_stable_id(component_id, "allocation", "residual"),
-            source_leg_id=source_id,
-            sink_leg_id=sink_id,
-            source_amount_msat=residual,
-            sink_amount_msat=residual,
+    for residual_classification, residual_amount in residual_parts:
+        sink_id = _stable_id(
+            component_id,
+            "leg",
+            "residual-sink",
+            source_id,
+            residual_classification,
         )
-    )
+        sink = {
+            **source,
+            "id": sink_id,
+            "amount_msat": residual_amount,
+            "valuation_unit": (
+                source.get("valuation_unit")
+                if spec.get("conservation_mode") == "conversion"
+                and residual_classification == "retained_custody"
+                else None
+            ),
+            "valuation_amount": (
+                residual_amount
+                if spec.get("conservation_mode") == "conversion"
+                and residual_classification == "retained_custody"
+                else None
+            ),
+            "role": {
+                "retained_custody": "retained",
+                "network_fee": "fee",
+            }.get(residual_classification, "suspense"),
+            "transaction_id": None,
+            "anchor_transaction_id": None,
+            "location_ref": (
+                f"reviewed-retained-custody:{row['id']}"
+                if residual_classification == "retained_custody"
+                else (
+                    f"network-fee:{row['id']}"
+                    if residual_classification == "network_fee"
+                    else f"reviewed-custody-suspense:{row['id']}"
+                )
+            ),
+            "notes": f"reviewed_residual:{residual_classification}",
+        }
+        if residual_classification != "retained_custody":
+            sink["wallet_id"] = None
+        spec["legs"].append(sink)
+        spec["allocations"].append(
+            _allocation(
+                allocation_id=_stable_id(
+                    component_id,
+                    "allocation",
+                    "residual",
+                    source_id,
+                    residual_classification,
+                ),
+                source_leg_id=source_id,
+                sink_leg_id=sink_id,
+                source_amount_msat=residual_amount,
+                sink_amount_msat=residual_amount,
+            )
+        )
 
 
 def _activate_native_review(
@@ -1983,11 +1976,7 @@ def create_pair_review_component(
             spec,
             row,
             reviewed_source_msat=reviewed,
-            classification=(
-                "retained_custody"
-                if out_amount_msat is not None
-                else "suspense_continuation"
-            ),
+            classification="suspense_continuation",
         )
     return _activate_native_review(
         conn,
@@ -2041,7 +2030,7 @@ def create_payout_review_component(
         spec,
         row,
         reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
-        classification="retained_custody",
+        classification="suspense_continuation",
     )
     return _activate_native_review(
         conn,
@@ -2067,84 +2056,57 @@ def revise_pair_review_component(
     """Append an immutable pair component revision."""
 
     review_id = str(_field(row, "id"))
-    compatibility = get_compatibility_review_projection(
+    active = _active_review_component(
         conn,
         profile_id=str(row["profile_id"]),
         review_id=review_id,
         term_kind="transaction_pair",
-        active_only=True,
     )
-    if compatibility is None:
-        active = _active_review_component(
-            conn,
-            profile_id=str(row["profile_id"]),
-            review_id=review_id,
-            term_kind="transaction_pair",
+    if active is None:
+        raise AppError("Transaction pair review was not found", code="not_found")
+    revised = {
+        **dict(row),
+        "kind": kind,
+        "policy": policy,
+        "notes": notes,
+        "swap_fee_msat": swap_fee_msat,
+        "swap_fee_kind": swap_fee_kind,
+        "created_at": now_iso(),
+    }
+    boundary = _review_boundary_row(conn, revised, include_target=True)
+    source_hash = _hash_payload(_canonical_payload(boundary, _PAIR_HASH_FIELDS))
+    component_records = [
+        record
+        for record in list_pair_review_records(
+            conn, profile_id=str(row["profile_id"])
         )
-        if active is None:
-            raise AppError("Transaction pair review was not found", code="not_found")
-        revised = {
-            **dict(row),
-            "kind": kind,
-            "policy": policy,
-            "notes": notes,
-            "swap_fee_msat": swap_fee_msat,
-            "swap_fee_kind": swap_fee_kind,
-            "created_at": now_iso(),
-        }
-        boundary = _review_boundary_row(conn, revised, include_target=True)
-        source_hash = _hash_payload(_canonical_payload(boundary, _PAIR_HASH_FIELDS))
-        component_records = [
-            record
-            for record in list_pair_review_records(
-                conn, profile_id=str(row["profile_id"])
-            )
-            if str(record.get("component_id") or "") == str(active["component_id"])
+        if str(record.get("component_id") or "") == str(active["component_id"])
+    ]
+    if len(component_records) > 1:
+        group_rows = [
+            boundary
+            if str(record["id"]) == review_id
+            else _review_boundary_row(conn, record, include_target=True)
+            for record in component_records
         ]
-        if len(component_records) > 1:
-            group_rows = [
-                boundary
-                if str(record["id"]) == review_id
-                else _review_boundary_row(conn, record, include_target=True)
-                for record in component_records
-            ]
-            spec = _pair_group_spec(group_rows)
-        else:
-            spec = _pair_spec(boundary, source_hash)
-            _append_source_residual(
-                spec,
-                boundary,
-                reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
-                classification=(
-                    "retained_custody"
-                    if boundary.get("out_amount") is not None
-                    else "suspense_continuation"
-                ),
-            )
-        spec["lineage_id"] = str(active["lineage_id"])
-        return _activate_native_review(
-            conn,
-            boundary,
+        spec = _pair_group_spec(group_rows)
+    else:
+        spec = _pair_spec(boundary, source_hash)
+        _append_source_residual(
             spec,
-            term_kind="transaction_pair",
-            source_hash=source_hash,
-            authored_source=authored_source,
+            boundary,
+            reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
+            classification="suspense_continuation",
         )
-    with _savepoint(conn, f"custody_pair_revise_{uuid.uuid4().hex}"):
-        retire_linked_component(
-            conn,
-            _field(row, "component_id"),
-            reason="transaction pair review revised",
-        )
-        conn.execute(
-            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ?, "
-            "swap_fee_msat = ?, swap_fee_kind = ? WHERE id = ?",
-            (kind, policy, notes, swap_fee_msat, swap_fee_kind, review_id),
-        )
-        refresh_legacy_authored_components(conn)
-    return conn.execute(
-        "SELECT * FROM transaction_pairs WHERE id = ?", (review_id,)
-    ).fetchone()
+    spec["lineage_id"] = str(active["lineage_id"])
+    return _activate_native_review(
+        conn,
+        boundary,
+        spec,
+        term_kind="transaction_pair",
+        source_hash=source_hash,
+        authored_source=authored_source,
+    )
 
 
 def delete_authored_review(
@@ -2156,25 +2118,6 @@ def delete_authored_review(
     deleted_at: str,
     authored_source: str,
 ) -> None:
-    table = (
-        "transaction_pairs"
-        if term_kind == "transaction_pair"
-        else "direct_swap_payouts"
-    )
-    compatibility = get_compatibility_review_projection(
-        conn,
-        profile_id=profile_id,
-        review_id=review_id,
-        term_kind=term_kind,
-    )
-    if compatibility is not None:
-        delete_review_projection(
-            conn,
-            table=table,
-            row=compatibility,
-            deleted_at=deleted_at,
-        )
-        return
     active = _active_review_component(
         conn,
         profile_id=profile_id,
@@ -2236,47 +2179,8 @@ def authored_review_exists(
 ) -> bool:
     """Return whether immutable authored history contains the review id."""
 
-    if get_compatibility_review_projection(
-        conn,
-        profile_id=profile_id,
-        review_id=review_id,
-        term_kind=term_kind,
-    ) is not None:
-        return True
     return conn.execute(
         "SELECT 1 FROM custody_component_economic_terms "
         "WHERE profile_id = ? AND legacy_source_id = ? AND term_kind = ? LIMIT 1",
         (profile_id, review_id, term_kind),
     ).fetchone() is not None
-
-
-def delete_review_projection(
-    conn: sqlite3.Connection,
-    *,
-    table: str,
-    row: Mapping[str, Any],
-    deleted_at: str,
-) -> sqlite3.Row:
-    """Retire the authored aggregate before tombstoning its projection."""
-
-    if table not in {"transaction_pairs", "direct_swap_payouts"}:
-        raise AssertionError(f"unsupported custody review projection: {table}")
-    review_id = str(_field(row, "id"))
-    reason = (
-        "transaction pair review deleted"
-        if table == "transaction_pairs"
-        else "direct payout review deleted"
-    )
-    with _savepoint(conn, f"custody_review_delete_{uuid.uuid4().hex}"):
-        retire_linked_component(
-            conn,
-            _field(row, "component_id"),
-            reason=reason,
-        )
-        conn.execute(
-            f"UPDATE {table} SET deleted_at = ? WHERE id = ?",
-            (deleted_at, review_id),
-        )
-    return conn.execute(
-        f"SELECT * FROM {table} WHERE id = ?", (review_id,)
-    ).fetchone()

@@ -364,6 +364,7 @@ class QuantityClaimError:
     reasons: tuple[str, ...]
     claim_ids: tuple[str, ...]
     source_observation_hashes: tuple[str, ...]
+    involved_observation_hashes: tuple[str, ...]
 
 
 def _validated_inputs(
@@ -435,6 +436,19 @@ def _validated_inputs(
                 reasons=tuple(sorted(reasons)),
                 claim_ids=tuple(sorted({claim.claim_id for claim in members})),
                 source_observation_hashes=tuple(sorted(source_hashes)),
+                involved_observation_hashes=tuple(
+                    sorted(
+                        {
+                            claim.source.observation_hash
+                            for claim in members
+                        }
+                        | {
+                            claim.target.observation_hash
+                            for claim in members
+                            if claim.target is not None
+                        }
+                    )
+                ),
             )
         )
         eligible_priorities = [

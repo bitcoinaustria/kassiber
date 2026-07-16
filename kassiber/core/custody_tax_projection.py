@@ -270,10 +270,8 @@ def compile_finalized_tax_projection(
     *,
     non_event_transaction_ids: Sequence[str] = (),
     blocked_transaction_ids: Sequence[str] = (),
-    direct_payout_conflict_transaction_ids: Sequence[str] = (),
     interpreter_quarantines: Sequence[Mapping[str, Any]] = (),
     direct_payout_records: Sequence[Mapping[str, Any]] = (),
-    reviewed_cross_asset_pairs: Sequence[Mapping[str, Any]] = (),
 ) -> FinalizedTaxProjection:
     """Compile selected custody slices into the irreversible tax input."""
 
@@ -282,14 +280,14 @@ def compile_finalized_tax_projection(
     eligible = {_slice_key(item.source) for item in state.tax_eligibility.eligible_decisions}
     non_events = {str(item) for item in non_event_transaction_ids if item}
     explicitly_blocked = {str(item) for item in blocked_transaction_ids if item}
-    direct_payout_conflicts = {
-        str(item) for item in direct_payout_conflict_transaction_ids if item
-    }
     blocked_anchor_ids = {
         transaction_id
         for issue in state.issues
         if issue.reason.startswith("custody_component_")
-        or issue.issue_type == "component_claim_compile_failed"
+        or issue.issue_type in {
+            "component_claim_compile_failed",
+            "quantity_claim_bundle_invalid",
+        }
         for transaction_id in issue.transaction_ids
     }
     payouts_by_source = _valid_direct_payouts_by_source(
@@ -395,24 +393,6 @@ def compile_finalized_tax_projection(
             {
                 "required_for": "complete_transfer_component",
                 "blocked_by_transaction_ids": sorted(explicitly_blocked),
-            },
-        )
-
-    for transaction_id in sorted(direct_payout_conflicts):
-        row = rows_by_id.get(transaction_id)
-        if row is None:
-            continue
-        reason = "direct_payout_conflicting_receipt"
-        quarantines[(transaction_id, reason)] = _quarantine(
-            profile,
-            transaction_id,
-            reason,
-            {
-                "asset": _field(row, "asset"),
-                "wallet_id": _field(row, "wallet_id"),
-                "direction": _field(row, "direction"),
-                "external_id": str(_field(row, "external_id") or ""),
-                "required_for": "direct_payout_review",
             },
         )
 
@@ -800,7 +780,7 @@ def compile_finalized_tax_projection(
         anchor = str(_field(projected_row, "journal_transaction_id") or "")
         if anchor:
             projected_by_anchor.setdefault(anchor, []).append(projected_row)
-    for pair in (*reviewed_cross_asset_pairs, *state.reviewed_conversion_pairs):
+    for pair in state.reviewed_conversion_pairs:
         pair_id = str(_field(pair, "pair_id") or "")
         if not pair_id or pair_id in existing_cross_pair_ids:
             continue

@@ -546,32 +546,76 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         self.assertEqual(fee.amount_msat, 1)
         self.assertEqual(fee.location_id, "network_fee")
 
-    def test_direct_payout_reserves_source_tail_beside_split_self_transfer(self):
+    def test_component_allocates_split_self_transfer_and_external_tail(self):
         rows = [
             _row("out", "wallet-a", "outbound", 5_000, "2025-01-01T00:00:00Z"),
             _row("in", "wallet-b", "inbound", 3_000, "2025-01-01T00:01:00Z"),
         ]
         state = build_canonical_quantity_state(
             rows,
-            direct_payout_records=[
+            effective_components=[
                 {
-                    "id": "payout",
-                    "out_transaction_id": "out",
-                    "out_amount": 2_000,
+                    "id": "reviewed-split",
+                    "effective_state": "active",
+                    "component_type": "manual_bridge",
+                    "conservation_mode": "quantity",
+                    "legs": [
+                        {
+                            "id": "source",
+                            "role": "source",
+                            "transaction_id": "out",
+                            "asset": "BTC",
+                            "amount_msat": 5_000,
+                        },
+                        {
+                            "id": "owned",
+                            "role": "destination",
+                            "transaction_id": "in",
+                            "asset": "BTC",
+                            "amount_msat": 3_000,
+                        },
+                        {
+                            "id": "external",
+                            "role": "external",
+                            "location_ref": "reviewed-counterparty",
+                            "asset": "BTC",
+                            "amount_msat": 2_000,
+                        },
+                    ],
+                    "allocations": [
+                        {
+                            "id": "owned-allocation",
+                            "source_leg_id": "source",
+                            "sink_leg_id": "owned",
+                            "source_amount_msat": 3_000,
+                            "sink_amount_msat": 3_000,
+                        },
+                        {
+                            "id": "external-allocation",
+                            "source_leg_id": "source",
+                            "sink_leg_id": "external",
+                            "source_amount_msat": 2_000,
+                            "sink_amount_msat": 2_000,
+                        },
+                    ],
+                    "economic_terms": [
+                        {
+                            "source_leg_id": "source",
+                            "target_leg_id": "external",
+                            "term_kind": "direct_swap_payout",
+                            "legacy_source_id": "payout",
+                            "review_kind": "direct-swap-payout",
+                            "tax_policy": "taxable",
+                            "payout_asset": "BTC",
+                            "payout_amount_msat": 2_000,
+                        }
+                    ],
                 }
-            ],
-            interpreter_claims=[
-                self._reviewed_claim(
-                    rows,
-                    out_id="out",
-                    in_id="in",
-                    amount=3_000,
-                )
             ],
         )
 
         self.assertEqual(state.issues, ())
-        self.assertEqual(
+        self.assertCountEqual(
             [(item.state, item.source.amount_msat) for item in state.projection.decisions],
             [(INTERNAL_REVIEWED, 3_000), (EXTERNAL_CONFIRMED, 2_000)],
         )
@@ -581,7 +625,10 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             if item.location_kind == "external"
         )
         self.assertEqual(payout.amount_msat, 2_000)
-        self.assertEqual(payout.location_id, "direct-payout:payout:source")
+        self.assertEqual(
+            payout.location_id,
+            "component:reviewed-split:allocation:external-allocation",
+        )
 
     def test_promoted_gap_candidate_holds_boundaries_without_transfer_edge(self):
         rows = [

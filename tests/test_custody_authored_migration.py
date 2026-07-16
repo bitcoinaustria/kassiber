@@ -47,7 +47,11 @@ def _scope(conn: sqlite3.Connection) -> None:
         """,
         (NOW,),
     )
-    for wallet_id, chain in (("btc", "bitcoin"), ("liquid", "liquid")):
+    for wallet_id, chain in (
+        ("btc", "bitcoin"),
+        ("btc2", "bitcoin"),
+        ("liquid", "liquid"),
+    ):
         conn.execute(
             """
             INSERT INTO wallets(
@@ -102,7 +106,7 @@ def _legacy_rows(conn: sqlite3.Connection) -> None:
     _tx(
         conn,
         "pair-in",
-        "btc",
+        "btc2",
         "inbound",
         "BTC",
         900,
@@ -146,7 +150,7 @@ def _legacy_rows(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
+def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)
     conn.close()
@@ -162,12 +166,22 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
         assert pair_link and payout_link and pair_link != payout_link
 
         pair = get_component(migrated, pair_link)
-        assert pair["state"] == "draft"
-        assert pair["effective_state"] == "draft"
+        assert pair["state"] == "active"
+        assert pair["effective_state"] == "active"
         assert pair["authored_source"] == "migration"
         assert pair["component_type"] == "manual_bridge"
-        assert [leg["amount_msat"] for leg in pair["legs"]] == [900, 900]
-        assert pair["allocations"][0]["source_amount_msat"] == 900
+        assert sorted(
+            (leg["role"], leg["amount_msat"]) for leg in pair["legs"]
+        ) == [
+            ("destination", 900),
+            ("fee", 10),
+            ("source", 1000),
+            ("suspense", 90),
+        ]
+        assert sum(
+            allocation["source_amount_msat"]
+            for allocation in pair["allocations"]
+        ) == 1000
         assert len(pair["economic_terms"]) == 1
         terms = pair["economic_terms"][0]
         assert terms["term_kind"] == "transaction_pair"
@@ -217,9 +231,6 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
         decisions = CustodyJournalBuilder(
             migrated, profile
         ).build_custody_decisions()
-        assert [record["id"] for record in decisions.manual_pair_records] == [
-            "pair"
-        ]
         assert [record["id"] for record in decisions.direct_payout_records] == [
             "payout"
         ]
@@ -242,7 +253,7 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
             )
             for row in refs
         } == {
-            ("pair", "transaction_pair", "BTC", "BTC", True),
+            ("pair", "transaction_pair", "BTC", "BTC", False),
             ("payout", "direct_swap_payout", "BTC", None, False),
         }
         assert find_active_review_for_transaction(
@@ -253,7 +264,7 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
             "id": "pair",
             "component_id": pair["id"],
             "term_kind": "transaction_pair",
-            "compatibility": True,
+            "compatibility": False,
         }
         assert find_active_review_for_transaction(
             migrated,
@@ -272,12 +283,77 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
     try:
         assert reopened.execute(
             "SELECT COUNT(*) FROM custody_components"
-        ).fetchone()[0] == 2
+        ).fetchone()[0] == 3
         assert reopened.execute(
             "SELECT COUNT(*) FROM custody_components WHERE state = 'active'"
-        ).fetchone()[0] == 1
+        ).fetchone()[0] == 2
     finally:
         reopened.close()
+
+
+def test_malformed_legacy_review_becomes_persisted_journal_blocker(tmp_path):
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    conn.execute(
+        "UPDATE direct_swap_payouts SET out_amount = 3000 WHERE id = 'payout'"
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = open_db(tmp_path)
+    try:
+        issue = migrated.execute(
+            "SELECT * FROM custody_authored_migration_issues "
+            "WHERE legacy_source_id = 'payout' AND resolved_at IS NULL"
+        ).fetchone()
+        assert issue is not None
+        assert issue["legacy_table"] == "direct_swap_payouts"
+
+        profile = migrated.execute(
+            "SELECT * FROM profiles WHERE id = 'profile'"
+        ).fetchone()
+        decisions = CustodyJournalBuilder(
+            migrated, profile
+        ).build_custody_decisions()
+        assert "payout-out" in decisions.interpretation.blocked_transaction_ids
+        quarantine = next(
+            item
+            for item in decisions.interpretation.quarantines
+            if item["transaction_id"] == "payout-out"
+        )
+        assert quarantine["reason"] == "custody_authored_migration_incomplete"
+        assert decisions.direct_payout_records == []
+    finally:
+        migrated.close()
+
+
+def test_deleted_legacy_reviews_migrate_to_component_history(tmp_path):
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    conn.execute("UPDATE transaction_pairs SET deleted_at = ?", (NOW,))
+    conn.execute("UPDATE direct_swap_payouts SET deleted_at = ?", (NOW,))
+    conn.commit()
+    conn.close()
+
+    migrated = open_db(tmp_path)
+    try:
+        assert list_transaction_pairs(migrated, "ws", "profile") == []
+        assert list_direct_swap_payouts(migrated, "ws", "profile") == []
+        deleted_pairs = list_transaction_pairs(
+            migrated, "ws", "profile", include_deleted=True
+        )
+        deleted_payouts = list_direct_swap_payouts(
+            migrated, "ws", "profile", include_deleted=True
+        )
+        assert [row["id"] for row in deleted_pairs] == ["pair"]
+        assert [row["id"] for row in deleted_payouts] == ["payout"]
+        assert deleted_pairs[0]["deleted_at"] == NOW
+        assert deleted_payouts[0]["deleted_at"] == NOW
+        assert migrated.execute(
+            "SELECT COUNT(*) FROM custody_components WHERE state = 'active'"
+        ).fetchone()[0] == 0
+    finally:
+        migrated.close()
 
 
 def test_active_component_without_legacy_terms_claims_every_boundary(tmp_path):
@@ -479,7 +555,7 @@ def test_connected_fanout_pairs_activate_as_one_atomic_component(tmp_path):
     _tx(
         conn,
         "pair-in-2",
-        "btc",
+        "btc2",
         "inbound",
         "BTC",
         100,

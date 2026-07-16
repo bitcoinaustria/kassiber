@@ -136,8 +136,7 @@ def ownership_review_counts(
     rows,
     owned_index,
     quarantines,
-    manual_pair_records,
-    direct_payout_records,
+    active_components,
 ) -> dict[str, Any]:
     blocked_reasons = {
         str(quarantine["transaction_id"]): str(quarantine["reason"])
@@ -145,17 +144,34 @@ def ownership_review_counts(
     }
     if not blocked_reasons:
         return {"total": 0, "by_reason": {}}
-    active_review_records = [*manual_pair_records]
-    active_review_records.extend(
-        {
-            "out_transaction_id": record["out_transaction_id"],
-            "in_transaction_id": None,
-            "kind": record["kind"],
-            "policy": record["policy"],
-            "deleted_at": record["deleted_at"],
+    active_review_records: list[dict[str, Any]] = []
+    for component in active_components:
+        legs = {
+            str(leg.get("id") or ""): leg
+            for leg in component.get("legs", ())
         }
-        for record in direct_payout_records
-    )
+        for allocation in component.get("allocations", ()):
+            source = legs.get(str(allocation.get("source_leg_id") or ""), {})
+            sink = legs.get(str(allocation.get("sink_leg_id") or ""), {})
+            out_id = source.get("anchor_transaction_id") or source.get(
+                "transaction_id"
+            )
+            in_id = sink.get("anchor_transaction_id") or sink.get(
+                "transaction_id"
+            )
+            if out_id in (None, ""):
+                continue
+            active_review_records.append(
+                {
+                    "out_transaction_id": str(out_id),
+                    "in_transaction_id": (
+                        None if in_id in (None, "") else str(in_id)
+                    ),
+                    "kind": component.get("component_type"),
+                    "policy": component.get("conversion_policy"),
+                    "deleted_at": None,
+                }
+            )
     proofs = ownership_transfers.derive_ownership_review_proofs(
         rows,
         index=owned_index or ownership.OwnedIndex(),
@@ -173,7 +189,6 @@ class CustodyJournalDecisions:
     """Canonical custody decisions, issues, barriers, and lineage inputs."""
 
     rows: Any
-    manual_pair_records: Any
     direct_payout_records: Any
     rates: Any
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
@@ -354,18 +369,9 @@ class CustodyJournalBuilder:
                 include_local_evidence=False,
             )
         )
-        effective_component_ids = {
-            str(component["id"])
-            for component in active_components
-            if component.get("effective_state") == "active"
-        }
-        (
-            manual_pair_records,
-            direct_payout_records,
-        ) = custody_authored_migration.load_legacy_compatibility_records(
+        migration_quarantines = custody_authored_migration.load_migration_quarantines(
             self.conn,
             profile_id=self.profile_id,
-            effective_component_ids=effective_component_ids,
         )
         component_blockers = component_integrity_blockers(
             self.conn,
@@ -381,17 +387,7 @@ class CustodyJournalBuilder:
             self.profile_id,
         )
 
-        ignored_gap_ids = {
-            str(record[key])
-            for record in manual_pair_records
-            for key in ("out_transaction_id", "in_transaction_id")
-            if record[key] not in (None, "")
-        }
-        ignored_gap_ids.update(
-            str(record["out_transaction_id"])
-            for record in direct_payout_records
-            if record["out_transaction_id"] not in (None, "")
-        )
+        ignored_gap_ids: set[str] = set()
         ignored_gap_ids.update(
             str(leg["transaction_id"])
             for leg in loan_legs
@@ -420,14 +416,31 @@ class CustodyJournalBuilder:
             rows,
             canonical_input,
             wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=manual_pair_records,
             owned_index=owned_index,
             channel_transfer_pairs=channel_transfer_pairs,
             channel_roles=channel_roles,
             loan_legs=loan_legs,
-            direct_payout_records=direct_payout_records,
             component_transaction_ids=component_transaction_ids,
         )
+        if migration_quarantines:
+            interpretation = replace(
+                interpretation,
+                blocked_transaction_ids=tuple(
+                    sorted(
+                        {
+                            *interpretation.blocked_transaction_ids,
+                            *(
+                                str(item["transaction_id"])
+                                for item in migration_quarantines
+                            ),
+                        }
+                    )
+                ),
+                quarantines=(
+                    *interpretation.quarantines,
+                    *migration_quarantines,
+                ),
+            )
         projection_ignored_ids = {
             *ignored_gap_ids,
             *component_transaction_ids,
@@ -471,38 +484,13 @@ class CustodyJournalBuilder:
             interpreter_claims=interpretation.claims,
             effective_components=active_components,
             native_evidence=interpretation.native_audits,
-            direct_payout_records=direct_payout_records,
             interpreter_blockers=interpretation.blocking_quarantines,
             ignored_gap_transaction_ids=runtime_ignored_transaction_ids,
             component_evidence_snapshots=evidence_snapshots,
             dismissed_gap_fingerprints=dismissed_fingerprints,
             gap_search_result=gap_search_result,
         )
-        component_conversion_ids = {
-            str(item.get("pair_id") or "")
-            for item in quantity_state.reviewed_conversion_pairs
-        }
-        compatibility_conversions = tuple(
-            item
-            for item in interpretation.cross_asset_pairs
-            if str(item.get("pair_id") or "") not in component_conversion_ids
-        )
-        if compatibility_conversions:
-            # During the bounded migration window, the builder remains the
-            # sole compatibility interpreter. Persist its reviewed conversion
-            # result into the same projection as component-native relations so
-            # no report/UI consumer needs to reopen transaction_pairs.
-            quantity_state = replace(
-                quantity_state,
-                reviewed_conversion_pairs=(
-                    *quantity_state.reviewed_conversion_pairs,
-                    *compatibility_conversions,
-                ),
-            )
-        direct_payout_records = [
-            *direct_payout_records,
-            *quantity_state.reviewed_direct_payouts,
-        ]
+        direct_payout_records = list(quantity_state.reviewed_direct_payouts)
         custody_transfers = custody_quantity_runtime.canonical_internal_transfer_rows(
             quantity_state,
             wallet_refs_by_id,
@@ -516,7 +504,6 @@ class CustodyJournalBuilder:
         )
         return CustodyJournalDecisions(
             rows=rows,
-            manual_pair_records=manual_pair_records,
             direct_payout_records=direct_payout_records,
             rates=rates,
             wallet_refs_by_id=wallet_refs_by_id,
@@ -545,12 +532,8 @@ class CustodyJournalBuilder:
             blocked_transaction_ids=(
                 decisions.interpretation.blocked_transaction_ids
             ),
-            direct_payout_conflict_transaction_ids=(
-                decisions.interpretation.direct_payout_conflict_transaction_ids
-            ),
             interpreter_quarantines=decisions.interpretation.quarantines,
             direct_payout_records=decisions.direct_payout_records,
-            reviewed_cross_asset_pairs=decisions.interpretation.cross_asset_pairs,
         )
         return CustodyJournalProjection(
             **{
@@ -613,8 +596,7 @@ class CustodyJournalBuilder:
                 custody.rows,
                 custody.owned_index,
                 engine_state.quarantines,
-                custody.manual_pair_records,
-                custody.direct_payout_records,
+                custody.active_components,
             ),
             "custody_component_blockers": custody.component_blockers,
             "custody_quantity": custody.quantity_state,

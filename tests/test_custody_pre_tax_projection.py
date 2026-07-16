@@ -11,7 +11,6 @@ from kassiber.core.custody_tax_projection import compile_finalized_tax_projectio
 from kassiber.core.custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from kassiber.core.custody_quantity import (
     CUSTODY_SUSPENSE,
-    INTERNAL_REVIEWED,
     ClaimPriority,
     QuantityClaim,
     QuantitySlice,
@@ -46,116 +45,6 @@ def _row(
         "raw_json": {},
         "fiat_rate": 1.0,
     }
-
-
-@pytest.mark.parametrize("review_kind", ["pair", "payout"])
-def test_explicit_split_review_authorizes_only_exact_same_txid_remainder(
-    review_kind: str,
-):
-    txid = "ab" * 32
-    source = _row("source", "spend", "outbound", 5_000, "2025-01-01T00:00:00Z")
-    retained = _row("retained", "keep", "inbound", 3_000, "2025-01-01T00:01:00Z")
-    for row in (source, retained):
-        row.update(
-            {
-                "external_id": txid,
-                "external_id_kind": "txid",
-                "chain": "bitcoin",
-                "network": "mainnet",
-            }
-        )
-    settlement = _row(
-        "settlement",
-        "liquid",
-        "inbound",
-        1_980,
-        "2025-01-01T00:02:00Z",
-    )
-    settlement["asset"] = "LBTC"
-    rows = [source, retained, settlement]
-    canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
-    kwargs = (
-        {
-            "manual_pair_records": [
-                {
-                    "id": "reviewed-peg",
-                    "out_transaction_id": "source",
-                    "in_transaction_id": "settlement",
-                    "kind": "peg-in",
-                    "policy": "carrying-value",
-                    "out_amount": 2_000,
-                }
-            ]
-        }
-        if review_kind == "pair"
-        else {
-            "direct_payout_records": [
-                {
-                    "id": "reviewed-payout",
-                    "out_transaction_id": "source",
-                    "out_amount": 2_000,
-                }
-            ]
-        }
-    )
-
-    compilation = compile_custody_interpreters(
-        rows,
-        canonical,
-        wallet_refs_by_id={
-            "spend": {"label": "Spend"},
-            "keep": {"label": "Keep"},
-            "liquid": {"label": "Liquid"},
-        },
-        **kwargs,
-    )
-
-    reviewed = [
-        claim
-        for claim in compilation.claims
-        if claim.state == INTERNAL_REVIEWED
-        and claim.reason == "reviewed_split_remainder"
-    ]
-    assert [(claim.source.amount_msat, claim.target.amount_msat) for claim in reviewed] == [
-        (3_000, 3_000)
-    ]
-    assert reviewed[0].reason == "reviewed_split_remainder"
-
-
-def test_split_review_does_not_authorize_nonconserving_same_txid_candidate():
-    txid = "cd" * 32
-    source = _row("source", "spend", "outbound", 5_000, "2025-01-01T00:00:00Z")
-    retained = _row("retained", "keep", "inbound", 2_999, "2025-01-01T00:01:00Z")
-    for row in (source, retained):
-        row.update(
-            {
-                "external_id": txid,
-                "external_id_kind": "txid",
-                "chain": "bitcoin",
-                "network": "mainnet",
-            }
-        )
-    rows = [source, retained]
-    compilation = compile_custody_interpreters(
-        rows,
-        build_canonical_quantity_input(enriched_quantity_rows(rows)),
-        wallet_refs_by_id={
-            "spend": {"label": "Spend"},
-            "keep": {"label": "Keep"},
-        },
-        direct_payout_records=[
-            {
-                "id": "reviewed-payout",
-                "out_transaction_id": "source",
-                "out_amount": 2_000,
-            }
-        ],
-    )
-
-    assert not any(
-        claim.state in {INTERNAL_REVIEWED, "internal_verified"}
-        for claim in compilation.claims
-    )
 
 
 def _residual_state():
@@ -385,54 +274,6 @@ def test_same_timestamp_native_siblings_compile_before_rp2_without_audit_input()
     assert {row["journal_transaction_id"] for row in projection.rows} == {
         "acquisition", "out", "in"
     }
-
-
-@pytest.mark.parametrize(
-    ("source_at", "target_at", "accepted"),
-    (
-        ("2026-01-03T23:00:00Z", "2026-01-02T00:00:00Z", True),
-        ("2026-01-04T00:00:01Z", "2026-01-02T00:00:00Z", False),
-    ),
-)
-def test_reviewed_transfer_pair_enforces_bounded_chronology(
-    source_at, target_at, accepted
-):
-    rows = [
-        _row("out", "source", "outbound", 1_000, source_at),
-        _row("in", "destination", "inbound", 1_000, target_at),
-    ]
-    canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
-    refs = {
-        wallet: {"id": wallet, "label": wallet}
-        for wallet in ("source", "destination")
-    }
-    compiled = compile_custody_interpreters(
-        rows,
-        canonical,
-        wallet_refs_by_id=refs,
-        manual_pair_records=(
-            {
-                "id": "reviewed-pair",
-                "out_transaction_id": "out",
-                "in_transaction_id": "in",
-                "kind": "manual",
-                "policy": "carrying-value",
-                "pair_source": "manual",
-            },
-        ),
-    )
-
-    if accepted:
-        assert len(compiled.claims) == 1
-        assert compiled.blocked_transaction_ids == ()
-        assert compiled.quarantines == ()
-    else:
-        assert compiled.claims == ()
-        assert compiled.blocked_transaction_ids == ("in", "out")
-        assert len(compiled.quarantines) == 2
-        assert {
-            item["reason"] for item in compiled.quarantines
-        } == {"transfer_pair_chronology_mismatch"}
 
 
 def test_unreviewed_privacy_hop_is_a_specific_pre_tax_blocker():

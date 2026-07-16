@@ -1684,6 +1684,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out
 CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active
     ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS custody_authored_migration_issues (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    legacy_table TEXT NOT NULL
+        CHECK(legacy_table IN ('transaction_pairs', 'direct_swap_payouts')),
+    legacy_source_id TEXT NOT NULL,
+    issue_code TEXT NOT NULL,
+    transaction_ids_json TEXT NOT NULL DEFAULT '[]',
+    details_json TEXT NOT NULL DEFAULT '{}',
+    resolved_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(legacy_table, legacy_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_authored_migration_issues_profile_open
+    ON custody_authored_migration_issues(profile_id, created_at, id)
+    WHERE resolved_at IS NULL;
+
 -- A loan mark on a single transaction. Collateral lock/release roles suppress
 -- the outbound/inbound collateral events because the coins never left the owned
 -- pool. Principal received/repaid roles suppress borrowed-principal movements

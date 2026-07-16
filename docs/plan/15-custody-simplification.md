@@ -28,18 +28,18 @@ observer coverage.
 
 ## Current competing paths
 
-The merged path assembles custody in `kassiber.cli.handlers.build_ledger_state`:
+The current path assembles custody in `CustodyJournalBuilder`:
 
 1. load transactions, observer provenance, wallet policy, loan and channel
    state;
-2. interpret native matches, transaction pairs, direct payouts and components;
+2. interpret native matches and compile active reviewed components;
 3. discover gap candidates and compile quantity claims;
 4. arbitrate quantity and compile finalized tax inputs;
 5. invoke RP2 and persist journal projections.
 
-Reports and the transaction graph may rerun transfer detection. Source-of-funds
-separately interprets components, pairs, UTXO relations, and Lightning hashes.
-The review queue runs gap discovery independently and caches serialized pages.
+Reports, transaction graphs, source-of-funds, UI and AI consume the stored
+projection. Gap discovery is versioned once and all presentation pages read its
+normalized keyset rows.
 
 ## Merge baseline
 
@@ -122,13 +122,14 @@ production interpretation before any physical deletion is considered. Physical
 removal requires the replication acknowledgement/tombstone protocol; it is not
 a prerequisite for one authored accounting truth.
 
-New pair and direct-payout reviews now write only immutable component revisions
+New pair and direct-payout reviews write only immutable component revisions
 and replicated economic terms. Revisions and fan-out deletion rebuild the whole
 shared aggregate atomically without dropping sibling terms. Same-asset
 shortfalls equal to observed miner fees become fee legs; otherwise they remain
-explicit suspense, while an explicitly reviewed partial conversion retains its
-unconverted source quantity as an exact continuation. Legacy tables remain a
-read-only migration input until the bounded exception upgrader is deleted.
+explicit suspense. Legacy tables are read-only migration and signed-replication
+inputs; they are not a live authored, interpreter, report, or mutation path.
+Malformed historical rows create durable migration issues and scoped journal
+barriers instead of falling back to their former specialized interpreter.
 
 No dual mutable writes are allowed. Downgrade after component-only writes means
 restoring the pre-migration backup, not silently continuing with an older
@@ -159,43 +160,17 @@ binary.
    drift before performing the reviewed mutation. Existing CLI/daemon kinds
    are redacted compatibility wrappers over those two operations.
 4. Add typed replicated component economic terms, migrate pair/payout authored
-   state deterministically, and freeze legacy writes. Staging and activation
-   are complete: each active legacy review receives deterministic immutable,
-   replicated, leg-bound economics; full-source connected pair graphs
-   consolidate into one atomic 1:N/N:M component and valid payout components
-   activate directly. Partial-source legacy pairs stay on compatibility reads
-   until their unreviewed tail can be authored as an explicit residual rather
-   than silently upgraded from presumed disposal to reviewed classification.
-   Journal interpretation now uses effective active components, while invalid
-   or historically malformed rows stay on the compatibility interpreter and
-   fail closed. Reopening is idempotent, including pre-432/pre-435 schema
-   upgrades whose term foreign keys are rebuilt with their custody legs.
-   Linked active legacy rows are write-frozen below the handlers; revision and
-   deletion retire the active aggregate before changing compatibility history,
-   and bypass or replication writes fail closed. Pair/payout lifecycle SQL now
-   belongs to the core authored-review store, not CLI handlers. That store still
-   emits frozen compatibility projections for readers not yet cut over; those
-   projection writes disappear with the consumer migration before physical
-   legacy deletion can be considered. The journal builder itself no longer
-   queries the compatibility tables: it receives only the bounded historical
-   rows whose linked component is ineffective, principally partial-source
-   reviews with no explicit residual classification. That narrow loader is the
-   remaining compatibility interpreter and must disappear with producer
-   cutover. Active-review suppression and mutation guards now enter through the
-   same component-first authored store, including native reviewed bridges that
-   have no migrated economic-term row; only ineffective historical reviews are
-   returned as explicit compatibility references. Compatibility pair/payout
-   commands use the same references for duplicate and leg-reuse checks rather
-   than querying their projection tables independently. Active pair/payout list
-   views also materialize from effective terms, including immutable replicated
-   per-review notes; their only legacy inputs are ineffective partial-source
-   exceptions and the explicitly requested deleted-history compatibility view.
-   Transaction-list flow filters use only a current stored custody projection,
-   and diagnostics count the same component-first authored population instead
-   of reopening compatibility tables.
-   CLI handlers now contain no pair/payout table reads; their remaining
-   delete/revise compatibility lookup is isolated inside the authored store and
-   will be deleted with the component-native producer cutover.
+   state deterministically, and freeze legacy writes. Complete: active and
+   deleted historical reviews migrate to immutable component history; connected
+   pair graphs become one atomic N:M aggregate; explicit residual and fee legs
+   cover every source boundary. New create/revise/delete operations are
+   component-native. Historical rows that cannot satisfy current conservation
+   or provenance rules produce durable `custody_authored_migration_issues` and
+   block their exact transaction scope. Delayed signed legacy events are
+   migrated during the same bundle import. Specialized pair/payout claims,
+   arbitration conflicts, tax relations, list mutations and `apply_manual_pairs`
+   are deleted. Physical table removal remains deferred until old replication
+   streams can no longer arrive.
    The future-only custody-layer adapter and producerless authored component
    types are removed. The small canonical observation/interpreter boundary and
    real Lightning lifecycle interpreter remain; later layers must introduce a
@@ -221,8 +196,9 @@ binary.
    clear quantity barriers. Nested report composition reuses the same proof;
    the former CLI-owned `require_processed_journals` hook is deleted. The
    component-only producer cutover and speculative-layer deletion are complete.
-   Remaining work is upgrading the bounded historical exceptions and deleting
-   their compatibility interpreter.
+   The bounded historical interpreter is now deleted. Remaining work is command
+   consolidation, claim-shape simplification, unpatched database integration
+   coverage, and the final performance/quality audit.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

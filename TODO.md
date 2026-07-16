@@ -1325,7 +1325,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     claim set is built) and booked as a non-taxable MOVE — the declared disposal +
     proceeds vanished silently, no quarantine. Fixed in `rp2.py`: `auto_pairs` is
     pruned of any pair touching a whole-row direct-payout-claimed id before
-    `apply_manual_pairs`, so the disposal books. Test:
+    the reviewed component source, so the disposal books. Test:
     `test_rp2_ownership_transfers...test_whole_row_payout_not_hijacked_by_same_txid_inbound`.
   - [x] **Clamped amount=0 self-send invisible → phantom acquisition (P2, round-2
     deep audit).** A coinjoin/payjoin-shaped self-send where an owned wallet's net

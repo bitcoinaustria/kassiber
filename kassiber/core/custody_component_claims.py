@@ -280,8 +280,7 @@ def compile_component_quantity_claims(
     finalized_retained_leg_ids = frozenset(
         leg_id
         for leg_id, leg in legs.items()
-        if is_guided_gap_component
-        and leg.get("role") == "retained"
+        if leg.get("role") == "retained"
         and not _transaction_id(leg)
         and str(leg.get("notes") or "")
         == "reviewed_residual:retained_custody"
@@ -362,10 +361,6 @@ def compile_component_quantity_claims(
                 component_id=component_id,
                 allocation_id=allocation.get("id"),
             )
-        if conservation_mode != "conversion" and sink.get("role") == "fee":
-            # QuantityObservation emits the exact fee posting independently of
-            # source-principal slices.
-            continue
         source_transaction_id = _transaction_id(source)
         if not source_transaction_id:
             raise _error(
@@ -394,6 +389,12 @@ def compile_component_quantity_claims(
         source_slice = QuantitySlice(
             source_observation.quantity_hash, source_start, source_end
         )
+
+        if conservation_mode != "conversion" and sink.get("role") == "fee":
+            # QuantityObservation emits the exact fee posting independently.
+            # Still advance the authored source cursor so exact component
+            # conservation can account for the explicitly separated fee leg.
+            continue
 
         sink_role = str(sink.get("role") or "")
         target_slice = None
