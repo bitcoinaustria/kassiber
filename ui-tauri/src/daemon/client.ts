@@ -276,46 +276,7 @@ export function daemonMutationKey(dataMode: DataMode, kind: string) {
 }
 
 const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
-  "ui.custody.gaps.dismiss": [
-    "ui.custody.gaps.list",
-    "ui.custody.gaps.review_context",
-    "ui.custody.gaps.history",
-    "ui.custody.lineage.snapshot",
-  ],
-  "ui.custody.gaps.bridge.create": [
-    "ui.custody.gaps.list",
-    "ui.custody.gaps.review_context",
-    "ui.custody.gaps.history",
-    "ui.custody.lineage.snapshot",
-    "ui.transfers.components.list",
-    "ui.journals.snapshot",
-    "ui.journals.quarantine",
-    "ui.report.blockers",
-    "ui.workspace.health",
-  ],
-  "ui.custody.gaps.reopen": [
-    "ui.custody.gaps.list",
-    "ui.custody.gaps.review_context",
-    "ui.custody.gaps.history",
-    "ui.custody.lineage.snapshot",
-    "ui.transfers.components.list",
-    "ui.journals.snapshot",
-    "ui.journals.quarantine",
-    "ui.report.blockers",
-    "ui.workspace.health",
-  ],
-  "ui.custody.gaps.revise": [
-    "ui.custody.gaps.list",
-    "ui.custody.gaps.review_context",
-    "ui.custody.gaps.history",
-    "ui.custody.lineage.snapshot",
-    "ui.transfers.components.list",
-    "ui.journals.snapshot",
-    "ui.journals.quarantine",
-    "ui.report.blockers",
-    "ui.workspace.health",
-  ],
-  "ui.custody.gaps.residual.classify": [
+  "ui.custody.review.apply": [
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",

@@ -38,8 +38,7 @@ import {
 
 const reviewedBridgePreview: BridgePreview = {
   gap_id: "gap-og",
-  candidate_fingerprint: "suggestion-fingerprint-og",
-  authored_claim_fingerprint: "authored-fingerprint-og",
+  fingerprint: "review-plan-fingerprint-og",
   dry_run: true,
   activatable: true,
   review_mode: "manual_weak_hint",
@@ -93,10 +92,11 @@ describe("CustodyGaps guided desktop bridge", () => {
   });
 
   it("sends only the guided gap identity and preview fingerprint", () => {
-    expect(bridgePreviewArgs("gap-og")).toEqual({ gap_id: "gap-og" });
+    expect(bridgePreviewArgs("gap-og")).toEqual({ action: "create", gap_id: "gap-og" });
     expect(bridgeCreateArgs(reviewedBridgePreview)).toEqual({
+      action: "create",
       gap_id: "gap-og",
-      expected_fingerprint: "authored-fingerprint-og",
+      expected_fingerprint: "review-plan-fingerprint-og",
     });
   });
 });
@@ -104,7 +104,7 @@ describe("CustodyGaps guided desktop bridge", () => {
 describe("CustodyGaps immutable correction workflow", () => {
   const reopenPreview: GuidedCorrectionPreview = {
     gap_id: "gap-og",
-    expected_fingerprint: "reopen-fingerprint",
+    fingerprint: "reopen-fingerprint",
     dry_run: true,
     requires_explicit_confirmation: true,
     resulting_status: "needs_review",
@@ -113,7 +113,7 @@ describe("CustodyGaps immutable correction workflow", () => {
   };
   const revisePreview: GuidedCorrectionPreview = {
     gap_id: "gap-og",
-    expected_fingerprint: "revise-fingerprint",
+    fingerprint: "revise-fingerprint",
     dry_run: true,
     requires_explicit_confirmation: true,
     activatable: true,
@@ -165,16 +165,22 @@ describe("CustodyGaps immutable correction workflow", () => {
 
   it("binds confirmation to the preview fingerprint and identical normalized note", () => {
     expect(reopenPreviewArgs("gap-og", "  Wrong return group  ")).toEqual({
+      action: "reopen",
       gap_id: "gap-og",
       reason: "Wrong return group",
     });
     expect(reopenConfirmArgs(reopenPreview, "Wrong return group")).toEqual({
+      action: "reopen",
       gap_id: "gap-og",
       expected_fingerprint: "reopen-fingerprint",
       reason: "Wrong return group",
     });
-    expect(revisePreviewArgs("gap-og", "")).toEqual({ gap_id: "gap-og" });
+    expect(revisePreviewArgs("gap-og", "")).toEqual({
+      action: "revise",
+      gap_id: "gap-og",
+    });
     expect(reviseConfirmArgs(revisePreview, "")).toEqual({
+      action: "revise",
       gap_id: "gap-og",
       expected_fingerprint: "revise-fingerprint",
     });
@@ -218,7 +224,7 @@ describe("CustodyGaps immutable correction workflow", () => {
 describe("CustodyGaps guided residual workflow", () => {
   const residualPreview: ResidualClassificationPreview = {
     gap_id: "gap-og",
-    expected_fingerprint: "residual-fingerprint",
+    fingerprint: "residual-fingerprint",
     dry_run: true,
     requires_explicit_confirmation: true,
     activatable: true,
@@ -255,11 +261,13 @@ describe("CustodyGaps guided residual workflow", () => {
     expect(
       residualPreviewArgs("gap-og", "external_gift", "  Family transfer  "),
     ).toEqual({
+      action: "classify_residual",
       gap_id: "gap-og",
       classification: "external_gift",
       reason: "Family transfer",
     });
     expect(residualConfirmArgs(residualPreview, "Family transfer")).toEqual({
+      action: "classify_residual",
       gap_id: "gap-og",
       classification: "external_gift",
       expected_fingerprint: "residual-fingerprint",

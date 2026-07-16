@@ -70,6 +70,12 @@ def _residual_custody_state(classification: str) -> str:
     return "custody_suspense"
 
 
+def residual_custody_state(classification: str) -> str:
+    """Return the country-neutral custody state for a reviewed residual action."""
+
+    return _residual_custody_state(_normalize_residual_classification(classification))
+
+
 def _event_kind(review: Mapping[str, Any]) -> str:
     return str(review.get("event_kind") or "review_decision")
 
@@ -304,31 +310,33 @@ def append_dismissal(
     authored_source: str = "user",
     commit: bool = True,
 ) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_dismiss")
-    try:
-        candidate = _require_current_candidate(conn, candidate)
-        fingerprint = _require_fresh_fingerprint(candidate, expected_fingerprint)
-        review = _append_review(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            candidate=candidate,
-            fingerprint=fingerprint,
-            action="dismissed",
-            component_id=None,
-            authored_source=authored_source,
-            reason=reason,
-            event_kind="review_decision",
-        )
-        _invalidate_journals(conn, profile_id)
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_dismiss")
-        conn.execute("RELEASE SAVEPOINT custody_gap_dismiss")
-        raise
-    conn.execute("RELEASE SAVEPOINT custody_gap_dismiss")
-    if commit:
-        conn.commit()
-    return _public_review(review)
+    plan = plan_review(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        action="dismiss",
+        candidate=candidate,
+        reason=reason,
+        authored_source=authored_source,
+    )
+    # Bounded compatibility for callers that previewed the former candidate
+    # fingerprint. Every mutation still runs through apply_review.
+    if expected_fingerprint in {
+        plan["authored_claim_fingerprint"],
+        candidate_fingerprint(plan["candidate"]),
+    }:
+        expected_fingerprint = plan["fingerprint"]
+    return apply_review(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        action="dismiss",
+        candidate=candidate,
+        expected_fingerprint=expected_fingerprint,
+        reason=reason,
+        authored_source=authored_source,
+        commit=commit,
+    )
 
 
 def _profile_input_version(conn: sqlite3.Connection, profile_id: str) -> int:
@@ -438,14 +446,17 @@ def plan_review(
     new_component_revision: int | None = None
     authored_fingerprint: str | None = None
     warnings: list[str] = []
-    if action in {"create", "revise"}:
+    if action in {"create", "revise", "dismiss"}:
         if candidate is None:
             raise AppError("Custody-gap candidate is required", code="invalid_argument")
         candidate = _require_current_candidate(conn, candidate)
         gap_id = candidate.gap_id
         authored_fingerprint = authored_claim_fingerprint(candidate)
         warnings = list(_guided_bridge_warnings(candidate))
-        if action == "create":
+        if action == "dismiss":
+            base_fingerprint = authored_fingerprint
+            impacts = _preview_filed_report_impacts(conn, candidate)
+        elif action == "create":
             base_fingerprint = authored_fingerprint
             new_component_revision = 1
             if candidate.excess_msat:
@@ -482,7 +493,7 @@ def plan_review(
             )
             replacing_lineage_id = str(context["component"]["lineage_id"])
             new_component_revision = _next_component_revision(conn, context)
-        if spec is not None:
+        if action != "dismiss" and spec is not None:
             component_plan = _component_plan(
                 conn,
                 workspace_id=workspace_id,
@@ -492,7 +503,8 @@ def plan_review(
                 replacing_lineage_id=replacing_lineage_id,
             )
             activatable = bool(component_plan["validation"].get("activatable"))
-        impacts = _preview_filed_report_impacts(conn, candidate)
+        if action != "dismiss":
+            impacts = _preview_filed_report_impacts(conn, candidate)
     elif action == "reopen":
         if not gap_id:
             raise AppError("Custody-gap id is required", code="invalid_argument")
@@ -685,13 +697,32 @@ def apply_review(
         )
         _require_expected_correction(expected_fingerprint, plan["fingerprint"])
         context = plan.get("context")
-        if action == "reopen":
+        if action == "dismiss":
+            current_candidate = plan["candidate"]
+            review = _append_review(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                candidate=current_candidate,
+                fingerprint=candidate_fingerprint(current_candidate),
+                action="dismissed",
+                component_id=None,
+                authored_source=authored_source,
+                reason=reason,
+                event_kind="review_decision",
+            )
+            _invalidate_journals(conn, profile_id)
+            result = {
+                **_public_review(review),
+                "filed_report_impacts": plan["filed_report_impacts"],
+            }
+        elif action == "reopen":
             component = custody_components.supersede_component(
                 conn,
                 context["component"]["id"],
                 reason=reason or "guided_bridge_reopened",
             )
-        else:
+        elif action != "dismiss":
             component = _persist_component_plan(conn, plan)
 
         if action in {"create", "revise"}:
@@ -781,7 +812,7 @@ def apply_review(
                 "review_revision": review["revision"],
                 "filed_report_impacts": impacts,
             }
-        else:
+        elif action == "classify_residual":
             normalized = str(plan["classification"])
             residual_msat = int(plan["residual_msat"])
             snapshot = dict(context["snapshot"])

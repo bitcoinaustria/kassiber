@@ -108,12 +108,7 @@ CORE_TOOL_NAMES = frozenset(
         "ui.custody.lineage.snapshot",
         "ui.custody.gaps.list", "ui.custody.gaps.review_context",
         "ui.custody.gaps.history",
-        "ui.custody.gaps.bridge.preview", "ui.custody.gaps.bridge.create",
-        "ui.custody.gaps.dismiss",
-        "ui.custody.gaps.reopen.preview", "ui.custody.gaps.reopen",
-        "ui.custody.gaps.revise.preview", "ui.custody.gaps.revise",
-        "ui.custody.gaps.residual.preview",
-        "ui.custody.gaps.residual.classify",
+        "ui.custody.review.plan", "ui.custody.review.apply",
     }
 )
 
@@ -1734,171 +1729,21 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read custody-gap correction history",
     ),
     ToolEntry(
-        name="ui.custody.gaps.bridge.preview",
+        name="ui.custody.review.plan",
         description=(
-            "Locally validate the exact server-side component for one promoted custody-gap "
-            "candidate without writing. The returned fingerprint must be passed unchanged "
-            "to a separately consented create call. Model output is not evidence. Local AI only."
+            "Purely plan one custody-gap create, dismiss, revise, reopen, or residual "
+            "classification action. Returns exact quantities, allocations, warnings, filed-"
+            "report impact, input version, and a fingerprint for a separately consented apply."
         ),
         parameters={
             "type": "object",
             "additionalProperties": False,
-            "required": ["gap_id"],
-            "properties": {"gap_id": {"type": "string", "minLength": 1}},
-        },
-        kind_class="read_only",
-        wire_name="ui_custody_gaps_bridge_preview",
-        daemon_kind="ui.custody.gaps.bridge.preview",
-        summary_template="Preview exact custody bridge",
-    ),
-    ToolEntry(
-        name="ui.custody.gaps.bridge.create",
-        description=(
-            "After explicit consent, create and activate the exact server-side reviewed "
-            "bridge previously previewed for this gap. The fingerprint makes stale evidence "
-            "fail closed. Local AI only; raw transaction linkage is never returned."
-        ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["gap_id", "expected_fingerprint"],
+            "required": ["action", "gap_id"],
             "properties": {
-                "gap_id": {"type": "string", "minLength": 1},
-                "expected_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64},
-            },
-        },
-        kind_class="mutating",
-        wire_name="ui_custody_gaps_bridge_create",
-        daemon_kind="ui.custody.gaps.bridge.create",
-        summary_template="Create reviewed custody bridge",
-    ),
-    ToolEntry(
-        name="ui.custody.gaps.dismiss",
-        description=(
-            "After explicit consent, dismiss one custody-gap candidate only for the exact "
-            "currently reviewed evidence fingerprint. Changed evidence reopens it. Local AI only."
-        ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["gap_id", "expected_fingerprint"],
-            "properties": {
-                "gap_id": {"type": "string", "minLength": 1},
-                "expected_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64},
-                "reason": {"type": "string", "maxLength": 500},
-            },
-        },
-        kind_class="mutating",
-        wire_name="ui_custody_gaps_dismiss",
-        daemon_kind="ui.custody.gaps.dismiss",
-        summary_template="Dismiss current custody-gap evidence",
-    ),
-    ToolEntry(
-        name="ui.custody.gaps.reopen.preview",
-        description=(
-            "Preview reopening an active reviewed bridge without writing. The preview "
-            "shows filed-report impact and returns an exact fingerprint for a separately "
-            "consented write. Reopening never edits the prior revision. Local AI only."
-        ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["gap_id"],
-            "properties": {
-                "gap_id": {"type": "string", "minLength": 1},
-                "reason": {"type": "string", "maxLength": 500},
-            },
-        },
-        kind_class="read_only",
-        wire_name="ui_custody_gaps_reopen_preview",
-        daemon_kind="ui.custody.gaps.reopen.preview",
-        summary_template="Preview reopening reviewed custody bridge",
-    ),
-    ToolEntry(
-        name="ui.custody.gaps.reopen",
-        description=(
-            "After explicit consent, supersede the active bridge and return its gap to "
-            "review. Prior revisions remain immutable and filed-report impact is recorded. "
-            "Local AI only."
-        ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["gap_id", "expected_fingerprint"],
-            "properties": {
-                "gap_id": {"type": "string", "minLength": 1},
-                "expected_fingerprint": {
+                "action": {
                     "type": "string",
-                    "minLength": 64,
-                    "maxLength": 64,
+                    "enum": ["create", "dismiss", "revise", "reopen", "classify_residual"],
                 },
-                "reason": {"type": "string", "maxLength": 500},
-            },
-        },
-        kind_class="mutating",
-        wire_name="ui_custody_gaps_reopen",
-        daemon_kind="ui.custody.gaps.reopen",
-        summary_template="Reopen reviewed custody bridge",
-    ),
-    ToolEntry(
-        name="ui.custody.gaps.revise.preview",
-        description=(
-            "Preview a new bridge revision for a reopened gap using the current bounded "
-            "candidate. This never edits the old component and returns an exact fingerprint "
-            "for separate confirmation. Local AI only."
-        ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["gap_id"],
-            "properties": {
-                "gap_id": {"type": "string", "minLength": 1},
-                "reason": {"type": "string", "maxLength": 500},
-            },
-        },
-        kind_class="read_only",
-        wire_name="ui_custody_gaps_revise_preview",
-        daemon_kind="ui.custody.gaps.revise.preview",
-        summary_template="Preview revised custody bridge",
-    ),
-    ToolEntry(
-        name="ui.custody.gaps.revise",
-        description=(
-            "After explicit consent, activate the exact new revision previewed for a "
-            "reopened gap. Evidence drift fails closed and requires a new preview. "
-            "Local AI only."
-        ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["gap_id", "expected_fingerprint"],
-            "properties": {
-                "gap_id": {"type": "string", "minLength": 1},
-                "expected_fingerprint": {
-                    "type": "string",
-                    "minLength": 64,
-                    "maxLength": 64,
-                },
-                "reason": {"type": "string", "maxLength": 500},
-            },
-        },
-        kind_class="mutating",
-        wire_name="ui_custody_gaps_revise",
-        daemon_kind="ui.custody.gaps.revise",
-        summary_template="Activate revised custody bridge",
-    ),
-    ToolEntry(
-        name="ui.custody.gaps.residual.preview",
-        description=(
-            "Preview classification of only the unresolved residual of an active reviewed "
-            "bridge. Custody finality is kept separate from country-specific tax meaning. "
-            "The model proposal is not evidence. Local AI only."
-        ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["gap_id", "classification"],
-            "properties": {
                 "gap_id": {"type": "string", "minLength": 1},
                 "classification": {
                     "type": "string",
@@ -1908,22 +1753,25 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             },
         },
         kind_class="read_only",
-        wire_name="ui_custody_gaps_residual_preview",
-        daemon_kind="ui.custody.gaps.residual.preview",
-        summary_template="Preview custody residual classification",
+        wire_name="ui_custody_review_plan",
+        daemon_kind="ui.custody.review.plan",
+        summary_template="Plan custody review",
     ),
     ToolEntry(
-        name="ui.custody.gaps.residual.classify",
+        name="ui.custody.review.apply",
         description=(
-            "After explicit consent, classify the exact residual from the prior preview. "
-            "Gift and loss remain non-sale meanings, retained custody creates no inbound "
-            "observation, and suspense remains a tax blocker. Local AI only."
+            "After explicit consent, atomically apply exactly the current custody review "
+            "plan. Action inputs and reason must match the preview; stale evidence fails closed."
         ),
         parameters={
             "type": "object",
             "additionalProperties": False,
-            "required": ["gap_id", "classification", "expected_fingerprint"],
+            "required": ["action", "gap_id", "expected_fingerprint"],
             "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "dismiss", "revise", "reopen", "classify_residual"],
+                },
                 "gap_id": {"type": "string", "minLength": 1},
                 "classification": {
                     "type": "string",
@@ -1931,16 +1779,15 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "expected_fingerprint": {
                     "type": "string",
-                    "minLength": 64,
-                    "maxLength": 64,
+                    "pattern": "^[0-9a-f]{64}$",
                 },
                 "reason": {"type": "string", "maxLength": 500},
             },
         },
         kind_class="mutating",
-        wire_name="ui_custody_gaps_residual_classify",
-        daemon_kind="ui.custody.gaps.residual.classify",
-        summary_template="Classify reviewed custody residual",
+        wire_name="ui_custody_review_apply",
+        daemon_kind="ui.custody.review.apply",
+        summary_template="Apply custody review",
     ),
     ToolEntry(
         name="ui.transfers.review_context",

@@ -4531,11 +4531,12 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
-    if (
-      req.kind === "ui.custody.gaps.residual.preview" ||
-      req.kind === "ui.custody.gaps.residual.classify"
-    ) {
-      const args = (req.args ?? {}) as { classification?: unknown };
+    if (req.kind === "ui.custody.review.plan") {
+      const args = (req.args ?? {}) as {
+        action?: unknown;
+        classification?: unknown;
+      };
+      const action = typeof args.action === "string" ? args.action : "create";
       const classification =
         typeof args.classification === "string"
           ? args.classification
@@ -4557,9 +4558,17 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: {
           ...fixture,
+          action,
           classification,
           custody_state: custodyState,
-          country_tax_meaning: "not_assigned",
+          country_tax_meaning:
+            action === "classify_residual" ? "not_assigned" : null,
+          current_component_revision:
+            action === "reopen" || action === "revise" || action === "classify_residual"
+              ? 1
+              : null,
+          new_component_revision:
+            action === "revise" || action === "classify_residual" ? 2 : null,
         } as T,
       };
     }

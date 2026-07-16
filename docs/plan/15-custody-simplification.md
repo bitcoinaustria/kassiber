@@ -203,6 +203,10 @@ binary.
    resolves and normalizes exact rows, validates database anchors and batch-wide
    conflicts, and fingerprints the journal input version. CLI, GUI and AI apply
    all require that fingerprint and persist the revalidated plan atomically.
+   Gap review UI and AI now expose only `ui.custody.review.plan` and
+   `ui.custody.review.apply` for create, dismiss, revise, reopen and residual
+   actions; ten mutation-specific daemon/tool kinds and their duplicate routing,
+   consent and cache-invalidation branches are deleted.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

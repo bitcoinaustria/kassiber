@@ -6538,8 +6538,9 @@ class DaemonSmokeTest(unittest.TestCase):
                 conn.commit()
                 call = ParsedAiToolCall(
                     call_id="call-custody-success",
-                    name="ui.custody.gaps.bridge.create",
+                    name="ui.custody.review.apply",
                     arguments={
+                        "action": "create",
                         "gap_id": "gap:whirlpool",
                         "expected_fingerprint": "a" * 64,
                     },
@@ -6553,7 +6554,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     authored_source,
                     commit,
                 ):
-                    self.assertEqual(kind, "ui.custody.gaps.bridge.create")
+                    self.assertEqual(kind, "ui.custody.review.apply")
                     self.assertEqual(arguments, call.arguments)
                     self.assertEqual(authored_source, "ai_tool")
                     self.assertFalse(commit)
@@ -6620,8 +6621,9 @@ class DaemonSmokeTest(unittest.TestCase):
                 conn.commit()
                 call = ParsedAiToolCall(
                     call_id="call-custody-audit-failure",
-                    name="ui.custody.gaps.bridge.create",
+                    name="ui.custody.review.apply",
                     arguments={
+                        "action": "create",
                         "gap_id": "gap:whirlpool",
                         "expected_fingerprint": "b" * 64,
                     },
@@ -6705,8 +6707,9 @@ class DaemonSmokeTest(unittest.TestCase):
             try:
                 call = ParsedAiToolCall(
                     call_id="call-custody-no-audit",
-                    name="ui.custody.gaps.dismiss",
+                    name="ui.custody.review.apply",
                     arguments={
+                        "action": "dismiss",
                         "gap_id": "gap:whirlpool",
                         "expected_fingerprint": "c" * 64,
                     },

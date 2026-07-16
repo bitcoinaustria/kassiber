@@ -434,15 +434,8 @@ SUPPORTED_KINDS = (
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",
-    "ui.custody.gaps.dismiss",
-    "ui.custody.gaps.bridge.preview",
-    "ui.custody.gaps.bridge.create",
-    "ui.custody.gaps.reopen.preview",
-    "ui.custody.gaps.reopen",
-    "ui.custody.gaps.revise.preview",
-    "ui.custody.gaps.revise",
-    "ui.custody.gaps.residual.preview",
-    "ui.custody.gaps.residual.classify",
+    "ui.custody.review.plan",
+    "ui.custody.review.apply",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
@@ -577,10 +570,7 @@ _CUSTODY_GAP_READ_DAEMON_KINDS = {
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",
-    "ui.custody.gaps.bridge.preview",
-    "ui.custody.gaps.reopen.preview",
-    "ui.custody.gaps.revise.preview",
-    "ui.custody.gaps.residual.preview",
+    "ui.custody.review.plan",
 }
 _CUSTODY_COVERAGE_READ_DAEMON_KINDS = {"ui.custody.coverage.snapshot"}
 _CUSTODY_LINEAGE_READ_DAEMON_KINDS = {"ui.custody.lineage.snapshot"}
@@ -589,13 +579,7 @@ _LOCAL_CUSTODY_READ_DAEMON_KINDS = (
     | _CUSTODY_COVERAGE_READ_DAEMON_KINDS
     | _CUSTODY_LINEAGE_READ_DAEMON_KINDS
 )
-_CUSTODY_GAP_MUTATING_DAEMON_KINDS = {
-    "ui.custody.gaps.dismiss",
-    "ui.custody.gaps.bridge.create",
-    "ui.custody.gaps.reopen",
-    "ui.custody.gaps.revise",
-    "ui.custody.gaps.residual.classify",
-}
+_CUSTODY_GAP_MUTATING_DAEMON_KINDS = {"ui.custody.review.apply"}
 _CUSTODY_GAP_DAEMON_KINDS = (
     _CUSTODY_GAP_READ_DAEMON_KINDS | _CUSTODY_GAP_MUTATING_DAEMON_KINDS
 )
@@ -689,11 +673,7 @@ AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.journals.quarantine.resolve",
         "ui.transfers.components.bulk_resolve",
-        "ui.custody.gaps.bridge.create",
-        "ui.custody.gaps.dismiss",
-        "ui.custody.gaps.reopen",
-        "ui.custody.gaps.revise",
-        "ui.custody.gaps.residual.classify",
+        "ui.custody.review.apply",
     }
 )
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
@@ -2243,34 +2223,22 @@ def _ui_custody_gap_payload_from_conn(
     """Build a bounded, privacy-safe custody-gap packet for UI or AI reads."""
 
     scope_fields = {"workspace", "profile"}
-    if kind == "ui.custody.gaps.list":
+    if kind == "ui.custody.review.plan":
+        allowed = scope_fields | {"action", "gap_id", "classification", "reason"}
+    elif kind == "ui.custody.review.apply":
+        allowed = scope_fields | {
+            "action",
+            "gap_id",
+            "classification",
+            "reason",
+            "expected_fingerprint",
+        }
+    elif kind == "ui.custody.gaps.list":
         allowed = scope_fields | {"limit", "cursor"}
     elif kind == "ui.custody.gaps.history":
         allowed = scope_fields | {"gap_id", "limit"}
     elif kind == "ui.custody.gaps.review_context":
         allowed = scope_fields | {"gap_id"}
-    elif kind == "ui.custody.gaps.bridge.preview":
-        allowed = scope_fields | {"gap_id"}
-    elif kind == "ui.custody.gaps.bridge.create":
-        allowed = scope_fields | {"gap_id", "expected_fingerprint"}
-    elif kind == "ui.custody.gaps.dismiss":
-        allowed = scope_fields | {"gap_id", "expected_fingerprint", "reason"}
-    elif kind in {
-        "ui.custody.gaps.reopen.preview",
-        "ui.custody.gaps.revise.preview",
-    }:
-        allowed = scope_fields | {"gap_id", "reason"}
-    elif kind in {"ui.custody.gaps.reopen", "ui.custody.gaps.revise"}:
-        allowed = scope_fields | {"gap_id", "expected_fingerprint", "reason"}
-    elif kind == "ui.custody.gaps.residual.preview":
-        allowed = scope_fields | {"gap_id", "classification", "reason"}
-    elif kind == "ui.custody.gaps.residual.classify":
-        allowed = scope_fields | {
-            "gap_id",
-            "classification",
-            "expected_fingerprint",
-            "reason",
-        }
     else:
         raise AppError(
             f"Unsupported custody-gap daemon kind '{kind}'", code="validation"
@@ -2327,6 +2295,195 @@ def _ui_custody_gap_payload_from_conn(
     _workspace, profile = resolve_scope(
         conn, args.get("workspace"), args.get("profile")
     )
+    if kind in {"ui.custody.review.plan", "ui.custody.review.apply"}:
+        action = args.get("action")
+        supported_actions = {
+            "create",
+            "dismiss",
+            "revise",
+            "reopen",
+            "classify_residual",
+        }
+        if not isinstance(action, str) or action not in supported_actions:
+            raise AppError(
+                f"{kind} action is invalid",
+                code="validation",
+                details={"supported_actions": sorted(supported_actions)},
+            )
+        classification = args.get("classification")
+        if action == "classify_residual" and not isinstance(classification, str):
+            raise AppError(f"{kind} requires classification", code="validation")
+        candidate = (
+            core_custody_gaps.find_gap_candidate(
+                conn, profile["id"], str(gap_id)
+            )
+            if action in {"create", "dismiss", "revise"}
+            else None
+        )
+        if kind == "ui.custody.review.plan":
+            plan = core_custody_gap_reviews.plan_review(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                action=action,
+                candidate=candidate,
+                gap_id=str(gap_id),
+                classification=classification,
+                reason=reason,
+                authored_source=authored_source,
+            )
+            component = plan.get("component_plan") or {}
+            public_component = None
+            if component:
+                public_component = {
+                    "id": component.get("component_id"),
+                    "component_type": component.get("component_type"),
+                    "conservation_mode": component.get("conservation_mode"),
+                    "legs": [
+                        {
+                            key: leg.get(key)
+                            for key in (
+                                "id",
+                                "role",
+                                "rail",
+                                "asset",
+                                "exposure",
+                                "conservation_unit",
+                                "amount_msat",
+                                "valuation_unit",
+                                "valuation_amount",
+                            )
+                        }
+                        for leg in component.get("legs", ())
+                    ],
+                    "allocations": [
+                        {
+                            key: allocation.get(key)
+                            for key in (
+                                "id",
+                                "source_leg_id",
+                                "sink_leg_id",
+                                "source_amount_msat",
+                                "sink_amount_msat",
+                            )
+                        }
+                        for allocation in component.get("allocations", ())
+                    ],
+                    "validation": {
+                        "activatable": bool(
+                            (component.get("validation") or {}).get("activatable")
+                        ),
+                        "issues": [
+                            {
+                                key: issue.get(key)
+                                for key in ("code", "message")
+                                if issue.get(key) is not None
+                            }
+                            for issue in (component.get("validation") or {}).get(
+                                "issues", ()
+                            )
+                        ],
+                        "warnings": [
+                            {
+                                key: warning.get(key)
+                                for key in ("code", "message")
+                                if warning.get(key) is not None
+                            }
+                            for warning in (component.get("validation") or {}).get(
+                                "warnings", ()
+                            )
+                        ],
+                    },
+                }
+            planned_candidate = plan.get("candidate")
+            return _ui_exact_integer_payload(
+                {
+                    "action": action,
+                    "gap_id": plan["gap_id"],
+                    "fingerprint": plan["fingerprint"],
+                    "input_version": plan["input_version"],
+                    "dry_run": True,
+                    "activatable": plan["activatable"],
+                    "requires_explicit_confirmation": True,
+                    "classification": plan.get("classification"),
+                    "country_tax_meaning": (
+                        "not_assigned" if action == "classify_residual" else None
+                    ),
+                    "custody_state": (
+                        core_custody_gap_reviews.residual_custody_state(
+                            str(plan["classification"])
+                        )
+                        if action == "classify_residual"
+                        else None
+                    ),
+                    "new_component_revision": plan.get("new_component_revision"),
+                    "current_component_revision": (
+                        (plan.get("context") or {}).get("component", {}).get(
+                            "revision"
+                        )
+                    ),
+                    "review_mode": (
+                        "structured_candidate"
+                        if planned_candidate is not None
+                        and planned_candidate.promotion_eligible
+                        and planned_candidate.conflict_size == 1
+                        else (
+                            "manual_weak_hint"
+                            if planned_candidate is not None
+                            else None
+                        )
+                    ),
+                    "retained_msat": (
+                        planned_candidate.retained_msat
+                        if planned_candidate is not None
+                        else 0
+                    ),
+                    "residual_msat": (
+                        planned_candidate.residual_msat
+                        if planned_candidate is not None
+                        else plan.get("residual_msat", 0)
+                    ),
+                    "fee_msat": (
+                        planned_candidate.source_fee_msat
+                        if planned_candidate is not None
+                        else 0
+                    ),
+                    "source_count": (
+                        len(planned_candidate.source_ids)
+                        if planned_candidate is not None
+                        else 0
+                    ),
+                    "destination_count": (
+                        len(planned_candidate.return_ids)
+                        if planned_candidate is not None
+                        else 0
+                    ),
+                    "warnings": plan["warnings"],
+                    "filed_report_impacts": plan["filed_report_impacts"],
+                    "component_plan": public_component,
+                }
+            )
+        expected = args.get("expected_fingerprint")
+        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+            raise AppError(
+                f"{kind} requires a 64-character expected_fingerprint",
+                code="validation",
+            )
+        return _ui_exact_integer_payload(
+            core_custody_gap_reviews.apply_review(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                action=action,
+                expected_fingerprint=expected,
+                candidate=candidate,
+                gap_id=str(gap_id),
+                classification=classification,
+                reason=reason,
+                authored_source=authored_source,
+                commit=commit,
+            )
+        )
     if kind == "ui.custody.gaps.history":
         return _ui_exact_integer_payload(
             core_custody_gap_reviews.list_review_history(
@@ -2337,142 +2494,6 @@ def _ui_custody_gap_payload_from_conn(
             )
         )
 
-    correction_kinds = {
-        "ui.custody.gaps.reopen.preview",
-        "ui.custody.gaps.reopen",
-        "ui.custody.gaps.residual.preview",
-        "ui.custody.gaps.residual.classify",
-    }
-    if kind in correction_kinds:
-        if kind == "ui.custody.gaps.reopen.preview":
-            payload = core_custody_gap_reviews.preview_reopen_guided_bridge(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                gap_id=str(gap_id),
-                reason=reason,
-            )
-            return _ui_exact_integer_payload(payload)
-        if kind == "ui.custody.gaps.residual.preview":
-            classification = args.get("classification")
-            if not isinstance(classification, str):
-                raise AppError(f"{kind} requires classification", code="validation")
-            payload = core_custody_gap_reviews.preview_residual_classification(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                gap_id=str(gap_id),
-                classification=classification,
-                reason=reason,
-                authored_source=authored_source,
-            )
-            return _ui_exact_integer_payload(payload)
-        expected = args.get("expected_fingerprint")
-        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
-            raise AppError(
-                f"{kind} requires a 64-character expected_fingerprint",
-                code="validation",
-            )
-        if kind == "ui.custody.gaps.reopen":
-            payload = core_custody_gap_reviews.reopen_guided_bridge(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                gap_id=str(gap_id),
-                expected_fingerprint=expected,
-                reason=reason,
-                authored_source=authored_source,
-                commit=commit,
-            )
-            return _ui_exact_integer_payload(payload)
-        classification = args.get("classification")
-        if not isinstance(classification, str):
-            raise AppError(f"{kind} requires classification", code="validation")
-        payload = core_custody_gap_reviews.classify_residual(
-            conn,
-            workspace_id=_workspace["id"],
-            profile_id=profile["id"],
-            gap_id=str(gap_id),
-            classification=classification,
-            expected_fingerprint=expected,
-            reason=reason,
-            authored_source=authored_source,
-            commit=commit,
-        )
-        return _ui_exact_integer_payload(payload)
-
-    if kind in {
-        "ui.custody.gaps.dismiss",
-        "ui.custody.gaps.bridge.preview",
-        "ui.custody.gaps.bridge.create",
-        "ui.custody.gaps.revise.preview",
-        "ui.custody.gaps.revise",
-    }:
-        candidate = core_custody_gaps.find_gap_candidate(
-            conn, profile["id"], str(gap_id)
-        )
-        if kind == "ui.custody.gaps.bridge.preview":
-            return _ui_exact_integer_payload(
-                core_custody_gap_reviews.preview_guided_bridge(
-                    conn,
-                    workspace_id=_workspace["id"],
-                    profile_id=profile["id"],
-                    candidate=candidate,
-                    authored_source=authored_source,
-                )
-            )
-        if kind == "ui.custody.gaps.revise.preview":
-            return _ui_exact_integer_payload(
-                core_custody_gap_reviews.preview_guided_revision(
-                    conn,
-                    workspace_id=_workspace["id"],
-                    profile_id=profile["id"],
-                    candidate=candidate,
-                    reason=reason,
-                    authored_source=authored_source,
-                )
-            )
-        expected = args.get("expected_fingerprint")
-        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
-            raise AppError(
-                f"{kind} requires a 64-character expected_fingerprint",
-                code="validation",
-            )
-        if kind == "ui.custody.gaps.dismiss":
-            return core_custody_gap_reviews.append_dismissal(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                candidate=candidate,
-                expected_fingerprint=expected,
-                authored_source=authored_source,
-                reason=reason,
-                commit=commit,
-            )
-        if kind == "ui.custody.gaps.revise":
-            return _ui_exact_integer_payload(
-                core_custody_gap_reviews.revise_guided_bridge(
-                    conn,
-                    workspace_id=_workspace["id"],
-                    profile_id=profile["id"],
-                    candidate=candidate,
-                    expected_fingerprint=expected,
-                    reason=reason,
-                    authored_source=authored_source,
-                    commit=commit,
-                )
-            )
-        return _ui_exact_integer_payload(
-            core_custody_gap_reviews.create_guided_bridge(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                candidate=candidate,
-                expected_fingerprint=expected,
-                authored_source=authored_source,
-                commit=commit,
-            )
-        )
     raw_payload = core_custody_gaps.build_gap_snapshot(
         conn,
         profile["id"],

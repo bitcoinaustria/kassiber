@@ -298,12 +298,12 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                 },
             )
             gap = listed["data"]["gaps"][0]
-            preview_args = {**scope, "gap_id": gap["gap_id"]}
+            preview_args = {**scope, "action": "create", "gap_id": gap["gap_id"]}
             preview = _request(
                 proc,
                 {
                     "request_id": "gap-preview",
-                    "kind": "ui.custody.gaps.bridge.preview",
+                    "kind": "ui.custody.review.plan",
                     "args": preview_args,
                 },
             )["data"]
@@ -311,13 +311,13 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
 
             create_args = {
                 **preview_args,
-                "expected_fingerprint": preview["candidate_fingerprint"],
+                "expected_fingerprint": preview["fingerprint"],
             }
             created = _request(
                 proc,
                 {
                     "request_id": "gap-create",
-                    "kind": "ui.custody.gaps.bridge.create",
+                    "kind": "ui.custody.review.apply",
                     "args": create_args,
                 },
             )["data"]
@@ -336,10 +336,18 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                 "raw_json",
                 json.dumps([listed, preview, created, refreshed]),
             )
-            self.assertEqual(set(preview_args), {"workspace", "profile", "gap_id"})
+            self.assertEqual(
+                set(preview_args), {"workspace", "profile", "action", "gap_id"}
+            )
             self.assertEqual(
                 set(create_args),
-                {"workspace", "profile", "gap_id", "expected_fingerprint"},
+                {
+                    "workspace",
+                    "profile",
+                    "action",
+                    "gap_id",
+                    "expected_fingerprint",
+                },
             )
         finally:
             if proc.stdin is not None:

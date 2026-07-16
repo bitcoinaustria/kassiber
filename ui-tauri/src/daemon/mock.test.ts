@@ -195,8 +195,9 @@ describe("mock daemon custody gaps", () => {
       country_tax_meaning: string;
       residual_msat: string;
     }>({
-      kind: "ui.custody.gaps.residual.preview",
+      kind: "ui.custody.review.plan",
       args: {
+        action: "classify_residual",
         gap_id: "custody-gap:og-treasury",
         classification: "retained_custody",
       },

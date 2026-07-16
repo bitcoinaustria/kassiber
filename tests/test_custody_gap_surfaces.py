@@ -31,10 +31,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             "ui.custody.gaps.list",
             "ui.custody.gaps.review_context",
             "ui.custody.gaps.history",
-            "ui.custody.gaps.bridge.preview",
-            "ui.custody.gaps.reopen.preview",
-            "ui.custody.gaps.revise.preview",
-            "ui.custody.gaps.residual.preview",
+            "ui.custody.review.plan",
         ):
             self.assertIn(kind, SUPPORTED_KINDS)
             tool = get_tool(kind)
@@ -42,13 +39,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             self.assertEqual(tool.kind_class, "read_only")
             self.assertEqual(tool.daemon_kind, kind)
 
-        for kind in (
-            "ui.custody.gaps.bridge.create",
-            "ui.custody.gaps.dismiss",
-            "ui.custody.gaps.reopen",
-            "ui.custody.gaps.revise",
-            "ui.custody.gaps.residual.classify",
-        ):
+        for kind in ("ui.custody.review.apply",):
             self.assertIn(kind, SUPPORTED_KINDS)
             self.assertEqual(get_tool(kind).kind_class, "mutating")
             self.assertIn(kind, AI_TOOL_ONCE_ONLY_CONSENT)
@@ -58,7 +49,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         self.assertFalse(review.parameters["additionalProperties"])
         gap_list = get_tool("ui.custody.gaps.list")
         self.assertEqual(gap_list.parameters["properties"]["cursor"]["type"], "string")
-        residual = get_tool("ui.custody.gaps.residual.classify")
+        residual = get_tool("ui.custody.review.apply")
         self.assertEqual(
             residual.parameters["properties"]["classification"]["enum"],
             [
@@ -259,7 +250,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
                 return_value=({"id": "workspace"}, {"id": "profile"}),
             ),
             patch(
-                "kassiber.daemon.core_custody_gap_reviews.classify_residual",
+                "kassiber.daemon.core_custody_gap_reviews.apply_review",
                 return_value={
                     "gap_id": "gap:1",
                     "review_id": "review",
@@ -270,8 +261,9 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         ):
             payload = _ui_custody_gap_payload_from_conn(
                 conn,
-                "ui.custody.gaps.residual.classify",
+                "ui.custody.review.apply",
                 {
+                    "action": "classify_residual",
                     "gap_id": "gap:1",
                     "classification": "external_gift",
                     "expected_fingerprint": "a" * 64,
@@ -284,6 +276,8 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             conn,
             workspace_id="workspace",
             profile_id="profile",
+            action="classify_residual",
+            candidate=None,
             gap_id="gap:1",
             classification="external_gift",
             expected_fingerprint="a" * 64,
@@ -296,8 +290,9 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         with self.assertRaises(AppError) as raised:
             _ui_custody_gap_payload_from_conn(
                 conn,
-                "ui.custody.gaps.residual.preview",
+                "ui.custody.review.plan",
                 {
+                    "action": "classify_residual",
                     "gap_id": "gap:1",
                     "classification": "external_gift",
                     "component": {"raw": "not accepted"},
@@ -544,16 +539,17 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         preview = _execute_read_only_ai_tool(
             ParsedAiToolCall(
                 call_id="call-preview",
-                name="ui.custody.gaps.bridge.preview",
-                arguments={"gap_id": "gap"},
+                name="ui.custody.review.plan",
+                arguments={"action": "create", "gap_id": "gap"},
             ),
             runtime,
         )
         create = _execute_mutating_ai_tool(
             ParsedAiToolCall(
                 call_id="call-create",
-                name="ui.custody.gaps.bridge.create",
+                name="ui.custody.review.apply",
                 arguments={
+                    "action": "create",
                     "gap_id": "gap",
                     "expected_fingerprint": "0" * 64,
                 },

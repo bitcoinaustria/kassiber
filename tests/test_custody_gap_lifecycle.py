@@ -1313,18 +1313,24 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         gap = listed["gaps"][0]
         preview = _ui_custody_gap_payload_from_conn(
             self.conn,
-            "ui.custody.gaps.bridge.preview",
-            {"workspace": "Books", "profile": "Book", "gap_id": gap["gap_id"]},
+            "ui.custody.review.plan",
+            {
+                "workspace": "Books",
+                "profile": "Book",
+                "action": "create",
+                "gap_id": gap["gap_id"],
+            },
         )
         self.assertNotIn('"out"', json.dumps(preview))
         created = _ui_custody_gap_payload_from_conn(
             self.conn,
-            "ui.custody.gaps.bridge.create",
+            "ui.custody.review.apply",
             {
                 "workspace": "Books",
                 "profile": "Book",
+                "action": "create",
                 "gap_id": gap["gap_id"],
-                "expected_fingerprint": preview["candidate_fingerprint"],
+                "expected_fingerprint": preview["fingerprint"],
             },
         )
         self.assertEqual(created["status"], "resolved")

@@ -698,30 +698,11 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
     preview: ResidualClassificationPreview;
   } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const bridgePreviewRequest = useDaemonMutation<BridgePreview>(
-    "ui.custody.gaps.bridge.preview",
+  const reviewPlan = useDaemonMutation<BridgePreview | GuidedCorrectionPreview | ResidualClassificationPreview>(
+    "ui.custody.review.plan",
     { invalidateQueries: false },
   );
-  const createBridge = useDaemonMutation("ui.custody.gaps.bridge.create");
-  const dismissGap = useDaemonMutation("ui.custody.gaps.dismiss");
-  const reopenPreview = useDaemonMutation<GuidedCorrectionPreview>(
-    "ui.custody.gaps.reopen.preview",
-    { invalidateQueries: false },
-  );
-  const reopenBridge = useDaemonMutation("ui.custody.gaps.reopen");
-  const revisePreview = useDaemonMutation<GuidedCorrectionPreview>(
-    "ui.custody.gaps.revise.preview",
-    { invalidateQueries: false },
-  );
-  const reviseBridge = useDaemonMutation("ui.custody.gaps.revise");
-  const residualPreviewRequest =
-    useDaemonMutation<ResidualClassificationPreview>(
-      "ui.custody.gaps.residual.preview",
-      { invalidateQueries: false },
-    );
-  const classifyResidual = useDaemonMutation(
-    "ui.custody.gaps.residual.classify",
-  );
+  const reviewApply = useDaemonMutation("ui.custody.review.apply");
   const { data, isLoading, isError, error } = useDaemon<CustodyGapSnapshot>(
     "ui.custody.gaps.review_context",
     { gap_id: gapId },
@@ -755,10 +736,10 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
     setActionError(null);
     setBridgePreviewData(null);
     try {
-      const result = await bridgePreviewRequest.mutateAsync(
+      const result = await reviewPlan.mutateAsync(
         bridgePreviewArgs(gap.gap_id),
       );
-      setBridgePreviewData(result.data ?? null);
+      setBridgePreviewData((result.data as BridgePreview | undefined) ?? null);
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : t("actions.failed"));
     }
@@ -767,19 +748,24 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
     if (!bridgePreviewData) return;
     setActionError(null);
     try {
-      await createBridge.mutateAsync(bridgeCreateArgs(bridgePreviewData));
+      await reviewApply.mutateAsync(bridgeCreateArgs(bridgePreviewData));
       setBridgePreviewData(null);
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : t("actions.failed"));
     }
   };
   const dismiss = async () => {
-    if (!window.confirm(t("actions.dismissConfirm"))) return;
     setActionError(null);
     try {
-      await dismissGap.mutateAsync({
+      const planned = await reviewPlan.mutateAsync({
+        action: "dismiss",
         gap_id: gap.gap_id,
-        expected_fingerprint: gap.candidate_fingerprint,
+      });
+      if (!planned.data || !window.confirm(t("actions.dismissConfirm"))) return;
+      await reviewApply.mutateAsync({
+        action: "dismiss",
+        gap_id: gap.gap_id,
+        expected_fingerprint: (planned.data as BridgePreview).fingerprint,
       });
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : t("actions.failed"));
@@ -791,15 +777,18 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
     setCorrectionPreview(null);
     const reason = correctionReason.trim();
     try {
-      const result =
+      const result = await reviewPlan.mutateAsync(
         mode === "reopen"
-          ? await reopenPreview.mutateAsync(
-              reopenPreviewArgs(gap.gap_id, reason),
-            )
-          : await revisePreview.mutateAsync(
-              revisePreviewArgs(gap.gap_id, reason),
-            );
-      if (result.data) setCorrectionPreview({ mode, reason, preview: result.data });
+          ? reopenPreviewArgs(gap.gap_id, reason)
+          : revisePreviewArgs(gap.gap_id, reason),
+      );
+      if (result.data) {
+        setCorrectionPreview({
+          mode,
+          reason,
+          preview: result.data as GuidedCorrectionPreview,
+        });
+      }
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : t("actions.failed"));
     }
@@ -810,14 +799,14 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
     setActionError(null);
     try {
       if (correctionPreview.mode === "reopen") {
-        await reopenBridge.mutateAsync(
+        await reviewApply.mutateAsync(
           reopenConfirmArgs(
             correctionPreview.preview,
             correctionPreview.reason,
           ),
         );
       } else {
-        await reviseBridge.mutateAsync(
+        await reviewApply.mutateAsync(
           reviseConfirmArgs(
             correctionPreview.preview,
             correctionPreview.reason,
@@ -836,10 +825,15 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
     setResidualPreview(null);
     const reason = residualReason.trim();
     try {
-      const result = await residualPreviewRequest.mutateAsync(
+      const result = await reviewPlan.mutateAsync(
         residualPreviewArgs(gap.gap_id, residualClassification, reason),
       );
-      if (result.data) setResidualPreview({ reason, preview: result.data });
+      if (result.data) {
+        setResidualPreview({
+          reason,
+          preview: result.data as ResidualClassificationPreview,
+        });
+      }
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : t("actions.failed"));
     }
@@ -849,7 +843,7 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
     if (!residualPreview) return;
     setActionError(null);
     try {
-      await classifyResidual.mutateAsync(
+      await reviewApply.mutateAsync(
         residualConfirmArgs(residualPreview.preview, residualPreview.reason),
       );
       setResidualPreview(null);
@@ -862,7 +856,7 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
   const actionMode = custodyGapActionMode(gap);
   const reopened = actionMode === "revise";
   const canCreateBridge = actionMode === "create";
-  const correctionPending = reopenBridge.isPending || reviseBridge.isPending;
+  const correctionPending = reviewApply.isPending;
 
   return (
     <div className="space-y-3 rounded-lg border bg-muted/25 p-4">
@@ -913,7 +907,7 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
         <BridgePreviewPanel
           preview={bridgePreviewData}
           asset={gap.asset}
-          isCreating={createBridge.isPending}
+          isCreating={reviewApply.isPending}
           onConfirm={confirmBridge}
         />
       ) : null}
@@ -924,13 +918,13 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
             type="button"
             size="sm"
             onClick={runPreview}
-            disabled={bridgePreviewRequest.isPending}
+            disabled={reviewPlan.isPending}
           >
-            {bridgePreviewRequest.isPending
+            {reviewPlan.isPending
               ? t("actions.previewing")
               : t("actions.previewBridge")}
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={dismiss} disabled={dismissGap.isPending}>
+          <Button type="button" size="sm" variant="outline" onClick={dismiss} disabled={reviewPlan.isPending || reviewApply.isPending}>
             {t("actions.dismiss")}
           </Button>
         </div>
@@ -965,15 +959,15 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
             size="sm"
             variant="outline"
             onClick={() => void runCorrectionPreview(reopened ? "revise" : "reopen")}
-            disabled={reopenPreview.isPending || revisePreview.isPending}
+            disabled={reviewPlan.isPending}
           >
-            {reopenPreview.isPending || revisePreview.isPending
+            {reviewPlan.isPending
               ? t("correction.previewing")
               : t(`correction.${reopened ? "revise" : "reopen"}.preview`)}
           </Button>
           {correctionPreview ? (
             <CorrectionPreviewPanel
-              key={correctionPreview.preview.expected_fingerprint}
+              key={correctionPreview.preview.fingerprint}
               preview={correctionPreview.preview}
               mode={correctionPreview.mode}
               asset={gap.asset}
@@ -1060,18 +1054,18 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
             size="sm"
             variant="outline"
             onClick={() => void runResidualPreview()}
-            disabled={residualPreviewRequest.isPending}
+            disabled={reviewPlan.isPending}
           >
-            {residualPreviewRequest.isPending
+            {reviewPlan.isPending
               ? t("residual.previewing")
               : t("residual.preview")}
           </Button>
           {residualPreview ? (
             <ResidualPreviewPanel
-              key={residualPreview.preview.expected_fingerprint}
+              key={residualPreview.preview.fingerprint}
               preview={residualPreview.preview}
               asset={gap.asset}
-              isPending={classifyResidual.isPending}
+              isPending={reviewApply.isPending}
               onConfirm={confirmResidual}
             />
           ) : null}
