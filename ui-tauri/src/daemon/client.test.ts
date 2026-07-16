@@ -266,8 +266,6 @@ describe("daemon mutation invalidation scope", () => {
   it("keeps custody component refreshes targeted", () => {
     for (const kind of [
       "ui.transfers.components.apply",
-      "ui.transfers.components.update",
-      "ui.transfers.components.undo",
     ]) {
       expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
         expect.arrayContaining([

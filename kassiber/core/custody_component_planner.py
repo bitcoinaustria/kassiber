@@ -583,6 +583,409 @@ def public_component_batch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+_REVISION_FIELDS = frozenset(
+    {
+        "component_type",
+        "conservation_mode",
+        "evidence_kind",
+        "evidence_grade",
+        "evidence",
+        "conversion_policy",
+        "conversion_reviewed",
+        "conversion_metadata",
+        "notes",
+        "change_reason",
+        "legs",
+        "allocations",
+    }
+)
+
+
+def _public_component(component: Mapping[str, Any]) -> dict[str, Any]:
+    result = dict(component)
+    result.pop("evidence", None)
+    result.pop("conversion_metadata", None)
+    result["legs"] = [
+        {key: value for key, value in leg.items() if key != "location_ref"}
+        for leg in component.get("legs", ())
+    ]
+    return result
+
+
+def plan_component_revision(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    component_id: str,
+    spec: Mapping[str, Any] | None = None,
+    activate: bool = False,
+    reason: str | None = None,
+    authored_source: str = "user",
+) -> dict[str, Any]:
+    """Plan an immutable revision or undo without changing SQLite."""
+
+    if action not in {"revise", "undo"}:
+        raise _error("Custody component revision action is unsupported", action=action)
+    if type(activate) is not bool:
+        raise _error("activate must be a boolean")
+    profile = _scope(conn, workspace_id, profile_id)
+    old = custody_components.get_component(
+        conn,
+        component_id,
+        profile_id=profile_id,
+        include_local_evidence=True,
+    )
+    if action == "undo" and old["state"] != "superseded":
+        raise _error(
+            "Only a superseded revision can be restored",
+            code="custody_component_not_superseded",
+            component_id=component_id,
+            state=old["state"],
+        )
+    raw_spec = {} if spec is None else spec
+    if not isinstance(raw_spec, Mapping):
+        raise _error("Custody component revision must be a JSON object")
+    unknown = sorted(set(raw_spec) - _REVISION_FIELDS)
+    if unknown:
+        raise _error(
+            "Custody component revision contains unsupported fields",
+            fields=unknown,
+        )
+    spec_dict = dict(raw_spec)
+    try:
+        canonical = json.dumps(spec_dict, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError) as error:
+        raise _error("Custody component revision is not JSON-safe") from error
+    existing_draft = conn.execute(
+        "SELECT id FROM custody_components "
+        "WHERE profile_id = ? AND lineage_id = ? AND state = 'draft' AND id != ?",
+        (profile_id, old["lineage_id"], component_id),
+    ).fetchone()
+    if existing_draft:
+        raise _error(
+            "Component lineage already has a draft revision",
+            code="custody_component_draft_exists",
+            draft_component_id=existing_draft["id"],
+        )
+    next_revision = int(
+        conn.execute(
+            "SELECT COALESCE(MAX(revision), 0) + 1 FROM custody_components "
+            "WHERE profile_id = ? AND lineage_id = ?",
+            (profile_id, old["lineage_id"]),
+        ).fetchone()[0]
+    )
+    new_component_id = str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "kassiber:custody-revision:"
+            f"{profile_id}:{component_id}:{action}:{next_revision}:"
+            f"{authored_source}:{int(activate)}:{reason or ''}:{canonical}",
+        )
+    )
+    if conn.execute(
+        "SELECT 1 FROM custody_components WHERE id = ?", (new_component_id,)
+    ).fetchone():
+        raise _error(
+            "Planned custody component revision already exists",
+            code="conflict",
+            component_id=new_component_id,
+        )
+
+    planned_wallets: dict[str, dict[str, str]] = {}
+    raw_legs = spec_dict.get("legs", old["legs"])
+    if not isinstance(raw_legs, list):
+        raise _error("Custody component legs must be a JSON array")
+    hidden_by_id = {
+        str(leg["id"]): leg.get("location_ref")
+        for leg in old["legs"]
+        if leg.get("location_ref") is not None
+    }
+    preserved_legs: list[Any] = []
+    for raw_leg in raw_legs:
+        if not isinstance(raw_leg, Mapping):
+            preserved_legs.append(raw_leg)
+            continue
+        preserved = dict(raw_leg)
+        raw_id = str(preserved.get("id") or "")
+        if "location_ref" not in preserved and raw_id in hidden_by_id:
+            preserved["location_ref"] = hidden_by_id[raw_id]
+        preserved_legs.append(preserved)
+    legs = _prepare_legs(
+        conn,
+        profile_id=profile_id,
+        component_id=new_component_id,
+        raw_legs=preserved_legs,
+        planned_wallets=planned_wallets,
+    )
+    leg_id_map: dict[str, str] = {}
+    for ordinal, (raw_leg, leg) in enumerate(zip(preserved_legs, legs, strict=True)):
+        if isinstance(raw_leg, Mapping) and raw_leg.get("id") not in (None, ""):
+            leg_id_map[str(raw_leg["id"])] = _deterministic_id(
+                new_component_id, "leg", ordinal
+            )
+        leg["id"] = _deterministic_id(new_component_id, "leg", ordinal)
+
+    if "allocations" in spec_dict:
+        raw_allocations = spec_dict["allocations"]
+    elif "legs" in spec_dict:
+        raw_allocations = []
+    else:
+        raw_allocations = old["allocations"]
+    if not isinstance(raw_allocations, list):
+        raise _error("Custody component allocations must be a JSON array")
+    remapped_allocations: list[Any] = []
+    for raw_allocation in raw_allocations:
+        if not isinstance(raw_allocation, Mapping):
+            remapped_allocations.append(raw_allocation)
+            continue
+        remapped = dict(raw_allocation)
+        for endpoint in ("source", "sink"):
+            field = f"{endpoint}_leg_id"
+            if str(remapped.get(field) or "") in leg_id_map:
+                remapped[field] = leg_id_map[str(remapped[field])]
+        remapped_allocations.append(remapped)
+    allocations = _prepare_allocations(new_component_id, remapped_allocations)
+    for ordinal, allocation in enumerate(allocations):
+        allocation["id"] = _deterministic_id(
+            new_component_id, "allocation", ordinal
+        )
+
+    economic_terms: list[dict[str, Any]] = []
+    for ordinal, term in enumerate(old.get("economic_terms") or ()):
+        source_id = leg_id_map.get(str(term["source_leg_id"]))
+        target_id = leg_id_map.get(str(term["target_leg_id"]))
+        if source_id is None or target_id is None:
+            raise _error(
+                "Revision must preserve legs bound by migrated economic terms",
+                code="custody_component_economic_term_leg_changed",
+                term_id=term["id"],
+            )
+        economic_terms.append(
+            {
+                **dict(term),
+                "id": _deterministic_id(new_component_id, "economic-term", ordinal),
+                "source_leg_id": source_id,
+                "target_leg_id": target_id,
+            }
+        )
+    header_values = {
+        "component_type": old["component_type"],
+        "conservation_mode": old["conservation_mode"],
+        "evidence_kind": old["evidence_kind"],
+        "evidence_grade": old["evidence_grade"],
+        "evidence": old.get("evidence"),
+        "conversion_policy": old["conversion_policy"],
+        "conversion_reviewed": old["conversion_reviewed"],
+        "conversion_metadata": old.get("conversion_metadata"),
+        "notes": old["notes"],
+    }
+    header_values.update(
+        {
+            field: spec_dict[field]
+            for field in header_values
+            if field in spec_dict
+        }
+    )
+    header = custody_components.normalize_component_header(
+        **header_values,
+        change_reason=(
+            reason if action == "undo" else spec_dict.get("change_reason", reason)
+        ),
+        component_id=new_component_id,
+        lineage_id=old["lineage_id"],
+        authored_source=authored_source,
+    )
+    validation = custody_components.validate_component_plan(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        component_type=header["component_type"],
+        legs=legs,
+        allocations=allocations,
+        conservation_mode=header["conservation_mode"],
+        conversion_policy=header["conversion_policy"],
+        conversion_reviewed=header["conversion_reviewed"],
+        evidence_grade=header["evidence_grade"],
+        replacing_lineage_id=old["lineage_id"],
+        planned_wallet_ids=planned_wallets,
+    )
+    economic_terms = custody_components.normalize_economic_terms(
+        economic_terms, validation["legs"]
+    )
+    if activate and not validation["validation"]["activatable"]:
+        raise _error(
+            "Custody component revision cannot activate",
+            code="custody_component_not_activatable",
+            component_id=new_component_id,
+            issues=validation["validation"]["issues"],
+        )
+    prepared_spec = {
+        **{key: value for key, value in header.items() if key != "lineage_id"},
+        "legs": validation["legs"],
+        "allocations": validation["allocations"],
+        "economic_terms": economic_terms,
+    }
+    planned_component = {
+        "id": new_component_id,
+        "lineage_id": old["lineage_id"],
+        "workspace_id": workspace_id,
+        "profile_id": profile_id,
+        "revision": next_revision,
+        "component_type": header["component_type"],
+        "conservation_mode": header["conservation_mode"],
+        "state": "active" if activate else "draft",
+        "effective_state": "active" if activate else "draft",
+        "evidence_kind": header["evidence_kind"],
+        "evidence_grade": header["evidence_grade"],
+        "evidence": header["evidence"],
+        "conversion_policy": header["conversion_policy"],
+        "conversion_reviewed": header["conversion_reviewed"],
+        "conversion_metadata": header["conversion_metadata"],
+        "authored_source": authored_source,
+        "notes": header["notes"],
+        "change_reason": header["change_reason"],
+        "supersedes_component_id": component_id,
+        "activated_at": None,
+        "superseded_at": None,
+        "created_at": header["created_at"],
+        "legs": validation["legs"],
+        "allocations": validation["allocations"],
+        "economic_terms": economic_terms,
+        "validation": validation["validation"],
+    }
+    commitment = {
+        "schema_version": 1,
+        "workspace_id": workspace_id,
+        "profile_id": profile_id,
+        "input_version": int(profile["journal_input_version"] or 0),
+        "action": action,
+        "source_component_id": component_id,
+        "source_component_commitment": _batch_fingerprint(old),
+        "activate": activate,
+        "authored_source": authored_source,
+        "reason": reason or "",
+        "planned_wallets": list(planned_wallets.values()),
+        "prepared_spec": prepared_spec,
+        "component": planned_component,
+    }
+    return {
+        **commitment,
+        "fingerprint": _batch_fingerprint(commitment),
+        "dry_run": True,
+        "requires_explicit_confirmation": True,
+    }
+
+
+def public_component_revision_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a renderer-safe revision plan without apply-only local evidence."""
+
+    return {
+        **{
+            key: value
+            for key, value in plan.items()
+            if key not in {"prepared_spec", "planned_wallets"}
+        },
+        "component": _public_component(plan["component"]),
+    }
+
+
+def apply_component_revision(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    component_id: str,
+    expected_fingerprint: str,
+    spec: Mapping[str, Any] | None = None,
+    activate: bool = False,
+    reason: str | None = None,
+    authored_source: str = "user",
+    include_local_evidence: bool = False,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Persist exactly a current immutable revision plan."""
+
+    try:
+        plan = plan_component_revision(
+            conn,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            action=action,
+            component_id=component_id,
+            spec=spec,
+            activate=activate,
+            reason=reason,
+            authored_source=authored_source,
+        )
+    except AppError as error:
+        if error.code not in {
+            "conflict",
+            "custody_component_draft_exists",
+            "custody_component_not_superseded",
+        }:
+            raise
+        raise _error(
+            "Custody component plan is stale",
+            code="custody_review_plan_stale",
+            expected_fingerprint=expected_fingerprint,
+            current_error=error.code,
+        ) from error
+    if not isinstance(expected_fingerprint, str) or not hmac.compare_digest(
+        plan["fingerprint"], expected_fingerprint
+    ):
+        raise _error(
+            "Custody component plan is stale",
+            code="custody_review_plan_stale",
+            expected_fingerprint=expected_fingerprint,
+            current_fingerprint=plan["fingerprint"],
+        )
+    savepoint = f"custody_component_revision_apply_{uuid.uuid4().hex}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        for planned_wallet in plan["planned_wallets"]:
+            wallets.create_wallet(
+                conn,
+                workspace_id,
+                profile_id,
+                planned_wallet["label"],
+                "untracked",
+                commit=False,
+                wallet_id=planned_wallet["id"],
+            )
+        prepared = dict(plan["prepared_spec"])
+        prepared.pop("lineage_id", None)
+        prepared.pop("component_id", None)
+        created_at = prepared.pop("created_at", None)
+        component = custody_components.update_component(
+            conn,
+            component_id,
+            new_component_id=plan["component"]["id"],
+            created_at=created_at,
+            preserve_planned_row_ids=True,
+            **prepared,
+        )
+        if activate:
+            component = custody_components.activate_component(conn, component["id"])
+        if not include_local_evidence:
+            component = custody_components.get_component(
+                conn,
+                component["id"],
+                profile_id=profile_id,
+                include_local_evidence=False,
+            )
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    if commit:
+        conn.commit()
+    return {"fingerprint": plan["fingerprint"], "component": component}
+
+
 def plan_component_state_change(
     conn: sqlite3.Connection,
     *,
@@ -698,8 +1101,11 @@ def apply_component_state_change(
 __all__ = [
     "MAX_COMPONENTS",
     "apply_component_batch",
+    "apply_component_revision",
     "apply_component_state_change",
     "plan_component_batch",
+    "plan_component_revision",
     "plan_component_state_change",
     "public_component_batch_plan",
+    "public_component_revision_plan",
 ]

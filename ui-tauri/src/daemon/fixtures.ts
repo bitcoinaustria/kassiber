@@ -900,11 +900,6 @@ export const fixtures: Record<string, unknown> = {
     ],
   },
   "ui.transfers.components.list": { components: [MOCK_CUSTODY_COMPONENT] },
-  "ui.transfers.components.update": {
-    ...MOCK_CUSTODY_COMPONENT,
-    revision: 2,
-  },
-  "ui.transfers.components.undo": MOCK_CUSTODY_COMPONENT,
   "ui.transfers.components.plan": {
     fingerprint: "a".repeat(64),
     components: [MOCK_CUSTODY_COMPONENT],

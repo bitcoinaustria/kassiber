@@ -257,10 +257,12 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
         )["data"]["component"]
         self.assertEqual(superseded["state"], "superseded")
 
-        revised = _run_cli(
+        undo_plan = _run_cli(
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "undo",
             "--component-id",
             created["component_id"],
@@ -268,6 +270,21 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             "restore for revision",
             *self._scope(),
         )["data"]
+        revised = _run_cli(
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "undo",
+            "--component-id",
+            created["component_id"],
+            "--reason",
+            "restore for revision",
+            "--expected-fingerprint",
+            undo_plan["fingerprint"],
+            *self._scope(),
+        )["data"]["component"]
         self.assertEqual(revised["state"], "draft")
         self.assertGreater(revised["revision"], superseded["revision"])
 

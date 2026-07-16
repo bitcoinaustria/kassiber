@@ -306,19 +306,25 @@ kassiber transfers components apply --action create --file migrations.json --dra
 
 kassiber transfers components list
 kassiber transfers components show --component-id <id>
-kassiber transfers components update --component-id <id> --file revision.json
-kassiber transfers components activate --component-id <id>
-kassiber transfers components supersede --component-id <id> --reason "bad evidence"
-kassiber transfers components undo --component-id <id>
+kassiber transfers components plan --action revise --component-id <id> \
+  --file revision.json --activate
+kassiber transfers components apply --action revise --component-id <id> \
+  --file revision.json --activate --expected-fingerprint <fingerprint>
+kassiber transfers components plan --action activate --component-id <id>
+kassiber transfers components plan --action supersede --component-id <id> \
+  --reason "bad evidence"
+kassiber transfers components plan --action undo --component-id <id>
+# Every state plan is followed by the matching apply with its fingerprint.
 ```
 
 The operation flag is authoritative: embedded JSON cannot override `--draft`
-or a desktop “Save as drafts” action. Desktop preview calls the same daemon
-validation inside a rollback-only transaction, including anchor, scope,
-conflict, placeholder-wallet, and conservation checks.
+or a desktop “Save as drafts” action. Desktop preview uses the same read-only
+normalization and validation as apply, including anchor, scope, conflict,
+placeholder-wallet, and conservation checks. It performs no writes and needs
+no rollback simulation.
 
 The in-app assistant may draft the same typed document, but model output is not
-ownership evidence. It must call the bulk tool with `dry_run=true` first and
+ownership evidence. It must call the plan tool first and
 present the validated effects. Creating or activating the final component stays
 behind the existing explicit-consent gate. A remote model may not infer a
 suspense residual or activate a bridge from amount similarity alone.

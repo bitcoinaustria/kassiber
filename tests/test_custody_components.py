@@ -20,7 +20,6 @@ from kassiber.core.custody_components import (
     list_effective_components,
     reconcile_active_memberships,
     supersede_component,
-    undo_supersede,
     update_component,
     validate_component_plan,
     validate_conservation,
@@ -1467,9 +1466,10 @@ class CustodyComponentApiTests(unittest.TestCase):
         self.assertEqual(revision["id"], old["superseded_by_component_id"])
 
         supersede_component(self.conn, revision["id"], reason="undo")
-        restored = undo_supersede(
+        restored = update_component(
             self.conn,
             revision["id"],
+            change_reason="undo_supersede",
             new_component_id="restored",
             created_at="2026-01-04T00:00:00Z",
         )

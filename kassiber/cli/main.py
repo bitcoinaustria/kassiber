@@ -115,8 +115,6 @@ from .handlers import (
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
-    undo_custody_component,
-    update_custody_component,
     update_transaction_pair,
 )
 from ..core import accounts as core_accounts
@@ -2267,29 +2265,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-local-evidence", action="store_true"
     )
 
-    transfers_components_update = transfers_components_sub.add_parser(
-        "update", help="Create a new immutable revision of a component"
-    )
-    _add_workspace_profile_args(transfers_components_update)
-    transfers_components_update.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-    _add_json_document_args(transfers_components_update, label="component revision")
-    transfers_components_update.add_argument(
-        "--activate",
-        action="store_true",
-        help="Activate the new revision after validation",
-    )
-
-    transfers_components_undo = transfers_components_sub.add_parser(
-        "undo", help="Restore a superseded component as a new draft revision"
-    )
-    _add_workspace_profile_args(transfers_components_undo)
-    transfers_components_undo.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-    transfers_components_undo.add_argument("--reason", default="undo")
-
     for command_name, help_text in (
         ("plan", "Purely plan one or more N:M custody components"),
         ("apply", "Atomically persist an unchanged custody component plan"),
@@ -2299,7 +2274,9 @@ def build_parser() -> argparse.ArgumentParser:
         )
         _add_workspace_profile_args(component_review)
         component_review.add_argument(
-            "--action", required=True, choices=("create", "activate", "supersede")
+            "--action",
+            required=True,
+            choices=("create", "revise", "undo", "activate", "supersede"),
         )
         component_review.add_argument("--component-id", dest="component_id")
         component_review.add_argument("--reason")
@@ -2310,10 +2287,16 @@ def build_parser() -> argparse.ArgumentParser:
         component_source.add_argument(
             "--file", dest="json_file", help="Component array JSON file"
         )
-        component_review.add_argument(
+        activation = component_review.add_mutually_exclusive_group()
+        activation.add_argument(
             "--draft",
             action="store_true",
             help="Create draft components instead of activating them",
+        )
+        activation.add_argument(
+            "--activate",
+            action="store_true",
+            help="Activate a planned revision after creating it",
         )
         if command_name == "apply":
             component_review.add_argument(
@@ -4338,36 +4321,41 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         include_local_evidence=args.include_local_evidence,
                     ),
                 )
-            if args.transfers_components_command == "update":
-                spec = _read_json_document(
-                    args.json_text, args.json_file, label="component revision"
-                )
-                return emit(
-                    args,
-                    update_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                        spec,
-                        activate=args.activate,
-                    ),
-                )
-            if args.transfers_components_command == "undo":
-                return emit(
-                    args,
-                    undo_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                        reason=args.reason,
-                    ),
-                )
             if args.transfers_components_command in {"plan", "apply"}:
                 workspace, profile = resolve_scope(
                     conn, args.workspace, args.profile
                 )
+                has_json = args.json_text is not None or args.json_file is not None
+                if args.action == "create" and (
+                    args.component_id or args.reason or args.activate
+                ):
+                    raise AppError(
+                        "create does not accept component_id, reason, or --activate",
+                        code="validation",
+                    )
+                if args.action in {"activate", "supersede"} and (
+                    has_json or args.draft or args.activate
+                ):
+                    raise AppError(
+                        f"{args.action} does not accept JSON, --draft, or --activate",
+                        code="validation",
+                    )
+                if args.action == "activate" and args.reason:
+                    raise AppError(
+                        "activate does not accept reason", code="validation"
+                    )
+                if args.action == "revise" and args.draft:
+                    raise AppError(
+                        "revise uses --activate; --draft is not accepted",
+                        code="validation",
+                    )
+                if args.action == "undo" and (
+                    has_json or args.draft or args.activate
+                ):
+                    raise AppError(
+                        "undo does not accept JSON, --draft, or --activate",
+                        code="validation",
+                    )
                 if args.action in {"activate", "supersede"}:
                     if not args.component_id:
                         raise AppError(
@@ -4391,6 +4379,52 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     return emit(
                         args,
                         core_custody_component_planner.apply_component_state_change(
+                            conn,
+                            expected_fingerprint=args.expected_fingerprint,
+                            **kwargs,
+                        ),
+                    )
+                if args.action in {"revise", "undo"}:
+                    if not args.component_id:
+                        raise AppError(
+                            f"component_id is required for {args.action}",
+                            code="validation",
+                        )
+                    if args.action == "revise":
+                        spec = _read_json_document(
+                            args.json_text,
+                            args.json_file,
+                            label="component revision",
+                        )
+                    else:
+                        spec = None
+                    kwargs = {
+                        "workspace_id": workspace["id"],
+                        "profile_id": profile["id"],
+                        "action": args.action,
+                        "component_id": args.component_id,
+                        "spec": spec,
+                        "activate": args.activate,
+                        "reason": args.reason or (
+                            "undo" if args.action == "undo" else None
+                        ),
+                        "authored_source": "cli",
+                    }
+                    if args.transfers_components_command == "plan":
+                        plan = (
+                            core_custody_component_planner.plan_component_revision(
+                                conn, **kwargs
+                            )
+                        )
+                        return emit(
+                            args,
+                            core_custody_component_planner.public_component_revision_plan(
+                                plan
+                            ),
+                        )
+                    return emit(
+                        args,
+                        core_custody_component_planner.apply_component_revision(
                             conn,
                             expected_fingerprint=args.expected_fingerprint,
                             **kwargs,

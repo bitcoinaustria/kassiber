@@ -14,6 +14,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from kassiber.cli.main import build_parser, dispatch
+from kassiber.core import custody_components
 from kassiber.daemon import SUPPORTED_KINDS, _ui_swap_matching_payload_from_conn
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -24,8 +25,6 @@ NOW = "2026-01-01T00:00:00Z"
 COMPONENT_KINDS = {
     "ui.transfers.components.list",
     "ui.transfers.components.get",
-    "ui.transfers.components.update",
-    "ui.transfers.components.undo",
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
 }
@@ -281,6 +280,90 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(stored["state"], "draft")
 
+    def test_component_revision_preview_is_pure_and_preserves_economic_terms(self):
+        component = self._create_draft_component()
+        source = next(leg for leg in component["legs"] if leg["role"] == "source")
+        target = next(
+            leg for leg in component["legs"] if leg["role"] == "destination"
+        )
+        custody_components.seal_component_economic_terms(
+            self.conn,
+            component["id"],
+            [
+                {
+                    "id": "legacy-term",
+                    "source_leg_id": source["id"],
+                    "target_leg_id": target["id"],
+                    "term_kind": "transaction_pair",
+                    "legacy_source_id": "legacy-pair",
+                    "source_row_hash": "a" * 64,
+                    "review_kind": "transfer",
+                    "tax_policy": "transfer",
+                    "swap_fee_msat": 1_000,
+                }
+            ],
+        )
+        self.conn.commit()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "revise",
+            "component_id": component["id"],
+            "spec": {"notes": "note-only revision"},
+            "activate": False,
+        }
+        before_changes = self.conn.total_changes
+
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+
+        self.assertEqual(self.conn.total_changes, before_changes)
+        self.assertFalse(self.conn.in_transaction)
+        self.assertTrue(preview["dry_run"])
+        self.assertNotIn("evidence", preview["component"])
+        self.assertTrue(
+            all("location_ref" not in leg for leg in preview["component"]["legs"])
+        )
+        result = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.apply",
+            {**args, "expected_fingerprint": preview["fingerprint"]},
+        )
+        revised = result["component"]
+        self.assertEqual(revised["revision"], 2)
+        self.assertEqual(len(revised["economic_terms"]), 1)
+        self.assertEqual(revised["economic_terms"][0]["tax_policy"], "transfer")
+        self.assertEqual(revised["economic_terms"][0]["swap_fee_msat"], 1_000)
+        self.assertNotEqual(
+            revised["economic_terms"][0]["id"], "legacy-term"
+        )
+
+    def test_component_revision_apply_rejects_reused_plan(self):
+        component = self._create_draft_component()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "revise",
+            "component_id": component["id"],
+            "spec": {"notes": "one reviewed revision"},
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        apply_args = {**args, "expected_fingerprint": preview["fingerprint"]}
+        _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.apply", apply_args
+        )
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn, "ui.transfers.components.apply", apply_args
+            )
+
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+
     def test_daemon_bulk_resolution_rejects_unbounded_batches(self):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
@@ -519,12 +602,15 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertEqual(created_component["effective_state"], "active")
         first_id = created_component["id"]
 
-        revised = _dispatch_json(
+        revision_json = json.dumps({"notes": "reviewed again"})
+        revision_plan = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
-            "update",
+            "plan",
+            "--action",
+            "revise",
             "--workspace",
             "Main",
             "--profile",
@@ -532,13 +618,33 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--component-id",
             first_id,
             "--json",
-            json.dumps({"notes": "reviewed again"}),
+            revision_json,
             "--activate",
         )
-        self.assertEqual(revised["kind"], "transfers.components.update")
-        self.assertEqual(revised["data"]["revision"], 2)
-        self.assertEqual(revised["data"]["effective_state"], "active")
-        second_id = revised["data"]["id"]
+        revised = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "revise",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            first_id,
+            "--json",
+            revision_json,
+            "--activate",
+            "--expected-fingerprint",
+            revision_plan["data"]["fingerprint"],
+        )
+        self.assertEqual(revised["kind"], "transfers.components.apply")
+        self.assertEqual(revised["data"]["component"]["revision"], 2)
+        self.assertEqual(revised["data"]["component"]["effective_state"], "active")
+        second_id = revised["data"]["component"]["id"]
 
         supersede_plan = _dispatch_json(
             self.conn,
@@ -579,11 +685,13 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertEqual(superseded["kind"], "transfers.components.apply")
         self.assertEqual(superseded["data"]["component"]["state"], "superseded")
 
-        restored = _dispatch_json(
+        undo_plan = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "undo",
             "--workspace",
             "Main",
@@ -592,9 +700,26 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--component-id",
             second_id,
         )
-        self.assertEqual(restored["kind"], "transfers.components.undo")
-        self.assertEqual(restored["data"]["state"], "draft")
-        third_id = restored["data"]["id"]
+        restored = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "undo",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            second_id,
+            "--expected-fingerprint",
+            undo_plan["data"]["fingerprint"],
+        )
+        self.assertEqual(restored["kind"], "transfers.components.apply")
+        self.assertEqual(restored["data"]["component"]["state"], "draft")
+        third_id = restored["data"]["component"]["id"]
 
         activate_plan = _dispatch_json(
             self.conn,
@@ -944,7 +1069,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "update",
+                "plan",
+                "--action",
+                "revise",
                 "--workspace",
                 "Main",
                 "--profile",
@@ -1032,26 +1159,39 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             )
             component_id = created_component["id"]
 
+            revision_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "revise",
+                "component_id": component_id,
+                "spec": {
+                    "notes": "daemon revision",
+                    "legs": created_component["legs"],
+                    "allocations": created_component["allocations"],
+                },
+                "activate": True,
+            }
+            revision_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-revision-plan",
+                    "args": revision_args,
+                },
+            )
             revised = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.update",
-                    "request_id": "component-update",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-revision-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
-                        "spec": {
-                            "notes": "daemon revision",
-                            "legs": created_component["legs"],
-                            "allocations": created_component["allocations"],
-                        },
-                        "activate": True,
+                        **revision_args,
+                        "expected_fingerprint": revision_plan["data"]["fingerprint"],
                     },
                 },
             )
-            self.assertEqual(revised["data"]["revision"], 2)
-            component_id = revised["data"]["id"]
+            self.assertEqual(revised["data"]["component"]["revision"], 2)
+            component_id = revised["data"]["component"]["id"]
 
             supersede_args = {
                 "workspace": "Main",
@@ -1081,20 +1221,34 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             )
             self.assertEqual(superseded["data"]["component"]["state"], "superseded")
 
+            undo_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "undo",
+                "component_id": component_id,
+                "reason": "undo",
+            }
+            undo_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-undo-plan",
+                    "args": undo_args,
+                },
+            )
             restored = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.undo",
-                    "request_id": "component-undo",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-undo-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
+                        **undo_args,
+                        "expected_fingerprint": undo_plan["data"]["fingerprint"],
                     },
                 },
             )
-            self.assertEqual(restored["data"]["state"], "draft")
-            component_id = restored["data"]["id"]
+            self.assertEqual(restored["data"]["component"]["state"], "draft")
+            component_id = restored["data"]["component"]["id"]
 
             activate_args = {
                 "workspace": "Main",
@@ -1163,11 +1317,12 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             invalid = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.update",
+                    "kind": "ui.transfers.components.plan",
                     "request_id": "component-invalid",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
+                        "action": "revise",
                         "component_id": component_id,
                         "spec": [],
                     },
@@ -1295,29 +1450,48 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             self.assertEqual(exact, allocation["source_amount_msat"])
             self.assertEqual(exact, allocation["sink_amount_msat"])
 
+            revision_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "revise",
+                "component_id": created_component["id"],
+                "spec": {
+                    "notes": "exact renderer revision",
+                    "legs": created_component["legs"],
+                    "allocations": created_component["allocations"],
+                },
+                "activate": False,
+            }
+            revision_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "unsafe-integer-revision-plan",
+                    "args": revision_args,
+                },
+            )
             revised = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.update",
-                    "request_id": "unsafe-integer-update",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "unsafe-integer-revision-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": created_component["id"],
-                        "spec": {
-                            "notes": "exact renderer revision",
-                            "legs": created_component["legs"],
-                            "allocations": created_component["allocations"],
-                        },
-                        "activate": False,
+                        **revision_args,
+                        "expected_fingerprint": revision_plan["data"]["fingerprint"],
                     },
                 },
             )
-            self.assertEqual(revised["data"]["revision"], 2)
-            self.assertEqual(exact, revised["data"]["legs"][0]["amount_msat"])
+            self.assertEqual(
+                revised["kind"], "ui.transfers.components.apply", revised
+            )
+            revised_component = revised["data"]["component"]
+            self.assertEqual(revised_component["revision"], 2)
+            self.assertEqual(
+                exact, revised_component["legs"][0]["amount_msat"]
+            )
             self.assertEqual(
                 exact,
-                revised["data"]["allocations"][0]["source_amount_msat"],
+                revised_component["allocations"][0]["source_amount_msat"],
             )
 
             listed = _request(
@@ -1331,7 +1505,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             latest = next(
                 item
                 for item in listed["data"]["components"]
-                if item["id"] == revised["data"]["id"]
+                if item["id"] == revised_component["id"]
             )
             self.assertEqual(exact, latest["legs"][0]["valuation_amount"])
             self.assertEqual(

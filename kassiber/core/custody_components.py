@@ -4026,6 +4026,7 @@ def update_component(
     *,
     legs: Iterable[Mapping[str, Any]] | object = _UNSET,
     allocations: Iterable[Mapping[str, Any]] | None | object = _UNSET,
+    economic_terms: Iterable[Mapping[str, Any]] | None | object = _UNSET,
     component_type: str | object = _UNSET,
     conservation_mode: str | object = _UNSET,
     evidence_kind: str | None | object = _UNSET,
@@ -4105,6 +4106,11 @@ def update_component(
             rewritten.pop("id", None)
             raw_allocations.append(rewritten)
     normalized_allocations = normalize_allocations(raw_allocations, normalized_legs)  # type: ignore[arg-type]
+    normalized_economic_terms = (
+        []
+        if economic_terms is _UNSET
+        else normalize_economic_terms(economic_terms, normalized_legs)  # type: ignore[arg-type]
+    )
     _validate_leg_anchors(
         conn,
         workspace_id=old["workspace_id"],
@@ -4165,14 +4171,15 @@ def update_component(
                 expected_leg_count, expected_allocation_count,
                 expected_economic_term_count, authored_source, notes,
                 change_reason, supersedes_component_id, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 new_id, old["lineage_id"], old["workspace_id"], old["profile_id"],
                 next_revision, new_type, new_mode, new_evidence_kind,
                 new_evidence_grade, new_evidence_json, new_policy,
                 int(new_reviewed), new_conversion_json,
-                len(normalized_legs), len(normalized_allocations), authored_source,
+                len(normalized_legs), len(normalized_allocations),
+                len(normalized_economic_terms), authored_source,
                 new_notes,
                 _optional_text(change_reason, "change_reason"), component_id, timestamp,
             ),
@@ -4191,6 +4198,14 @@ def update_component(
             workspace_id=old["workspace_id"],
             profile_id=old["profile_id"],
             allocations=normalized_allocations,
+            created_at=timestamp,
+        )
+        _insert_economic_terms(
+            conn,
+            component_id=new_id,
+            workspace_id=old["workspace_id"],
+            profile_id=old["profile_id"],
+            terms=normalized_economic_terms,
             created_at=timestamp,
         )
     return get_component(conn, new_id)
@@ -4394,32 +4409,6 @@ def supersede_component(
         # effective component instead of waiting for another sync replay.
         reconcile_active_memberships(conn, profile_id=row["profile_id"])
     return get_component(conn, component_id)
-
-
-def undo_supersede(
-    conn: sqlite3.Connection,
-    component_id: str,
-    *,
-    reason: str | None = "undo_supersede",
-    new_component_id: str | None = None,
-    created_at: str | None = None,
-    authored_source: str = "user",
-) -> dict[str, Any]:
-    row = _row(conn, component_id)
-    if row["state"] != "superseded":
-        raise _error(
-            "only a superseded revision can be restored",
-            "custody_component_not_superseded",
-            details={"component_id": component_id, "state": row["state"]},
-        )
-    return update_component(
-        conn,
-        component_id,
-        change_reason=reason,
-        new_component_id=new_component_id,
-        created_at=created_at,
-        authored_source=authored_source,
-    )
 
 
 def list_components(
@@ -4682,7 +4671,6 @@ __all__ = [
     "normalize_component_header",
     "reconcile_active_memberships",
     "supersede_component",
-    "undo_supersede",
     "update_component",
     "validate_conservation",
     "validate_component_activation",

@@ -104,8 +104,6 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
-    undo_custody_component,
-    update_custody_component,
     update_transaction_pair,
 )
 from .core import audit_package as core_audit_package
@@ -421,8 +419,6 @@ SUPPORTED_KINDS = (
     "ui.transfers.dismiss",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
-    "ui.transfers.components.update",
-    "ui.transfers.components.undo",
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
     "ui.custody.coverage.snapshot",
@@ -1811,14 +1807,6 @@ def _ui_swap_matching_payload_from_conn(
             )
         return value.strip()
 
-    def component_spec() -> dict[str, Any]:
-        value = args.get("spec", args.get("component"))
-        if not isinstance(value, dict):
-            raise AppError(
-                f"{kind} requires a JSON object in spec", code="validation"
-            )
-        return value
-
     if kind == "ui.transfers.components.list":
         limit = args.get("limit", 200)
         if type(limit) is not int or not 1 <= limit <= 1000:
@@ -1856,40 +1844,27 @@ def _ui_swap_matching_payload_from_conn(
                 include_local_evidence=False,
             )
         )
-    if kind == "ui.transfers.components.update":
-        return _ui_exact_integer_payload(
-            update_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                component_spec(),
-                activate=exact_bool("activate"),
-                include_local_evidence=False,
-                authored_source=authored_source,
-            )
-        )
-    if kind == "ui.transfers.components.undo":
-        reason = args.get("reason", "undo")
-        if not isinstance(reason, str):
-            raise AppError(f"{kind} reason must be text", code="validation")
-        return _ui_exact_integer_payload(
-            undo_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                reason=reason,
-                include_local_evidence=False,
-                authored_source=authored_source,
-            )
-        )
     if kind in {"ui.transfers.components.plan", "ui.transfers.components.apply"}:
         action = args.get("action", "create")
         if action in {"activate", "supersede"}:
+            forbidden = sorted(
+                key
+                for key in ("components", "spec", "component", "activate")
+                if key in args
+            )
+            if forbidden:
+                raise AppError(
+                    f"{kind} {action} contains unsupported arguments",
+                    code="validation",
+                    details={"fields": forbidden},
+                )
             reason = args.get("reason")
             if reason is not None and not isinstance(reason, str):
                 raise AppError(f"{kind} reason must be text", code="validation")
+            if action == "activate" and reason is not None:
+                raise AppError(
+                    f"{kind} activate does not accept reason", code="validation"
+                )
             resolved_workspace, resolved_profile = resolve_scope(
                 conn, workspace, profile
             )
@@ -1920,11 +1895,77 @@ def _ui_swap_matching_payload_from_conn(
                     **kwargs,
                 )
             )
+        if action in {"revise", "undo"}:
+            if "components" in args:
+                raise AppError(
+                    f"{kind} {action} does not accept components",
+                    code="validation",
+                )
+            reason = args.get("reason", "undo" if action == "undo" else None)
+            if reason is not None and not isinstance(reason, str):
+                raise AppError(f"{kind} reason must be text", code="validation")
+            spec = args.get("spec", args.get("component"))
+            if action == "revise" and not isinstance(spec, dict):
+                raise AppError(
+                    f"{kind} requires a JSON object in spec", code="validation"
+                )
+            if action == "undo" and (spec is not None or "activate" in args):
+                raise AppError(
+                    f"{kind} undo does not accept spec or activate",
+                    code="validation",
+                )
+            resolved_workspace, resolved_profile = resolve_scope(
+                conn, workspace, profile
+            )
+            kwargs = {
+                "workspace_id": resolved_workspace["id"],
+                "profile_id": resolved_profile["id"],
+                "action": action,
+                "component_id": component_id(),
+                "spec": spec,
+                "activate": exact_bool("activate"),
+                "reason": reason,
+                "authored_source": authored_source,
+            }
+            if kind == "ui.transfers.components.plan":
+                plan = core_custody_component_planner.plan_component_revision(
+                    conn, **kwargs
+                )
+                return _ui_exact_integer_payload(
+                    core_custody_component_planner.public_component_revision_plan(
+                        plan
+                    )
+                )
+            expected_fingerprint = args.get("expected_fingerprint")
+            if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
+                raise AppError(
+                    f"{kind} requires the fingerprint returned by plan",
+                    code="validation",
+                )
+            return _ui_exact_integer_payload(
+                core_custody_component_planner.apply_component_revision(
+                    conn,
+                    expected_fingerprint=expected_fingerprint,
+                    include_local_evidence=False,
+                    **kwargs,
+                )
+            )
         if action != "create":
             raise AppError(
                 f"{kind} action is unsupported",
                 code="validation",
                 details={"action": action},
+            )
+        forbidden = sorted(
+            key
+            for key in ("component_id", "spec", "component", "reason")
+            if key in args
+        )
+        if forbidden:
+            raise AppError(
+                f"{kind} create contains unsupported arguments",
+                code="validation",
+                details={"fields": forbidden},
             )
         components = args.get("components")
         if not isinstance(components, list) or not components or not all(

@@ -231,6 +231,13 @@ binary.
    The direct CLI commands, desktop daemon kinds and CLI-handler mutation
    wrappers are deleted; desktop create and lifecycle changes consequently
    share one consent, cache invalidation and stale-plan boundary.
+   Immutable revision and undo operations now use the same boundary too. The
+   planner assigns deterministic component, leg, allocation and economic-term
+   identities without writes, retains hidden local leg evidence without
+   returning it to the renderer, and carries migrated pair/payout policy and
+   fee terms onto note-only/restored revisions. Removing a term-bound leg fails
+   closed. The direct update/undo CLI commands, daemon kinds, handler
+   orchestration and unused core undo convenience path are deleted.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 
