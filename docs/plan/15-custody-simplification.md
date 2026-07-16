@@ -214,6 +214,10 @@ binary.
    The unused specialized component-create CLI/daemon path is deleted as well;
    one-component authoring uses the same pure fingerprinted batch plan/apply
    path as N:M authoring.
+   The serialized `custody_gap_candidate_snapshots` cache is physically dropped
+   on open and removed from new schemas, reset accounting, replication policy
+   and workspace-split metadata; normalized candidate/projection rows are now
+   the only persisted gap-discovery population.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

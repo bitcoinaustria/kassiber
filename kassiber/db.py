@@ -1302,25 +1302,8 @@ CREATE TABLE IF NOT EXISTS custody_gap_reviews (
 CREATE INDEX IF NOT EXISTS idx_custody_gap_reviews_latest
     ON custody_gap_reviews(profile_id, gap_id, revision DESC);
 
--- Replaceable, privacy-safe derived discovery pages. These rows are keyed to
--- journal/review input versions, are never authored evidence, and are excluded
--- from replication/audit surfaces. Stable cursors read this population without
--- regenerating the expensive custody-gap matcher for every page.
-CREATE TABLE IF NOT EXISTS custody_gap_candidate_snapshots (
-    cache_token TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    version_json TEXT NOT NULL,
-    summary_json TEXT NOT NULL,
-    gaps_json TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_snapshots_profile
-    ON custody_gap_candidate_snapshots(profile_id);
-
 -- Replaceable local projection of one bounded gap-discovery run. Candidate
--- rows are normalized below and shared by accounting/review consumers; the
--- legacy page-snapshot table above is read-only compatibility until migration
--- cleanup proves no older binary needs it.
+-- rows are normalized below and shared by accounting/review consumers.
 CREATE TABLE IF NOT EXISTS custody_gap_candidate_projections (
     id TEXT PRIMARY KEY CHECK(length(id) = 64),
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -4263,6 +4246,10 @@ def ensure_schema_compat(conn):
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
+    # Derived serialized pages were replaced by normalized, versioned candidate
+    # rows. They carry no authored evidence or rollback history and are safe to
+    # remove atomically on open.
+    conn.execute("DROP TABLE IF EXISTS custody_gap_candidate_snapshots")
     ensure_column(
         conn,
         "chain_observer_instances",

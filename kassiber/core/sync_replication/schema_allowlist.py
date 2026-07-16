@@ -740,7 +740,6 @@ NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset(
         "ai_chat_sessions",
         "ai_chat_messages",
         "custody_ai_assistance_audits",
-        "custody_gap_candidate_snapshots",
         "custody_gap_candidate_projections",
         "custody_gap_candidates",
         "custody_gap_candidate_boundaries",

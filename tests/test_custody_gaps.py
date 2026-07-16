@@ -5,8 +5,10 @@ from datetime import datetime, timedelta, timezone
 import json
 import random
 import sqlite3
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from kassiber.core import custody_gap_reviews, custody_gaps
@@ -16,9 +18,52 @@ from kassiber.core.custody_gaps import (
     build_gap_snapshot,
     suggest_custody_gap_candidates,
 )
+from kassiber.db import open_db
 
 
 BTC_MSAT = 100_000_000_000
+
+
+class CustodyGapLegacySchemaMigrationTests(unittest.TestCase):
+    def test_open_drops_serialized_candidate_page_table(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = open_db(Path(root) / "data")
+            conn.execute(
+                """
+                CREATE TABLE custody_gap_candidate_snapshots (
+                    cache_token TEXT PRIMARY KEY,
+                    profile_id TEXT NOT NULL,
+                    version_json TEXT NOT NULL,
+                    summary_json TEXT NOT NULL,
+                    gaps_json TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO custody_gap_candidate_snapshots VALUES "
+                "('legacy', 'profile', '[]', '{}', '[]')"
+            )
+            conn.commit()
+            conn.close()
+
+            migrated = open_db(Path(root) / "data")
+            try:
+                self.assertIsNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' "
+                        "AND name = 'custody_gap_candidate_snapshots'"
+                    ).fetchone()
+                )
+                self.assertIsNotNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' "
+                        "AND name = 'custody_gap_candidates'"
+                    ).fetchone()
+                )
+            finally:
+                migrated.close()
 
 
 def _row(
@@ -1058,13 +1103,6 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 reason TEXT NOT NULL,
                 blocks_from TEXT
             );
-            CREATE TABLE custody_gap_candidate_snapshots (
-                cache_token TEXT PRIMARY KEY,
-                profile_id TEXT NOT NULL,
-                version_json TEXT NOT NULL,
-                summary_json TEXT NOT NULL,
-                gaps_json TEXT NOT NULL
-            );
             CREATE TABLE custody_gap_candidate_projections (
                 id TEXT PRIMARY KEY, profile_id TEXT NOT NULL,
                 producer_kind TEXT NOT NULL DEFAULT 'review',
@@ -1215,34 +1253,6 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 (projection["id"],),
             ).fetchone()[0],
             len(first["gaps"]),
-        )
-        self.assertEqual(
-            self.conn.execute(
-                "SELECT COUNT(*) FROM custody_gap_candidate_snapshots"
-            ).fetchone()[0],
-            0,
-        )
-
-    def test_normalized_projection_clears_legacy_serialized_cache_atomically(self):
-        self.conn.execute(
-            "INSERT INTO custody_gap_candidate_snapshots("
-            "cache_token, profile_id, version_json, summary_json, gaps_json) "
-            "VALUES ('legacy', 'profile-one', '[]', '{}', '[]')"
-        )
-
-        build_gap_snapshot(self.conn, "profile-one")
-
-        self.assertEqual(
-            self.conn.execute(
-                "SELECT COUNT(*) FROM custody_gap_candidate_snapshots"
-            ).fetchone()[0],
-            0,
-        )
-        self.assertEqual(
-            self.conn.execute(
-                "SELECT COUNT(*) FROM custody_gap_candidate_projections"
-            ).fetchone()[0],
-            1,
         )
 
     def test_normalized_projection_persists_excess_return_candidate(self):

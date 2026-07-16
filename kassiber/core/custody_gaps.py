@@ -1242,13 +1242,6 @@ def _persist_candidate_projection(
                 profile_id,
             ),
         )
-        # Serialized page populations are derived and have no rollback/audit
-        # value. Clear the legacy cache after the normalized replacement is
-        # safely present; the table remains only so older databases can open.
-        conn.execute(
-            "DELETE FROM custody_gap_candidate_snapshots WHERE profile_id = ?",
-            (profile_id,),
-        )
         conn.execute(f"RELEASE SAVEPOINT {savepoint}")
         if owns_transaction:
             conn.commit()

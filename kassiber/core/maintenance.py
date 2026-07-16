@@ -227,9 +227,6 @@ def reset_current_profile_data(
         "custody_gap_reviews": _count_profile_rows(
             conn, "custody_gap_reviews", profile_id
         ),
-        "custody_gap_candidate_snapshots": _count_profile_rows(
-            conn, "custody_gap_candidate_snapshots", profile_id
-        ),
         "custody_gap_candidate_projections": _count_profile_rows(
             conn, "custody_gap_candidate_projections", profile_id
         ),
@@ -456,7 +453,6 @@ def reset_current_profile_data(
             "custody_filed_report_impacts",
             "filed_report_snapshots",
             "custody_authored_evidence_snapshots",
-            "custody_gap_candidate_snapshots",
             "custody_gap_projection_rows",
             "custody_gap_candidate_boundaries",
             "custody_gap_candidates",
