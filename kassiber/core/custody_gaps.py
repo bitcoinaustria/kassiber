@@ -161,6 +161,20 @@ class CustodyGapCandidate:
 
 
 @dataclass(frozen=True)
+class CustodyGapSearchResult:
+    """Ordinary result for a complete or capacity-bounded advisory search."""
+
+    candidates: tuple[CustodyGapCandidate, ...]
+    accounting_candidates: tuple[CustodyGapCandidate, ...]
+    search_complete: bool
+    limit_kind: str | None = None
+    candidate_count: int = 0
+    promotion_eligible_count: int = 0
+    blocking_source_ids: tuple[str, ...] = ()
+    message: str | None = None
+
+
+@dataclass(frozen=True)
 class _Leg:
     id: str
     profile_id: str
@@ -461,6 +475,60 @@ def suggest_custody_gap_candidates(
     return stamped
 
 
+def search_custody_gap_candidates(
+    rows: Sequence[Mapping[str, Any]],
+    **kwargs: Any,
+) -> CustodyGapSearchResult:
+    """Return advisory candidates and explicit search-completeness metadata.
+
+    This is the production boundary. The legacy list/exception API remains
+    temporarily available to callers outside the canonical journal seam.
+    """
+
+    try:
+        candidates = tuple(suggest_custody_gap_candidates(rows, **kwargs))
+    except CustodyGapSearchLimitError as exc:
+        visible = tuple(
+            item
+            for item in exc.partial_candidates
+            if isinstance(item, CustodyGapCandidate)
+        )
+        accounting = tuple(
+            item
+            for item in exc.accounting_candidates
+            if isinstance(item, CustodyGapCandidate)
+        )
+        return CustodyGapSearchResult(
+            candidates=visible,
+            accounting_candidates=accounting,
+            search_complete=False,
+            limit_kind=exc.limit_kind,
+            candidate_count=(
+                int(exc.candidate_count)
+                if exc.candidate_count is not None
+                else len(visible)
+            ),
+            promotion_eligible_count=(
+                int(exc.promotion_eligible_count)
+                if exc.promotion_eligible_count is not None
+                else sum(item.promotion_eligible for item in visible)
+            ),
+            blocking_source_ids=tuple(exc.blocking_source_ids),
+            message=str(exc),
+        )
+    return CustodyGapSearchResult(
+        candidates=candidates,
+        accounting_candidates=tuple(
+            item for item in candidates if item.promotion_eligible
+        ),
+        search_complete=True,
+        candidate_count=len(candidates),
+        promotion_eligible_count=sum(
+            item.promotion_eligible for item in candidates
+        ),
+    )
+
+
 def build_gap_snapshot(
     conn,
     profile_id: str,
@@ -515,28 +583,13 @@ def build_gap_snapshot(
     # Page size must not change matcher semantics. Every page is cut from the
     # same bounded advisory population; an incomplete population is labelled
     # explicitly rather than represented as a global accounting failure.
-    search_limit: CustodyGapSearchLimitError | None = None
-    try:
-        candidates, normalized = load_gap_candidates(
-            conn,
-            profile_id,
-            limit=DEFAULT_MAX_CANDIDATES,
-            include_journal_claims=journal_status == "current",
-        )
-    except CustodyGapSearchLimitError as exc:
-        # Suggestions are advisory. Preserve any deterministic prefix that was
-        # fully scored, disclose that discovery is incomplete, and continue to
-        # report canonical readiness independently. A capacity limit is never
-        # evidence that custody or tax basis is wrong.
-        search_limit = exc
-        candidates = [
-            item
-            for item in exc.partial_candidates
-            if isinstance(item, CustodyGapCandidate)
-        ]
-        normalized = [
-            item for item in exc.normalized_legs if isinstance(item, _Leg)
-        ]
+    search_result, normalized = load_gap_search_result(
+        conn,
+        profile_id,
+        limit=DEFAULT_MAX_CANDIDATES,
+        include_journal_claims=journal_status == "current",
+    )
+    candidates = list(search_result.candidates)
     if gap_id is not None:
         candidates = [
             candidate for candidate in candidates if candidate.gap_id == gap_id
@@ -644,17 +697,15 @@ def build_gap_snapshot(
         "canonical_status_text": canonical["status_text"],
         "derived_state_current": canonical["derived_state_current"],
         "qualification": canonical["qualification"],
-        "search_complete": search_limit is None,
+        "search_complete": search_result.search_complete,
         "search_status": (
-            "complete" if search_limit is None else "capacity_limited"
+            "complete" if search_result.search_complete else "capacity_limited"
         ),
-        "search_limit_kind": (
-            None if search_limit is None else search_limit.limit_kind
-        ),
+        "search_limit_kind": search_result.limit_kind,
         "search_candidate_count": (
             len(candidates)
-            if search_limit is None or search_limit.candidate_count is None
-            else search_limit.candidate_count
+            if search_result.search_complete
+            else search_result.candidate_count
         ),
     }
     next_cursor = None
@@ -794,14 +845,14 @@ def _decode_snapshot_cursor(cursor: str) -> tuple[str, int]:
     return parts[1], offset
 
 
-def load_gap_candidates(
+def load_gap_search_result(
     conn: sqlite3.Connection,
     profile_id: str,
     *,
     limit: int = DEFAULT_MAX_CANDIDATES,
     include_journal_claims: bool | None = None,
-) -> tuple[list[CustodyGapCandidate], list[_Leg]]:
-    """Load the bounded current candidate set and normalized safe legs."""
+) -> tuple[CustodyGapSearchResult, list[_Leg]]:
+    """Load candidates with ordinary search-completeness metadata."""
 
     row_count = conn.execute(
         "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0",
@@ -963,44 +1014,62 @@ def load_gap_candidates(
         include_journal_claims=include_journal_claims,
     )
     normalized = [leg for row in rows if (leg := _normalize_leg(row, set())) is not None]
-    try:
-        worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
-        candidates = suggest_custody_gap_candidates(
-            rows,
-            ignored_ids=claimed_ids,
-            max_input_rows=worklist_threshold,
-            max_candidates=limit,
+    worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
+    result = search_custody_gap_candidates(
+        rows,
+        ignored_ids=claimed_ids,
+        max_input_rows=worklist_threshold,
+        max_candidates=limit,
+    )
+    if large_book and result.search_complete:
+        result = replace(
+            result,
+            accounting_candidates=(),
+            search_complete=False,
+            limit_kind="boundary_worklist",
+            promotion_eligible_count=0,
+            message="custody-gap search used a bounded large-book worklist",
         )
-        if large_book:
-            raise CustodyGapSearchLimitError(
-                "custody-gap search used a bounded large-book worklist",
-                candidate_count=len(candidates),
-                promotion_eligible_count=0,
-                limit_kind="boundary_worklist",
-                partial_candidates=candidates,
-                normalized_legs=normalized,
-            )
-    except CustodyGapSearchLimitError as exc:
-        exc.normalized_legs = tuple(normalized)
-        raise
-    return candidates, normalized
+    return result, normalized
+
+
+def load_gap_candidates(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    limit: int = DEFAULT_MAX_CANDIDATES,
+    include_journal_claims: bool | None = None,
+) -> tuple[list[CustodyGapCandidate], list[_Leg]]:
+    """Compatibility wrapper for the former list/exception API."""
+
+    result, normalized = load_gap_search_result(
+        conn,
+        profile_id,
+        limit=limit,
+        include_journal_claims=include_journal_claims,
+    )
+    if not result.search_complete:
+        raise CustodyGapSearchLimitError(
+            result.message or "custody-gap search is incomplete",
+            candidate_count=result.candidate_count,
+            promotion_eligible_count=result.promotion_eligible_count,
+            limit_kind=result.limit_kind or "capacity",
+            partial_candidates=result.candidates,
+            accounting_candidates=result.accounting_candidates,
+            normalized_legs=normalized,
+            blocking_source_ids=result.blocking_source_ids,
+        )
+    return list(result.candidates), normalized
 
 
 def find_gap_candidate(
     conn: sqlite3.Connection, profile_id: str, gap_id: str
 ) -> CustodyGapCandidate:
-    try:
-        candidates, _normalized = load_gap_candidates(conn, profile_id)
-    except CustodyGapSearchLimitError as exc:
-        # A fully scored prefix remains safe to review even though the advisory
-        # queue is incomplete. The action still re-derives and fingerprints the
-        # exact candidate; this does not imply anything about omitted hints.
-        candidates = [
-            item
-            for item in exc.partial_candidates
-            if isinstance(item, CustodyGapCandidate)
-        ]
-    for candidate in candidates:
+    result, _normalized = load_gap_search_result(conn, profile_id)
+    # A fully scored prefix remains safe to review even though the advisory
+    # queue is incomplete. The action still re-derives and fingerprints the
+    # exact candidate; this does not imply anything about omitted hints.
+    for candidate in result.candidates:
         if candidate.gap_id == gap_id:
             return candidate
     raise AppError(

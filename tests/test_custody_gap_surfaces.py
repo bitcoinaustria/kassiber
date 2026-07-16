@@ -8,7 +8,6 @@ from unittest.mock import Mock, patch
 
 from kassiber.ai.tools import get_tool
 from kassiber.ai.prompt import build_openai_tools
-from kassiber.core.custody_gaps import CustodyGapSearchLimitError
 from kassiber.core.ui_snapshot import build_custody_lineage_snapshot
 from kassiber.daemon import (
     AiToolRuntime,
@@ -564,7 +563,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         self.assertEqual(preview["reason"], "local_provider_required")
         self.assertEqual(create["reason"], "local_provider_required")
 
-    def test_bounded_search_failure_does_not_claim_an_empty_queue(self):
+    def test_bounded_search_is_an_ordinary_incomplete_queue_result(self):
         with (
             patch(
                 "kassiber.daemon.resolve_scope",
@@ -572,16 +571,26 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             ),
             patch(
                 "kassiber.daemon.core_custody_gaps.build_gap_snapshot",
-                side_effect=CustodyGapSearchLimitError("too many rows"),
+                return_value={
+                    "summary": {
+                        "search_complete": False,
+                        "search_status": "capacity_limited",
+                        "search_limit_kind": "candidate_population",
+                        "search_candidate_count": 5_541,
+                    },
+                    "gaps": [],
+                    "next_cursor": None,
+                },
             ),
-            self.assertRaises(AppError) as raised,
         ):
-            _ui_custody_gap_payload_from_conn(
+            payload = _ui_custody_gap_payload_from_conn(
                 sqlite3.connect(":memory:"),
                 "ui.custody.gaps.list",
                 {},
             )
-        self.assertEqual(raised.exception.code, "custody_gap_search_limit")
+        self.assertFalse(payload["summary"]["search_complete"])
+        self.assertEqual(payload["summary"]["search_status"], "capacity_limited")
+        self.assertEqual(payload["summary"]["search_candidate_count"], 5_541)
 
 
 if __name__ == "__main__":

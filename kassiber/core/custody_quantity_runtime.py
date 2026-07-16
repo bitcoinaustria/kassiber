@@ -25,8 +25,7 @@ from .custody_evidence import (
 from .custody_gap_claims import compile_gap_candidate_claims
 from .custody_gap_reviews import candidate_fingerprint
 from .custody_gaps import (
-    CustodyGapSearchLimitError,
-    suggest_custody_gap_candidates,
+    search_custody_gap_candidates,
 )
 from .custody_native_audit import compile_verified_native_claims
 from .custody_quantity import (
@@ -527,16 +526,17 @@ def _gap_candidate_claims_and_issues(
 
     ignored = tuple(sorted({str(item) for item in ignored_transaction_ids if item}))
     capacity_blocking_source_ids: set[str] = set()
-    try:
-        candidates = suggest_custody_gap_candidates(rows, ignored_ids=ignored)
-    except CustodyGapSearchLimitError as exc:
+    search_result = search_custody_gap_candidates(rows, ignored_ids=ignored)
+    if search_result.search_complete:
+        candidates = search_result.candidates
+    else:
         # Candidate search is advisory. Capacity says only that suggestions are
         # incomplete; it is not itself evidence about any physical quantity.
         # A population ceiling can, however, be reached *after* structured
         # candidates were completely scored. Preserve those candidates for
         # canonical accounting even though the UI queue remains bounded.
-        candidates = tuple(exc.accounting_candidates)
-        capacity_blocking_source_ids.update(exc.blocking_source_ids)
+        candidates = search_result.accounting_candidates
+        capacity_blocking_source_ids.update(search_result.blocking_source_ids)
         if not candidates and not capacity_blocking_source_ids:
             return (), (), ()
 

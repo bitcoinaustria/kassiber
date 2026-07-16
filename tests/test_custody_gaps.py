@@ -12,6 +12,7 @@ from unittest.mock import patch
 from kassiber.core import custody_gaps
 from kassiber.core.custody_gaps import (
     CustodyGapSearchLimitError,
+    CustodyGapSearchResult,
     build_gap_snapshot,
     suggest_custody_gap_candidates,
 )
@@ -1275,9 +1276,16 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         historical = [*reviewed, *actionable]
         with (
             patch(
-                "kassiber.core.custody_gaps.load_gap_candidates",
-                return_value=([], []),
-            ) as load_candidates,
+                "kassiber.core.custody_gaps.load_gap_search_result",
+                return_value=(
+                    CustodyGapSearchResult(
+                        candidates=(),
+                        accounting_candidates=(),
+                        search_complete=True,
+                    ),
+                    [],
+                ),
+            ) as load_search,
             patch(
                 "kassiber.core.custody_gap_reviews.latest_reviews",
                 return_value={},
@@ -1299,7 +1307,7 @@ class CustodyGapSnapshotTests(unittest.TestCase):
 
         self.assertEqual(first["summary"]["total"], 106)
         self.assertEqual(
-            [call.kwargs["limit"] for call in load_candidates.call_args_list],
+            [call.kwargs["limit"] for call in load_search.call_args_list],
             [custody_gaps.DEFAULT_MAX_CANDIDATES],
         )
         self.assertEqual(first["summary"]["needs_review"], 101)
@@ -1324,8 +1332,15 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         ]
         with (
             patch(
-                "kassiber.core.custody_gaps.load_gap_candidates",
-                return_value=([], []),
+                "kassiber.core.custody_gaps.load_gap_search_result",
+                return_value=(
+                    CustodyGapSearchResult(
+                        candidates=(),
+                        accounting_candidates=(),
+                        search_complete=True,
+                    ),
+                    [],
+                ),
             ),
             patch(
                 "kassiber.core.custody_gap_reviews.latest_reviews",
@@ -1362,16 +1377,18 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         candidate = custody_gaps.load_gap_candidates(
             self.conn, "profile-one"
         )[0][0]
-        limited = CustodyGapSearchLimitError(
-            "bounded advisory search reached capacity",
+        limited = CustodyGapSearchResult(
+            candidates=(candidate,),
+            accounting_candidates=(),
+            search_complete=False,
+            message="bounded advisory search reached capacity",
             candidate_count=5_541,
             promotion_eligible_count=12,
             limit_kind="candidate_population",
-            partial_candidates=(candidate,),
         )
         with patch(
-            "kassiber.core.custody_gaps.load_gap_candidates",
-            side_effect=limited,
+            "kassiber.core.custody_gaps.load_gap_search_result",
+            return_value=(limited, []),
         ):
             snapshot = build_gap_snapshot(self.conn, "profile-one")
             found = custody_gaps.find_gap_candidate(

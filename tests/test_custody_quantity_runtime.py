@@ -6,7 +6,7 @@ from unittest.mock import patch
 from kassiber.core.custody_evidence import EvidenceSnapshot
 from kassiber.core.custody_gap_reviews import candidate_fingerprint
 from kassiber.core.custody_gaps import (
-    CustodyGapSearchLimitError,
+    CustodyGapSearchResult,
     suggest_custody_gap_candidates,
 )
 from kassiber.core.custody_quantity import (
@@ -678,9 +678,13 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         ]
 
         with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "candidate population exceeds its hard ceiling"
+            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
+            return_value=CustodyGapSearchResult(
+                candidates=(),
+                accounting_candidates=(),
+                search_complete=False,
+                limit_kind="candidate_population",
+                message="candidate population exceeds its hard ceiling",
             ),
         ):
             state = build_canonical_quantity_state(rows)
@@ -708,11 +712,15 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         ]
 
         with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "weak candidate population exceeds its display ceiling",
+            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
+            return_value=CustodyGapSearchResult(
+                candidates=(),
+                accounting_candidates=(),
+                search_complete=False,
+                limit_kind="candidate_population",
                 candidate_count=5_541,
                 promotion_eligible_count=0,
+                message="weak candidate population exceeds its display ceiling",
             ),
         ):
             state = build_canonical_quantity_state(rows)
@@ -748,12 +756,16 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         )
 
         with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "structured boundary return worklist is incomplete",
-                blocking_source_ids=("out",),
-                partial_candidates=(sampled_candidate,),
+            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
+            return_value=CustodyGapSearchResult(
+                candidates=(sampled_candidate,),
+                accounting_candidates=(),
+                search_complete=False,
                 limit_kind="boundary_worklist",
+                blocking_source_ids=("out",),
+                candidate_count=1,
+                promotion_eligible_count=1,
+                message="structured boundary return worklist is incomplete",
             ),
         ):
             state = build_canonical_quantity_state(
@@ -821,14 +833,15 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         )
 
         with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "candidate population exceeds its display ceiling",
+            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
+            return_value=CustodyGapSearchResult(
+                candidates=(),
+                accounting_candidates=(candidate,),
+                search_complete=False,
+                limit_kind="candidate_population",
                 candidate_count=501,
                 promotion_eligible_count=1,
-                partial_candidates=(),
-                accounting_candidates=(candidate,),
-                limit_kind="candidate_population",
+                message="candidate population exceeds its display ceiling",
             ),
         ):
             state = build_canonical_quantity_state(rows)

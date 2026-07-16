@@ -2455,24 +2455,13 @@ def _ui_custody_gap_payload_from_conn(
                 commit=commit,
             )
         )
-    try:
-        raw_payload = core_custody_gaps.build_gap_snapshot(
-            conn,
-            profile["id"],
-            gap_id=gap_id,
-            limit=1 if gap_id else limit,
-            cursor=raw_cursor if kind == "ui.custody.gaps.list" else None,
-        )
-    except core_custody_gaps.CustodyGapSearchLimitError as exc:
-        raise AppError(
-            "The custody-gap scan is too large for the bounded review search",
-            code="custody_gap_search_limit",
-            hint=(
-                "Narrow the imported history or use a future indexed custody-gap "
-                "scan before treating the review queue as clear."
-            ),
-            retryable=False,
-        ) from exc
+    raw_payload = core_custody_gaps.build_gap_snapshot(
+        conn,
+        profile["id"],
+        gap_id=gap_id,
+        limit=1 if gap_id else limit,
+        cursor=raw_cursor if kind == "ui.custody.gaps.list" else None,
+    )
     raw_summary = raw_payload.get("summary", {})
     payload = {
         "summary": {

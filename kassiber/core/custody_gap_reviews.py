@@ -742,25 +742,25 @@ def backfill_legacy_componentless_review_relations(
     if not pending:
         return 0
 
-    from .custody_gaps import CustodyGapSearchLimitError, load_gap_candidates
+    from .custody_gaps import load_gap_search_result
 
     inserted = 0
     by_profile: dict[str, list[Mapping[str, Any]]] = {}
     for row in pending:
         by_profile.setdefault(str(row["profile_id"]), []).append(row)
     for profile_id, reviews in by_profile.items():
-        try:
-            candidates, _ = load_gap_candidates(
-                conn,
-                profile_id,
-                include_journal_claims=False,
+        search_result, _ = load_gap_search_result(
+            conn,
+            profile_id,
+            include_journal_claims=False,
+        )
+        candidates = {
+            candidate.gap_id: candidate
+            for candidate in (
+                *search_result.candidates,
+                *search_result.accounting_candidates,
             )
-        except CustodyGapSearchLimitError as exc:
-            candidates = [
-                candidate
-                for candidate in (*exc.partial_candidates, *exc.accounting_candidates)
-                if isinstance(candidate, CustodyGapCandidate)
-            ]
+        }.values()
         exact = {
             (candidate.gap_id, candidate_fingerprint(candidate)): candidate
             for candidate in candidates
