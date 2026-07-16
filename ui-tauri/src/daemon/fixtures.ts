@@ -904,12 +904,6 @@ export const fixtures: Record<string, unknown> = {
     ...MOCK_CUSTODY_COMPONENT,
     revision: 2,
   },
-  "ui.transfers.components.activate": MOCK_CUSTODY_COMPONENT,
-  "ui.transfers.components.supersede": {
-    ...MOCK_CUSTODY_COMPONENT,
-    state: "superseded",
-    effective_state: "superseded",
-  },
   "ui.transfers.components.undo": MOCK_CUSTODY_COMPONENT,
   "ui.transfers.components.plan": {
     fingerprint: "a".repeat(64),

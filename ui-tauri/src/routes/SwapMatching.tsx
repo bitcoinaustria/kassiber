@@ -940,10 +940,6 @@ function CustodyComponentResolver() {
     useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.apply");
   const updateMutation =
     useDaemonMutation<CustodyComponent>("ui.transfers.components.update");
-  const activateMutation =
-    useDaemonMutation<CustodyComponent>("ui.transfers.components.activate");
-  const supersedeMutation =
-    useDaemonMutation<CustodyComponent>("ui.transfers.components.supersede");
   const undoMutation =
     useDaemonMutation<CustodyComponent>("ui.transfers.components.undo");
 
@@ -952,8 +948,8 @@ function CustodyComponentResolver() {
     [componentQuery.data?.data],
   );
   const mutationPending =
-    activateMutation.isPending ||
-    supersedeMutation.isPending ||
+    previewMutation.isPending ||
+    bulkMutation.isPending ||
     undoMutation.isPending ||
     updateMutation.isPending;
   const batchPending = previewMutation.isPending || bulkMutation.isPending;
@@ -1087,15 +1083,24 @@ function CustodyComponentResolver() {
     setPendingComponentId(component.id);
     setActionError(null);
     try {
-      if (action === "activate") {
-        await activateMutation.mutateAsync({ component_id: component.id });
-      } else if (action === "supersede" || action === "retire") {
-        await supersedeMutation.mutateAsync({
+      if (action === "activate" || action === "supersede" || action === "retire") {
+        const planArgs = {
+          action: action === "activate" ? "activate" : "supersede",
           component_id: component.id,
           reason:
             action === "retire"
               ? "desktop_custody_review_retire"
-              : "desktop_custody_review_supersede",
+              : action === "supersede"
+                ? "desktop_custody_review_supersede"
+                : undefined,
+        };
+        const previewResponse = await previewMutation.mutateAsync(planArgs);
+        if (!previewResponse.data?.fingerprint) {
+          throw new Error(t("swap.components.backendError.unexpected"));
+        }
+        await bulkMutation.mutateAsync({
+          ...planArgs,
+          expected_fingerprint: previewResponse.data.fingerprint,
         });
       } else {
         const response = await undoMutation.mutateAsync({

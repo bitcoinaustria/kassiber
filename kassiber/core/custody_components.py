@@ -4207,12 +4207,12 @@ def _activation_error(component: Mapping[str, Any]) -> AppError:
     )
 
 
-def activate_component(
+def validate_component_activation(
     conn: sqlite3.Connection,
     component_id: str,
-    *,
-    activated_at: str | None = None,
 ) -> dict[str, Any]:
+    """Return the current component iff activation would be valid, without writes."""
+
     component = get_component(conn, component_id)
     if component["state"] == "superseded":
         raise _error(
@@ -4248,6 +4248,16 @@ def activate_component(
         failed = dict(component)
         failed["validation"] = validation
         raise _activation_error(failed)
+    return component
+
+
+def activate_component(
+    conn: sqlite3.Connection,
+    component_id: str,
+    *,
+    activated_at: str | None = None,
+) -> dict[str, Any]:
+    component = validate_component_activation(conn, component_id)
     if component["state"] == "active":
         # Idempotent reads of a received active revision must not manufacture a
         # device-local activation snapshot from the receiver's current rows.
@@ -4675,6 +4685,7 @@ __all__ = [
     "undo_supersede",
     "update_component",
     "validate_conservation",
+    "validate_component_activation",
     "validate_component_plan",
     "validate_planned_active_batch",
 ]

@@ -583,9 +583,123 @@ def public_component_batch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def plan_component_state_change(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    component_id: str,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Plan activation or supersession without mutating component state."""
+
+    if action not in {"activate", "supersede"}:
+        raise _error("Custody component state action is unsupported", action=action)
+    profile = _scope(conn, workspace_id, profile_id)
+    component = custody_components.get_component(
+        conn,
+        component_id,
+        profile_id=profile_id,
+        include_local_evidence=True,
+    )
+    if action == "activate":
+        component = custody_components.validate_component_activation(
+            conn, component_id
+        )
+        resulting_state = "active"
+    else:
+        resulting_state = "superseded"
+    component_commitment = _batch_fingerprint(component)
+    commitment = {
+        "schema_version": 1,
+        "workspace_id": workspace_id,
+        "profile_id": profile_id,
+        "input_version": int(profile["journal_input_version"] or 0),
+        "action": action,
+        "component_id": component_id,
+        "component_commitment": component_commitment,
+        "current_state": component["state"],
+        "resulting_state": resulting_state,
+        "reason": reason or "",
+    }
+    public_component = custody_components.get_component(
+        conn,
+        component_id,
+        profile_id=profile_id,
+        include_local_evidence=False,
+    )
+    return {
+        **commitment,
+        "fingerprint": _batch_fingerprint(commitment),
+        "component": public_component,
+        "dry_run": True,
+        "requires_explicit_confirmation": True,
+    }
+
+
+def apply_component_state_change(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    component_id: str,
+    expected_fingerprint: str,
+    reason: str | None = None,
+    include_local_evidence: bool = False,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Persist the current state-change plan after exact fingerprint checking."""
+
+    plan = plan_component_state_change(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        action=action,
+        component_id=component_id,
+        reason=reason,
+    )
+    if not isinstance(expected_fingerprint, str) or not hmac.compare_digest(
+        plan["fingerprint"], expected_fingerprint
+    ):
+        raise _error(
+            "Custody component plan is stale",
+            code="custody_review_plan_stale",
+            expected_fingerprint=expected_fingerprint,
+            current_fingerprint=plan["fingerprint"],
+        )
+    savepoint = f"custody_component_state_apply_{uuid.uuid4().hex}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        if action == "activate":
+            component = custody_components.activate_component(conn, component_id)
+        else:
+            component = custody_components.supersede_component(
+                conn, component_id, reason=reason
+            )
+        if not include_local_evidence:
+            component = custody_components.get_component(
+                conn,
+                component["id"],
+                profile_id=profile_id,
+                include_local_evidence=False,
+            )
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    if commit:
+        conn.commit()
+    return {"fingerprint": plan["fingerprint"], "component": component}
+
+
 __all__ = [
     "MAX_COMPONENTS",
     "apply_component_batch",
+    "apply_component_state_change",
     "plan_component_batch",
+    "plan_component_state_change",
     "public_component_batch_plan",
 ]

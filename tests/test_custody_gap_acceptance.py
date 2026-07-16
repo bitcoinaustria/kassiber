@@ -227,10 +227,12 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
         )["data"]
         self.assertEqual(created["status"], "resolved")
 
-        superseded = _run_cli(
+        supersede_plan = _run_cli(
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "supersede",
             "--component-id",
             created["component_id"],
@@ -238,6 +240,21 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             "review correction",
             *self._scope(),
         )["data"]
+        superseded = _run_cli(
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "supersede",
+            "--component-id",
+            created["component_id"],
+            "--reason",
+            "review correction",
+            "--expected-fingerprint",
+            supersede_plan["fingerprint"],
+            *self._scope(),
+        )["data"]["component"]
         self.assertEqual(superseded["state"], "superseded")
 
         revised = _run_cli(

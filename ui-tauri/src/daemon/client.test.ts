@@ -267,8 +267,6 @@ describe("daemon mutation invalidation scope", () => {
     for (const kind of [
       "ui.transfers.components.apply",
       "ui.transfers.components.update",
-      "ui.transfers.components.activate",
-      "ui.transfers.components.supersede",
       "ui.transfers.components.undo",
     ]) {
       expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
@@ -281,7 +279,7 @@ describe("daemon mutation invalidation scope", () => {
     }
     expect(
       invalidatedDaemonQueryKindsForMutation(
-        "ui.transfers.components.activate",
+        "ui.transfers.components.apply",
       ),
     ).toContain("ui.journals.snapshot");
   });

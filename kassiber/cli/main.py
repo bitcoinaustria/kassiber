@@ -59,7 +59,6 @@ from .handlers import (
     cmd_init,
     cmd_status,
     apply_transfer_rules,
-    activate_custody_component,
     bulk_resolve_custody_components,
     plan_bulk_custody_components,
     bulk_pair_transfers,
@@ -116,7 +115,6 @@ from .handlers import (
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
-    supersede_custody_component,
     undo_custody_component,
     update_custody_component,
     update_transaction_pair,
@@ -125,6 +123,7 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_components as core_custody_components
+from ..core import custody_component_planner as core_custody_component_planner
 from ..core import custody_filed_reports as core_custody_filed_reports
 from ..core import custody_gaps as core_custody_gaps
 from ..core import custody_gap_reviews as core_custody_gap_reviews
@@ -2282,23 +2281,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Activate the new revision after validation",
     )
 
-    transfers_components_activate = transfers_components_sub.add_parser(
-        "activate", help="Make a complete custody component effective"
-    )
-    _add_workspace_profile_args(transfers_components_activate)
-    transfers_components_activate.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-
-    transfers_components_supersede = transfers_components_sub.add_parser(
-        "supersede", help="Deactivate an authored component without deleting evidence"
-    )
-    _add_workspace_profile_args(transfers_components_supersede)
-    transfers_components_supersede.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-    transfers_components_supersede.add_argument("--reason")
-
     transfers_components_undo = transfers_components_sub.add_parser(
         "undo", help="Restore a superseded component as a new draft revision"
     )
@@ -2316,9 +2298,17 @@ def build_parser() -> argparse.ArgumentParser:
             command_name, help=help_text
         )
         _add_workspace_profile_args(component_review)
-        component_review.add_argument("--action", required=True, choices=("create",))
-        _add_json_document_args(
-            component_review, label="component array or bulk object"
+        component_review.add_argument(
+            "--action", required=True, choices=("create", "activate", "supersede")
+        )
+        component_review.add_argument("--component-id", dest="component_id")
+        component_review.add_argument("--reason")
+        component_source = component_review.add_mutually_exclusive_group()
+        component_source.add_argument(
+            "--json", dest="json_text", help="Inline component array JSON"
+        )
+        component_source.add_argument(
+            "--file", dest="json_file", help="Component array JSON file"
         )
         component_review.add_argument(
             "--draft",
@@ -4363,27 +4353,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         activate=args.activate,
                     ),
                 )
-            if args.transfers_components_command == "activate":
-                return emit(
-                    args,
-                    activate_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                    ),
-                )
-            if args.transfers_components_command == "supersede":
-                return emit(
-                    args,
-                    supersede_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                        reason=args.reason,
-                    ),
-                )
             if args.transfers_components_command == "undo":
                 return emit(
                     args,
@@ -4396,6 +4365,37 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     ),
                 )
             if args.transfers_components_command in {"plan", "apply"}:
+                workspace, profile = resolve_scope(
+                    conn, args.workspace, args.profile
+                )
+                if args.action in {"activate", "supersede"}:
+                    if not args.component_id:
+                        raise AppError(
+                            f"component_id is required for {args.action}",
+                            code="validation",
+                        )
+                    kwargs = {
+                        "workspace_id": workspace["id"],
+                        "profile_id": profile["id"],
+                        "action": args.action,
+                        "component_id": args.component_id,
+                        "reason": args.reason,
+                    }
+                    if args.transfers_components_command == "plan":
+                        return emit(
+                            args,
+                            core_custody_component_planner.plan_component_state_change(
+                                conn, **kwargs
+                            ),
+                        )
+                    return emit(
+                        args,
+                        core_custody_component_planner.apply_component_state_change(
+                            conn,
+                            expected_fingerprint=args.expected_fingerprint,
+                            **kwargs,
+                        ),
+                    )
                 specs = _read_json_document(
                     args.json_text,
                     args.json_file,

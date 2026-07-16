@@ -1299,34 +1299,6 @@ def get_custody_component(
     )
 
 
-def activate_custody_component(
-    conn,
-    workspace_ref,
-    profile_ref,
-    component_id,
-    *,
-    include_local_evidence=True,
-):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    core_custody_components.get_component(
-        conn, component_id, profile_id=profile["id"], include_local_evidence=False
-    )
-    try:
-        result = core_custody_components.activate_component(conn, component_id)
-        if not include_local_evidence:
-            result = core_custody_components.get_component(
-                conn,
-                result["id"],
-                profile_id=profile["id"],
-                include_local_evidence=False,
-            )
-        conn.commit()
-        return result
-    except Exception:
-        conn.rollback()
-        raise
-
-
 def update_custody_component(
     conn,
     workspace_ref,
@@ -1389,37 +1361,6 @@ def update_custody_component(
         )
         if activate:
             result = core_custody_components.activate_component(conn, result["id"])
-        if not include_local_evidence:
-            result = core_custody_components.get_component(
-                conn,
-                result["id"],
-                profile_id=profile["id"],
-                include_local_evidence=False,
-            )
-        conn.commit()
-        return result
-    except Exception:
-        conn.rollback()
-        raise
-
-
-def supersede_custody_component(
-    conn,
-    workspace_ref,
-    profile_ref,
-    component_id,
-    *,
-    reason=None,
-    include_local_evidence=True,
-):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    core_custody_components.get_component(
-        conn, component_id, profile_id=profile["id"], include_local_evidence=False
-    )
-    try:
-        result = core_custody_components.supersede_component(
-            conn, component_id, reason=reason
-        )
         if not include_local_evidence:
             result = core_custody_components.get_component(
                 conn,

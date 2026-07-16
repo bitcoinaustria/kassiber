@@ -70,7 +70,6 @@ from .cli.handlers import (
     _attachment_hooks,
     _metadata_hooks,
     _report_hooks,
-    activate_custody_component,
     auto_price_transactions_from_rates_cache,
     apply_transfer_rules,
     bulk_resolve_custody_components,
@@ -105,7 +104,6 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
-    supersede_custody_component,
     undo_custody_component,
     update_custody_component,
     update_transaction_pair,
@@ -115,6 +113,7 @@ from .core import chat_history as core_chat_history
 from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import custody_gaps as core_custody_gaps
+from .core import custody_component_planner as core_custody_component_planner
 from .core import custody_gap_reviews as core_custody_gap_reviews
 from .core import custody_ai_audit as core_custody_ai_audit
 from .core import ownership_policy_epochs as core_ownership_policy_epochs
@@ -423,8 +422,6 @@ SUPPORTED_KINDS = (
     "ui.transfers.components.list",
     "ui.transfers.components.get",
     "ui.transfers.components.update",
-    "ui.transfers.components.activate",
-    "ui.transfers.components.supersede",
     "ui.transfers.components.undo",
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
@@ -1872,30 +1869,6 @@ def _ui_swap_matching_payload_from_conn(
                 authored_source=authored_source,
             )
         )
-    if kind == "ui.transfers.components.activate":
-        return _ui_exact_integer_payload(
-            activate_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                include_local_evidence=False,
-            )
-        )
-    if kind == "ui.transfers.components.supersede":
-        reason = args.get("reason")
-        if reason is not None and not isinstance(reason, str):
-            raise AppError(f"{kind} reason must be text", code="validation")
-        return _ui_exact_integer_payload(
-            supersede_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                reason=reason,
-                include_local_evidence=False,
-            )
-        )
     if kind == "ui.transfers.components.undo":
         reason = args.get("reason", "undo")
         if not isinstance(reason, str):
@@ -1912,6 +1885,47 @@ def _ui_swap_matching_payload_from_conn(
             )
         )
     if kind in {"ui.transfers.components.plan", "ui.transfers.components.apply"}:
+        action = args.get("action", "create")
+        if action in {"activate", "supersede"}:
+            reason = args.get("reason")
+            if reason is not None and not isinstance(reason, str):
+                raise AppError(f"{kind} reason must be text", code="validation")
+            resolved_workspace, resolved_profile = resolve_scope(
+                conn, workspace, profile
+            )
+            kwargs = {
+                "workspace_id": resolved_workspace["id"],
+                "profile_id": resolved_profile["id"],
+                "action": action,
+                "component_id": component_id(),
+                "reason": reason,
+            }
+            if kind == "ui.transfers.components.plan":
+                return _ui_exact_integer_payload(
+                    core_custody_component_planner.plan_component_state_change(
+                        conn, **kwargs
+                    )
+                )
+            expected_fingerprint = args.get("expected_fingerprint")
+            if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
+                raise AppError(
+                    f"{kind} requires the fingerprint returned by plan",
+                    code="validation",
+                )
+            return _ui_exact_integer_payload(
+                core_custody_component_planner.apply_component_state_change(
+                    conn,
+                    expected_fingerprint=expected_fingerprint,
+                    include_local_evidence=False,
+                    **kwargs,
+                )
+            )
+        if action != "create":
+            raise AppError(
+                f"{kind} action is unsupported",
+                code="validation",
+                details={"action": action},
+            )
         components = args.get("components")
         if not isinstance(components, list) or not components or not all(
             isinstance(item, dict) for item in components

@@ -25,8 +25,6 @@ COMPONENT_KINDS = {
     "ui.transfers.components.list",
     "ui.transfers.components.get",
     "ui.transfers.components.update",
-    "ui.transfers.components.activate",
-    "ui.transfers.components.supersede",
     "ui.transfers.components.undo",
     "ui.transfers.components.plan",
     "ui.transfers.components.apply",
@@ -208,6 +206,80 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             (result["components"][0]["id"],),
         ).fetchone()
         self.assertEqual(stored["authored_source"], "ai_tool")
+
+    def _create_draft_component(self) -> dict:
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "create",
+            "components": [_component_spec()],
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        result = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.apply",
+            {**args, "expected_fingerprint": preview["fingerprint"]},
+        )
+        return result["components"][0]
+
+    def test_component_activation_preview_is_pure_and_apply_is_exact(self):
+        component = self._create_draft_component()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "activate",
+            "component_id": component["id"],
+        }
+        before_changes = self.conn.total_changes
+
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(preview["current_state"], "draft")
+        self.assertEqual(preview["resulting_state"], "active")
+        self.assertEqual(self.conn.total_changes, before_changes)
+        self.assertFalse(self.conn.in_transaction)
+        result = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.apply",
+            {**args, "expected_fingerprint": preview["fingerprint"]},
+        )
+        self.assertEqual(result["component"]["effective_state"], "active")
+
+    def test_component_state_apply_rejects_stale_input_version(self):
+        component = self._create_draft_component()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "activate",
+            "component_id": component["id"],
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile'"
+        )
+        self.conn.commit()
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.apply",
+                {**args, "expected_fingerprint": preview["fingerprint"]},
+            )
+
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+        stored = self.conn.execute(
+            "SELECT state FROM custody_components WHERE id = ?", (component["id"],)
+        ).fetchone()
+        self.assertEqual(stored["state"], "draft")
 
     def test_daemon_bulk_resolution_rejects_unbounded_batches(self):
         with self.assertRaises(AppError) as caught:
@@ -468,11 +540,13 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertEqual(revised["data"]["effective_state"], "active")
         second_id = revised["data"]["id"]
 
-        superseded = _dispatch_json(
+        supersede_plan = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "supersede",
             "--workspace",
             "Main",
@@ -483,8 +557,27 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--reason",
             "replace evidence",
         )
-        self.assertEqual(superseded["kind"], "transfers.components.supersede")
-        self.assertEqual(superseded["data"]["state"], "superseded")
+        superseded = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "supersede",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            second_id,
+            "--reason",
+            "replace evidence",
+            "--expected-fingerprint",
+            supersede_plan["data"]["fingerprint"],
+        )
+        self.assertEqual(superseded["kind"], "transfers.components.apply")
+        self.assertEqual(superseded["data"]["component"]["state"], "superseded")
 
         restored = _dispatch_json(
             self.conn,
@@ -503,11 +596,13 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertEqual(restored["data"]["state"], "draft")
         third_id = restored["data"]["id"]
 
-        activated = _dispatch_json(
+        activate_plan = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "activate",
             "--workspace",
             "Main",
@@ -516,8 +611,25 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--component-id",
             third_id,
         )
-        self.assertEqual(activated["kind"], "transfers.components.activate")
-        self.assertEqual(activated["data"]["effective_state"], "active")
+        activated = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "activate",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            third_id,
+            "--expected-fingerprint",
+            activate_plan["data"]["fingerprint"],
+        )
+        self.assertEqual(activated["kind"], "transfers.components.apply")
+        self.assertEqual(activated["data"]["component"]["effective_state"], "active")
 
         shown = _dispatch_json(
             self.conn,
@@ -941,20 +1053,33 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             self.assertEqual(revised["data"]["revision"], 2)
             component_id = revised["data"]["id"]
 
+            supersede_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "supersede",
+                "component_id": component_id,
+                "reason": "exercise immutable undo",
+            }
+            supersede_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-supersede-plan",
+                    "args": supersede_args,
+                },
+            )
             superseded = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.supersede",
-                    "request_id": "component-supersede",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-supersede-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
-                        "reason": "exercise immutable undo",
+                        **supersede_args,
+                        "expected_fingerprint": supersede_plan["data"]["fingerprint"],
                     },
                 },
             )
-            self.assertEqual(superseded["data"]["state"], "superseded")
+            self.assertEqual(superseded["data"]["component"]["state"], "superseded")
 
             restored = _request(
                 proc,
@@ -971,19 +1096,34 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             self.assertEqual(restored["data"]["state"], "draft")
             component_id = restored["data"]["id"]
 
+            activate_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "activate",
+                "component_id": component_id,
+            }
+            activate_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-activate-plan",
+                    "args": activate_args,
+                },
+            )
             activated = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.activate",
-                    "request_id": "component-activate",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-activate-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
+                        **activate_args,
+                        "expected_fingerprint": activate_plan["data"]["fingerprint"],
                     },
                 },
             )
-            self.assertEqual(activated["data"]["effective_state"], "active")
+            self.assertEqual(
+                activated["data"]["component"]["effective_state"], "active"
+            )
 
             fetched = _request(
                 proc,

@@ -225,6 +225,12 @@ binary.
    Component authoring now exposes distinct `components plan/apply` CLI,
    desktop and AI operations; the overloaded `bulk_resolve(dry_run=...)`
    command/kind is deleted, and apply requires the exact pure-plan fingerprint.
+   Component activation and supersession now use those same operations. Their
+   plans are read-only, bind the immutable component contents and current
+   journal input version, and share the activation validator used by apply.
+   The direct CLI commands, desktop daemon kinds and CLI-handler mutation
+   wrappers are deleted; desktop create and lifecycle changes consequently
+   share one consent, cache invalidation and stale-plan boundary.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 
