@@ -61,7 +61,6 @@ from ..core import source_overlap as core_source_overlap
 from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
-from ..core import tax_events as core_tax_events
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
 from ..core.repo import current_context_snapshot, resolve_account
@@ -4783,186 +4782,24 @@ def _journal_processing_status(conn, profile):
     }
 
 
-def _audit_transaction_refs(conn, profile_id, transaction_ids):
-    ids = list(dict.fromkeys(str(value) for value in transaction_ids if value))
-    if not ids:
-        return {}
-    rows = []
-    chunk_size = 400
-    for start in range(0, len(ids), chunk_size):
-        chunk = ids[start : start + chunk_size]
-        placeholders = ", ".join("?" for _ in chunk)
-        rows.extend(
-            conn.execute(
-                f"""
-                SELECT
-                    t.id,
-                    t.external_id,
-                    t.occurred_at,
-                    t.asset,
-                    w.label AS wallet
-                FROM transactions t
-                JOIN wallets w ON w.id = t.wallet_id
-                WHERE t.profile_id = ? AND t.id IN ({placeholders})
-                """,
-                [profile_id, *chunk],
-            ).fetchall()
-        )
-    return {str(row["id"]): dict(row) for row in rows}
-
-
-def _serialize_intra_audit(rows):
-    return [
-        {
-            "out_id": row["out_id"],
-            "in_id": row["in_id"],
-            "external_id": row["external_id"],
-            "occurred_at": row["occurred_at"],
-            "asset": row["asset"],
-            "from_wallet": row["from_wallet_label"],
-            "to_wallet": row["to_wallet_label"],
-            "sent": float(dec(row["crypto_sent"])),
-            "sent_msat": btc_to_msat(dec(row["crypto_sent"])),
-            "received": float(dec(row["crypto_received"])),
-            "received_msat": btc_to_msat(dec(row["crypto_received"])),
-            "fee": float(dec(row["crypto_fee"])),
-            "fee_msat": btc_to_msat(dec(row["crypto_fee"])),
-            "spot_price": float(dec(row["spot_price"])),
-            "pairing_source": row.get("pairing_source"),
-            **(
-                {"transfer_group_id": row["transfer_group_id"]}
-                if row.get("transfer_group_id")
-                else {}
-            ),
-        }
-        for row in sorted(
-            rows,
-            key=lambda item: (item["occurred_at"], item["out_id"], item["in_id"]),
-        )
-    ]
-
-
-def _serialize_cross_asset_pairs(rows, refs_by_id):
-    serialized = []
-    for row in sorted(
-        rows,
-        key=lambda item: (
-            refs_by_id.get(str(item["out_id"]), {}).get("occurred_at", ""),
-            str(item.get("pair_id") or ""),
-            str(item["out_id"]),
-            str(item["in_id"]),
-        ),
-    ):
-        out_ref = refs_by_id.get(
-            str(row.get("out_transaction_id") or row["out_id"]), {}
-        )
-        in_ref = refs_by_id.get(
-            str(row.get("in_transaction_id") or row["in_id"]), {}
-        )
-        serialized.append(
-            {
-                "pair_id": row.get("pair_id"),
-                "kind": row.get("kind"),
-                "policy": row.get("policy"),
-                "out_id": row["out_id"],
-                "out_asset": row["out_asset"],
-                "out_wallet": out_ref.get("wallet"),
-                "out_external_id": out_ref.get("external_id"),
-                "out_occurred_at": out_ref.get("occurred_at"),
-                "in_id": row["in_id"],
-                "in_asset": row["in_asset"],
-                "in_wallet": in_ref.get("wallet"),
-                "in_external_id": in_ref.get("external_id"),
-                "in_occurred_at": in_ref.get("occurred_at"),
-            }
-        )
-    return serialized
-
-
-def _serialize_direct_swap_payouts(rows, refs_by_id):
-    serialized = []
-    for row in sorted(
-        rows,
-        key=lambda item: (
-            item.get("payout_occurred_at") or refs_by_id.get(str(item["out_id"]), {}).get("occurred_at", ""),
-            str(item.get("payout_id") or ""),
-        ),
-    ):
-        out_ref = refs_by_id.get(str(row["out_id"]), {})
-        serialized.append(
-            {
-                "payout_id": row["payout_id"],
-                "kind": row["kind"],
-                "policy": row["policy"],
-                "out_id": row["out_id"],
-                "out_asset": row["out_asset"],
-                "out_wallet": out_ref.get("wallet"),
-                "out_external_id": out_ref.get("external_id"),
-                "out_occurred_at": out_ref.get("occurred_at"),
-                "out_amount": float(msat_to_btc(row["out_amount_msat"])),
-                "out_amount_msat": int(row["out_amount_msat"]),
-                "payout_asset": row["payout_asset"],
-                "payout_amount": float(msat_to_btc(row["payout_amount_msat"])),
-                "payout_amount_msat": int(row["payout_amount_msat"]),
-                "payout_occurred_at": row["payout_occurred_at"],
-                "payout_external_id": row["payout_external_id"],
-                "counterparty": row["counterparty"],
-                "swap_fee": float(msat_to_btc(row["swap_fee_msat"])),
-                "swap_fee_msat": int(row["swap_fee_msat"]),
-                "swap_fee_kind": row["swap_fee_kind"],
-            }
-        )
-    return serialized
-
-
 def inspect_transfer_audit(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
-    state = core_custody_journal.build_ledger_state(conn, profile)
-    tx_refs = _audit_transaction_refs(
-        conn,
-        profile["id"],
-        [
-            row.get("out_transaction_id") or row["out_id"]
-            for row in state["cross_asset_pairs"]
-        ]
-        + [
-            row.get("in_transaction_id") or row["in_id"]
-            for row in state["cross_asset_pairs"]
-        ],
-    )
-    payout_refs = _audit_transaction_refs(
-        conn,
-        profile["id"],
-        [row["out_id"] for row in state["direct_swap_payouts"]],
-    )
-    intra_transfers = _serialize_intra_audit(state["intra_audit"])
-    custody_transfers = [
-        {
-            **row,
-            "amount": float(msat_to_btc(row["amount_msat"])),
-        }
-        for row in state["custody_transfers"]
-    ]
-    cross_asset_pairs = _serialize_cross_asset_pairs(state["cross_asset_pairs"], tx_refs)
-    direct_swap_payouts = _serialize_direct_swap_payouts(
-        state["direct_swap_payouts"],
-        payout_refs,
-    )
+    audit = core_custody_journal.load_stored_transfer_audit(conn, profile["id"])
     return {
         "profile": profile["label"],
         "processing": _journal_processing_status(conn, profile),
         "summary": {
-            "same_asset_transfers": len(intra_transfers),
-            "custody_transfers": len(custody_transfers),
-            "cross_asset_pairs": len(cross_asset_pairs),
-            "direct_swap_payouts": len(direct_swap_payouts),
-            "quarantines": len(core_tax_events.dedupe_quarantines(state["quarantines"])),
+            "same_asset_transfers": len(audit["same_asset_transfers"]),
+            "custody_transfers": len(audit["custody_transfers"]),
+            "cross_asset_pairs": len(audit["cross_asset_pairs"]),
+            "direct_swap_payouts": len(audit["direct_swap_payouts"]),
+            "quarantines": audit["quarantine_count"],
         },
-        "same_asset_transfers": intra_transfers,
-        "custody_transfers": custody_transfers,
-        "cross_asset_pairs": cross_asset_pairs,
-        "direct_swap_payouts": direct_swap_payouts,
+        "same_asset_transfers": audit["same_asset_transfers"],
+        "custody_transfers": audit["custody_transfers"],
+        "cross_asset_pairs": audit["cross_asset_pairs"],
+        "direct_swap_payouts": audit["direct_swap_payouts"],
     }
 
 

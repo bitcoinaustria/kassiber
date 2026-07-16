@@ -24,7 +24,6 @@ from kassiber.backends import (
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import (
     _attachment_hooks,
-    _audit_transaction_refs,
     _report_hooks,
     cache_swap_candidate_count,
     create_direct_swap_payout,
@@ -5336,37 +5335,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, msg=payload)
                 self.assertEqual(payload.get("kind"), "error")
                 self.assertEqual(payload["error"]["code"], "validation")
-
-    def test_audit_transaction_refs_chunks_large_input(self):
-        class _Cursor:
-            def __init__(self, rows):
-                self._rows = rows
-
-            def fetchall(self):
-                return self._rows
-
-        class _Conn:
-            def __init__(self):
-                self.calls = []
-
-            def execute(self, query, params):
-                self.calls.append(len(params))
-                rows = [
-                    {
-                        "id": tx_id,
-                        "external_id": f"ext-{tx_id}",
-                        "occurred_at": "2026-01-01T00:00:00Z",
-                        "asset": "BTC",
-                        "wallet": "Wallet",
-                    }
-                    for tx_id in params[1:]
-                ]
-                return _Cursor(rows)
-
-        conn = _Conn()
-        refs = _audit_transaction_refs(conn, "profile-1", [f"tx-{index}" for index in range(1200)])
-        self.assertEqual(len(refs), 1200)
-        self.assertEqual(conn.calls, [401, 401, 401])
 
     def test_reports_summary_plain_output_is_human_readable(self):
         self._bootstrap_profile()

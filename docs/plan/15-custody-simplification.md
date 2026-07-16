@@ -270,6 +270,12 @@ binary.
    reconstructs exact quantities and fiat fields through the core stored-ledger
    loader, so an empty projection stays empty instead of silently reinterpreting
    custody during report rendering.
+   The CLI transfer-audit endpoint now loads MOVE decisions, reviewed
+   conversions and direct payouts from `journal_custody_decisions` and
+   `journal_custody_economic_relations`. Its live build, four presentation
+   adapters and chunked transaction-ref loader are deleted. Consequently the
+   core journal-processing service is the only production caller of
+   `build_ledger_state`.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

@@ -921,6 +921,163 @@ def load_stored_ledger_state(
     }
 
 
+def load_stored_transfer_audit(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    """Load transfer audit rows from the canonical stored custody projection."""
+
+    decision_rows = conn.execute(
+        """
+        SELECT d.*, d.source_end_msat - d.source_start_msat AS amount_msat,
+               source.external_id AS source_external_id,
+               source.fee AS source_fee_msat,
+               source.fiat_rate AS source_fiat_rate,
+               source_wallet.label AS source_wallet_label,
+               target.external_id AS target_external_id,
+               target_wallet.label AS target_wallet_label
+        FROM journal_custody_decisions d
+        JOIN transactions source ON source.id = d.source_transaction_id
+        JOIN transactions target ON target.id = d.target_transaction_id
+        LEFT JOIN wallets source_wallet ON source_wallet.id = d.source_wallet_id
+        LEFT JOIN wallets target_wallet ON target_wallet.id = d.target_wallet_id
+        WHERE d.profile_id = ?
+        ORDER BY d.occurred_at ASC, d.decision_id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    fee_emitted_for_source: set[str] = set()
+    same_asset_transfers = []
+    custody_transfers = []
+    for row in decision_rows:
+        amount_msat = int(row["amount_msat"])
+        source_id = str(row["source_transaction_id"])
+        fee_msat = 0
+        if source_id not in fee_emitted_for_source:
+            fee_msat = int(row["source_fee_msat"] or 0)
+            fee_emitted_for_source.add(source_id)
+        if row["source_asset"] == row["target_asset"]:
+            same_asset_transfers.append(
+                {
+                    "out_id": source_id,
+                    "in_id": row["target_transaction_id"],
+                    "external_id": row["source_external_id"],
+                    "occurred_at": row["occurred_at"],
+                    "asset": row["source_asset"],
+                    "from_wallet": row["source_wallet_label"],
+                    "to_wallet": row["target_wallet_label"],
+                    "sent": float(msat_to_btc(amount_msat + fee_msat)),
+                    "sent_msat": amount_msat + fee_msat,
+                    "received": float(msat_to_btc(amount_msat)),
+                    "received_msat": amount_msat,
+                    "fee": float(msat_to_btc(fee_msat)),
+                    "fee_msat": fee_msat,
+                    "spot_price": float(row["source_fiat_rate"] or 0),
+                    "pairing_source": row["reason"],
+                    **(
+                        {"transfer_group_id": row["atomic_group_id"]}
+                        if row["atomic_group_id"]
+                        else {}
+                    ),
+                }
+            )
+        custody_transfers.append(
+            {
+                "decision_id": row["decision_id"],
+                "out_id": source_id,
+                "in_id": row["target_transaction_id"],
+                "from_wallet": row["source_wallet_label"],
+                "to_wallet": row["target_wallet_label"],
+                "source_asset": row["source_asset"],
+                "target_asset": row["target_asset"],
+                "amount": float(msat_to_btc(amount_msat)),
+                "amount_msat": amount_msat,
+                "custody_state": row["state"],
+                "basis_state": row["basis_state"],
+                "evidence_reason": row["reason"],
+                "component_id": row["component_id"],
+            }
+        )
+
+    relation_rows = conn.execute(
+        """
+        SELECT r.*, source.external_id AS source_external_id,
+               source.occurred_at AS source_occurred_at,
+               source_wallet.label AS source_wallet_label,
+               target.external_id AS target_external_id,
+               target.occurred_at AS target_transaction_occurred_at,
+               target_wallet.label AS target_wallet_label
+        FROM journal_custody_economic_relations r
+        JOIN transactions source ON source.id = r.source_transaction_id
+        LEFT JOIN wallets source_wallet ON source_wallet.id = source.wallet_id
+        LEFT JOIN transactions target ON target.id = r.target_transaction_id
+        LEFT JOIN wallets target_wallet ON target_wallet.id = target.wallet_id
+        WHERE r.profile_id = ?
+        ORDER BY COALESCE(r.target_occurred_at, r.occurred_at) ASC,
+                 r.relation_id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    cross_asset_pairs = []
+    direct_swap_payouts = []
+    for row in relation_rows:
+        if row["relation_kind"] == "conversion":
+            cross_asset_pairs.append(
+                {
+                    "pair_id": row["relation_id"],
+                    "kind": row["review_kind"],
+                    "policy": row["policy"],
+                    "out_id": row["source_transaction_id"],
+                    "out_asset": row["source_asset"],
+                    "out_wallet": row["source_wallet_label"],
+                    "out_external_id": row["source_external_id"],
+                    "out_occurred_at": row["source_occurred_at"],
+                    "in_id": row["target_transaction_id"],
+                    "in_asset": row["target_asset"],
+                    "in_wallet": row["target_wallet_label"],
+                    "in_external_id": row["target_external_id"],
+                    "in_occurred_at": row["target_transaction_occurred_at"],
+                }
+            )
+            continue
+        direct_swap_payouts.append(
+            {
+                "payout_id": row["relation_id"],
+                "kind": row["review_kind"],
+                "policy": row["policy"],
+                "out_id": row["source_transaction_id"],
+                "out_asset": row["source_asset"],
+                "out_wallet": row["source_wallet_label"],
+                "out_external_id": row["source_external_id"],
+                "out_occurred_at": row["source_occurred_at"],
+                "out_amount": float(msat_to_btc(row["source_amount_msat"])),
+                "out_amount_msat": int(row["source_amount_msat"]),
+                "payout_asset": row["target_asset"],
+                "payout_amount": float(msat_to_btc(row["target_amount_msat"])),
+                "payout_amount_msat": int(row["target_amount_msat"]),
+                "payout_occurred_at": row["target_occurred_at"],
+                "payout_external_id": row["target_external_id"],
+                "counterparty": row["counterparty"],
+                "swap_fee": float(msat_to_btc(row["swap_fee_msat"] or 0)),
+                "swap_fee_msat": int(row["swap_fee_msat"] or 0),
+                "swap_fee_kind": row["swap_fee_kind"],
+            }
+        )
+    quarantine_count = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM journal_quarantines WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchone()[0]
+    )
+    return {
+        "same_asset_transfers": same_asset_transfers,
+        "custody_transfers": custody_transfers,
+        "cross_asset_pairs": cross_asset_pairs,
+        "direct_swap_payouts": direct_swap_payouts,
+        "quarantine_count": quarantine_count,
+    }
+
+
 def process_journals(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -1021,6 +1178,7 @@ __all__ = [
     "duplicate_label_warnings",
     "latest_transaction_rates_for_profile",
     "load_stored_ledger_state",
+    "load_stored_transfer_audit",
     "ownership_review_counts",
     "process_journals",
 ]
