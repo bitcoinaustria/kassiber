@@ -173,7 +173,10 @@ binary.
    rows whose linked component is ineffective, principally partial-source
    reviews with no explicit residual classification. That narrow loader is the
    remaining compatibility interpreter and must disappear with producer
-   cutover.
+   cutover. Active-review suppression and mutation guards now enter through the
+   same component-first authored store, including native reviewed bridges that
+   have no migrated economic-term row; only ineffective historical reviews are
+   returned as explicit compatibility references.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.

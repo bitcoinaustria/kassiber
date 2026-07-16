@@ -1419,22 +1419,26 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
         raise AppError("Commercial income can only be applied to inbound transactions", code="validation")
     if commercial_kind == "expense" and tx["direction"] != "outbound":
         raise AppError("Commercial expense can only be applied to outbound transactions", code="validation")
-    pair = conn.execute(
-        """
-        SELECT id FROM transaction_pairs
-        WHERE profile_id = ?
-          AND deleted_at IS NULL
-          AND (out_transaction_id = ? OR in_transaction_id = ?)
-        LIMIT 1
-        """,
-        (profile["id"], tx["id"], tx["id"]),
-    ).fetchone()
-    if pair:
+    from . import custody_authored_migration
+
+    custody_review = custody_authored_migration.find_active_review_for_transaction(
+        conn,
+        profile_id=profile["id"],
+        transaction_id=tx["id"],
+    )
+    if custody_review:
         raise AppError(
-            "Commercial review cannot overwrite a transaction that is part of an active transfer pair",
+            "Commercial review cannot overwrite a transaction in an active custody review",
             code="validation",
-            hint="Unpair the transfer first or review the merchant-side transaction instead.",
-            details={"transaction_id": tx["id"], "pair_id": pair["id"]},
+            hint=(
+                "Reopen or supersede the custody review first, or review the "
+                "merchant-side transaction instead."
+            ),
+            details={
+                "transaction_id": tx["id"],
+                "review_id": custody_review["id"],
+                "component_id": custody_review["component_id"],
+            },
         )
     updates: dict[str, Any] = {}
     snapshot_json = (

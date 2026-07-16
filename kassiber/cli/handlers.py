@@ -1803,20 +1803,10 @@ def _filter_transfer_candidates(
 
 
 def _load_active_transfer_review_refs(conn, profile_id):
-    pair_records = conn.execute(
-        "SELECT out_transaction_id, in_transaction_id, kind, policy, deleted_at "
-        "FROM transaction_pairs WHERE profile_id = ?",
-        (profile_id,),
-    ).fetchall()
-    payout_records = conn.execute(
-        """
-        SELECT out_transaction_id, NULL AS in_transaction_id, kind, policy, deleted_at
-        FROM direct_swap_payouts
-        WHERE profile_id = ?
-        """,
-        (profile_id,),
-    ).fetchall()
-    return [*pair_records, *payout_records]
+    return core_custody_authored_migration.list_active_review_refs(
+        conn,
+        profile_id=profile_id,
+    )
 
 
 def _ownership_review_candidates(conn, profile_id, rows, pair_records):

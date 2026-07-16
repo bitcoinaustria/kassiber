@@ -5,17 +5,20 @@ from unittest.mock import patch
 
 import pytest
 
+from kassiber import db as db_module
 from kassiber.core.custody_authored_migration import (
     backfill_legacy_authored_components,
+    find_active_review_for_transaction,
+    list_active_review_refs,
 )
 from kassiber.core.custody_components import (
+    activate_component,
     create_component,
     get_component,
     iter_authored_active_components,
     seal_component_economic_terms,
 )
 from kassiber.core.custody_journal import CustodyJournalBuilder
-from kassiber import db as db_module
 from kassiber.db import open_db
 
 
@@ -211,6 +214,32 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
             "payout"
         ]
         assert decisions.direct_payout_records[0]["component_id"] == payout["id"]
+
+        refs = list_active_review_refs(migrated, profile_id="profile")
+        assert {
+            (row["id"], row["compatibility"])
+            for row in refs
+        } == {("pair", True), ("payout", False)}
+        assert find_active_review_for_transaction(
+            migrated,
+            profile_id="profile",
+            transaction_id="pair-out",
+        ) == {
+            "id": "pair",
+            "component_id": pair["id"],
+            "term_kind": "transaction_pair",
+            "compatibility": True,
+        }
+        assert find_active_review_for_transaction(
+            migrated,
+            profile_id="profile",
+            transaction_id="payout-out",
+        ) == {
+            "id": "payout",
+            "component_id": payout["id"],
+            "term_kind": "direct_swap_payout",
+            "compatibility": False,
+        }
     finally:
         migrated.close()
 
@@ -224,6 +253,82 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
         ).fetchone()[0] == 1
     finally:
         reopened.close()
+
+
+def test_active_component_without_legacy_terms_claims_every_boundary(tmp_path):
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, "bridge-out", "btc", "outbound", "BTC", 990, NOW)
+    _tx(conn, "bridge-in", "btc", "inbound", "BTC", 990, NOW)
+    component = create_component(
+        conn,
+        workspace_id="ws",
+        profile_id="profile",
+        component_id="native-bridge",
+        component_type="manual_bridge",
+        conservation_mode="quantity",
+        evidence_kind="manual_reconstruction",
+        evidence_grade="reviewed",
+        legs=[
+            {
+                "id": "native-source",
+                "role": "source",
+                "rail": "bitcoin",
+                "chain": "bitcoin",
+                "network": "main",
+                "asset": "BTC",
+                "exposure": "bitcoin",
+                "conservation_unit": "msat",
+                "amount_msat": 990,
+                "occurred_at": NOW,
+                "transaction_id": "bridge-out",
+                "anchor_transaction_id": "bridge-out",
+                "wallet_id": "btc",
+            },
+            {
+                "id": "native-target",
+                "role": "destination",
+                "rail": "bitcoin",
+                "chain": "bitcoin",
+                "network": "main",
+                "asset": "BTC",
+                "exposure": "bitcoin",
+                "conservation_unit": "msat",
+                "amount_msat": 990,
+                "occurred_at": NOW,
+                "transaction_id": "bridge-in",
+                "anchor_transaction_id": "bridge-in",
+                "wallet_id": "btc",
+            },
+        ],
+        allocations=[
+            {
+                "source_ordinal": 0,
+                "sink_ordinal": 1,
+                "source_amount_msat": 990,
+                "sink_amount_msat": 990,
+            }
+        ],
+        authored_source="user",
+        created_at=NOW,
+    )
+    activate_component(conn, component["id"], activated_at=NOW)
+
+    refs = list_active_review_refs(conn, profile_id="profile")
+    assert {
+        (row["out_transaction_id"], row["in_transaction_id"])
+        for row in refs
+    } == {("bridge-out", None), (None, "bridge-in")}
+    for transaction_id in ("bridge-out", "bridge-in"):
+        review = find_active_review_for_transaction(
+            conn,
+            profile_id="profile",
+            transaction_id=transaction_id,
+        )
+        assert review["id"] == "native-bridge"
+        assert review["component_id"] == "native-bridge"
+        assert review["compatibility"] is False
+    conn.close()
 
 
 def test_backfill_is_idempotent_and_legacy_edits_create_a_revision(tmp_path):

@@ -1119,6 +1119,175 @@ def load_legacy_compatibility_records(
     )
 
 
+def effective_component_ids(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+) -> set[str]:
+    """Return component ids that own at least one effective membership."""
+
+    return {
+        str(row["component_id"])
+        for row in conn.execute(
+            "SELECT DISTINCT component_id "
+            "FROM custody_component_transaction_memberships "
+            "WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchall()
+    }
+
+
+def list_active_review_refs(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+) -> list[Mapping[str, Any]]:
+    """Return matcher-shaped refs from components plus bounded exceptions."""
+
+    effective_ids = effective_component_ids(conn, profile_id=profile_id)
+    component_rows: list[Mapping[str, Any]] = []
+    if effective_ids:
+        placeholders = ",".join("?" for _ in effective_ids)
+        component_rows = [
+            {**dict(row), "compatibility": False}
+            for row in conn.execute(
+                f"""
+                SELECT term.legacy_source_id AS id,
+                       term.component_id,
+                       COALESCE(source.anchor_transaction_id,
+                                source.transaction_id) AS out_transaction_id,
+                       CASE WHEN term.term_kind = 'transaction_pair'
+                            THEN COALESCE(target.anchor_transaction_id,
+                                          target.transaction_id)
+                            ELSE NULL END AS in_transaction_id,
+                       term.review_kind AS kind,
+                       term.tax_policy AS policy,
+                       NULL AS deleted_at
+                FROM custody_component_economic_terms term
+                JOIN custody_component_legs source
+                  ON source.id = term.source_leg_id
+                JOIN custody_component_legs target
+                  ON target.id = term.target_leg_id
+                WHERE term.profile_id = ?
+                  AND term.component_id IN ({placeholders})
+                ORDER BY term.created_at, term.component_id, term.ordinal
+                """,
+                (profile_id, *sorted(effective_ids)),
+            ).fetchall()
+        ]
+        claimed_transaction_ids = {
+            str(transaction_id)
+            for row in component_rows
+            for transaction_id in (
+                _field(row, "out_transaction_id"),
+                _field(row, "in_transaction_id"),
+            )
+            if transaction_id not in (None, "")
+        }
+        component_rows.extend(
+            {
+                "id": str(row["component_id"]),
+                "component_id": str(row["component_id"]),
+                "out_transaction_id": (
+                    str(row["transaction_id"])
+                    if row["role"] == "source"
+                    else None
+                ),
+                "in_transaction_id": (
+                    str(row["transaction_id"])
+                    if row["role"] != "source"
+                    else None
+                ),
+                "kind": "custody-component",
+                "policy": None,
+                "deleted_at": None,
+                "compatibility": False,
+            }
+            for row in conn.execute(
+                f"""
+                SELECT component_id, role,
+                       COALESCE(transaction_id,
+                                anchor_transaction_id) AS transaction_id
+                FROM custody_component_legs
+                WHERE profile_id = ?
+                  AND component_id IN ({placeholders})
+                  AND COALESCE(transaction_id, anchor_transaction_id) IS NOT NULL
+                ORDER BY component_id, ordinal, id
+                """,
+                (profile_id, *sorted(effective_ids)),
+            ).fetchall()
+            if str(row["transaction_id"]) not in claimed_transaction_ids
+        )
+    pairs, payouts = load_legacy_compatibility_records(
+        conn,
+        profile_id=profile_id,
+        effective_component_ids=effective_ids,
+    )
+    compatibility_rows = [
+        {**dict(row), "compatibility": True}
+        for row in (*pairs, *payouts)
+    ]
+    return [*component_rows, *compatibility_rows]
+
+
+def find_active_review_for_transaction(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    transaction_id: str,
+) -> Mapping[str, Any] | None:
+    """Find the authored component or bounded exception owning a boundary."""
+
+    component = conn.execute(
+        """
+        SELECT component.id AS component_id,
+               term.legacy_source_id AS review_id,
+               term.term_kind
+        FROM custody_component_legs leg
+        JOIN custody_components component ON component.id = leg.component_id
+        LEFT JOIN custody_component_economic_terms term
+          ON term.component_id = component.id
+         AND (term.source_leg_id = leg.id OR term.target_leg_id = leg.id)
+        WHERE component.profile_id = ?
+          AND component.state = 'active'
+          AND COALESCE(leg.anchor_transaction_id, leg.transaction_id) = ?
+        ORDER BY component.created_at, component.id, term.ordinal
+        LIMIT 1
+        """,
+        (profile_id, transaction_id),
+    ).fetchone()
+    if component is not None:
+        return {
+            "id": component["review_id"] or component["component_id"],
+            "component_id": component["component_id"],
+            "term_kind": component["term_kind"],
+            "compatibility": False,
+        }
+
+    effective_ids = effective_component_ids(conn, profile_id=profile_id)
+    pairs, payouts = load_legacy_compatibility_records(
+        conn,
+        profile_id=profile_id,
+        effective_component_ids=effective_ids,
+    )
+    for term_kind, records in (
+        ("transaction_pair", pairs),
+        ("direct_swap_payout", payouts),
+    ):
+        for row in records:
+            if transaction_id in {
+                str(_field(row, "out_transaction_id") or ""),
+                str(_field(row, "in_transaction_id") or ""),
+            }:
+                return {
+                    "id": str(_field(row, "id")),
+                    "component_id": _field(row, "component_id"),
+                    "term_kind": term_kind,
+                    "compatibility": True,
+                }
+    return None
+
+
 def retire_linked_component(
     conn: sqlite3.Connection,
     component_id: Any,

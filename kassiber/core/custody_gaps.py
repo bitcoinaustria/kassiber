@@ -2279,28 +2279,30 @@ def _claimed_transaction_ids(
     include_journal_claims: bool,
 ) -> set[str]:
     claimed: set[str] = set()
-    # A normal Kassiber DB has both tables.  Keeping the reads separate makes
-    # this helper usable against narrow schema fixtures during migrations.
     try:
-        rows = conn.execute(
-            """
-            SELECT out_transaction_id AS transaction_id
-            FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL
-            UNION
-            SELECT in_transaction_id AS transaction_id
-            FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL
-            """,
-            (profile_id, profile_id),
-        ).fetchall()
-        claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows)
+        from . import custody_authored_migration
+
+        review_rows = custody_authored_migration.list_active_review_refs(
+            conn,
+            profile_id=profile_id,
+        )
+        claimed.update(
+            str(transaction_id)
+            for row in review_rows
+            for transaction_id in (
+                _get(row, "out_transaction_id"),
+                _get(row, "in_transaction_id"),
+            )
+            if transaction_id not in (None, "")
+        )
     except sqlite3.OperationalError:
-        # Narrow migration fixtures may omit authored transaction pairs.
+        # Narrow migration fixtures may omit authored review tables.
         pass
     if include_journal_claims:
         try:
             # Automatic descriptor/graph ownership paths are derived rather
-            # than authored in transaction_pairs. Only a current projection may
-            # suppress their boundaries from the live gap matcher.
+            # than authored components. Only a current projection may suppress
+            # their boundaries from the live gap matcher.
             rows = conn.execute(
                 """
                 SELECT DISTINCT transaction_id
@@ -2314,19 +2316,6 @@ def _claimed_transaction_ids(
         except sqlite3.OperationalError:
             # A reduced schema has no derived journal claims to suppress.
             pass
-    try:
-        rows = conn.execute(
-            """
-            SELECT out_transaction_id AS transaction_id
-            FROM direct_swap_payouts
-            WHERE profile_id = ? AND deleted_at IS NULL
-            """,
-            (profile_id,),
-        ).fetchall()
-        claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows)
-    except sqlite3.OperationalError:
-        # Older/reduced schemas may not contain direct payout reviews.
-        pass
     try:
         rows = conn.execute(
             """

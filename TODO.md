@@ -193,7 +193,11 @@ same verification surface.
     cutover after all readers move to component terms. The journal builder no
     longer queries either legacy table directly: the core authored store now
     exposes only linked rows whose component is ineffective, keeping the
-    partial-source residual exception explicit and deletable.
+    partial-source residual exception explicit and deletable. Transfer
+    matching, gap discovery, transaction-exclusion guards and commercial
+    classification now resolve active reviews through that same store; every
+    effective component boundary is claimed even when the component has no
+    migrated pair/payout economic term.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The
