@@ -29,13 +29,13 @@ from kassiber.cli.handlers import (
     cache_swap_candidate_count,
     create_direct_swap_payout,
     create_transaction_pair,
-    latest_rates_for_profile,
     list_transaction_pairs,
     process_journals,
     suggest_transfer_candidates,
     update_transaction_pair,
 )
 from kassiber.core import attachments as core_attachments
+from kassiber.core import custody_journal as core_custody_journal
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import rp2 as rp2_engine
@@ -506,7 +506,9 @@ class ReviewRegressionTest(unittest.TestCase):
         )
 
         report_rates = latest_transaction_rates_for_profile(conn, "pf-rate")
-        ledger_rates = latest_rates_for_profile(conn, "pf-rate")
+        ledger_rates = core_custody_journal.latest_transaction_rates_for_profile(
+            conn, "pf-rate"
+        )
 
         self.assertEqual(report_rates, ledger_rates)
         self.assertEqual(report_rates["BTC"], Decimal("62000.123456789"))

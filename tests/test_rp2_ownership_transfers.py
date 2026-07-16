@@ -6,9 +6,10 @@ Two layers:
   hand-built esplora rows + a hand-built ``OwnedIndex`` to prove a 1->N fan-out
   becomes carrying MOVEs (``transfer_in``/``transfer_out``) instead of the
   ``owned_fanout_unresolved`` quarantine it gets without the deriver.
-* handler-level — exercise ``handlers.build_ledger_state`` end-to-end against a
-  temp SQLite DB so the new index-build + all-wallet-refs wiring is covered, and
-  confirm derived pairs are never persisted to ``transaction_pairs``.
+* core-service-level — exercise ``custody_journal.build_ledger_state``
+  end-to-end against a temp SQLite DB so the new index-build + all-wallet-refs
+  wiring is covered, and confirm derived pairs are never persisted to
+  ``transaction_pairs``.
 """
 
 import json
@@ -1676,7 +1677,7 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
             profile = conn.execute(
                 "SELECT * FROM profiles WHERE id = 'profile-1'"
             ).fetchone()
-            state = handlers.build_ledger_state(conn, profile)
+            state = custody_journal.build_ledger_state(conn, profile)
 
             reasons = {q["reason"] for q in state["quarantines"]}
             self.assertNotIn("owned_fanout_unresolved", reasons)

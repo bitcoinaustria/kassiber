@@ -259,6 +259,11 @@ binary.
    stable result contract. The CLI wrapper only injects the existing audited
    source-overlap repair/warning and cached-rate pricing preflights; it no
    longer decides custody behavior or coordinates projection persistence.
+   The obsolete CLI `build_ledger_state` and rate-loader compatibility wrappers
+   are deleted; report hooks, transfer audit and integration tests call the
+   core service directly. The source-overlap integration test now creates a
+   real active reviewed component through plan/apply instead of manufacturing
+   a legacy `transaction_pairs` row.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

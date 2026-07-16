@@ -8,6 +8,10 @@ from embit import bip32, bip39
 
 from kassiber.cli.handlers import _repair_journal_source_overlaps, process_journals
 from kassiber.core import source_overlap
+from kassiber.core.custody_component_planner import (
+    apply_component_review,
+    plan_component_review,
+)
 from kassiber.core.sync import WalletBackendFetch, WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
 from kassiber.core.ui_snapshot import build_overview_snapshot, build_report_blockers_snapshot
 from kassiber.core.wallets import normalize_addresses
@@ -810,18 +814,41 @@ class SourceOverlapTests(unittest.TestCase):
                     "address",
                     {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
                 )
-                _tx(conn, "tx-desc", "desc", "cc" * 32)
-                _tx(conn, "tx-addr", "addr", "cc" * 32)
-                conn.execute(
-                    """
-                    INSERT INTO transaction_pairs(
-                        id, workspace_id, profile_id, out_transaction_id,
-                        in_transaction_id, created_at
-                    ) VALUES('pair-1', 'ws', 'pf', 'tx-addr', 'tx-desc', ?)
-                    """,
-                    ("2026-01-01T00:00:00Z",),
+                _tx(conn, "tx-desc", "desc", "cc" * 32, direction="outbound")
+                _tx(conn, "tx-addr", "addr", "cc" * 32, direction="outbound")
+                _tx(conn, "tx-return", "desc", "dd" * 32)
+                review_args = {
+                    "workspace_id": "ws",
+                    "profile_id": "pf",
+                    "action": "create",
+                    "components": [
+                        {
+                            "component_type": "native_transfer",
+                            "evidence_kind": "manual_claim",
+                            "evidence_grade": "reviewed",
+                            "legs": [
+                                {
+                                    "role": "source",
+                                    "transaction": "tx-addr",
+                                    "amount_msat": btc_to_msat("0.01"),
+                                },
+                                {
+                                    "role": "destination",
+                                    "transaction": "tx-return",
+                                    "amount_msat": btc_to_msat("0.01"),
+                                },
+                            ],
+                        }
+                    ],
+                    "activate": True,
+                    "authored_source": "user",
+                }
+                plan = plan_component_review(conn, **review_args)
+                apply_component_review(
+                    conn,
+                    expected_fingerprint=plan["fingerprint"],
+                    **review_args,
                 )
-                conn.commit()
 
                 repair = _repair_journal_source_overlaps(conn, profile)
 

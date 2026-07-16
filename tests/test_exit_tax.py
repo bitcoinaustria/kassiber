@@ -593,7 +593,9 @@ class ExitTaxEngineIntegrationTests(unittest.TestCase):
         conn, profile = self._seed_book()
         from kassiber.cli import handlers
 
-        state = handlers.build_ledger_state(conn, profile)
+        from kassiber.core import custody_journal
+
+        state = custody_journal.build_ledger_state(conn, profile)
         entry_types = {str(e.get("entry_type")) for e in state["entries"]}
         unexpected_entry_types = entry_types - exit_tax.RECOGNIZED_ENTRY_TYPES
         self.assertSetEqual(

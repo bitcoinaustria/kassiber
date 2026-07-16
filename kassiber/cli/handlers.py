@@ -2607,7 +2607,7 @@ def _report_hooks():
         resolve_scope=resolve_scope,
         resolve_account=resolve_account,
         resolve_wallet=resolve_wallet,
-        build_ledger_state=build_ledger_state,
+        build_ledger_state=core_custody_journal.build_ledger_state,
         list_journal_entries=list_journal_entries,
         list_wallets=core_wallets.list_wallets,
         parse_iso_datetime=_parse_iso_datetime,
@@ -4519,13 +4519,6 @@ def list_transactions(
     }
 
 
-def latest_rates_for_profile(conn, profile_id):
-    return core_custody_journal.latest_transaction_rates_for_profile(
-        conn,
-        profile_id,
-    )
-
-
 def auto_price_transactions_from_rates_cache(conn, profile):
     missing_price_sql = core_rates.transaction_price_missing_sql_unqualified()
     tx_rows = conn.execute(
@@ -4621,12 +4614,6 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         if price_was_missing:
             auto_priced += 1
     return auto_priced
-
-
-def build_ledger_state(conn, profile):
-    """Compatibility entrypoint for the canonical core journal builder."""
-
-    return core_custody_journal.build_ledger_state(conn, profile)
 
 
 def _unresolved_address_list_overlap_wallets(overlap):
@@ -4932,7 +4919,7 @@ def _serialize_direct_swap_payouts(rows, refs_by_id):
 def inspect_transfer_audit(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
-    state = build_ledger_state(conn, profile)
+    state = core_custody_journal.build_ledger_state(conn, profile)
     tx_refs = _audit_transaction_refs(
         conn,
         profile["id"],

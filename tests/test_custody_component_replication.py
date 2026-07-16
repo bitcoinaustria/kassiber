@@ -11,8 +11,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from kassiber.cli.handlers import build_ledger_state
 from kassiber.core.accounts import create_profile, create_workspace
+from kassiber.core.custody_journal import build_ledger_state
 from kassiber.core.custody_components import (
     activate_component,
     create_component,
