@@ -62,6 +62,20 @@ def _descriptor_wallet():
 
 
 class BdkDependencyContractTest(TestCase):
+    def _observer(self):
+        wallet, plan = _descriptor_wallet()
+        identity = identities_for_wallet(wallet, observer_kind="bdk")[0]
+        return BdkObserver(
+            identity=identity,
+            backend={
+                "name": "native",
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            branches=bdk_branches_for_identity(plan, identity),
+            gap_limit=20,
+        )
+
     def _discovery(self, *, backend=None, partial_targets=False):
         wallet, plan = _descriptor_wallet()
         targets = sync_backends._offline_descriptor_targets(plan, {})
@@ -93,6 +107,46 @@ class BdkDependencyContractTest(TestCase):
             started=0.0,
             force_full=False,
         )
+
+    def test_unused_branch_coverage_is_exactly_the_revealed_exclusive_bound(self):
+        observer = self._observer()
+        native_wallet = mock.Mock()
+        native_wallet.derivation_index.return_value = 19
+
+        point = observer._coverage_point(
+            native_wallet,
+            observer.branches[0],
+            None,
+        )
+
+        self.assertEqual(point.scanned_to, 20)
+        self.assertIsNone(point.highest_used)
+
+    def test_used_branch_coverage_does_not_add_a_second_gap(self):
+        observer = self._observer()
+        native_wallet = mock.Mock()
+        # BDK revealed and synced indices 0..25 after finding index 5. The
+        # former projection added another gap and incorrectly reported 46.
+        native_wallet.derivation_index.return_value = 25
+
+        point = observer._coverage_point(
+            native_wallet,
+            observer.branches[0],
+            5,
+        )
+
+        self.assertEqual(point.scanned_to, 26)
+        self.assertEqual(point.highest_used, 5)
+
+    def test_used_index_outside_revealed_boundary_fails_closed(self):
+        observer = self._observer()
+        native_wallet = mock.Mock()
+        native_wallet.derivation_index.return_value = 5
+
+        with self.assertRaises(AppError) as raised:
+            observer._coverage_point(native_wallet, observer.branches[0], 6)
+
+        self.assertEqual(raised.exception.code, "observer_accounting_ambiguous")
 
     def test_supported_route_never_calls_compatibility_adapter(self):
         wallet, discovery = self._discovery()

@@ -114,6 +114,10 @@ from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
 from .core import loans as core_loans
 from .core import commercial as core_commercial
+from .core import custody_gaps as core_custody_gaps
+from .core import custody_gap_reviews as core_custody_gap_reviews
+from .core import custody_ai_audit as core_custody_ai_audit
+from .core import ownership_policy_epochs as core_ownership_policy_epochs
 from .core import attachments as core_attachments
 from .core import document_import as core_document_import
 from .core import lightning as core_lightning
@@ -139,6 +143,7 @@ from .core.ui_snapshot import (
     build_audit_changes_since_last_answer_snapshot,
     build_backends_list_snapshot,
     build_capital_gains_snapshot,
+    build_custody_lineage_snapshot,
     build_journal_events_list_snapshot,
     build_journals_snapshot,
     build_journals_quarantine_snapshot,
@@ -423,6 +428,20 @@ SUPPORTED_KINDS = (
     "ui.transfers.components.supersede",
     "ui.transfers.components.undo",
     "ui.transfers.components.bulk_resolve",
+    "ui.custody.coverage.snapshot",
+    "ui.custody.lineage.snapshot",
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history",
+    "ui.custody.gaps.dismiss",
+    "ui.custody.gaps.bridge.preview",
+    "ui.custody.gaps.bridge.create",
+    "ui.custody.gaps.reopen.preview",
+    "ui.custody.gaps.reopen",
+    "ui.custody.gaps.revise.preview",
+    "ui.custody.gaps.revise",
+    "ui.custody.gaps.residual.preview",
+    "ui.custody.gaps.residual.classify",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
@@ -553,6 +572,32 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.report.blockers",
 }
 _SWAP_MATCHING_DAEMON_KIND_PREFIXES = ("ui.transfers.", "ui.saved_views.")
+_CUSTODY_GAP_READ_DAEMON_KINDS = {
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history",
+    "ui.custody.gaps.bridge.preview",
+    "ui.custody.gaps.reopen.preview",
+    "ui.custody.gaps.revise.preview",
+    "ui.custody.gaps.residual.preview",
+}
+_CUSTODY_COVERAGE_READ_DAEMON_KINDS = {"ui.custody.coverage.snapshot"}
+_CUSTODY_LINEAGE_READ_DAEMON_KINDS = {"ui.custody.lineage.snapshot"}
+_LOCAL_CUSTODY_READ_DAEMON_KINDS = (
+    _CUSTODY_GAP_READ_DAEMON_KINDS
+    | _CUSTODY_COVERAGE_READ_DAEMON_KINDS
+    | _CUSTODY_LINEAGE_READ_DAEMON_KINDS
+)
+_CUSTODY_GAP_MUTATING_DAEMON_KINDS = {
+    "ui.custody.gaps.dismiss",
+    "ui.custody.gaps.bridge.create",
+    "ui.custody.gaps.reopen",
+    "ui.custody.gaps.revise",
+    "ui.custody.gaps.residual.classify",
+}
+_CUSTODY_GAP_DAEMON_KINDS = (
+    _CUSTODY_GAP_READ_DAEMON_KINDS | _CUSTODY_GAP_MUTATING_DAEMON_KINDS
+)
 _SOURCE_FUNDS_READ_AI_DAEMON_KINDS = {
     "ui.source_funds.preview",
     "ui.source_funds.sources.list",
@@ -643,6 +688,11 @@ AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.journals.quarantine.resolve",
         "ui.transfers.components.bulk_resolve",
+        "ui.custody.gaps.bridge.create",
+        "ui.custody.gaps.dismiss",
+        "ui.custody.gaps.reopen",
+        "ui.custody.gaps.revise",
+        "ui.custody.gaps.residual.classify",
     }
 )
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
@@ -1122,6 +1172,15 @@ class ParsedAiToolCall:
     name: str
     arguments: dict[str, Any]
     argument_error: str | None = None
+
+
+@dataclass(frozen=True)
+class CustodyAiConsentAudit:
+    provider_kind: str
+    model: str
+    consent_decision: str
+    consent_requested_at: str
+    consent_decided_at: str
 
 
 @dataclass(frozen=True)
@@ -2153,6 +2212,361 @@ def _ui_swap_matching_payload(
     ``kassiber.ai.tools``.
     """
     return _ui_swap_matching_payload_from_conn(_require_conn(ctx), kind, args)
+
+
+def _ui_custody_gap_payload_from_conn(
+    conn: sqlite3.Connection,
+    kind: str,
+    args: dict[str, Any],
+    *,
+    authored_source: str = "gui",
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Build a bounded, privacy-safe custody-gap packet for UI or AI reads."""
+
+    scope_fields = {"workspace", "profile"}
+    if kind == "ui.custody.gaps.list":
+        allowed = scope_fields | {"limit", "cursor"}
+    elif kind == "ui.custody.gaps.history":
+        allowed = scope_fields | {"gap_id", "limit"}
+    elif kind == "ui.custody.gaps.review_context":
+        allowed = scope_fields | {"gap_id"}
+    elif kind == "ui.custody.gaps.bridge.preview":
+        allowed = scope_fields | {"gap_id"}
+    elif kind == "ui.custody.gaps.bridge.create":
+        allowed = scope_fields | {"gap_id", "expected_fingerprint"}
+    elif kind == "ui.custody.gaps.dismiss":
+        allowed = scope_fields | {"gap_id", "expected_fingerprint", "reason"}
+    elif kind in {
+        "ui.custody.gaps.reopen.preview",
+        "ui.custody.gaps.revise.preview",
+    }:
+        allowed = scope_fields | {"gap_id", "reason"}
+    elif kind in {"ui.custody.gaps.reopen", "ui.custody.gaps.revise"}:
+        allowed = scope_fields | {"gap_id", "expected_fingerprint", "reason"}
+    elif kind == "ui.custody.gaps.residual.preview":
+        allowed = scope_fields | {"gap_id", "classification", "reason"}
+    elif kind == "ui.custody.gaps.residual.classify":
+        allowed = scope_fields | {
+            "gap_id",
+            "classification",
+            "expected_fingerprint",
+            "reason",
+        }
+    else:
+        raise AppError(
+            f"Unsupported custody-gap daemon kind '{kind}'", code="validation"
+        )
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            f"{kind} received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+
+    limit = args.get("limit", 100)
+    if kind in {"ui.custody.gaps.list", "ui.custody.gaps.history"} and (
+        type(limit) is not int or not 1 <= limit <= 200
+    ):
+        raise AppError(
+            f"{kind} limit must be an integer between 1 and 200",
+            code="validation",
+            retryable=False,
+        )
+    raw_cursor = args.get("cursor")
+    if raw_cursor is not None and (
+        not isinstance(raw_cursor, str) or not raw_cursor.isdigit()
+    ):
+        raise AppError(
+            f"{kind} cursor is invalid",
+            code="validation",
+            retryable=False,
+        )
+    if raw_cursor is not None and int(raw_cursor) > 2**31 - 1:
+        raise AppError(
+            f"{kind} cursor is out of range",
+            code="validation",
+            retryable=False,
+        )
+    gap_id = args.get("gap_id")
+    if kind != "ui.custody.gaps.list":
+        if not isinstance(gap_id, str) or not gap_id.strip():
+            raise AppError(f"{kind} requires gap_id", code="validation")
+        gap_id = gap_id.strip()
+
+    reason = args.get("reason")
+    if reason is not None and (
+        not isinstance(reason, str) or len(reason) > 500
+    ):
+        raise AppError(
+            f"{kind} reason must be text up to 500 characters",
+            code="validation",
+            retryable=False,
+        )
+
+    _workspace, profile = resolve_scope(
+        conn, args.get("workspace"), args.get("profile")
+    )
+    if kind == "ui.custody.gaps.history":
+        return _ui_exact_integer_payload(
+            core_custody_gap_reviews.list_review_history(
+                conn,
+                profile["id"],
+                str(gap_id),
+                limit=limit,
+            )
+        )
+
+    correction_kinds = {
+        "ui.custody.gaps.reopen.preview",
+        "ui.custody.gaps.reopen",
+        "ui.custody.gaps.residual.preview",
+        "ui.custody.gaps.residual.classify",
+    }
+    if kind in correction_kinds:
+        if kind == "ui.custody.gaps.reopen.preview":
+            payload = core_custody_gap_reviews.preview_reopen_guided_bridge(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                gap_id=str(gap_id),
+                reason=reason,
+            )
+            return _ui_exact_integer_payload(payload)
+        if kind == "ui.custody.gaps.residual.preview":
+            classification = args.get("classification")
+            if not isinstance(classification, str):
+                raise AppError(f"{kind} requires classification", code="validation")
+            payload = core_custody_gap_reviews.preview_residual_classification(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                gap_id=str(gap_id),
+                classification=classification,
+                reason=reason,
+                authored_source=authored_source,
+            )
+            return _ui_exact_integer_payload(payload)
+        expected = args.get("expected_fingerprint")
+        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+            raise AppError(
+                f"{kind} requires a 64-character expected_fingerprint",
+                code="validation",
+            )
+        if kind == "ui.custody.gaps.reopen":
+            payload = core_custody_gap_reviews.reopen_guided_bridge(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                gap_id=str(gap_id),
+                expected_fingerprint=expected,
+                reason=reason,
+                authored_source=authored_source,
+                commit=commit,
+            )
+            return _ui_exact_integer_payload(payload)
+        classification = args.get("classification")
+        if not isinstance(classification, str):
+            raise AppError(f"{kind} requires classification", code="validation")
+        payload = core_custody_gap_reviews.classify_residual(
+            conn,
+            workspace_id=_workspace["id"],
+            profile_id=profile["id"],
+            gap_id=str(gap_id),
+            classification=classification,
+            expected_fingerprint=expected,
+            reason=reason,
+            authored_source=authored_source,
+            commit=commit,
+        )
+        return _ui_exact_integer_payload(payload)
+
+    if kind in {
+        "ui.custody.gaps.dismiss",
+        "ui.custody.gaps.bridge.preview",
+        "ui.custody.gaps.bridge.create",
+        "ui.custody.gaps.revise.preview",
+        "ui.custody.gaps.revise",
+    }:
+        candidate = core_custody_gaps.find_gap_candidate(
+            conn, profile["id"], str(gap_id)
+        )
+        if kind == "ui.custody.gaps.bridge.preview":
+            return _ui_exact_integer_payload(
+                core_custody_gap_reviews.preview_guided_bridge(
+                    conn,
+                    workspace_id=_workspace["id"],
+                    profile_id=profile["id"],
+                    candidate=candidate,
+                    authored_source=authored_source,
+                )
+            )
+        if kind == "ui.custody.gaps.revise.preview":
+            return _ui_exact_integer_payload(
+                core_custody_gap_reviews.preview_guided_revision(
+                    conn,
+                    workspace_id=_workspace["id"],
+                    profile_id=profile["id"],
+                    candidate=candidate,
+                    reason=reason,
+                    authored_source=authored_source,
+                )
+            )
+        expected = args.get("expected_fingerprint")
+        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+            raise AppError(
+                f"{kind} requires a 64-character expected_fingerprint",
+                code="validation",
+            )
+        if kind == "ui.custody.gaps.dismiss":
+            return core_custody_gap_reviews.append_dismissal(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                candidate=candidate,
+                expected_fingerprint=expected,
+                authored_source=authored_source,
+                reason=reason,
+                commit=commit,
+            )
+        if kind == "ui.custody.gaps.revise":
+            return _ui_exact_integer_payload(
+                core_custody_gap_reviews.revise_guided_bridge(
+                    conn,
+                    workspace_id=_workspace["id"],
+                    profile_id=profile["id"],
+                    candidate=candidate,
+                    expected_fingerprint=expected,
+                    reason=reason,
+                    authored_source=authored_source,
+                    commit=commit,
+                )
+            )
+        return _ui_exact_integer_payload(
+            core_custody_gap_reviews.create_guided_bridge(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                candidate=candidate,
+                expected_fingerprint=expected,
+                authored_source=authored_source,
+                commit=commit,
+            )
+        )
+    try:
+        raw_payload = core_custody_gaps.build_gap_snapshot(
+            conn,
+            profile["id"],
+            gap_id=gap_id,
+            limit=1 if gap_id else limit,
+            cursor=raw_cursor if kind == "ui.custody.gaps.list" else None,
+        )
+    except core_custody_gaps.CustodyGapSearchLimitError as exc:
+        raise AppError(
+            "The custody-gap scan is too large for the bounded review search",
+            code="custody_gap_search_limit",
+            hint=(
+                "Narrow the imported history or use a future indexed custody-gap "
+                "scan before treating the review queue as clear."
+            ),
+            retryable=False,
+        ) from exc
+    raw_summary = raw_payload.get("summary", {})
+    payload = {
+        "summary": {
+            key: raw_summary.get(key, 0)
+            for key in (
+                "total",
+                "needs_review",
+                "conflicting",
+                "resolved",
+                "dismissed",
+                "unresolved_msat",
+                "candidate_residual_msat",
+                "candidate_residual_by_asset",
+                "canonical_unresolved_msat",
+                "canonical_issue_count",
+                "canonical_unresolved_by_asset",
+                "canonical_unquantified_issue_count",
+                "canonical_status",
+                "canonical_status_text",
+                "derived_state_current",
+                "qualification",
+                "search_complete",
+                "search_status",
+                "search_limit_kind",
+                "search_candidate_count",
+            )
+        },
+        "gaps": [
+            {
+                **{
+                    key: gap.get(key)
+                    for key in (
+                        "gap_id",
+                        "candidate_fingerprint",
+                        "status",
+                        "status_reason",
+                        "asset",
+                        "source_wallet_label",
+                        "destination_wallet_labels",
+                        "source_total_msat",
+                        "source_fee_msat",
+                        "source_debit_msat",
+                        "return_total_msat",
+                        "residual_msat",
+                        "started_at",
+                        "ended_at",
+                        "confidence",
+                        "promotion_eligible",
+                        "competitor_score_margin",
+                        "reason_codes",
+                    )
+                },
+                "downstream": {
+                    key: (gap.get("downstream") or {}).get(key)
+                    for key in ("affected_disposals", "affected_years")
+                },
+            }
+            for gap in raw_payload.get("gaps", [])
+            if isinstance(gap, dict)
+        ],
+        "next_cursor": raw_payload.get("next_cursor"),
+    }
+    return _ui_exact_integer_payload(payload)
+
+
+def _ui_custody_gap_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    return _ui_custody_gap_payload_from_conn(_require_conn(ctx), kind, args)
+
+
+def _ui_custody_coverage_payload_from_conn(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Return technical imported-policy coverage, never ownership completeness."""
+
+    allowed = {"workspace", "profile"}
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.custody.coverage.snapshot received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    _workspace, profile = resolve_scope(
+        conn, args.get("workspace"), args.get("profile")
+    )
+    return core_ownership_policy_epochs.technical_coverage_snapshot(
+        conn, str(profile["id"])
+    )
 
 
 def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
@@ -5256,6 +5670,17 @@ def _execute_read_only_ai_tool(
     entry = get_tool(call.name)
     if entry is None or entry.kind_class != "read_only":
         return _tool_result_denied("tool_not_allowed")
+    if (
+        entry.daemon_kind in _LOCAL_CUSTODY_READ_DAEMON_KINDS
+        and runtime.maintenance_state.get("provider_kind") != "local"
+    ):
+        return _tool_result_denied(
+            "local_provider_required",
+            message=(
+                "Custody lineage is available in the local desktop workflow "
+                "and to local AI providers only."
+            ),
+        )
     if not planned_auto_read and not _ai_tool_is_advertised(entry, runtime):
         return _tool_result_denied("tool_not_advertised")
     try:
@@ -5616,6 +6041,20 @@ def _execute_read_only_ai_tool(
                         data_root=runtime.data_root,
                     )
                 )
+            elif entry.daemon_kind in _CUSTODY_COVERAGE_READ_DAEMON_KINDS:
+                payload = _ui_custody_coverage_payload_from_conn(
+                    conn,
+                    call.arguments,
+                )
+            elif entry.daemon_kind in _CUSTODY_LINEAGE_READ_DAEMON_KINDS:
+                payload = build_custody_lineage_snapshot(conn, call.arguments)
+            elif entry.daemon_kind in _CUSTODY_GAP_READ_DAEMON_KINDS:
+                payload = _ui_custody_gap_payload_from_conn(
+                    conn,
+                    entry.daemon_kind,
+                    call.arguments,
+                    authored_source="ai_tool",
+                )
             elif entry.daemon_kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
                 payload = _ui_swap_matching_payload_from_conn(
                     conn,
@@ -5941,12 +6380,25 @@ def _quarantine_resolution_payload(
     }
 
 
-def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -> dict[str, Any]:
+def _execute_mutating_ai_tool(
+    call: ParsedAiToolCall,
+    runtime: AiToolRuntime,
+    *,
+    custody_audit: CustodyAiConsentAudit | None = None,
+) -> dict[str, Any]:
     if call.argument_error:
         return _tool_result_denied(call.argument_error)
     entry = get_tool(call.name)
     if entry is None or entry.kind_class != "mutating":
         return _tool_result_denied("tool_not_allowed")
+    if (
+        entry.daemon_kind in _CUSTODY_GAP_MUTATING_DAEMON_KINDS
+        and runtime.maintenance_state.get("provider_kind") != "local"
+    ):
+        return _tool_result_denied(
+            "local_provider_required",
+            message="Custody-gap linkage is available to local AI providers only.",
+        )
     if not _ai_tool_is_advertised(entry, runtime):
         return _tool_result_denied("tool_not_advertised")
     try:
@@ -6148,6 +6600,77 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_scoped_ai_mutation(runtime, _execute)
+        if entry.daemon_kind in _CUSTODY_GAP_MUTATING_DAEMON_KINDS:
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                if custody_audit is None:
+                    raise AppError(
+                        "Custody AI write is missing its consent audit context",
+                        code="custody_ai_audit_required",
+                        retryable=False,
+                    )
+                workspace_id = runtime.maintenance_state.get("scope_workspace_id")
+                profile_id = runtime.maintenance_state.get("scope_profile_id")
+                if not isinstance(workspace_id, str) or not isinstance(profile_id, str):
+                    raise AppError(
+                        "Custody AI write has no frozen book scope",
+                        code="stale_context",
+                        retryable=True,
+                    )
+                conn.execute("SAVEPOINT custody_ai_assisted_write")
+                try:
+                    payload = _ui_custody_gap_payload_from_conn(
+                        conn,
+                        entry.daemon_kind,
+                        call.arguments,
+                        authored_source="ai_tool",
+                        commit=False,
+                    )
+                    core_custody_ai_audit.append_assistance_record(
+                        conn,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        tool_name=entry.name,
+                        daemon_kind=entry.daemon_kind,
+                        call_id=call.call_id,
+                        provider_kind=custody_audit.provider_kind,
+                        model=custody_audit.model,
+                        model_proposal=call.arguments,
+                        final_proposal=call.arguments,
+                        consent_decision=custody_audit.consent_decision,
+                        consent_requested_at=custody_audit.consent_requested_at,
+                        consent_decided_at=custody_audit.consent_decided_at,
+                        execution_status="executed",
+                        result=payload,
+                    )
+                except Exception as exc:
+                    conn.execute("ROLLBACK TO SAVEPOINT custody_ai_assisted_write")
+                    conn.execute("RELEASE SAVEPOINT custody_ai_assisted_write")
+                    core_custody_ai_audit.append_assistance_record(
+                        conn,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        tool_name=entry.name,
+                        daemon_kind=entry.daemon_kind,
+                        call_id=call.call_id,
+                        provider_kind=custody_audit.provider_kind,
+                        model=custody_audit.model,
+                        model_proposal=call.arguments,
+                        final_proposal=call.arguments,
+                        consent_decision=custody_audit.consent_decision,
+                        consent_requested_at=custody_audit.consent_requested_at,
+                        consent_decided_at=custody_audit.consent_decided_at,
+                        execution_status="failed",
+                        execution_code=(
+                            exc.code if isinstance(exc, AppError) else "tool_error"
+                        ),
+                    )
+                    conn.commit()
+                    raise
+                conn.execute("RELEASE SAVEPOINT custody_ai_assisted_write")
+                conn.commit()
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_scoped_ai_mutation(runtime, _execute)
         if entry.daemon_kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
             if entry.daemon_kind == "ui.transfers.update" and not any(
                 key in call.arguments for key in ("kind", "policy", "notes")
@@ -6190,6 +6713,62 @@ def _tool_result_content_for_model(result: dict[str, Any]) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def _record_nonexecuted_custody_ai_call(
+    *,
+    call: ParsedAiToolCall,
+    runtime: AiToolRuntime,
+    provider_kind: str,
+    model: str,
+    consent_decision: str,
+    consent_requested_at: str,
+    consent_decided_at: str,
+    execution_status: str,
+    execution_code: str,
+) -> None:
+    """Persist a denied/cancelled custody proposal independently of chat history."""
+
+    entry = get_tool(call.name)
+    if entry is None or entry.daemon_kind not in _CUSTODY_GAP_MUTATING_DAEMON_KINDS:
+        return
+
+    def _record(conn: sqlite3.Connection) -> dict[str, Any]:
+        workspace_id = runtime.maintenance_state.get("scope_workspace_id")
+        profile_id = runtime.maintenance_state.get("scope_profile_id")
+        if not isinstance(workspace_id, str) or not isinstance(profile_id, str):
+            raise AppError(
+                "Custody AI audit has no frozen book scope",
+                code="stale_context",
+                retryable=True,
+            )
+        record = core_custody_ai_audit.append_assistance_record(
+            conn,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            tool_name=entry.name,
+            daemon_kind=entry.daemon_kind,
+            call_id=call.call_id,
+            provider_kind=provider_kind,
+            model=model,
+            model_proposal=call.arguments,
+            final_proposal=call.arguments,
+            consent_decision=consent_decision,
+            consent_requested_at=consent_requested_at,
+            consent_decided_at=consent_decided_at,
+            execution_status=execution_status,
+            execution_code=execution_code,
+        )
+        conn.commit()
+        return record
+
+    try:
+        _run_scoped_ai_operation(runtime, _record)
+    except Exception as exc:
+        _REQUEST_LOGGER.error(
+            "failed to append non-executed custody AI audit",
+            exc_info=exc,
+        )
 
 
 def _record_ai_tool_usage(
@@ -6909,6 +7488,22 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         add("ui.journals.snapshot")
         add("ui.reports.summary")
 
+    if _message_has_any(
+        text,
+        "custody gap",
+        "missing wallet",
+        "wallet roll",
+        "whirlpool",
+        "samourai",
+        "basis continuity",
+        "verwahrungslücke",
+        "verwahrungsluecke",
+        "fehlende wallet",
+    ):
+        add("ui.custody.gaps.list", {"limit": 20})
+        add("ui.custody.coverage.snapshot")
+        add("ui.custody.lineage.snapshot", {"limit": 100})
+
     if _message_has_any(text, "auto-pair", "autopair", "rule", "rules", "regel"):
         add("ui.transfers.rules.list")
 
@@ -7562,6 +8157,7 @@ def _run_ai_chat_tool_loop(
             display_name = entry.name if entry is not None else call.name
             tool_session_name = entry.name if entry is not None else call.name
             preview_arguments = redact_tool_arguments(call.arguments)
+            proposal_seen_at = now_iso()
             needs_consent = (
                 entry is not None
                 and advertised
@@ -7588,6 +8184,25 @@ def _run_ai_chat_tool_loop(
                 )
             )
             if cancel_event.is_set():
+                if (
+                    entry is not None
+                    and advertised
+                    and not duplicate_call_id
+                    and entry.kind_class == "mutating"
+                    and not call.argument_error
+                ):
+                    cancelled_at = now_iso()
+                    _record_nonexecuted_custody_ai_call(
+                        call=call,
+                        runtime=runtime,
+                        provider_kind=str(provider_snapshot.get("kind") or "unknown"),
+                        model=validated["model"],
+                        consent_decision="cancelled",
+                        consent_requested_at=proposal_seen_at,
+                        consent_decided_at=cancelled_at,
+                        execution_status="cancelled",
+                        execution_code="cancelled_before_consent",
+                    )
                 finish_reason = "cancelled"
                 break
             if duplicate_call_id:
@@ -7595,6 +8210,7 @@ def _run_ai_chat_tool_loop(
             elif entry is not None and not advertised:
                 result = _tool_result_denied("tool_not_advertised")
             elif entry is not None and entry.kind_class == "mutating" and not call.argument_error:
+                consent_requested_at = proposal_seen_at
                 if needs_consent:
                     out.write(
                         _with_request_id(
@@ -7616,13 +8232,47 @@ def _run_ai_chat_tool_loop(
                     cancel_event=cancel_event,
                     timeout=AI_TOOL_CONSENT_TIMEOUT_SECONDS,
                 )
+                consent_decided_at = now_iso()
                 if decision == "cancelled" or cancel_event.is_set():
+                    _record_nonexecuted_custody_ai_call(
+                        call=call,
+                        runtime=runtime,
+                        provider_kind=str(provider_snapshot.get("kind") or "unknown"),
+                        model=validated["model"],
+                        consent_decision="cancelled",
+                        consent_requested_at=consent_requested_at,
+                        consent_decided_at=consent_decided_at,
+                        execution_status="cancelled",
+                        execution_code="cancelled",
+                    )
                     finish_reason = "cancelled"
                     break
                 if decision == "deny":
                     result = _tool_result_denied("user_denied")
+                    _record_nonexecuted_custody_ai_call(
+                        call=call,
+                        runtime=runtime,
+                        provider_kind=str(provider_snapshot.get("kind") or "unknown"),
+                        model=validated["model"],
+                        consent_decision=decision,
+                        consent_requested_at=consent_requested_at,
+                        consent_decided_at=consent_decided_at,
+                        execution_status="denied",
+                        execution_code="user_denied",
+                    )
                 elif decision == "consent_timeout":
                     result = _tool_result_denied("consent_timeout")
+                    _record_nonexecuted_custody_ai_call(
+                        call=call,
+                        runtime=runtime,
+                        provider_kind=str(provider_snapshot.get("kind") or "unknown"),
+                        model=validated["model"],
+                        consent_decision=decision,
+                        consent_requested_at=consent_requested_at,
+                        consent_decided_at=consent_decided_at,
+                        execution_status="denied",
+                        execution_code="consent_timeout",
+                    )
                 else:
                     out.write(
                         _with_request_id(
@@ -7639,7 +8289,19 @@ def _run_ai_chat_tool_loop(
                             request_id,
                         )
                     )
-                    result = _execute_mutating_ai_tool(call, runtime)
+                    result = _execute_mutating_ai_tool(
+                        call,
+                        runtime,
+                        custody_audit=CustodyAiConsentAudit(
+                            provider_kind=str(
+                                provider_snapshot.get("kind") or "unknown"
+                            ),
+                            model=validated["model"],
+                            consent_decision=decision,
+                            consent_requested_at=consent_requested_at,
+                            consent_decided_at=consent_decided_at,
+                        ),
+                    )
             else:
                 result = _execute_read_only_ai_tool(call, runtime)
             _record_ai_tool_usage(runtime, display_name, result)
@@ -14107,6 +14769,52 @@ def handle_request(
             False,
         )
 
+    if kind in _CUSTODY_GAP_DAEMON_KINDS:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_custody_gap_payload(
+                        ctx,
+                        kind,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in _CUSTODY_COVERAGE_READ_DAEMON_KINDS:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_custody_coverage_payload_from_conn(
+                        _require_conn(ctx),
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in _CUSTODY_LINEAGE_READ_DAEMON_KINDS:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    build_custody_lineage_snapshot(
+                        _require_conn(ctx),
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
         return (
             _with_request_id(
@@ -15384,6 +16092,7 @@ def handle_request(
             main_thread_tasks=ctx.main_thread_tasks,
             maintenance_state={
                 "egress_after_id": int(egress_before_chat or 0),
+                "provider_kind": provider["kind"],
                 "scope_workspace_id": chat_scope.get("workspace_id"),
                 "scope_profile_id": chat_scope.get("profile_id"),
             },

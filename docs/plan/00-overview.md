@@ -50,6 +50,8 @@ Out of scope unless a future design says otherwise:
 - BTC amounts are integer msat
 - reports are trusted only after journal processing
 - ambiguous tax semantics quarantine instead of being guessed
+- every observed quantity is represented exactly once, while unresolved
+  custody never becomes a taxable event
 - secret-bearing success output stays redacted/safe for agents
 - docs and command behavior move together
 
@@ -64,6 +66,7 @@ Out of scope unless a future design says otherwise:
 | Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
 | Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
+| Custody lineage | Design/active | separate quantity from tax, reconcile complete policies automatically, and review durable missing-wallet bridges |
 | Packaging | In progress | Unsigned prerelease desktop bundles now carry a PyInstaller CLI sidecar; signed production packaging and any `python-build-standalone` replacement are still open |
 
 ## Stack
@@ -89,6 +92,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `11-exit-tax-deemed-disposal.md`: Wegzugsbesteuerung / deemed-disposal report design
 - `12-collateralized-loans.md`: collateralized-loan leg modeling
 - `13-device-sync.md`: shipped cross-device / multi-user sync guardrails (mailbox-first, no trusted server; issue #309)
+- `14-custody-lineage.md`: custody quantity/tax separation, durable
+  missing-wallet bridges, and long-horizon reconciliation
 
 ## Highest-Risk Drift Points
 

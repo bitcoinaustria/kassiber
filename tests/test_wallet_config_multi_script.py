@@ -20,6 +20,10 @@ from embit import bip32
 from kassiber.core import accounts as core_accounts
 from kassiber.core import freshness as core_freshness
 from kassiber.core import ownership
+from kassiber.core.ownership_policy_epochs import (
+    ensure_active_wallet_epoch,
+    retired_policy_materials,
+)
 from kassiber.core.sync import classify_wallet_sync
 from kassiber.core.sync_backends import resolve_wallet_sync_targets
 from kassiber.core.ui_snapshot import _wallet_backend_summary
@@ -359,6 +363,180 @@ class WalletConfigFreshnessTests(unittest.TestCase):
         self.assertEqual(state["stale_reason"], "wallet_config_changed")
         self.assertEqual(state["status"], core_freshness.STATUS_PARTIALLY_STALE)
 
+    def test_alias_only_config_rewrite_preserves_epoch_and_observer_state(self):
+        conn = self._db()
+        workspace = core_accounts.create_workspace(conn, "Main")
+        profile = core_accounts.create_profile(
+            conn,
+            workspace["id"],
+            "Book",
+            "EUR",
+            "FIFO",
+            "generic",
+            365,
+        )
+        wallet = create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "Vault",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh", "p2tr"],
+                "chain": "bitcoin",
+                "network": "main",
+            },
+        )
+        authored_config = {
+            "xpub": _xpub(),
+            "script_types": ["p2tr", "p2wpkh", "p2tr"],
+            "chain": "btc",
+            "network": "mainnet",
+        }
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(authored_config), wallet["id"]),
+        )
+        wallet_row = conn.execute(
+            "SELECT * FROM wallets WHERE id = ?",
+            (wallet["id"],),
+        ).fetchone()
+        epoch_id = ensure_active_wallet_epoch(conn, wallet_row)
+        timestamp = "2026-01-01T00:00:00Z"
+        conn.execute(
+            """
+            INSERT INTO chain_observer_instances(
+                id, workspace_id, profile_id, logical_wallet_id,
+                source_wallet_id, source_key, observer_kind, chain, network,
+                state_version, state_json, created_at, updated_at
+            ) VALUES('observer', ?, ?, ?, ?, 'xpub:p2wpkh', 'bdk',
+                     'bitcoin', 'main', 1, '{}', ?, ?)
+            """,
+            (
+                workspace["id"],
+                profile["id"],
+                wallet["id"],
+                wallet["id"],
+                timestamp,
+                timestamp,
+            ),
+        )
+        source_key = core_freshness.source_key(
+            core_freshness.SOURCE_ONCHAIN,
+            wallet["id"],
+        )
+        core_freshness.upsert_source_state(
+            conn,
+            profile_id=profile["id"],
+            source_key=source_key,
+            source_type=core_freshness.SOURCE_ONCHAIN,
+            source_label="Vault on-chain history",
+            status=core_freshness.STATUS_FRESH,
+            checkpoint={"highest_used": {"4": 12}},
+        )
+
+        update_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            wallet["id"],
+            {"label": "Vault canonicalized"},
+        )
+
+        epochs = conn.execute(
+            "SELECT id, status, private_material_json FROM wallet_policy_epochs "
+            "WHERE wallet_id = ?",
+            (wallet["id"],),
+        ).fetchall()
+        self.assertEqual(len(epochs), 1)
+        self.assertEqual((epochs[0]["id"], epochs[0]["status"]), (epoch_id, "active"))
+        self.assertEqual(
+            json.loads(epochs[0]["private_material_json"])["script_types"],
+            ["p2tr", "p2wpkh", "p2tr"],
+        )
+        self.assertEqual(
+            conn.execute(
+                "SELECT COUNT(*) FROM chain_observer_instances WHERE id = 'observer'"
+            ).fetchone()[0],
+            1,
+        )
+        state = core_freshness.get_source_state(conn, profile["id"], source_key)
+        self.assertEqual(state["checkpoint"], {"highest_used": {"4": 12}})
+        self.assertEqual(state["status"], core_freshness.STATUS_FRESH)
+
+    def test_failed_update_cannot_leave_a_policy_rollover_pending(self):
+        conn = self._db()
+        workspace = core_accounts.create_workspace(conn, "Main")
+        profile = core_accounts.create_profile(
+            conn,
+            workspace["id"],
+            "Book",
+            "EUR",
+            "FIFO",
+            "generic",
+            365,
+        )
+        first = create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "First",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh"],
+                "chain": "bitcoin",
+                "network": "main",
+            },
+        )
+        create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "Duplicate",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh"],
+                "chain": "bitcoin",
+                "network": "main",
+            },
+        )
+
+        with self.assertRaises(AppError) as raised:
+            update_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                first["id"],
+                {
+                    "label": "Duplicate",
+                    "config": {"script_types": ["p2tr"]},
+                },
+            )
+        self.assertEqual(raised.exception.code, "conflict")
+
+        # Simulate a later successful daemon request on the same connection.
+        conn.execute(
+            "UPDATE profiles SET label = label WHERE id = ?",
+            (profile["id"],),
+        )
+        conn.commit()
+        stored = conn.execute(
+            "SELECT label, config_json FROM wallets WHERE id = ?",
+            (first["id"],),
+        ).fetchone()
+        self.assertEqual(stored["label"], "First")
+        self.assertEqual(json.loads(stored["config_json"])["script_types"], ["p2wpkh"])
+        self.assertEqual(
+            conn.execute(
+                "SELECT COUNT(*) FROM wallet_policy_epochs WHERE wallet_id = ?",
+                (first["id"],),
+            ).fetchone()[0],
+            0,
+        )
+
     def test_script_type_migration_keeps_prior_scripts_in_owned_index(self):
         conn = self._db()
         workspace = core_accounts.create_workspace(conn, "Main")
@@ -408,8 +586,10 @@ class WalletConfigFreshnessTests(unittest.TestCase):
             "SELECT * FROM wallets WHERE id = ?", (wallet["id"],)
         ).fetchone()
         stored = json.loads(migrated_row["config_json"])
+        self.assertNotIn(OWNERSHIP_HISTORY_CONFIG_KEY, stored)
         self.assertEqual(
-            stored[OWNERSHIP_HISTORY_CONFIG_KEY][0]["script_types"], ["p2wpkh"]
+            retired_policy_materials(conn, wallet["id"])[0]["script_types"],
+            ["p2wpkh"],
         )
 
         migrated_index, warnings = ownership.build_owned_index(

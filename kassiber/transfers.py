@@ -58,6 +58,7 @@ _WALLET_KIND_ALIASES = {
 }
 _SYNTHETIC_TRANSFER_ID_PREFIXES = (
     "custody:",
+    "custody-tax:",
     "cross-split:",
     "direct-payout:",
     "multi-consol:",
@@ -554,6 +555,7 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
                     "kind": record["kind"],
                     "policy": record["policy"],
                     "source": _row_field(record, "pair_source") or "manual",
+                    "out_amount": _row_field(record, "out_amount"),
                     "component_id": component_id,
                     "group_id": component_group_id,
                     "group_block_rows": component_rows,
@@ -569,6 +571,7 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
                     "in_id": in_id,
                     "out_asset": out_row["asset"],
                     "in_asset": in_row["asset"],
+                    "out_amount": _row_field(record, "out_amount"),
                     **(
                         {"component_id": component_id}
                         if component_id is not None
@@ -695,7 +698,17 @@ def detect_intra_transfers(rows):
         out_row, in_row = outs[0], ins[0]
         if out_row["wallet_id"] == in_row["wallet_id"]:
             continue
-        pairs.append({"out": out_row, "in": in_row})
+        # Same-event rows are useful candidate evidence, but this grouping is
+        # intentionally not an authority boundary. The custody interpreter
+        # later requires closed observer provenance on both endpoints (or an
+        # explicit review) before this candidate can carry basis.
+        pairs.append(
+            {
+                "out": out_row,
+                "in": in_row,
+                "source": "row_matched",
+            }
+        )
         matched_ids.add(out_row["id"])
         matched_ids.add(in_row["id"])
 
@@ -755,7 +768,13 @@ def detect_intra_transfers(rows):
         # semantically precise (change, provider artifacts, or manual repair rows).
         if out_row["id"] in matched_ids or in_row["id"] in matched_ids:
             continue
-        pairs.append({"out": out_row, "in": in_row})
+        pairs.append(
+            {
+                "out": out_row,
+                "in": in_row,
+                "source": "lightning_payment_hash",
+            }
+        )
         matched_ids.add(out_row["id"])
         matched_ids.add(in_row["id"])
     return pairs, matched_ids

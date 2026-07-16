@@ -14,6 +14,7 @@ const CUSTODY_LEG_ROLES = [
   "external",
   "retained",
   "unresolved",
+  "suspense",
 ] as const;
 
 type JsonRecord = Record<string, unknown>;
@@ -48,6 +49,14 @@ export type CustodyPreviewIssueCode =
   | "ownedDestinationRequired"
   | "anchorRequired"
   | "unresolvedValue"
+  | "suspenseReviewRequired"
+  | "suspenseQuantityModeRequired"
+  | "suspenseLocationInvalid"
+  | "suspenseTimeRequired"
+  | "suspenseAllocationRequired"
+  | "suspenseObservedSourceRequired"
+  | "suspenseAssetMismatch"
+  | "suspenseTimeMismatch"
   | "quantityUnbalanced"
   | "conversionReviewRequired"
   | "conversionValuationUnbalanced"
@@ -80,6 +89,7 @@ export interface CustodyBatchPreview {
     transactionAnchors: number;
     untrackedLegs: number;
     unresolvedLegs: number;
+    suspenseLegs: number;
   };
 }
 
@@ -91,6 +101,7 @@ const SINK_ROLES = new Set<string>([
   "external",
   "retained",
   "unresolved",
+  "suspense",
 ]);
 const SQLITE_MAX_INTEGER = 9_223_372_036_854_775_807n;
 
@@ -253,6 +264,7 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
         transactionAnchors: 0,
         untrackedLegs: 0,
         unresolvedLegs: 0,
+        suspenseLegs: 0,
       },
     };
   }
@@ -275,6 +287,7 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
         transactionAnchors: 0,
         untrackedLegs: 0,
         unresolvedLegs: 0,
+        suspenseLegs: 0,
       },
     };
   }
@@ -294,6 +307,7 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
   let transactionAnchors = 0;
   let untrackedLegs = 0;
   let unresolvedLegs = 0;
+  let suspenseLegs = 0;
 
   rawComponents.forEach((rawComponent, componentIndex) => {
     if (!isRecord(rawComponent)) return;
@@ -355,6 +369,7 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
     let componentOwnedDestinations = 0;
     let componentAnchors = 0;
     let componentUnresolved = 0;
+    let componentSuspense = 0;
 
     legs.forEach((leg, legIndex) => {
       const values = { component: componentIndex + 1, leg: legIndex + 1 };
@@ -404,6 +419,16 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
       if (leg.role === "unresolved" && amount !== null && amount > 0n) {
         unresolvedLegs += 1;
         componentUnresolved += 1;
+      }
+      if (leg.role === "suspense" && amount !== null && amount > 0n) {
+        suspenseLegs += 1;
+        componentSuspense += 1;
+        if (legHasTransactionAnchor(leg) || legHasWallet(leg)) {
+          activationErrors.push(issue("suspenseLocationInvalid", values));
+        }
+        if (!hasText(leg.occurred_at)) {
+          activationErrors.push(issue("suspenseTimeRequired", values));
+        }
       }
       if (amount !== null) {
         const key = `${normalizedExposure(leg)}\u0000${normalizedUnit(leg)}`;
@@ -472,6 +497,24 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
         issue("unresolvedValue", { component: componentIndex + 1 }),
       );
     }
+    if (componentSuspense > 0) {
+      if (
+        componentType !== "manual_bridge" ||
+        !hasText(rawComponent.evidence_grade) ||
+        rawComponent.evidence_grade.trim().toLowerCase() !== "reviewed"
+      ) {
+        activationErrors.push(
+          issue("suspenseReviewRequired", { component: componentIndex + 1 }),
+        );
+      }
+      if (mode !== "quantity") {
+        activationErrors.push(
+          issue("suspenseQuantityModeRequired", {
+            component: componentIndex + 1,
+          }),
+        );
+      }
+    }
 
     if (mode === "quantity") {
       for (const [key, amounts] of balance) {
@@ -527,13 +570,15 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
         SINK_ROLES.has(String(leg.role)) && (amountAsMsat(leg) ?? 0n) > 0n,
     );
     const attributedSinks = positiveSinks.filter((leg) =>
-      ["fee", "external", "unresolved"].includes(String(leg.role)),
+      ["fee", "external", "unresolved", "suspense"].includes(String(leg.role)),
     );
     const ownedSinks = positiveSinks.filter((leg) =>
       ["destination", "retained"].includes(String(leg.role)),
     );
     const needsAllocations =
-      mode === "conversion"
+      componentSuspense > 0
+        ? true
+        : mode === "conversion"
         ? positiveSources.length !== 1 || positiveSinks.length !== 1
         : positiveSources.length > 1 &&
           !(ownedSinks.length === 1 && attributedSinks.length === 0);
@@ -559,7 +604,12 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
       : [];
     if (needsAllocations && allocations.length === 0) {
       activationErrors.push(
-        issue("allocationsRequired", { component: componentIndex + 1 }),
+        issue(
+          componentSuspense > 0
+            ? "suspenseAllocationRequired"
+            : "allocationsRequired",
+          { component: componentIndex + 1 },
+        ),
       );
     }
     const sourceCoverage = new Map<number, bigint>();
@@ -656,6 +706,38 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
             }),
           );
         }
+        if (sinkLeg?.role === "suspense") {
+          if (!legHasTransactionAnchor(sourceLeg)) {
+            activationErrors.push(
+              issue("suspenseObservedSourceRequired", {
+                component: componentIndex + 1,
+                allocation: allocationIndex + 1,
+              }),
+            );
+          }
+          if (normalizedAsset(sourceLeg) !== normalizedAsset(sinkLeg)) {
+            activationErrors.push(
+              issue("suspenseAssetMismatch", {
+                component: componentIndex + 1,
+                allocation: allocationIndex + 1,
+              }),
+            );
+          }
+          if (
+            hasText(sourceLeg.occurred_at) &&
+            hasText(sinkLeg.occurred_at) &&
+            Number.isFinite(Date.parse(sourceLeg.occurred_at)) &&
+            Number.isFinite(Date.parse(sinkLeg.occurred_at)) &&
+            Date.parse(sourceLeg.occurred_at) !== Date.parse(sinkLeg.occurred_at)
+          ) {
+            activationErrors.push(
+              issue("suspenseTimeMismatch", {
+                component: componentIndex + 1,
+                allocation: allocationIndex + 1,
+              }),
+            );
+          }
+        }
       }
     });
     if (allocations.length > 0) {
@@ -702,6 +784,7 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
       transactionAnchors,
       untrackedLegs,
       unresolvedLegs,
+      suspenseLegs,
     },
   };
 }

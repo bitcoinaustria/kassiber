@@ -18,6 +18,7 @@ import deAssistant from "./locales/de/assistant.json";
 import deChrome from "./locales/de/chrome.json";
 import deCommon from "./locales/de/common.json";
 import deConnections from "./locales/de/connections.json";
+import deCustodyGaps from "./locales/de/custodyGaps.json";
 import deJournals from "./locales/de/journals.json";
 import deNav from "./locales/de/nav.json";
 import deOnboarding from "./locales/de/onboarding.json";
@@ -32,6 +33,7 @@ import enAssistant from "./locales/en/assistant.json";
 import enChrome from "./locales/en/chrome.json";
 import enCommon from "./locales/en/common.json";
 import enConnections from "./locales/en/connections.json";
+import enCustodyGaps from "./locales/en/custodyGaps.json";
 import enJournals from "./locales/en/journals.json";
 import enNav from "./locales/en/nav.json";
 import enOnboarding from "./locales/en/onboarding.json";
@@ -56,6 +58,7 @@ export const resources = {
     privacyMirror: enPrivacyMirror,
     transactions: enTransactions,
     connections: enConnections,
+    custodyGaps: enCustodyGaps,
     journals: enJournals,
     onboarding: enOnboarding,
     assistant: enAssistant,
@@ -72,6 +75,7 @@ export const resources = {
     privacyMirror: dePrivacyMirror,
     transactions: deTransactions,
     connections: deConnections,
+    custodyGaps: deCustodyGaps,
     journals: deJournals,
     onboarding: deOnboarding,
     assistant: deAssistant,

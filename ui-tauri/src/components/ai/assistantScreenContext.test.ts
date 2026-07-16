@@ -47,6 +47,14 @@ describe("assistantScreenContextFor", () => {
       capabilities: ["wallets", "reports", "operations"],
     });
     expect(
+      assistantScreenContextFor("/custody-gaps", "?gap=custody-gap%3A123"),
+    ).toMatchObject({
+      route: "/custody-gaps",
+      entityType: "custody_gap",
+      entityId: "custody-gap:123",
+      capabilities: ["transfers", "transactions", "wallets"],
+    });
+    expect(
       assistantScreenContextFor(
         "/exit-tax",
         "?destination=eu_eea&departure_date=2026-07-10",

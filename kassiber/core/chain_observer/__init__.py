@@ -29,6 +29,15 @@ from .store import (
     load_observer_state,
     persist_observer_state,
 )
+from .provenance import (
+    AUTHORITY_VERSION,
+    canonical_graph_hash,
+    canonical_observed_quantity_hash,
+    fee_attribution_from_raw,
+    persist_chain_observation_provenance,
+    provenance_entries_for_facts,
+    row_has_current_authoritative_observation,
+)
 
 __all__ = [
     "IDENTITY_VERSION",
@@ -44,14 +53,21 @@ __all__ = [
     "PreparedObserverUpdate",
     "StoredObserverState",
     "apply_prepared_observer_update",
+    "AUTHORITY_VERSION",
+    "canonical_graph_hash",
+    "canonical_observed_quantity_hash",
     "delete_profile_observer_state",
     "delete_wallet_observer_state",
     "discard_prepared_observer_update",
     "discard_prepared_observer_updates",
+    "fee_attribution_from_raw",
     "identities_for_wallet",
     "identities_for_wallets",
     "load_observer_state",
     "observer_instance_id",
     "persist_observer_state",
     "prepare_observer_update",
+    "persist_chain_observation_provenance",
+    "provenance_entries_for_facts",
+    "row_has_current_authoritative_observation",
 ]

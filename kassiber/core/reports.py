@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
+from . import custody_filed_reports as core_custody_filed_reports
 from . import pricing
 from . import rates as core_rates
 from .austrian import (
@@ -28,6 +29,7 @@ from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_rep
     report_exit_tax,
 )
 from .privacy_linkage import analyze_psbt_privacy, build_privacy_linkage_graph
+from .custody_evidence import row_principal_msat
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
@@ -280,6 +282,29 @@ def _resolve_report_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
     return workspace, profile
+
+
+def _register_saved_export(
+    conn: sqlite3.Connection,
+    *,
+    workspace: Mapping[str, Any],
+    profile: Mapping[str, Any],
+    report_kind: str,
+    artifact_paths: Sequence[str | Path],
+    period_start_year: int | None = None,
+    period_end_year: int | None = None,
+    report_scope: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    return core_custody_filed_reports.register_saved_report_export(
+        conn,
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        report_kind=report_kind,
+        artifact_paths=artifact_paths,
+        period_start_year=period_start_year,
+        period_end_year=period_end_year,
+        report_scope=report_scope,
+    )
 
 
 def _json_object(raw_json: Any) -> dict[str, Any]:
@@ -2876,7 +2901,7 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         if out_row is None:
             continue
         reviewed = record["out_amount"]
-        full_amount = int(out_row["amount"] or 0)
+        full_amount = row_principal_msat(out_row)
         if reviewed in (None, "") or int(reviewed) == full_amount:
             payout_claimed_ids.add(out_row["id"])
     auto_pairs = [
@@ -5363,7 +5388,7 @@ def build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: Re
 
 def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
     report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     transaction_rows = _austrian_e1kv_transaction_rows(conn, profile, report["tax_year"])
     from ..austrian_pdf_report import write_austrian_e1kv_pdf
 
@@ -5393,6 +5418,15 @@ def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path,
         "faq",
     ]
     written["transactions"] = len(transaction_rows)
+    written["report_snapshot"] = _register_saved_export(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        report_kind="austrian-e1kv.pdf",
+        artifact_paths=(file_path,),
+        period_start_year=report["tax_year"],
+        period_end_year=report["tax_year"],
+    )
     return written
 
 
@@ -5997,6 +6031,7 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
     import xlsxwriter
 
     report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -6014,7 +6049,7 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
     _austrian_e1kv_xlsx_write_section_sheets(report, workbook, formats)
     _austrian_e1kv_xlsx_write_explanations(report, workbook, formats)
     workbook.close()
-    return {
+    result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "form": report["form"],
@@ -6023,6 +6058,16 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
         "rows": len(report["rows"]),
         "summary_rows": len(report["summary_rows"]),
     }
+    result["report_snapshot"] = _register_saved_export(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        report_kind="austrian-e1kv.xlsx",
+        artifact_paths=(path,),
+        period_start_year=report["tax_year"],
+        period_end_year=report["tax_year"],
+    )
+    return result
 
 
 def _write_csv_rows(path, rows):
@@ -6114,6 +6159,7 @@ def _austrian_e1kv_explanation_csv_rows(report):
 
 def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, hooks: ReportHooks, tax_year=None):
     report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     directory = Path(dir_path).expanduser()
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -6143,7 +6189,7 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
         _austrian_e1kv_csv_filename(99, "erlaeuterungen_zum_steuerreport"),
         _austrian_e1kv_explanation_csv_rows(report),
     )
-    return {
+    result = {
         "dir": str(directory.resolve()),
         "form": report["form"],
         "tax_year": report["tax_year"],
@@ -6152,6 +6198,16 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
         "rows": len(report["rows"]),
         "summary_rows": len(report["summary_rows"]),
     }
+    result["report_snapshot"] = _register_saved_export(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        report_kind="austrian-e1kv.csv-bundle",
+        artifact_paths=tuple(item["file"] for item in files),
+        period_start_year=report["tax_year"],
+        period_end_year=report["tax_year"],
+    )
+    return result
 
 
 def _row_get(row, key, default=""):
@@ -6844,7 +6900,7 @@ def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     _write_csv_rows(path, rows)
-    return {
+    result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "title": context["title"],
@@ -6852,6 +6908,19 @@ def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
         "sections": [spec["sheet_name"] for spec in sections],
         "rows": sum(len(spec["rows"]) for spec in sections),
     }
+    result["report_snapshot"] = _register_saved_export(
+        conn,
+        workspace=context["workspace"],
+        profile=context["profile"],
+        report_kind="full-report.csv",
+        artifact_paths=(path,),
+        report_scope=(
+            {"wallet_ids": [str(context["wallet"]["id"])]}
+            if context.get("wallet")
+            else None
+        ),
+    )
+    return result
 
 
 _VERIFY_ADD_ENTRY_TYPES = ("acquisition", "income", "transfer_in")
@@ -7156,7 +7225,7 @@ def export_xlsx_report(
             attachments=verification["attachments"],
         )
     workbook.close()
-    return {
+    result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "title": context["title"],
@@ -7165,6 +7234,19 @@ def export_xlsx_report(
         "verified": bool(verify),
         "rows": sum(len(spec["rows"]) for spec in sections),
     }
+    result["report_snapshot"] = _register_saved_export(
+        conn,
+        workspace=context["workspace"],
+        profile=context["profile"],
+        report_kind="full-report.xlsx",
+        artifact_paths=(path,),
+        report_scope=(
+            {"wallet_ids": [str(context["wallet"]["id"])]}
+            if context.get("wallet")
+            else None
+        ),
+    )
+    return result
 
 
 TRANSACTIONS_EXPORT_HEADERS = (
@@ -7201,6 +7283,7 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
     sheet — including note, counterparty, tags, and the linked-file/URL
     attachments — so the standalone export matches the report."""
     workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    hooks.require_processed_journals(conn, profile)
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     query_rows = _report_query_rows(conn, profile, wallet=wallet)
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
@@ -7211,7 +7294,13 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
         "headers": TRANSACTIONS_EXPORT_HEADERS,
         "rows": rows,
     }
-    return {"title": f"Kassiber Transactions - {title_scope}", "spec": spec, "wallet": wallet}
+    return {
+        "title": f"Kassiber Transactions - {title_scope}",
+        "spec": spec,
+        "wallet": wallet,
+        "workspace": workspace,
+        "profile": profile,
+    }
 
 
 def export_transactions_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
@@ -7220,13 +7309,14 @@ def export_transactions_csv_report(conn, workspace_ref, profile_ref, file_path, 
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     _write_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
-    return {
+    result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "title": context["title"],
         "wallet": wallet_ref or "",
         "rows": len(spec["rows"]),
     }
+    return result
 
 
 def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
@@ -7591,6 +7681,19 @@ def export_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
     )
     written = dict(hooks.write_text_pdf(file_path, title, lines))
     written["wallet"] = wallet_ref or ""
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_scope = None
+    if wallet_ref:
+        wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref)
+        report_scope = {"wallet_ids": [str(wallet["id"])]}
+    written["report_snapshot"] = _register_saved_export(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        report_kind="full-report.pdf",
+        artifact_paths=(file_path,),
+        report_scope=report_scope,
+    )
     return written
 
 
@@ -7644,6 +7747,21 @@ def export_summary_pdf_report(
             "snapshot_wallets": report["snapshot"]["wallets"] if report.get("snapshot") else None,
             "balance_history": report["balance_history"],
         }
+    )
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    written["report_snapshot"] = _register_saved_export(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        report_kind="summary.pdf",
+        artifact_paths=(file_path,),
+        period_start_year=int(str(report["timeframe"]["start"])[:4]),
+        period_end_year=int(str(report["timeframe"]["end"])[:4]),
+        report_scope={
+            "wallet_ids": [str(wallet["id"]) for wallet in report["wallets"]],
+            "occurred_at_start": report["timeframe"]["start"],
+            "occurred_at_end": report["timeframe"]["end"],
+        },
     )
     return written
 
@@ -7788,7 +7906,7 @@ def export_exit_tax_xlsx_report(
     for spec in specs:
         _generic_report_xlsx_write_sheet(workbook, spec, formats)
     workbook.close()
-    return {
+    result = {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "scope": "exit_tax",
@@ -7798,6 +7916,7 @@ def export_exit_tax_xlsx_report(
         "sheets": [spec["sheet_name"] for spec in specs],
         "rows": len(report["lots"]),
     }
+    return result
 
 
 __all__ = [

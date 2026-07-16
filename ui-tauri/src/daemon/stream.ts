@@ -146,6 +146,7 @@ export interface AiChatRequest {
       | "wallet"
       | "report"
       | "source_funds_case"
+      | "custody_gap"
       | "connection"
       | "profile";
     entityId?: string;

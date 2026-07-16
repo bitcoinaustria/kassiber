@@ -7,6 +7,7 @@ import sqlite3
 import contextvars
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, MutableMapping, Protocol, Sequence
@@ -20,7 +21,10 @@ from .chain_observer import (
     PreparedObserverUpdate,
     apply_prepared_observer_update,
     discard_prepared_observer_updates,
+    persist_chain_observation_provenance,
+    provenance_entries_for_facts,
 )
+from .ownership_policy_epochs import record_observer_policy_coverage
 from .wallets import (
     has_descriptor_sync_material,
     has_silent_payment_sync_material,
@@ -180,6 +184,50 @@ class WalletBackendFetch:
     skip_outcome: Mapping[str, Any] | None = None
     observer_updates: tuple[PreparedObserverUpdate, ...] = ()
     authoritative_chain_observer: bool = False
+
+
+@dataclass(frozen=True)
+class _StructuralAdapterIdentity:
+    """Private identity for a trusted non-dependency chain adapter apply."""
+
+    id: str
+    observer_kind: str
+
+
+def _authoritative_adapter_observation_provenance(
+    fetch: WalletBackendFetch,
+    wallet: WalletRow,
+) -> Mapping[str, Any] | None:
+    """Close provenance for Bitcoin Core and named compatibility adapters.
+
+    BDK/LWK prepare their own state-bound provenance.  Bitcoin Core and the
+    explicitly supported compatibility routes instead return normalized facts
+    through the internal adapter contract.  Their boolean authority marker is
+    process-local, so convert it to the same graph/quantity-bound persistence
+    record before the sync result leaves its atomic apply transaction.
+    """
+
+    if (
+        not fetch.authoritative_chain_observer
+        or fetch.observer_updates
+        or not fetch.normalized_records
+    ):
+        return None
+    kind = str(fetch.kind or fetch.backend.get("kind") or "adapter").strip().lower()
+    identity = _StructuralAdapterIdentity(
+        id=f"adapter:{kind}:{wallet['id']}",
+        observer_kind=kind,
+    )
+    entries = provenance_entries_for_facts(
+        ((identity, fetch.normalized_records),),
+        fetch.normalized_records,
+    )
+    if not entries:
+        return None
+    return {
+        "application_revision": str(uuid.uuid4()),
+        "entries": entries,
+    }
 
 
 @dataclass(frozen=True)
@@ -629,8 +677,13 @@ def apply_fetch_observer_updates(
     retracted: list[str] = []
     observer_checkpoints: dict[str, Mapping[str, Any]] = {}
     highest_used: dict[str, int] = {}
+    records_by_observer: list[
+        tuple[Any, Sequence[Mapping[str, Any]]]
+    ] = []
     for prepared in fetch.observer_updates:
         facts = apply_prepared_observer_update(conn, prepared)
+        record_observer_policy_coverage(conn, prepared.identity, facts.coverage)
+        records_by_observer.append((prepared.identity, facts.transaction_records))
         observer_records.extend(facts.transaction_records)
         for output in facts.outputs:
             key = (str(output.get("txid") or ""), int(output.get("vout") or 0))
@@ -755,6 +808,18 @@ def apply_fetch_observer_updates(
         if highest_used:
             merged_checkpoint["highest_used"] = dict(sorted(highest_used.items()))
         adapter_meta["freshness_checkpoint"] = merged_checkpoint
+    provenance_entries = provenance_entries_for_facts(
+        records_by_observer,
+        records,
+    )
+    if provenance_entries:
+        # Private coordinator metadata: popped before the public sync outcome.
+        # The random revision identifies this concrete authoritative apply
+        # without hashing descriptor/xpub material.
+        adapter_meta["_chain_observation_provenance"] = {
+            "application_revision": str(uuid.uuid4()),
+            "entries": provenance_entries,
+        }
     return replace(
         fetch,
         normalized_records=tuple(records) if records else fetch.normalized_records,
@@ -826,6 +891,15 @@ def sync_wallet_from_backend(
     normalized_records = fetch.normalized_records
     kind = fetch.kind
     adapter_meta = dict(fetch.adapter_meta or {})
+    observation_provenance = adapter_meta.pop(
+        "_chain_observation_provenance",
+        None,
+    )
+    if observation_provenance is None:
+        observation_provenance = _authoritative_adapter_observation_provenance(
+            fetch,
+            wallet,
+        )
     prepared_negative_balance_rescan = adapter_meta.pop(
         "_prepared_negative_balance_rescan",
         None,
@@ -891,6 +965,18 @@ def sync_wallet_from_backend(
         f"backend:{backend['name']}",
         **insert_kwargs,
     )
+    if isinstance(observation_provenance, Mapping):
+        persist_chain_observation_provenance(
+            conn,
+            profile,
+            wallet,
+            application_revision=str(
+                observation_provenance.get("application_revision") or ""
+            ),
+            chain=str(sync_state.chain),
+            network=str(sync_state.network),
+            entries=tuple(observation_provenance.get("entries") or ()),
+        )
     notify_apply_stage(hooks, APPLY_STAGE_TRANSACTION_INSERTION)
     if observed_utxos is not None and hooks.update_output_inventory is not None:
         outcome["output_inventory"] = dict(

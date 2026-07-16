@@ -276,6 +276,56 @@ export function daemonMutationKey(dataMode: DataMode, kind: string) {
 }
 
 const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
+  "ui.custody.gaps.dismiss": [
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history",
+    "ui.custody.lineage.snapshot",
+  ],
+  "ui.custody.gaps.bridge.create": [
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history",
+    "ui.custody.lineage.snapshot",
+    "ui.transfers.components.list",
+    "ui.journals.snapshot",
+    "ui.journals.quarantine",
+    "ui.report.blockers",
+    "ui.workspace.health",
+  ],
+  "ui.custody.gaps.reopen": [
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history",
+    "ui.custody.lineage.snapshot",
+    "ui.transfers.components.list",
+    "ui.journals.snapshot",
+    "ui.journals.quarantine",
+    "ui.report.blockers",
+    "ui.workspace.health",
+  ],
+  "ui.custody.gaps.revise": [
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history",
+    "ui.custody.lineage.snapshot",
+    "ui.transfers.components.list",
+    "ui.journals.snapshot",
+    "ui.journals.quarantine",
+    "ui.report.blockers",
+    "ui.workspace.health",
+  ],
+  "ui.custody.gaps.residual.classify": [
+    "ui.custody.gaps.list",
+    "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history",
+    "ui.custody.lineage.snapshot",
+    "ui.transfers.components.list",
+    "ui.journals.snapshot",
+    "ui.journals.quarantine",
+    "ui.report.blockers",
+    "ui.workspace.health",
+  ],
   "ui.transfers.components.bulk_resolve": [
     "ui.activity.history",
     "ui.activity.stale",
@@ -283,6 +333,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.journals.snapshot",
     "ui.next_actions",
     "ui.overview.snapshot",
+    "ui.custody.lineage.snapshot",
     "ui.report.blockers",
     "ui.review.badges",
     "ui.transfers.components.list",
@@ -290,6 +341,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.workspace.health",
   ],
   "ui.transfers.components.update": [
+    "ui.custody.lineage.snapshot",
     "ui.journals.quarantine",
     "ui.journals.snapshot",
     "ui.report.blockers",
@@ -298,6 +350,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.workspace.health",
   ],
   "ui.transfers.components.activate": [
+    "ui.custody.lineage.snapshot",
     "ui.journals.quarantine",
     "ui.journals.snapshot",
     "ui.report.blockers",
@@ -306,6 +359,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.workspace.health",
   ],
   "ui.transfers.components.supersede": [
+    "ui.custody.lineage.snapshot",
     "ui.journals.quarantine",
     "ui.journals.snapshot",
     "ui.report.blockers",
@@ -314,6 +368,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.workspace.health",
   ],
   "ui.transfers.components.undo": [
+    "ui.custody.lineage.snapshot",
     "ui.journals.quarantine",
     "ui.journals.snapshot",
     "ui.report.blockers",
@@ -429,6 +484,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
   "ui.journals.process": [
     "ui.activity.history",
     "ui.activity.stale",
+    "ui.custody.lineage.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
     "ui.journals.snapshot",

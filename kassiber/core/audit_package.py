@@ -14,6 +14,11 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
 from . import source_funds as core_source_funds
+from . import custody_filed_reports as core_custody_filed_reports
+from . import custody_gap_reviews as core_custody_gap_reviews
+from . import custody_ai_audit as core_custody_ai_audit
+from . import custody_quantity_store as core_custody_quantity_store
+from . import custody_tax_migration as core_custody_tax_migration
 from .attachments import attachment_display_label
 from . import transaction_history
 
@@ -21,7 +26,7 @@ ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Map
 TransactionResolver = Callable[..., Mapping[str, Any]]
 NowIso = Callable[[], str]
 
-AUDIT_PACKAGE_SCHEMA_VERSION = 1
+AUDIT_PACKAGE_SCHEMA_VERSION = 2
 SENSITIVE_MATERIAL_EXCLUSIONS = [
     "wallet descriptors",
     "xpubs",
@@ -32,8 +37,9 @@ SENSITIVE_MATERIAL_EXCLUSIONS = [
     "environment files",
     "logs",
     "AI settings",
+    "raw AI custody proposals (cryptographic hashes and consent outcomes only)",
     "unrelated books",
-    "technical wallet evidence",
+    "raw technical wallet evidence (cryptographic hashes only)",
     "chain observer state and derivation coverage",
 ]
 _DECISION_KEYWORDS = (
@@ -56,6 +62,10 @@ _SECRET_URL_QUERY_HINTS = (
     "sig",
     "token",
 )
+_BOUNDED_FILED_REPORT_EXCLUSION = {
+    "status": "excluded_from_bounded_scope",
+    "reason": "complete_custody_review_boundary_required",
+}
 
 
 @dataclass(frozen=True)
@@ -756,6 +766,142 @@ def _transaction_refs_from_case(
     }
 
 
+def _custody_quantity_warning(
+    tx: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    *,
+    bounded_scope: bool = False,
+) -> dict[str, Any] | None:
+    if summary.get("status") != "known_custody_gaps":
+        return None
+    if bounded_scope:
+        return _warning(
+            "custody_quantity_unresolved",
+            "blocker",
+            "Known custody gaps may affect final tax basis; profile-wide "
+            "quantity and timing details were excluded from this bounded package.",
+        )
+    blocked_from = str(summary.get("blocked_from") or "")
+    occurred_at = str(_row_get(tx, "occurred_at") or "")
+    if blocked_from and occurred_at and occurred_at < blocked_from:
+        return None
+    totals = ", ".join(
+        f"{item['amount_msat']} msat {item['asset']}"
+        for item in summary.get("unresolved_by_asset", [])
+    )
+    suffix = f" ({totals})" if totals else ""
+    return _warning(
+        "custody_quantity_unresolved",
+        "blocker",
+        "Known custody gaps withhold final tax basis from this point onward"
+        f"{suffix}.",
+    )
+
+
+def _schema_migration_audits(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return database-schema provenance without cross-profile row counts."""
+
+    output: list[dict[str, Any]] = []
+    for row in conn.execute(
+        "SELECT migration_name, schema_version, impact_json, created_at "
+        "FROM schema_migration_audits ORDER BY created_at, migration_name"
+    ).fetchall():
+        try:
+            raw = json.loads(row["impact_json"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raw = {}
+        output.append(
+            {
+                "migration_name": row["migration_name"],
+                "schema_version": int(row["schema_version"]),
+                "scope": "database_schema_only",
+                "impact": {
+                    "schema_version": int(raw.get("schema_version") or 0)
+                    if isinstance(raw, dict)
+                    else 0,
+                    "migration": str(raw.get("migration") or "")[:64]
+                    if isinstance(raw, dict)
+                    else "",
+                },
+                "created_at": row["created_at"],
+            }
+        )
+    return output
+
+
+def _bounded_filed_report_snapshot(
+    snapshot: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return report identity without profile-wide accounting payloads.
+
+    A saved report can cover many transactions, wallets, or a whole period.
+    Referencing its immutable identity from a transaction-bounded custody
+    impact does not make its summaries, scope, or free-form notes safe to
+    disclose in that bounded package.
+    """
+
+    return {
+        "id": snapshot["id"],
+        "report_kind": snapshot["report_kind"],
+        "report_state": snapshot["report_state"],
+        "period_start_year": int(snapshot["period_start_year"]),
+        "period_end_year": int(snapshot["period_end_year"]),
+        "content_sha256": snapshot["content_sha256"],
+        "authored_source": snapshot["authored_source"],
+        "created_at": snapshot["created_at"],
+        "report_wide_payload_excluded": True,
+        "excluded_fields": [
+            "classification_summary",
+            "gain_summary",
+            "report_scope",
+            "notes",
+        ],
+    }
+
+
+def _bounded_filed_report_impact(
+    impact: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return transaction-safe impact provenance without report totals."""
+
+    resolution = impact.get("resolution")
+    bounded_resolution = None
+    if isinstance(resolution, Mapping):
+        bounded_resolution = {
+            "id": resolution["id"],
+            "impact_id": resolution["impact_id"],
+            "rebuilt_at": resolution["rebuilt_at"],
+            "classification_changed": bool(resolution["classification_changed"]),
+            "gain_changed": bool(resolution["gain_changed"]),
+            "amendment_status": resolution["amendment_status"],
+            "created_at": resolution["created_at"],
+            "report_wide_payload_excluded": True,
+            "excluded_fields": [
+                "after_classification_summary",
+                "after_gain_summary",
+            ],
+        }
+    return {
+        "id": impact["id"],
+        "filed_report_snapshot_id": impact["filed_report_snapshot_id"],
+        "component_id": impact["component_id"],
+        "review_id": impact["review_id"],
+        "gap_id": impact["gap_id"],
+        "affected_period_start_year": int(impact["affected_period_start_year"]),
+        "affected_period_end_year": int(impact["affected_period_end_year"]),
+        "amendment_warning": impact["amendment_warning"],
+        "resolution": bounded_resolution,
+        "created_at": impact["created_at"],
+        "report_wide_payload_excluded": True,
+        "excluded_fields": [
+            "before_classification_summary",
+            "after_classification_summary",
+            "before_gain_summary",
+            "after_gain_summary",
+        ],
+    }
+
+
 def build_evidence_summary(
     conn: sqlite3.Connection,
     data_root: str,
@@ -788,10 +934,42 @@ def build_evidence_summary(
         scope = {"type": "transactions", "transaction_count": len(transaction_refs)}
 
     attachments_root = _attachments_root(data_root)
-    freshness = _journal_freshness(conn, profile)
+    profile_freshness = _journal_freshness(conn, profile)
+    bounded_scope = resolved_transaction_refs is not None
+    freshness = (
+        {
+            "status": "excluded_from_bounded_scope",
+            "needs_processing": False,
+            "reason": "Profile-wide journal freshness excluded",
+            "scope": "selected_transactions",
+        }
+        if bounded_scope
+        else profile_freshness
+    )
     readiness_freshness = _readiness_journal_freshness(
-        freshness,
+        profile_freshness,
         include_journal_state=include_journal_state,
+    )
+    profile_custody_quantity = (
+        core_custody_quantity_store.custody_quantity_readiness_summary(
+            conn,
+            profile["id"],
+            journal_status=str(profile_freshness["status"]),
+            include_journal_state=include_journal_state,
+        )
+    )
+    custody_quantity = (
+        {
+            "status": "excluded_from_bounded_scope",
+            "status_text": "Profile-wide custody totals excluded",
+            "scope": "selected_transactions",
+            "qualification": (
+                "Only custody facts durably anchored to the selected "
+                "transactions are included in this package."
+            ),
+        }
+        if bounded_scope
+        else profile_custody_quantity
     )
     transactions = []
     warning_counts: dict[str, int] = {}
@@ -837,6 +1015,13 @@ def build_evidence_summary(
             quarantine,
             include_review_state=include_review_state,
         )
+        custody_warning = _custody_quantity_warning(
+            tx,
+            profile_custody_quantity,
+            bounded_scope=bounded_scope,
+        )
+        if custody_warning is not None:
+            warnings.append(custody_warning)
         if not include_review_state:
             warnings.append(
                 _warning(
@@ -879,12 +1064,114 @@ def build_evidence_summary(
             item["edit_history"] = edit_history.get(tx["id"], [])
         transactions.append(item)
 
-    return {
+    authored_evidence = core_custody_quantity_store.authored_evidence_hash_summary(
+        conn,
+        profile["id"],
+        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
+    )
+    custody_gap_review_history = core_custody_gap_reviews.list_audit_review_history(
+        conn,
+        profile["id"],
+        transaction_ids=(tx_ids if bounded_scope else None),
+    )
+    all_filed_report_snapshots = (
+        core_custody_filed_reports.list_filed_report_snapshots(conn, profile["id"])
+    )
+    matching_custody_filed_report_impacts = (
+        core_custody_filed_reports.list_custody_impacts(
+            conn,
+            profile["id"],
+            transaction_ids=(tx_ids if bounded_scope else None),
+        )
+    )
+    filed_report_projection_excluded = bounded_scope and (
+        bool(custody_gap_review_history["truncated"])
+        or any(
+            bool(record.get("candidate_wide_payload_excluded"))
+            for record in custody_gap_review_history["records"]
+        )
+    )
+    if bounded_scope and matching_custody_filed_report_impacts:
+        candidate_review_ids = frozenset(
+            str(item["review_id"])
+            for item in matching_custody_filed_report_impacts
+        )
+        complete_review_ids = core_custody_gap_reviews.complete_selected_review_ids(
+            conn,
+            profile["id"],
+            tx_ids,
+            review_ids=tuple(sorted(candidate_review_ids)),
+        )
+        filed_report_projection_excluded = (
+            filed_report_projection_excluded
+            or complete_review_ids != candidate_review_ids
+        )
+    if filed_report_projection_excluded:
+        filed_report_snapshot_section = dict(_BOUNDED_FILED_REPORT_EXCLUSION)
+        custody_filed_report_impact_section = dict(
+            _BOUNDED_FILED_REPORT_EXCLUSION
+        )
+        custody_filed_report_impact_resolution_section = dict(
+            _BOUNDED_FILED_REPORT_EXCLUSION
+        )
+    else:
+        if bounded_scope:
+            referenced_snapshot_ids = {
+                str(item["filed_report_snapshot_id"])
+                for item in matching_custody_filed_report_impacts
+            }
+            filed_report_snapshot_records = [
+                _bounded_filed_report_snapshot(item)
+                for item in all_filed_report_snapshots
+                if str(item["id"]) in referenced_snapshot_ids
+            ]
+            custody_filed_report_impact_records = [
+                _bounded_filed_report_impact(item)
+                for item in matching_custody_filed_report_impacts
+            ]
+        else:
+            filed_report_snapshot_records = all_filed_report_snapshots
+            custody_filed_report_impact_records = (
+                matching_custody_filed_report_impacts
+            )
+        custody_filed_report_impact_resolution_records = [
+            item["resolution"]
+            for item in custody_filed_report_impact_records
+            if item.get("resolution") is not None
+        ]
+        filed_report_snapshot_section = filed_report_snapshot_records
+        custody_filed_report_impact_section = custody_filed_report_impact_records
+        custody_filed_report_impact_resolution_section = (
+            custody_filed_report_impact_resolution_records
+        )
+    custody_ai_assistance = core_custody_ai_audit.redacted_audit_summary(
+        conn,
+        profile["id"],
+        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
+    )
+    custody_tax_migration_audits = core_custody_tax_migration.list_redacted_reports(
+        conn,
+        profile["id"],
+        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
+    )
+    schema_migration_audits = _schema_migration_audits(conn)
+    result = {
         "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
         "workspace": {"id": workspace["id"], "label": workspace["label"]},
         "profile": {"id": profile["id"], "label": profile["label"]},
         "scope": scope,
         "journal_freshness": freshness,
+        "custody_quantity": custody_quantity,
+        "authored_custody_evidence": authored_evidence,
+        "filed_report_snapshots": filed_report_snapshot_section,
+        "custody_filed_report_impacts": custody_filed_report_impact_section,
+        "custody_filed_report_impact_resolutions": (
+            custody_filed_report_impact_resolution_section
+        ),
+        "custody_gap_review_history": custody_gap_review_history,
+        "custody_ai_assistance": custody_ai_assistance,
+        "custody_tax_migration_audits": custody_tax_migration_audits,
+        "schema_migration_audits": schema_migration_audits,
         "transactions": transactions,
         "summary": {
             "transaction_count": len(transactions),
@@ -894,9 +1181,37 @@ def build_evidence_summary(
             "warning_codes": dict(sorted(warning_counts.items())),
             "edit_history_event_count": edit_history_count,
             "edit_history_included": bool(include_edit_history),
+            "custody_gap_status": custody_quantity["status"],
+            "custody_issue_count": custody_quantity.get("issue_count"),
+            "authored_custody_evidence_hash_count": authored_evidence[
+                "snapshot_count"
+            ],
+            "custody_gap_review_event_count": custody_gap_review_history[
+                "returned"
+            ],
+            "custody_ai_assistance_count": custody_ai_assistance["count"],
+            "custody_tax_migration_audit_count": len(
+                custody_tax_migration_audits
+            ),
+            "schema_migration_audit_count": len(schema_migration_audits),
         },
         "excluded_sensitive_material": SENSITIVE_MATERIAL_EXCLUSIONS,
     }
+    if not filed_report_projection_excluded:
+        result["summary"].update(
+            {
+                "filed_report_snapshot_count": len(
+                    filed_report_snapshot_records
+                ),
+                "custody_filed_report_impact_count": len(
+                    custody_filed_report_impact_records
+                ),
+                "custody_filed_report_impact_resolution_count": len(
+                    custody_filed_report_impact_resolution_records
+                ),
+            }
+        )
+    return result
 
 
 def _collect_attachment_ids(summary: Mapping[str, Any], *, include_review_state: bool) -> set[str]:
@@ -1120,11 +1435,26 @@ def export_audit_package(
                 "Transaction edit history exists but was excluded by export options.",
             )
         )
+    presumed_external = summary["custody_quantity"].get("presumed_external") or {
+        "slice_count": 0
+    }
+    if presumed_external.get("slice_count"):
+        package_warnings.append(
+            _warning(
+                "external_custody_presumed",
+                "warning",
+                (
+                    f"{presumed_external['slice_count']} unmatched custody slice(s) "
+                    "are treated as presumed external. This is disclosed but does "
+                    "not block reports."
+                ),
+            )
+        )
     package_warnings.append(
         _warning(
             "sensitive_material_excluded",
             "info",
-            "Descriptors, xpubs, backend URLs, credentials, wallet files, logs, AI settings, unrelated books, and technical wallet evidence were excluded.",
+            "Descriptors, xpubs, backend URLs, credentials, wallet files, logs, AI settings, unrelated books, and raw technical wallet evidence were excluded; authored evidence is represented by hashes only.",
         )
     )
 

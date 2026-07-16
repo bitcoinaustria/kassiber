@@ -3,41 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol, Sequence
 
+from ..custody_tax_projection import FinalizedTaxProjection
+
 
 @dataclass(frozen=True)
 class TaxEngineLedgerInputs:
-    """Raw per-profile inputs loaded from SQLite before engine processing."""
+    """Strict tax-engine input: already-finalized custody tax projection.
 
-    rows: Sequence[Mapping[str, Any]]
+    Production engines must never accept ``transactions`` rows.  Raw evidence
+    belongs to the custody interpreter/arbitrator phase and is represented here
+    only through :class:`FinalizedTaxProjection`.
+    """
+
+    finalized_tax_projection: FinalizedTaxProjection
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
-    manual_pair_records: Sequence[Mapping[str, Any]]
+    # Compatibility/report metadata only; it cannot introduce tax rows.
     direct_payout_records: Sequence[Mapping[str, Any]] = ()
-    # Prebuilt profile-wide address-ownership index (kassiber.core.ownership.
-    # OwnedIndex) used to derive self-transfers from the transaction graph;
-    # ``None`` when no on-chain transaction JSON is available to read.
-    owned_index: Any = None
-    # Active loan legs (rows from ``loan_legs`` with a non-null transaction_id).
-    # Each carries a ``role`` that classifies the matching journal transaction:
-    # collateral lock/release and borrowed-principal receive/repay roles are
-    # non-events, while unmarked liquidation falls through to normal disposal.
-    loan_legs: Sequence[Mapping[str, Any]] = ()
-    # Derived Lightning channel-lifecycle roles: ``{transaction_id: role}`` where
-    # role is ``channel_open`` / ``channel_close`` (kassiber.core.loans). Built
-    # from owned channels' funding/closing txids matched against on-chain rows;
-    # merged into the same non-event suppression as loan legs so a channel
-    # funding tx is not booked as a disposal nor a close as an acquisition.
-    channel_roles: Mapping[str, str] = None  # type: ignore[assignment]
-    # Derived Lightning channel capacity moves. When channel metadata identifies
-    # the node wallet, the funding tx becomes an explicit on-chain-wallet -> node
-    # MOVE (and a cooperative close can become node -> on-chain-wallet). The role
-    # map above remains a fallback for unmatched lifecycle rows.
-    channel_transfer_pairs: Sequence[Mapping[str, Any]] = ()
-    # Fully-materialized authored-active custody components. The handler owns
-    # the DB boundary and deliberately includes locally incomplete/conflicting
-    # revisions: projection must claim their known raw anchors and quarantine
-    # them fail-closed instead of letting those anchors book independently.
-    # Effective revisions project normally.
-    authored_active_custody_components: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True)
@@ -70,8 +51,7 @@ class TaxEngineLedgerResult:
 class TaxEngine(Protocol):
     """Profile-level tax engine interface.
 
-    Engines receive raw per-profile journal inputs and return the aggregated
-    ledger state that handlers persist into Kassiber's journal tables.
+    Engines receive a finalized tax projection and return journal state.
     """
 
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:

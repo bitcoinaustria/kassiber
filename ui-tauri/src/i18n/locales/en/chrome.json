@@ -137,6 +137,10 @@
       "label": "Search swaps and transfers",
       "placeholder": "Search wallet, asset pair, txid..."
     },
+    "custodyGaps": {
+      "label": "Search custody gaps",
+      "placeholder": "Search missing wallets and possible returns..."
+    },
     "transactions": {
       "label": "Search transactions",
       "placeholder": "Search counterparty, tag, account..."

@@ -22,6 +22,8 @@ from kassiber.core.sync_replication.merge import (
 from kassiber.core.sync_replication.schema_allowlist import (
     NEVER_SYNC_TABLES,
     SYNC_TABLE_MAP,
+    merge_public_wallet_config,
+    private_wallet_policy_requires_review,
     public_wallet_config,
     serialize_row,
     validate_wire_row,
@@ -68,11 +70,13 @@ class SyncSchemaBoundaryTests(unittest.TestCase):
             "chain_observer_instances",
             "chain_observer_coverage",
             "chain_observer_values",
+            "custody_gap_candidate_snapshots",
             "rates_cache",
             "sync_member_private_keys",
             "sync_device_private_keys",
         ):
             self.assertNotIn(forbidden, SYNC_TABLE_MAP)
+        self.assertIn("custody_gap_candidate_snapshots", NEVER_SYNC_TABLES)
 
     def test_wallet_config_is_positive_allowlist_and_rejects_private_material(self):
         safe = public_wallet_config(
@@ -98,6 +102,72 @@ class SyncSchemaBoundaryTests(unittest.TestCase):
                 "descriptor",
                 public_wallet_config({"descriptor": private_descriptor}),
             )
+
+    def test_public_wallet_config_merge_removes_omitted_synced_fields(self):
+        merged = merge_public_wallet_config(
+            {
+                "chain": "bitcoin",
+                "network": "main",
+                "xpub": "xpub-old-public-watch-material",
+                "script_types": ["p2wpkh"],
+                "gap_limit": 40,
+                "token": "device-local-secret",
+            },
+            {
+                "chain": "bitcoin",
+                "network": "main",
+                "addresses": ["bc1qreplacement"],
+            },
+        )
+
+        self.assertNotIn("xpub", merged)
+        self.assertNotIn("script_types", merged)
+        self.assertNotIn("gap_limit", merged)
+        self.assertEqual(merged["addresses"], ["bc1qreplacement"])
+        self.assertEqual(merged["token"], "device-local-secret")
+
+    def test_public_wallet_config_merge_preserves_omitted_private_descriptor(self):
+        private_descriptor = "wpkh(xprv-device-local-private-material/0/*)"
+        merged = merge_public_wallet_config(
+            {
+                "descriptor": private_descriptor,
+                "chain": "bitcoin",
+                "network": "main",
+                "gap_limit": 20,
+            },
+            {
+                "chain": "bitcoin",
+                "network": "main",
+                "gap_limit": 40,
+            },
+        )
+
+        self.assertEqual(merged["descriptor"], private_descriptor)
+        self.assertEqual(merged["gap_limit"], 40)
+
+        competing = {
+            "chain": "bitcoin",
+            "network": "main",
+            "addresses": ["bc1qreplacement"],
+        }
+        preserved = merge_public_wallet_config(
+            {
+                "descriptor": private_descriptor,
+                "chain": "liquid",
+                "network": "main",
+                "policy_asset": "device-local-policy-asset",
+            },
+            competing,
+        )
+        self.assertEqual(preserved["descriptor"], private_descriptor)
+        self.assertEqual(preserved["chain"], "liquid")
+        self.assertNotIn("addresses", preserved)
+        self.assertTrue(
+            private_wallet_policy_requires_review(
+                {"descriptor": private_descriptor, "chain": "liquid"},
+                competing,
+            )
+        )
 
     def test_wire_upsert_requires_every_allowlisted_column(self):
         with self.assertRaisesRegex(AppError, "sync schema allowlist"):

@@ -39,6 +39,7 @@ from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
 from . import custody_components as core_custody_components
+from . import custody_quantity_store as core_custody_quantity_store
 from . import lightning as core_lightning
 from . import rates as core_rates
 from . import silent_payments
@@ -1189,6 +1190,48 @@ def _journal_wallet_holdings_balances(
     return None
 
 
+def _canonical_quantity_processed(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> bool:
+    try:
+        row = conn.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM journal_quantity_postings WHERE profile_id = ?
+            ) OR EXISTS(
+                SELECT 1 FROM journal_quantity_issues WHERE profile_id = ?
+            ) AS present
+            """,
+            (profile_id, profile_id),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    return bool(row and row["present"])
+
+
+def _canonical_wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float] | None:
+    if not _canonical_quantity_processed(conn, profile_id):
+        return None
+    rows = conn.execute(
+        """
+        SELECT location_id AS wallet_id, SUM(amount_msat) AS amount_msat
+        FROM journal_quantity_balances
+        WHERE profile_id = ? AND location_kind = 'wallet'
+          AND asset IN ('BTC', 'LBTC')
+        GROUP BY location_id
+        """,
+        (profile_id,),
+    ).fetchall()
+    return {
+        str(row["wallet_id"]): float(msat_to_btc(row["amount_msat"] or 0))
+        for row in rows
+    }
+
+
 def _journal_entry_wallet_balances(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1215,6 +1258,23 @@ def _journal_quantity_deltas_by_transaction(
     conn: sqlite3.Connection,
     profile_id: str,
 ) -> dict[str, Decimal]:
+    if _canonical_quantity_processed(conn, profile_id):
+        rows = conn.execute(
+            """
+            SELECT transaction_id, SUM(amount_msat) AS amount_msat
+            FROM journal_quantity_postings
+            WHERE profile_id = ? AND location_kind = 'wallet'
+              AND state = 'observed' AND transaction_id IS NOT NULL
+              AND asset IN ('BTC', 'LBTC')
+            GROUP BY transaction_id
+            ORDER BY MIN(occurred_at), transaction_id
+            """,
+            (profile_id,),
+        ).fetchall()
+        return {
+            str(row["transaction_id"]): msat_to_btc(row["amount_msat"] or 0)
+            for row in rows
+        }
     rows = conn.execute(
         """
         SELECT transaction_id, entry_type, quantity
@@ -1240,6 +1300,24 @@ def _journal_quantity_deltas_by_day(
     conn: sqlite3.Connection,
     profile_id: str,
 ) -> dict[date, Decimal]:
+    if _canonical_quantity_processed(conn, profile_id):
+        rows = conn.execute(
+            """
+            SELECT occurred_at, SUM(amount_msat) AS amount_msat
+            FROM journal_quantity_postings
+            WHERE profile_id = ? AND location_kind = 'wallet'
+              AND state = 'observed' AND asset IN ('BTC', 'LBTC')
+            GROUP BY occurred_at
+            ORDER BY occurred_at
+            """,
+            (profile_id,),
+        ).fetchall()
+        deltas: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+        for row in rows:
+            day = _parse_day(row["occurred_at"])
+            if day is not None:
+                deltas[day] += msat_to_btc(row["amount_msat"] or 0)
+        return deltas
     rows = conn.execute(
         """
         SELECT
@@ -1270,6 +1348,9 @@ def _journal_wallet_balances(
 ) -> dict[str, float] | None:
     if not has_book_state:
         return None
+    canonical_balances = _canonical_wallet_balances(conn, profile_id)
+    if canonical_balances is not None:
+        return canonical_balances
     holdings_balances = _journal_wallet_holdings_balances(conn, profile_id)
     if holdings_balances is not None:
         return holdings_balances
@@ -2099,6 +2180,27 @@ def _journal_balance_series(
 ) -> list[float] | None:
     if not has_book_state:
         return None
+    if _canonical_quantity_processed(conn, profile_id):
+        rows = conn.execute(
+            """
+            SELECT SUBSTR(occurred_at, 1, 7) AS month,
+                   SUM(amount_msat) AS amount_msat
+            FROM journal_quantity_postings
+            WHERE profile_id = ? AND location_kind = 'wallet'
+              AND state = 'observed' AND asset IN ('BTC', 'LBTC')
+              AND occurred_at IS NOT NULL
+            GROUP BY SUBSTR(occurred_at, 1, 7)
+            ORDER BY month
+            """,
+            (profile_id,),
+        ).fetchall()
+        return _balance_series_from_month_deltas(
+            {
+                str(row["month"]): msat_to_btc(row["amount_msat"] or 0)
+                for row in rows
+                if row["month"]
+            }
+        )
     rows = conn.execute(
         """
         SELECT occurred_at, entry_type, quantity
@@ -4545,6 +4647,157 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def build_custody_lineage_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return canonical internal-custody edges for the active local book.
+
+    The persisted reader deliberately omits observation commitments and exact
+    quantity-slice offsets.  This snapshot keeps custody finality distinct from
+    tax-basis eligibility: an exact wallet-to-wallet edge remains visible even
+    when an earlier custody gap prevents later tax projection.
+    """
+
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"cursor", "limit", "transaction_id"})
+    if unknown:
+        raise AppError(
+            "ui.custody.lineage.snapshot received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=100, maximum=500)
+    cursor = raw_args.get("cursor")
+    if cursor is not None and (not isinstance(cursor, str) or not cursor):
+        raise AppError(
+            "ui.custody.lineage.snapshot cursor must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    transaction_id = raw_args.get("transaction_id")
+    if transaction_id is not None:
+        if not isinstance(transaction_id, str) or not transaction_id.strip():
+            raise AppError(
+                "ui.custody.lineage.snapshot transaction_id must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+        transaction_id = transaction_id.strip()
+
+    context, profile = _active_context_and_profile(conn)
+    qualification = (
+        "Derived locally from canonical evidence in the active project and selected "
+        "book. Custody finality is separate from tax-basis eligibility: a verified "
+        "custody edge may remain basis-blocked by an earlier unresolved gap. State "
+        "counters describe the returned rows when the result is truncated."
+    )
+    scope = {
+        "workspace_id": context["workspace_id"] or None,
+        "workspace_label": context["workspace_label"] or None,
+        "profile_id": context["profile_id"] or None,
+        "profile_label": context["profile_label"] or None,
+    }
+    if profile is None:
+        return {
+            "scope": scope,
+            "items": [],
+            "next_cursor": None,
+            "summary": {
+                "total_count": 0,
+                "returned_count": 0,
+                "truncated": False,
+                "internal_verified": 0,
+                "internal_reviewed": 0,
+                "basis_eligible": 0,
+                "basis_blocked": 0,
+                "qualification": qualification,
+            },
+            "observation_commitments_included": False,
+            "replicated": False,
+        }
+
+    result = core_custody_quantity_store.custody_decision_rows(
+        conn,
+        str(profile["id"]),
+        limit=limit,
+        transaction_ids=[transaction_id] if transaction_id is not None else None,
+        cursor=cursor,
+    )
+    items = []
+    custody_counts: dict[str, int] = defaultdict(int)
+    basis_counts: dict[str, int] = defaultdict(int)
+    for raw_record in result.get("records", []):
+        record = dict(raw_record)
+        custody_state = str(record.get("custody_state") or "unknown")
+        basis_state = str(record.get("basis_state") or "unknown")
+        custody_counts[custody_state] += 1
+        basis_counts[basis_state] += 1
+        asset = str(record.get("source_asset") or record.get("target_asset") or "")
+        source_network = str(record.get("source_network") or "unknown")
+        target_network = str(record.get("target_network") or "unknown")
+        source_rail = str(record.get("source_rail") or "unknown")
+        target_rail = str(record.get("target_rail") or "unknown")
+        items.append(
+            {
+                "out_transaction_id": record.get("source_transaction_id"),
+                "in_transaction_id": record.get("target_transaction_id"),
+                "occurred_at": record.get("occurred_at"),
+                "asset": asset,
+                "source_asset": record.get("source_asset"),
+                "target_asset": record.get("target_asset"),
+                "amount_msat": str(int(record.get("amount_msat") or 0)),
+                "from_wallet_id": record.get("source_wallet_id"),
+                "from_wallet_label": record.get("source_wallet_label"),
+                "to_wallet_id": record.get("target_wallet_id"),
+                "to_wallet_label": record.get("target_wallet_label"),
+                "custody_state": custody_state,
+                "basis_state": basis_state,
+                "basis_barrier_at": record.get("basis_barrier_at"),
+                "evidence_reason": record.get("reason"),
+                "network": (
+                    source_network
+                    if source_network == target_network
+                    else f"{source_network}->{target_network}"
+                ),
+                "source_network": source_network,
+                "target_network": target_network,
+                "rail": (
+                    source_rail
+                    if source_rail == target_rail
+                    else f"{source_rail}->{target_rail}"
+                ),
+                "source_rail": source_rail,
+                "target_rail": target_rail,
+                "atomic_bundle_id": record.get("atomic_group_id"),
+                "component_id": record.get("component_id"),
+            }
+        )
+
+    return {
+        "scope": scope,
+        "items": items,
+        "next_cursor": result.get("next_cursor"),
+        "summary": {
+            "total_count": int(result.get("count") or 0),
+            "returned_count": int(result.get("returned", len(items)) or 0),
+            "truncated": bool(result.get("truncated")),
+            "internal_verified": custody_counts.get("internal_verified", 0),
+            "internal_reviewed": custody_counts.get("internal_reviewed", 0),
+            "basis_eligible": basis_counts.get("eligible", 0),
+            "basis_blocked": basis_counts.get(
+                "blocked_by_prior_custody_basis", 0
+            ),
+            "qualification": qualification,
+        },
+        "observation_commitments_included": bool(
+            result.get("observation_commitments_included", False)
+        ),
+        "replicated": bool(result.get("replicated", False)),
+    }
+
+
 def build_journal_events_list_snapshot(
     conn: sqlite3.Connection,
     args: dict[str, Any] | None = None,
@@ -5256,7 +5509,8 @@ def build_wallet_identify_snapshot(
     """Reconcile pasted addresses / txids against the active profile's wallets.
 
     Read-only and cache-only: matches against the watch-only output inventory,
-    imported txids and offline descriptor derivation. It never contacts the
+    exact stored receive outpoints, local transaction graphs, address lists,
+    and offline active/retired policy derivation. It never contacts the
     network — on-chain verification is the separate ``ui.wallets.identify_onchain``
     action, so this read surface stays safe to call without consent.
     """
@@ -6160,6 +6414,28 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     health = build_workspace_health_snapshot(conn)
     rates_coverage = build_rates_coverage_snapshot(conn, {"limit": 10})
     blockers: list[dict[str, Any]] = []
+    custody_quantity: dict[str, Any] = {
+        "status": "unavailable",
+        "status_text": "Custody gap status unavailable: no active profile",
+        "derived_state_current": False,
+        "issue_count": 0,
+        "quantified_issue_count": 0,
+        "unquantified_issue_count": 0,
+        "unresolved_by_asset": [],
+        "by_state": [],
+        "blocked_from": None,
+        "presumed_external": {
+            "slice_count": 0,
+            "transaction_count": 0,
+            "by_asset": [],
+            "treatment": "warning_not_blocker",
+        },
+        "warnings": [],
+        "qualification": (
+            "This reports gaps detectable from current imported evidence; it "
+            "does not assert that every wallet was imported."
+        ),
+    }
     if health["profile"] is None:
         blockers.append(
             {
@@ -6173,6 +6449,13 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     else:
         counts = health["counts"]
         journals = health["journals"]
+        custody_quantity = (
+            core_custody_quantity_store.custody_quantity_readiness_summary(
+                conn,
+                health["profile"]["id"],
+                journal_status=str(journals["status"]),
+            )
+        )
         edit_stale = transaction_history.stale_summary(
             conn,
             {"id": health["profile"]["id"], **journals},
@@ -6323,6 +6606,34 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.journals.quarantine",
                 }
             )
+        if custody_quantity["issue_count"]:
+            blockers.append(
+                {
+                    "id": "custody_quantity_unresolved",
+                    "severity": "blocking",
+                    "title": "Unresolved custody quantity",
+                    "detail": (
+                        f"{custody_quantity['issue_count']} exact quantity issue(s) block "
+                        "final basis from the earliest affected event onward."
+                    ),
+                    "daemon_kind": "ui.journals.process",
+                    "blocked_from": custody_quantity["blocked_from"],
+                    "states": [
+                        item["state"] for item in custody_quantity["by_state"]
+                    ],
+                    "unresolved_by_asset": custody_quantity[
+                        "unresolved_by_asset"
+                    ],
+                    "unresolved_msat": (
+                        custody_quantity["unresolved_by_asset"][0]["amount_msat"]
+                        if len(custody_quantity["unresolved_by_asset"]) == 1
+                        else None
+                    ),
+                    "unquantified_issue_count": custody_quantity[
+                        "unquantified_issue_count"
+                    ],
+                }
+            )
         ownership_blocker = _ownership_review_candidate_blocker(
             conn, health["profile"]["id"]
         )
@@ -6347,6 +6658,8 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "ready": not blockers,
         "blockers": blockers,
+        "warnings": custody_quantity["warnings"],
+        "custody_quantity": custody_quantity,
         "health": health,
         "rates_coverage": rates_coverage,
     }

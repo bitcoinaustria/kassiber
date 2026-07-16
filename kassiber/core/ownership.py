@@ -40,6 +40,7 @@ from ..errors import AppError
 from ..wallet_descriptors import derive_descriptor_targets, normalize_chain, normalize_network
 from .address_scripts import address_to_scriptpubkey
 from .onchain import parse_identification_legs
+from .ownership_policy_epochs import retired_policy_materials
 from .wallets import (
     OWNERSHIP_HISTORY_CONFIG_KEY,
     OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
@@ -639,12 +640,11 @@ def build_owned_index(
 ) -> tuple[OwnedIndex, list[str]]:
     """Build the ownership index for the given wallets.
 
-    Seeds the cheap tiers (output inventory + imported txids + address-list
-    wallets) unconditionally, then - when ``derive`` is set - derives descriptor
-    wallets up to a per-wallet inclusive ceiling (``max(scan_to_index,
-    highest_used + gap_limit)``) so historic addresses past the last synced
-    index are still found. Returns the index plus any non-fatal warnings (e.g.
-    a descriptor that could not be parsed).
+    Seeds the cheap tiers (output inventory, exact stored receive outpoints,
+    local transaction graphs, and address lists) unconditionally. When
+    ``derive`` is set, it derives active and retired descriptor policies to a
+    per-policy inclusive ceiling so historic addresses past the last synced
+    index remain recognizable. Returns the index plus non-fatal warnings.
     """
     index = OwnedIndex()
     warnings: list[str] = []
@@ -652,7 +652,6 @@ def build_owned_index(
     wallet_id_set = set(wallet_ids)
 
     highest_used = _seed_from_inventory(conn, index, profile_id, wallet_id_set)
-    _seed_from_transactions(conn, index, profile_id, wallets)
 
     for wallet in wallets:
         config = _wallet_config(wallet)
@@ -671,6 +670,13 @@ def build_owned_index(
             max(scan_to_index, configured_scan_to_index),
         )
         ownership_configs: list[tuple[Mapping[str, Any], bool]] = [(config, False)]
+        ownership_configs.extend(
+            (historic, True)
+            for historic in retired_policy_materials(conn, str(wallet["id"]))
+        )
+        # Legacy encrypted wallet-config history remains readable during the
+        # migration window. New rollovers use durable policy epochs instead of
+        # a capped inline list.
         ownership_configs.extend(
             (historic, True)
             for historic in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
@@ -813,39 +819,6 @@ def _seed_from_inventory(
     return highest
 
 
-def _seed_from_transactions(
-    conn: sqlite3.Connection,
-    index: OwnedIndex,
-    profile_id: str,
-    wallets: Sequence[sqlite3.Row],
-) -> None:
-    label_by_id = {str(w["id"]): str(w["label"]) for w in wallets}
-    scope_by_id: dict[str, tuple[str, str]] = {}
-    for wallet in wallets:
-        config = _wallet_config(wallet)
-        scope_by_id[str(wallet["id"])] = _index_chain_network(
-            config.get("chain"), config.get("network")
-        )
-    if not label_by_id:
-        return
-    placeholders = ", ".join("?" for _ in label_by_id)
-    rows = conn.execute(
-        f"SELECT external_id, wallet_id FROM transactions "
-        f"WHERE profile_id = ? AND external_id IS NOT NULL AND wallet_id IN ({placeholders})",
-        (profile_id, *label_by_id.keys()),
-    ).fetchall()
-    for row in rows:
-        wallet_id = str(row["wallet_id"])
-        chain, network = scope_by_id.get(wallet_id, ("bitcoin", "main"))
-        index.note_txid(
-            row["external_id"],
-            wallet_id,
-            label_by_id.get(wallet_id, wallet_id),
-            chain=chain,
-            network=network,
-        )
-
-
 def _seed_transaction_outpoints(
     conn: sqlite3.Connection,
     index: OwnedIndex,
@@ -903,15 +876,6 @@ def _seed_transaction_outpoints(
             for match in matches:
                 if str(match.wallet_id) == wallet_id:
                     index.add_outpoint(external_txid, output_index, match)
-
-
-def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, str]:
-    return {
-        str(row["id"]): str(row["label"])
-        for row in conn.execute(
-            "SELECT id, label FROM wallets WHERE profile_id = ?", (profile_id,)
-        ).fetchall()
-    }
 
 
 def _wallet_summary_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, str]]:

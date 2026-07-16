@@ -175,6 +175,78 @@ class ChainObserverContractTest(unittest.TestCase):
             [("change", 20), ("receive", 40)],
         )
 
+    def test_stale_prepared_update_cannot_overwrite_newer_observer_state(self):
+        _first_observer, first = self._prepare()
+        _stale_observer, stale = self._prepare()
+        self.assertIsNone(first.expected_epoch)
+        self.assertIsNone(stale.expected_epoch)
+
+        self._apply_and_commit(first)
+
+        self.conn.execute("SAVEPOINT stale_observer_apply")
+        with self.assertRaises(AppError) as raised:
+            apply_prepared_observer_update(self.conn, stale)
+        self.conn.execute("ROLLBACK TO SAVEPOINT stale_observer_apply")
+        self.conn.execute("RELEASE SAVEPOINT stale_observer_apply")
+
+        self.assertEqual(raised.exception.code, "observer_state_stale")
+        self.assertTrue(raised.exception.retryable)
+        self.assertFalse(stale.applied)
+        stored = load_observer_state(self.conn, self.identity)
+        self.assertEqual(stored.epoch, 1)
+        self.assertEqual(stored.payload["generation"], 1)
+
+        _retry_observer, retry = self._prepare()
+        self.assertEqual(retry.expected_epoch, 1)
+        self._apply_and_commit(retry)
+        refreshed = load_observer_state(self.conn, self.identity)
+        self.assertEqual(refreshed.epoch, 2)
+        self.assertEqual(refreshed.payload["generation"], 2)
+
+    def test_used_index_must_be_inside_exclusive_coverage_boundary(self):
+        observer = FakeObserver(self.conn)
+        _observer, prepared = self._prepare(observer)
+        original_apply = observer.apply
+
+        def invalid_apply(prepared_update, prior_state):
+            application = original_apply(prepared_update, prior_state)
+            return ObserverApplication(
+                state=application.state,
+                facts=ChainFacts(
+                    coverage=(
+                        CoveragePoint(
+                            "receive",
+                            scanned_to=3,
+                            highest_used=3,
+                        ),
+                    ),
+                ),
+            )
+
+        observer.apply = invalid_apply
+        self.conn.execute("SAVEPOINT invalid_coverage")
+        with self.assertRaises(AppError) as raised:
+            apply_prepared_observer_update(self.conn, prepared)
+        self.conn.execute("ROLLBACK TO SAVEPOINT invalid_coverage")
+        self.conn.execute("RELEASE SAVEPOINT invalid_coverage")
+
+        self.assertEqual(raised.exception.code, "observer_state_invalid")
+
+    def test_version_one_coverage_requires_rebuild_under_exclusive_semantics(self):
+        _observer, prepared = self._prepare()
+        self._apply_and_commit(prepared)
+        self.conn.execute(
+            "UPDATE chain_observer_coverage SET coverage_version = 1 WHERE observer_id = ?",
+            (self.identity.id,),
+        )
+        self.conn.commit()
+
+        with self.assertRaises(AppError) as raised:
+            load_observer_state(self.conn, self.identity)
+
+        self.assertEqual(raised.exception.code, "observer_state_rebuild_required")
+        self.assertEqual(raised.exception.details["representation"], "coverage")
+
     def test_observer_boundary_exposes_no_spending_or_broadcast_capability(self):
         methods = {
             name
@@ -329,7 +401,11 @@ class ChainObserverContractTest(unittest.TestCase):
             core_sync.source_overlap,
             "filter_sync_state_for_canonical_owner",
             side_effect=lambda _conn, _profile, _wallet, state: state,
-        ):
+        ), patch.object(
+            core_sync,
+            "persist_chain_observation_provenance",
+            return_value=0,
+        ) as persist_provenance:
             core_sync.sync_wallet_from_backend(
                 self.conn,
                 {},
@@ -342,6 +418,7 @@ class ChainObserverContractTest(unittest.TestCase):
         self.conn.execute("RELEASE SAVEPOINT observer_authority")
 
         self.assertEqual(insert_calls, [{"authoritative_chain_observer": True}])
+        persist_provenance.assert_called_once()
 
     def test_sync_fetch_projects_facts_and_rejects_shadow_projection(self):
         observer, prepared = self._prepare()

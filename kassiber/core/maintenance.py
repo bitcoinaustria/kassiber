@@ -171,6 +171,9 @@ def reset_current_profile_data(
         "custody_component_allocations": _count_profile_rows(
             conn, "custody_component_allocations", profile_id
         ),
+        "custody_component_evidence_commitments": _count_profile_rows(
+            conn, "custody_component_evidence_commitments", profile_id
+        ),
         "transaction_tags": _count_sql(
             conn,
             """
@@ -202,6 +205,42 @@ def reset_current_profile_data(
             conn,
             "journal_wallet_holdings",
             profile_id,
+        ),
+        "journal_quantity_postings": _count_profile_rows(
+            conn, "journal_quantity_postings", profile_id
+        ),
+        "journal_quantity_issues": _count_profile_rows(
+            conn, "journal_quantity_issues", profile_id
+        ),
+        "journal_quantity_balances": _count_profile_rows(
+            conn, "journal_quantity_balances", profile_id
+        ),
+        "journal_custody_decisions": _count_profile_rows(
+            conn, "journal_custody_decisions", profile_id
+        ),
+        "custody_authored_evidence_snapshots": _count_profile_rows(
+            conn, "custody_authored_evidence_snapshots", profile_id
+        ),
+        "custody_gap_reviews": _count_profile_rows(
+            conn, "custody_gap_reviews", profile_id
+        ),
+        "custody_gap_candidate_snapshots": _count_profile_rows(
+            conn, "custody_gap_candidate_snapshots", profile_id
+        ),
+        "custody_gap_review_relation_sets": _count_profile_rows(
+            conn, "custody_gap_review_relation_sets", profile_id
+        ),
+        "custody_gap_review_transactions": _count_profile_rows(
+            conn, "custody_gap_review_transactions", profile_id
+        ),
+        "filed_report_snapshots": _count_profile_rows(
+            conn, "filed_report_snapshots", profile_id
+        ),
+        "custody_filed_report_impacts": _count_profile_rows(
+            conn, "custody_filed_report_impacts", profile_id
+        ),
+        "custody_filed_report_impact_resolutions": _count_profile_rows(
+            conn, "custody_filed_report_impact_resolutions", profile_id
         ),
         "transaction_pairs": _count_profile_rows(
             conn,
@@ -304,6 +343,30 @@ def reset_current_profile_data(
 
     with conn:
         delete_profile_observer_state(conn, profile_id)
+        # Review rows are immutable in normal use. Remove them before their
+        # component FK would otherwise attempt an ON DELETE SET NULL update.
+        conn.execute(
+            "DELETE FROM custody_filed_report_impact_resolutions WHERE profile_id = ?",
+            (profile_id,),
+        )
+        conn.execute(
+            "DELETE FROM custody_filed_report_impacts WHERE profile_id = ?",
+            (profile_id,),
+        )
+        conn.execute(
+            "DELETE FROM custody_gap_review_transactions WHERE profile_id = ?",
+            (profile_id,),
+        )
+        conn.execute(
+            "DELETE FROM custody_gap_review_relation_sets WHERE profile_id = ?",
+            (profile_id,),
+        )
+        conn.execute(
+            "DELETE FROM custody_gap_reviews WHERE profile_id = ?", (profile_id,)
+        )
+        conn.execute(
+            "DELETE FROM filed_report_snapshots WHERE profile_id = ?", (profile_id,)
+        )
         conn.execute(
             "INSERT INTO custody_component_purge_authorizations(profile_id) VALUES(?)",
             (profile_id,),
@@ -366,6 +429,18 @@ def reset_current_profile_data(
             "transaction_pairs",
             "bip329_labels",
             "journal_wallet_holdings",
+            "journal_quantity_balances",
+            "journal_custody_decisions",
+            "journal_quantity_issues",
+            "journal_quantity_postings",
+            "custody_gap_review_transactions",
+            "custody_gap_review_relation_sets",
+            "custody_gap_reviews",
+            "custody_filed_report_impact_resolutions",
+            "custody_filed_report_impacts",
+            "filed_report_snapshots",
+            "custody_authored_evidence_snapshots",
+            "custody_gap_candidate_snapshots",
             "journal_account_holdings",
             "journal_tax_summary",
             "journal_quarantines",

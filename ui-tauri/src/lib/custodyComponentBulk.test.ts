@@ -56,6 +56,140 @@ describe("previewCustodyComponentBatch", () => {
     expect(issueCodes(preview.activationErrors)).toContain("unresolvedValue");
   });
 
+  it("accepts exact reviewed residual suspense without treating it as unresolved", () => {
+    const preview = previewCustodyComponentBatch(
+      JSON.stringify([
+        {
+          component_type: "manual_bridge",
+          conservation_mode: "quantity",
+          evidence_grade: "reviewed",
+          legs: [
+            {
+              id: "source",
+              role: "source",
+              transaction: "old-wallet-send",
+              occurred_at: "2020-01-01T00:00:00Z",
+              amount_msat: 100_000,
+            },
+            {
+              id: "destination",
+              role: "destination",
+              transaction: "new-wallet-receive",
+              occurred_at: "2021-01-01T00:00:00Z",
+              amount_msat: 90_000,
+            },
+            {
+              id: "suspense",
+              role: "suspense",
+              occurred_at: "2020-01-01T00:00:00Z",
+              amount_msat: 10_000,
+            },
+          ],
+          allocations: [
+            {
+              source_leg_id: "source",
+              sink_leg_id: "destination",
+              source_amount_msat: 90_000,
+              sink_amount_msat: 90_000,
+            },
+            {
+              source_leg_id: "source",
+              sink_leg_id: "suspense",
+              source_amount_msat: 10_000,
+              sink_amount_msat: 10_000,
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(preview.structuralErrors).toEqual([]);
+    expect(preview.activationErrors).toEqual([]);
+    expect(preview.summary).toMatchObject({
+      unresolvedLegs: 0,
+      suspenseLegs: 1,
+    });
+  });
+
+  it("fails closed when suspense is inferred, located, or not reviewed", () => {
+    const withoutAllocation = previewCustodyComponentBatch(
+      JSON.stringify([
+        {
+          component_type: "manual_bridge",
+          evidence_grade: "reviewed",
+          legs: [
+            { role: "source", transaction: "out", amount_msat: 100 },
+            { role: "destination", transaction: "in", amount_msat: 90 },
+            {
+              role: "suspense",
+              occurred_at: "2020-01-01T00:00:00Z",
+              amount_msat: 10,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(issueCodes(withoutAllocation.activationErrors)).toContain(
+      "suspenseAllocationRequired",
+    );
+
+    const invalid = previewCustodyComponentBatch(
+      JSON.stringify([
+        {
+          component_type: "native_transfer",
+          evidence_grade: "exact",
+          legs: [
+            {
+              id: "source",
+              role: "source",
+              transaction: "out",
+              occurred_at: "2020-01-01T00:00:00Z",
+              asset: "BTC",
+              amount_msat: 100,
+            },
+            {
+              id: "destination",
+              role: "destination",
+              transaction: "in",
+              asset: "BTC",
+              amount_msat: 90,
+            },
+            {
+              id: "suspense",
+              role: "suspense",
+              wallet: "not-allowed",
+              occurred_at: "2020-01-02T00:00:00Z",
+              asset: "LBTC",
+              amount_msat: 10,
+            },
+          ],
+          allocations: [
+            {
+              source_leg_id: "source",
+              sink_leg_id: "destination",
+              source_amount_msat: 90,
+              sink_amount_msat: 90,
+            },
+            {
+              source_leg_id: "source",
+              sink_leg_id: "suspense",
+              source_amount_msat: 10,
+              sink_amount_msat: 10,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(issueCodes(invalid.activationErrors)).toEqual(
+      expect.arrayContaining([
+        "suspenseReviewRequired",
+        "suspenseLocationInvalid",
+        "suspenseAssetMismatch",
+        "suspenseTimeMismatch",
+      ]),
+    );
+  });
+
   it("requires explicit allocations for a genuine N:M component", () => {
     const preview = previewCustodyComponentBatch(
       JSON.stringify([

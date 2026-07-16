@@ -1,0 +1,289 @@
+{
+  "title": "Custody Gaps",
+  "description": "Review Bitcoin that may have remained under the same legal owner while passing through wallet history that is not imported into Kassiber.",
+  "localOnly": "Analyzed locally",
+  "summary": {
+    "needsReview": "Need review",
+    "detected": "Known gap records",
+    "unresolved": "Quantity pending custody review",
+    "canonicalUnresolved": "Canonical blocking quantity",
+    "candidateResidual": "Nonblocking candidate residual hint",
+    "blockingIssueCount_one": "{{count}} blocking issue",
+    "blockingIssueCount_other": "{{count}} blocking issues",
+    "unquantified_one": "{{count}} additional blocking issue has no exact quantity.",
+    "unquantified_other": "{{count}} additional blocking issues have no exact quantity."
+  },
+  "coverage": {
+    "title": "Imported wallet policy timeline",
+    "description": "Technical scan coverage for wallet policies imported into Kassiber. Kassiber cannot know whether every wallet owned by this profile's legal owner was imported.",
+    "ownershipUnknown": "Ownership universe unknown",
+    "technicalOnly": "This coverage can improve diagnostics, but it never clears a custody gap, proves complete wallet coverage, or confirms an external disposal.",
+    "loading": "Loading recorded technical coverage…",
+    "unavailable": "Recorded technical coverage is unavailable. This does not change custody-gap status.",
+    "empty": "No imported policy coverage has been recorded yet. This does not mean that no owned wallets exist.",
+    "epochCount_one": "{{count}} recorded policy epoch",
+    "epochCount_other": "{{count}} recorded policy epochs",
+    "active": "Active epoch",
+    "retired": "Retired epoch",
+    "started": "Started {{date}}",
+    "retiredAt": "Retired {{date}}",
+    "exclusiveBound": "Exclusive scan bound: {{index}}",
+    "highestUsed": "Highest used index: {{index}}",
+    "unused": "No used index observed",
+    "observed": "Observed {{date}}",
+    "notObserved": "No completed scan recorded for this branch",
+    "noBranches": "No derivation-branch coverage has been recorded.",
+    "noSources": "No observer source coverage has been recorded for this epoch.",
+    "branch": {
+      "receive": "Receive branch",
+      "change": "Change branch"
+    }
+  },
+  "lineage": {
+    "title": "Custody lineage",
+    "description": "Finalized same-owner wallet moves from the canonical custody model. Custody finality and tax-basis readiness are shown separately.",
+    "edgeCount_one": "{{count}} wallet move",
+    "edgeCount_other": "{{count}} wallet moves",
+    "loading": "Loading canonical custody lineage…",
+    "unavailable": "Canonical custody lineage is unavailable until the journal has been processed.",
+    "empty": "No finalized internal wallet moves have been recorded yet.",
+    "evidenceLabel": "Evidence: {{evidence}}",
+    "basisBlocked": "Custody is settled, but tax basis remains blocked by an earlier unresolved custody boundary.",
+    "pagination": {
+      "loaded": "Showing {{loaded}} of {{total}} wallet moves",
+      "loadMore": "Load older custody lineage",
+      "loading": "Loading older custody lineage…"
+    },
+    "custodyState": {
+      "internal_verified": "Custody verified",
+      "internal_reviewed": "Custody reviewed"
+    },
+    "basisState": {
+      "eligible": "Tax basis eligible",
+      "blocked_by_prior_custody_basis": "Tax basis blocked"
+    },
+    "evidence": {
+      "recordedFanout": "Exact outputs from one recorded chain transaction",
+      "rowMatched": "Exact matched wallet observations",
+      "nativeTransfer": "Exact native wallet event",
+      "reviewedTransfer": "Reviewed internal transfer record",
+      "reviewedGapBridge": "Reviewed missing-wallet custody bridge",
+      "channelLifecycle": "Verified channel lifecycle",
+      "reviewedDefault": "Reviewed internal custody evidence",
+      "verifiedDefault": "Verified wallet or chain evidence"
+    }
+  },
+  "reviewQueue": {
+    "title": "Possible missing-wallet returns",
+    "description": "Suggestions are deterministic and never create a custody bridge automatically. Time reduces confidence but does not hide a plausible long-term return."
+  },
+  "history": {
+    "title": "Reviewed custody history",
+    "description": "Decisions remain visible. Dismissals apply only to the evidence fingerprint that was reviewed."
+  },
+  "reviewHistory": {
+    "title": "Append-only review history",
+    "loading": "Loading bounded review history…",
+    "unavailable": "Review history is unavailable. No correction can be confirmed while its preview is unavailable.",
+    "empty": "No review decision has been recorded for this candidate yet.",
+    "revision": "Review {{revision}}",
+    "amounts": "Retained {{retained}} · residual {{residual}}",
+    "residual": "Residual decision: {{classification}}",
+    "reason": "Review note: {{reason}}",
+    "reportImpacts_one": "This decision recorded {{count}} saved or filed report impact.",
+    "reportImpacts_other": "This decision recorded {{count}} saved or filed report impacts.",
+    "events": {
+      "review_decision": "Review decision",
+      "bridge_created": "Reviewed bridge created",
+      "bridge_reopened": "Bridge reopened for correction",
+      "bridge_revised": "Bridge revision activated",
+      "residual_classified": "Residual classified"
+    }
+  },
+  "pagination": {
+    "loaded": "Showing {{loaded}} of {{total}} known gap records",
+    "loadMore": "Load more custody gaps",
+    "loading": "Loading more custody gaps…"
+  },
+  "card": {
+    "principal": "Principal considered",
+    "knownFee": "Known network fee",
+    "walletDebit": "Wallet debit: {{amount}}",
+    "mayHaveReturned": "May have returned",
+    "residual": "Still unexplained",
+    "review": "Review evidence",
+    "hideReview": "Hide evidence"
+  },
+  "candidate": {
+    "promotionEligible": "Structured candidate",
+    "searchHint": "Nonblocking search hint"
+  },
+  "status": {
+    "needs_review": "Needs review",
+    "conflicting": "Conflicting evidence",
+    "resolved": "Resolved by reviewed bridge",
+    "dismissed": "Dismissed for this evidence"
+  },
+  "confidence": {
+    "strong": "Strong suggestion",
+    "moderate": "Moderate suggestion",
+    "weak": "Weak suggestion"
+  },
+  "review": {
+    "loading": "Loading review context…",
+    "unavailable": "The review context is unavailable.",
+    "missing": "This custody gap no longer exists.",
+    "whyTitle": "Why Kassiber suggested this",
+    "affectedDisposals": "Later disposals affected",
+    "affectedYears": "Report years affected",
+    "explicitReview": "Kassiber cannot know that every wallet was imported. A bridge is created only after a successful local preview and your explicit approval.",
+    "correctionPath": "Need to correct this decision? Create a new immutable component revision and activate it. Kassiber will supersede the prior bridge without rewriting its audit history."
+  },
+  "actions": {
+    "previewBridge": "Preview exact bridge",
+    "previewing": "Checking bridge…",
+    "previewReady": "Exact bridge preview passed",
+    "previewAmounts": "Carry {{retained}}; keep {{residual}} in custody suspense; preserve {{fee}} as the known fee.",
+    "reviewWarnings": "Facts that still require your judgment",
+    "explicitOwnershipConfirmation": "I reviewed these exact amounts and competing explanations. I confirm the retained quantity remained under this profile's legal owner's control. Kassiber is not inferring this for me.",
+    "confirmBridge": "Create reviewed bridge",
+    "creating": "Creating bridge…",
+    "dismiss": "Dismiss this evidence",
+    "dismissConfirm": "Dismiss this candidate for its current evidence? Changed evidence will reopen it.",
+    "failed": "The custody-gap action failed."
+  },
+  "correction": {
+    "reasonLabel": "Correction note (optional)",
+    "reasonPlaceholder": "Why are you reopening or revising this reviewed bridge?",
+    "previewing": "Checking correction…",
+    "reopen": {
+      "title": "Correct this reviewed bridge",
+      "description": "Reopen the current bridge first. Kassiber will supersede it without deleting its evidence or review history.",
+      "preview": "Preview exact reopen",
+      "previewReady": "Exact reopen preview passed",
+      "revision": "Current immutable component revision: {{current}}. It will be superseded, not deleted.",
+      "confirmation": "I reviewed this preview and want to reopen this exact bridge for correction. I understand reports remain blocked until I activate a revised bridge.",
+      "confirm": "Reopen reviewed bridge",
+      "confirming": "Reopening bridge…"
+    },
+    "revise": {
+      "title": "Activate the corrected bridge",
+      "description": "This reopened bridge must be revised inside its existing immutable lineage. Kassiber will not create an unrelated replacement.",
+      "preview": "Preview exact revision",
+      "previewReady": "Exact revision preview passed",
+      "revision": "Component revision {{current}} will be superseded by revision {{next}} in the same lineage.",
+      "amounts": "The revision carries {{retained}} and leaves {{residual}} for a separate residual decision.",
+      "confirmation": "I reviewed these exact revised amounts and confirm this revision represents the legal owner's retained custody.",
+      "confirm": "Activate bridge revision",
+      "confirming": "Activating revision…"
+    }
+  },
+  "residual": {
+    "title": "Resolve the remaining custody quantity",
+    "description": "Classify the exact residual {{amount}} through a guided custody decision.",
+    "currentTitle": "Current reviewed residual decision",
+    "current": "{{amount}} was classified as {{classification}}.",
+    "classificationLabel": "Custody classification",
+    "reasonLabel": "Review note (optional)",
+    "reasonPlaceholder": "Record the evidence or judgment behind this residual decision.",
+    "taxBoundary": "This step decides custody only. Country-specific tax treatment remains a separate review and Kassiber does not infer it from this label.",
+    "preview": "Preview exact residual decision",
+    "previewing": "Checking residual decision…",
+    "previewReady": "Exact residual preview passed",
+    "previewAmount": "Classify {{amount}} as {{classification}}.",
+    "custodyResultTitle": "Custody result",
+    "taxMeaningTitle": "Country-tax meaning",
+    "taxMeaningUnassigned": "Not assigned by this custody action.",
+    "giftLossTaxReview": "Gift and loss labels still require country-specific tax review before final reporting.",
+    "confirmation": "I reviewed this exact residual quantity and confirm the selected custody outcome. I understand this does not assign country-specific tax treatment.",
+    "confirm": "Classify exact residual",
+    "confirming": "Classifying residual…",
+    "custodyState": {
+      "external_confirmed": "The reviewed quantity leaves this legal owner's custody.",
+      "internal_reviewed": "The reviewed quantity remains under this legal owner's custody.",
+      "custody_suspense": "The reviewed quantity remains in custody suspense and continues to block final basis."
+    },
+    "options": {
+      "external_payment": {
+        "label": "External payment",
+        "description": "The quantity left the legal owner's custody as a payment; tax meaning is still separate."
+      },
+      "external_disposal": {
+        "label": "External disposal",
+        "description": "The quantity left the legal owner's custody in a reviewed disposal; country-tax treatment is still separate."
+      },
+      "external_gift": {
+        "label": "External gift",
+        "description": "The quantity left the legal owner's custody as a gift; country-specific tax review is still required."
+      },
+      "external_loss": {
+        "label": "External loss",
+        "description": "Control of the quantity was lost; country-specific tax review is still required."
+      },
+      "retained_custody": {
+        "label": "Retained custody",
+        "description": "The quantity remained under the same legal owner's control despite the missing wallet history."
+      },
+      "suspense_continuation": {
+        "label": "Keep in custody suspense",
+        "description": "There is not enough evidence yet; keep this exact quantity unresolved and blocking."
+      }
+    }
+  },
+  "warnings": {
+    "manual_review_required": "This bridge is authored from your review, not proven by wallet scanning or by the suggestion score.",
+    "weak_advisory_evidence": "Amount and timing alone are ambiguous. This hint was not eligible for automatic promotion.",
+    "competing_candidates": "Other plausible return groups compete with this explanation. Review them before choosing this bridge.",
+    "unresolved_residual": "Some outgoing principal remains in custody suspense and needs a later decision.",
+    "excess_return_unclassified": "The return exceeds the outgoing principal. The excess is not carried by this bridge and needs a separate origin classification."
+  },
+  "filedImpact": {
+    "title": "Saved or filed report may need amendment",
+    "report": "{{kind}} ({{state}}), affected period {{start}}–{{end}}",
+    "state": {
+      "saved": "saved",
+      "filed": "filed"
+    },
+    "pendingRebuild": "Gain and basis changes are not final until journals are rebuilt."
+  },
+  "reasons": {
+    "amount_coverage_high": "Most of the outgoing quantity appears in the proposed returns.",
+    "amount_coverage_partial": "Part of the outgoing quantity appears in the proposed returns.",
+    "wallet_transition": "The source became inactive before the destination wallet became active.",
+    "long_horizon": "A plausible return exists despite the long time between wallet boundaries.",
+    "structured_privacy_boundary": "A typed privacy-boundary marker supports a missing-wallet interval.",
+    "structured_samourai_wallet": "The wallet type identifies a Samourai or Whirlpool policy.",
+    "structured_samourai_transaction": "Typed Samourai transaction evidence supports the path.",
+    "structured_samourai_policy": "Validated Samourai role and section metadata supports the path.",
+    "structured_custody_chronology": "Typed wallet-epoch chronology supports the transition.",
+    "structured_custody_topology": "Typed custody topology evidence supports the transition.",
+    "promotion_eligible_structured_signal": "Structured evidence and the competitor margin make this a review candidate.",
+    "search_hint_only": "Amount and timing alone make this a nonblocking search hint.",
+    "competitor_margin_insufficient": "A competing explanation is too close to promote this hint.",
+    "promotion_ineligible_external_origin": "Typed commercial evidence indicates an external origin.",
+    "split_source": "Several outgoing transactions form the proposed source boundary.",
+    "split_return": "Several incoming transactions form the proposed return boundary.",
+    "unresolved_residual": "Part of the outgoing quantity remains unexplained.",
+    "return_exceeds_source": "The proposed returns exceed the source quantity; the excess needs a separate classification."
+  },
+  "empty": {
+    "title": "No known custody gaps",
+    "body": "Kassiber found no unresolved custody gap in the currently imported evidence. It cannot determine whether wallets that were never imported exist."
+  },
+  "processing": {
+    "title": "Custody gap status needs journal processing",
+    "body": "Process the journal before treating the currently imported evidence as clear."
+  },
+  "searchIncomplete": {
+    "title": "Suggestion search reached a capacity limit",
+    "body": "The visible hints may be incomplete. This is an advisory search limitation, not evidence of a disposal and not a tax-report blocker by itself."
+  },
+  "blocking": {
+    "title": "Known custody quantity still needs review",
+    "body": "{{count}} canonical custody issue blocks final tax basis, even though no current missing-wallet suggestion can resolve it automatically. Review the custody component or quarantine evidence."
+  },
+  "unavailable": {
+    "title": "Custody gaps unavailable",
+    "body": "Kassiber could not load the custody-gap snapshot."
+  }
+}

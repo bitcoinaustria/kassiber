@@ -104,6 +104,16 @@ CORE_TOOL_NAMES = frozenset(
         "ui.wallets.sync", "ui.journals.process", "ui.maintenance.run",
         "ui.transfers.suggest", "ui.transfers.review_context",
         "ui.transfers.list", "ui.transfers.rules.list",
+        "ui.custody.coverage.snapshot",
+        "ui.custody.lineage.snapshot",
+        "ui.custody.gaps.list", "ui.custody.gaps.review_context",
+        "ui.custody.gaps.history",
+        "ui.custody.gaps.bridge.preview", "ui.custody.gaps.bridge.create",
+        "ui.custody.gaps.dismiss",
+        "ui.custody.gaps.reopen.preview", "ui.custody.gaps.reopen",
+        "ui.custody.gaps.revise.preview", "ui.custody.gaps.revise",
+        "ui.custody.gaps.residual.preview",
+        "ui.custody.gaps.residual.classify",
     }
 )
 
@@ -113,6 +123,15 @@ _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
     "properties": {},
 }
+
+_CUSTODY_RESIDUAL_CLASSIFICATIONS = (
+    "external_payment",
+    "external_disposal",
+    "external_gift",
+    "external_loss",
+    "retained_custody",
+    "suspense_continuation",
+)
 
 _SOURCE_FUNDS_SOURCE_TYPES = (
     "fiat_purchase",
@@ -184,6 +203,7 @@ _CUSTODY_LEG_ROLES = (
     "external",
     "retained",
     "unresolved",
+    "suspense",
 )
 _EXACT_NONNEGATIVE_INTEGER_SCHEMA: dict[str, Any] = {
     "type": ["integer", "string"],
@@ -218,7 +238,15 @@ _CUSTODY_COMPONENT_SPEC_SCHEMA: dict[str, Any] = {
                         "type": "string",
                         "description": "Stable component-local leg id used by explicit allocations.",
                     },
-                    "role": {"type": "string", "enum": list(_CUSTODY_LEG_ROLES)},
+                    "role": {
+                        "type": "string",
+                        "enum": list(_CUSTODY_LEG_ROLES),
+                        "description": (
+                            "unresolved is an incomplete draft leg. suspense is an exact "
+                            "reviewed residual allowed only in a quantity-mode manual_bridge; "
+                            "it needs an explicit source allocation and no wallet or transaction anchor."
+                        ),
+                    },
                     "transaction": {
                         "type": "string",
                         "description": "Imported transaction id, txid, or external id anchoring this leg.",
@@ -1042,7 +1070,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.report.blockers",
         description=(
             "Read deterministic report-readiness blockers: missing workspace/profile, "
-            "wallets, transactions, stale journals, quarantine, and pricing coverage."
+            "wallets, transactions, stale journals, quarantine, canonical custody-quantity "
+            "gaps, and pricing coverage. A clear custody status means no known gaps in "
+            "current imported evidence, not that every wallet was imported."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -1574,6 +1604,348 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read transfer/swap candidates",
     ),
     ToolEntry(
+        name="ui.custody.coverage.snapshot",
+        description=(
+            "Read the redacted technical scan history for imported wallet-policy "
+            "epochs in the active profile: wallet labels, active/retired epochs, "
+            "observer/source classes, exclusive scan bounds, highest-used indices, "
+            "and observation times. This snapshot always reports that the ownership "
+            "universe is unknown; it cannot prove every wallet was imported, clear a "
+            "custody gap, or establish a disposal. No descriptors, extended public "
+            "keys, addresses, scripts, or private material are exposed. Local AI only."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_custody_coverage_snapshot",
+        daemon_kind="ui.custody.coverage.snapshot",
+        summary_template="Read imported-policy technical coverage",
+    ),
+    ToolEntry(
+        name="ui.custody.lineage.snapshot",
+        description=(
+            "Read the redacted canonical internal-custody edges derived for the "
+            "active local book. Each row names the source and destination wallet, "
+            "exact amount, evidence reason, custody finality, and separate tax-basis "
+            "eligibility. A verified custody edge can remain visible when an earlier "
+            "unresolved gap blocks later tax projection. Observation commitments and "
+            "quantity-slice offsets are never exposed. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                "cursor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": (
+                        "Opaque pagination cursor returned as next_cursor by the "
+                        "previous page."
+                    ),
+                },
+                "transaction_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": (
+                        "Optional internal transaction id; returns edges where it is "
+                        "either the source or destination."
+                    ),
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_lineage_snapshot",
+        daemon_kind="ui.custody.lineage.snapshot",
+        summary_template="Read canonical custody lineage",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.list",
+        description=(
+            "Read privacy-safe, deterministic long-horizon custody-gap suggestions "
+            "for the active profile. A suggestion may connect Bitcoin leaving a known "
+            "wallet to later returns after missing wallet history; it is not evidence "
+            "and never activates a custody bridge automatically. Available to local AI "
+            "providers only because the result links wallet history."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+                "cursor": {
+                    "type": "string",
+                    "description": (
+                        "Pagination cursor returned as next_cursor by the previous page."
+                    ),
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_gaps_list",
+        daemon_kind="ui.custody.gaps.list",
+        summary_template="Read custody-gap suggestions",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.review_context",
+        description=(
+            "Read one privacy-safe custody-gap review packet with quantity coverage, "
+            "reason codes, and downstream basis impact. "
+            "No descriptors, addresses, scripts, xpubs, or raw transaction "
+            "graph are exposed. "
+            "Available to local AI providers only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id"],
+            "properties": {
+                "gap_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": (
+                        "Stable custody-gap candidate identifier returned by "
+                        "ui.custody.gaps.list."
+                    ),
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_gaps_review_context",
+        daemon_kind="ui.custody.gaps.review_context",
+        summary_template="Read custody-gap review context",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.history",
+        description=(
+            "Read the bounded append-only review and correction history for one "
+            "custody gap. Returns review states, component revisions, residual "
+            "classifications, and filed-report impact counts without raw transaction "
+            "graphs or boundary transaction ids. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_gaps_history",
+        daemon_kind="ui.custody.gaps.history",
+        summary_template="Read custody-gap correction history",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.bridge.preview",
+        description=(
+            "Locally validate the exact server-side component for one promoted custody-gap "
+            "candidate without writing. The returned fingerprint must be passed unchanged "
+            "to a separately consented create call. Model output is not evidence. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id"],
+            "properties": {"gap_id": {"type": "string", "minLength": 1}},
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_gaps_bridge_preview",
+        daemon_kind="ui.custody.gaps.bridge.preview",
+        summary_template="Preview exact custody bridge",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.bridge.create",
+        description=(
+            "After explicit consent, create and activate the exact server-side reviewed "
+            "bridge previously previewed for this gap. The fingerprint makes stale evidence "
+            "fail closed. Local AI only; raw transaction linkage is never returned."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id", "expected_fingerprint"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "expected_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_custody_gaps_bridge_create",
+        daemon_kind="ui.custody.gaps.bridge.create",
+        summary_template="Create reviewed custody bridge",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.dismiss",
+        description=(
+            "After explicit consent, dismiss one custody-gap candidate only for the exact "
+            "currently reviewed evidence fingerprint. Changed evidence reopens it. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id", "expected_fingerprint"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "expected_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64},
+                "reason": {"type": "string", "maxLength": 500},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_custody_gaps_dismiss",
+        daemon_kind="ui.custody.gaps.dismiss",
+        summary_template="Dismiss current custody-gap evidence",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.reopen.preview",
+        description=(
+            "Preview reopening an active reviewed bridge without writing. The preview "
+            "shows filed-report impact and returns an exact fingerprint for a separately "
+            "consented write. Reopening never edits the prior revision. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "reason": {"type": "string", "maxLength": 500},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_gaps_reopen_preview",
+        daemon_kind="ui.custody.gaps.reopen.preview",
+        summary_template="Preview reopening reviewed custody bridge",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.reopen",
+        description=(
+            "After explicit consent, supersede the active bridge and return its gap to "
+            "review. Prior revisions remain immutable and filed-report impact is recorded. "
+            "Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id", "expected_fingerprint"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "expected_fingerprint": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64,
+                },
+                "reason": {"type": "string", "maxLength": 500},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_custody_gaps_reopen",
+        daemon_kind="ui.custody.gaps.reopen",
+        summary_template="Reopen reviewed custody bridge",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.revise.preview",
+        description=(
+            "Preview a new bridge revision for a reopened gap using the current bounded "
+            "candidate. This never edits the old component and returns an exact fingerprint "
+            "for separate confirmation. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "reason": {"type": "string", "maxLength": 500},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_gaps_revise_preview",
+        daemon_kind="ui.custody.gaps.revise.preview",
+        summary_template="Preview revised custody bridge",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.revise",
+        description=(
+            "After explicit consent, activate the exact new revision previewed for a "
+            "reopened gap. Evidence drift fails closed and requires a new preview. "
+            "Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id", "expected_fingerprint"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "expected_fingerprint": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64,
+                },
+                "reason": {"type": "string", "maxLength": 500},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_custody_gaps_revise",
+        daemon_kind="ui.custody.gaps.revise",
+        summary_template="Activate revised custody bridge",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.residual.preview",
+        description=(
+            "Preview classification of only the unresolved residual of an active reviewed "
+            "bridge. Custody finality is kept separate from country-specific tax meaning. "
+            "The model proposal is not evidence. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id", "classification"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "classification": {
+                    "type": "string",
+                    "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS),
+                },
+                "reason": {"type": "string", "maxLength": 500},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_custody_gaps_residual_preview",
+        daemon_kind="ui.custody.gaps.residual.preview",
+        summary_template="Preview custody residual classification",
+    ),
+    ToolEntry(
+        name="ui.custody.gaps.residual.classify",
+        description=(
+            "After explicit consent, classify the exact residual from the prior preview. "
+            "Gift and loss remain non-sale meanings, retained custody creates no inbound "
+            "observation, and suspense remains a tax blocker. Local AI only."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["gap_id", "classification", "expected_fingerprint"],
+            "properties": {
+                "gap_id": {"type": "string", "minLength": 1},
+                "classification": {
+                    "type": "string",
+                    "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS),
+                },
+                "expected_fingerprint": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64,
+                },
+                "reason": {"type": "string", "maxLength": 500},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_custody_gaps_residual_classify",
+        daemon_kind="ui.custody.gaps.residual.classify",
+        summary_template="Classify reviewed custody residual",
+    ),
+    ToolEntry(
         name="ui.transfers.review_context",
         description=(
             "Read a deterministic pair-review packet for the active profile: "
@@ -1680,9 +2052,11 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "Validate or atomically author one or more reviewed custody components after "
             "explicit consent. This is the quarantine repair path for missing wallets and "
             "1:N, N:1, or explicit N:M custody flows that cannot be represented by one pair. "
-            "Prefer dry_run=true first. Activation remains fail-closed: every anchor, amount, "
+            "Run dry_run=true first, then request consent for any final write. Activation "
+            "remains fail-closed: every anchor, amount, "
             "fee, network, asset, chronology, and allocation must conserve exactly. The result "
-            "omits local-only evidence and location references."
+            "omits local-only evidence and location references. AI output is not evidence: "
+            "suspense may only preserve an exact user-reviewed residual in a manual bridge."
         ),
         parameters={
             "type": "object",
@@ -2770,7 +3144,9 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
         capabilities.add("source_funds")
     if name.startswith(("ui.btcpay.", "ui.documents.")) or name == "ui.transactions.commercial_context":
         capabilities.add("merchant")
-    if name.startswith(("ui.transfers.", "ui.saved_views.")) or name == "ui.journals.transfers.list":
+    if name.startswith(("ui.transfers.", "ui.saved_views.", "ui.custody.")) or (
+        name == "ui.journals.transfers.list"
+    ):
         capabilities.add("transfers")
     if name.startswith("ui.journals."):
         capabilities.update({"transactions", "reports"})
@@ -2819,7 +3195,21 @@ def select_tool_capabilities(
         "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
         "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds"),
         "merchant": ("btcpay", "invoice", "receipt", "merchant", "commercial", "document"),
-        "transfers": ("transfer", "swap", "payout", "boltz", "peg", "coinjoin", "whirlpool", "pair"),
+        "transfers": (
+            "transfer",
+            "swap",
+            "payout",
+            "boltz",
+            "peg",
+            "coinjoin",
+            "whirlpool",
+            "pair",
+            "custody",
+            "missing wallet",
+            "wallet roll",
+            "samourai",
+            "basis continuity",
+        ),
         "operations": ("health", "pending", "next", "ready", "stale", "maintenance", "diagnose", "broken", "failed", "review", "worklist", "unresolved", "to do", "todo"),
     }
     for capability, keywords in keyword_groups.items():

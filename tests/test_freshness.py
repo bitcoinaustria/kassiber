@@ -14,6 +14,7 @@ from kassiber import daemon_freshness
 from kassiber.core import freshness, rates as core_rates
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
+from kassiber.secrets.sqlcipher import require_sqlcipher, sqlcipher_available
 from kassiber.time_utils import now_iso
 
 
@@ -336,6 +337,120 @@ class FreshnessTest(unittest.TestCase):
         # ...and it is persisted in the job error for diagnostics/UI.
         self.assertEqual(
             results[0]["error"]["details"]["error_class"], "builtins.ValueError"
+        )
+
+    def test_database_busy_requeues_with_safe_driver_neutral_diagnostics(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        conn.commit()
+
+        def busy(conn, job, progress, check_cancelled):
+            exc = sqlite3.OperationalError(
+                "database is locked at https://user:pw@node/secret"
+            )
+            exc.sqlite_errorcode = sqlite3.SQLITE_BUSY
+            exc.sqlite_errorname = "SQLITE_BUSY"
+            raise exc
+
+        with self.assertLogs("kassiber.core.freshness", level="WARNING") as captured:
+            results = freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: busy},
+                profile_id=profile_id,
+                limit=1,
+            )
+
+        job = results[0]
+        self.assertEqual(job["status"], freshness.JOB_RATE_LIMITED)
+        self.assertEqual(job["error"]["code"], "database_busy")
+        self.assertTrue(job["error"]["retryable"])
+        self.assertEqual(job["error"]["details"]["sqlite_error_name"], "SQLITE_BUSY")
+        self.assertEqual(job["error"]["details"]["sqlite_error_code"], sqlite3.SQLITE_BUSY)
+        self.assertIsNotNone(job["cooldown_until"])
+        self.assertIsNotNone(job["run_after"])
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertEqual(state["status"], freshness.STATUS_RATE_LIMITED)
+        self.assertEqual(state["last_error_code"], "database_busy")
+        self.assertEqual(state["cooldown_reason"], "database-busy")
+        self.assertTrue(any("SQLITE_BUSY" in line for line in captured.output))
+        self.assertFalse(any("user:pw" in line for line in captured.output))
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver is unavailable")
+    def test_sqlcipher_busy_uses_the_same_safe_classifier(self):
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-freshness-sqlcipher-busy-")
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "busy.sqlite3"
+        driver = require_sqlcipher()
+        owner = driver.connect(path)
+        contender = driver.connect(path)
+        self.addCleanup(owner.close)
+        self.addCleanup(contender.close)
+        owner.execute("CREATE TABLE writes(id INTEGER PRIMARY KEY, value TEXT)")
+        owner.execute("INSERT INTO writes(value) VALUES('before')")
+        owner.commit()
+        contender.execute("PRAGMA busy_timeout = 1")
+        owner.execute("BEGIN IMMEDIATE")
+        owner.execute("UPDATE writes SET value = 'owner'")
+        try:
+            with self.assertRaises(driver.OperationalError) as raised:
+                contender.execute("UPDATE writes SET value = 'contender'")
+            self.assertFalse(
+                isinstance(raised.exception, sqlite3.OperationalError),
+                "Regression requires SQLCipher's independent DB-API hierarchy",
+            )
+            details = freshness._safe_sqlite_error_details(raised.exception)
+            self.assertTrue(freshness._sqlite_error_is_busy(details))
+            self.assertEqual(details["sqlite_error_name"], "SQLITE_BUSY")
+            self.assertEqual(details["sqlite_error_code"], sqlite3.SQLITE_BUSY)
+            self.assertEqual(
+                details["error_class"],
+                "sqlcipher3.dbapi2.OperationalError",
+            )
+        finally:
+            owner.rollback()
+
+    def test_sqlite_schema_error_keeps_failed_state_and_logs_safe_result_code(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+            priority=10,
+        )
+        conn.commit()
+
+        def malformed(conn, job, progress, check_cancelled):
+            conn.execute("SELECT * FROM missing_freshness_internal_table")
+
+        with self.assertLogs("kassiber.core.freshness", level="ERROR") as captured:
+            results = freshness.run_due_jobs(
+                conn,
+                {freshness.JOB_ONCHAIN_WALLET: malformed},
+                profile_id=profile_id,
+                limit=1,
+            )
+
+        job = results[0]
+        self.assertEqual(job["status"], freshness.JOB_ERROR)
+        self.assertEqual(job["error"]["code"], "freshness_job_failed")
+        self.assertEqual(job["error"]["details"]["sqlite_error_name"], "SQLITE_ERROR")
+        self.assertEqual(job["error"]["details"]["sqlite_error_code"], sqlite3.SQLITE_ERROR)
+        self.assertTrue(any("SQLITE_ERROR" in line for line in captured.output))
+        self.assertFalse(
+            any("missing_freshness_internal_table" in line for line in captured.output)
         )
 
     def test_failed_job_error_message_url_is_scrubbed_in_ui_snapshot(self):

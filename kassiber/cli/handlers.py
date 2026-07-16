@@ -38,6 +38,18 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_components as core_custody_components
+from ..core import custody_gap_reviews as core_custody_gap_reviews
+from ..core import custody_interpreters as core_custody_interpreters
+from ..core import custody_quantity_runtime as core_custody_quantity_runtime
+from ..core import custody_quantity_store as core_custody_quantity_store
+from ..core import custody_tax_projection as core_custody_tax_projection
+from ..core import custody_tax_migration as core_custody_tax_migration
+from ..core import custody_filed_reports as core_custody_filed_reports
+from ..core.custody_evidence import (
+    build_canonical_quantity_input,
+    enriched_quantity_rows,
+    row_principal_msat,
+)
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
 from ..core import imports as core_imports
@@ -720,7 +732,7 @@ def create_transaction_pair(
                 code="validation",
             )
         out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
-        full_out_msat = int(out_row["amount"] or 0)
+        full_out_msat = row_principal_msat(out_row)
         if out_amount_msat > full_out_msat:
             raise AppError(
                 f"--out-amount exceeds the outbound amount "
@@ -853,7 +865,7 @@ def create_direct_swap_payout(
     out_amount_msat = None
     if out_amount is not None:
         out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
-        full_out_msat = int(out_row["amount"] or 0)
+        full_out_msat = row_principal_msat(out_row)
         if out_amount_msat > full_out_msat:
             raise AppError(
                 f"--out-amount exceeds the outbound amount "
@@ -911,7 +923,11 @@ def create_direct_swap_payout(
         )
 
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0),
+        (
+            out_amount_msat
+            if out_amount_msat is not None
+            else row_principal_msat(out_row)
+        ),
         payout_amount_msat,
         _outbound_pair_fee_component_msat(
             out_row,
@@ -5207,11 +5223,18 @@ def build_ledger_state(conn, profile):
             w.kind AS wallet_kind,
             w.account_id AS wallet_account_id,
             w.config_json AS config_json,
+            observation.authority_version AS observation_authority_version,
+            observation.graph_hash AS observation_graph_hash,
+            observation.quantity_hash AS observation_quantity_hash,
+            observation.fee_attribution AS observation_fee_attribution,
+            observation.application_revision AS observation_application_revision,
             COALESCE(a.code, 'treasury') AS account_code,
             COALESCE(a.label, 'Treasury') AS account_label
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN accounts a ON a.id = w.account_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
         WHERE t.profile_id = ? AND t.excluded = 0
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
@@ -5366,23 +5389,152 @@ def build_ledger_state(conn, profile):
             include_local_evidence=False,
         )
     )
+    # Materialization validates replicated author commitments against local
+    # canonical anchors. Raw activation snapshots remain author-local audit
+    # material and are not a journal input.
     custody_component_blockers = _custody_component_integrity_blockers(
         conn,
         profile["id"],
         components=authored_active_custody_components,
     )
+    component_evidence_snapshots = (
+        core_custody_quantity_store.load_component_evidence_snapshots(
+            conn,
+            profile["id"],
+        )
+    )
+    dismissed_gap_fingerprints = (
+        core_custody_gap_reviews.latest_dismissed_fingerprints(
+            conn,
+            profile["id"],
+        )
+    )
+    ignored_gap_transaction_ids = {
+        str(record[key])
+        for record in manual_pair_records
+        for key in ("out_transaction_id", "in_transaction_id")
+        if record[key] not in (None, "")
+    }
+    ignored_gap_transaction_ids.update(
+        str(record["out_transaction_id"])
+        for record in direct_payout_records
+        if record["out_transaction_id"] not in (None, "")
+    )
+    ignored_gap_transaction_ids.update(
+        str(leg["transaction_id"])
+        for leg in loan_legs
+        if leg["transaction_id"] not in (None, "")
+    )
+    ignored_gap_transaction_ids.update(str(item) for item in channel_roles)
+    for pair in channel_transfer_pairs:
+        for side in ("out", "in"):
+            row = pair.get(side) or {}
+            transaction_id = row.get("journal_transaction_id") or row.get("id")
+            if transaction_id not in (None, ""):
+                ignored_gap_transaction_ids.add(str(transaction_id))
+
+    component_transaction_ids = tuple(
+        sorted(
+            {
+                str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
+                for component in authored_active_custody_components
+                for leg in component.get("legs", ())
+                if leg.get("anchor_transaction_id") or leg.get("transaction_id")
+            }
+        )
+    )
+    canonical_input = build_canonical_quantity_input(enriched_quantity_rows(rows))
+    interpreter_compilation = core_custody_interpreters.compile_custody_interpreters(
+        rows,
+        canonical_input,
+        wallet_refs_by_id=wallet_refs_by_id,
+        manual_pair_records=manual_pair_records,
+        owned_index=owned_index,
+        channel_transfer_pairs=channel_transfer_pairs,
+        channel_roles=channel_roles,
+        loan_legs=loan_legs,
+        direct_payout_records=direct_payout_records,
+        component_transaction_ids=component_transaction_ids,
+    )
+    custody_quantity = core_custody_quantity_runtime.build_canonical_quantity_state(
+        rows,
+        interpreter_claims=interpreter_compilation.claims,
+        effective_components=authored_active_custody_components,
+        native_evidence=interpreter_compilation.native_audits,
+        direct_payout_records=direct_payout_records,
+        interpreter_blockers=interpreter_compilation.blocking_quarantines,
+        ignored_gap_transaction_ids=(
+            *ignored_gap_transaction_ids,
+            *interpreter_compilation.blocked_transaction_ids,
+        ),
+        component_evidence_snapshots=component_evidence_snapshots,
+        dismissed_gap_fingerprints=dismissed_gap_fingerprints,
+    )
+    custody_transfers = core_custody_quantity_runtime.canonical_internal_transfer_rows(
+        custody_quantity,
+        wallet_refs_by_id,
+    )
+    channel_non_event_ids = {
+        str(transaction_id)
+        for transaction_id, role in channel_roles.items()
+        if str(role) in {core_loans.CHANNEL_OPEN, core_loans.CHANNEL_CLOSE}
+    }
+    finalized_tax_projection = (
+        core_custody_tax_projection.compile_finalized_tax_projection(
+            profile,
+            rows,
+            custody_quantity,
+            non_event_transaction_ids=(
+                *interpreter_compilation.non_event_transaction_ids,
+                *sorted(channel_non_event_ids),
+            ),
+            blocked_transaction_ids=interpreter_compilation.blocked_transaction_ids,
+            direct_payout_conflict_transaction_ids=(
+                interpreter_compilation.direct_payout_conflict_transaction_ids
+            ),
+            interpreter_quarantines=interpreter_compilation.quarantines,
+            direct_payout_records=direct_payout_records,
+            reviewed_cross_asset_pairs=(
+                interpreter_compilation.cross_asset_pairs
+            ),
+        )
+    )
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
-            rows=rows,
+            finalized_tax_projection=finalized_tax_projection,
             wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=manual_pair_records,
             direct_payout_records=direct_payout_records,
-            owned_index=owned_index,
-            loan_legs=loan_legs,
-            channel_roles=channel_roles,
-            channel_transfer_pairs=channel_transfer_pairs,
-            authored_active_custody_components=authored_active_custody_components,
         )
+    )
+    current_wallet_balances = {
+        (str(wallet_id), str(asset)): btc_to_msat(value["quantity"])
+        for (wallet_id, _wallet_label, _account_code, asset), value
+        in engine_state.wallet_holdings.items()
+    }
+    known_non_event_reasons = {
+        str(leg["transaction_id"]): f"loan_{leg['role']}_non_event"
+        for leg in loan_legs
+        if leg["transaction_id"] is not None
+    }
+    known_non_event_reasons.update(
+        {
+            str(transaction_id): f"lightning_{role}_non_event"
+            for transaction_id, role in channel_roles.items()
+        }
+    )
+    for component in authored_active_custody_components:
+        validation = component.get("validation") or {}
+        if int(validation.get("suspense_msat") or 0) <= 0:
+            continue
+        for leg in component.get("legs", ()):
+            if leg.get("role") == "source" and leg.get("transaction_id"):
+                known_non_event_reasons[str(leg["transaction_id"])] = (
+                    "custody_component_residual_suspense"
+                )
+    quantity_differences = core_custody_quantity_runtime.compare_wallet_balances(
+        custody_quantity,
+        current_wallet_balances,
+        known_non_event_reasons=known_non_event_reasons,
     )
     ownership_review_counts = _ownership_review_counts_for_state(
         rows,
@@ -5402,6 +5554,9 @@ def build_ledger_state(conn, profile):
         "wallet_holdings": engine_state.wallet_holdings,
         "ownership_review_counts": ownership_review_counts,
         "custody_component_blockers": custody_component_blockers,
+        "custody_quantity": custody_quantity,
+        "custody_transfers": custody_transfers,
+        "quantity_differences": quantity_differences,
         "latest_rates": rates,
         "warnings": warnings,
     }
@@ -5607,6 +5762,11 @@ def process_journals(conn, workspace_ref, profile_ref):
         )
     conn.execute("SAVEPOINT journals_process")
     try:
+        core_custody_tax_migration.capture_legacy_baseline(
+            conn,
+            workspace_id=profile["workspace_id"],
+            profile_id=profile["id"],
+        )
         source_overlap_repair = _repair_journal_source_overlaps(conn, profile)
         source_overlap_warning = _journal_source_overlap_warning(
             conn,
@@ -5621,6 +5781,21 @@ def process_journals(conn, workspace_ref, profile_ref):
         conn.execute("DELETE FROM journal_account_holdings WHERE profile_id = ?", (profile["id"],))
         conn.execute("DELETE FROM journal_wallet_holdings WHERE profile_id = ?", (profile["id"],))
         created_at = now_iso()
+        custody_quantity = state.get("custody_quantity")
+        quantity_counts = {
+            "postings": 0,
+            "issues": 0,
+            "balances": 0,
+            "decisions": 0,
+        }
+        if custody_quantity is not None:
+            quantity_counts = core_custody_quantity_store.replace_canonical_quantity_state(
+                conn,
+                workspace_id=profile["workspace_id"],
+                profile_id=profile["id"],
+                state=custody_quantity,
+                created_at=created_at,
+            )
         pricing_by_tx = {
             row["id"]: row
             for row in conn.execute(
@@ -5819,6 +5994,26 @@ def process_journals(conn, workspace_ref, profile_ref):
                 profile["id"],
             ),
         )
+        core_custody_tax_migration.finalize_first_rebuild(
+            conn,
+            workspace_id=profile["workspace_id"],
+            profile_id=profile["id"],
+            rebuilt_at=created_at,
+        )
+        filed_impact_resolutions = []
+        if (
+            not state.get("custody_component_blockers")
+            and not deduped_quarantines
+            and not (custody_quantity and custody_quantity.report_blocked)
+        ):
+            filed_impact_resolutions = (
+                core_custody_filed_reports.resolve_pending_custody_impacts(
+                    conn,
+                    workspace_id=profile["workspace_id"],
+                    profile_id=profile["id"],
+                    rebuilt_at=created_at,
+                )
+            )
     except Exception:
         conn.execute("ROLLBACK TO SAVEPOINT journals_process")
         conn.execute("RELEASE SAVEPOINT journals_process")
@@ -5834,6 +6029,16 @@ def process_journals(conn, workspace_ref, profile_ref):
         "auto_priced": auto_priced,
         "processed_transactions": tx_count,
         "processed_at": created_at,
+        "custody_quantity": {
+            **quantity_counts,
+            "differences": len(state.get("quantity_differences", ())),
+            "blocked": bool(custody_quantity and custody_quantity.report_blocked),
+            "blocked_from": (
+                custody_quantity.tax_eligibility.blocked_from
+                if custody_quantity is not None
+                else None
+            ),
+        },
     }
     if state.get("direct_swap_payouts"):
         result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
@@ -5852,6 +6057,8 @@ def process_journals(conn, workspace_ref, profile_ref):
         result["source_overlap_repair"] = source_overlap_repair
     if source_overlap_warning is not None:
         result["source_overlap_warning"] = source_overlap_warning
+    if filed_impact_resolutions:
+        result["filed_report_impacts_resolved"] = len(filed_impact_resolutions)
     return result
 
 
@@ -5937,8 +6144,12 @@ def _serialize_cross_asset_pairs(rows, refs_by_id):
             str(item["in_id"]),
         ),
     ):
-        out_ref = refs_by_id.get(str(row["out_id"]), {})
-        in_ref = refs_by_id.get(str(row["in_id"]), {})
+        out_ref = refs_by_id.get(
+            str(row.get("out_transaction_id") or row["out_id"]), {}
+        )
+        in_ref = refs_by_id.get(
+            str(row.get("in_transaction_id") or row["in_id"]), {}
+        )
         serialized.append(
             {
                 "pair_id": row.get("pair_id"),
@@ -6002,8 +6213,14 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
     tx_refs = _audit_transaction_refs(
         conn,
         profile["id"],
-        [row["out_id"] for row in state["cross_asset_pairs"]]
-        + [row["in_id"] for row in state["cross_asset_pairs"]],
+        [
+            row.get("out_transaction_id") or row["out_id"]
+            for row in state["cross_asset_pairs"]
+        ]
+        + [
+            row.get("in_transaction_id") or row["in_id"]
+            for row in state["cross_asset_pairs"]
+        ],
     )
     payout_refs = _audit_transaction_refs(
         conn,
@@ -6011,6 +6228,13 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
         [row["out_id"] for row in state["direct_swap_payouts"]],
     )
     intra_transfers = _serialize_intra_audit(state["intra_audit"])
+    custody_transfers = [
+        {
+            **row,
+            "amount": float(msat_to_btc(row["amount_msat"])),
+        }
+        for row in state["custody_transfers"]
+    ]
     cross_asset_pairs = _serialize_cross_asset_pairs(state["cross_asset_pairs"], tx_refs)
     direct_swap_payouts = _serialize_direct_swap_payouts(
         state["direct_swap_payouts"],
@@ -6021,11 +6245,13 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
         "processing": _journal_processing_status(conn, profile),
         "summary": {
             "same_asset_transfers": len(intra_transfers),
+            "custody_transfers": len(custody_transfers),
             "cross_asset_pairs": len(cross_asset_pairs),
             "direct_swap_payouts": len(direct_swap_payouts),
             "quarantines": len(core_tax_events.dedupe_quarantines(state["quarantines"])),
         },
         "same_asset_transfers": intra_transfers,
+        "custody_transfers": custody_transfers,
         "cross_asset_pairs": cross_asset_pairs,
         "direct_swap_payouts": direct_swap_payouts,
     }
@@ -6607,6 +6833,32 @@ def require_processed_journals(conn, profile):
                 "`kassiber transfers components list` before relying on reports."
             ),
             details={"components": custody_component_blockers},
+            retryable=False,
+        )
+    quantity_issues = core_custody_quantity_store.blocking_quantity_issues(
+        conn,
+        profile["id"],
+    )
+    if quantity_issues:
+        blocked_from = next(
+            (
+                str(item["blocks_from"])
+                for item in quantity_issues
+                if item.get("blocks_from")
+            ),
+            None,
+        )
+        raise AppError(
+            "Reports are blocked by unresolved custody quantity.",
+            code="custody_quantity_unresolved",
+            hint=(
+                "Review the custody quantity issues before relying on tax or "
+                "portfolio reports. Later basis is not final."
+            ),
+            details={
+                "blocked_from": blocked_from,
+                "issues": quantity_issues[:20],
+            },
             retryable=False,
         )
     _, processed_current = _journals_current_for_profile(conn, profile)

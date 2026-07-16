@@ -207,6 +207,16 @@ const PAGE_RESULTS: SearchResult[] = [
     privacyTier: "public",
   },
   {
+    id: "page:custody-gaps",
+    category: "page",
+    title: "Custody Gaps",
+    subtitle: "Review possible returns through missing wallet history",
+    keywords: ["custody", "missing wallet", "wallet roll", "whirlpool", "coinjoin"],
+    iconKey: "transaction",
+    route: { to: "/custody-gaps" },
+    privacyTier: "public",
+  },
+  {
     id: "page:settings",
     category: "page",
     title: "Settings",

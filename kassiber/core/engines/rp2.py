@@ -16,25 +16,11 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
-from ...transfers import (
-    apply_manual_pairs,
-    bitcoin_network_domain_evidence,
-    detect_intra_transfers,
-    is_bitcoin_rail_pair,
-    onchain_transfer_scope,
-)
+from ...transfers import is_bitcoin_rail_pair
 from .. import pricing
-from ..custody_journal import (
-    component_member_row_ids,
-    failed_component_ids,
-    force_block_components,
-    project_effective_components,
-)
 from ..ownership_transfers import (
-    derive_profile_transfers,
     detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
-    graph_partial_payment_out_ids,
 )
 from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
@@ -399,6 +385,10 @@ def _compose_transfer_notes(transfer: Any) -> str:
         # proven from the on-chain transaction graph (an output paid an address
         # owned by another of the user's wallets), not a same-txid row match.
         tokens.append("self-transfer proven by address ownership")
+    elif pairing_source == "recorded_fanout":
+        # Every destination wallet independently observed the same physical
+        # event and the complete 1:N quantities conserve exactly.
+        tokens.append("self-transfer proven by complete wallet observations")
     elif pairing_source == "multi_source_consolidation":
         # One leg of a consolidation funded by several owned wallets, split from
         # the graph + per-wallet rows so the network fee is booked once.
@@ -435,6 +425,8 @@ def _compose_transfer_journal_description(audit: Mapping[str, Any]) -> str:
         # so the audit/report shows this MOVE was proven from the on-chain
         # address graph rather than matched on a shared txid.
         tokens.append("(proven by address ownership)")
+    elif pairing_source == "recorded_fanout":
+        tokens.append("(proven by complete wallet observations)")
     elif pairing_source == "multi_source_consolidation":
         tokens.append("(multi-wallet consolidation)")
     return " ".join(tokens)
@@ -921,6 +913,19 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         audit_row = {
             "out_id": transfer.out_transaction_id,
             "in_id": transfer.in_transaction_id,
+            # Synthetic ownership-derived legs are engine-local rows.  Keep
+            # their real transaction anchors beside the display/audit ids so
+            # the canonical quantity layer can tie the interpretation back to
+            # immutable imported evidence without guessing from labels or
+            # amounts.
+            "out_anchor_transaction_id": str(
+                _row_get(transfer.out_row, "journal_transaction_id")
+                or transfer.out_transaction_id
+            ),
+            "in_anchor_transaction_id": str(
+                _row_get(transfer.in_row, "journal_transaction_id")
+                or transfer.in_transaction_id
+            ),
             "from_wallet_id": transfer.from_wallet_id,
             "from_wallet_label": transfer.from_wallet_label,
             "to_wallet_id": transfer.to_wallet_id,
@@ -931,12 +936,14 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             "crypto_sent": float(transfer.sent),
             "crypto_received": float(transfer.received),
             "crypto_fee": float(transfer.fee),
+            "crypto_sent_msat": btc_to_msat(transfer.sent),
+            "crypto_received_msat": btc_to_msat(transfer.received),
+            "crypto_fee_msat": btc_to_msat(transfer.fee),
             "spot_price": (
                 float(transfer.spot_price) if transfer.spot_price is not None else 0.0
             ),
-            # Provenance for the audit trail: "ownership_derived" when this
-            # MOVE was proven from the on-chain graph rather than row-matched
-            # (None for same-txid / manual pairs).
+            # Provenance for the audit trail: graph ownership, complete
+            # recorded fan-out, consolidation, or row/review matching.
             "pairing_source": getattr(transfer, "pairing_source", None),
         }
         if getattr(transfer, "at_regime", None):
@@ -1793,443 +1800,73 @@ def _select_at_cross_asset_swap_links(
     return swap_link_by_row_id, quarantined_row_ids, quarantines
 
 
-def _fiat_value_from_row(row: Mapping[str, Any]) -> Decimal | None:
-    value = _row_get(row, "fiat_value_exact")
-    if value is not None:
-        return dec(value)
-    value = _row_get(row, "fiat_value")
-    if value is not None:
-        return dec(value)
-    return None
-
-
-def _direct_payout_value(record: Mapping[str, Any], out_row: Mapping[str, Any]) -> Decimal | None:
-    value = _row_get(record, "payout_fiat_value")
-    if value is not None:
-        return dec(value)
-    row_value = _fiat_value_from_row(out_row)
-    if row_value is not None:
-        return row_value
-    rate = _row_get(out_row, "fiat_rate_exact")
-    if rate in (None, ""):
-        rate = _row_get(out_row, "fiat_rate")
-    amount_msat = int(_row_get(out_row, "amount") or 0)
-    if rate in (None, "") or amount_msat <= 0:
-        return None
-    return dec(rate) * msat_to_btc(amount_msat)
-
-
-def _direct_payout_proceeds_row(
-    record: Mapping[str, Any],
-    out_row: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    """Apply reviewed external payout proceeds to the taxable source row.
-
-    Direct payout reviews are not limited to carrying-value treatment. Ordinary
-    taxable direct payouts still need the reviewed payout value to drive disposal
-    proceeds.
-    """
-
-    payout_value = _row_get(record, "payout_fiat_value")
-    if payout_value in (None, ""):
-        return out_row
-    payout_value = dec(payout_value)
-    amount = msat_to_btc(int(out_row["amount"] or 0))
-    if amount <= 0 or payout_value <= 0:
-        return out_row
-    reviewed = dict(out_row)
-    payout_rate = payout_value / amount
-    reviewed.update(
-        {
-            "fiat_rate": float(payout_rate),
-            "fiat_value": float(payout_value),
-            "fiat_rate_exact": str(payout_rate),
-            "fiat_value_exact": str(payout_value),
-            "pricing_source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
-            "pricing_quality": pricing.QUALITY_EXACT,
-            "note": _row_get(record, "notes") or _row_get(out_row, "note"),
-        }
-    )
-    return reviewed
-
-
-def _direct_payout_record_out_amount(
-    record: Mapping[str, Any],
-    out_row: Mapping[str, Any],
-) -> int:
-    raw = _row_get(record, "out_amount")
-    if raw in (None, ""):
-        return int(out_row["amount"] or 0)
-    return int(raw)
-
-
-def _split_review_source_row(
-    out_row: Mapping[str, Any],
-    amount_msat: int,
-    *,
-    row_id: str | None = None,
-    external_id: str | None = None,
-    kind: str | None = None,
-) -> dict[str, Any]:
-    full = int(out_row["amount"] or 0)
-    base = dict(out_row)
-    if (
-        _row_get(out_row, "fiat_rate_exact") in (None, "")
-        and _row_get(out_row, "fiat_rate") in (None, "")
-        and full > 0
-    ):
-        fiat_value = _row_get(out_row, "fiat_value_exact") or _row_get(out_row, "fiat_value")
-        if fiat_value not in (None, ""):
-            unit_rate = format(Decimal(str(fiat_value)) / msat_to_btc(full), "f")
-            base["fiat_rate"] = unit_rate
-            base["fiat_rate_exact"] = unit_rate
-    base["amount"] = amount_msat
-    base["fiat_value"] = None
-    base["fiat_value_exact"] = None
-    if row_id is not None:
-        base["id"] = row_id
-        base["journal_transaction_id"] = out_row["id"]
-        base["fee"] = 0
-    if external_id is not None:
-        base["external_id"] = external_id
-    if kind is not None:
-        base["kind"] = kind
-    return base
-
-
-def _direct_payout_audit(record: Mapping[str, Any], out_row: Mapping[str, Any]) -> dict[str, Any]:
-    payout_amount_msat = int(record["payout_amount"] or 0)
-    return {
-        "payout_id": str(record["id"]),
-        "kind": record["kind"],
-        "policy": record["policy"],
-        "out_id": str(record["out_transaction_id"]),
-        "out_asset": out_row["asset"],
-        "out_amount_msat": _direct_payout_record_out_amount(record, out_row),
-        "payout_asset": record["payout_asset"],
-        "payout_amount_msat": payout_amount_msat,
-        "payout_occurred_at": record["payout_occurred_at"] or out_row["occurred_at"],
-        "payout_external_id": record["payout_external_id"],
-        "counterparty": record["counterparty"],
-        "swap_fee_msat": int(record["swap_fee_msat"] or 0),
-        "swap_fee_kind": record["swap_fee_kind"],
-    }
-
-
-def _direct_payout_synthetic_rows(
-    profile: Mapping[str, Any],
-    rows: Sequence[Mapping[str, Any]],
-    direct_payout_records: Sequence[Mapping[str, Any]],
-) -> tuple[
-    list[Mapping[str, Any]],
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-    set[str],
-]:
-    """Return engine-only target legs for direct swap payouts.
-
-    Cross-asset carrying-value payouts need two facts in RP2: a neutral swap
-    into the payout asset, then an immediate external disposal. The synthetic
-    rows are never persisted as transactions; journal entries produced from
-    them point back to the real source row via ``journal_transaction_id``.
-    """
-
-    if not direct_payout_records:
-        # Sort the common (no-payout) path the same way the payout path does
-        # below, so engine row order never depends on the caller pre-sorting.
-        return sorted(rows, key=_transaction_row_sort_key), [], [], [], set()
-
-    tax_country = _profile_str(profile, "tax_country").lower()
-    rows_by_id = {str(row["id"]): row for row in rows}
-    rows_for_engine: list[Mapping[str, Any]] = list(rows)
-    row_overrides: dict[str, Mapping[str, Any]] = {}
-    cross_asset_pairs: list[dict[str, Any]] = []
-    direct_payouts: list[dict[str, Any]] = []
-    quarantines: list[dict[str, Any]] = []
-    blocked_row_ids: set[str] = set()
-
-    for record in direct_payout_records:
-        out_id = str(record["out_transaction_id"])
-        out_row = rows_by_id.get(out_id)
-        if out_row is None:
-            continue
-        reviewed_out_amount_msat = _direct_payout_record_out_amount(record, out_row)
-        full_out_amount_msat = int(out_row["amount"] or 0)
-        if reviewed_out_amount_msat <= 0 or reviewed_out_amount_msat > full_out_amount_msat:
-            quarantines.append(
-                build_tax_quarantine(
-                    profile,
-                    out_row,
-                    "direct_payout_out_amount_invalid",
-                    {
-                        "payout_id": record["id"],
-                        "out_amount_msat": reviewed_out_amount_msat,
-                        "full_out_amount_msat": full_out_amount_msat,
-                    },
-                )
-            )
-            blocked_row_ids.add(out_id)
-            continue
-        audit = _direct_payout_audit(record, out_row)
-        direct_payouts.append(audit)
-        payout_asset = str(record["payout_asset"])
-        source_out_row = out_row
-        source_is_synthetic = reviewed_out_amount_msat < full_out_amount_msat
-        if source_is_synthetic:
-            self_amount_msat = full_out_amount_msat - reviewed_out_amount_msat
-            row_overrides[out_id] = _split_review_source_row(out_row, self_amount_msat)
-            source_out_row = _split_review_source_row(
-                out_row,
-                reviewed_out_amount_msat,
-                row_id=f"direct-payout:{record['id']}:source",
-                external_id=f"direct-payout:{record['id']}:source",
-                kind="sell",
-            )
-        is_cross_asset_carry = (
-            record["policy"] == "carrying-value"
-            and out_row["asset"] != payout_asset
-            and (
-                tax_country == "at"
-                or is_bitcoin_rail_pair(out_row["asset"], payout_asset)
-            )
-        )
-        if not is_cross_asset_carry:
-            proceeds_row = _direct_payout_proceeds_row(record, source_out_row)
-            if source_is_synthetic:
-                rows_for_engine.append(proceeds_row)
-            else:
-                row_overrides[out_id] = proceeds_row
-            continue
-
-        payout_amount_msat = int(record["payout_amount"] or 0)
-        payout_amount = msat_to_btc(payout_amount_msat)
-        payout_value = _direct_payout_value(record, source_out_row)
-        if (
-            payout_amount is None
-            or payout_amount <= 0
-            or payout_value is None
-            or payout_value <= 0
-        ):
-            quarantines.append(
-                build_tax_quarantine(
-                    profile,
-                    out_row,
-                    AT_SWAP_QUARANTINE_REASON,
-                    {
-                        "reason_code": "missing_payout_price",
-                        "payout_id": record["id"],
-                        "payout_asset": payout_asset,
-                    },
-                )
-            )
-            blocked_row_ids.add(out_id)
-            continue
-
-        if source_is_synthetic:
-            rows_for_engine.append(source_out_row)
-        payout_rate = payout_value / payout_amount
-        payout_at = record["payout_occurred_at"] or out_row["occurred_at"]
-        pair_id = f"direct-payout:{record['id']}"
-        in_id = f"{pair_id}:in"
-        out_virtual_id = f"{pair_id}:out"
-        description = (
-            record["notes"]
-            or f"Direct swap payout to {record['counterparty'] or 'external recipient'}"
-        )
-        common = {
-            "workspace_id": profile["workspace_id"],
-            "profile_id": profile["id"],
-            "wallet_id": source_out_row["wallet_id"],
-            "wallet_label": _row_get(source_out_row, "wallet_label"),
-            "wallet_account_id": _row_get(source_out_row, "wallet_account_id"),
-            "account_code": _row_get(source_out_row, "account_code"),
-            "account_label": _row_get(source_out_row, "account_label"),
-            "asset": payout_asset,
-            "amount": payout_amount_msat,
-            "fee": 0,
-            "fiat_rate": float(payout_rate),
-            "fiat_value": float(payout_value),
-            "fiat_rate_exact": str(payout_rate),
-            "fiat_value_exact": str(payout_value),
-            "pricing_source_kind": _row_get(out_row, "pricing_source_kind"),
-            "pricing_quality": _row_get(out_row, "pricing_quality"),
-            "created_at": record["created_at"],
-            "journal_transaction_id": out_id,
-            "note": description,
-        }
-        rows_for_engine.append(
-            {
-                **common,
-                "id": in_id,
-                "external_id": record["payout_external_id"],
-                "occurred_at": payout_at,
-                "direction": "inbound",
-                "kind": "direct_swap_payout_in",
-                "description": f"{description} (swap settlement)",
-            }
-        )
-        rows_for_engine.append(
-            {
-                **common,
-                "id": out_virtual_id,
-                "external_id": record["payout_external_id"],
-                "occurred_at": payout_at,
-                "direction": "outbound",
-                "kind": "sell",
-                "description": f"{description} (external payout)",
-            }
-        )
-        cross_asset_pairs.append(
-            {
-                "pair_id": pair_id,
-                "kind": record["kind"],
-                "policy": record["policy"],
-                "out_id": str(source_out_row["id"]),
-                "in_id": in_id,
-                "out_asset": out_row["asset"],
-                "in_asset": payout_asset,
-            }
-        )
-
-    if row_overrides:
-        rows_for_engine = [
-            row_overrides.get(str(row["id"]), row)
-            for row in rows_for_engine
-        ]
-    rows_for_engine = sorted(rows_for_engine, key=_transaction_row_sort_key)
-
-    return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
-
-
-def _is_direct_payout_synthetic_row_id(row_id: Any) -> bool:
-    text = str(row_id)
-    return text.startswith("direct-payout:") and (
-        text.endswith(":in") or text.endswith(":out")
-    )
-
-
-def _ownership_block_quarantines(
-    profile: Mapping[str, Any],
-    blocked_sources: Sequence[Mapping[str, Any]],
+def _direct_payout_compat_records(
+    records: Sequence[Mapping[str, Any]],
+    projected_rows: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    quarantines: list[dict[str, Any]] = []
-    for blocked in blocked_sources:
-        row = blocked.get("row")
-        if row is None:
-            continue
-        quarantines.append(
-            build_tax_quarantine(
-                profile,
-                row,
-                str(blocked.get("reason") or "ownership_transfer_unresolved"),
-                dict(blocked.get("detail") or {}),
-            )
-        )
-    return quarantines
+    """Keep the direct-payout storage/report adapter after pre-tax cutover.
 
-
-def _pair_record_out_amount(record: Mapping[str, Any]) -> Any:
-    if hasattr(record, "keys"):
-        return record["out_amount"] if "out_amount" in record.keys() else None
-    return record.get("out_amount")
-
-
-def _apply_cross_asset_splits(
-    rows_for_engine: list[Mapping[str, Any]],
-    manual_pair_records: Sequence[Mapping[str, Any]],
-) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]], dict[str, str]]:
-    """Split one outbound across a same-asset self-transfer + a cross-asset peg.
-
-    A cross-asset pair may carry only PART of its out leg (``out_amount`` < the
-    row's amount) when a single spend both returned change to an owned wallet
-    and pegged the rest to another asset. Reduce the real out row to the
-    self-transfer remainder — so it auto-pairs with the same-txid change as a
-    clean MOVE — and synthesize a separate outbound for the pegged portion that
-    the cross-asset pair carries (carrying-value basis carry / taxable SELL+BUY,
-    per the pair's policy). The pair record is rewritten to point at the
-    synthetic leg, leaving the real reduced row free to auto-pair.
-
-    No-ops for whole-row pairs (``out_amount`` unset / >= the row amount) and
-    same-asset pairs. Returns ``(rows_for_engine, manual_pair_records,
-    synthetic_out_id -> real_out_id)``; the first two are unchanged and the map
-    empty when no split applies. The map lets callers show the real out tx in
-    audits while the engine carries the synthetic leg.
+    Payout rows are compatibility metadata, not a source of tax events.  The
+    finalized projection already selected the exact source slice; this adapter
+    only preserves the established response/persistence shape.
     """
-    rows_by_id = {str(row["id"]): row for row in rows_for_engine}
-    overrides: dict[str, dict[str, Any]] = {}
-    synthetic_rows: list[dict[str, Any]] = []
-    rewritten: list[Mapping[str, Any]] = []
-    out_id_to_real: dict[str, str] = {}
-    changed = False
-    for record in manual_pair_records:
-        raw = _pair_record_out_amount(record)
-        out_id = str(record["out_transaction_id"])
-        in_id = str(record["in_transaction_id"])
-        out_row = rows_by_id.get(out_id)
-        in_row = rows_by_id.get(in_id)
-        if (
-            raw in (None, "")
-            or out_row is None
-            or in_row is None
-            or out_row["asset"] == in_row["asset"]
-        ):
-            rewritten.append(record)
+
+    projected_by_anchor: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in projected_rows:
+        anchor = str(_row_get(row, "journal_transaction_id") or "")
+        if anchor and _row_get(row, "direction") == "outbound":
+            projected_by_anchor[anchor].append(row)
+    result: list[dict[str, Any]] = []
+    for record in records:
+        payout_id = str(_row_get(record, "id") or "")
+        out_id = str(_row_get(record, "out_transaction_id") or "")
+        if not payout_id or not out_id:
             continue
-        peg = int(raw)
-        full = int(out_row["amount"] or 0)
-        self_amt = full - peg
-        if peg <= 0 or self_amt <= 0:
-            # Whole-row swap (or nothing left to self-transfer): existing path.
-            rewritten.append(record)
-            continue
-        changed = True
-        pair_id = (
-            str(record["id"])
-            if hasattr(record, "keys") and "id" in record.keys()
-            else f"{out_id}->{in_id}"
+        reviewed_amount = (
+            _row_get(record, "out_amount")
+            or _row_get(record, "out_amount_msat")
         )
-        # The per-unit rate survives the amount change, so each leg reprices from
-        # its own amount once the (now-wrong) absolute fiat value is dropped. But
-        # a row priced by value ALONE (no fiat_rate) would lose its only pricing
-        # evidence — materialize a unit rate from value/amount first so it doesn't
-        # become a false missing-price quarantine.
-        base = dict(out_row)
-        if (
-            _row_get(out_row, "fiat_rate_exact") in (None, "")
-            and _row_get(out_row, "fiat_rate") in (None, "")
-            and full > 0
-        ):
-            fiat_value = _row_get(out_row, "fiat_value_exact") or _row_get(out_row, "fiat_value")
-            if fiat_value not in (None, ""):
-                # format("f") keeps plain decimal notation (no "6E+3") so the
-                # derived rate matches how exact rates are stored elsewhere.
-                unit_rate = format(Decimal(str(fiat_value)) / msat_to_btc(full), "f")
-                base["fiat_rate"] = unit_rate
-                base["fiat_rate_exact"] = unit_rate
-        base["fiat_value"] = None
-        base["fiat_value_exact"] = None
-        overrides[out_id] = {**base, "amount": self_amt}
-        swap_out_id = f"cross-split:{pair_id}:out"
-        out_id_to_real[swap_out_id] = out_id
-        synthetic_rows.append(
+        candidates = projected_by_anchor.get(out_id, [])
+        reviewed_asset = str(_row_get(record, "out_asset") or "")
+        if reviewed_asset:
+            candidates = [
+                row
+                for row in candidates
+                if str(_row_get(row, "asset") or "") == reviewed_asset
+            ]
+        if reviewed_amount not in (None, ""):
+            candidates = [
+                row
+                for row in candidates
+                if int(_row_get(row, "amount") or 0) == int(reviewed_amount)
+            ]
+        projected_source = candidates[0] if len(candidates) == 1 else {}
+        result.append(
             {
-                **base,
-                "id": swap_out_id,
-                "amount": peg,
-                "fee": 0,
-                "external_id": f"cross-split:{pair_id}",
-                "direction": "outbound",
-                "kind": "sell",
-                "journal_transaction_id": out_id,
+                "payout_id": payout_id,
+                "kind": _row_get(record, "kind"),
+                "policy": _row_get(record, "policy"),
+                "out_id": out_id,
+                "out_asset": (
+                    _row_get(record, "out_asset")
+                    or _row_get(projected_source, "asset")
+                ),
+                "out_amount_msat": int(
+                    _row_get(record, "out_amount")
+                    or _row_get(record, "out_amount_msat")
+                    or _row_get(projected_source, "amount")
+                    or 0
+                ),
+                "payout_asset": _row_get(record, "payout_asset"),
+                "payout_amount_msat": int(_row_get(record, "payout_amount") or 0),
+                "payout_occurred_at": _row_get(record, "payout_occurred_at"),
+                "payout_external_id": _row_get(record, "payout_external_id"),
+                "counterparty": _row_get(record, "counterparty"),
+                "swap_fee_msat": int(_row_get(record, "swap_fee_msat") or 0),
+                "swap_fee_kind": _row_get(record, "swap_fee_kind"),
             }
         )
-        rewritten.append({**dict(record), "out_transaction_id": swap_out_id})
-    if not changed:
-        return rows_for_engine, list(manual_pair_records), {}
-    new_rows = [overrides.get(str(row["id"]), row) for row in rows_for_engine]
-    new_rows.extend(synthetic_rows)
-    return new_rows, rewritten, out_id_to_real
+    return result
 
 
 def _decimal_to_row_value(value: Decimal) -> str:
@@ -2314,104 +1951,6 @@ def _generic_bitcoin_rail_pair_quarantines(
                 )
             )
     return quarantines
-
-
-def _partition_network_compatible_carrying_pairs(
-    profile: Mapping[str, Any],
-    rows: Sequence[Mapping[str, Any]],
-    pair_records: Sequence[Mapping[str, Any]],
-) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]], set[str]]:
-    """Fail closed for persisted carrying-value pairs across known networks.
-
-    The command boundary rejects new mismatches, but replicated or historical
-    rows can predate that guard.  Journal construction must independently stop
-    them from carrying real basis between mainnet/testnet/signet/regtest.
-    """
-
-    rows_by_id = {str(_row_get(row, "id")): row for row in rows}
-    accepted: list[Mapping[str, Any]] = []
-    quarantines: list[dict[str, Any]] = []
-    rejected_row_ids: set[str] = set()
-    for record in pair_records:
-        if str(_row_get(record, "policy") or "") != "carrying-value":
-            accepted.append(record)
-            continue
-        out_id = str(_row_get(record, "out_transaction_id") or "")
-        in_id = str(_row_get(record, "in_transaction_id") or "")
-        out_row = rows_by_id.get(out_id)
-        in_row = rows_by_id.get(in_id)
-        if out_row is None or in_row is None:
-            accepted.append(record)
-            continue
-        out_domain, out_valid = bitcoin_network_domain_evidence(out_row)
-        in_domain, in_valid = bitcoin_network_domain_evidence(in_row)
-        if (
-            out_valid
-            and in_valid
-            and (
-                out_domain is None
-                or in_domain is None
-                or out_domain == in_domain
-            )
-        ):
-            accepted.append(record)
-            continue
-        detail = {
-            "pair_id": str(_row_get(record, "id") or ""),
-            "out_transaction_id": out_id,
-            "in_transaction_id": in_id,
-            "out_network_domain": out_domain,
-            "in_network_domain": in_domain,
-            "out_network_valid": out_valid,
-            "in_network_valid": in_valid,
-            "required_for": "carrying_value_pair",
-        }
-        rejected_row_ids.update((out_id, in_id))
-        quarantines.extend(
-            build_tax_quarantine(
-                profile,
-                row,
-                "transfer_network_mismatch",
-                detail,
-            )
-            for row in (out_row, in_row)
-        )
-    # Pair records form an economic component. If one edge is rejected, every
-    # edge touching either blocked leg must fail closed too; otherwise removing
-    # the shared row can leave an earlier accepted edge with one missing leg and
-    # book its survivor as a standalone disposal/acquisition.
-    while rejected_row_ids:
-        remaining: list[Mapping[str, Any]] = []
-        expanded = False
-        for record in accepted:
-            out_id = str(_row_get(record, "out_transaction_id") or "")
-            in_id = str(_row_get(record, "in_transaction_id") or "")
-            if not ({out_id, in_id} & rejected_row_ids):
-                remaining.append(record)
-                continue
-            newly_blocked = {out_id, in_id} - rejected_row_ids
-            rejected_row_ids.update((out_id, in_id))
-            expanded = expanded or bool(newly_blocked)
-            detail = {
-                "pair_id": str(_row_get(record, "id") or ""),
-                "out_transaction_id": out_id,
-                "in_transaction_id": in_id,
-                "required_for": "complete_pair_component",
-            }
-            quarantines.extend(
-                build_tax_quarantine(
-                    profile,
-                    row,
-                    "transfer_pair_dependency_blocked",
-                    detail,
-                )
-                for row_id in (out_id, in_id)
-                if (row := rows_by_id.get(row_id)) is not None
-            )
-        accepted = remaining
-        if not expanded:
-            break
-    return accepted, quarantines, rejected_row_ids
 
 
 def _apply_generic_bitcoin_rail_carry_values(
@@ -2533,650 +2072,177 @@ class GenericRP2TaxEngine:
     def __init__(self, profile: Mapping[str, Any]):
         self.profile = profile
 
-    def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
-        custody_projection = project_effective_components(
-            self.profile,
-            inputs.rows,
-            inputs.wallet_refs_by_id,
-            inputs.manual_pair_records,
-            inputs.authored_active_custody_components or (),
-        )
-        projected_rows = list(custody_projection.rows)
-        blocked_custody_anchor_rows = list(custody_projection.blocked_anchor_rows)
-        projected_manual_pairs = list(custody_projection.manual_pair_records)
-        (
-            projected_manual_pairs,
-            pair_network_quarantines,
-            pair_network_blocked_row_ids,
-        ) = _partition_network_compatible_carrying_pairs(
-            self.profile,
-            projected_rows,
-            projected_manual_pairs,
-        )
-        if pair_network_blocked_row_ids:
-            projected_rows = [
-                row
-                for row in projected_rows
-                if str(_row_get(row, "id")) not in pair_network_blocked_row_ids
-            ]
-        projected_payout_records = [
-            record
-            for record in inputs.direct_payout_records
-            if str(record["out_transaction_id"])
-            not in custody_projection.claimed_transaction_ids
-        ]
-        if not projected_rows and not blocked_custody_anchor_rows:
+    def _build_finalized_ledger_state(
+        self,
+        inputs: TaxEngineLedgerInputs,
+        configuration: Any | None,
+    ) -> TaxEngineLedgerResult:
+        """Run RP2 exclusively over finalized custody tax events and moves."""
+
+        projection = inputs.finalized_tax_projection
+        # ``FinalizedTaxProjection.__post_init__`` validates each row marker;
+        # retain this explicit boundary check so a duck-typed raw-row bundle
+        # cannot accidentally regain the production path.
+        from ..custody_tax_projection import FinalizedTaxProjection
+
+        if not isinstance(projection, FinalizedTaxProjection):
+            raise TypeError(
+                "GenericRP2TaxEngine requires a FinalizedTaxProjection; raw rows are not a tax-engine input"
+            )
+        rows_for_engine = list(projection.rows)
+        quarantines = list(projection.quarantines)
+        if not rows_for_engine:
             return TaxEngineLedgerResult(
                 entries=[],
-                quarantines=[
-                    *custody_projection.quarantines,
-                    *pair_network_quarantines,
-                ],
+                quarantines=quarantines,
                 intra_audit=[],
-                cross_asset_pairs=[],
-                direct_swap_payouts=[],
+                cross_asset_pairs=list(projection.cross_asset_pairs),
+                direct_swap_payouts=_direct_payout_compat_records(
+                    inputs.direct_payout_records,
+                    projection.rows,
+                ),
                 tax_summary=[],
                 account_holdings={},
                 wallet_holdings={},
             )
 
-        (
-            rows_for_engine,
-            payout_pairs,
-            direct_payouts,
-            payout_quarantines,
-            blocked_payout_row_ids,
-        ) = _direct_payout_synthetic_rows(
-            self.profile,
-            projected_rows,
-            projected_payout_records,
-        )
-        wallet_labels = {
-            row["wallet_label"]
-            for row in [*rows_for_engine, *blocked_custody_anchor_rows]
-        }
-        # The ownership deriver can route a MOVE into a wallet that recorded no
-        # rows (sync gap); declare every profile wallet as an RP2 exchange so the
-        # synthesized destination leg lands on a known account.
-        wallet_labels |= {
-            ref["label"]
-            for ref in inputs.wallet_refs_by_id.values()
-            if ref.get("label")
-        }
-        assets = {
-            row["asset"] for row in [*rows_for_engine, *blocked_custody_anchor_rows]
-        }
-        entries: list[dict[str, Any]] = []
-        quarantines: list[dict[str, Any]] = [
-            *custody_projection.quarantines,
-            *pair_network_quarantines,
-            *payout_quarantines,
-        ]
-        intra_audit_all: list[dict[str, Any]] = []
-        account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-        wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-        engine_cross_asset_pairs: list[dict[str, Any]] = list(payout_pairs)
-        manual_cross_asset_pairs_all: list[dict[str, Any]] = []
-        tax_summary_all: list[dict[str, Any]] = []
-        with _rp2_configuration(self.profile, wallet_labels, assets) as configuration:
-            wallet_refs_by_label = {
-                ref["label"]: ref for ref in inputs.wallet_refs_by_id.values()
-            }
-            # Split spends (part same-asset self-transfer, part cross-asset peg)
-            # are decomposed before pairing: the real out row is reduced to the
-            # self-transfer remainder (auto-pairs with its change) and a synthetic
-            # outbound carries the pegged portion into the cross-asset pair.
-            rows_for_engine, split_pair_records, split_out_id_to_real = _apply_cross_asset_splits(
-                rows_for_engine,
-                projected_manual_pairs,
-            )
-            auto_pairs, auto_matched_ids = detect_intra_transfers(rows_for_engine)
-            if auto_pairs:
-                kept_auto_pairs = []
-                for pair in auto_pairs:
-                    out_id = str(pair["out"]["id"])
-                    in_id = str(pair["in"]["id"])
-                    if (
-                        _is_direct_payout_synthetic_row_id(out_id)
-                        or _is_direct_payout_synthetic_row_id(in_id)
-                    ):
-                        auto_matched_ids.discard(out_id)
-                        auto_matched_ids.discard(in_id)
-                        continue
-                    kept_auto_pairs.append(pair)
-                auto_pairs = kept_auto_pairs
-            # Give the address-ownership deriver first refusal on a 1-out/1-in
-            # pair whose outbound graph shows value also left to a NON-owned
-            # recipient (a partial payment). detect_intra_transfers would pair the
-            # owned leg and silently fold the external payment into the implied
-            # MOVE fee; withholding it lets the graph deriver book the owned MOVE
-            # and keep the external residual as a real disposal. detect_intra
-            # stays authoritative for graphless rows and pure self-transfers.
-            withheld_partial_payment_ids = graph_partial_payment_out_ids(
-                auto_pairs, inputs.owned_index
-            )
-            # Keep withheld pairs only so a false-positive withhold can be rolled
-            # back. A source that the graph deriver BLOCKS is never restored: the
-            # graph has already proved that the row pair is not a complete MOVE
-            # (external value, another owned destination, or incomplete fee/value
-            # evidence). Restoring that pair would silently relabel the unknown
-            # principal as a transfer fee.
-            withheld_pairs_by_out_id: dict[str, Mapping[str, Any]] = {}
-            if withheld_partial_payment_ids:
-                kept_auto_pairs = []
-                for pair in auto_pairs:
-                    if str(pair["out"]["id"]) in withheld_partial_payment_ids:
-                        auto_matched_ids.discard(str(pair["out"]["id"]))
-                        auto_matched_ids.discard(str(pair["in"]["id"]))
-                        withheld_pairs_by_out_id[str(pair["out"]["id"])] = pair
-                        continue
-                    kept_auto_pairs.append(pair)
-                auto_pairs = kept_auto_pairs
-            # Address-ownership deriver: prove self-transfers from the on-chain
-            # graph (output paid an address owned by another of my wallets), for
-            # the cases same-txid row matching misses — sync-gap destinations,
-            # mismatched txids, and 1->N fan-outs. Supplements (does not replace)
-            # detect_intra_transfers, which still covers same-txid rows the
-            # deriver can't read (CSV imports with no transaction JSON).
-            already_paired_ids = set(auto_matched_ids)
-            for record in split_pair_records:
-                already_paired_ids.add(str(record["out_transaction_id"]))
-                already_paired_ids.add(str(record["in_transaction_id"]))
-            input_rows_by_id = {str(row["id"]): row for row in projected_rows}
-            # Whole-row direct-payout sources are already decomposed by
-            # _direct_payout_synthetic_rows. Partial payouts leave a reduced
-            # real source row in rows_for_engine for the remainder, and that
-            # row must still be eligible for ownership-derived self-transfers.
-            blocked_payout_id_set = {str(rid) for rid in blocked_payout_row_ids}
-            direct_payout_claimed_ids: set[str] = set()
-            direct_payout_suppressed_in_ids: set[str] = set()
-            for record in projected_payout_records:
-                out_id = str(record["out_transaction_id"])
-                out_row = input_rows_by_id.get(out_id)
-                if out_row is None:
-                    continue
-                reviewed_out_amount = _direct_payout_record_out_amount(record, out_row)
-                full_out_amount = int(_row_get(out_row, "amount") or 0)
-                if reviewed_out_amount >= full_out_amount:
-                    already_paired_ids.add(out_id)
-                    # Only a SUCCESSFULLY-claimed whole-row payout (exact full
-                    # amount, not rejected as out_amount-invalid) gets a proceeds
-                    # disposal row. Pruning the self-transfer pair for a rejected
-                    # payout (out_amount > source) would drop the transfer with no
-                    # disposal to replace it, leaving the destination as a phantom
-                    # acquisition — so exclude blocked / over-amount payouts here.
-                    if (
-                        reviewed_out_amount == full_out_amount
-                        and out_id not in blocked_payout_id_set
-                    ):
-                        direct_payout_claimed_ids.add(out_id)
-            already_paired_ids |= blocked_payout_id_set
-            # A reviewed whole-row direct payout is a taxable disposal whose
-            # proceeds row keeps the real tx's external_id + outbound direction.
-            # If another owned wallet recorded an inbound under the same txid,
-            # detect_intra_transfers pairs them and would book the disposal as a
-            # non-taxable MOVE — silently dropping the declared proceeds. Adding
-            # the out id to already_paired_ids only stops the deriver; the auto
-            # pair must also be pruned so apply_manual_pairs cannot revive it.
-            if direct_payout_claimed_ids:
-                kept_auto_pairs = []
-                for pair in auto_pairs:
-                    out_id = str(pair["out"]["id"])
-                    in_id = str(pair["in"]["id"])
-                    if (
-                        out_id in direct_payout_claimed_ids
-                        or in_id in direct_payout_claimed_ids
-                    ):
-                        if out_id in direct_payout_claimed_ids:
-                            direct_payout_suppressed_in_ids.add(in_id)
-                        if in_id in direct_payout_claimed_ids:
-                            direct_payout_suppressed_in_ids.add(out_id)
-                        continue
-                    kept_auto_pairs.append(pair)
-                auto_pairs = kept_auto_pairs
-                # When the payout's out row has a readable graph that also pays an
-                # owned wallet, graph_partial_payment_out_ids already moved its
-                # pair into the withheld set BEFORE this prune. Drop it from there
-                # too, or the restore-withheld path below re-adds it and the
-                # reviewed payout still books as a non-taxable MOVE.
-                for claimed in direct_payout_claimed_ids:
-                    withheld = withheld_pairs_by_out_id.pop(claimed, None)
-                    if withheld is not None:
-                        direct_payout_suppressed_in_ids.add(str(withheld["in"]["id"]))
-            if direct_payout_suppressed_in_ids:
-                already_paired_ids |= direct_payout_suppressed_in_ids
-                kept_rows = []
-                for row in rows_for_engine:
-                    if str(row["id"]) not in direct_payout_suppressed_in_ids:
-                        kept_rows.append(row)
-                        continue
-                    # The suppressed row is a real synced receipt that
-                    # contradicts the whole-row payout review (part of the tx
-                    # demonstrably came back to an owned wallet). Dropping it
-                    # silently would understate holdings with no review trace.
-                    # Rows here can be sqlite3.Row (no .get) — use _row_get.
-                    wallet_id = str(_row_get(row, "wallet_id") or "")
-                    wallet_ref = inputs.wallet_refs_by_id.get(wallet_id)
-                    quarantines.append(
-                        build_tax_quarantine(
-                            self.profile,
-                            row,
-                            "direct_payout_conflicting_receipt",
-                            {
-                                "asset": _row_get(row, "asset"),
-                                "wallet": (
-                                    wallet_ref["label"]
-                                    if wallet_ref and wallet_ref.get("label")
-                                    else wallet_id
-                                ),
-                                "direction": _row_get(row, "direction"),
-                                "external_id": str(_row_get(row, "external_id") or ""),
-                                "required_for": "direct_payout_review",
-                            },
-                        )
-                    )
-                rows_for_engine = kept_rows
-            # Multi-source consolidation deriver (N owned wallets -> 1, graph
-            # readable): the one case detect_intra and the single-source deriver
-            # both decline because per-wallet sync double-counts the fee. It
-            # books the legs from the graph + per-wallet rows; run it FIRST and
-            # feed its touched ids forward so the single-source deriver does not
-            # also block-and-quarantine the same contributors. Anything outside
-            # its conservative scope is untouched and still hits the fan-out
-            # quarantine.
-            ownership_derivation = derive_profile_transfers(
-                rows_for_engine,
-                index=inputs.owned_index,
-                wallet_refs_by_id=inputs.wallet_refs_by_id,
-                already_paired_ids=already_paired_ids,
-                sort_key=_transaction_row_sort_key,
-            )
-            consolidation_result = ownership_derivation.consolidation
-            ownership_result = ownership_derivation.ownership
-            fanout_result = ownership_derivation.fanout
-            consolidation_drop_ids = (
-                consolidation_result.dropped_out_ids
-                | consolidation_result.dropped_in_ids
-            )
-            if consolidation_drop_ids:
-                already_paired_ids |= consolidation_drop_ids
-            rows_for_engine = ownership_derivation.rows_after_consolidation
-            # Restore a withheld pair only when the ownership pass found no
-            # blocker and no decomposition was required. Once graph evidence
-            # blocks the source, the original pair is provably incomplete and
-            # must remain withheld; otherwise an external/missing-wallet leg
-            # would be silently relabelled as a MOVE fee.
-            restored_withheld_out_ids: set[str] = set()
-            blocked_source_ids = {
-                str(_row_get(blocked.get("row") or {}, "id"))
-                for blocked in ownership_result.blocked_sources
-                if blocked.get("row") is not None
-            }
-            unsafe_withheld_blocks: set[str] = set()
-            if withheld_pairs_by_out_id:
-                handled_withheld = ownership_result.dropped_out_ids | {
-                    str(out_id) for out_id in ownership_result.out_row_overrides
-                }
-                for out_id in withheld_pairs_by_out_id:
-                    if out_id in handled_withheld:
-                        continue
-                    if out_id in blocked_source_ids:
-                        unsafe_withheld_blocks.add(out_id)
-                        continue
-                    restored_withheld_out_ids.add(out_id)
-            # A blocked source is a proven self-transfer the deriver could not
-            # safely split. Surface it for review, but NEVER drop it from booking:
-            # a blocked source posts a normal disposal — the same conservative
-            # booking the deriver-off baseline makes — so holdings stay correct.
-            # Dropping it would lose that disposal and silently inflate the source
-            # wallet whenever the destination receipt was recorded under a
-            # different external_id (CSV / separate sync) or not at all. The one
-            # case we skip the quarantine is when a recorded destination shares
-            # the spend's canonical on-chain scope from another wallet: the
-            # existing owned-fanout guard already holds back and quarantines that
-            # whole balanced group, so a second quarantine would be redundant.
-            if ownership_result.blocked_sources:
-                inbound_group_wallets: dict[
-                    tuple[str, str, str, str], set[str]
-                ] = {}
-                group_row_ids: dict[tuple[str, str, str, str], set[str]] = {}
-                group_positive_directions: dict[
-                    tuple[str, str, str, str], tuple[int, int]
-                ] = {}
-                for candidate in rows_for_engine:
-                    candidate_key = onchain_transfer_scope(candidate)
-                    if candidate_key is None:
-                        continue
-                    group_row_ids.setdefault(candidate_key, set()).add(
-                        str(_row_get(candidate, "id"))
-                    )
-                    outs, ins = group_positive_directions.get(candidate_key, (0, 0))
-                    if int(_row_get(candidate, "amount") or 0) > 0:
-                        if _row_get(candidate, "direction") == "outbound":
-                            outs += 1
-                        elif _row_get(candidate, "direction") == "inbound":
-                            ins += 1
-                    group_positive_directions[candidate_key] = (outs, ins)
-                    if _row_get(candidate, "direction") == "inbound":
-                        inbound_group_wallets.setdefault(candidate_key, set()).add(
-                            str(_row_get(candidate, "wallet_id"))
-                        )
-                surfaced_blocks: list[Mapping[str, Any]] = []
-                for blocked in ownership_result.blocked_sources:
-                    row = blocked.get("row")
-                    if row is None:
-                        continue
-                    row_id = str(_row_get(row, "id"))
-                    source_wallet_id = str(_row_get(row, "wallet_id"))
-                    group_key = onchain_transfer_scope(row)
-                    # The owned-fanout guard only holds a group NO pair touches
-                    # (a paired leg means "handled elsewhere" to it). A blocked
-                    # source in a partially-paired group would book a standalone
-                    # disposal with neither guard nor quarantine — so the
-                    # suppression premise requires both a recorded cross-wallet
-                    # destination AND a pair-free group.
-                    positive_outs, positive_ins = group_positive_directions.get(
-                        group_key, (0, 0)
-                    )
-                    fanout_holds = (
-                        group_key is not None
-                        and (positive_outs > 1 or positive_ins > 1)
-                        and any(
-                        wallet_id != source_wallet_id
-                        for wallet_id in inbound_group_wallets.get(group_key, ())
-                        )
-                    ) and not any(
-                        member_id in already_paired_ids
-                        for member_id in group_row_ids.get(group_key, ())
-                    )
-                    # A restored withheld pair is re-paired as a self-transfer
-                    # below, so its source must not also be quarantined here.
-                    if (
-                        (not fanout_holds or row_id in unsafe_withheld_blocks)
-                        and row_id not in restored_withheld_out_ids
-                    ):
-                        surfaced_blocks.append(blocked)
-                if surfaced_blocks:
-                    quarantines.extend(
-                        _ownership_block_quarantines(self.profile, surfaced_blocks)
-                    )
-            # Apply the exact shared row set used by transaction-graph preview.
-            # Quarantine decisions above intentionally inspected the
-            # post-consolidation rows, matching the prior journal order.
-            rows_for_engine = ownership_derivation.rows
-            if restored_withheld_out_ids:
-                auto_pairs = auto_pairs + [
-                    withheld_pairs_by_out_id[out_id]
-                    for out_id in restored_withheld_out_ids
-                ]
-            all_pairs, manual_cross_asset_pairs = apply_manual_pairs(
-                rows_for_engine,
-                auto_pairs,
-                split_pair_records,
-            )
-            all_pairs = (
-                all_pairs
-                + consolidation_result.derived_pairs
-                + ownership_result.derived_pairs
-                + fanout_result.derived_pairs
-                + [
-                    pair
-                    for pair in (inputs.channel_transfer_pairs or ())
-                    if str(
-                        _row_get(pair.get("out"), "journal_transaction_id")
-                        or _row_get(pair.get("out"), "id")
-                    )
-                    not in custody_projection.claimed_transaction_ids
-                    and str(
-                        _row_get(pair.get("in"), "journal_transaction_id")
-                        or _row_get(pair.get("in"), "id")
-                    )
-                    not in custody_projection.claimed_transaction_ids
-                ]
-            )
-            # The engine carries the synthetic split leg (so it can mark the
-            # cross-asset swap-out without touching the self-transfer remainder),
-            # but the result/audit should reference the real out tx — map it back.
-            manual_cross_asset_pairs_all = [
-                {**pair, "out_id": split_out_id_to_real.get(str(pair["out_id"]), pair["out_id"])}
-                for pair in manual_cross_asset_pairs
-            ]
-            engine_cross_asset_pairs.extend(manual_cross_asset_pairs)
-            rows_by_asset = defaultdict(list)
-            for row in rows_for_engine:
-                rows_by_asset[row["asset"]].append(row)
-            pairs_by_asset = defaultdict(list)
-            for pair in all_pairs:
-                pairs_by_asset[pair["out"]["asset"]].append(pair)
-            # Active loan marks classify their journal transaction by role.
-            # Suppressed roles are non-events for owned-lot accounting. Row-index
-            # access works for both sqlite3.Row and dict.
-            loan_leg_by_transaction_id = {
-                str(leg["transaction_id"]): str(leg["role"])
-                for leg in (inputs.loan_legs or ())
-                if leg["transaction_id"] is not None
-            }
-            # Derived Lightning channel-lifecycle roles share the loan non-event
-            # suppression (CHANNEL_OPEN / CHANNEL_CLOSE are in the loan
-            # suppress-role sets). setdefault keeps an explicit loan mark
-            # authoritative if the same tx were ever both (disjoint in practice).
-            for tx_id, role in (inputs.channel_roles or {}).items():
-                loan_leg_by_transaction_id.setdefault(str(tx_id), str(role))
+        assert configuration is not None
+        pairs_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for pair in projection.intra_pairs:
+            out_row = pair["out"]
+            in_row = pair["in"]
+            if str(_row_get(out_row, "asset")) != str(_row_get(in_row, "asset")):
+                raise AssertionError("finalized same-asset move pair crossed assets")
+            pairs_by_asset[str(_row_get(out_row, "asset"))].append(pair)
 
-            generic_rail_carry = _apply_generic_bitcoin_rail_carry_values(
+        # The existing generic BTC/LBTC carrying-value helper remains RP2 lot
+        # math, but it now sees only finalized projection rows/pairs.  It cannot
+        # discover, suppress, or restore raw evidence.
+        generic_rail = _apply_generic_bitcoin_rail_carry_values(
+            self.profile,
+            rows_for_engine,
+            projection.cross_asset_pairs,
+            pairs_by_asset,
+            configuration,
+            inputs.wallet_refs_by_id,
+            excluded_row_ids=set(),
+            loan_leg_by_transaction_id={},
+        )
+        rows_for_engine = generic_rail.rows
+        quarantines.extend(generic_rail.quarantines)
+
+        rows_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for row in rows_for_engine:
+            rows_by_asset[str(_row_get(row, "asset"))].append(row)
+        prepared_by_asset = _prepare_assets(
+            self.profile,
+            rows_by_asset,
+            inputs.wallet_refs_by_id,
+            pairs_by_asset,
+            configuration,
+            excluded_row_ids=generic_rail.blocked_row_ids,
+            loan_leg_by_transaction_id={},
+        )
+        swap_link_by_row_id, quarantined_row_ids, swap_quarantines = (
+            _select_at_cross_asset_swap_links(
                 self.profile,
+                projection.cross_asset_pairs,
                 rows_for_engine,
-                engine_cross_asset_pairs,
+                prepared_by_asset,
+            )
+        )
+        quarantines.extend(swap_quarantines)
+        if swap_link_by_row_id or quarantined_row_ids:
+            prepared_by_asset = _prepare_assets(
+                self.profile,
+                rows_by_asset,
+                inputs.wallet_refs_by_id,
                 pairs_by_asset,
                 configuration,
-                inputs.wallet_refs_by_id,
-                excluded_row_ids=blocked_payout_row_ids,
-                loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+                at_swap_link_by_row_id=swap_link_by_row_id,
+                excluded_row_ids=(
+                    set(generic_rail.blocked_row_ids) | quarantined_row_ids
+                ),
+                loan_leg_by_transaction_id={},
             )
-            quarantines.extend(generic_rail_carry.quarantines)
-            blocked_generic_rail_row_ids = generic_rail_carry.blocked_row_ids
-            rows_for_engine = list(generic_rail_carry.rows)
-            # Invalid/conflicting authored-active components keep their raw
-            # anchors outside every matching/derivation path above. Add them
-            # back only at the normalization boundary as forced-block rows:
-            # they cannot book, while their timestamps contaminate later lot
-            # provenance until the component is repaired or superseded.
-            rows_for_engine.extend(blocked_custody_anchor_rows)
-            payout_synthetic_ids = {
-                synthetic_id
-                for pair in payout_pairs
-                for synthetic_id in (str(pair["in_id"]), f"{pair['pair_id']}:out")
-            }
-            # Custody atomicity spans assets. Normalization enforces it inside one
-            # asset, then this fixed point propagates any member failure across
-            # BTC/LBTC (or future multi-rail assets) before RP2 computes anything.
-            # Forced members remain in normalization as quarantines so their
-            # timestamps contaminate later lot provenance; simply excluding them
-            # would let dependent disposals book against an incomplete basis.
-            failed_custody_ids = failed_component_ids(
-                rows_for_engine, generic_rail_carry.quarantines
-            )
-            if failed_custody_ids:
-                rows_for_engine = force_block_components(
-                    rows_for_engine,
-                    failed_custody_ids,
-                    reason="bitcoin_rail_carry_member_blocked",
-                )
-            swap_link_by_row_id: dict[str, str] = {}
-            quarantined_row_ids: set[str] = set()
-            swap_quarantines: list[dict[str, Any]] = []
-            prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]] = []
-            excluded_row_ids: set[str] = set()
-            max_component_passes = max(
-                1, len(inputs.authored_active_custody_components or ()) + 1
-            )
-            for _custody_pass in range(max_component_passes):
-                failed_member_ids = component_member_row_ids(
-                    rows_for_engine, failed_custody_ids
-                )
-                active_blocked_generic_ids = (
-                    blocked_generic_rail_row_ids - failed_member_ids
-                )
-                active_cross_asset_pairs = [
-                    pair
-                    for pair in engine_cross_asset_pairs
-                    if str(pair.get("component_id") or "") not in failed_custody_ids
-                ]
-                rows_by_asset = defaultdict(list)
-                for row in rows_for_engine:
-                    rows_by_asset[row["asset"]].append(row)
-                # Phase 1 has no swap markers. It discovers missing price/basis,
-                # quantity, fee, and per-asset transfer failures safely.
-                prepared_by_asset = _prepare_assets(
-                    self.profile,
-                    rows_by_asset,
-                    inputs.wallet_refs_by_id,
-                    pairs_by_asset,
-                    configuration,
-                    excluded_row_ids=(
-                        blocked_payout_row_ids | active_blocked_generic_ids
-                    ),
-                    loan_leg_by_transaction_id=loan_leg_by_transaction_id,
-                )
-                swap_link_by_row_id, quarantined_row_ids, swap_quarantines = (
-                    _select_at_cross_asset_swap_links(
-                        self.profile,
-                        active_cross_asset_pairs,
-                        rows_for_engine,
-                        prepared_by_asset,
-                    )
-                )
-                selected_payout_synthetic_ids = {
-                    synthetic_id
-                    for pair in payout_pairs
-                    if str(pair["in_id"]) in swap_link_by_row_id
-                    or (
-                        _profile_str(self.profile, "tax_country").lower() != "at"
-                        and pair.get("policy") == "carrying-value"
-                        and is_bitcoin_rail_pair(
-                            pair.get("out_asset"), pair.get("in_asset")
-                        )
-                    )
-                    for synthetic_id in (
-                        str(pair["in_id"]),
-                        f"{pair['pair_id']}:out",
-                    )
-                }
-                excluded_row_ids = (
-                    blocked_payout_row_ids
-                    | active_blocked_generic_ids
-                    | quarantined_row_ids
-                    | (payout_synthetic_ids - selected_payout_synthetic_ids)
-                )
-                final_prepared = prepared_by_asset
-                if swap_link_by_row_id or excluded_row_ids:
-                    final_prepared = _prepare_assets(
-                        self.profile,
-                        rows_by_asset,
-                        inputs.wallet_refs_by_id,
-                        pairs_by_asset,
-                        configuration,
-                        at_swap_link_by_row_id=swap_link_by_row_id,
-                        excluded_row_ids=excluded_row_ids,
-                        loan_leg_by_transaction_id=loan_leg_by_transaction_id,
-                    )
-                phase_quarantines = [
-                    quarantine
-                    for normalized, prepared in final_prepared
-                    for quarantine in (
-                        *normalized.quarantines,
-                        *prepared.quarantines,
-                    )
-                ]
-                newly_failed = failed_component_ids(
-                    rows_for_engine,
-                    [*phase_quarantines, *swap_quarantines],
-                ) - failed_custody_ids
-                if not newly_failed:
-                    prepared_by_asset = final_prepared
-                    break
-                # Preserve the first concrete failure; the next pass adds the
-                # component-wide blocker rows for every sibling anchor.
-                newly_failed_anchors = {
-                    str(anchor_id)
-                    for row in rows_for_engine
-                    if str(_row_get(row, "custody_component_id") or "")
-                    in newly_failed
-                    for anchor_id in (
-                        _row_get(row, "custody_component_anchor_ids") or ()
-                    )
-                }
-                quarantines.extend(
-                    quarantine
-                    for quarantine in [*phase_quarantines, *swap_quarantines]
-                    if str(quarantine["transaction_id"]) in newly_failed_anchors
-                )
-                failed_custody_ids.update(newly_failed)
-                rows_for_engine = force_block_components(
-                    rows_for_engine,
-                    newly_failed,
-                    reason="component_member_blocked",
-                )
-            else:
-                raise AppError(
-                    "Custody-component atomicity did not converge",
-                    code="custody_component_atomicity",
-                    hint="Review overlapping or chained component anchors.",
-                )
-            quarantines.extend(swap_quarantines)
-
-            # Phase 2: cross-asset validation via the country hook. Catches invariants
-            # (e.g. Austrian `at_swap_link` marker must appear on two different assets)
-            # that Kassiber's annotator structurally cannot detect — a paired leg that
-            # was never imported can't be annotated, so only a post-hoc scan sees it.
-            # `validate_input_data` was added in bitcoinaustria/rp2 PR #4. If an older rp2
-            # is installed (editable checkout, stale `uv sync`), fall through with a clear
-            # upgrade hint rather than a confusing generic failure.
-            input_data_list = [
+        _validate_prepared_rp2_inputs(
+            configuration,
+            [
                 prepared.input_data
                 for _, prepared in prepared_by_asset
                 if prepared.input_data is not None
-            ]
-            _validate_prepared_rp2_inputs(configuration, input_data_list)
-
-            # Phase 3: compute tax + assemble per-asset results. Austrian
-            # carrying-value swaps use rp2's country-level multi-asset hook so
-            # moving-average pool state, same-timestamp ordering, and basis
-            # carry stay inside the tax engine.
-            asset_states = _rp2_asset_states_from_prepared(
-                prepared_by_asset,
-                self.profile,
+            ],
+        )
+        asset_states = _rp2_asset_states_from_prepared(
+            prepared_by_asset,
+            self.profile,
+            configuration,
+            requires_multi_asset_compute=bool(swap_link_by_row_id),
+        )
+        wallet_refs_by_label = {
+            str(item["label"]): item
+            for item in inputs.wallet_refs_by_id.values()
+            if item.get("label") not in (None, "")
+        }
+        entries: list[dict[str, Any]] = []
+        intra_audit: list[dict[str, Any]] = []
+        tax_summary: list[dict[str, Any]] = []
+        account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
+        wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
+        for normalized_inputs, prepared in prepared_by_asset:
+            result = self._process_asset(
+                prepared,
+                normalized_inputs,
+                wallet_refs_by_label,
                 configuration,
-                requires_multi_asset_compute=bool(swap_link_by_row_id),
+                asset_states[prepared.asset],
             )
-            for normalized_inputs, prepared in prepared_by_asset:
-                asset_result = self._process_asset(
-                    prepared,
-                    normalized_inputs,
-                    wallet_refs_by_label,
-                    configuration,
-                    asset_states[prepared.asset],
-                )
-                quarantines.extend(asset_result.quarantines)
-                intra_audit_all.extend(asset_result.intra_audit)
-                tax_summary_all.extend(asset_result.tax_summary)
-                entries.extend(asset_result.entries)
-                for key, totals in asset_result.account_holdings.items():
-                    account_holdings[key]["quantity"] += totals["quantity"]
-                    account_holdings[key]["cost_basis"] += totals["cost_basis"]
-                for key, totals in asset_result.wallet_holdings.items():
-                    wallet_holdings[key]["quantity"] += totals["quantity"]
-                    wallet_holdings[key]["cost_basis"] += totals["cost_basis"]
+            quarantines.extend(result.quarantines)
+            intra_audit.extend(result.intra_audit)
+            tax_summary.extend(result.tax_summary)
+            entries.extend(result.entries)
+            for key, value in result.account_holdings.items():
+                account_holdings[key]["quantity"] += value["quantity"]
+                account_holdings[key]["cost_basis"] += value["cost_basis"]
+            for key, value in result.wallet_holdings.items():
+                wallet_holdings[key]["quantity"] += value["quantity"]
+                wallet_holdings[key]["cost_basis"] += value["cost_basis"]
         return TaxEngineLedgerResult(
             entries=entries,
             quarantines=quarantines,
-            intra_audit=intra_audit_all,
-            cross_asset_pairs=manual_cross_asset_pairs_all,
-            direct_swap_payouts=direct_payouts,
-            tax_summary=tax_summary_all,
+            # This is rendered output from the finalized MOVE projection.  It
+            # is no longer an interpreter input for custody quantity.
+            intra_audit=intra_audit,
+            cross_asset_pairs=list(projection.cross_asset_pairs),
+            direct_swap_payouts=_direct_payout_compat_records(
+                inputs.direct_payout_records,
+                projection.rows,
+            ),
+            tax_summary=tax_summary,
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),
         )
+
+    def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
+        """Run RP2 exclusively over finalized custody tax events and moves."""
+
+        from ..custody_tax_projection import FinalizedTaxProjection
+
+        projection = inputs.finalized_tax_projection
+        if not isinstance(projection, FinalizedTaxProjection):
+            raise TypeError(
+                "GenericRP2TaxEngine requires a FinalizedTaxProjection; raw rows are not a tax-engine input"
+            )
+        if not projection.rows:
+            return self._build_finalized_ledger_state(inputs, None)
+        wallet_labels = [
+            str(item["label"])
+            for item in inputs.wallet_refs_by_id.values()
+            if item.get("label") not in (None, "")
+        ]
+        assets = {str(_row_get(row, "asset")) for row in projection.rows}
+        with _rp2_configuration(self.profile, wallet_labels, assets) as configuration:
+            return self._build_finalized_ledger_state(inputs, configuration)
 
     def _process_asset(
         self,

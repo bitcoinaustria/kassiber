@@ -175,6 +175,49 @@ class CoreMaintenanceTest(unittest.TestCase):
                         "2026-01-01T10:00:00Z",
                     ),
                 )
+                transaction_id = conn.execute(
+                    "SELECT id FROM transactions WHERE external_id = 'seed-inbound-1'"
+                ).fetchone()[0]
+                conn.execute(
+                    """
+                    INSERT INTO custody_gap_reviews(
+                        id, workspace_id, profile_id, gap_id, revision,
+                        candidate_fingerprint, action, authored_source,
+                        snapshot_json, created_at
+                    ) VALUES('reset-review', ?, ?, 'reset-gap', 1, ?,
+                             'dismissed', 'user', '{}', ?)
+                    """,
+                    (
+                        workspace_id,
+                        profile_id,
+                        "a" * 64,
+                        "2026-01-01T10:00:00Z",
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO custody_gap_review_transactions(
+                        id, review_id, workspace_id, profile_id,
+                        role, transaction_id, created_at
+                    ) VALUES('reset-review-source', 'reset-review', ?, ?,
+                             'source', ?, ?)
+                    """,
+                    (
+                        workspace_id,
+                        profile_id,
+                        transaction_id,
+                        "2026-01-01T10:00:00Z",
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO custody_gap_candidate_snapshots(
+                        cache_token, profile_id, version_json,
+                        summary_json, gaps_json
+                    ) VALUES('reset-gap-cache', ?, '[]', '{}', '[]')
+                    """,
+                    (profile_id,),
+                )
 
                 payload = maintenance.reset_current_profile_data(conn, str(data_root))
 
@@ -186,6 +229,13 @@ class CoreMaintenanceTest(unittest.TestCase):
                 self.assertEqual(payload["removed"]["transactions"], 1)
                 self.assertEqual(payload["removed"]["custody_components"], 1)
                 self.assertEqual(payload["removed"]["custody_component_legs"], 1)
+                self.assertEqual(payload["removed"]["custody_gap_reviews"], 1)
+                self.assertEqual(
+                    payload["removed"]["custody_gap_candidate_snapshots"], 1
+                )
+                self.assertEqual(
+                    payload["removed"]["custody_gap_review_transactions"], 1
+                )
                 self.assertGreaterEqual(payload["removed"]["journal_entries"], 1)
                 self.assertEqual(payload["removed"]["attachments"], 1)
                 self.assertEqual(payload["removed"]["attachment_files"], 1)
@@ -210,6 +260,9 @@ class CoreMaintenanceTest(unittest.TestCase):
                     "custody_component_legs",
                     "custody_component_allocations",
                     "custody_component_purge_authorizations",
+                    "custody_gap_reviews",
+                    "custody_gap_candidate_snapshots",
+                    "custody_gap_review_transactions",
                 ):
                     count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                     self.assertEqual(count, 0, table)

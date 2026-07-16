@@ -29,6 +29,12 @@ from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
 from .address_scripts import scriptpubkey_for_address_or_none
 from .chain_observer import delete_wallet_observer_state
+from .ownership_policy_epochs import (
+    canonical_wallet_config_identity,
+    policy_identity_material,
+    private_policy_material,
+    roll_wallet_policy_epoch,
+)
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -73,19 +79,6 @@ WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
 OWNERSHIP_HISTORY_CONFIG_KEY = "ownership_history"
 OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
 MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
-_OWNERSHIP_HISTORY_LIMIT = 8
-_OWNERSHIP_MATERIAL_FIELDS = (
-    "descriptor",
-    "change_descriptor",
-    "xpub",
-    "script_types",
-    OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
-    "addresses",
-    "chain",
-    "network",
-    "gap_limit",
-    "synthesize_change",
-)
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -670,51 +663,10 @@ def _sync_material_config_json(config):
     sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_HISTORY_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY, None)
-    return json.dumps(sync_config, sort_keys=True)
-
-
-def _ownership_material_snapshot(config):
-    """The minimum private config needed to recognize historic scripts.
-
-    This stays inside the encrypted wallet config. It is intentionally absent
-    from ``WALLET_SAFE_CONFIG_FIELDS`` and therefore never appears in normal
-    CLI, daemon, UI, or AI wallet payloads.
-    """
-
-    if not isinstance(config, dict):
-        return {}
-    return {
-        field: config[field]
-        for field in _OWNERSHIP_MATERIAL_FIELDS
-        if config.get(field) not in (None, "", [])
-    }
-
-
-def _historic_scan_floor(conn, wallet_id):
-    row = conn.execute(
-        "SELECT MAX(address_index) AS highest FROM wallet_utxos WHERE wallet_id = ?",
-        (wallet_id,),
-    ).fetchone()
-    return max(0, int(row["highest"] or 0)) if row else 0
-
-
-def _archive_ownership_material(conn, wallet_id, config, snapshot):
-    if not snapshot:
-        return
-    archived = dict(snapshot)
-    archived["scan_to_index"] = _historic_scan_floor(conn, wallet_id)
-    existing = [
-        dict(item)
-        for item in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
-        if isinstance(item, dict)
-    ]
-    canonical = json.dumps(archived, sort_keys=True)
-    existing = [
-        item for item in existing if json.dumps(item, sort_keys=True) != canonical
-    ]
-    config[OWNERSHIP_HISTORY_CONFIG_KEY] = (existing + [archived])[
-        -_OWNERSHIP_HISTORY_LIMIT:
-    ]
+    return json.dumps(
+        canonical_wallet_config_identity(sync_config),
+        sort_keys=True,
+    )
 
 
 def _wallet_descriptor_state(config):
@@ -1041,7 +993,8 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
-    original_ownership_material = _ownership_material_snapshot(config)
+    original_ownership_material = private_policy_material(config)
+    original_ownership_identity = policy_identity_material(config)
     original_sync_material_json = _sync_material_config_json(config)
     for field in clear_fields:
         if field not in config:
@@ -1058,13 +1011,9 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config[key] = value
 
     config = _validated_wallet_config(wallet["kind"], config)
-    if _ownership_material_snapshot(config) != original_ownership_material:
-        _archive_ownership_material(
-            conn,
-            wallet["id"],
-            config,
-            original_ownership_material,
-        )
+    ownership_identity_changed = (
+        policy_identity_material(config) != original_ownership_identity
+    )
     config_json = json.dumps(config, sort_keys=True)
     sync_material_changed = (
         _sync_material_config_json(config) != original_sync_material_json
@@ -1080,21 +1029,40 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             (label_value, account_id, config_json, wallet["id"]),
         )
     except sqlite3.IntegrityError as exc:
+        conn.rollback()
         raise AppError(
             f"Wallet '{label_value}' already exists in profile '{profile['label']}'",
             code="conflict",
             hint="Choose a different wallet label.",
         ) from exc
-    if sync_material_changed:
-        delete_wallet_observer_state(conn, wallet["id"])
-        core_output_inventory.clear_wallet_output_inventory(
-            conn,
-            wallet["id"],
-            commit=False,
-        )
-        _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
+    try:
+        if ownership_identity_changed:
+            # Retain retired material and its last technical coverage in a
+            # durable, random-id policy epoch before disposable observer state
+            # is cleared. This records only imported policy history, never an
+            # attestation that every wallet owned by the profile was supplied.
+            roll_wallet_policy_epoch(
+                conn,
+                wallet,
+                original_ownership_material,
+                private_policy_material(config),
+            )
+        if sync_material_changed:
+            delete_wallet_observer_state(conn, wallet["id"])
+            core_output_inventory.clear_wallet_output_inventory(
+                conn,
+                wallet["id"],
+                commit=False,
+            )
+            _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
+        invalidate_journals(conn, profile["id"])
+        conn.commit()
+    except Exception:
+        # The daemon reuses its connection. Never leave a successful wallet
+        # row update or a partial epoch rollover pending for an unrelated later
+        # command to commit.
+        conn.rollback()
+        raise
     updated = fetch_wallet_with_account(conn, wallet["id"])
     return wallet_row_to_dict(updated)
 

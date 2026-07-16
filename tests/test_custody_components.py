@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
 
+from kassiber import db as db_module
 from kassiber.cli.handlers import process_journals, require_processed_journals
 from kassiber.core.custody_components import (
     activate_component,
@@ -20,6 +22,9 @@ from kassiber.core.custody_components import (
     undo_supersede,
     update_component,
     validate_conservation,
+)
+from kassiber.core.chain_observer.provenance import (
+    persist_chain_observation_provenance,
 )
 from kassiber.core.sync_replication.schema_allowlist import (
     SYNC_TABLE_MAP,
@@ -222,6 +227,216 @@ class CustodySchemaTests(unittest.TestCase):
                     self.assertIn("component_id", columns)
             finally:
                 migrated.close()
+
+    def test_open_db_migrates_pre_durable_anchor_active_component_evidence(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = open_db(root)
+            _scope(conn)
+            _tx(conn, "legacy-out", "btc", "outbound", "BTC", 100)
+            _tx(conn, "legacy-in", "btc", "inbound", "BTC", 100)
+            component = create_component(
+                conn,
+                workspace_id="ws",
+                profile_id="profile",
+                component_id="legacy-active",
+                component_type="native_transfer",
+                legs=[
+                    {
+                        **_leg("source", 100, tx="legacy-out", wallet="btc"),
+                        "id": "legacy-source",
+                    },
+                    {
+                        **_leg("destination", 100, tx="legacy-in", wallet="btc"),
+                        "id": "legacy-sink",
+                    },
+                ],
+                allocations=[
+                    {
+                        "id": "legacy-edge",
+                        "source_leg_id": "legacy-source",
+                        "sink_leg_id": "legacy-sink",
+                        "source_amount_msat": 100,
+                        "sink_amount_msat": 100,
+                    }
+                ],
+                created_at=NOW,
+            )
+            activated = activate_component(conn, component["id"], activated_at=NOW)
+            snapshots_before = [
+                tuple(row)
+                for row in conn.execute(
+                    "SELECT quantity_hash, detail_hash, payload_json, created_at "
+                    "FROM custody_authored_evidence_snapshots "
+                    "WHERE subject_kind = 'custody_component' AND subject_id = ? "
+                    "ORDER BY quantity_hash, detail_hash",
+                    (component["id"],),
+                )
+            ]
+            commitments_before = [
+                tuple(row)
+                for row in conn.execute(
+                    "SELECT id, ordinal, quantity_hash, detail_hash, created_at "
+                    "FROM custody_component_evidence_commitments "
+                    "WHERE component_id = ? ORDER BY ordinal, id",
+                    (component["id"],),
+                )
+            ]
+            self.assertEqual("active", activated["state"])
+            self.assertGreater(len(snapshots_before), 0)
+            self.assertEqual(len(snapshots_before), len(commitments_before))
+            db_path = conn.execute("PRAGMA database_list").fetchone()["file"]
+            conn.commit()
+            conn.close()
+
+            # Recreate the immediately preceding custody schema: activation
+            # snapshots existed, but replicated commitments, the commitment
+            # header, and durable transaction anchors did not yet exist.
+            legacy = sqlite3.connect(db_path)
+            try:
+                legacy.execute("PRAGMA foreign_keys = OFF")
+                trigger_names = [
+                    row[0]
+                    for row in legacy.execute(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type = 'trigger' AND name LIKE 'trg_custody_%'"
+                    )
+                ]
+                for trigger_name in trigger_names:
+                    legacy.execute(f'DROP TRIGGER "{trigger_name}"')
+                legacy.execute("DROP TABLE custody_component_evidence_commitments")
+                legacy.execute(
+                    "ALTER TABLE custody_components DROP COLUMN expected_evidence_count"
+                )
+                legacy.execute(
+                    "ALTER TABLE custody_component_legs DROP COLUMN anchor_transaction_id"
+                )
+                legacy.commit()
+            finally:
+                legacy.close()
+
+            migrated = open_db(root)
+            try:
+                restored = get_component(migrated, component["id"])
+                self.assertEqual("active", restored["state"])
+                self.assertEqual(NOW, restored["activated_at"])
+                self.assertEqual(
+                    len(commitments_before), restored["expected_evidence_count"]
+                )
+                self.assertEqual(
+                    ["legacy-in", "legacy-out"],
+                    sorted(leg["anchor_transaction_id"] for leg in restored["legs"]),
+                )
+                snapshots_after = [
+                    tuple(row)
+                    for row in migrated.execute(
+                        "SELECT quantity_hash, detail_hash, payload_json, created_at "
+                        "FROM custody_authored_evidence_snapshots "
+                        "WHERE subject_kind = 'custody_component' AND subject_id = ? "
+                        "ORDER BY quantity_hash, detail_hash",
+                        (component["id"],),
+                    )
+                ]
+                commitments_after = [
+                    tuple(row)
+                    for row in migrated.execute(
+                        "SELECT id, ordinal, quantity_hash, detail_hash, created_at "
+                        "FROM custody_component_evidence_commitments "
+                        "WHERE component_id = ? ORDER BY ordinal, id",
+                        (component["id"],),
+                    )
+                ]
+                self.assertEqual(snapshots_before, snapshots_after)
+                self.assertEqual(commitments_before, commitments_after)
+            finally:
+                migrated.close()
+
+    def test_custody_role_table_rebuild_preserves_rows_fks_and_guards(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = open_db(root)
+            try:
+                _scope(conn)
+                _tx(conn, "out", "btc", "outbound", "BTC", 100)
+                _tx(conn, "in", "btc", "inbound", "BTC", 100)
+                component = create_component(
+                    conn,
+                    workspace_id="ws",
+                    profile_id="profile",
+                    component_type="native_transfer",
+                    legs=[
+                        {**_leg("source", 100, tx="out", wallet="btc"), "id": "source"},
+                        {**_leg("destination", 100, tx="in", wallet="btc"), "id": "sink"},
+                    ],
+                    allocations=[
+                        {
+                            "id": "edge",
+                            "source_leg_id": "source",
+                            "sink_leg_id": "sink",
+                            "source_amount_msat": 100,
+                            "sink_amount_msat": 100,
+                        }
+                    ],
+                )
+                before_leg_ids = {
+                    row["id"]
+                    for row in conn.execute(
+                        "SELECT id FROM custody_component_legs WHERE component_id = ?",
+                        (component["id"],),
+                    )
+                }
+                before_allocation_ids = {
+                    row["id"]
+                    for row in conn.execute(
+                        "SELECT id FROM custody_component_allocations WHERE component_id = ?",
+                        (component["id"],),
+                    )
+                }
+
+                db_module._rebuild_custody_leg_role_schema(conn)
+                db_module._ensure_custody_leg_role_schema(conn)
+
+                self.assertEqual(
+                    before_leg_ids,
+                    {
+                        row["id"]
+                        for row in conn.execute(
+                            "SELECT id FROM custody_component_legs WHERE component_id = ?",
+                            (component["id"],),
+                        )
+                    },
+                )
+                self.assertEqual(
+                    before_allocation_ids,
+                    {
+                        row["id"]
+                        for row in conn.execute(
+                            "SELECT id FROM custody_component_allocations WHERE component_id = ?",
+                            (component["id"],),
+                        )
+                    },
+                )
+                self.assertFalse(conn.execute("PRAGMA foreign_key_check").fetchall())
+                object_names = {
+                    row["name"]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type IN ('index', 'trigger')"
+                    )
+                }
+                self.assertTrue(
+                    {
+                        "idx_custody_component_legs_component",
+                        "idx_custody_allocations_component",
+                        "trg_custody_allocation_scope_insert",
+                        "trg_custody_component_scope_insert",
+                        "trg_custody_component_leg_revision_immutable",
+                        "trg_custody_component_allocation_revision_immutable",
+                    }
+                    <= object_names
+                )
+                self.assertEqual(
+                    component["id"], get_component(conn, component["id"])["id"]
+                )
+            finally:
+                conn.close()
 
     def test_sync_projection_excludes_local_evidence_and_location_reference(self):
         with tempfile.TemporaryDirectory() as root:
@@ -508,6 +723,149 @@ class CustodyComponentApiTests(unittest.TestCase):
         }
         self.assertEqual(0, coverage["out"]["reviewed_minus_raw_msat"])
 
+    def test_authoritative_chronology_refinement_warns_without_deactivation(self):
+        txid = "ab" * 32
+        raw_json = json.dumps(
+            {
+                "txid": txid,
+                "chain": "bitcoin",
+                "network": "regtest",
+                "observer": "bdk",
+                "vin": [],
+                "vout": [],
+            },
+            sort_keys=True,
+        )
+        self.conn.execute(
+            """
+            UPDATE transactions
+            SET external_id = ?, external_id_kind = 'txid', raw_json = ?
+            WHERE id = 'in-1'
+            """,
+            (txid, raw_json),
+        )
+        persist_chain_observation_provenance(
+            self.conn,
+            self.conn.execute(
+                "SELECT * FROM profiles WHERE id = 'profile'"
+            ).fetchone(),
+            self.conn.execute(
+                "SELECT * FROM wallets WHERE id = 'btc'"
+            ).fetchone(),
+            application_revision="observer-apply-1",
+            chain="bitcoin",
+            network="regtest",
+            entries=(
+                {
+                    "external_id": txid,
+                    "asset": "BTC",
+                    "direction": "inbound",
+                    "observer_ids": ["descriptor:default"],
+                    "observer_kinds": ["bdk"],
+                },
+            ),
+        )
+        activated = activate_component(
+            self.conn,
+            self._balanced_component()["id"],
+            activated_at=NOW,
+        )
+        self.assertEqual("active", activated["effective_state"])
+
+        reorg_raw_json = json.dumps(
+            {
+                "txid": txid,
+                "chain": "bitcoin",
+                "network": "regtest",
+                "observer": "bdk",
+                "status": {
+                    "confirmed": True,
+                    "block_height": 201,
+                    "block_hash": "cd" * 32,
+                },
+                "vin": [],
+                "vout": [],
+            },
+            sort_keys=True,
+        )
+        self.conn.execute(
+            """
+            UPDATE transactions
+            SET occurred_at = '2026-01-01T00:00:01Z',
+                confirmed_at = '2026-01-01T00:10:00Z',
+                raw_json = ?
+            WHERE id = 'in-1'
+            """,
+            (reorg_raw_json,),
+        )
+        persist_chain_observation_provenance(
+            self.conn,
+            self.conn.execute(
+                "SELECT * FROM profiles WHERE id = 'profile'"
+            ).fetchone(),
+            self.conn.execute(
+                "SELECT * FROM wallets WHERE id = 'btc'"
+            ).fetchone(),
+            application_revision="observer-apply-2",
+            chain="bitcoin",
+            network="regtest",
+            entries=(
+                {
+                    "external_id": txid,
+                    "asset": "BTC",
+                    "direction": "inbound",
+                    "observer_ids": ["descriptor:default"],
+                    "observer_kinds": ["bdk"],
+                },
+            ),
+        )
+        refined = get_component(self.conn, activated["id"])
+
+        self.assertEqual("active", refined["effective_state"])
+        self.assertEqual("matched", refined["evidence_status"]["status"])
+        warning = next(
+            item
+            for item in refined["validation"]["warnings"]
+            if item["code"] == "anchor_observer_chronology_changed"
+        )
+        self.assertTrue(warning["review_required"])
+        self.assertEqual("observer-apply-2", warning["application_revision"])
+        self.assertNotIn(
+            "anchor_occurred_at_mismatch",
+            {item["code"] for item in refined["validation"]["issues"]},
+        )
+
+        # A quantity contradiction still fails closed; the chronology warning
+        # cannot bless a changed economic anchor.
+        self.conn.execute(
+            "UPDATE transactions SET amount = amount + 1 WHERE id = 'in-1'"
+        )
+        contradicted = get_component(self.conn, activated["id"])
+        self.assertEqual("draft", contradicted["effective_state"])
+        self.assertIn(
+            "anchor_coverage_mismatch",
+            {item["code"] for item in contradicted["validation"]["issues"]},
+        )
+
+    def test_unproven_anchor_chronology_change_remains_blocking(self):
+        activated = activate_component(
+            self.conn,
+            self._balanced_component()["id"],
+            activated_at=NOW,
+        )
+        self.conn.execute(
+            "UPDATE transactions SET occurred_at = '2026-01-01T00:00:01Z' "
+            "WHERE id = 'in-1'"
+        )
+
+        changed = get_component(self.conn, activated["id"])
+
+        self.assertEqual("draft", changed["effective_state"])
+        self.assertIn(
+            "anchor_occurred_at_mismatch",
+            {item["code"] for item in changed["validation"]["issues"]},
+        )
+
     def test_anchor_rail_chain_and_network_contradictions_fail_closed(self):
         self.conn.execute(
             "UPDATE wallets SET config_json = ? WHERE id = 'btc'",
@@ -569,6 +927,82 @@ class CustodyComponentApiTests(unittest.TestCase):
         }
         self.assertNotIn("out", quarantine_ids)
         self.assertTrue({"in-1", "in-2"} <= quarantine_ids)
+
+        self.assertEqual(
+            [component["id"]],
+            [
+                item["id"]
+                for item in list_components(
+                    self.conn,
+                    profile_id="profile",
+                    transaction_id="out",
+                )
+            ],
+        )
+        self.assertEqual(
+            [component["id"]],
+            [
+                item["id"]
+                for item in iter_authored_active_components(
+                    self.conn,
+                    profile_id="profile",
+                    transaction_id="out",
+                )
+            ],
+        )
+
+        # Reusing the durable id does not silently reconnect the authored leg.
+        # The changed row stays claimed by the invalid active component and
+        # cannot fall back to an ordinary disposal.
+        _tx(self.conn, "out", "btc", "outbound", "BTC", 120)
+        reimported = get_component(self.conn, component["id"])
+        source = next(leg for leg in reimported["legs"] if leg["role"] == "source")
+        self.assertIsNone(source["transaction_id"])
+        process_journals(self.conn, "ws", "profile")
+        quarantine_ids = {
+            row["transaction_id"]
+            for row in self.conn.execute(
+                "SELECT transaction_id FROM journal_quarantines"
+            ).fetchall()
+        }
+        self.assertIn("out", quarantine_ids)
+        self.assertFalse(
+            any(
+                row["transaction_id"] == "out" and row["entry_type"] == "disposal"
+                for row in self.conn.execute(
+                    "SELECT transaction_id, entry_type FROM journal_entries"
+                ).fetchall()
+            )
+        )
+
+    def test_retracted_active_anchor_still_blocks_overlapping_component(self):
+        first = activate_component(self.conn, self._balanced_component()["id"])
+        self.conn.execute("DELETE FROM transactions WHERE id = 'out'")
+        _tx(self.conn, "out", "btc", "outbound", "BTC", 100)
+        _tx(self.conn, "new-in", "btc", "inbound", "BTC", 100)
+        overlapping = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="native_transfer",
+            legs=[
+                _leg("source", 100, tx="out", wallet="btc"),
+                _leg("destination", 100, tx="new-in", wallet="btc"),
+            ],
+        )
+
+        with self.assertRaises(AppError) as blocked:
+            activate_component(self.conn, overlapping["id"])
+
+        self.assertEqual("custody_component_incomplete", blocked.exception.code)
+        conflict_issue = next(
+            issue
+            for issue in blocked.exception.details["validation"]["issues"]
+            if issue["code"] == "active_transaction_membership_conflict"
+        )
+        self.assertEqual(
+            first["id"], conflict_issue["conflicts"][0]["component_id"]
+        )
 
     def test_all_excluded_component_anchors_still_block_reports(self):
         component = activate_component(self.conn, self._balanced_component()["id"])
@@ -711,6 +1145,205 @@ class CustodyComponentApiTests(unittest.TestCase):
             "SELECT journal_input_version FROM profiles WHERE id = 'profile'"
         ).fetchone()[0]
         self.assertEqual(version_before, version_after)
+
+    def test_reviewed_manual_bridge_activates_exact_residual_suspense(self):
+        component = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="manual_bridge",
+            evidence_kind="manual_reconstruction",
+            evidence_grade="reviewed",
+            legs=[
+                {**_leg("source", 100, tx="out", wallet="btc"), "id": "source"},
+                {**_leg("destination", 60, tx="in-1", wallet="btc"), "id": "dest-1"},
+                {**_leg("destination", 39, tx="in-2", wallet="btc"), "id": "dest-2"},
+                {
+                    **_leg("suspense", 1, rail="untracked", occurred_at=NOW),
+                    "id": "suspense",
+                },
+            ],
+            allocations=[
+                {"source_leg_id": "source", "sink_leg_id": "dest-1", "source_amount_msat": 60, "sink_amount_msat": 60},
+                {"source_leg_id": "source", "sink_leg_id": "dest-2", "source_amount_msat": 39, "sink_amount_msat": 39},
+                {"source_leg_id": "source", "sink_leg_id": "suspense", "source_amount_msat": 1, "sink_amount_msat": 1},
+            ],
+        )
+
+        self.assertTrue(component["validation"]["activatable"])
+        self.assertEqual(1, component["validation"]["suspense_msat"])
+        self.assertEqual(0, component["validation"]["unresolved_msat"])
+        activated = activate_component(self.conn, component["id"])
+        self.assertEqual("active", activated["effective_state"])
+        self.assertEqual(
+            {"out", "in-1", "in-2"},
+            {
+                row["transaction_id"]
+                for row in self.conn.execute(
+                    "SELECT transaction_id FROM custody_component_transaction_memberships"
+                )
+            },
+        )
+        suspense_row = self.conn.execute(
+            "SELECT * FROM custody_component_legs "
+            "WHERE component_id = ? AND role = 'suspense'",
+            (component["id"],),
+        ).fetchone()
+        suspense_payload = serialize_row(
+            SYNC_TABLE_MAP["custody_component_legs"],
+            suspense_row,
+            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        )
+        validate_wire_row("custody_component_legs", suspense_payload)
+
+    def test_suspense_requires_review_allocation_scope_and_source_time(self):
+        base = [
+            {**_leg("source", 100, tx="out", wallet="btc"), "id": "source"},
+            {**_leg("destination", 99, tx="in-1", wallet="btc"), "id": "dest"},
+            {
+                **_leg(
+                    "suspense",
+                    1,
+                    rail="untracked",
+                    occurred_at="2026-01-02T00:00:00Z",
+                ),
+                "id": "suspense",
+            },
+        ]
+        allocations = [
+            {"source_leg_id": "source", "sink_leg_id": "dest", "source_amount_msat": 99, "sink_amount_msat": 99},
+            {"source_leg_id": "source", "sink_leg_id": "suspense", "source_amount_msat": 1, "sink_amount_msat": 1},
+        ]
+        report = validate_conservation(
+            base,
+            allocations=allocations,
+            component_type="native_transfer",
+            evidence_grade="exact",
+        )
+        codes = {issue["code"] for issue in report["issues"]}
+        self.assertIn("custody_suspense_review_required", codes)
+        self.assertIn("custody_suspense_time_mismatch", codes)
+
+        wrong_asset = [dict(leg) for leg in base]
+        wrong_asset[-1]["asset"] = "LBTC"
+        report = validate_conservation(
+            wrong_asset,
+            allocations=allocations,
+            component_type="manual_bridge",
+            evidence_grade="reviewed",
+        )
+        self.assertIn(
+            "custody_suspense_asset_mismatch",
+            {issue["code"] for issue in report["issues"]},
+        )
+
+    def test_reviewed_nm_bridge_allocates_residual_to_one_exact_source_slice(self):
+        _tx(self.conn, "out-2", "btc", "outbound", "BTC", 40)
+        _tx(self.conn, "in-3", "btc", "inbound", "BTC", 40)
+        component = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="manual_bridge",
+            evidence_kind="manual_reconstruction",
+            evidence_grade="reviewed",
+            legs=[
+                {**_leg("source", 100, tx="out", wallet="btc"), "id": "source-1"},
+                {**_leg("source", 40, tx="out-2", wallet="btc"), "id": "source-2"},
+                {**_leg("destination", 60, tx="in-1", wallet="btc"), "id": "dest-1"},
+                {**_leg("destination", 39, tx="in-2", wallet="btc"), "id": "dest-2"},
+                {**_leg("destination", 40, tx="in-3", wallet="btc"), "id": "dest-3"},
+                {**_leg("suspense", 1, rail="untracked", occurred_at=NOW), "id": "suspense"},
+            ],
+            allocations=[
+                {"source_leg_id": "source-1", "sink_leg_id": "dest-1", "source_amount_msat": 60, "sink_amount_msat": 60},
+                {"source_leg_id": "source-1", "sink_leg_id": "dest-2", "source_amount_msat": 39, "sink_amount_msat": 39},
+                {"source_leg_id": "source-1", "sink_leg_id": "suspense", "source_amount_msat": 1, "sink_amount_msat": 1},
+                {"source_leg_id": "source-2", "sink_leg_id": "dest-3", "source_amount_msat": 40, "sink_amount_msat": 40},
+            ],
+        )
+        self.assertTrue(component["validation"]["activatable"])
+        self.assertEqual(1, component["validation"]["suspense_msat"])
+        self.assertEqual(
+            "active", activate_component(self.conn, component["id"])["effective_state"]
+        )
+
+    def test_suspense_preserves_observed_fee_as_a_separate_allocation(self):
+        self.conn.execute("UPDATE transactions SET fee = 1 WHERE id = 'out'")
+        component = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="manual_bridge",
+            evidence_kind="manual_reconstruction",
+            evidence_grade="reviewed",
+            legs=[
+                {**_leg("source", 101, tx="out", wallet="btc"), "id": "source"},
+                {**_leg("destination", 60, tx="in-1", wallet="btc"), "id": "dest-1"},
+                {**_leg("destination", 39, tx="in-2", wallet="btc"), "id": "dest-2"},
+                {**_leg("suspense", 1, rail="untracked", occurred_at=NOW), "id": "suspense"},
+                {**_leg("fee", 1, tx="out", wallet="btc"), "id": "fee"},
+            ],
+            allocations=[
+                {"source_leg_id": "source", "sink_leg_id": "dest-1", "source_amount_msat": 60, "sink_amount_msat": 60},
+                {"source_leg_id": "source", "sink_leg_id": "dest-2", "source_amount_msat": 39, "sink_amount_msat": 39},
+                {"source_leg_id": "source", "sink_leg_id": "suspense", "source_amount_msat": 1, "sink_amount_msat": 1},
+                {"source_leg_id": "source", "sink_leg_id": "fee", "source_amount_msat": 1, "sink_amount_msat": 1},
+            ],
+        )
+        self.assertTrue(component["validation"]["activatable"])
+
+        bad = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="manual_bridge",
+            evidence_grade="reviewed",
+            legs=[
+                {**_leg("source", 101, tx="out", wallet="btc"), "id": "bad-source"},
+                {**_leg("destination", 60, tx="in-1", wallet="btc"), "id": "bad-dest-1"},
+                {**_leg("destination", 39, tx="in-2", wallet="btc"), "id": "bad-dest-2"},
+                {**_leg("suspense", 2, rail="untracked", occurred_at=NOW), "id": "bad-suspense"},
+            ],
+            allocations=[
+                {"source_leg_id": "bad-source", "sink_leg_id": "bad-dest-1", "source_amount_msat": 60, "sink_amount_msat": 60},
+                {"source_leg_id": "bad-source", "sink_leg_id": "bad-dest-2", "source_amount_msat": 39, "sink_amount_msat": 39},
+                {"source_leg_id": "bad-source", "sink_leg_id": "bad-suspense", "source_amount_msat": 2, "sink_amount_msat": 2},
+            ],
+        )
+        self.assertFalse(bad["validation"]["activatable"])
+        self.assertIn(
+            "custody_suspense_fee_coverage_mismatch",
+            {issue["code"] for issue in bad["validation"]["issues"]},
+        )
+
+    def test_unknown_future_role_returns_typed_validation(self):
+        report = validate_conservation(
+            [
+                {**_leg("source", 1, wallet="btc", occurred_at=NOW), "id": "source"},
+                {**_leg("future_custody_role", 1, occurred_at=NOW), "id": "future"},
+            ]
+        )
+        self.assertFalse(report["activatable"])
+        self.assertEqual(
+            "custody_component_leg_role_unknown", report["issues"][0]["code"]
+        )
+
+        component = self._balanced_component()
+        row = self.conn.execute(
+            "SELECT * FROM custody_component_legs WHERE component_id = ? "
+            "ORDER BY ordinal LIMIT 1",
+            (component["id"],),
+        ).fetchone()
+        payload = serialize_row(
+            SYNC_TABLE_MAP["custody_component_legs"],
+            row,
+            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        )
+        payload["role"] = "future_custody_role"
+        with self.assertRaises(AppError) as raised:
+            validate_wire_row("custody_component_legs", payload)
+        self.assertEqual("sync_schema_incompatible", raised.exception.code)
 
     def test_anchor_coverage_mismatch_cannot_activate_even_when_manually_reviewed(self):
         _tx(self.conn, "mismatch-in", "btc", "inbound", "BTC", 90)
@@ -1371,7 +2004,31 @@ class CustodyComponentApiTests(unittest.TestCase):
         )
 
     def test_reviewed_conversion_fee_activates_and_projects_end_to_end(self):
+        _tx(self.conn, "conversion-basis", "btc", "inbound", "BTC", 100)
         _tx(self.conn, "conversion-in", "liquid", "inbound", "USDT", 250)
+        self.conn.execute(
+            """
+            UPDATE transactions
+            SET occurred_at = '2025-01-01T00:00:00Z', kind = 'buy',
+                fiat_rate = 100000, fiat_rate_exact = '100000'
+            WHERE id = 'conversion-basis'
+            """
+        )
+        self.conn.execute(
+            """
+            UPDATE transactions
+            SET kind = CASE WHEN id = 'out' THEN 'sell' ELSE 'buy' END,
+                fiat_rate = 100000, fiat_rate_exact = '100000'
+            WHERE id IN ('out', 'conversion-in')
+            """
+        )
+        self.conn.execute(
+            """
+            UPDATE transactions
+            SET excluded = 1
+            WHERE id NOT IN ('conversion-basis', 'out', 'conversion-in')
+            """
+        )
         component = create_component(
             self.conn,
             workspace_id="ws",
@@ -1432,6 +2089,48 @@ class CustodyComponentApiTests(unittest.TestCase):
         processed = process_journals(self.conn, "ws", "profile")
 
         self.assertFalse(processed.get("custody_component_blockers", []))
+        self.assertFalse(processed["custody_quantity"]["blocked"])
+        self.assertEqual(0, processed["custody_quantity"]["issues"])
+        self.assertEqual(1, processed["cross_asset_pairs"])
+
+        classified = [
+            (row["location_kind"], row["amount_msat"])
+            for row in self.conn.execute(
+                """
+                SELECT location_kind, amount_msat
+                FROM journal_quantity_postings
+                WHERE transaction_id = 'out'
+                  AND location_kind IN ('external', 'fee')
+                ORDER BY location_kind, amount_msat
+                """
+            ).fetchall()
+        ]
+        self.assertEqual([("external", 90), ("fee", 10)], classified)
+
+        projected_entries = {
+            (row["transaction_id"], row["entry_type"], row["asset"], row["quantity"])
+            for row in self.conn.execute(
+                """
+                SELECT transaction_id, entry_type, asset, quantity
+                FROM journal_entries
+                WHERE transaction_id IN ('out', 'conversion-in')
+                """
+            ).fetchall()
+        }
+        self.assertIn(("out", "disposal", "BTC", -90), projected_entries)
+        self.assertIn(
+            ("conversion-in", "acquisition", "USDT", 250),
+            projected_entries,
+        )
+        self.assertTrue(
+            any(
+                transaction_id == "out"
+                and entry_type == "fee"
+                and asset == "BTC"
+                and quantity == -10
+                for transaction_id, entry_type, asset, quantity in projected_entries
+            )
+        )
 
     def test_conversion_requires_review_policy_and_balanced_exact_valuations(self):
         legs = [

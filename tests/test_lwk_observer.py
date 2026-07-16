@@ -16,6 +16,7 @@ from kassiber.core.chain_observer.lwk import (
     LwkObserver,
     _allocated_liquid_fee,
     _fee_sats_by_asset,
+    _lwk_coverage,
     _lwk_electrum_connection,
     _lwk_esplora_auth_options,
     _lwk_scan_to_index,
@@ -345,6 +346,45 @@ class LwkDescriptorContractTest(unittest.TestCase):
             20,
         )
         self.assertEqual(_lwk_scan_to_index(plan, None, {}), 7)
+
+    def test_unused_branch_coverage_is_the_exact_exclusive_request_bound(self):
+        points = _lwk_coverage(
+            branch_keys=("receive", "change"),
+            scan_to_index=7,
+            highest_used={},
+        )
+
+        self.assertEqual(
+            [
+                (point.branch_key, point.scanned_to, point.highest_used)
+                for point in points
+            ],
+            [("receive", 8, None), ("change", 8, None)],
+        )
+
+    def test_edge_discovery_does_not_claim_an_unscanned_following_gap(self):
+        # The scan request included 0..7. Finding index 7 schedules a wider
+        # next refresh; it does not prove that 8..15 were scanned already.
+        points = _lwk_coverage(
+            branch_keys=("receive", "change"),
+            scan_to_index=7,
+            highest_used={"receive": 7},
+        )
+
+        self.assertEqual(points[0].scanned_to, 8)
+        self.assertEqual(points[0].highest_used, 7)
+        self.assertEqual(points[1].scanned_to, 8)
+
+    def test_dependency_discovery_beyond_requested_minimum_does_not_add_a_gap(self):
+        points = _lwk_coverage(
+            branch_keys=("receive", "change"),
+            scan_to_index=7,
+            highest_used={"receive": 12},
+        )
+
+        self.assertEqual(points[0].scanned_to, 13)
+        self.assertEqual(points[0].highest_used, 12)
+        self.assertEqual(points[1].scanned_to, 8)
 
     def test_native_client_receives_auth_and_explicit_tls_policy(self):
         network = object()

@@ -6,6 +6,7 @@ import json
 import sqlite3
 from typing import Any, Mapping
 
+from ...db import custody_gap_review_transaction_id
 from ...errors import AppError
 from .crypto import canonical_json_bytes, sha256_hex
 from .events import AuthoredEvent, author_event
@@ -109,6 +110,15 @@ def _wire_payload(
             profile_id=profile_id,
             table=referenced_table,
             local_id=row[column],
+        )
+    if spec.table == "custody_gap_review_transactions":
+        # The v2 relation identity is a set identity over authored wire ids,
+        # not device-local transaction aliases.  Recompute only after every
+        # reference has been translated to its portable identity.
+        payload["id"] = custody_gap_review_transaction_id(
+            payload["review_id"],
+            payload["role"],
+            payload["transaction_id"],
         )
     return payload
 

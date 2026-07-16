@@ -9,6 +9,7 @@ import threading
 import unittest
 import zipfile
 from argparse import Namespace
+from copy import deepcopy
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -38,7 +39,7 @@ from kassiber.core import attachments as core_attachments
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import rp2 as rp2_engine
-from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
+from kassiber.core.engines import build_tax_engine
 from kassiber.core.reports import (
     ReportHooks,
     _generic_report_transfer_pair_rows,
@@ -72,6 +73,7 @@ from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
+from tests.custody_tax_helpers import finalized_tax_inputs
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -335,6 +337,32 @@ def _normalize_intra_audit(rows):
         ],
         key=lambda row: (row["occurred_at"], row["out_id"], row["in_id"]),
     )
+
+
+def _legacy_snapshot_identity(snapshot):
+    """Compare economic output while ignoring finalized-slice identifiers.
+
+    The historical JSON fixtures predate the custody projection and therefore
+    name imported rows directly. Finalized slice IDs and their provenance are
+    covered by custody-specific tests; these fixtures still guard the RP2
+    entries, holdings, quarantine, and transfer economics.
+    """
+
+    result = deepcopy(snapshot)
+    for transfer in result["intra_audit"]:
+        transfer["out_id"] = transfer.get(
+            "out_anchor_transaction_id", transfer["out_id"]
+        )
+        transfer["in_id"] = transfer.get(
+            "in_anchor_transaction_id", transfer["in_id"]
+        )
+        transfer["pairing_source"] = None
+        transfer.pop("transfer_group_id", None)
+    for pair in result["cross_asset_pairs"]:
+        pair["out_id"] = pair.pop("out_transaction_id", pair["out_id"])
+        pair["in_id"] = pair.pop("in_transaction_id", pair["in_id"])
+        pair.pop("component_id", None)
+    return result
 
 
 class ReviewRegressionTest(unittest.TestCase):
@@ -7943,10 +7971,19 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": "2026-02-01T12:00:00Z",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=[],
+            manual_pair_records=[
+                {
+                    "id": "reviewed-self-transfer",
+                    "out_transaction_id": "onchain-self-transfer-1-out",
+                    "in_transaction_id": "onchain-self-transfer-1-in",
+                    "kind": "manual",
+                    "policy": "carrying-value",
+                }
+            ],
         )
 
     def _direct_austrian_engine_inputs(self):
@@ -8037,7 +8074,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": "2025-03-01T09:00:00Z",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=[],
@@ -8140,7 +8178,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "kind": "swap",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=manual_pairs,
@@ -8204,15 +8243,25 @@ class ReviewRegressionTest(unittest.TestCase):
 
         rows = [
             _row("neu-buy", "wallet-a", "inbound", 100_000_000_000, "2024-06-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Vienna Neu buy", external_id="neu-buy"),
-            # Same-asset A -> B transfer: shared external_id auto-pairs the two legs into a MOVE.
+            # Same-asset A -> B transfer, explicitly reviewed because these are
+            # synthetic/import-shaped rows rather than observer authority.
             _row("xfer-out", "wallet-a", "outbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="withdrawal", description="Move A->B", external_id=_AT_TRANSFER_TXID),
             _row("xfer-in", "wallet-b", "inbound", 100_000_000_000, "2024-07-01T10:00:00Z", fiat_rate=30000, fiat_value=30000, kind="deposit", description="Move A->B", external_id=_AT_TRANSFER_TXID),
             _row("neu-sell", "wallet-b", "outbound", 30_000_000_000, "2025-03-01T09:00:00Z", fiat_rate=50000, fiat_value=15000, kind="withdrawal", description="Sell from B", external_id="neu-sell"),
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=[],
+            manual_pair_records=[
+                {
+                    "id": "reviewed-at-transfer",
+                    "out_transaction_id": "xfer-out",
+                    "in_transaction_id": "xfer-in",
+                    "kind": "manual",
+                    "policy": "carrying-value",
+                }
+            ],
         )
 
     def _direct_austrian_swap_payout_inputs(self):
@@ -8294,7 +8343,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": "2025-03-01T09:01:00Z",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=[],
@@ -8380,7 +8430,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": "2025-03-01T09:01:00Z",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=[],
@@ -8539,7 +8590,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "kind": "swap",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=manual_pairs,
@@ -8606,7 +8658,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": "2026-03-02T09:00:00Z",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=[],
@@ -8700,7 +8753,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": "2026-04-15T10:30:00Z",
             },
         ]
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=[
@@ -8776,7 +8830,8 @@ class ReviewRegressionTest(unittest.TestCase):
                     "created_at": occurred_at,
                 }
             )
-        return profile, TaxEngineLedgerInputs(
+        return profile, finalized_tax_inputs(
+            profile,
             rows=normalized_rows,
             wallet_refs_by_id={wallet_ref["id"]: wallet_ref},
             manual_pair_records=[],
@@ -11148,13 +11203,14 @@ class ReviewRegressionTest(unittest.TestCase):
         profile, inputs = self._direct_cross_asset_pair_engine_inputs()
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("generic_rp2_cross_asset_pair_snapshot.json")
-        self.assertEqual(actual, expected)
+        self.assertEqual(_legacy_snapshot_identity(actual), expected)
 
     def test_direct_generic_bitcoin_rail_carrying_value_pair_carries_basis(self):
         profile, inputs = self._direct_cross_asset_pair_engine_inputs()
-        carry_inputs = TaxEngineLedgerInputs(
+        carry_inputs = finalized_tax_inputs(
+            profile,
             rows=[
-                *inputs.rows,
+                *inputs.source_rows,
                 {
                     "id": "lbtc-sale-after-carry",
                     "wallet_id": "wallet-liquid",
@@ -11178,7 +11234,10 @@ class ReviewRegressionTest(unittest.TestCase):
             ],
             wallet_refs_by_id=inputs.wallet_refs_by_id,
             manual_pair_records=[
-                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+                {
+                    **dict(inputs.source_manual_pair_records[0]),
+                    "policy": "carrying-value",
+                },
             ],
         )
         actual = self._direct_engine_snapshot(profile, carry_inputs)
@@ -11246,7 +11305,8 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": occurred_at,
             }
 
-        inputs = TaxEngineLedgerInputs(
+        inputs = finalized_tax_inputs(
+            profile,
             rows=[
                 row("btc-buy-10k", "wallet-btc", "inbound", "BTC", "2026-01-01T00:00:00Z", 10000, "BTC buy"),
                 row("btc-to-lbtc-out", "wallet-btc", "outbound", "BTC", "2026-02-01T00:00:00Z", 20000, "BTC rail out"),
@@ -11293,11 +11353,17 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_direct_generic_bitcoin_rail_carry_quarantines_when_source_basis_missing(self):
         profile, inputs = self._direct_cross_asset_pair_engine_inputs()
-        carry_inputs = TaxEngineLedgerInputs(
-            rows=[row for row in inputs.rows if row["id"] != "cross-fund-1"],
+        carry_inputs = finalized_tax_inputs(
+            profile,
+            rows=[
+                row for row in inputs.source_rows if row["id"] != "cross-fund-1"
+            ],
             wallet_refs_by_id=inputs.wallet_refs_by_id,
             manual_pair_records=[
-                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+                {
+                    **dict(inputs.source_manual_pair_records[0]),
+                    "policy": "carrying-value",
+                },
             ],
         )
         actual = self._direct_engine_snapshot(profile, carry_inputs)
@@ -11308,14 +11374,16 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(set(quarantines), {"cross-out-leg", "cross-in-leg"})
         for quarantine in quarantines.values():
             self.assertEqual(quarantine["reason"], "bitcoin_rail_carry_basis_unresolved")
-            self.assertEqual(quarantine["detail"]["reason_code"], "insufficient_lots")
+            self.assertEqual(
+                quarantine["detail"]["reason_code"], "source_basis_unavailable"
+            )
             self.assertEqual(quarantine["detail"]["rail_pair"], "pair-cross-1")
 
     def test_direct_generic_bitcoin_rail_carry_clears_coarse_pricing_review(self):
         profile, inputs = self._direct_cross_asset_pair_engine_inputs()
         profile = {**dict(profile), "require_coarse_review": 1}
         rows = []
-        for row in inputs.rows:
+        for row in inputs.source_rows:
             if row["id"] == "cross-in-leg":
                 rows.append(
                     {
@@ -11327,11 +11395,15 @@ class ReviewRegressionTest(unittest.TestCase):
                 )
             else:
                 rows.append(row)
-        carry_inputs = TaxEngineLedgerInputs(
+        carry_inputs = finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=inputs.wallet_refs_by_id,
             manual_pair_records=[
-                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+                {
+                    **dict(inputs.source_manual_pair_records[0]),
+                    "policy": "carrying-value",
+                },
             ],
         )
         actual = self._direct_engine_snapshot(profile, carry_inputs)
@@ -11391,6 +11463,16 @@ class ReviewRegressionTest(unittest.TestCase):
             "--file", str(hot_csv),
         )
         self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--tx-out", _FIXTURE_SELF_TRANSFER_TXID,
+            "--tx-in", _FIXTURE_SELF_TRANSFER_TXID,
+            "--kind", "manual",
+            "--policy", "carrying-value",
+        )
+        self._assert_ok(payload, result, "transfers.pair")
 
         summary, result = self._run_json(
             "journals", "process",
@@ -11452,7 +11534,11 @@ class ReviewRegressionTest(unittest.TestCase):
         profile, inputs = self._direct_transfer_engine_inputs()
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
-        self.assertEqual(actual, expected)
+        self.assertEqual(_legacy_snapshot_identity(actual), expected)
+        self.assertEqual(actual["intra_audit"][0]["pairing_source"], "manual")
+        self.assertTrue(
+            actual["intra_audit"][0]["transfer_group_id"].startswith("pair:")
+        )
 
     def test_austrian_rp2_engine_snapshot_matches_fixture(self):
         """End-to-end: AT profile produces rp2-AT-marked notes, moving-average disposal math, and Alt/Neu classification."""
@@ -11471,7 +11557,8 @@ class ReviewRegressionTest(unittest.TestCase):
             "tax_long_term_days": 365,
             "gains_algorithm": "moving_average_at",
         }
-        inputs = TaxEngineLedgerInputs(
+        inputs = finalized_tax_inputs(
+            profile,
             rows=[
                 {
                     "id": "staking-receipt-1",
@@ -11632,7 +11719,7 @@ class ReviewRegressionTest(unittest.TestCase):
         profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
-        self.assertEqual(actual, expected)
+        self.assertEqual(_legacy_snapshot_identity(actual), expected)
 
     def test_austrian_rp2_sale_from_transfer_funded_wallet_uses_global_pool(self):
         """End-to-end (bitcoinaustria/kassiber#213): a Neu sale from a wallet funded by an internal
@@ -11715,7 +11802,8 @@ class ReviewRegressionTest(unittest.TestCase):
             }
 
         state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(
+                profile,
                 rows=[
                     _row(
                         "alt-buy",
@@ -11746,7 +11834,15 @@ class ReviewRegressionTest(unittest.TestCase):
                     ),
                 ],
                 wallet_refs_by_id=wallet_refs_by_id,
-                manual_pair_records=[],
+                manual_pair_records=[
+                    {
+                        "id": "reviewed-alt-transfer",
+                        "out_transaction_id": "xfer-out",
+                        "in_transaction_id": "xfer-in",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    }
+                ],
             )
         )
 
@@ -11824,7 +11920,8 @@ class ReviewRegressionTest(unittest.TestCase):
             }
 
         state = build_tax_engine(profile).build_ledger_state(
-            TaxEngineLedgerInputs(
+            finalized_tax_inputs(
+                profile,
                 rows=[
                     _row(
                         "alt-buy",
@@ -11864,7 +11961,15 @@ class ReviewRegressionTest(unittest.TestCase):
                     ),
                 ],
                 wallet_refs_by_id=wallet_refs_by_id,
-                manual_pair_records=[],
+                manual_pair_records=[
+                    {
+                        "id": "reviewed-mixed-transfer",
+                        "out_transaction_id": "xfer-out",
+                        "in_transaction_id": "xfer-in",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    }
+                ],
             )
         )
 
@@ -11884,7 +11989,26 @@ class ReviewRegressionTest(unittest.TestCase):
         entries = _normalize_engine_entries(state.entries)
 
         self.assertEqual(state.quarantines, [])
-        self.assertEqual(state.cross_asset_pairs, [])
+        self.assertEqual(len(state.cross_asset_pairs), 1)
+        payout_pair = state.cross_asset_pairs[0]
+        self.assertEqual(
+            {
+                "pair_id": payout_pair["pair_id"],
+                "kind": payout_pair["kind"],
+                "policy": payout_pair["policy"],
+                "out_transaction_id": payout_pair["out_transaction_id"],
+                "out_asset": payout_pair["out_asset"],
+                "in_asset": payout_pair["in_asset"],
+            },
+            {
+                "pair_id": "direct-payout:direct-payout-1",
+                "kind": "direct-swap-payout",
+                "policy": "carrying-value",
+                "out_transaction_id": "swap-payout-source",
+                "out_asset": "LBTC",
+                "in_asset": "BTC",
+            },
+        )
         self.assertEqual(
             state.direct_swap_payouts,
             [
@@ -11966,7 +12090,7 @@ class ReviewRegressionTest(unittest.TestCase):
     def test_austrian_direct_swap_payout_sorts_synthetic_rows(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
         rows = [
-            *inputs.rows,
+            *inputs.source_rows,
             {
                 "id": "btc-buy-after-payout",
                 "wallet_id": "wallet-liquid",
@@ -11988,10 +12112,11 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": "2025-03-02T09:00:00Z",
             },
         ]
-        sorted_inputs = TaxEngineLedgerInputs(
+        sorted_inputs = finalized_tax_inputs(
+            profile,
             rows=rows,
             wallet_refs_by_id=inputs.wallet_refs_by_id,
-            manual_pair_records=inputs.manual_pair_records,
+            manual_pair_records=inputs.source_manual_pair_records,
             direct_payout_records=inputs.direct_payout_records,
         )
         original_normalize = rp2_engine.normalize_tax_asset_inputs
@@ -11999,7 +12124,16 @@ class ReviewRegressionTest(unittest.TestCase):
 
         def spy_normalize(profile_arg, asset, asset_rows, wallet_refs_by_id, pairs, **kwargs):
             if asset == "BTC":
-                btc_orders.append([str(row["id"]) for row in asset_rows])
+                btc_orders.append(
+                    [
+                        (
+                            str(row.get("journal_transaction_id") or row["id"])
+                            if str(row["id"]).startswith("custody-tax:")
+                            else str(row["id"])
+                        )
+                        for row in asset_rows
+                    ]
+                )
             return original_normalize(
                 profile_arg,
                 asset,
@@ -12013,14 +12147,18 @@ class ReviewRegressionTest(unittest.TestCase):
             build_tax_engine(profile).build_ledger_state(sorted_inputs)
 
         self.assertTrue(btc_orders)
-        first_btc_order = btc_orders[0]
+        positions = {
+            row_id: (batch_index, row_index)
+            for batch_index, batch in enumerate(btc_orders)
+            for row_index, row_id in enumerate(batch)
+        }
         self.assertLess(
-            first_btc_order.index("direct-payout:direct-payout-1:in"),
-            first_btc_order.index("btc-buy-after-payout"),
+            positions["direct-payout:direct-payout-1:in"],
+            positions["btc-buy-after-payout"],
         )
         self.assertLess(
-            first_btc_order.index("direct-payout:direct-payout-1:out"),
-            first_btc_order.index("btc-buy-after-payout"),
+            positions["direct-payout:direct-payout-1:out"],
+            positions["btc-buy-after-payout"],
         )
 
     def test_generic_direct_swap_payout_uses_reviewed_sale_proceeds(self):
@@ -12419,7 +12557,8 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
         profile, _ = self._direct_transfer_engine_inputs()
-        inputs = TaxEngineLedgerInputs(
+        inputs = finalized_tax_inputs(
+            profile,
             rows=[
                 {
                     "id": "transfer-out",
@@ -12480,7 +12619,15 @@ class ReviewRegressionTest(unittest.TestCase):
                     "account_label": "Treasury",
                 },
             },
-            manual_pair_records=[],
+            manual_pair_records=[
+                {
+                    "id": "reviewed-unfunded-transfer",
+                    "out_transaction_id": "transfer-out",
+                    "in_transaction_id": "transfer-in",
+                    "kind": "manual",
+                    "policy": "carrying-value",
+                }
+            ],
         )
         state = build_tax_engine(profile).build_ledger_state(inputs)
         self.assertEqual(state.entries, [])
@@ -12488,7 +12635,10 @@ class ReviewRegressionTest(unittest.TestCase):
         reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}
         self.assertEqual(
             reasons_by_id,
-            {"transfer-out": "insufficient_lots", "transfer-in": "insufficient_lots"},
+            {
+                "transfer-out": "insufficient_lots",
+                "transfer-in": "derived_transfer_group_blocked",
+            },
         )
         inbound_detail = json.loads(
             next(
@@ -12497,19 +12647,20 @@ class ReviewRegressionTest(unittest.TestCase):
                 if q["transaction_id"] == "transfer-in"
             )
         )
-        self.assertEqual(inbound_detail["paired_leg"], "inbound")
+        self.assertIs(inbound_detail["paired_leg"], True)
+        self.assertEqual(inbound_detail["blocked_by_reason"], "insufficient_lots")
 
     def test_transfer_pricing_review_targets_used_price_leg(self):
         profile, inputs = self._direct_transfer_engine_inputs()
         # Coarse pricing only quarantines when the profile opts into review.
         profile = {**dict(profile), "require_coarse_review": 1}
         out_row = {
-            **inputs.rows[1],
+            **inputs.source_rows[1],
             "pricing_source_kind": pricing.SOURCE_MANUAL_RATE_CACHE,
             "pricing_quality": pricing.QUALITY_EXACT,
         }
         unused_coarse_in_row = {
-            **inputs.rows[2],
+            **inputs.source_rows[2],
             "pricing_source_kind": pricing.SOURCE_FMV_PROVIDER,
             "pricing_quality": pricing.QUALITY_COARSE_FALLBACK,
         }
@@ -12850,6 +13001,16 @@ class ReviewRegressionTest(unittest.TestCase):
             "--file", str(hot_csv),
         )
         self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--tx-out", _FIXTURE_SELF_TRANSFER_TXID,
+            "--tx-in", _FIXTURE_SELF_TRANSFER_TXID,
+            "--kind", "manual",
+            "--policy", "carrying-value",
+        )
+        self._assert_ok(payload, result, "transfers.pair")
         summary, result = self._run_json(
             "journals", "process",
             "--workspace", "Main",

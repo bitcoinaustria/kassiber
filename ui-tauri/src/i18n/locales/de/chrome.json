@@ -137,6 +137,10 @@
       "label": "Swaps und Übertragungen durchsuchen",
       "placeholder": "Wallet, Asset-Paar, txid suchen…"
     },
+    "custodyGaps": {
+      "label": "Verwahrungslücken durchsuchen",
+      "placeholder": "Fehlende Wallets und mögliche Rückflüsse suchen…"
+    },
     "transactions": {
       "label": "Transaktionen durchsuchen",
       "placeholder": "Gegenpartei, Tag, Account suchen…"

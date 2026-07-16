@@ -484,8 +484,9 @@ class RegtestHarnessTest(unittest.TestCase):
             {
                 "from_wallet": route["from_wallet"],
                 "to_wallet": route["to_wallet"],
-                "received_msat": route["received_msat"],
-                "pairing_source": "ownership_derived",
+                "amount_msat": route["received_msat"],
+                "custody_state": "internal_verified",
+                "evidence_reason": "ownership_derived",
             }
             for route in expected_routes
         ]
@@ -496,7 +497,7 @@ class RegtestHarnessTest(unittest.TestCase):
             if args[:2] == ("transfers", "list"):
                 return {"data": []}
             if args[:3] == ("journals", "transfers", "list"):
-                return {"data": {"same_asset_transfers": observed_rows}}
+                return {"data": {"custody_transfers": observed_rows}}
             raise AssertionError(f"Unexpected CLI call: {args!r}")
 
         with patch.object(regtest_demo, "run_cli", side_effect=fake_run_cli), patch.object(
@@ -532,6 +533,37 @@ class RegtestHarnessTest(unittest.TestCase):
                     scenario,
                 )
         blocked_seed.assert_not_called()
+
+    def test_full_accounting_demo_accepts_exact_recorded_fanout_proof(self):
+        scenario = regtest_demo.load_scenario()
+        observed_rows = [
+            {
+                "from_wallet": route["from_wallet"],
+                "to_wallet": route["to_wallet"],
+                "amount_msat": route["received_msat"],
+                "custody_state": "internal_verified",
+                "evidence_reason": "recorded_fanout",
+            }
+            for route in regtest_demo._expected_ownership_fanout_routes(scenario)
+        ]
+
+        def fake_run_cli(_data_root, *args):
+            if args[:2] == ("transfers", "list"):
+                return {"data": []}
+            if args[:3] == ("journals", "transfers", "list"):
+                return {"data": {"custody_transfers": observed_rows}}
+            raise AssertionError(f"Unexpected CLI call: {args!r}")
+
+        with patch.object(regtest_demo, "run_cli", side_effect=fake_run_cli), patch.object(
+            regtest_demo,
+            "_seed_rates_and_process",
+            return_value=({"processed_transactions": 1}, [], {"seeded": True}),
+        ):
+            proof = regtest_demo._assert_ownership_self_transfer_matching(
+                Path("/tmp/kassiber-proof"), scenario
+            )
+
+        self.assertEqual(len(proof["observed_routes"]), 2)
 
     def test_full_accounting_demo_manifest_validation_fails_closed(self):
         scenario = regtest_demo.load_scenario()

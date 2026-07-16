@@ -648,6 +648,20 @@ def _transaction_merge_updates(
     authoritative_chain_observer: bool = False,
 ):
     updates = {}
+    existing_external_id_kind = (
+        existing.get("external_id_kind")
+        if hasattr(existing, "get")
+        else (
+            existing["external_id_kind"]
+            if "external_id_kind" in existing.keys()
+            else None
+        )
+    )
+    if (
+        normalized.get("external_id_kind") == "txid"
+        and existing_external_id_kind != "txid"
+    ):
+        updates["external_id_kind"] = "txid"
     authoritative_amount_changed = False
     if authoritative_chain_observer:
         incoming_amount = btc_to_msat(normalized["amount"])
@@ -1124,6 +1138,59 @@ def _exchange_evidence_matchable(record: ImportRow) -> bool:
     return record.get("_exchange_evidence_matchable") is not False
 
 
+_NATIVE_TXID_KEYS = frozenset(
+    {"txid", "txhash", "transactionid", "transactionhash", "onchaintxid"}
+)
+
+
+def _canonical_txid(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if len(text) != 64:
+        return None
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return None
+    return text
+
+
+def _external_id_kind(
+    record: ImportRow,
+    raw_payload: Mapping[str, Any] | None,
+    external_id: str,
+) -> str | None:
+    """Persist only a closed public type for native transaction identity."""
+
+    canonical_external_id = _canonical_txid(external_id)
+    if canonical_external_id is None:
+        return None
+    declared = str(
+        record.get("external_id_kind")
+        or (raw_payload or {}).get("external_id_kind")
+        or ""
+    ).strip().lower()
+    if declared in {"txid", "transaction_hash", "onchain_txid"}:
+        return "txid"
+    payloads: list[Mapping[str, Any]] = [record]
+    if raw_payload is not None:
+        payloads.append(raw_payload)
+        for key in ("tx", "ownership_graph"):
+            nested = raw_payload.get(key)
+            if isinstance(nested, Mapping):
+                payloads.append(nested)
+    for payload in payloads:
+        for key, value in payload.items():
+            normalized_key = "".join(
+                char for char in str(key).lower() if char.isalnum()
+            )
+            if (
+                normalized_key in _NATIVE_TXID_KEYS
+                and _canonical_txid(value) == canonical_external_id
+            ):
+                return "txid"
+    return None
+
+
 def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[str, Any]:
     raw_amount = dec(record.get("amount"))
     direction = normalize_import_direction(record.get("direction"), raw_amount)
@@ -1219,8 +1286,14 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
             swap_refund_funding_vout = None
         if swap_refund_funding_vout is not None and swap_refund_funding_vout < 0:
             swap_refund_funding_vout = None
+    external_id = str(record.get("txid") or record.get("id") or "")
     return {
-        "external_id": str(record.get("txid") or record.get("id") or ""),
+        "external_id": external_id,
+        "external_id_kind": _external_id_kind(
+            record,
+            raw_payload if isinstance(raw_payload, Mapping) else None,
+            external_id,
+        ),
         "occurred_at": occurred_at,
         "confirmed_at": confirmed_at,
         "direction": direction,
@@ -1356,7 +1429,8 @@ def insert_wallet_records(
         conn.execute(
             """
             INSERT INTO transactions(
-                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                id, workspace_id, profile_id, wallet_id, external_id,
+                external_id_kind, fingerprint,
                 occurred_at, confirmed_at, direction, asset, amount, fee,
                 amount_includes_fee, fiat_currency,
                 fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
@@ -1367,7 +1441,7 @@ def insert_wallet_records(
                 payment_hash, payment_hash_source, swap_refund_funding_txid,
                 swap_refund_funding_vout,
                 created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -1375,6 +1449,7 @@ def insert_wallet_records(
                 profile["id"],
                 wallet["id"],
                 normalized["external_id"] or None,
+                normalized["external_id_kind"],
                 fingerprint,
                 normalized["occurred_at"],
                 normalized["confirmed_at"],

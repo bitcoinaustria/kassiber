@@ -102,6 +102,66 @@ same verification surface.
     additionally proved pinned LWK 0.18.0's insecure Rustls verifier unusable;
     keep that named compatibility route until a packaged LWK release contains
     the upstream signature-scheme fix and passes the local oracle.
+- [x] **Custody lineage and missing-wallet reconciliation.** Implement the
+  bounded architecture in
+  [`docs/plan/14-custody-lineage.md`](docs/plan/14-custody-lineage.md). One
+  profile is one legal owner; there is no "all wallets imported" attestation.
+  The terminal invariant is: every observed quantity is represented exactly
+  once, while unresolved custody never becomes a taxable event.
+  - [x] Publish the architecture, vocabulary, scope guards, executable gates,
+    flagship OG-treasury fixture, and terminal stop state.
+  - [x] **Gate 0 — honest pre-split behavior.** Remove row-deletion suspense;
+    retain the conservative disposal plus hard quarantine until the quantity
+    split exists; prove exact source debit, fee separation, wallet holdings,
+    and that the spent source quantity cannot fund a later disposal.
+  - [x] **Gate 1 — evidence and projection boundary.** Add stable quantity
+    identities, immutable evidence snapshots for authored claims, and canonical
+    physical-event identity; define the single custody
+    claim arbitrator; split quantity projection from finalized tax input; add
+    custody suspense. Complete when a full-engine regression proves candidate,
+    suspense, conflict, and failed-component quantities cannot reach RP2 while
+    a known source-wallet debit still affects observed quantity. Run the first
+    architecture review here before continuing.
+  - [x] **Gate 2 — interpretation parity.** Port exact same-txid moves,
+    policy/output ownership, fan-out/consolidation, manual pairs, direct payouts,
+    swaps/refunds, Lightning lifecycle, and active custody components into the
+    one arbitrator. Add deterministic, bounded, full-history 1:N/N:1/N:M custody
+    candidates and durable reviewed bridges. Complete when known-correct
+    differential fixtures match, the complete-policy and missing-Whirlpool
+    flagship cases pass, and no later phase can restore or fallback-book an
+    already decided quantity. Add an explicit activatable `suspense` component
+    sink and keep `unresolved` non-activatable. Because basis is global across
+    wallets, later tax output stays provisional when resolving an earlier
+    suspense slice can change lot selection.
+  - [x] **Gate 3 — product completion.** Add the Custody gaps queue, lineage
+    timeline, guided bridge/residual workflow, downstream and filed-report
+    impact preview, CLI/daemon kinds, localized desktop allowlists, AI-safe read
+    and consented write tools, privacy receipts, migration, replication, and
+    audit history. Complete when the workflow works without raw component JSON,
+    old authored history survives migration, and deterministic operation remains
+    fully usable without AI.
+  - [x] **Gate 4 — verification and stop.** Run differential, property,
+    migration, performance, fast replay, Bitcoin Core, Electrum, Silent
+    Payments, Liquid/Boltz, CLN/LND, desktop, and repository quality gates.
+    Delete superseded ownership/matching precedence, withholding/restoration,
+    and fallback-disposal paths. Run a simplicity pass plus an independent final
+    architecture/security/privacy and merge-readiness review. Complete only when
+    every terminal-stop condition in the plan is met and no issue-scoped P0/P1
+    remains; move unrelated P2+ findings to separate TODO items and stop.
+
+- [x] Scale custody-gap discovery beyond the former 50k-input and 87-source
+  all-or-nothing ceilings. Large books now use a bounded typed/high-value source
+  worklist and amount-indexed return ranges, keep incomplete sampled candidates
+  review-only, quarantine only exact typed source boundaries, and expose stable
+  version-bound pages without rerunning discovery. Long-lived-book regressions
+  and the 100k-1m benchmark prove useful candidates still surface while
+  incomplete searches remain explicit.
+
+- [x] Harden the pre-msat legacy schema migration so rebuilding a very old
+  database preserves columns added after that historical table shape. Add an
+  ancient-schema fixture and assert column/data parity after migration. This
+  predates the custody-lineage branch and is intentionally outside its stop
+  state.
 
 - [x] Harden the CLI for one-shot agents: `--machine` now implies
   `--non-interactive`; `commands describe` exposes an argparse-derived command
@@ -166,7 +226,8 @@ same verification surface.
   each transaction as a self-transfer / outbound payment / inbound receipt. Pure
   engine in [`kassiber/core/ownership.py`](kassiber/core/ownership.py) matches on
   canonical scriptPubKey (address-string fallback for Liquid confidential
-  addresses), seeds free from inventory + imported txids, derives descriptors
+  addresses), seeds from output inventory, exact stored receive outpoints,
+  local transaction graphs, and address lists, derives active/retired policies
   offline up to `--scan-to-index`, and accepts an injected on-chain fetcher
   (`--verify-on-chain`) so read surfaces stay cache-only. AI variant drops
   scriptPubKeys / derivation paths / address indices.
@@ -1026,21 +1087,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     `max(1% of out, 2500 sats)`. A real fix needs out-of-band fee recovery (raw
     tx / NBXplorer) or a surfaced "fee unknown" state on the disposal; the marker
     added here is the groundwork.
-  - [x] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
-    one tx pays an owned wallet + a small external address + change, and the
-    owned destination synced the shared txid, `detect_intra_transfers` paired the
-    self-transfer leg and pre-empted the on-chain ownership deriver, so the
-    external payment (under `max(1% of out, 2500 sats)`) fell through to a
-    non-taxable MOVE fee instead of a taxable disposal. Fixed via
-    `ownership_transfers.graph_partial_payment_out_ids`: after
-    `detect_intra_transfers`, the engine withholds any 1-out/1-in pair whose
-    outbound graph is single-source and shows value leaving to a non-owned
-    recipient (recorded `amount` > owned-to-other-wallets value), so
-    `derive_ownership_transfers` re-derives it — booking the owned MOVE and
-    keeping the external residual as a real disposal. `detect_intra` stays
-    authoritative for graph-less (CSV) rows and pure self-transfers. Tests:
-    `test_ownership_transfers.GraphPartialPaymentTests`,
-    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest`.
+  - [x] **Sub-ceiling external payment absorbed as a transfer fee (P2).** The
+    canonical custody interpreter now decomposes graph-proven owned legs and
+    external residuals before tax projection. Exact quantities are arbitrated
+    once, so the owned slice becomes a MOVE and the external slice remains a
+    disposal even when it is smaller than the old fee heuristic. Pure recorded
+    pairs still require exact conservation; graphless ambiguity fails closed.
+    Tests: `test_rp2_ownership_transfers.PartialPaymentCustodyArbitrationEngineTest`.
   - [x] **Cross-wallet consolidation quarantined instead of booked (was implicit
     in the fan-out limitation).** A spend funded by inputs from two or more owned
     wallets (consolidating e.g. Cold + Hot into Savings) was the one self-transfer
@@ -1057,17 +1110,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     readable esplora graph, exact conservation; anything else still quarantines.
     Tests: `test_ownership_transfers.MultiSourceConsolidationDeriverTests`,
     `test_rp2_ownership_transfers.MultiSourceConsolidationEngineTest`.
-  - [x] **Withheld partial-payment pair orphaned when the deriver declines (P1,
-    regression introduced with the withhold above).** `graph_partial_payment_out_ids`
-    withheld the `detect_intra` pair unconditionally; when `derive_ownership_transfers`
-    then DECLINED (ambiguous owned output shared by two wallets, ambiguous
-    destination, amount mismatch) it produced no derived pair and no override, so
-    the source booked a FULL disposal and the destination a phantom acquisition
-    with NO quarantine (the `fanout_holds` premise suppressed the block). Fixed in
-    `rp2.py`: the withheld pairs are kept and ROLLED BACK to their original
-    self-transfer when the deriver did not handle the source (not dropped, not
-    overridden); restored sources are excluded from the block quarantine. Test:
-    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest.test_withhold_rolls_back_when_owned_output_is_ambiguous`.
+  - [x] **Ambiguous partial payment cannot leak a phantom leg (P1).** If an
+    owned output maps to multiple wallets or the physical event does not
+    conserve, canonical arbitration emits a blocking custody conflict for the
+    complete event. No partial decision reaches the finalized tax projection,
+    so neither a full disposal nor a phantom acquisition can be booked. Test:
+    `test_rp2_ownership_transfers.PartialPaymentCustodyArbitrationEngineTest.test_graph_proven_external_residual_blocks_when_owned_output_is_ambiguous`.
   - [x] **Multi-source consolidation double-counts an off-group destination receipt
     (P1, regression).** `has_external_receipt` required EXACT amount equality, so a
     destination receipt recorded under a different id at a slightly different amount
@@ -1220,10 +1268,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     Tests: `test_ownership_transfers.ConflictingSpendTests`. (The broader RBF
     *dropped-import* phantom-disposal P3 above — opposite shape — remains separate.)
   - [x] **Direct-payout common path returned engine rows unsorted (P3, latent,
-    round-2 deep audit).** `_direct_payout_synthetic_rows`' no-payout early-return
-    returned rows in caller order, skipping the `_transaction_row_sort_key` sort the
-    payout path applies — masked in production only because the caller pre-sorts via
-    SQL. Fixed: the early-return now sorts unconditionally. (The gate-ordering /
+    round-2 deep audit).** The former synthetic direct-payout path returned rows
+    in caller order on its no-payout branch. That path was fixed at the time and
+    has since been removed by the custody-lineage cutover: finalized custody tax
+    projection now owns event ordering before RP2. (The gate-ordering /
     same-timestamp determinism part of this finding was already addressed by the
     F5 same-timestamp fix, which removed the old `_gate_order_key`.)
   - [x] **Cross-chain script-collision guard defeated by blank chain/network (P3,

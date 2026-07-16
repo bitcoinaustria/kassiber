@@ -60,6 +60,40 @@ def test_resync_upgrades_ownership_graph_without_an_unrelated_column_change():
     assert updates == {"raw_json": normalized["raw_json"]}
 
 
+def test_normalization_persists_explicit_native_txid_type_without_raw_payload():
+    txid = "ab" * 32
+
+    normalized = normalize_import_record(
+        {
+            "txid": txid,
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "outbound",
+            "amount": "1",
+            "raw_json": "{}",
+        }
+    )
+
+    assert normalized["external_id"] == txid
+    assert normalized["external_id_kind"] == "txid"
+
+
+def test_normalization_does_not_type_bare_64_hex_provider_id_as_txid():
+    provider_id = "cd" * 32
+
+    normalized = normalize_import_record(
+        {
+            "id": provider_id,
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "direction": "outbound",
+            "amount": "1",
+            "raw_json": "{}",
+        }
+    )
+
+    assert normalized["external_id"] == provider_id
+    assert normalized["external_id_kind"] is None
+
+
 def test_resync_does_not_replace_same_or_older_ownership_evidence_by_itself():
     existing, normalized = _records(
         {"txid": "ab" * 32, "ownership_graph_version": 2, "marker": "kept"},

@@ -11,8 +11,21 @@ import sqlite3
 import uuid
 from typing import Any, Mapping
 
+from ...db import (
+    custody_gap_review_transaction_id,
+    custody_gap_review_transaction_v1_id,
+)
 from ...errors import AppError
 from ...time_utils import now_iso, parse_timestamp
+from .. import freshness as core_freshness
+from .. import output_inventory as core_output_inventory
+from ..chain_observer import delete_wallet_observer_state
+from ..ownership_policy_epochs import (
+    canonical_wallet_config_identity,
+    policy_identity_material,
+    private_policy_material,
+    roll_wallet_policy_epoch,
+)
 from ..repo import invalidate_journals
 from .bundle import (
     BUNDLE_MANIFEST_DOMAIN,
@@ -43,6 +56,9 @@ from .schema_allowlist import (
     REFERENCE_TABLES,
     SYNC_TABLE_MAP,
     TableSpec,
+    merge_public_wallet_config,
+    private_wallet_policy_requires_review,
+    public_wallet_config,
     validate_wire_row,
 )
 
@@ -52,6 +68,7 @@ _CUSTODY_COMPONENT_TABLES = frozenset(
         "custody_components",
         "custody_component_legs",
         "custody_component_allocations",
+        "custody_component_evidence_commitments",
     }
 )
 
@@ -70,6 +87,86 @@ class BundleImportResult:
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+
+
+def _normalized_review_relation_wire_row(
+    event: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], str | None]:
+    """Translate one verified ordinal v1 relation to the strict v2 row shape.
+
+    Signature verification always happens against the untouched event.  This
+    compatibility adapter runs only at validation/apply time so a signed event
+    delayed in a mailbox across an application upgrade can advance its replica
+    stream without making ``ordinal`` part of the current sync schema again.
+    """
+
+    payload = event.get("payload") or {}
+    wire_row = payload.get("row") if isinstance(payload, Mapping) else None
+    if not isinstance(wire_row, Mapping):
+        raise AppError("row upsert event has no row", code="sync_bundle_invalid")
+    if str(event.get("entity_table")) != "custody_gap_review_transactions" or (
+        "ordinal" not in wire_row
+    ):
+        return wire_row, None
+    v1_fields = {
+        "id",
+        "review_id",
+        "workspace_id",
+        "profile_id",
+        "ordinal",
+        "role",
+        "transaction_id",
+        "created_at",
+    }
+    if set(wire_row) != v1_fields:
+        raise AppError(
+            "legacy custody review relation does not match its signed schema",
+            code="sync_schema_forbidden",
+            details={
+                "table": "custody_gap_review_transactions",
+                "unknown_fields": sorted(set(wire_row) - v1_fields),
+                "missing_fields": sorted(v1_fields - set(wire_row)),
+            },
+            retryable=False,
+        )
+    ordinal = wire_row.get("ordinal")
+    role = str(wire_row.get("role") or "")
+    review_id = str(wire_row.get("review_id") or "")
+    transaction_id = str(wire_row.get("transaction_id") or "")
+    legacy_id = str(wire_row.get("id") or "")
+    if (
+        type(ordinal) is not int
+        or ordinal < 0
+        or role not in {"source", "return"}
+        or not review_id
+        or not transaction_id
+        or legacy_id
+        != custody_gap_review_transaction_v1_id(review_id, role, ordinal)
+    ):
+        raise AppError(
+            "legacy custody review relation identity is invalid",
+            code="sync_bundle_invalid",
+        )
+    try:
+        entity_key = json.loads(str(event.get("entity_key")))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError(
+            "legacy custody review relation key is invalid",
+            code="sync_bundle_invalid",
+        ) from exc
+    if entity_key != [legacy_id]:
+        raise AppError(
+            "legacy custody review relation key does not match its row",
+            code="sync_bundle_invalid",
+        )
+    normalized = dict(wire_row)
+    normalized.pop("ordinal")
+    normalized["id"] = custody_gap_review_transaction_id(
+        review_id,
+        role,
+        transaction_id,
+    )
+    return normalized, legacy_id
 
 
 def _event_from_db(row) -> dict[str, Any]:
@@ -698,8 +795,14 @@ def _prepare_actual_row(
                 # A malformed local wallet config must not abort a remote
                 # merge; treat it as empty and retain only safe incoming keys.
                 pass
-        incoming_config = wire_row.get("config_json") if isinstance(wire_row.get("config_json"), dict) else {}
-        actual["config_json"] = _json(local_config | incoming_config)
+        incoming_config = (
+            wire_row.get("config_json")
+            if isinstance(wire_row.get("config_json"), dict)
+            else {}
+        )
+        actual["config_json"] = _json(
+            merge_public_wallet_config(local_config, incoming_config)
+        )
     else:
         for column in spec.json_columns:
             actual[column] = _json(actual[column]) if actual[column] is not None else None
@@ -734,6 +837,12 @@ def _prepare_actual_row(
                 table=referenced_table,
                 wire_id=actual[column],
             )
+    legacy_mapped_anchor = (
+        actual.get("transaction_id")
+        if spec.table == "custody_component_legs"
+        and "anchor_transaction_id" not in wire_row
+        else None
+    )
     if spec.table == "custody_component_legs":
         # Live FKs are intentionally retractable while the immutable anchor
         # survives. A peer may receive an older/live authored leg after its
@@ -784,7 +893,7 @@ def _prepare_actual_row(
         actual["anchor_transaction_id"] = (
             existing_anchor["anchor_transaction_id"]
             if existing_anchor
-            else actual.get("transaction_id")
+            else legacy_mapped_anchor
         )
     if spec.table == "custody_components" and (
         "expected_leg_count" not in wire_row
@@ -870,6 +979,25 @@ def _prepare_actual_row(
                 ),
             )
             actual["document_id"] = document_id
+    if spec.table == "custody_gap_review_transactions":
+        # A delayed v1 event and a current v2 replay can name the same authored
+        # set member with different row ids.  The semantic uniqueness is the
+        # review/role/transaction tuple; converge on the materialized row and
+        # record both wire ids as aliases instead of tripping the UNIQUE fence.
+        existing_relation = conn.execute(
+            """
+            SELECT id
+            FROM custody_gap_review_transactions
+            WHERE review_id = ? AND role = ? AND transaction_id = ?
+            """,
+            (
+                actual.get("review_id"),
+                actual.get("role"),
+                actual.get("transaction_id"),
+            ),
+        ).fetchone()
+        if existing_relation is not None:
+            actual["id"] = str(existing_relation["id"])
     local_pk = tuple(actual[column] for column in spec.primary_key)
     if len(spec.primary_key) == 1 and local_pk[0] is not None:
         _record_id_map(
@@ -955,12 +1083,73 @@ def _apply_row_upsert(
     attachments_root: Path | None,
     created_files: list[Path],
 ) -> tuple[bool, int]:
-    payload = event.get("payload") or {}
-    wire_row = payload.get("row") if isinstance(payload, Mapping) else None
-    if not isinstance(wire_row, Mapping):
-        raise AppError("row upsert event has no row", code="sync_bundle_invalid")
+    wire_row, legacy_relation_wire_id = _normalized_review_relation_wire_row(event)
     spec = validate_wire_row(str(event["entity_table"]), wire_row)
     key = str(event["entity_key"])
+    if spec.table == "custody_component_evidence_commitments":
+        # Commitment ids are deterministic by component + ordinal.  Once a
+        # slot exists, an identical replay is a no-op and a differing payload
+        # is an explicit high-stakes conflict.  It must never be resolved by
+        # LWW because that would rewrite what the activating author committed.
+        actual, local_pk = _prepare_actual_row(
+            conn,
+            book=book,
+            spec=spec,
+            wire_row=wire_row,
+            blobs=parsed.blobs,
+            attachments_root=attachments_root,
+            created_files=created_files,
+        )
+        existing = conn.execute(
+            "SELECT * FROM custody_component_evidence_commitments WHERE id = ?",
+            local_pk,
+        ).fetchone()
+        if existing is not None:
+            differing = [
+                field
+                for field in sorted(spec.immutable_fields)
+                if existing[field] != actual[field]
+            ]
+            conflicts = 0
+            for field in differing:
+                _, old_event = _field_state(
+                    conn,
+                    profile_id=book["profile_id"],
+                    table=spec.table,
+                    key=key,
+                    field=field,
+                )
+                if old_event is None:
+                    prior = conn.execute(
+                        """
+                        SELECT * FROM sync_events
+                        WHERE profile_id = ? AND entity_table = ?
+                          AND entity_key = ? AND id != ?
+                        ORDER BY hlc DESC, replica_id DESC, replica_seq DESC, id DESC
+                        LIMIT 1
+                        """,
+                        (book["profile_id"], spec.table, key, event["id"]),
+                    ).fetchone()
+                    old_event = (
+                        _event_from_db(prior)
+                        if prior is not None
+                        else {"id": f"local-row:{existing['id']}"}
+                    )
+                conflicts += int(
+                    _create_conflict(
+                        conn,
+                        profile_id=book["profile_id"],
+                        workspace_id=book["workspace_id"],
+                        table=spec.table,
+                        key=key,
+                        field=field,
+                        old_event=old_event,
+                        new_event=event,
+                        old_value=existing[field],
+                        new_value=actual[field],
+                    )
+                )
+            return False, conflicts
     exists_state, exists_event = _field_state(
         conn,
         profile_id=book["profile_id"],
@@ -1032,6 +1221,31 @@ def _apply_row_upsert(
             merged[field] = old_value
             winning_events[field] = old_event
 
+    prior_wallet = None
+    prior_wallet_material: dict[str, Any] | None = None
+    prior_wallet_identity: dict[str, Any] | None = None
+    prior_public_wallet_config: dict[str, Any] | None = None
+    private_policy_review_required = False
+    if spec.table == "wallets":
+        prior_wallet = conn.execute(
+            "SELECT * FROM wallets WHERE id = ?",
+            (merged["id"],),
+        ).fetchone()
+        if prior_wallet is not None:
+            try:
+                prior_config = json.loads(prior_wallet["config_json"] or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                prior_config = {}
+            if not isinstance(prior_config, Mapping):
+                prior_config = {}
+            prior_wallet_material = private_policy_material(prior_config)
+            prior_wallet_identity = policy_identity_material(prior_config)
+            prior_public_wallet_config = public_wallet_config(prior_config)
+            private_policy_review_required = private_wallet_policy_requires_review(
+                prior_config,
+                merged.get("config_json"),
+            )
+
     actual, _ = _prepare_actual_row(
         conn,
         book=book,
@@ -1041,7 +1255,87 @@ def _apply_row_upsert(
         attachments_root=attachments_root,
         created_files=created_files,
     )
-    _insert_or_update_with_collision_notice(conn, book=book, spec=spec, actual=actual, event=event)
+    if legacy_relation_wire_id is not None:
+        _record_id_map(
+            conn,
+            profile_id=book["profile_id"],
+            table="custody_gap_review_transactions",
+            wire_id=legacy_relation_wire_id,
+            local_id=str(actual["id"]),
+        )
+    identical_immutable_replay = False
+    if spec.table in {
+        "custody_gap_review_relation_sets",
+        "custody_gap_review_transactions",
+    }:
+        existing_relation = conn.execute(
+            f"SELECT * FROM {spec.table} WHERE id = ?",
+            (actual["id"],),
+        ).fetchone()
+        identical_immutable_replay = bool(
+            existing_relation is not None
+            and all(existing_relation[column] == actual[column] for column in spec.columns)
+        )
+    if not identical_immutable_replay:
+        _insert_or_update_with_collision_notice(
+            conn,
+            book=book,
+            spec=spec,
+            actual=actual,
+            event=event,
+        )
+    if private_policy_review_required and prior_wallet is not None:
+        _notice(
+            conn,
+            profile_id=book["profile_id"],
+            code="sync_wallet_policy_requires_local_review",
+            severity="warning",
+            replica_id=str(event["replica_id"]),
+            member_id=str(event["author_member_id"]),
+            details={"wallet_id": str(prior_wallet["id"])},
+        )
+    if prior_wallet is not None and prior_wallet_identity is not None:
+        try:
+            updated_config = json.loads(actual["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            updated_config = {}
+        if not isinstance(updated_config, Mapping):
+            updated_config = {}
+        identity_changed = (
+            policy_identity_material(updated_config) != prior_wallet_identity
+        )
+        if identity_changed:
+            # Policy epochs are deliberately device-local because they may
+            # contain descriptor material.  Reconstruct the rotation on this
+            # peer when the signed public wallet row changes script identity;
+            # otherwise later observer coverage would be attached to the
+            # superseded active epoch.
+            roll_wallet_policy_epoch(
+                conn,
+                prior_wallet,
+                prior_wallet_material or {},
+                private_policy_material(updated_config),
+            )
+        observer_config_changed = (
+            canonical_wallet_config_identity(public_wallet_config(updated_config))
+            != canonical_wallet_config_identity(prior_public_wallet_config or {})
+        )
+        if identity_changed or observer_config_changed:
+            delete_wallet_observer_state(conn, str(prior_wallet["id"]))
+            core_output_inventory.clear_wallet_output_inventory(
+                conn,
+                str(prior_wallet["id"]),
+                commit=False,
+            )
+            core_freshness.reset_source_checkpoint(
+                conn,
+                str(prior_wallet["profile_id"]),
+                core_freshness.source_key(
+                    core_freshness.SOURCE_ONCHAIN,
+                    str(prior_wallet["id"]),
+                ),
+                stale_reason="wallet_config_changed",
+            )
     for field, value in merged.items():
         winner = winning_events.get(field, event)
         _write_field_state(
@@ -1400,17 +1694,29 @@ def _immutable_revision_rejection(
             # this authored row. Its explicit child tombstone is then a safe,
             # idempotent audit fence rather than an erasure.
             return None
-        parent_alive = (
-            conn.execute(
+        if spec.table in {
+            "custody_components",
+            "filed_report_snapshots",
+            "custody_filed_report_impact_resolutions",
+            "custody_gap_reviews",
+        }:
+            parent_alive = conn.execute(
                 "SELECT 1 FROM profiles WHERE id = ?",
                 (existing["profile_id"],),
             ).fetchone()
-            if spec.table == "custody_components"
-            else conn.execute(
+        elif spec.table in {
+            "custody_gap_review_relation_sets",
+            "custody_gap_review_transactions",
+        }:
+            parent_alive = conn.execute(
+                "SELECT 1 FROM custody_gap_reviews WHERE id = ?",
+                (existing["review_id"],),
+            ).fetchone()
+        else:
+            parent_alive = conn.execute(
                 "SELECT 1 FROM custody_components WHERE id = ?",
                 (existing["component_id"],),
             ).fetchone()
-        )
         if parent_alive:
             return {
                 "event_id": event["id"],
@@ -1423,9 +1729,11 @@ def _immutable_revision_rejection(
         return None
     if event["event_type"] != "row.upsert":
         return None
-    payload = event.get("payload") or {}
-    wire_row = payload.get("row") if isinstance(payload, Mapping) else None
-    if not isinstance(wire_row, Mapping):
+    try:
+        wire_row, _ = _normalized_review_relation_wire_row(event)
+    except AppError:
+        # The strict apply path will reject malformed wire data with its typed
+        # schema error; immutable inspection must not interpret it first.
         return None
     spec = validate_wire_row(str(event["entity_table"]), wire_row)
 
@@ -1448,6 +1756,7 @@ def _immutable_revision_rejection(
         if spec.table in {
             "custody_component_legs",
             "custody_component_allocations",
+            "custody_component_evidence_commitments",
         }:
             component_id = _mapped_id(
                 conn,
@@ -1455,11 +1764,20 @@ def _immutable_revision_rejection(
                 table="custody_components",
                 wire_id=wire_row.get("component_id"),
             )
-            count_field, child_table = (
-                ("expected_leg_count", "custody_component_legs")
-                if spec.table == "custody_component_legs"
-                else ("expected_allocation_count", "custody_component_allocations")
-            )
+            count_field, child_table = {
+                "custody_component_legs": (
+                    "expected_leg_count",
+                    "custody_component_legs",
+                ),
+                "custody_component_allocations": (
+                    "expected_allocation_count",
+                    "custody_component_allocations",
+                ),
+                "custody_component_evidence_commitments": (
+                    "expected_evidence_count",
+                    "custody_component_evidence_commitments",
+                ),
+            }[spec.table]
             component = conn.execute(
                 f"SELECT {count_field} AS expected FROM custody_components WHERE id = ?",
                 (component_id,),
@@ -1484,6 +1802,12 @@ def _immutable_revision_rejection(
                     }
         return None
 
+    # Commitment collisions are handled in ``_apply_row_upsert`` so they
+    # create durable high-stakes conflicts instead of becoming an ordinary
+    # immutable-row rejection.
+    if spec.table == "custody_component_evidence_commitments":
+        return None
+
     changed_fields: list[str] = []
     for field in sorted(spec.immutable_fields):
         # Additive fields omitted by an older signed bundle do not rewrite the
@@ -1501,6 +1825,28 @@ def _immutable_revision_rejection(
             )
         previous = existing[field]
         if previous == incoming:
+            continue
+        if (
+            spec.table == "custody_components"
+            and field == "expected_evidence_count"
+            and previous is None
+            and type(incoming) is int
+            and incoming >= 0
+            and (
+                (
+                    existing["state"] in {"active", "superseded"}
+                    and existing["state"] == wire_row.get("state")
+                )
+                or (
+                    existing["state"] == "draft"
+                    and wire_row.get("state") == "active"
+                )
+            )
+        ):
+            # New activations bind the count at draft -> active. Legacy local
+            # migrations may also fill a once-NULL count without changing the
+            # lifecycle state, but only author commitments (delivered as child
+            # rows) can make that header effective on a receiver.
             continue
         if spec.table == "custody_component_legs" and field == "transaction_id":
             if incoming is None or (
@@ -1671,12 +2017,14 @@ def _apply_contiguous_event(
             created_files=created_files,
         )
         custody_touched = bool(
-            mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+            (mutated or conflicts)
+            and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
         )
     elif event["event_type"] == "row.delete":
         mutated, conflicts = _apply_row_delete(conn, book=book, event=event)
         custody_touched = bool(
-            mutated and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
+            (mutated or conflicts)
+            and event["entity_table"] in _CUSTODY_COMPONENT_TABLES
         )
     elif event["event_type"] == "conflict.resolve":
         from .conflicts import apply_resolution_event

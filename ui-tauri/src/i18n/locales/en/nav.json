@@ -11,6 +11,7 @@
     "reconcile": "Reconcile",
     "egress": "Network Monitor",
     "sourceFunds": "Source Funds",
+    "custodyGaps": "Custody Gaps",
     "swaps": "Swaps & Transfers",
     "activity": "Activity",
     "logs": "Logs",

@@ -20,6 +20,7 @@ Call sites should never embed their own `CREATE TABLE` or `ALTER TABLE`
 DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 """
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -80,6 +81,18 @@ SWAP_FEE_PAIR_KINDS = (
     "swap-refund",
 )
 
+CUSTODY_DURABLE_EVIDENCE_MIGRATION = "custody-durable-evidence-v1"
+_CUSTODY_MIGRATION_EXPLANATIONS = {
+    "durable_transaction_anchors": (
+        "Copies each extant leg transaction id into the immutable anchor so "
+        "later source retraction cannot erase the reviewed reference."
+    ),
+    "payload_free_evidence_commitments": (
+        "Seals existing active authored evidence with replicable hashes while "
+        "retaining raw evidence only in the local snapshot table."
+    ),
+}
+
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -88,6 +101,22 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Local append-only schema migration reports. These contain only bounded
+-- migration names/counts/explanations, never raw transactions or evidence.
+CREATE TABLE IF NOT EXISTS schema_migration_audits (
+    id TEXT PRIMARY KEY,
+    migration_name TEXT NOT NULL UNIQUE,
+    schema_version INTEGER NOT NULL CHECK(schema_version >= 1),
+    impact_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_schema_migration_audits_immutable
+BEFORE UPDATE ON schema_migration_audits
+BEGIN
+    SELECT RAISE(ABORT, 'schema_migration_audits_immutable');
+END;
 
 CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
@@ -113,6 +142,85 @@ CREATE TABLE IF NOT EXISTS profiles (
     created_at TEXT NOT NULL,
     UNIQUE (workspace_id, label)
 );
+
+-- Local-only behavioral cutover evidence. Baseline rows capture the derived
+-- classification that existed immediately before the first custody-aware
+-- rebuild. The bounded comparison is appended only after that rebuild has
+-- completed inside the journal savepoint. No raw transaction payloads live in
+-- these tables, and none are replicated.
+CREATE TABLE IF NOT EXISTS custody_tax_migration_baselines (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    migration_name TEXT NOT NULL,
+    schema_version INTEGER NOT NULL CHECK(schema_version >= 1),
+    journal_entry_count INTEGER NOT NULL CHECK(journal_entry_count >= 0),
+    tax_summary_count INTEGER NOT NULL CHECK(tax_summary_count >= 0),
+    event_count INTEGER NOT NULL CHECK(event_count >= 0),
+    captured_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS custody_tax_migration_baseline_events (
+    profile_id TEXT NOT NULL REFERENCES custody_tax_migration_baselines(profile_id)
+        ON DELETE CASCADE,
+    event_id TEXT NOT NULL,
+    transaction_id TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    classification TEXT NOT NULL,
+    amounts_msat_json TEXT NOT NULL DEFAULT '{}',
+    monetary_exact_json TEXT NOT NULL DEFAULT '{}',
+    affected_years_json TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY(profile_id, event_id)
+);
+
+CREATE TABLE IF NOT EXISTS custody_tax_migration_reports (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    migration_name TEXT NOT NULL,
+    schema_version INTEGER NOT NULL CHECK(schema_version >= 1),
+    status TEXT NOT NULL CHECK(status IN ('complete', 'baseline_without_event_detail')),
+    baseline_captured_at TEXT NOT NULL,
+    rebuilt_at TEXT NOT NULL,
+    baseline_event_count INTEGER NOT NULL CHECK(baseline_event_count >= 0),
+    rebuilt_event_count INTEGER NOT NULL CHECK(rebuilt_event_count >= 0),
+    changed_event_count INTEGER NOT NULL CHECK(changed_event_count >= 0),
+    detailed_change_count INTEGER NOT NULL CHECK(detailed_change_count >= 0),
+    changes_truncated INTEGER NOT NULL DEFAULT 0 CHECK(changes_truncated IN (0, 1)),
+    comparison_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(profile_id, migration_name)
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_tax_migration_baselines_immutable
+BEFORE UPDATE ON custody_tax_migration_baselines
+BEGIN
+    SELECT RAISE(ABORT, 'custody_tax_migration_baselines_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_tax_migration_baseline_events_immutable
+BEFORE UPDATE ON custody_tax_migration_baseline_events
+BEGIN
+    SELECT RAISE(ABORT, 'custody_tax_migration_baseline_events_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_tax_migration_baseline_events_sealed
+BEFORE INSERT ON custody_tax_migration_baseline_events
+WHEN (
+    SELECT COUNT(*) FROM custody_tax_migration_baseline_events
+    WHERE profile_id = NEW.profile_id
+) >= (
+    SELECT event_count FROM custody_tax_migration_baselines
+    WHERE profile_id = NEW.profile_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'custody_tax_migration_baseline_events_sealed');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_tax_migration_reports_immutable
+BEFORE UPDATE ON custody_tax_migration_reports
+BEGIN
+    SELECT RAISE(ABORT, 'custody_tax_migration_reports_immutable');
+END;
 
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
@@ -154,6 +262,7 @@ CREATE TABLE IF NOT EXISTS chain_observer_instances (
     chain TEXT NOT NULL,
     network TEXT NOT NULL,
     state_version INTEGER NOT NULL,
+    state_epoch INTEGER NOT NULL DEFAULT 0,
     state_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -174,6 +283,53 @@ CREATE TABLE IF NOT EXISTS chain_observer_coverage (
     PRIMARY KEY (observer_id, branch_key)
 );
 
+-- Wallet-policy epochs are the durable custody-facing interpretation of
+-- disposable observer state.  Their random ids do not fingerprint descriptor
+-- or xpub material.  ``private_material_json`` remains inside SQLCipher and is
+-- used only to recognize outputs from retired policies; it is excluded from
+-- public, AI, audit, diagnostic, and replication surfaces.
+CREATE TABLE IF NOT EXISTS wallet_policy_epochs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('active', 'retired')),
+    private_material_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    retired_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_policy_epochs_one_active
+    ON wallet_policy_epochs(wallet_id)
+    WHERE status = 'active';
+
+CREATE INDEX IF NOT EXISTS idx_wallet_policy_epochs_profile
+    ON wallet_policy_epochs(profile_id, wallet_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS wallet_policy_sources (
+    id TEXT PRIMARY KEY,
+    epoch_id TEXT NOT NULL REFERENCES wallet_policy_epochs(id) ON DELETE CASCADE,
+    source_wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    observer_kind TEXT NOT NULL,
+    branch_keys_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(epoch_id, source_wallet_id, source_key)
+);
+
+CREATE TABLE IF NOT EXISTS wallet_policy_coverage_witnesses (
+    source_id TEXT NOT NULL REFERENCES wallet_policy_sources(id) ON DELETE CASCADE,
+    branch_key TEXT NOT NULL,
+    scanned_to_exclusive INTEGER NOT NULL CHECK(scanned_to_exclusive >= 0),
+    highest_used INTEGER,
+    observer_kind TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY(source_id, branch_key)
+);
+
 -- Opaque dependency-owned key/value state. Values are intentionally BLOBs:
 -- Kassiber namespaces and versions them but never interprets their contents.
 -- The FK keeps the values inside the observer row's SQLCipher transaction.
@@ -192,6 +348,10 @@ CREATE TABLE IF NOT EXISTS transactions (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
     external_id TEXT,
+    -- Closed, public discriminator for the meaning of external_id. Raw import
+    -- payloads stay local; peers need only this marker to retain native chain
+    -- identity after replication strips raw_json.
+    external_id_kind TEXT CHECK(external_id_kind IS NULL OR external_id_kind = 'txid'),
     fingerprint TEXT NOT NULL UNIQUE,
     occurred_at TEXT NOT NULL,
     confirmed_at TEXT,
@@ -237,6 +397,33 @@ CREATE TABLE IF NOT EXISTS transactions (
     swap_refund_funding_vout INTEGER,
     created_at TEXT NOT NULL
 );
+
+-- Closed authority channel from an applied dependency observer to the current
+-- normalized transaction projection. Generic imports cannot write this table;
+-- custody consumers must also verify the stored graph/quantity hashes against
+-- the current row before elevating native evidence.
+CREATE TABLE IF NOT EXISTS chain_observation_provenance (
+    transaction_id TEXT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    authority_version INTEGER NOT NULL CHECK(authority_version >= 1),
+    observer_ids_json TEXT NOT NULL,
+    observer_kinds_json TEXT NOT NULL,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    application_revision TEXT NOT NULL,
+    graph_hash TEXT NOT NULL,
+    quantity_hash TEXT NOT NULL,
+    fee_attribution TEXT NOT NULL CHECK(
+        fee_attribution IN ('exact', 'implicit_wallet_delta', 'unknown')
+    ),
+    observed_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chain_observation_provenance_profile
+    ON chain_observation_provenance(profile_id, wallet_id, chain, network);
 
 CREATE TABLE IF NOT EXISTS transaction_graph_cache (
     schema_version INTEGER NOT NULL,
@@ -807,6 +994,137 @@ CREATE TABLE IF NOT EXISTS journal_wallet_holdings (
     created_at TEXT NOT NULL
 );
 
+-- Local canonical quantity state. These tables are derived independently of RP2
+-- and are deliberately absent from the replication allowlist.
+CREATE TABLE IF NOT EXISTS journal_quantity_postings (
+    posting_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+    observation_hash TEXT,
+    occurred_at TEXT,
+    asset TEXT NOT NULL,
+    location_kind TEXT NOT NULL,
+    location_id TEXT NOT NULL,
+    amount_msat INTEGER NOT NULL CHECK(amount_msat != 0),
+    state TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, posting_id)
+);
+
+CREATE TABLE IF NOT EXISTS journal_quantity_issues (
+    issue_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    issue_type TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN (
+        'custody_candidate', 'custody_suspense', 'conflicting'
+    )),
+    asset TEXT,
+    amount_msat INTEGER CHECK(amount_msat IS NULL OR amount_msat > 0),
+    occurred_at TEXT,
+    transaction_ids_json TEXT NOT NULL DEFAULT '[]',
+    reason TEXT NOT NULL,
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    blocks_from TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, issue_id)
+);
+
+CREATE TABLE IF NOT EXISTS journal_quantity_balances (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    location_kind TEXT NOT NULL,
+    location_id TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    amount_msat INTEGER NOT NULL CHECK(amount_msat != 0),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, location_kind, location_id, asset)
+);
+
+-- Canonical target-bearing custody decisions.  These rows are a derived,
+-- local-only navigation index over the exact quantity arbiter: they make the
+-- durable source -> destination lineage available without re-interpreting tax
+-- rows or trusting presentation labels.  The observation commitments and
+-- half-open slices stay stored for replacement/integrity checks, while normal
+-- readers use a redacted semantic projection.
+CREATE TABLE IF NOT EXISTS journal_custody_decisions (
+    decision_id TEXT NOT NULL CHECK(length(decision_id) = 64),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    source_transaction_id TEXT NOT NULL
+        REFERENCES transactions(id) ON DELETE CASCADE,
+    target_transaction_id TEXT NOT NULL
+        REFERENCES transactions(id) ON DELETE CASCADE,
+    source_observation_hash TEXT NOT NULL
+        CHECK(length(source_observation_hash) = 64),
+    source_start_msat INTEGER NOT NULL
+        CHECK(typeof(source_start_msat) = 'integer' AND source_start_msat >= 0),
+    source_end_msat INTEGER NOT NULL
+        CHECK(
+            typeof(source_end_msat) = 'integer'
+            AND source_end_msat > source_start_msat
+        ),
+    target_observation_hash TEXT NOT NULL
+        CHECK(length(target_observation_hash) = 64),
+    target_start_msat INTEGER NOT NULL
+        CHECK(typeof(target_start_msat) = 'integer' AND target_start_msat >= 0),
+    target_end_msat INTEGER NOT NULL
+        CHECK(
+            typeof(target_end_msat) = 'integer'
+            AND target_end_msat > target_start_msat
+        ),
+    source_wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+    target_wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+    source_network TEXT NOT NULL,
+    target_network TEXT NOT NULL,
+    source_rail TEXT NOT NULL,
+    target_rail TEXT NOT NULL,
+    source_asset TEXT NOT NULL,
+    target_asset TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN (
+        'internal_verified', 'internal_reviewed'
+    )),
+    basis_state TEXT NOT NULL CHECK(basis_state IN (
+        'eligible', 'blocked_by_prior_custody_basis'
+    )),
+    basis_barrier_at TEXT,
+    reason TEXT NOT NULL,
+    atomic_group_id TEXT,
+    component_id TEXT,
+    occurred_at TEXT,
+    target_occurred_at TEXT,
+    created_at TEXT NOT NULL,
+    CHECK(
+        source_end_msat - source_start_msat =
+        target_end_msat - target_start_msat
+    ),
+    PRIMARY KEY(profile_id, decision_id)
+);
+
+-- Evidence detail is written once when a durable authored claim/component
+-- explicitly binds it. Rows cannot be updated; scoped book reset/profile
+-- teardown may delete them. Journal refresh never snapshots every import row.
+CREATE TABLE IF NOT EXISTS custody_authored_evidence_snapshots (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    subject_kind TEXT NOT NULL CHECK(subject_kind IN (
+        'custody_component', 'custody_claim'
+    )),
+    subject_id TEXT NOT NULL,
+    detail_hash TEXT NOT NULL,
+    quantity_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, subject_kind, subject_id, detail_hash)
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_authored_evidence_immutable
+BEFORE UPDATE ON custody_authored_evidence_snapshots
+BEGIN
+    SELECT RAISE(ABORT, 'custody_authored_evidence_immutable');
+END;
+
 CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_time
     ON journal_entries(profile_id, occurred_at, created_at, id);
 
@@ -833,6 +1151,306 @@ CREATE INDEX IF NOT EXISTS idx_journal_account_holdings_profile_asset
 
 CREATE INDEX IF NOT EXISTS idx_journal_wallet_holdings_profile_asset
     ON journal_wallet_holdings(profile_id, asset, wallet_label, id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_quantity_postings_profile_time
+    ON journal_quantity_postings(profile_id, occurred_at, posting_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_quantity_issues_profile_time
+    ON journal_quantity_issues(profile_id, occurred_at, issue_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_quantity_balances_profile_asset
+    ON journal_quantity_balances(profile_id, asset, location_kind, location_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_profile_time
+    ON journal_custody_decisions(profile_id, occurred_at, decision_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_source
+    ON journal_custody_decisions(profile_id, source_transaction_id, decision_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_target
+    ON journal_custody_decisions(profile_id, target_transaction_id, decision_id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_authored_evidence_subject
+    ON custody_authored_evidence_snapshots(
+        profile_id, subject_kind, subject_id, created_at
+    );
+
+-- Append-only marker for a report saved by Kassiber or explicitly registered
+-- as saved/filed outside Kassiber.
+-- The exported document itself remains in the user's chosen location; this
+-- append-only row retains only its content hash and bounded accounting
+-- summaries so later custody evidence can identify amendment risk without
+-- turning Kassiber into a general document-versioning system.
+CREATE TABLE IF NOT EXISTS filed_report_snapshots (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    report_kind TEXT NOT NULL,
+    report_state TEXT NOT NULL CHECK(report_state IN ('saved', 'filed')),
+    period_start_year INTEGER NOT NULL CHECK(period_start_year BETWEEN 1900 AND 9999),
+    period_end_year INTEGER NOT NULL CHECK(period_end_year BETWEEN period_start_year AND 9999),
+    content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64),
+    classification_summary_json TEXT NOT NULL DEFAULT '{}',
+    gain_summary_json TEXT NOT NULL DEFAULT '{}',
+    report_scope_json TEXT NOT NULL DEFAULT '{}',
+    authored_source TEXT NOT NULL DEFAULT 'user'
+        CHECK(authored_source IN ('user', 'cli', 'gui', 'ai_tool')),
+    notes TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_filed_report_snapshots_period
+    ON filed_report_snapshots(
+        profile_id, period_start_year, period_end_year, created_at, id
+    );
+
+CREATE TRIGGER IF NOT EXISTS trg_filed_report_snapshots_immutable
+BEFORE UPDATE ON filed_report_snapshots
+BEGIN
+    SELECT RAISE(ABORT, 'filed_report_snapshots_immutable');
+END;
+
+-- Authored review decisions for deterministic custody-gap candidates.  The
+-- matcher output remains derived; each decision pins the exact candidate
+-- fingerprint that was reviewed.  If imported evidence changes that
+-- fingerprint, the old decision remains in history but no longer closes the
+-- current candidate.
+CREATE TABLE IF NOT EXISTS custody_gap_reviews (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    gap_id TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK(revision >= 1),
+    candidate_fingerprint TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('dismissed', 'resolved')),
+    event_kind TEXT NOT NULL DEFAULT 'review_decision'
+        CHECK(event_kind IN (
+            'review_decision', 'bridge_created', 'bridge_reopened',
+            'bridge_revised', 'residual_classified'
+        )),
+    component_id TEXT,
+    authored_source TEXT NOT NULL DEFAULT 'user'
+        CHECK(authored_source IN ('user', 'cli', 'gui', 'ai_tool')),
+    reason TEXT,
+    snapshot_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_reviews_latest
+    ON custody_gap_reviews(profile_id, gap_id, revision DESC);
+
+-- Replaceable, privacy-safe derived discovery pages. These rows are keyed to
+-- journal/review input versions, are never authored evidence, and are excluded
+-- from replication/audit surfaces. Stable cursors read this population without
+-- regenerating the expensive custody-gap matcher for every page.
+CREATE TABLE IF NOT EXISTS custody_gap_candidate_snapshots (
+    cache_token TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    version_json TEXT NOT NULL,
+    summary_json TEXT NOT NULL,
+    gaps_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_snapshots_profile
+    ON custody_gap_candidate_snapshots(profile_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_gap_reviews_immutable
+BEFORE UPDATE ON custody_gap_reviews
+BEGIN
+    SELECT RAISE(ABORT, 'custody_gap_reviews_immutable');
+END;
+
+-- Immutable completeness commitment for the normalized transaction boundary
+-- authored by one custody review.  Keeping this as a child header allows an
+-- upgraded peer to distinguish a complete relation set from a prefix received
+-- in an earlier bundle without changing the signed shape of legacy reviews.
+CREATE TABLE IF NOT EXISTS custody_gap_review_relation_sets (
+    id TEXT PRIMARY KEY,
+    review_id TEXT NOT NULL UNIQUE
+        REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    expected_source_count INTEGER NOT NULL CHECK(expected_source_count >= 0),
+    expected_return_count INTEGER NOT NULL CHECK(expected_return_count >= 0),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_review_relation_sets_scope
+    ON custody_gap_review_relation_sets(profile_id, review_id, id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_relation_set_scope_insert
+BEFORE INSERT ON custody_gap_review_relation_sets
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1 FROM custody_gap_reviews r
+        WHERE r.id = NEW.review_id
+          AND r.workspace_id = NEW.workspace_id
+          AND r.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_gap_review_relation_set_scope_mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_relation_sets_immutable
+BEFORE UPDATE ON custody_gap_review_relation_sets
+BEGIN
+    SELECT RAISE(ABORT, 'custody_gap_review_relation_sets_immutable');
+END;
+
+-- Export-safe transaction scope for each authored custody-gap review.  The
+-- review snapshot remains local/private and the candidate fingerprint is
+-- intentionally one-way, so neither can answer whether a bounded auditor
+-- handoff should include a componentless dismissal.  These normalized anchors
+-- contain only authored row identities and survive later transaction deletion.
+CREATE TABLE IF NOT EXISTS custody_gap_review_transactions (
+    id TEXT PRIMARY KEY,
+    review_id TEXT NOT NULL REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('source', 'return')),
+    transaction_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (review_id, role, transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_review
+    ON custody_gap_review_transactions(review_id, role, transaction_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_scope
+    ON custody_gap_review_transactions(profile_id, transaction_id, review_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transaction_scope_insert
+BEFORE INSERT ON custody_gap_review_transactions
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1 FROM custody_gap_reviews r
+        WHERE r.id = NEW.review_id
+          AND r.workspace_id = NEW.workspace_id
+          AND r.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_gap_review_transaction_review_scope_mismatch') END;
+    -- A durable review anchor must survive source retraction and must remain
+    -- importable into a fresh replica after that retraction. Reject only a
+    -- colliding live transaction from another book; absence is intentional.
+    SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM transactions t WHERE t.id = NEW.transaction_id
+    ) AND NOT EXISTS (
+        SELECT 1 FROM transactions t
+        WHERE t.id = NEW.transaction_id
+          AND t.workspace_id = NEW.workspace_id
+          AND t.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_gap_review_transaction_scope_mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transactions_immutable
+BEFORE UPDATE ON custody_gap_review_transactions
+BEGIN
+    SELECT RAISE(ABORT, 'custody_gap_review_transactions_immutable');
+END;
+
+-- Local-only, append-only evidence that a custody write proposed by the AI
+-- crossed an explicit consent boundary.  Chat history is optional and cannot
+-- serve as this audit trail.  Proposal payloads remain inside SQLCipher and
+-- are deliberately absent from replication and public/audit-package exports.
+CREATE TABLE IF NOT EXISTS custody_ai_assistance_audits (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    tool_name TEXT NOT NULL,
+    daemon_kind TEXT NOT NULL,
+    call_id TEXT NOT NULL,
+    provider_kind TEXT NOT NULL,
+    model TEXT NOT NULL,
+    gap_id TEXT,
+    candidate_fingerprint TEXT,
+    facts_sha256 TEXT NOT NULL CHECK(length(facts_sha256) = 64),
+    model_proposal_json TEXT NOT NULL DEFAULT '{}',
+    final_proposal_json TEXT NOT NULL DEFAULT '{}',
+    user_edited INTEGER NOT NULL DEFAULT 0 CHECK(user_edited IN (0, 1)),
+    consent_decision TEXT NOT NULL CHECK(consent_decision IN (
+        'allow_once', 'allow_session', 'deny', 'consent_timeout', 'cancelled'
+    )),
+    consent_requested_at TEXT NOT NULL,
+    consent_decided_at TEXT NOT NULL,
+    execution_status TEXT NOT NULL CHECK(execution_status IN (
+        'executed', 'failed', 'denied', 'cancelled'
+    )),
+    execution_code TEXT,
+    result_sha256 TEXT CHECK(result_sha256 IS NULL OR length(result_sha256) = 64),
+    review_id TEXT,
+    component_id TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_ai_assistance_profile_time
+    ON custody_ai_assistance_audits(profile_id, created_at DESC, id DESC);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_ai_assistance_immutable
+BEFORE UPDATE ON custody_ai_assistance_audits
+BEGIN
+    SELECT RAISE(ABORT, 'custody_ai_assistance_immutable');
+END;
+
+-- Durable activation audit history tying an authored custody review to every
+-- overlapping saved/filed report. The row is sealed by the confirmed review
+-- and replicates with that authored decision; it is not a mutable projection
+-- of current journal state.
+CREATE TABLE IF NOT EXISTS custody_filed_report_impacts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    filed_report_snapshot_id TEXT NOT NULL
+        REFERENCES filed_report_snapshots(id) ON DELETE CASCADE,
+    component_id TEXT NOT NULL,
+    review_id TEXT NOT NULL,
+    gap_id TEXT NOT NULL,
+    affected_period_start_year INTEGER NOT NULL
+        CHECK(affected_period_start_year BETWEEN 1900 AND 9999),
+    affected_period_end_year INTEGER NOT NULL
+        CHECK(affected_period_end_year BETWEEN affected_period_start_year AND 9999),
+    before_classification_summary_json TEXT NOT NULL DEFAULT '{}',
+    after_classification_summary_json TEXT NOT NULL DEFAULT '{}',
+    before_gain_summary_json TEXT NOT NULL DEFAULT '{}',
+    after_gain_summary_json TEXT NOT NULL DEFAULT '{}',
+    amendment_warning TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(filed_report_snapshot_id, review_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_filed_report_impacts_profile
+    ON custody_filed_report_impacts(profile_id, created_at, id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_filed_report_impacts_immutable
+BEFORE UPDATE ON custody_filed_report_impacts
+BEGIN
+    SELECT RAISE(ABORT, 'custody_filed_report_impacts_immutable');
+END;
+
+-- One immutable post-rebuild closure for an activation-time filed-report
+-- impact. The original impact deliberately remains pending; this child row
+-- records the exact finalized journal totals and the honest amendment state.
+CREATE TABLE IF NOT EXISTS custody_filed_report_impact_resolutions (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    impact_id TEXT NOT NULL UNIQUE
+        REFERENCES custody_filed_report_impacts(id) ON DELETE CASCADE,
+    rebuilt_at TEXT NOT NULL,
+    after_classification_summary_json TEXT NOT NULL DEFAULT '{}',
+    after_gain_summary_json TEXT NOT NULL DEFAULT '{}',
+    classification_changed INTEGER NOT NULL CHECK(classification_changed IN (0, 1)),
+    gain_changed INTEGER NOT NULL CHECK(gain_changed IN (0, 1)),
+    amendment_status TEXT NOT NULL CHECK(amendment_status IN (
+        'no_change', 'saved_report_changed', 'review_required'
+    )),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_filed_report_impact_resolutions_profile
+    ON custody_filed_report_impact_resolutions(profile_id, rebuilt_at, id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_filed_report_impact_resolutions_immutable
+BEFORE UPDATE ON custody_filed_report_impact_resolutions
+BEGIN
+    SELECT RAISE(ABORT, 'custody_filed_report_impact_resolutions_immutable');
+END;
 
 CREATE TABLE IF NOT EXISTS transaction_pairs (
     id TEXT PRIMARY KEY,
@@ -1494,6 +2112,7 @@ CREATE TABLE IF NOT EXISTS custody_components (
     conversion_metadata_json TEXT NOT NULL DEFAULT '{}',
     expected_leg_count INTEGER CHECK (expected_leg_count >= 0),
     expected_allocation_count INTEGER CHECK (expected_allocation_count >= 0),
+    expected_evidence_count INTEGER CHECK (expected_evidence_count >= 0),
     authored_source TEXT DEFAULT 'user',
     notes TEXT,
     change_reason TEXT,
@@ -1528,6 +2147,37 @@ CREATE INDEX IF NOT EXISTS idx_custody_components_supersedes
     ON custody_components(supersedes_component_id)
     WHERE supersedes_component_id IS NOT NULL;
 
+-- Author-bound, payload-free commitments to the canonical evidence visible at
+-- activation.  Raw evidence payloads remain in the local-only
+-- custody_authored_evidence_snapshots table; these rows are safe to replicate.
+-- The deterministic id is a hash of (component_id, ordinal), so two authors
+-- cannot silently publish different evidence into the same ordinal.
+CREATE TABLE IF NOT EXISTS custody_component_evidence_commitments (
+    id TEXT PRIMARY KEY,
+    component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    quantity_hash TEXT NOT NULL CHECK (length(quantity_hash) = 64),
+    detail_hash TEXT NOT NULL CHECK (length(detail_hash) = 64),
+    created_at TEXT NOT NULL,
+    UNIQUE (component_id, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_evidence_commitments_component
+    ON custody_component_evidence_commitments(component_id, ordinal, id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_evidence_commitment_scope_insert
+BEFORE INSERT ON custody_component_evidence_commitments
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1 FROM custody_components c
+        WHERE c.id = NEW.component_id
+          AND c.workspace_id = NEW.workspace_id
+          AND c.profile_id = NEW.profile_id
+    ) THEN RAISE(ABORT, 'custody_evidence_commitment_scope_mismatch') END;
+END;
+
 -- A book reset preserves the profile row, so delete-immutability cannot use
 -- profile absence as its authorization signal. This local-only guard is
 -- populated and cleared inside the reset transaction; it is not replicated.
@@ -1543,7 +2193,7 @@ CREATE TABLE IF NOT EXISTS custody_component_legs (
     ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
     role TEXT NOT NULL
         CHECK (role IN ('source', 'destination', 'fee', 'external',
-                        'retained', 'unresolved')),
+                        'retained', 'unresolved', 'suspense')),
     rail TEXT NOT NULL,
     chain TEXT,
     network TEXT,
@@ -2120,12 +2770,1089 @@ def ensure_column(conn, table_name, column_name, definition):
     conn.commit()
 
 
+def _custody_leg_schema_supports_suspense(conn):
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'custody_component_legs'"
+    ).fetchone()
+    return row is not None and "'suspense'" in str(row["sql"] or "")
+
+
+def _create_custody_leg_indexes_and_scope_triggers(conn):
+    """Restore the non-immutability objects around rebuilt custody child tables."""
+
+    for statement in (
+        "CREATE INDEX idx_custody_component_legs_component "
+        "ON custody_component_legs(component_id, ordinal, id)",
+        "CREATE INDEX idx_custody_component_legs_profile_transaction "
+        "ON custody_component_legs(profile_id, transaction_id) "
+        "WHERE transaction_id IS NOT NULL",
+        "CREATE INDEX idx_custody_component_legs_profile_wallet "
+        "ON custody_component_legs(profile_id, wallet_id) "
+        "WHERE wallet_id IS NOT NULL",
+        "CREATE INDEX idx_custody_allocations_component "
+        "ON custody_component_allocations(component_id, ordinal, id)",
+        "CREATE INDEX idx_custody_allocations_source "
+        "ON custody_component_allocations(source_leg_id)",
+        "CREATE INDEX idx_custody_allocations_sink "
+        "ON custody_component_allocations(sink_leg_id)",
+    ):
+        conn.execute(statement)
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_allocation_scope_insert
+        BEFORE INSERT ON custody_component_allocations
+        BEGIN
+            SELECT CASE WHEN NOT EXISTS (
+                SELECT 1
+                FROM custody_components c
+                JOIN custody_component_legs source ON source.id = NEW.source_leg_id
+                JOIN custody_component_legs sink ON sink.id = NEW.sink_leg_id
+                WHERE c.id = NEW.component_id
+                  AND c.workspace_id = NEW.workspace_id
+                  AND c.profile_id = NEW.profile_id
+                  AND source.component_id = c.id
+                  AND sink.component_id = c.id
+                  AND source.role = 'source'
+                  AND sink.role != 'source'
+            ) THEN RAISE(ABORT, 'custody_allocation_scope_or_role_mismatch') END;
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_allocation_scope_update
+        BEFORE UPDATE OF component_id, workspace_id, profile_id,
+                         source_leg_id, sink_leg_id
+        ON custody_component_allocations
+        BEGIN
+            SELECT CASE WHEN NOT EXISTS (
+                SELECT 1
+                FROM custody_components c
+                JOIN custody_component_legs source ON source.id = NEW.source_leg_id
+                JOIN custody_component_legs sink ON sink.id = NEW.sink_leg_id
+                WHERE c.id = NEW.component_id
+                  AND c.workspace_id = NEW.workspace_id
+                  AND c.profile_id = NEW.profile_id
+                  AND source.component_id = c.id
+                  AND sink.component_id = c.id
+                  AND source.role = 'source'
+                  AND sink.role != 'source'
+            ) THEN RAISE(ABORT, 'custody_allocation_scope_or_role_mismatch') END;
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_scope_insert
+        BEFORE INSERT ON custody_component_legs
+        BEGIN
+            SELECT CASE WHEN NOT EXISTS (
+                SELECT 1 FROM custody_components c
+                WHERE c.id = NEW.component_id
+                  AND c.workspace_id = NEW.workspace_id
+                  AND c.profile_id = NEW.profile_id
+            ) THEN RAISE(ABORT, 'custody_leg_component_scope_mismatch') END;
+            SELECT CASE WHEN NEW.transaction_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM transactions t
+                WHERE t.id = NEW.transaction_id
+                  AND t.workspace_id = NEW.workspace_id
+                  AND t.profile_id = NEW.profile_id
+            ) THEN RAISE(ABORT, 'custody_leg_transaction_scope_mismatch') END;
+            SELECT CASE WHEN NEW.wallet_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM wallets w
+                WHERE w.id = NEW.wallet_id
+                  AND w.workspace_id = NEW.workspace_id
+                  AND w.profile_id = NEW.profile_id
+            ) THEN RAISE(ABORT, 'custody_leg_wallet_scope_mismatch') END;
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_scope_update
+        BEFORE UPDATE OF component_id, workspace_id, profile_id,
+                         transaction_id, wallet_id
+        ON custody_component_legs
+        BEGIN
+            SELECT CASE WHEN NOT EXISTS (
+                SELECT 1 FROM custody_components c
+                WHERE c.id = NEW.component_id
+                  AND c.workspace_id = NEW.workspace_id
+                  AND c.profile_id = NEW.profile_id
+            ) THEN RAISE(ABORT, 'custody_leg_component_scope_mismatch') END;
+            SELECT CASE WHEN NEW.transaction_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM transactions t
+                WHERE t.id = NEW.transaction_id
+                  AND t.workspace_id = NEW.workspace_id
+                  AND t.profile_id = NEW.profile_id
+            ) THEN RAISE(ABORT, 'custody_leg_transaction_scope_mismatch') END;
+            SELECT CASE WHEN NEW.wallet_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM wallets w
+                WHERE w.id = NEW.wallet_id
+                  AND w.workspace_id = NEW.workspace_id
+                  AND w.profile_id = NEW.profile_id
+            ) THEN RAISE(ABORT, 'custody_leg_wallet_scope_mismatch') END;
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_memberships_leg_delete
+        AFTER DELETE ON custody_component_legs
+        WHEN OLD.transaction_id IS NOT NULL
+        BEGIN
+            DELETE FROM custody_component_transaction_memberships
+            WHERE component_id = OLD.component_id
+              AND transaction_id = OLD.transaction_id
+              AND NOT EXISTS (
+                  SELECT 1 FROM custody_component_legs l
+                  WHERE l.component_id = OLD.component_id
+                    AND l.transaction_id = OLD.transaction_id
+              );
+        END
+        """
+    )
+
+
+def _rebuild_custody_leg_role_schema(conn):
+    """Expand the closed custody-leg role set without rewriting authored rows."""
+
+    leg_columns = (
+        "id, component_id, workspace_id, profile_id, ordinal, role, rail, "
+        "chain, network, asset, exposure, conservation_unit, amount_msat, "
+        "valuation_unit, valuation_amount, occurred_at, transaction_id, "
+        "anchor_transaction_id, wallet_id, location_ref, notes, created_at"
+    )
+    allocation_columns = (
+        "id, component_id, workspace_id, profile_id, ordinal, source_leg_id, "
+        "sink_leg_id, source_amount_msat, sink_amount_msat, created_at"
+    )
+    counts_before = {
+        "legs": int(conn.execute("SELECT COUNT(*) FROM custody_component_legs").fetchone()[0]),
+        "allocations": int(
+            conn.execute("SELECT COUNT(*) FROM custody_component_allocations").fetchone()[0]
+        ),
+    }
+    previous_fk = int(conn.execute("PRAGMA foreign_keys").fetchone()[0])
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for trigger in (
+            "trg_custody_allocation_scope_insert",
+            "trg_custody_allocation_scope_update",
+            "trg_custody_component_scope_insert",
+            "trg_custody_component_scope_update",
+            "trg_custody_component_memberships_leg_delete",
+            "trg_custody_component_leg_revision_immutable",
+            "trg_custody_component_allocation_revision_immutable",
+            "trg_custody_component_leg_revision_delete_immutable",
+            "trg_custody_component_allocation_revision_delete_immutable",
+            "trg_custody_component_leg_count_commitment",
+            "trg_custody_component_allocation_count_commitment",
+        ):
+            conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+        for index in (
+            "idx_custody_component_legs_component",
+            "idx_custody_component_legs_profile_transaction",
+            "idx_custody_component_legs_profile_wallet",
+            "idx_custody_allocations_component",
+            "idx_custody_allocations_source",
+            "idx_custody_allocations_sink",
+        ):
+            conn.execute(f"DROP INDEX IF EXISTS {index}")
+
+        conn.execute(
+            "ALTER TABLE custody_component_allocations "
+            "RENAME TO custody_component_allocations__pre_suspense"
+        )
+        conn.execute(
+            "ALTER TABLE custody_component_legs "
+            "RENAME TO custody_component_legs__pre_suspense"
+        )
+        conn.execute(
+            """
+            CREATE TABLE custody_component_legs (
+                id TEXT PRIMARY KEY,
+                component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+                role TEXT NOT NULL CHECK (
+                    role IN ('source', 'destination', 'fee', 'external',
+                             'retained', 'unresolved', 'suspense')
+                ),
+                rail TEXT NOT NULL,
+                chain TEXT,
+                network TEXT,
+                asset TEXT NOT NULL,
+                exposure TEXT NOT NULL,
+                conservation_unit TEXT NOT NULL,
+                amount_msat INTEGER NOT NULL CHECK (
+                    typeof(amount_msat) = 'integer' AND amount_msat >= 0
+                ),
+                valuation_unit TEXT,
+                valuation_amount INTEGER CHECK (
+                    valuation_amount IS NULL OR
+                    (typeof(valuation_amount) = 'integer' AND valuation_amount >= 0)
+                ),
+                occurred_at TEXT,
+                transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+                anchor_transaction_id TEXT,
+                wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
+                location_ref TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE (component_id, ordinal)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE custody_component_allocations (
+                id TEXT PRIMARY KEY,
+                component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+                source_leg_id TEXT NOT NULL REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+                sink_leg_id TEXT NOT NULL REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+                source_amount_msat INTEGER NOT NULL CHECK (
+                    typeof(source_amount_msat) = 'integer' AND source_amount_msat >= 0
+                ),
+                sink_amount_msat INTEGER NOT NULL CHECK (
+                    typeof(sink_amount_msat) = 'integer' AND sink_amount_msat >= 0
+                ),
+                created_at TEXT NOT NULL,
+                UNIQUE (component_id, ordinal),
+                UNIQUE (component_id, source_leg_id, sink_leg_id)
+            )
+            """
+        )
+        conn.execute(
+            f"INSERT INTO custody_component_legs({leg_columns}) "
+            f"SELECT {leg_columns} FROM custody_component_legs__pre_suspense"
+        )
+        conn.execute(
+            f"INSERT INTO custody_component_allocations({allocation_columns}) "
+            f"SELECT {allocation_columns} "
+            "FROM custody_component_allocations__pre_suspense"
+        )
+        counts_after = {
+            "legs": int(conn.execute("SELECT COUNT(*) FROM custody_component_legs").fetchone()[0]),
+            "allocations": int(
+                conn.execute("SELECT COUNT(*) FROM custody_component_allocations").fetchone()[0]
+            ),
+        }
+        if counts_after != counts_before:
+            raise RuntimeError(
+                f"custody child row counts changed: {counts_before} -> {counts_after}"
+            )
+        conn.execute("DROP TABLE custody_component_allocations__pre_suspense")
+        conn.execute("DROP TABLE custody_component_legs__pre_suspense")
+        _create_custody_leg_indexes_and_scope_triggers(conn)
+        _ensure_custody_revision_immutability_triggers(conn)
+        violations = [
+            dict(row)
+            for row in conn.execute("PRAGMA foreign_key_check").fetchall()
+            if row["table"]
+            in {"custody_component_legs", "custody_component_allocations"}
+        ]
+        if violations:
+            raise RuntimeError(
+                f"custody child foreign-key violations: {violations}"
+            )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        raise AppError(
+            "custody component schema migration failed",
+            code="custody_schema_migration_failed",
+            hint="Restore the database backup or retry with a compatible Kassiber build.",
+            details={"migration": "custody_leg_suspense_role"},
+            retryable=False,
+        ) from exc
+    finally:
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk else 'OFF'}")
+
+    # Sanity-check again after restoring FK enforcement. The transactional
+    # check above is the one that can still roll the migration back.
+    violations = [
+        dict(row)
+        for row in conn.execute("PRAGMA foreign_key_check").fetchall()
+        if row["table"]
+        in {"custody_component_legs", "custody_component_allocations"}
+    ]
+    if violations:
+        raise AppError(
+            "custody component schema migration left invalid references",
+            code="custody_schema_migration_failed",
+            details={
+                "migration": "custody_leg_suspense_role",
+                "foreign_key_violations": violations,
+            },
+            retryable=False,
+        )
+
+
+def _ensure_custody_leg_role_schema(conn):
+    if not _custody_leg_schema_supports_suspense(conn):
+        _rebuild_custody_leg_role_schema(conn)
+
+
+def _custody_evidence_commitment_id(component_id, ordinal):
+    encoded = json.dumps(
+        ["custody-component-evidence-v1", str(component_id), int(ordinal)],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def custody_gap_review_transaction_id(review_id, role, transaction_id):
+    """Return the stable authored id for one review boundary anchor."""
+
+    encoded = json.dumps(
+        [
+            "custody-gap-review-transaction-v2",
+            str(review_id),
+            str(role),
+            str(transaction_id),
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def custody_gap_review_transaction_v1_id(review_id, role, ordinal):
+    """Return the retired ordinal-keyed wire id accepted during replay."""
+
+    encoded = json.dumps(
+        [
+            "custody-gap-review-transaction-v1",
+            str(review_id),
+            str(role),
+            int(ordinal),
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def custody_gap_review_relation_set_id(review_id):
+    """Return the stable authored id for a review boundary commitment."""
+
+    encoded = json.dumps(
+        ["custody-gap-review-relation-set-v1", str(review_id)],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def backfill_custody_gap_review_relation_set(
+    conn,
+    *,
+    review_id,
+    workspace_id,
+    profile_id,
+    created_at,
+    expected_source_count,
+    expected_return_count,
+):
+    """Persist a missing immutable completeness header without rewriting it."""
+
+    cursor = conn.execute(
+        """
+        INSERT OR IGNORE INTO custody_gap_review_relation_sets(
+            id, review_id, workspace_id, profile_id,
+            expected_source_count, expected_return_count, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            custody_gap_review_relation_set_id(review_id),
+            review_id,
+            workspace_id,
+            profile_id,
+            int(expected_source_count),
+            int(expected_return_count),
+            created_at,
+        ),
+    )
+    return max(0, int(cursor.rowcount))
+
+
+def _create_custody_gap_review_transaction_aux_schema(conn):
+    # ``executescript`` commits any pending transaction before running. Keep
+    # these statements individually executable so the v1 table rebuild can
+    # include its indexes and triggers in one savepoint.
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_review
+            ON custody_gap_review_transactions(
+                review_id, role, transaction_id, id
+            )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_custody_gap_review_transactions_scope
+            ON custody_gap_review_transactions(
+                profile_id, transaction_id, review_id
+            )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transaction_scope_insert
+        BEFORE INSERT ON custody_gap_review_transactions
+        BEGIN
+            SELECT CASE WHEN NOT EXISTS (
+                SELECT 1 FROM custody_gap_reviews r
+                WHERE r.id = NEW.review_id
+                  AND r.workspace_id = NEW.workspace_id
+                  AND r.profile_id = NEW.profile_id
+            ) THEN RAISE(
+                ABORT, 'custody_gap_review_transaction_review_scope_mismatch'
+            ) END;
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM transactions t WHERE t.id = NEW.transaction_id
+            ) AND NOT EXISTS (
+                SELECT 1 FROM transactions t
+                WHERE t.id = NEW.transaction_id
+                  AND t.workspace_id = NEW.workspace_id
+                  AND t.profile_id = NEW.profile_id
+            ) THEN RAISE(
+                ABORT, 'custody_gap_review_transaction_scope_mismatch'
+            ) END;
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transactions_immutable
+        BEFORE UPDATE ON custody_gap_review_transactions
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_gap_review_transactions_immutable');
+        END
+        """
+    )
+
+
+def _create_custody_gap_review_transaction_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS custody_gap_review_transactions (
+            id TEXT PRIMARY KEY,
+            review_id TEXT NOT NULL
+                REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,
+            workspace_id TEXT NOT NULL
+                REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL
+                REFERENCES profiles(id) ON DELETE CASCADE,
+            role TEXT NOT NULL CHECK (role IN ('source', 'return')),
+            transaction_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE (review_id, role, transaction_id)
+        )
+        """
+    )
+
+
+def _v1_review_relation_wire_identity(conn, row):
+    """Recover the portable relation tuple from its original signed upsert.
+
+    Alias catalogs are intentionally device-local projections and two peers
+    may know different subsets.  A migrated v1 row therefore takes its review
+    and transaction identities from the immutable signed event that authored
+    that exact ordinal row. A row never captured before upgrade has no portable
+    identity yet and safely falls back to its local tuple; capture will derive
+    its first v2 wire identity after migration.
+    """
+
+    entity_key = json.dumps([str(row["id"])], ensure_ascii=True, separators=(",", ":"))
+    events = conn.execute(
+        """
+        SELECT payload_json
+        FROM sync_events
+        WHERE profile_id = ?
+          AND entity_table = 'custody_gap_review_transactions'
+          AND entity_key = ?
+          AND event_type = 'row.upsert'
+        ORDER BY replica_id, replica_seq, id
+        """,
+        (row["profile_id"], entity_key),
+    ).fetchall()
+    for event in events:
+        try:
+            payload = json.loads(str(event["payload_json"] or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        wire_row = payload.get("row") if isinstance(payload, dict) else None
+        if not isinstance(wire_row, dict):
+            continue
+        if (
+            str(wire_row.get("id") or "") == str(row["id"])
+            and str(wire_row.get("role") or "") == str(row["role"])
+            and type(wire_row.get("ordinal")) is int
+        ):
+            review_id = str(wire_row.get("review_id") or "")
+            transaction_id = str(wire_row.get("transaction_id") or "")
+            if review_id and transaction_id:
+                return review_id, transaction_id
+    return str(row["review_id"]), str(row["transaction_id"])
+
+
+def _ensure_custody_gap_review_transaction_schema(conn):
+    """Replace the unreleased ordinal-keyed relation shape with set identity."""
+
+    table_names = {
+        str(row["name"])
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    columns = {
+        str(row["name"])
+        for row in conn.execute(
+            "PRAGMA table_info(custody_gap_review_transactions)"
+        ).fetchall()
+    }
+    legacy_exists = "custody_gap_review_transactions_v1" in table_names
+    if "ordinal" not in columns and not legacy_exists:
+        return False
+    savepoint = "migrate_custody_gap_review_transactions_v2"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        for object_kind, object_name in (
+            ("TRIGGER", "trg_custody_gap_review_transaction_scope_insert"),
+            ("TRIGGER", "trg_custody_gap_review_transactions_immutable"),
+            ("INDEX", "idx_custody_gap_review_transactions_review"),
+            ("INDEX", "idx_custody_gap_review_transactions_scope"),
+        ):
+            conn.execute(f"DROP {object_kind} IF EXISTS {object_name}")
+        if "ordinal" in columns:
+            if legacy_exists:
+                raise AppError(
+                    "Custody review relation migration state is ambiguous.",
+                    code="custody_review_relation_migration_conflict",
+                    retryable=False,
+                )
+            conn.execute(
+                "ALTER TABLE custody_gap_review_transactions "
+                "RENAME TO custody_gap_review_transactions_v1"
+            )
+            _create_custody_gap_review_transaction_table(conn)
+        else:
+            # Recover a database left by the old non-atomic rebuild after its
+            # legacy rename. SCHEMA may already have recreated an empty/partial
+            # v2 table, so merge by stable relation id instead of replacing it.
+            _create_custody_gap_review_transaction_table(conn)
+        rows = conn.execute(
+            """
+            SELECT id, review_id, workspace_id, profile_id, role,
+                   transaction_id, created_at
+            FROM custody_gap_review_transactions_v1
+            ORDER BY review_id, role, transaction_id, id
+            """,
+        ).fetchall()
+        for row in rows:
+            wire_review_id, wire_transaction_id = _v1_review_relation_wire_identity(
+                conn, row
+            )
+            relation_id = custody_gap_review_transaction_id(
+                wire_review_id,
+                row["role"],
+                wire_transaction_id,
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO custody_gap_review_transactions(
+                    id, review_id, workspace_id, profile_id,
+                    role, transaction_id, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    relation_id,
+                    row["review_id"],
+                    row["workspace_id"],
+                    row["profile_id"],
+                    row["role"],
+                    row["transaction_id"],
+                    row["created_at"],
+                ),
+            )
+            # A delayed signed v1 tombstone/upsert still names the ordinal row
+            # id. Redirect that portable alias before dropping the legacy row.
+            conn.execute(
+                """
+                UPDATE sync_id_map
+                SET local_id = ?
+                WHERE profile_id = ?
+                  AND entity_table = 'custody_gap_review_transactions'
+                  AND local_id = ?
+                """,
+                (relation_id, row["profile_id"], row["id"]),
+            )
+            conn.execute(
+                """
+                INSERT INTO sync_id_map(
+                    profile_id, entity_table, wire_id, local_id, created_at
+                ) VALUES(?, 'custody_gap_review_transactions', ?, ?, ?)
+                ON CONFLICT(profile_id, entity_table, wire_id)
+                DO UPDATE SET local_id = excluded.local_id
+                """,
+                (
+                    row["profile_id"],
+                    row["id"],
+                    relation_id,
+                    row["created_at"],
+                ),
+            )
+        conn.execute("DROP TABLE custody_gap_review_transactions_v1")
+        _create_custody_gap_review_transaction_aux_schema(conn)
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+    return True
+
+
+def backfill_custody_gap_review_relations(
+    conn,
+    *,
+    review_id,
+    workspace_id,
+    profile_id,
+    created_at,
+    relations,
+):
+    """Insert any missing durable review anchors without rewriting history.
+
+    Existing databases and replicas can contain only a prefix of the relation
+    rows.  Repair therefore works per ``(role, transaction_id)`` instead of
+    treating the first child row as proof that the whole review was migrated.
+    An authored transaction identity remains valid after source retraction;
+    only a currently-live row owned by another book makes that identity unsafe
+    to attach here.
+    """
+
+    grouped = {"source": [], "return": []}
+    for role, transaction_id in relations:
+        normalized_role = str(role)
+        normalized_id = str(transaction_id or "")
+        if normalized_role not in grouped or not normalized_id:
+            continue
+        if normalized_id not in grouped[normalized_role]:
+            grouped[normalized_role].append(normalized_id)
+
+    existing_rows = conn.execute(
+        """
+        SELECT role, transaction_id
+        FROM custody_gap_review_transactions
+        WHERE review_id = ?
+        ORDER BY role, transaction_id, id
+        """,
+        (review_id,),
+    ).fetchall()
+    existing_ids = {"source": set(), "return": set()}
+    for row in existing_rows:
+        role = str(row["role"])
+        if role not in existing_ids:
+            continue
+        existing_ids[role].add(str(row["transaction_id"]))
+
+    inserted = 0
+    for role in ("source", "return"):
+        for transaction_id in sorted(grouped[role]):
+            if transaction_id in existing_ids[role]:
+                continue
+            collision = conn.execute(
+                """
+                SELECT 1
+                FROM transactions
+                WHERE id = ?
+                  AND (workspace_id != ? OR profile_id != ?)
+                LIMIT 1
+                """,
+                (transaction_id, workspace_id, profile_id),
+            ).fetchone()
+            if collision is not None:
+                continue
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO custody_gap_review_transactions(
+                    id, review_id, workspace_id, profile_id,
+                    role, transaction_id, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    custody_gap_review_transaction_id(
+                        review_id, role, transaction_id
+                    ),
+                    review_id,
+                    workspace_id,
+                    profile_id,
+                    role,
+                    transaction_id,
+                    created_at,
+                ),
+            )
+            if int(cursor.rowcount) > 0:
+                inserted += int(cursor.rowcount)
+                existing_ids[role].add(transaction_id)
+    return inserted
+
+
+def _backfill_custody_gap_review_transactions(conn):
+    """Normalize only transaction identities already durably authored.
+
+    Older candidate fingerprints cannot be reversed here, and current derived
+    candidates may have changed since a review.  This lower-layer pass is
+    therefore limited to legacy snapshot id arrays and component leg anchors.
+    The custody review layer separately performs an exact fingerprint-checked
+    candidate recovery for old componentless dismissals whose snapshots never
+    contained those arrays.
+    """
+
+    inserted = 0
+    reviews = conn.execute(
+        """
+        SELECT id, workspace_id, profile_id, component_id, snapshot_json, created_at
+        FROM custody_gap_reviews
+        ORDER BY created_at, id
+        """
+    ).fetchall()
+    for review in reviews:
+        relation_ids = {"source": [], "return": []}
+        try:
+            snapshot = json.loads(str(review["snapshot_json"] or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            snapshot = {}
+        if isinstance(snapshot, dict):
+            for role, key in (("source", "source_ids"), ("return", "return_ids")):
+                values = snapshot.get(key)
+                if not isinstance(values, list):
+                    continue
+                for value in values:
+                    if not isinstance(value, str) or not value:
+                        continue
+                    if value not in relation_ids[role]:
+                        relation_ids[role].append(value)
+
+        if review["component_id"]:
+            legs = conn.execute(
+                """
+                SELECT role, COALESCE(anchor_transaction_id, transaction_id) AS transaction_id
+                FROM custody_component_legs
+                WHERE component_id = ?
+                  AND workspace_id = ?
+                  AND profile_id = ?
+                  AND role IN ('source', 'fee', 'destination')
+                  AND COALESCE(anchor_transaction_id, transaction_id) IS NOT NULL
+                ORDER BY ordinal, id
+                """,
+                (
+                    review["component_id"],
+                    review["workspace_id"],
+                    review["profile_id"],
+                ),
+            ).fetchall()
+            for leg in legs:
+                role = "return" if leg["role"] == "destination" else "source"
+                transaction_id = str(leg["transaction_id"])
+                if transaction_id not in relation_ids[role]:
+                    relation_ids[role].append(transaction_id)
+
+        inserted += backfill_custody_gap_review_relations(
+            conn,
+            review_id=review["id"],
+            workspace_id=review["workspace_id"],
+            profile_id=review["profile_id"],
+            created_at=review["created_at"],
+            relations=(
+                *(("source", value) for value in relation_ids["source"]),
+                *(("return", value) for value in relation_ids["return"]),
+            ),
+        )
+        if relation_ids["source"] or relation_ids["return"]:
+            backfill_custody_gap_review_relation_set(
+                conn,
+                review_id=review["id"],
+                workspace_id=review["workspace_id"],
+                profile_id=review["profile_id"],
+                created_at=review["created_at"],
+                expected_source_count=len(relation_ids["source"]),
+                expected_return_count=len(relation_ids["return"]),
+            )
+    return inserted
+
+
+def _backfill_legacy_componentless_review_transactions(conn):
+    """Run the higher-layer deterministic recovery after DB initialization.
+
+    The cheap guard avoids importing or running the custody matcher for normal
+    databases.  The local runtime import keeps the foundational DB module free
+    of a module-load back-edge while allowing a semantic migration that cannot
+    safely be implemented by reversing a one-way candidate fingerprint.
+    """
+
+    pending = conn.execute(
+        """
+        SELECT 1
+        FROM custody_gap_reviews r
+        WHERE r.component_id IS NULL
+          AND r.action = 'dismissed'
+          AND COALESCE(r.event_kind, 'review_decision') = 'review_decision'
+          AND (
+              NOT EXISTS (
+                  SELECT 1 FROM custody_gap_review_relation_sets s
+                  WHERE s.review_id = r.id
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM custody_gap_review_relation_sets s
+                  WHERE s.review_id = r.id
+                    AND (
+                        s.expected_source_count != (
+                            SELECT COUNT(*)
+                            FROM custody_gap_review_transactions x
+                            WHERE x.review_id = r.id AND x.role = 'source'
+                        )
+                        OR s.expected_return_count != (
+                            SELECT COUNT(*)
+                            FROM custody_gap_review_transactions x
+                            WHERE x.review_id = r.id AND x.role = 'return'
+                        )
+                    )
+              )
+          )
+        LIMIT 1
+        """
+    ).fetchone()
+    if pending is None:
+        return 0
+    from .core.custody_gap_reviews import (
+        backfill_legacy_componentless_review_relations,
+    )
+
+    return backfill_legacy_componentless_review_relations(conn)
+
+
+def _custody_replicable_detail_hash(payload_json):
+    payload = json.loads(payload_json)
+    if not isinstance(payload, dict):
+        raise ValueError("custody evidence payload is invalid")
+    # Keep migration backfills byte-for-byte equivalent to new activation
+    # commitments. Observer lifecycle enrichment (mempool -> confirmed,
+    # reorg position, improved timestamps, richer raw graph detail) is retained
+    # in the immutable local snapshot but is not an ownership contradiction.
+    for volatile_key in (
+        "fingerprint",
+        "occurred_at",
+        "confirmed_at",
+        "raw_json",
+    ):
+        payload.pop(volatile_key, None)
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _backfill_local_custody_evidence_commitments(conn):
+    """Migrate only evidence that an older local activation already bound.
+
+    Current transaction rows are deliberately never consulted here.  A
+    received component without the author's commitments must remain
+    ineffective instead of being blessed by whatever this replica happens to
+    know today.  A genuinely transactionless active component is the sole safe
+    zero-evidence backfill.
+    """
+
+    migrated = 0
+    rows = conn.execute(
+        """
+        SELECT c.id, c.workspace_id, c.profile_id, c.state, c.created_at
+        FROM custody_components c
+        WHERE c.expected_evidence_count IS NULL
+        ORDER BY c.created_at, c.id
+        """
+    ).fetchall()
+    for component in rows:
+        snapshots = conn.execute(
+            """
+            SELECT quantity_hash, detail_hash, payload_json, created_at
+            FROM custody_authored_evidence_snapshots
+            WHERE profile_id = ?
+              AND subject_kind = 'custody_component'
+              AND subject_id = ?
+            ORDER BY quantity_hash, detail_hash
+            """,
+            (component["profile_id"], component["id"]),
+        ).fetchall()
+        if snapshots:
+            commitment_snapshots = sorted(
+                (
+                    snapshot["quantity_hash"],
+                    _custody_replicable_detail_hash(snapshot["payload_json"]),
+                    snapshot["created_at"],
+                )
+                for snapshot in snapshots
+            )
+            for ordinal, (quantity_hash, detail_hash, snapshot_created_at) in enumerate(
+                commitment_snapshots
+            ):
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO custody_component_evidence_commitments(
+                        id, component_id, workspace_id, profile_id, ordinal,
+                        quantity_hash, detail_hash, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        _custody_evidence_commitment_id(component["id"], ordinal),
+                        component["id"],
+                        component["workspace_id"],
+                        component["profile_id"],
+                        ordinal,
+                        quantity_hash,
+                        detail_hash,
+                        snapshot_created_at or component["created_at"],
+                    ),
+                )
+            conn.execute(
+                "UPDATE custody_components SET expected_evidence_count = ? WHERE id = ?",
+                (len(commitment_snapshots), component["id"]),
+            )
+            migrated += 1
+            continue
+        if component["state"] != "active":
+            continue
+        anchored = conn.execute(
+            """
+            SELECT 1 FROM custody_component_legs
+            WHERE component_id = ?
+              AND COALESCE(anchor_transaction_id, transaction_id) IS NOT NULL
+            LIMIT 1
+            """,
+            (component["id"],),
+        ).fetchone()
+        if anchored is None:
+            conn.execute(
+                "UPDATE custody_components SET expected_evidence_count = 0 WHERE id = ?",
+                (component["id"],),
+            )
+            migrated += 1
+    return migrated
+
+
+def _record_custody_durable_evidence_migration(
+    conn,
+    *,
+    anchor_column_present_before,
+    anchored_legs_before,
+    anchored_legs_after,
+    evidence_column_present_before,
+    evidence_commitments_before,
+    evidence_commitments_after,
+):
+    """Persist one bounded, payload-free before/after migration report."""
+
+    changes = [
+        {
+            "name": "durable_transaction_anchors",
+            "before": {
+                "column_present": bool(anchor_column_present_before),
+                "anchored_leg_count": int(anchored_legs_before),
+            },
+            "after": {
+                "column_present": True,
+                "anchored_leg_count": int(anchored_legs_after),
+            },
+            "rows_changed": max(
+                0, int(anchored_legs_after) - int(anchored_legs_before)
+            ),
+            "explanation": _CUSTODY_MIGRATION_EXPLANATIONS[
+                "durable_transaction_anchors"
+            ],
+        },
+        {
+            "name": "payload_free_evidence_commitments",
+            "before": {
+                "header_column_present": bool(evidence_column_present_before),
+                "commitment_count": int(evidence_commitments_before),
+            },
+            "after": {
+                "header_column_present": True,
+                "commitment_count": int(evidence_commitments_after),
+            },
+            "rows_changed": max(
+                0,
+                int(evidence_commitments_after)
+                - int(evidence_commitments_before),
+            ),
+            "explanation": _CUSTODY_MIGRATION_EXPLANATIONS[
+                "payload_free_evidence_commitments"
+            ],
+        },
+    ]
+    impact = {
+        "schema_version": 1,
+        "migration": CUSTODY_DURABLE_EVIDENCE_MIGRATION,
+        "changes": changes,
+    }
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO schema_migration_audits(
+            id, migration_name, schema_version, impact_json, created_at
+        ) VALUES(?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        """,
+        (
+            CUSTODY_DURABLE_EVIDENCE_MIGRATION,
+            CUSTODY_DURABLE_EVIDENCE_MIGRATION,
+            json.dumps(impact, sort_keys=True, separators=(",", ":")),
+        ),
+    )
+
+
 def ensure_schema_compat(conn):
     """Apply one-shot backfills not covered by `CREATE TABLE IF NOT EXISTS`.
 
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
+    ensure_column(
+        conn,
+        "chain_observer_instances",
+        "state_epoch",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(
+        conn,
+        "filed_report_snapshots",
+        "report_scope_json",
+        "TEXT NOT NULL DEFAULT '{}'",
+    )
+    ensure_column(
+        conn,
+        "custody_gap_reviews",
+        "authored_source",
+        "TEXT NOT NULL DEFAULT 'user'",
+    )
+    ensure_column(
+        conn,
+        "custody_gap_reviews",
+        "event_kind",
+        "TEXT NOT NULL DEFAULT 'review_decision'",
+    )
     ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
     ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
     ensure_column(conn, "profiles", "require_coarse_review", "INTEGER NOT NULL DEFAULT 0")
@@ -2263,17 +3990,90 @@ def ensure_schema_compat(conn):
     # Added after the msat rebuild, whose fixed column list would otherwise drop
     # it on a legacy REAL-typed database.
     ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(
+        conn,
+        "transactions",
+        "external_id_kind",
+        "TEXT CHECK(external_id_kind IS NULL OR external_id_kind = 'txid')",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "source_network",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "target_network",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "source_rail",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "target_rail",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
+    legacy_leg_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(custody_component_legs)")
+    }
+    legacy_component_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(custody_components)")
+    }
+    anchor_column_present_before = "anchor_transaction_id" in legacy_leg_columns
+    evidence_column_present_before = (
+        "expected_evidence_count" in legacy_component_columns
+    )
+    anchored_legs_before = (
+        int(
+            conn.execute(
+                "SELECT COUNT(*) FROM custody_component_legs "
+                "WHERE anchor_transaction_id IS NOT NULL"
+            ).fetchone()[0]
+        )
+        if anchor_column_present_before
+        else 0
+    )
+    evidence_commitments_before = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM custody_component_evidence_commitments"
+        ).fetchone()[0]
+    )
+    # Evidence migration below inspects each leg's durable anchor to
+    # distinguish a genuinely transactionless active component from one whose
+    # author evidence is missing.  Older custody schemas do not have that
+    # column, so establish and populate it before running the backfill.
+    ensure_column(conn, "custody_component_legs", "occurred_at", "TEXT")
+    added_anchor_column = _ensure_column_no_commit(
+        conn, "custody_component_legs", "anchor_transaction_id", "TEXT"
+    )
+    conn.execute(
+        "UPDATE custody_component_legs "
+        "SET anchor_transaction_id = transaction_id "
+        "WHERE anchor_transaction_id IS NULL AND transaction_id IS NOT NULL"
+    )
     added_leg_commitment = _ensure_column_no_commit(
         conn, "custody_components", "expected_leg_count", "INTEGER"
     )
     added_allocation_commitment = _ensure_column_no_commit(
         conn, "custody_components", "expected_allocation_count", "INTEGER"
+    )
+    added_evidence_commitment = _ensure_column_no_commit(
+        conn, "custody_components", "expected_evidence_count", "INTEGER"
     )
     added_authored_source = _ensure_column_no_commit(
         conn, "custody_components", "authored_source", "TEXT DEFAULT 'user'"
@@ -2297,15 +4097,44 @@ def ensure_schema_compat(conn):
             "UPDATE custody_components SET authored_source = 'user' "
             "WHERE authored_source IS NULL OR authored_source = ''"
         )
-    if added_leg_commitment or added_allocation_commitment or added_authored_source:
-        conn.commit()
-    ensure_column(conn, "custody_component_legs", "occurred_at", "TEXT")
-    ensure_column(conn, "custody_component_legs", "anchor_transaction_id", "TEXT")
-    conn.execute(
-        "UPDATE custody_component_legs "
-        "SET anchor_transaction_id = transaction_id "
-        "WHERE anchor_transaction_id IS NULL AND transaction_id IS NOT NULL"
+    migrated_evidence_commitments = _backfill_local_custody_evidence_commitments(conn)
+    anchored_legs_after = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM custody_component_legs "
+            "WHERE anchor_transaction_id IS NOT NULL"
+        ).fetchone()[0]
     )
+    evidence_commitments_after = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM custody_component_evidence_commitments"
+        ).fetchone()[0]
+    )
+    if added_anchor_column or added_evidence_commitment or migrated_evidence_commitments:
+        _record_custody_durable_evidence_migration(
+            conn,
+            anchor_column_present_before=anchor_column_present_before,
+            anchored_legs_before=anchored_legs_before,
+            anchored_legs_after=anchored_legs_after,
+            evidence_column_present_before=evidence_column_present_before,
+            evidence_commitments_before=evidence_commitments_before,
+            evidence_commitments_after=evidence_commitments_after,
+        )
+    if (
+        added_anchor_column
+        or added_leg_commitment
+        or added_allocation_commitment
+        or added_evidence_commitment
+        or added_authored_source
+        or migrated_evidence_commitments
+    ):
+        conn.commit()
+    _ensure_custody_leg_role_schema(conn)
+    if _ensure_custody_gap_review_transaction_schema(conn):
+        conn.commit()
+    if _backfill_custody_gap_review_transactions(conn):
+        conn.commit()
+    if _backfill_legacy_componentless_review_transactions(conn):
+        conn.commit()
     _ensure_custody_revision_immutability_triggers(conn)
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
@@ -2328,8 +4157,11 @@ def _ensure_custody_revision_immutability_triggers(conn):
         "trg_custody_component_revision_delete_immutable",
         "trg_custody_component_leg_revision_delete_immutable",
         "trg_custody_component_allocation_revision_delete_immutable",
+        "trg_custody_component_evidence_revision_immutable",
+        "trg_custody_component_evidence_revision_delete_immutable",
         "trg_custody_component_leg_count_commitment",
         "trg_custody_component_allocation_count_commitment",
+        "trg_custody_component_evidence_count_commitment",
     ):
         conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
     conn.execute(
@@ -2351,6 +4183,18 @@ def _ensure_custody_revision_immutability_triggers(conn):
           OR OLD.conversion_metadata_json IS NOT NEW.conversion_metadata_json
           OR OLD.expected_leg_count IS NOT NEW.expected_leg_count
           OR OLD.expected_allocation_count IS NOT NEW.expected_allocation_count
+          OR (
+              OLD.expected_evidence_count IS NOT NEW.expected_evidence_count
+              AND NOT (
+                  OLD.expected_evidence_count IS NULL
+                  AND NEW.expected_evidence_count IS NOT NULL
+                  AND NEW.expected_evidence_count >= 0
+                  AND (
+                      (OLD.state IN ('active', 'superseded') AND OLD.state = NEW.state)
+                      OR (OLD.state = 'draft' AND NEW.state = 'active')
+                  )
+              )
+          )
           OR OLD.authored_source IS NOT NEW.authored_source
           OR OLD.notes IS NOT NEW.notes
           OR OLD.supersedes_component_id IS NOT NEW.supersedes_component_id
@@ -2398,6 +4242,15 @@ def _ensure_custody_revision_immutability_triggers(conn):
           )
         BEGIN
             SELECT RAISE(ABORT, 'custody_component_leg_revision_immutable');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_evidence_revision_immutable
+        BEFORE UPDATE ON custody_component_evidence_commitments
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_evidence_revision_immutable');
         END
         """
     )
@@ -2451,6 +4304,22 @@ def _ensure_custody_revision_immutability_triggers(conn):
     )
     conn.execute(
         """
+        CREATE TRIGGER trg_custody_component_evidence_revision_delete_immutable
+        BEFORE DELETE ON custody_component_evidence_commitments
+        WHEN EXISTS (
+            SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM custody_component_purge_authorizations authorization
+            WHERE authorization.profile_id = OLD.profile_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_evidence_revision_delete_immutable');
+        END
+        """
+    )
+    conn.execute(
+        """
         CREATE TRIGGER trg_custody_component_leg_count_commitment
         BEFORE INSERT ON custody_component_legs
         WHEN NOT EXISTS (
@@ -2494,6 +4363,31 @@ def _ensure_custody_revision_immutability_triggers(conn):
         )
         BEGIN
             SELECT RAISE(ABORT, 'custody_component_allocation_count_commitment');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_evidence_count_commitment
+        BEFORE INSERT ON custody_component_evidence_commitments
+        WHEN NOT EXISTS (
+            SELECT 1 FROM custody_component_evidence_commitments current
+            WHERE current.id = NEW.id
+        )
+        AND
+        (
+            SELECT c.expected_evidence_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        ) IS NOT NULL
+        AND (
+            SELECT COUNT(*) FROM custody_component_evidence_commitments evidence
+            WHERE evidence.component_id = NEW.component_id
+        ) >= (
+            SELECT c.expected_evidence_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_evidence_count_commitment');
         END
         """
     )
@@ -3566,7 +5460,7 @@ def _migrate_msat_columns(conn):
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
         if migrate_transactions:
-            # The custody leg scope triggers query ``transactions``. SQLite
+            # Custody scope triggers query ``transactions``. SQLite
             # validates trigger bodies while the legacy REAL table is dropped /
             # renamed, even with foreign keys disabled, so suspend only those
             # derived guards for the atomic rebuild and restore the idempotent
@@ -3575,6 +5469,7 @@ def _migrate_msat_columns(conn):
                 """
                 DROP TRIGGER IF EXISTS trg_custody_component_scope_insert;
                 DROP TRIGGER IF EXISTS trg_custody_component_scope_update;
+                DROP TRIGGER IF EXISTS trg_custody_gap_review_transaction_scope_insert;
                 """
             )
             conn.executescript(
@@ -3608,6 +5503,12 @@ def _migrate_msat_columns(conn):
                     pricing_method TEXT,
                     pricing_external_ref TEXT,
                     pricing_quality TEXT,
+                    commercial_applied_link_id TEXT,
+                    review_status TEXT,
+                    taxability_override INTEGER,
+                    at_regime_override TEXT,
+                    at_category_override TEXT,
+                    privacy_boundary TEXT,
                     kind TEXT,
                     description TEXT,
                     counterparty TEXT,
@@ -3626,6 +5527,9 @@ def _migrate_msat_columns(conn):
                     pricing_provider, pricing_pair, pricing_timestamp,
                     pricing_fetched_at, pricing_granularity, pricing_method,
                     pricing_external_ref, pricing_quality,
+                    commercial_applied_link_id, review_status,
+                    taxability_override, at_regime_override,
+                    at_category_override, privacy_boundary,
                     kind, description, counterparty, note, excluded, raw_json, created_at
                 FROM transactions;
                 DROP TABLE transactions;
@@ -3767,6 +5671,7 @@ def _migrate_msat_columns(conn):
         _recreate_msat_migration_indexes(conn)
         if migrate_transactions:
             conn.executescript(CUSTODY_COMPONENT_SCHEMA)
+            _create_custody_gap_review_transaction_aux_schema(conn)
     except Exception:
         conn.rollback()
         raise

@@ -480,6 +480,54 @@ def _execute_ai_tool_on_conn(executor, call, runtime, conn):
     return results[0]
 
 
+def _open_scoped_local_ai_runtime(data_root):
+    conn = open_db(data_root)
+    workspace = daemon_module.core_accounts.create_workspace(conn, "Book")
+    profile = daemon_module.core_accounts.create_profile(
+        conn,
+        workspace["id"],
+        "Owner",
+        "EUR",
+        "FIFO",
+        "generic",
+        365,
+    )
+    runtime = AiToolRuntime(
+        data_root=str(data_root),
+        runtime_config={},
+        main_thread_tasks=queue.Queue(),
+        maintenance_state={
+            "provider_kind": "local",
+            "scope_workspace_id": workspace["id"],
+            "scope_profile_id": profile["id"],
+        },
+    )
+    return conn, runtime
+
+
+def _custody_ai_consent_audit():
+    return daemon_module.CustodyAiConsentAudit(
+        provider_kind="local",
+        model="local-test-model",
+        consent_decision="allow_once",
+        consent_requested_at="2026-07-15T10:00:00Z",
+        consent_decided_at="2026-07-15T10:00:01Z",
+    )
+
+
+def _execute_custody_ai_tool_on_conn(call, runtime, conn, audit):
+    return _execute_ai_tool_on_conn(
+        lambda parsed_call, tool_runtime: _execute_mutating_ai_tool(
+            parsed_call,
+            tool_runtime,
+            custody_audit=audit,
+        ),
+        call,
+        runtime,
+        conn,
+    )
+
+
 def _seed_austrian_hodl_disposal(data_root, tmp_root):
     csv_path = Path(tmp_root) / "hodl-disposal.csv"
     csv_path.write_text(
@@ -6478,6 +6526,213 @@ class DaemonSmokeTest(unittest.TestCase):
             results[0]["envelope"]["kind"],
             "ui.journals.quarantine.resolve",
         )
+
+    def test_custody_ai_mutation_commits_domain_write_and_executed_audit_atomically(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-custody-ai-success-") as tmp:
+            data_root = Path(tmp) / "data"
+            conn, runtime = _open_scoped_local_ai_runtime(data_root)
+            try:
+                conn.execute(
+                    "CREATE TABLE custody_ai_test_markers(id TEXT PRIMARY KEY, source TEXT)"
+                )
+                conn.commit()
+                call = ParsedAiToolCall(
+                    call_id="call-custody-success",
+                    name="ui.custody.gaps.bridge.create",
+                    arguments={
+                        "gap_id": "gap:whirlpool",
+                        "expected_fingerprint": "a" * 64,
+                    },
+                )
+
+                def write_marker(
+                    target_conn,
+                    kind,
+                    arguments,
+                    *,
+                    authored_source,
+                    commit,
+                ):
+                    self.assertEqual(kind, "ui.custody.gaps.bridge.create")
+                    self.assertEqual(arguments, call.arguments)
+                    self.assertEqual(authored_source, "ai_tool")
+                    self.assertFalse(commit)
+                    target_conn.execute(
+                        "INSERT INTO custody_ai_test_markers(id, source) VALUES(?, ?)",
+                        ("domain-write", authored_source),
+                    )
+                    return {
+                        "gap_id": "gap:whirlpool",
+                        "status": "resolved",
+                        "review_id": "review-ai-1",
+                        "component_id": "component-ai-1",
+                    }
+
+                with mock.patch(
+                    "kassiber.daemon._ui_custody_gap_payload_from_conn",
+                    side_effect=write_marker,
+                ):
+                    result = _execute_custody_ai_tool_on_conn(
+                        call,
+                        runtime,
+                        conn,
+                        _custody_ai_consent_audit(),
+                    )
+
+                self.assertTrue(result["ok"])
+                self.assertEqual(
+                    tuple(
+                        conn.execute(
+                            "SELECT id, source FROM custody_ai_test_markers"
+                        ).fetchone()
+                    ),
+                    ("domain-write", "ai_tool"),
+                )
+                audit_row = conn.execute(
+                    """
+                    SELECT execution_status, execution_code, review_id, component_id,
+                           consent_decision, call_id
+                    FROM custody_ai_assistance_audits
+                    """
+                ).fetchone()
+                self.assertEqual(
+                    tuple(audit_row),
+                    (
+                        "executed",
+                        None,
+                        "review-ai-1",
+                        "component-ai-1",
+                        "allow_once",
+                        "call-custody-success",
+                    ),
+                )
+            finally:
+                conn.close()
+
+    def test_custody_ai_audit_insert_failure_rolls_back_domain_write_and_records_failure(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-custody-ai-failure-") as tmp:
+            data_root = Path(tmp) / "data"
+            conn, runtime = _open_scoped_local_ai_runtime(data_root)
+            try:
+                conn.execute(
+                    "CREATE TABLE custody_ai_test_markers(id TEXT PRIMARY KEY, source TEXT)"
+                )
+                conn.commit()
+                call = ParsedAiToolCall(
+                    call_id="call-custody-audit-failure",
+                    name="ui.custody.gaps.bridge.create",
+                    arguments={
+                        "gap_id": "gap:whirlpool",
+                        "expected_fingerprint": "b" * 64,
+                    },
+                )
+
+                def write_marker(target_conn, _kind, _arguments, **_kwargs):
+                    target_conn.execute(
+                        "INSERT INTO custody_ai_test_markers(id, source) VALUES(?, ?)",
+                        ("must-roll-back", "ai_tool"),
+                    )
+                    return {
+                        "gap_id": "gap:whirlpool",
+                        "review_id": "review-must-roll-back",
+                        "component_id": "component-must-roll-back",
+                    }
+
+                original_append = (
+                    daemon_module.core_custody_ai_audit.append_assistance_record
+                )
+                append_attempts = 0
+
+                def fail_executed_audit_once(*args, **kwargs):
+                    nonlocal append_attempts
+                    append_attempts += 1
+                    if append_attempts == 1:
+                        raise RuntimeError("simulated executed-audit insert failure")
+                    return original_append(*args, **kwargs)
+
+                with (
+                    mock.patch(
+                        "kassiber.daemon._ui_custody_gap_payload_from_conn",
+                        side_effect=write_marker,
+                    ),
+                    mock.patch(
+                        "kassiber.daemon.core_custody_ai_audit.append_assistance_record",
+                        side_effect=fail_executed_audit_once,
+                    ),
+                ):
+                    result = _execute_custody_ai_tool_on_conn(
+                        call,
+                        runtime,
+                        conn,
+                        _custody_ai_consent_audit(),
+                    )
+
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["reason"], "tool_error")
+                self.assertEqual(append_attempts, 2)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM custody_ai_test_markers"
+                    ).fetchone()[0],
+                    0,
+                )
+                audit_rows = conn.execute(
+                    """
+                    SELECT execution_status, execution_code, review_id, component_id,
+                           consent_decision, call_id
+                    FROM custody_ai_assistance_audits
+                    """
+                ).fetchall()
+                self.assertEqual(len(audit_rows), 1)
+                self.assertEqual(
+                    tuple(audit_rows[0]),
+                    (
+                        "failed",
+                        "tool_error",
+                        None,
+                        None,
+                        "allow_once",
+                        "call-custody-audit-failure",
+                    ),
+                )
+            finally:
+                conn.close()
+
+    def test_custody_ai_mutation_without_audit_context_fails_before_domain_handler(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-custody-ai-no-audit-") as tmp:
+            data_root = Path(tmp) / "data"
+            conn, runtime = _open_scoped_local_ai_runtime(data_root)
+            try:
+                call = ParsedAiToolCall(
+                    call_id="call-custody-no-audit",
+                    name="ui.custody.gaps.dismiss",
+                    arguments={
+                        "gap_id": "gap:whirlpool",
+                        "expected_fingerprint": "c" * 64,
+                    },
+                )
+
+                with mock.patch(
+                    "kassiber.daemon._ui_custody_gap_payload_from_conn"
+                ) as domain_handler:
+                    result = _execute_ai_tool_on_conn(
+                        _execute_mutating_ai_tool,
+                        call,
+                        runtime,
+                        conn,
+                    )
+
+                domain_handler.assert_not_called()
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["reason"], "custody_ai_audit_required")
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM custody_ai_assistance_audits"
+                    ).fetchone()[0],
+                    0,
+                )
+            finally:
+                conn.close()
 
     def test_ai_mutation_rejects_book_changed_while_waiting_for_consent(self):
         task_queue = queue.Queue()
