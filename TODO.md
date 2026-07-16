@@ -170,8 +170,9 @@ same verification surface.
   - [x] Replace heuristic transfer claims with independently scoped
     source/return holds; delete `CUSTODY_CANDIDATE` / `HEURISTIC_CANDIDATE`
     arbitration so suggestions cannot contain a basis-carrying target edge.
-  - [ ] Persist one normalized, versioned candidate projection with explicit
-    completeness metadata and indexed keyset pagination.
+  - [x] Persist one normalized, versioned candidate projection with explicit
+    completeness metadata and indexed keyset pagination; make journal, UI and
+    AI reuse it and clear the obsolete serialized page cache after replacement.
   - [ ] Add pure review planning and fingerprint/version-checked apply.
   - [ ] Migrate pair/payout authored meaning into components with typed
     replicated economic terms; freeze legacy writes and retain replay history.

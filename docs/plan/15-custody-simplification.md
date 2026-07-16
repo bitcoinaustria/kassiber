@@ -141,7 +141,10 @@ binary.
    candidates/completeness once per input version; introduce pure plan/apply.
    The first part is complete: promotion now emits independent source/return
    holds and typed issues, never a source-to-target claim. The normalized
-   projection and pure planner remain separate migration slices.
+   projection is also complete: accounting/review consumers share one
+   input-version/ignored-boundary projection, completeness lives on its header,
+   boundary relations are normalized, and presentation pages use indexed
+   keyset rows without rerunning discovery. The pure planner remains separate.
 4. Add typed replicated component economic terms, migrate pair/payout authored
    state deterministically, and freeze legacy writes.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;

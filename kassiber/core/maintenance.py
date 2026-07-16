@@ -227,6 +227,18 @@ def reset_current_profile_data(
         "custody_gap_candidate_snapshots": _count_profile_rows(
             conn, "custody_gap_candidate_snapshots", profile_id
         ),
+        "custody_gap_candidate_projections": _count_profile_rows(
+            conn, "custody_gap_candidate_projections", profile_id
+        ),
+        "custody_gap_candidates": _count_profile_rows(
+            conn, "custody_gap_candidates", profile_id
+        ),
+        "custody_gap_candidate_boundaries": _count_profile_rows(
+            conn, "custody_gap_candidate_boundaries", profile_id
+        ),
+        "custody_gap_projection_rows": _count_profile_rows(
+            conn, "custody_gap_projection_rows", profile_id
+        ),
         "custody_gap_review_relation_sets": _count_profile_rows(
             conn, "custody_gap_review_relation_sets", profile_id
         ),
@@ -441,6 +453,10 @@ def reset_current_profile_data(
             "filed_report_snapshots",
             "custody_authored_evidence_snapshots",
             "custody_gap_candidate_snapshots",
+            "custody_gap_projection_rows",
+            "custody_gap_candidate_boundaries",
+            "custody_gap_candidates",
+            "custody_gap_candidate_projections",
             "journal_account_holdings",
             "journal_tax_summary",
             "journal_quarantines",

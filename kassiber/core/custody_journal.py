@@ -16,6 +16,7 @@ from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import require_tax_processing_supported
 from . import custody_components
 from . import custody_gap_reviews
+from . import custody_gaps
 from . import custody_interpreters
 from . import custody_quantity_runtime
 from . import custody_quantity_store
@@ -427,6 +428,44 @@ class CustodyJournalBuilder:
             direct_payout_records=direct_payout_records,
             component_transaction_ids=component_transaction_ids,
         )
+        projection_ignored_ids = {
+            *ignored_gap_ids,
+            *component_transaction_ids,
+        }
+        observations_by_hash = {
+            item.quantity_hash: item for item in canonical_input.observations
+        }
+        for claim in interpretation.claims:
+            # Gap discovery must retain unmatched/suspense sources so the
+            # review queue can explain a missing-wallet hypothesis. Only an
+            # authoritative target-bearing custody edge suppresses both
+            # boundaries from the shared candidate population.
+            if claim.target is None:
+                continue
+            source = observations_by_hash.get(claim.source.observation_hash)
+            if source is not None:
+                projection_ignored_ids.add(source.transaction_id)
+            target = observations_by_hash.get(claim.target.observation_hash)
+            if target is not None:
+                projection_ignored_ids.add(target.transaction_id)
+        projection_ignored_transaction_ids = tuple(
+            sorted(projection_ignored_ids)
+        )
+        runtime_ignored_transaction_ids = tuple(
+            sorted(
+                {
+                    *projection_ignored_ids,
+                    *interpretation.blocked_transaction_ids,
+                }
+            )
+        )
+        gap_search_result, _gap_legs = custody_gaps.load_gap_search_result(
+            self.conn,
+            self.profile_id,
+            ignored_transaction_ids=projection_ignored_transaction_ids,
+            accounting_ignored_transaction_ids=runtime_ignored_transaction_ids,
+            producer_kind="journal",
+        )
         quantity_state = custody_quantity_runtime.build_canonical_quantity_state(
             rows,
             interpreter_claims=interpretation.claims,
@@ -434,12 +473,10 @@ class CustodyJournalBuilder:
             native_evidence=interpretation.native_audits,
             direct_payout_records=direct_payout_records,
             interpreter_blockers=interpretation.blocking_quarantines,
-            ignored_gap_transaction_ids=(
-                *ignored_gap_ids,
-                *interpretation.blocked_transaction_ids,
-            ),
+            ignored_gap_transaction_ids=runtime_ignored_transaction_ids,
             component_evidence_snapshots=evidence_snapshots,
             dismissed_gap_fingerprints=dismissed_fingerprints,
+            gap_search_result=gap_search_result,
         )
         custody_transfers = custody_quantity_runtime.canonical_internal_transfer_rows(
             quantity_state,

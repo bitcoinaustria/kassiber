@@ -25,6 +25,7 @@ from .custody_evidence import (
 from .custody_gap_holds import CustodyGapHold, compile_gap_candidate_holds
 from .custody_gap_reviews import candidate_fingerprint
 from .custody_gaps import (
+    CustodyGapSearchResult,
     search_custody_gap_candidates,
 )
 from .custody_native_audit import compile_verified_native_claims
@@ -518,6 +519,7 @@ def _gap_candidate_holds_and_issues(
     *,
     ignored_transaction_ids: Iterable[str],
     dismissed_fingerprints: Mapping[str, str],
+    search_result: CustodyGapSearchResult | None = None,
 ) -> tuple[
     tuple[QuantityClaim, ...],
     tuple[QuantityIssue, ...],
@@ -528,19 +530,31 @@ def _gap_candidate_holds_and_issues(
 
     ignored = tuple(sorted({str(item) for item in ignored_transaction_ids if item}))
     capacity_blocking_source_ids: set[str] = set()
-    search_result = search_custody_gap_candidates(rows, ignored_ids=ignored)
-    if search_result.search_complete:
-        candidates = search_result.candidates
-    else:
+    if search_result is None:
+        search_result = search_custody_gap_candidates(rows, ignored_ids=ignored)
+    candidates = search_result.accounting_candidates
+    if not search_result.search_complete:
         # Candidate search is advisory. Capacity says only that suggestions are
         # incomplete; it is not itself evidence about any physical quantity.
         # A population ceiling can, however, be reached *after* structured
         # candidates were completely scored. Preserve those candidates for
         # canonical accounting even though the UI queue remains bounded.
-        candidates = search_result.accounting_candidates
         capacity_blocking_source_ids.update(search_result.blocking_source_ids)
         if not candidates and not capacity_blocking_source_ids:
             return (), (), (), ()
+
+    # The shared projection intentionally retains unmatched/suspense
+    # boundaries for review presentation. Existing interpreter blockers still
+    # own those exact accounting slices, so do not add a competing gap hold.
+    ignored_set = set(ignored)
+    candidates = tuple(
+        candidate
+        for candidate in candidates
+        if not ignored_set.intersection(
+            (*candidate.source_ids, *candidate.return_ids)
+        )
+    )
+    capacity_blocking_source_ids.difference_update(ignored_set)
 
     observations = _observations_by_transaction(canonical)
     claims: list[QuantityClaim] = []
@@ -944,6 +958,7 @@ def build_canonical_quantity_state(
         Mapping[str, Sequence[Mapping[str, Any]]] | None
     ) = None,
     dismissed_gap_fingerprints: Mapping[str, str] | None = None,
+    gap_search_result: CustodyGapSearchResult | None = None,
 ) -> CanonicalQuantityState:
     """Build the canonical quantity projection and tax-eligibility boundary."""
 
@@ -985,6 +1000,7 @@ def build_canonical_quantity_state(
             canonical,
             ignored_transaction_ids=ignored_transaction_ids,
             dismissed_fingerprints=dismissed_gap_fingerprints or {},
+            search_result=gap_search_result,
         )
     )
     direct_payout_claims = _direct_payout_claims(

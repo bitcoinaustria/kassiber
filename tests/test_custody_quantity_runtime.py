@@ -733,6 +733,48 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         self.assertIsNone(state.tax_eligibility.barrier_event_key)
         self.assertFalse(state.gap_candidate_transaction_ids)
 
+    def test_shared_candidate_does_not_duplicate_interpreter_blocked_slice(self):
+        rows = [
+            _row(
+                "out",
+                "wallet-a",
+                "outbound",
+                10_000,
+                "2020-01-01T00:00:00Z",
+                privacy_boundary="coinjoin",
+            ),
+            _row(
+                "return",
+                "wallet-c",
+                "inbound",
+                9_900,
+                "2021-01-01T00:00:00Z",
+            ),
+        ]
+        candidate = next(
+            item
+            for item in suggest_custody_gap_candidates(
+                enriched_quantity_rows(rows)
+            )
+            if item.promotion_eligible
+        )
+
+        state = build_canonical_quantity_state(
+            rows,
+            ignored_gap_transaction_ids=("out",),
+            gap_search_result=CustodyGapSearchResult(
+                candidates=(candidate,),
+                accounting_candidates=(candidate,),
+                search_complete=True,
+                candidate_count=1,
+                promotion_eligible_count=1,
+            ),
+        )
+
+        self.assertFalse(state.report_blocked)
+        self.assertFalse(state.gap_candidate_transaction_ids)
+        self.assertFalse(state.gap_holds)
+
     def test_incomplete_structured_search_blocks_only_source_disposal(self):
         rows = [
             _row(

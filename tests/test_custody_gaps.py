@@ -9,7 +9,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from kassiber.core import custody_gaps
+from kassiber.core import custody_gap_reviews, custody_gaps
 from kassiber.core.custody_gaps import (
     CustodyGapSearchLimitError,
     CustodyGapSearchResult,
@@ -1013,6 +1013,18 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 journal_input_version INTEGER NOT NULL DEFAULT 0,
                 last_processed_input_version INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE custody_gap_reviews (
+                id TEXT PRIMARY KEY,
+                profile_id TEXT NOT NULL,
+                gap_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                candidate_fingerprint TEXT NOT NULL,
+                action TEXT NOT NULL,
+                event_kind TEXT NOT NULL,
+                component_id TEXT,
+                snapshot_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            );
             CREATE TABLE transactions (
                 id TEXT PRIMARY KEY,
                 profile_id TEXT NOT NULL,
@@ -1053,6 +1065,57 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 summary_json TEXT NOT NULL,
                 gaps_json TEXT NOT NULL
             );
+            CREATE TABLE custody_gap_candidate_projections (
+                id TEXT PRIMARY KEY, profile_id TEXT NOT NULL,
+                producer_kind TEXT NOT NULL DEFAULT 'review',
+                version_json TEXT NOT NULL, input_hash TEXT NOT NULL,
+                ignored_ids_json TEXT NOT NULL DEFAULT '[]',
+                accounting_ignored_ids_json TEXT NOT NULL DEFAULT '[]',
+                search_complete INTEGER NOT NULL, limit_kind TEXT,
+                candidate_count INTEGER NOT NULL,
+                promotion_eligible_count INTEGER NOT NULL,
+                blocking_source_ids_json TEXT NOT NULL DEFAULT '[]',
+                message TEXT, summary_json TEXT NOT NULL DEFAULT '{}',
+                display_ready INTEGER NOT NULL DEFAULT 0,
+                display_context TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+            );
+            CREATE TABLE custody_gap_candidates (
+                projection_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+                gap_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+                source_count INTEGER NOT NULL, return_count INTEGER NOT NULL,
+                visible INTEGER NOT NULL, accounting INTEGER NOT NULL,
+                asset TEXT NOT NULL, protocol_chain TEXT NOT NULL,
+                network TEXT NOT NULL, source_wallet_ids_json TEXT NOT NULL,
+                destination_wallet_ids_json TEXT NOT NULL,
+                source_wallet_labels_json TEXT NOT NULL,
+                destination_wallet_labels_json TEXT NOT NULL,
+                source_total_msat INTEGER NOT NULL, source_fee_msat INTEGER NOT NULL,
+                source_debit_msat INTEGER NOT NULL, return_total_msat INTEGER NOT NULL,
+                retained_msat INTEGER NOT NULL, residual_msat INTEGER NOT NULL,
+                excess_msat INTEGER NOT NULL, coverage_ppm INTEGER NOT NULL,
+                started_at TEXT NOT NULL, ended_at TEXT NOT NULL,
+                elapsed_seconds INTEGER NOT NULL, score INTEGER NOT NULL,
+                confidence TEXT NOT NULL, reason_codes_json TEXT NOT NULL,
+                promotion_eligible INTEGER NOT NULL, competitor_score_margin INTEGER,
+                conflict_set_id TEXT NOT NULL, conflict_size INTEGER NOT NULL,
+                PRIMARY KEY(projection_id, gap_id), UNIQUE(projection_id, ordinal)
+            );
+            CREATE TABLE custody_gap_candidate_boundaries (
+                projection_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+                gap_id TEXT NOT NULL, side TEXT NOT NULL, ordinal INTEGER NOT NULL,
+                transaction_id TEXT NOT NULL,
+                PRIMARY KEY(projection_id, gap_id, side, ordinal)
+            );
+            CREATE TABLE custody_gap_projection_rows (
+                projection_id TEXT NOT NULL, profile_id TEXT NOT NULL,
+                sort_group INTEGER NOT NULL, ordinal INTEGER NOT NULL,
+                gap_id TEXT NOT NULL, payload_json TEXT NOT NULL,
+                PRIMARY KEY(projection_id, gap_id)
+            );
+            CREATE INDEX idx_custody_gap_projection_rows_page
+                ON custody_gap_projection_rows(
+                    projection_id, sort_group, ordinal, gap_id
+                );
             """
         )
         self.conn.execute("INSERT INTO profiles(id) VALUES ('profile-one')")
@@ -1118,6 +1181,302 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         self.assertEqual(gap["downstream"]["affected_years"], [2022])
         self.assertNotIn("raw_json", gap)
         self.assertNotIn("address", gap)
+
+    def test_snapshot_persists_normalized_projection_not_serialized_page(self):
+        first = build_gap_snapshot(self.conn, "profile-one")
+        projection = self.conn.execute(
+            "SELECT id, search_complete, display_ready "
+            "FROM custody_gap_candidate_projections WHERE profile_id = ?",
+            ("profile-one",),
+        ).fetchone()
+
+        self.assertIsNotNone(projection)
+        self.assertEqual(int(projection["search_complete"]), 1)
+        self.assertEqual(int(projection["display_ready"]), 1)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_candidates WHERE projection_id = ?",
+                (projection["id"],),
+            ).fetchone()[0],
+            1,
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_candidate_boundaries "
+                "WHERE projection_id = ?",
+                (projection["id"],),
+            ).fetchone()[0],
+            2,
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_projection_rows "
+                "WHERE projection_id = ?",
+                (projection["id"],),
+            ).fetchone()[0],
+            len(first["gaps"]),
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_candidate_snapshots"
+            ).fetchone()[0],
+            0,
+        )
+
+    def test_normalized_projection_clears_legacy_serialized_cache_atomically(self):
+        self.conn.execute(
+            "INSERT INTO custody_gap_candidate_snapshots("
+            "cache_token, profile_id, version_json, summary_json, gaps_json) "
+            "VALUES ('legacy', 'profile-one', '[]', '{}', '[]')"
+        )
+
+        build_gap_snapshot(self.conn, "profile-one")
+
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_candidate_snapshots"
+            ).fetchone()[0],
+            0,
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_candidate_projections"
+            ).fetchone()[0],
+            1,
+        )
+
+    def test_normalized_projection_persists_excess_return_candidate(self):
+        self.conn.execute(
+            "UPDATE transactions SET amount = ? WHERE id = 'return'",
+            (21 * BTC_MSAT // 2,),
+        )
+
+        build_gap_snapshot(self.conn, "profile-one")
+
+        candidate = self.conn.execute(
+            "SELECT retained_msat, residual_msat, excess_msat "
+            "FROM custody_gap_candidates"
+        ).fetchone()
+        self.assertEqual(int(candidate["retained_msat"]), 10 * BTC_MSAT)
+        self.assertEqual(int(candidate["residual_msat"]), 0)
+        self.assertEqual(int(candidate["excess_msat"]), BTC_MSAT // 2)
+
+    def test_repeated_projection_read_does_not_rerun_matcher(self):
+        first, _ = custody_gaps.load_gap_search_result(
+            self.conn, "profile-one"
+        )
+        with patch(
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            side_effect=AssertionError("matcher reran"),
+        ):
+            second, _ = custody_gaps.load_gap_search_result(
+                self.conn, "profile-one"
+            )
+
+        self.assertEqual(first.projection_id, second.projection_id)
+        self.assertEqual(first.candidates, second.candidates)
+
+    def test_projection_reuses_candidates_but_refreshes_readiness_display(self):
+        first = build_gap_snapshot(self.conn, "profile-one")
+        projection_id = self.conn.execute(
+            "SELECT id FROM custody_gap_candidate_projections "
+            "WHERE profile_id = 'profile-one'"
+        ).fetchone()[0]
+        self.assertFalse(first["summary"]["derived_state_current"])
+
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = '2022-01-02T00:00:00Z',
+                last_processed_tx_count = 3,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-one'
+            """
+        )
+        with patch(
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            side_effect=AssertionError("matcher reran"),
+        ):
+            second = build_gap_snapshot(self.conn, "profile-one")
+
+        self.assertTrue(second["summary"]["derived_state_current"])
+        header = self.conn.execute(
+            "SELECT id, display_context FROM custody_gap_candidate_projections "
+            "WHERE profile_id = 'profile-one'"
+        ).fetchone()
+        self.assertEqual(header["id"], projection_id)
+        self.assertEqual(json.loads(header["display_context"])[0], "current")
+
+    def test_review_change_refreshes_display_without_rerunning_candidates(self):
+        first = build_gap_snapshot(self.conn, "profile-one")
+        candidate = custody_gaps.load_gap_search_result(
+            self.conn, "profile-one"
+        )[0].candidates[0]
+        projection_id = self.conn.execute(
+            "SELECT id FROM custody_gap_candidate_projections "
+            "WHERE profile_id = 'profile-one'"
+        ).fetchone()[0]
+        self.assertEqual(first["gaps"][0]["status"], "needs_review")
+        self.conn.execute(
+            """
+            INSERT INTO custody_gap_reviews(
+                id, profile_id, gap_id, revision, candidate_fingerprint,
+                action, event_kind, component_id, snapshot_json, created_at
+            ) VALUES ('review-1', 'profile-one', ?, 1, ?, 'dismissed',
+                      'review_decision', NULL, '{}', '2026-01-01T00:00:00Z')
+            """,
+            (
+                candidate.gap_id,
+                custody_gap_reviews.candidate_fingerprint(candidate),
+            ),
+        )
+
+        with patch(
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            side_effect=AssertionError("matcher reran"),
+        ):
+            second = build_gap_snapshot(self.conn, "profile-one")
+
+        self.assertEqual(second["gaps"][0]["status"], "dismissed")
+        header = self.conn.execute(
+            "SELECT id, display_context FROM custody_gap_candidate_projections "
+            "WHERE profile_id = 'profile-one'"
+        ).fetchone()
+        self.assertEqual(header["id"], projection_id)
+        self.assertEqual(json.loads(header["display_context"])[1], 1)
+
+    def test_current_review_surface_reuses_journal_projection_authority(self):
+        journal, _ = custody_gaps.load_gap_search_result(
+            self.conn,
+            "profile-one",
+            ignored_transaction_ids=("later-disposal",),
+            producer_kind="journal",
+        )
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = '2022-01-02T00:00:00Z',
+                last_processed_tx_count = 3,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-one'
+            """
+        )
+        with patch(
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            side_effect=AssertionError("matcher reran"),
+        ):
+            review, _ = custody_gaps.load_gap_search_result(
+                self.conn,
+                "profile-one",
+            )
+
+        self.assertEqual(review.projection_id, journal.projection_id)
+        header = self.conn.execute(
+            "SELECT producer_kind FROM custody_gap_candidate_projections "
+            "WHERE id = ?",
+            (journal.projection_id,),
+        ).fetchone()
+        self.assertEqual(header["producer_kind"], "journal")
+
+    def test_distinct_ignored_boundary_projections_do_not_evict_each_other(self):
+        review, _ = custody_gaps.load_gap_search_result(
+            self.conn, "profile-one"
+        )
+        journal, _ = custody_gaps.load_gap_search_result(
+            self.conn,
+            "profile-one",
+            ignored_transaction_ids=("later-disposal",),
+            producer_kind="journal",
+        )
+
+        self.assertNotEqual(review.projection_id, journal.projection_id)
+        retained = {
+            row[0]
+            for row in self.conn.execute(
+                "SELECT id FROM custody_gap_candidate_projections "
+                "WHERE profile_id = 'profile-one'"
+            ).fetchall()
+        }
+        self.assertEqual(retained, {review.projection_id, journal.projection_id})
+
+    def test_accounting_population_excludes_blocked_competitor_before_matching(self):
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind,
+                privacy_boundary
+            ) VALUES (
+                'other-out', 'profile-one', 'old',
+                '2020-02-01T00:00:00Z', '2020-02-01T00:00:00Z', 'outbound',
+                'BTC', ?, 0, 0, 0, '', 'coinjoin'
+            )
+            """,
+            (10 * BTC_MSAT,),
+        )
+
+        result, _ = custody_gaps.load_gap_search_result(
+            self.conn,
+            "profile-one",
+            ignored_transaction_ids=(),
+            accounting_ignored_transaction_ids=("out",),
+            producer_kind="journal",
+        )
+
+        self.assertIn(
+            ("out",),
+            {candidate.source_ids for candidate in result.candidates},
+        )
+        self.assertEqual(
+            {candidate.source_ids for candidate in result.accounting_candidates},
+            {("other-out",)},
+        )
+        self.assertTrue(result.accounting_candidates[0].promotion_eligible)
+
+    def test_review_projection_churn_retains_latest_journal_projection(self):
+        journal, _ = custody_gaps.load_gap_search_result(
+            self.conn,
+            "profile-one",
+            ignored_transaction_ids=("later-disposal",),
+            producer_kind="journal",
+        )
+        for index in range(custody_gaps.MAX_RETAINED_GAP_PROJECTIONS + 2):
+            custody_gaps.load_gap_search_result(
+                self.conn,
+                "profile-one",
+                ignored_transaction_ids=(f"provisional-{index}",),
+            )
+
+        retained = self.conn.execute(
+            "SELECT producer_kind FROM custody_gap_candidate_projections "
+            "WHERE id = ?",
+            (journal.projection_id,),
+        ).fetchone()
+        self.assertIsNotNone(retained)
+        self.assertEqual(retained["producer_kind"], "journal")
+
+    def test_projection_page_query_uses_keyset_index(self):
+        build_gap_snapshot(self.conn, "profile-one")
+        projection_id = self.conn.execute(
+            "SELECT id FROM custody_gap_candidate_projections "
+            "WHERE profile_id = 'profile-one'"
+        ).fetchone()[0]
+        plan = self.conn.execute(
+            """
+            EXPLAIN QUERY PLAN
+            SELECT sort_group, ordinal, gap_id, payload_json
+            FROM custody_gap_projection_rows
+            WHERE projection_id = ?
+              AND (sort_group > ?
+                   OR (sort_group = ? AND ordinal > ?)
+                   OR (sort_group = ? AND ordinal = ? AND gap_id > ?))
+            ORDER BY sort_group, ordinal, gap_id
+            LIMIT ?
+            """,
+            (projection_id, 0, 0, 0, 0, 0, "", 101),
+        ).fetchall()
+        detail = " ".join(str(row[3]) for row in plan)
+        self.assertIn("idx_custody_gap_projection_rows_page", detail)
 
     def test_book_above_50k_rows_still_surfaces_structured_boundary(self):
         self.conn.executemany(
@@ -1274,18 +1633,12 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             for index in range(5)
         ]
         historical = [*reviewed, *actionable]
+        self.conn.execute("DELETE FROM transactions WHERE profile_id = 'profile-one'")
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile-one'"
+        )
         with (
-            patch(
-                "kassiber.core.custody_gaps.load_gap_search_result",
-                return_value=(
-                    CustodyGapSearchResult(
-                        candidates=(),
-                        accounting_candidates=(),
-                        search_complete=True,
-                    ),
-                    [],
-                ),
-            ) as load_search,
             patch(
                 "kassiber.core.custody_gap_reviews.latest_reviews",
                 return_value={},
@@ -1306,12 +1659,8 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             )
 
         self.assertEqual(first["summary"]["total"], 106)
-        self.assertEqual(
-            [call.kwargs["limit"] for call in load_search.call_args_list],
-            [custody_gaps.DEFAULT_MAX_CANDIDATES],
-        )
         self.assertEqual(first["summary"]["needs_review"], 101)
-        self.assertRegex(first["next_cursor"], r"^cg1\.[0-9a-f]{24}\.100$")
+        self.assertRegex(first["next_cursor"], r"^cgp1\.[A-Za-z0-9_-]+$")
         self.assertTrue(all(gap["status"] == "needs_review" for gap in first["gaps"]))
         self.assertEqual(second["gaps"][0]["gap_id"], "gap-100")
         self.assertEqual(
@@ -1330,18 +1679,8 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             }
             for index in range(2)
         ]
+        self.conn.execute("DELETE FROM transactions WHERE profile_id = 'profile-one'")
         with (
-            patch(
-                "kassiber.core.custody_gaps.load_gap_search_result",
-                return_value=(
-                    CustodyGapSearchResult(
-                        candidates=(),
-                        accounting_candidates=(),
-                        search_complete=True,
-                    ),
-                    [],
-                ),
-            ),
             patch(
                 "kassiber.core.custody_gap_reviews.latest_reviews",
                 return_value={},
@@ -1365,6 +1704,29 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 cursor=first["next_cursor"],
             )
 
+    def test_projection_identity_changes_when_evidence_changes_without_version_bump(self):
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind
+            ) VALUES (
+                'competing-return', 'profile-one', 'new',
+                '2021-02-01T00:00:00Z', '2021-02-01T00:00:00Z', 'inbound',
+                'BTC', ?, 0, 0, 0, ''
+            )
+            """,
+            (99 * BTC_MSAT // 10,),
+        )
+        first, _ = custody_gaps.load_gap_search_result(self.conn, "profile-one")
+
+        self.conn.execute(
+            "UPDATE transactions SET amount = amount - 1 WHERE id = 'return'"
+        )
+        second, _ = custody_gaps.load_gap_search_result(self.conn, "profile-one")
+
+        self.assertNotEqual(second.projection_id, first.projection_id)
+
     def test_snapshot_rejects_invalid_cursor(self):
         with self.assertRaisesRegex(ValueError, "cursor"):
             build_gap_snapshot(
@@ -1386,9 +1748,13 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             promotion_eligible_count=12,
             limit_kind="candidate_population",
         )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile-one'"
+        )
         with patch(
-            "kassiber.core.custody_gaps.load_gap_search_result",
-            return_value=(limited, []),
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            return_value=limited,
         ):
             snapshot = build_gap_snapshot(self.conn, "profile-one")
             found = custody_gaps.find_gap_candidate(

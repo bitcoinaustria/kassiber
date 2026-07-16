@@ -1257,6 +1257,113 @@ CREATE TABLE IF NOT EXISTS custody_gap_candidate_snapshots (
 CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_snapshots_profile
     ON custody_gap_candidate_snapshots(profile_id);
 
+-- Replaceable local projection of one bounded gap-discovery run. Candidate
+-- rows are normalized below and shared by accounting/review consumers; the
+-- legacy page-snapshot table above is read-only compatibility until migration
+-- cleanup proves no older binary needs it.
+CREATE TABLE IF NOT EXISTS custody_gap_candidate_projections (
+    id TEXT PRIMARY KEY CHECK(length(id) = 64),
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    producer_kind TEXT NOT NULL DEFAULT 'review'
+        CHECK(producer_kind IN ('journal', 'review')),
+    version_json TEXT NOT NULL,
+    input_hash TEXT NOT NULL CHECK(length(input_hash) = 64),
+    ignored_ids_json TEXT NOT NULL DEFAULT '[]',
+    accounting_ignored_ids_json TEXT NOT NULL DEFAULT '[]',
+    search_complete INTEGER NOT NULL CHECK(search_complete IN (0, 1)),
+    limit_kind TEXT,
+    candidate_count INTEGER NOT NULL CHECK(candidate_count >= 0),
+    promotion_eligible_count INTEGER NOT NULL CHECK(promotion_eligible_count >= 0),
+    blocking_source_ids_json TEXT NOT NULL DEFAULT '[]',
+    message TEXT,
+    summary_json TEXT NOT NULL DEFAULT '{}',
+    display_ready INTEGER NOT NULL DEFAULT 0 CHECK(display_ready IN (0, 1)),
+    display_context TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(profile_id, version_json, input_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_projections_profile
+    ON custody_gap_candidate_projections(profile_id, created_at, id);
+
+CREATE TABLE IF NOT EXISTS custody_gap_candidates (
+    projection_id TEXT NOT NULL
+        REFERENCES custody_gap_candidate_projections(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    gap_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+    source_count INTEGER NOT NULL CHECK(source_count >= 1),
+    return_count INTEGER NOT NULL CHECK(return_count >= 1),
+    visible INTEGER NOT NULL CHECK(visible IN (0, 1)),
+    accounting INTEGER NOT NULL CHECK(accounting IN (0, 1)),
+    asset TEXT NOT NULL,
+    protocol_chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    source_wallet_ids_json TEXT NOT NULL,
+    destination_wallet_ids_json TEXT NOT NULL,
+    source_wallet_labels_json TEXT NOT NULL,
+    destination_wallet_labels_json TEXT NOT NULL,
+    source_total_msat INTEGER NOT NULL CHECK(source_total_msat > 0),
+    source_fee_msat INTEGER NOT NULL CHECK(source_fee_msat >= 0),
+    source_debit_msat INTEGER NOT NULL CHECK(source_debit_msat > 0),
+    return_total_msat INTEGER NOT NULL CHECK(return_total_msat > 0),
+    retained_msat INTEGER NOT NULL CHECK(retained_msat > 0),
+    residual_msat INTEGER NOT NULL CHECK(residual_msat >= 0),
+    excess_msat INTEGER NOT NULL CHECK(excess_msat >= 0),
+    coverage_ppm INTEGER NOT NULL CHECK(coverage_ppm >= 0),
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    elapsed_seconds INTEGER NOT NULL CHECK(elapsed_seconds >= 0),
+    score INTEGER NOT NULL,
+    confidence TEXT NOT NULL,
+    reason_codes_json TEXT NOT NULL,
+    promotion_eligible INTEGER NOT NULL CHECK(promotion_eligible IN (0, 1)),
+    competitor_score_margin INTEGER,
+    conflict_set_id TEXT NOT NULL,
+    conflict_size INTEGER NOT NULL CHECK(conflict_size >= 1),
+    PRIMARY KEY(projection_id, gap_id),
+    UNIQUE(projection_id, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_candidates_page
+    ON custody_gap_candidates(projection_id, visible, ordinal, gap_id);
+
+CREATE TABLE IF NOT EXISTS custody_gap_candidate_boundaries (
+    projection_id TEXT NOT NULL,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    gap_id TEXT NOT NULL,
+    side TEXT NOT NULL CHECK(side IN ('source', 'return')),
+    ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    PRIMARY KEY(projection_id, gap_id, side, ordinal),
+    UNIQUE(projection_id, gap_id, side, transaction_id),
+    FOREIGN KEY(projection_id, gap_id)
+        REFERENCES custody_gap_candidates(projection_id, gap_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_boundaries_transaction
+    ON custody_gap_candidate_boundaries(transaction_id, projection_id, gap_id);
+
+-- Privacy-safe presentation rows are materialized once from the normalized
+-- candidate projection plus immutable review history. Keyset reads never
+-- rerun matching or deserialize an entire page population.
+CREATE TABLE IF NOT EXISTS custody_gap_projection_rows (
+    projection_id TEXT NOT NULL
+        REFERENCES custody_gap_candidate_projections(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    sort_group INTEGER NOT NULL CHECK(sort_group IN (0, 1)),
+    ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+    gap_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY(projection_id, gap_id),
+    UNIQUE(projection_id, sort_group, ordinal, gap_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_gap_projection_rows_page
+    ON custody_gap_projection_rows(
+        projection_id, sort_group, ordinal, gap_id
+    );
+
 CREATE TRIGGER IF NOT EXISTS trg_custody_gap_reviews_immutable
 BEFORE UPDATE ON custody_gap_reviews
 BEGIN
