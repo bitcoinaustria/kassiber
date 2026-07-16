@@ -28,7 +28,8 @@ from ..errors import AppError
 from ..time_utils import now_iso
 from . import custody_components
 from . import custody_filed_reports
-from .custody_evidence import resolve_protocol_scope
+from .custody_allocations import CustodyAllocationError, allocate_msat_fifo
+from .custody_evidence import row_boundary_amounts, resolve_protocol_scope
 from .custody_gaps import CustodyGapCandidate
 
 
@@ -1731,33 +1732,43 @@ def _guided_component_spec(
 
     legs: list[dict[str, Any]] = []
     allocations: list[dict[str, Any]] = []
-    source_available: list[list[Any]] = []
+    source_contexts: list[
+        tuple[str, int, Mapping[str, Any], Mapping[str, str]]
+    ] = []
     for index, transaction_id in enumerate(candidate.source_ids):
         row = by_id[transaction_id]
-        fee = int(row["fee"] or 0)
-        principal = int(row["amount"] or 0)
-        if bool(row["amount_includes_fee"]):
-            principal -= fee
-            debit = int(row["amount"] or 0)
-        else:
-            debit = principal + fee
+        boundary = row_boundary_amounts(row)
         scope = _transaction_scope(row)
         source_id = f"source-{index}"
-        legs.append(_anchored_leg(source_id, "source", debit, row, scope))
-        source_available.append([source_id, principal, row, scope])
+        legs.append(
+            _anchored_leg(
+                source_id,
+                "source",
+                boundary.wallet_movement_msat,
+                row,
+                scope,
+            )
+        )
+        source_contexts.append((source_id, boundary.principal_msat, row, scope))
 
     retained_remaining = candidate.retained_msat
+    destination_amounts: list[tuple[str, int]] = []
     for index, transaction_id in enumerate(candidate.return_ids):
         row = by_id[transaction_id]
-        observed_amount = int(row["amount"] or 0)
-        amount = min(observed_amount, retained_remaining)
+        amount = min(row_boundary_amounts(row).principal_msat, retained_remaining)
         if amount <= 0:
             continue
         destination_id = f"destination-{index}"
         legs.append(
-            _anchored_leg(destination_id, "destination", amount, row, _transaction_scope(row))
+            _anchored_leg(
+                destination_id,
+                "destination",
+                amount,
+                row,
+                _transaction_scope(row),
+            )
         )
-        _allocate(source_available, destination_id, amount, allocations)
+        destination_amounts.append((destination_id, amount))
         retained_remaining -= amount
 
     if retained_remaining:
@@ -1766,7 +1777,29 @@ def _guided_component_spec(
             code="custody_gap_stale",
         )
 
-    for index, (source_id, remaining, row, scope) in enumerate(source_available):
+    try:
+        retained_plan = allocate_msat_fifo(
+            [
+                (source_id, principal)
+                for source_id, principal, _row, _scope in source_contexts
+            ],
+            destination_amounts,
+            amount_msat=candidate.retained_msat,
+        )
+    except CustodyAllocationError as exc:
+        raise AppError(
+            "Custody-gap retained quantity is no longer available",
+            code="custody_gap_stale",
+            details={"allocation_code": exc.code, **exc.details},
+        ) from exc
+    allocations.extend(
+        _allocation(cell.source_id, cell.sink_id, cell.amount_msat)
+        for cell in retained_plan.cells
+    )
+    source_remaining = dict(retained_plan.source_remaining)
+
+    for index, (source_id, _principal, row, scope) in enumerate(source_contexts):
+        remaining = source_remaining[source_id]
         if remaining:
             suspense_id = f"suspense-{index}"
             legs.append(
@@ -1784,15 +1817,11 @@ def _guided_component_spec(
                 }
             )
             allocations.append(_allocation(source_id, suspense_id, remaining))
-            source_available[index][1] = 0
-        fee = int(row["fee"] or 0)
+        fee = row_boundary_amounts(row).fee_msat
         if fee:
             fee_id = f"fee-{index}"
             legs.append(_anchored_leg(fee_id, "fee", fee, row, scope))
             allocations.append(_allocation(source_id, fee_id, fee))
-
-    if any(remaining for _source_id, remaining, _row, _scope in source_available):
-        raise AppError("Guided bridge allocation is incomplete", code="custody_gap_stale")
     component_id = str(
         uuid.uuid5(
             uuid.NAMESPACE_URL,
@@ -1815,21 +1844,6 @@ def _guided_component_spec(
         "legs": legs,
         "allocations": allocations,
     }
-
-
-def _allocate(
-    sources: list[list[Any]], sink_id: str, amount: int, allocations: list[dict[str, Any]]
-) -> None:
-    remaining = amount
-    for source in sources:
-        take = min(int(source[1]), remaining)
-        if take:
-            allocations.append(_allocation(str(source[0]), sink_id, take))
-            source[1] = int(source[1]) - take
-            remaining -= take
-        if not remaining:
-            return
-    raise AppError("Custody-gap return exceeds source principal", code="custody_gap_stale")
 
 
 def _allocation(source_id: str, sink_id: str, amount: int) -> dict[str, Any]:

@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
+from .custody_allocations import CustodyAllocationError, allocate_msat_fifo
 from .custody_gaps import CustodyGapCandidate, custody_gap_id
 from .custody_quantity import (
     CUSTODY_CANDIDATE,
@@ -269,37 +270,42 @@ def _allocate_claims(
     *,
     bundle_id: str,
 ) -> tuple[QuantityClaim, ...]:
-    source_index = 0
-    return_index = 0
-    source_cursor = 0
-    return_cursor = 0
-    remaining = candidate.retained_msat
+    try:
+        allocation = allocate_msat_fifo(
+            [
+                (source.quantity_hash, source.principal_msat)
+                for source in sources
+            ],
+            [
+                (target.quantity_hash, target.principal_msat)
+                for target in returns
+            ],
+            amount_msat=candidate.retained_msat,
+        )
+    except CustodyAllocationError as exc:
+        raise CustodyGapClaimCompileError(
+            "candidate observations cannot conserve retained principal",
+            details={
+                "gap_id": candidate.gap_id,
+                "allocation_code": exc.code,
+                **exc.details,
+            },
+        ) from exc
+    sources_by_hash = {item.quantity_hash: item for item in sources}
+    returns_by_hash = {item.quantity_hash: item for item in returns}
     claims: list[QuantityClaim] = []
-    while remaining:
-        if source_index >= len(sources) or return_index >= len(returns):
-            raise CustodyGapClaimCompileError(
-                "candidate observations cannot conserve retained principal",
-                details={"gap_id": candidate.gap_id, "remaining_msat": remaining},
-            )
-        source = sources[source_index]
-        target = returns[return_index]
-        source_available = source.principal_msat - source_cursor
-        target_available = target.principal_msat - return_cursor
-        amount = min(remaining, source_available, target_available)
-        if amount <= 0:
-            raise CustodyGapClaimCompileError(
-                "candidate allocation encountered an empty principal slice",
-                details={"gap_id": candidate.gap_id},
-            )
+    for cell in allocation.cells:
+        source = sources_by_hash[cell.source_id]
+        target = returns_by_hash[cell.sink_id]
         source_slice = QuantitySlice(
             source.quantity_hash,
-            source_cursor,
-            source_cursor + amount,
+            cell.source_start_msat,
+            cell.source_end_msat,
         )
         target_slice = QuantitySlice(
             target.quantity_hash,
-            return_cursor,
-            return_cursor + amount,
+            cell.sink_start_msat,
+            cell.sink_end_msat,
         )
         claims.append(
             QuantityClaim(
@@ -320,15 +326,6 @@ def _allocate_claims(
                 atomic_bundle_id=bundle_id,
             )
         )
-        remaining -= amount
-        source_cursor += amount
-        return_cursor += amount
-        if source_cursor == source.principal_msat:
-            source_index += 1
-            source_cursor = 0
-        if return_cursor == target.principal_msat:
-            return_index += 1
-            return_cursor = 0
     return tuple(claims)
 
 

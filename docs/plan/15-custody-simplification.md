@@ -132,6 +132,11 @@ binary.
    to an ordinary result, add unpatched characterization, and measure the real
    builder boundary.
 2. Centralize boundary-leg normalization and deterministic N:M allocation.
+   Completed: imported-row, canonical-observation, gap-discovery, bridge-plan,
+   and component-coverage arithmetic share one boundary normalizer; gap claims
+   and bridge plans share one all-or-nothing FIFO allocator with exact offsets
+   and residuals. Transactionless component-route flattening remains a narrow
+   provenance operation rather than a competing allocation policy.
 3. Persist normalized candidates/completeness once per input version, replace
    candidate transfer claims with scoped holds, and introduce pure plan/apply.
 4. Add typed replicated component economic terms, migrate pair/payout authored

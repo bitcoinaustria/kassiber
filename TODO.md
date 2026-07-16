@@ -164,7 +164,9 @@ same verification surface.
     expose the decision boundary separately from RP2, convert production gap
     capacity state to an ordinary typed result, and add an unpatched builder
     characterization plus a real 100k benchmark baseline.
-  - [ ] Centralize boundary-leg normalization and deterministic N:M allocation.
+  - [x] Centralize boundary-leg principal/fee/wallet-movement normalization and
+    deterministic FIFO N:M allocation; make gap claims and reviewed bridge
+    plans consume the same exact-msat cells and residuals.
   - [ ] Persist one versioned candidate projection and replace heuristic
     transfer claims with independently scoped source/return holds.
   - [ ] Add pure review planning and fingerprint/version-checked apply.

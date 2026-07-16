@@ -24,7 +24,7 @@ import sqlite3
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import custody_quantity_store as core_custody_quantity_store
-from .custody_evidence import resolve_protocol_scope
+from .custody_evidence import normalize_boundary_amounts, resolve_protocol_scope
 
 from ..errors import AppError
 from ..time_utils import parse_iso_datetime_or_none
@@ -1096,24 +1096,17 @@ def _normalize_leg(row: Mapping[str, Any], ignored: set[str]) -> _Leg | None:
     fee = _exact_nonnegative_int(_get(row, "fee", 0))
     if fee is None:
         return None
-    if direction == "outbound":
-        if _truthy(_get(row, "amount_includes_fee")):
-            # Net-delta imports fold any known fee into amount.  Most such
-            # imports have fee=0 because the fee is unavailable; in that case
-            # the whole observed debit is the safest available principal.
-            if fee > amount:
-                return None
-            principal = amount - fee
-            debit = amount
-        else:
-            principal = amount
-            debit = amount + fee
-        if principal <= 0:
-            return None
-    else:
-        principal = amount
-        fee = 0
-        debit = amount
+    boundary = normalize_boundary_amounts(
+        direction=direction,
+        amount_msat=amount,
+        fee_msat=fee if direction == "outbound" else 0,
+        amount_includes_fee=_truthy(_get(row, "amount_includes_fee")),
+    )
+    principal = boundary.principal_msat
+    fee = boundary.fee_msat
+    debit = boundary.wallet_movement_msat
+    if principal <= 0:
+        return None
     occurred_at = occurred_dt.isoformat().replace("+00:00", "Z")
     try:
         scope = resolve_protocol_scope(row)

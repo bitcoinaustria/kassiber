@@ -36,6 +36,74 @@ class ProtocolScope:
     base_chain: str
 
 
+@dataclass(frozen=True)
+class BoundaryAmounts:
+    """Canonical principal, fee, and wallet movement for one boundary leg."""
+
+    direction: str
+    observed_amount_msat: int
+    principal_msat: int
+    fee_msat: int
+    wallet_movement_msat: int
+    wallet_delta_msat: int
+
+
+def normalize_boundary_amounts(
+    *,
+    direction: Any,
+    amount_msat: Any,
+    fee_msat: Any = 0,
+    amount_includes_fee: Any = False,
+) -> BoundaryAmounts:
+    """Normalize imported boundary arithmetic without guessing semantics.
+
+    Some outbound observers store principal in ``amount`` while others store
+    the complete wallet debit. This is the single arithmetic boundary used by
+    discovery, reviewed plans, canonical observations, and component coverage.
+    Validation remains at each caller's evidence boundary so malformed imports
+    continue to fail closed in their existing typed issue path.
+    """
+
+    normalized_direction = str(direction or "").strip().lower()
+    observed = int(amount_msat or 0)
+    fee = int(fee_msat or 0)
+    included = bool(amount_includes_fee)
+    principal = (
+        observed - fee
+        if normalized_direction == "outbound" and included
+        else observed
+    )
+    wallet_movement = (
+        principal + fee
+        if normalized_direction == "outbound"
+        else observed
+    )
+    wallet_delta = (
+        -wallet_movement
+        if normalized_direction == "outbound"
+        else wallet_movement
+    )
+    return BoundaryAmounts(
+        direction=normalized_direction,
+        observed_amount_msat=observed,
+        principal_msat=principal,
+        fee_msat=fee,
+        wallet_movement_msat=wallet_movement,
+        wallet_delta_msat=wallet_delta,
+    )
+
+
+def row_boundary_amounts(row: Mapping[str, Any]) -> BoundaryAmounts:
+    """Normalize one imported transaction-like mapping."""
+
+    return normalize_boundary_amounts(
+        direction=_field(row, "direction"),
+        amount_msat=_field(row, "amount"),
+        fee_msat=_field(row, "fee"),
+        amount_includes_fee=_field(row, "amount_includes_fee", False),
+    )
+
+
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
     if hasattr(row, "keys") and key not in row.keys():
         return default
@@ -62,13 +130,7 @@ def row_principal_msat(row: Mapping[str, Any]) -> int:
     allocates principal, while the fee remains a separate sibling quantity.
     """
 
-    amount_msat = int(_field(row, "amount") or 0)
-    if (
-        str(_field(row, "direction") or "").strip().lower() == "outbound"
-        and bool(_field(row, "amount_includes_fee", False))
-    ):
-        return amount_msat - int(_field(row, "fee") or 0)
-    return amount_msat
+    return row_boundary_amounts(row).principal_msat
 
 
 def enriched_quantity_rows(
@@ -615,16 +677,21 @@ class QuantityObservation:
             raise ValueError("an included fee cannot exceed the observed amount")
 
     @property
+    def boundary_amounts(self) -> BoundaryAmounts:
+        return normalize_boundary_amounts(
+            direction=self.direction,
+            amount_msat=self.amount_msat,
+            fee_msat=self.fee_msat,
+            amount_includes_fee=self.amount_includes_fee,
+        )
+
+    @property
     def principal_msat(self) -> int:
-        if self.direction == "outbound" and self.amount_includes_fee:
-            return self.amount_msat - self.fee_msat
-        return self.amount_msat
+        return self.boundary_amounts.principal_msat
 
     @property
     def wallet_delta_msat(self) -> int:
-        if self.direction == "inbound":
-            return self.amount_msat
-        return -(self.principal_msat + self.fee_msat)
+        return self.boundary_amounts.wallet_delta_msat
 
 
 @dataclass(frozen=True)
@@ -839,6 +906,7 @@ def build_canonical_quantity_input(
 
 
 __all__ = [
+    "BoundaryAmounts",
     "ChainObservationAuthority",
     "CanonicalEventIssue",
     "CanonicalEventKey",
@@ -854,6 +922,8 @@ __all__ = [
     "canonical_quantity_payload",
     "enriched_quantity_rows",
     "observation_hash",
+    "normalize_boundary_amounts",
+    "row_boundary_amounts",
     "row_principal_msat",
     "resolve_protocol_scope",
 ]

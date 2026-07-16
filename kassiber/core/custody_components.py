@@ -39,6 +39,7 @@ from ..transfers import (
 )
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
 from .chain_observer.provenance import row_has_current_authoritative_observation
+from .custody_evidence import row_boundary_amounts
 
 
 COMPONENT_TYPES = frozenset(
@@ -2702,9 +2703,7 @@ def _db_anchor_validation(
                 )
             )
         )
-        expected = int(row["amount"] or 0)
-        if row["direction"] == "outbound" and not bool(row["amount_includes_fee"]):
-            expected += int(row["fee"] or 0)
+        expected = row_boundary_amounts(row).wallet_movement_msat
         coverage_row = {
             "transaction_id": transaction_id,
             "direction": row["direction"],

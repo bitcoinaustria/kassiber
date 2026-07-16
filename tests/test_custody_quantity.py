@@ -1,7 +1,14 @@
 import random
 import unittest
 
-from kassiber.core.custody_evidence import assess_authoritative_chain_observation
+from kassiber.core.custody_allocations import (
+    CustodyAllocationError,
+    allocate_msat_fifo,
+)
+from kassiber.core.custody_evidence import (
+    assess_authoritative_chain_observation,
+    normalize_boundary_amounts,
+)
 from kassiber.core.chain_observer.provenance import (
     canonical_graph_hash,
     canonical_observed_quantity_hash,
@@ -68,6 +75,92 @@ def _observation(*args, **kwargs):
 
 
 class CustodyQuantityTests(unittest.TestCase):
+    def test_boundary_amount_normalization_covers_fee_conventions(self):
+        separate = normalize_boundary_amounts(
+            direction="outbound",
+            amount_msat=100,
+            fee_msat=5,
+            amount_includes_fee=False,
+        )
+        included = normalize_boundary_amounts(
+            direction="outbound",
+            amount_msat=105,
+            fee_msat=5,
+            amount_includes_fee=True,
+        )
+        inbound = normalize_boundary_amounts(
+            direction="inbound",
+            amount_msat=100,
+            fee_msat=5,
+            amount_includes_fee=False,
+        )
+
+        self.assertEqual(separate.principal_msat, 100)
+        self.assertEqual(included.principal_msat, 100)
+        self.assertEqual(separate.wallet_movement_msat, 105)
+        self.assertEqual(included.wallet_movement_msat, 105)
+        self.assertEqual(separate.wallet_delta_msat, -105)
+        self.assertEqual(included.wallet_delta_msat, -105)
+        self.assertEqual(inbound.principal_msat, 100)
+        self.assertEqual(inbound.wallet_movement_msat, 100)
+        self.assertEqual(inbound.wallet_delta_msat, 100)
+
+    def test_fifo_nm_allocator_is_exact_and_returns_residuals(self):
+        result = allocate_msat_fifo(
+            [("source-a", 60), ("source-b", 50)],
+            [("sink-x", 30), ("sink-y", 70)],
+            amount_msat=95,
+        )
+
+        self.assertEqual(
+            [
+                (
+                    cell.source_id,
+                    cell.sink_id,
+                    cell.amount_msat,
+                    cell.source_start_msat,
+                    cell.sink_start_msat,
+                )
+                for cell in result.cells
+            ],
+            [
+                ("source-a", "sink-x", 30, 0, 0),
+                ("source-a", "sink-y", 30, 30, 0),
+                ("source-b", "sink-y", 35, 0, 30),
+            ],
+        )
+        self.assertEqual(result.allocated_msat, 95)
+        self.assertEqual(
+            result.source_remaining,
+            (("source-a", 0), ("source-b", 15)),
+        )
+        self.assertEqual(
+            result.sink_remaining,
+            (("sink-x", 0), ("sink-y", 5)),
+        )
+
+    def test_fifo_nm_allocator_fails_before_returning_partial_result(self):
+        with self.assertRaises(CustodyAllocationError) as raised:
+            allocate_msat_fifo(
+                [("source", 5)],
+                [("sink", 6)],
+                amount_msat=6,
+            )
+        self.assertEqual(
+            raised.exception.code,
+            "custody_allocation_insufficient_capacity",
+        )
+
+    def test_fifo_nm_allocator_skips_zero_capacity_boundaries(self):
+        result = allocate_msat_fifo(
+            [("empty-source", 0), ("source", 5)],
+            [("empty-sink", 0), ("sink", 5)],
+        )
+        self.assertEqual(len(result.cells), 1)
+        self.assertEqual(result.cells[0].source_id, "source")
+        self.assertEqual(result.cells[0].sink_id, "sink")
+        self.assertEqual(result.cells[0].amount_msat, 5)
+
     def test_atomic_bundle_selection_index_matches_legacy_semantics(self):
         source = QuantitySlice("source", 0, 100)
         target = QuantitySlice("target", 0, 100)
