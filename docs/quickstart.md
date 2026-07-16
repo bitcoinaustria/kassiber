@@ -134,7 +134,8 @@ of ambiguous pairs:
 python3 -m kassiber transfers components bulk-resolve \
   --file migrations.json --dry-run
 python3 -m kassiber transfers components bulk-resolve \
-  --file migrations.json
+  --file migrations.json \
+  --expected-fingerprint <fingerprint-from-preview>
 ```
 
 The same workflow is available under **Swap Matching → Close gaps**. See

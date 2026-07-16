@@ -912,6 +912,7 @@ export const fixtures: Record<string, unknown> = {
   },
   "ui.transfers.components.undo": MOCK_CUSTODY_COMPONENT,
   "ui.transfers.components.bulk_resolve": {
+    fingerprint: "a".repeat(64),
     components: [MOCK_CUSTODY_COMPONENT],
     summary: { count: 1, active: 1, draft: 0 },
   },

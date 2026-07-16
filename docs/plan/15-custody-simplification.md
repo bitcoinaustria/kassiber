@@ -198,7 +198,11 @@ binary.
    component-only producer cutover and speculative-layer deletion are complete.
    The bounded historical interpreter is now deleted. Remaining work is command
    consolidation, claim-shape simplification, unpatched database integration
-   coverage, and the final performance/quality audit.
+   coverage, and the final performance/quality audit. Component batch preview
+   no longer creates rows inside a rollback savepoint: one core read-only planner
+   resolves and normalizes exact rows, validates database anchors and batch-wide
+   conflicts, and fingerprints the journal input version. CLI, GUI and AI apply
+   all require that fingerprint and persist the revalidated plan atomically.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

@@ -294,11 +294,14 @@ specific `ui.transfers.components.*` kinds.
 # Preview without persisting components or placeholder wallets.
 kassiber transfers components bulk-resolve --file migrations.json --dry-run
 
-# Activate the complete batch atomically.
-kassiber transfers components bulk-resolve --file migrations.json
+# Activate exactly that reviewed batch atomically.
+kassiber transfers components bulk-resolve --file migrations.json \
+  --expected-fingerprint <fingerprint-from-preview>
 
 # Save incomplete work without affecting accounting.
-kassiber transfers components bulk-resolve --file migrations.json --draft
+kassiber transfers components bulk-resolve --file migrations.json --draft --dry-run
+kassiber transfers components bulk-resolve --file migrations.json --draft \
+  --expected-fingerprint <fingerprint-from-draft-preview>
 
 kassiber transfers components list
 kassiber transfers components show --component-id <id>

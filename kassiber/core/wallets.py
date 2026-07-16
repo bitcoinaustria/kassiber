@@ -537,12 +537,13 @@ def create_wallet(
     config=None,
     *,
     commit=True,
+    wallet_id=None,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     account = resolve_account(conn, profile["id"], account_ref or "treasury")
     normalized_kind = normalize_wallet_kind(kind)
     config = _validated_wallet_config(normalized_kind, config or {})
-    wallet_id = str(uuid.uuid4())
+    wallet_id = str(wallet_id or uuid.uuid4())
     try:
         conn.execute(
             """

@@ -794,6 +794,7 @@ export interface CustodyBulkRequest {
   components: JsonRecord[];
   activate: boolean;
   dry_run?: true;
+  expected_fingerprint?: string;
 }
 
 interface CustodyRevisionLegInput {
@@ -905,7 +906,7 @@ export function formatCustodyExactInteger(
  */
 export function buildCustodyBulkRequest(
   preview: CustodyBatchPreview,
-  options: { activate: boolean; dryRun?: boolean },
+  options: { activate: boolean; dryRun?: boolean; expectedFingerprint?: string },
 ): CustodyBulkRequest {
   const components = preview.components.map((raw) => {
     const component = { ...raw };
@@ -916,6 +917,9 @@ export function buildCustodyBulkRequest(
     components,
     activate: options.activate,
     ...(options.dryRun ? { dry_run: true as const } : {}),
+    ...(options.expectedFingerprint
+      ? { expected_fingerprint: options.expectedFingerprint }
+      : {}),
   };
 }
 

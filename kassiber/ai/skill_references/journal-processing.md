@@ -120,7 +120,8 @@ custody with `untracked_wallet`; genuine N:M requires explicit allocations.
 Activate only after exact anchor coverage and conservation pass atomically.
 In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
 then `ui.transfers.components.bulk_resolve` with `dry_run=true` before asking
-for consent to write the final component set.
+for consent to write the final component set with the returned
+`expected_fingerprint`.
 
 If `kassiber --machine journals transfers list` reports
 `summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.

@@ -87,6 +87,7 @@ from .cli.handlers import (
     dismiss_transfer_candidate,
     get_custody_component,
     invalidate_journals,
+    plan_bulk_custody_components,
     loans_link,
     loans_mark,
     loans_unmark,
@@ -1966,6 +1967,12 @@ def _ui_swap_matching_payload_from_conn(
         if authored_source == "ai_tool":
             _validate_ai_custody_conversion_boundary(components, activate=activate)
         if not dry_run:
+            expected_fingerprint = args.get("expected_fingerprint")
+            if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
+                raise AppError(
+                    f"{kind} apply requires the fingerprint returned by dry_run",
+                    code="validation",
+                )
             return _ui_exact_integer_payload(
                 bulk_resolve_custody_components(
                     conn,
@@ -1975,27 +1982,17 @@ def _ui_swap_matching_payload_from_conn(
                     activate=activate,
                     include_local_evidence=False,
                     authored_source=authored_source,
+                    expected_fingerprint=expected_fingerprint,
                 )
             )
-
-        conn.execute("SAVEPOINT daemon_custody_component_preview")
-        try:
-            preview = bulk_resolve_custody_components(
-                conn,
-                workspace,
-                profile,
-                components,
-                activate=activate,
-                commit=False,
-                include_local_evidence=False,
-                authored_source=authored_source,
-            )
-        except Exception:
-            conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
-            conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
-            raise
-        conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
-        conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
+        preview = plan_bulk_custody_components(
+            conn,
+            workspace,
+            profile,
+            components,
+            activate=activate,
+            authored_source=authored_source,
+        )
         preview["dry_run"] = True
         return _ui_exact_integer_payload(preview)
 

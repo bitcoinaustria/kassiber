@@ -61,6 +61,7 @@ from .handlers import (
     apply_transfer_rules,
     activate_custody_component,
     bulk_resolve_custody_components,
+    plan_bulk_custody_components,
     bulk_pair_transfers,
     create_custody_component,
     create_direct_swap_payout,
@@ -2360,7 +2361,11 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_components_bulk.add_argument(
         "--dry-run",
         action="store_true",
-        help="Validate and preview every component, then roll back the whole batch",
+        help="Purely validate and preview every component without writing",
+    )
+    transfers_components_bulk.add_argument(
+        "--expected-fingerprint",
+        help="Required for apply; copy the fingerprint from the matching --dry-run",
     )
 
     transfers_payouts = transfers_sub.add_parser("payouts")
@@ -4555,20 +4560,31 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.json_file,
                     label="component array or bulk object",
                 )
-                operation = functools.partial(
-                    bulk_resolve_custody_components,
-                    conn,
-                    args.workspace,
-                    args.profile,
-                    specs,
-                    activate=not args.draft,
-                    commit=not args.dry_run,
-                )
+                if args.dry_run:
+                    preview = plan_bulk_custody_components(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        specs,
+                        activate=not args.draft,
+                    )
+                    preview["dry_run"] = True
+                    return emit(args, preview)
+                if not args.expected_fingerprint:
+                    raise AppError(
+                        "bulk-resolve apply requires --expected-fingerprint from --dry-run",
+                        code="validation",
+                    )
                 return emit(
                     args,
-                    _dry_run_transaction(conn, operation)
-                    if args.dry_run
-                    else operation(),
+                    bulk_resolve_custody_components(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        specs,
+                        activate=not args.draft,
+                        expected_fingerprint=args.expected_fingerprint,
+                    ),
                 )
         if args.transfers_command == "payouts":
             if args.payouts_command == "list":

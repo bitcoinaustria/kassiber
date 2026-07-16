@@ -180,16 +180,27 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.addCleanup(self.conn.close)
 
     def test_ai_bulk_resolution_stamps_component_attribution(self):
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "components": [_component_spec()],
+            "activate": False,
+            "dry_run": True,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.bulk_resolve",
+            args,
+            authored_source="ai_tool",
+        )
+        args.update(
+            dry_run=False,
+            expected_fingerprint=preview["fingerprint"],
+        )
         result = _ui_swap_matching_payload_from_conn(
             self.conn,
             "ui.transfers.components.bulk_resolve",
-            {
-                "workspace": "Main",
-                "profile": "Book",
-                "components": [_component_spec()],
-                "activate": False,
-                "dry_run": False,
-            },
+            args,
             authored_source="ai_tool",
         )
 
@@ -217,23 +228,28 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "validation")
         self.assertEqual(caught.exception.details["max_components"], 50)
 
-    def test_bulk_resolution_retry_reuses_deterministic_draft_ids(self):
+    def test_bulk_resolution_rejects_reusing_an_applied_plan(self):
         args = {
             "workspace": "Main",
             "profile": "Book",
             "components": [_component_spec()],
             "activate": False,
-            "dry_run": False,
+            "dry_run": True,
         }
-
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.bulk_resolve", args
+        )
+        args.update(dry_run=False, expected_fingerprint=preview["fingerprint"])
         first = _ui_swap_matching_payload_from_conn(
             self.conn, "ui.transfers.components.bulk_resolve", args
         )
-        second = _ui_swap_matching_payload_from_conn(
-            self.conn, "ui.transfers.components.bulk_resolve", args
-        )
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn, "ui.transfers.components.bulk_resolve", args
+            )
 
-        self.assertEqual(first["components"][0]["id"], second["components"][0]["id"])
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+        self.assertEqual(first["components"][0]["id"], preview["components"][0]["id"])
         self.assertEqual(
             self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
             1,
@@ -256,6 +272,131 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             )
 
         self.assertEqual(caught.exception.details["max_legs"], 256)
+
+    def test_bulk_preview_performs_no_database_writes(self):
+        spec = _component_spec()
+        spec["legs"][1] = {
+            "role": "retained",
+            "untracked_wallet": "Preview-only missing wallet",
+            "occurred_at": "2026-06-01T00:00:00Z",
+            "amount_msat": 99_000,
+        }
+        before_changes = self.conn.total_changes
+        before_version = self.conn.execute(
+            "SELECT journal_input_version FROM profiles WHERE id = 'profile'"
+        ).fetchone()[0]
+
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.bulk_resolve",
+            {
+                "workspace": "Main",
+                "profile": "Book",
+                "components": [spec],
+                "activate": False,
+                "dry_run": True,
+            },
+        )
+
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(self.conn.total_changes, before_changes)
+        self.assertFalse(self.conn.in_transaction)
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
+        self.assertIsNone(
+            self.conn.execute(
+                "SELECT id FROM wallets WHERE label = 'Preview-only missing wallet'"
+            ).fetchone()
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT journal_input_version FROM profiles WHERE id = 'profile'"
+            ).fetchone()[0],
+            before_version,
+        )
+
+    def test_bulk_apply_rejects_a_stale_input_version(self):
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "components": [_component_spec()],
+            "activate": False,
+            "dry_run": True,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.bulk_resolve", args
+        )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile'"
+        )
+        self.conn.commit()
+        args.update(dry_run=False, expected_fingerprint=preview["fingerprint"])
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn, "ui.transfers.components.bulk_resolve", args
+            )
+
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
+
+    def test_active_preview_rejects_cross_component_anchor_conflicts(self):
+        first = _component_spec(note="first")
+        second = _component_spec(note="second")
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.bulk_resolve",
+                {
+                    "workspace": "Main",
+                    "profile": "Book",
+                    "components": [first, second],
+                    "activate": True,
+                    "dry_run": True,
+                },
+            )
+
+        self.assertEqual(caught.exception.code, "custody_component_not_activatable")
+        self.assertIn(
+            "active_transaction_membership_conflict",
+            {issue["code"] for issue in caught.exception.details["issues"]},
+        )
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
+
+    def test_preview_applies_database_anchor_coverage_checks(self):
+        spec = _component_spec()
+        spec["legs"][0]["amount_msat"] = 99_999
+        spec["legs"][2]["amount_msat"] = 999
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.bulk_resolve",
+                {
+                    "workspace": "Main",
+                    "profile": "Book",
+                    "components": [spec],
+                    "activate": True,
+                    "dry_run": True,
+                },
+            )
+
+        self.assertEqual(caught.exception.code, "custody_component_not_activatable")
+        self.assertIn("anchor_coverage_mismatch", str(caught.exception.details))
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
 
     def test_transaction_and_untracked_wallet_error_names_the_real_conflict(self):
         spec = _component_spec()
@@ -471,6 +612,22 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--file",
             str(spec_path),
             "--draft",
+            "--expected-fingerprint",
+            _dispatch_json(
+                self.conn,
+                self.data_root,
+                "transfers",
+                "components",
+                "bulk-resolve",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+                "--file",
+                str(spec_path),
+                "--draft",
+                "--dry-run",
+            )["data"]["fingerprint"],
         )
 
         self.assertEqual(created["data"]["summary"], {"count": 1, "active": 0, "draft": 1})
@@ -531,6 +688,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "Book",
             "--file",
             str(spec_path),
+            "--expected-fingerprint",
+            preview["data"]["fingerprint"],
         )
         self.assertEqual(created["data"]["summary"]["active"], 1)
         wallet = self.conn.execute(

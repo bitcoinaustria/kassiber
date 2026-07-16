@@ -656,6 +656,7 @@ type CustodyComponentListEnvelope = {
 };
 
 interface CustodyBulkResolveResult {
+  fingerprint: string;
   components: CustodyComponent[];
   summary: { count: number; active: number; draft: number };
   dry_run?: boolean;
@@ -979,13 +980,13 @@ function CustodyComponentResolver() {
       );
       if (!response.data) {
         setServerPreviewError(t("swap.components.backendError.unexpected"));
-        return false;
+        return null;
       }
       setServerPreview(response.data);
-      return true;
+      return response.data;
     } catch (error) {
       setServerPreviewError(custodyMutationError(t, error));
-      return false;
+      return null;
     }
   };
 
@@ -1018,7 +1019,10 @@ function CustodyComponentResolver() {
     if (!verified) return;
     try {
       const response = await bulkMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, { activate }),
+        buildCustodyBulkRequest(nextPreview, {
+          activate,
+          expectedFingerprint: verified.fingerprint,
+        }),
       );
       if (response.data) setResult(response.data.summary);
     } catch (error) {

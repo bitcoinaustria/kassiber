@@ -39,6 +39,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_components as core_custody_components
+from ..core import custody_component_planner as core_custody_component_planner
 from ..core import custody_journal as core_custody_journal
 from ..core import custody_quantity_store as core_custody_quantity_store
 from ..core import custody_tax_migration as core_custody_tax_migration
@@ -1207,11 +1208,13 @@ _CUSTODY_COMPONENT_CREATE_FIELDS = (
     "created_at",
 )
 
-_CUSTODY_BULK_COMPONENT_CAP = 50
-_CUSTODY_COMPONENT_LEG_CAP = 256
-_CUSTODY_COMPONENT_ALLOCATION_CAP = 4096
-_CUSTODY_BULK_TOTAL_LEG_CAP = 2000
-_CUSTODY_BULK_TOTAL_ALLOCATION_CAP = 10_000
+_CUSTODY_BULK_COMPONENT_CAP = core_custody_component_planner.MAX_COMPONENTS
+_CUSTODY_COMPONENT_LEG_CAP = (
+    core_custody_component_planner.MAX_LEGS_PER_COMPONENT
+)
+_CUSTODY_COMPONENT_ALLOCATION_CAP = (
+    core_custody_component_planner.MAX_ALLOCATIONS_PER_COMPONENT
+)
 
 
 def _validate_custody_component_spec_size(spec) -> tuple[int, int]:
@@ -1302,6 +1305,7 @@ def bulk_resolve_custody_components(
     profile_ref,
     specs,
     *,
+    expected_fingerprint,
     activate=True,
     commit=True,
     include_local_evidence=True,
@@ -1309,107 +1313,41 @@ def bulk_resolve_custody_components(
 ):
     if isinstance(specs, dict):
         specs = specs.get("components")
-    if not isinstance(specs, list) or not specs:
-        raise AppError(
-            "bulk custody resolution requires a non-empty components array",
-            code="validation",
-        )
-    if len(specs) > _CUSTODY_BULK_COMPONENT_CAP:
-        raise AppError(
-            f"bulk custody resolution accepts at most {_CUSTODY_BULK_COMPONENT_CAP} components",
-            code="validation",
-            details={"count": len(specs), "max_components": _CUSTODY_BULK_COMPONENT_CAP},
-        )
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    prepared = []
-    total_legs = total_allocations = 0
-    for index, raw_spec in enumerate(specs):
-        if not isinstance(raw_spec, dict):
-            raise AppError("custody component spec must be a JSON object", code="validation")
-        leg_count, allocation_count = _validate_custody_component_spec_size(raw_spec)
-        total_legs += leg_count
-        total_allocations += allocation_count
-        spec = dict(raw_spec)
-        generated_id = not str(spec.get("component_id") or "").strip()
-        if generated_id:
-            try:
-                canonical = json.dumps(spec, sort_keys=True, separators=(",", ":"))
-            except (TypeError, ValueError) as exc:
-                raise AppError("custody component spec is not JSON-safe", code="validation") from exc
-            spec["component_id"] = str(
-                uuid.uuid5(
-                    uuid.NAMESPACE_URL,
-                    "kassiber:custody-bulk:"
-                    f"{profile['id']}:{authored_source}:{int(bool(activate))}:{index}:{canonical}",
-                )
-            )
-        prepared.append((spec, generated_id))
-    if total_legs > _CUSTODY_BULK_TOTAL_LEG_CAP:
-        raise AppError(
-            "bulk custody resolution contains too many legs",
-            code="validation",
-            details={"count": total_legs, "max_legs": _CUSTODY_BULK_TOTAL_LEG_CAP},
-        )
-    if total_allocations > _CUSTODY_BULK_TOTAL_ALLOCATION_CAP:
-        raise AppError(
-            "bulk custody resolution contains too many allocations",
-            code="validation",
-            details={
-                "count": total_allocations,
-                "max_allocations": _CUSTODY_BULK_TOTAL_ALLOCATION_CAP,
-            },
-        )
-    created = []
-    savepoint = f"custody_components_bulk_{uuid.uuid4().hex}"
-    conn.execute(f"SAVEPOINT {savepoint}")
-    try:
-        for spec, generated_id in prepared:
-            if generated_id:
-                existing = conn.execute(
-                    "SELECT 1 FROM custody_components WHERE id = ? AND profile_id = ?",
-                    (spec["component_id"], profile["id"]),
-                ).fetchone()
-                if existing:
-                    created.append(
-                        core_custody_components.get_component(
-                            conn,
-                            spec["component_id"],
-                            profile_id=profile["id"],
-                            include_local_evidence=include_local_evidence,
-                        )
-                    )
-                    continue
-            created.append(
-                create_custody_component(
-                    conn,
-                    workspace["id"],
-                    profile["id"],
-                    spec,
-                    activate=activate,
-                    commit=False,
-                    include_local_evidence=include_local_evidence,
-                    authored_source=authored_source,
-                )
-            )
-    except Exception:
-        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-        raise
-    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-    if commit:
-        conn.commit()
-    return {
-        "components": created,
-        "summary": {
-            "count": len(created),
-            "active": sum(
-                item.get("effective_state") == "active" for item in created
-            ),
-            "draft": sum(
-                item.get("effective_state") != "active" for item in created
-            ),
-        },
-    }
+    return core_custody_component_planner.apply_component_batch(
+        conn,
+        workspace_id=workspace["id"],
+        profile_id=profile["id"],
+        specs=specs,
+        activate=activate,
+        authored_source=authored_source,
+        expected_fingerprint=expected_fingerprint,
+        include_local_evidence=include_local_evidence,
+        commit=commit,
+    )
+
+
+def plan_bulk_custody_components(
+    conn,
+    workspace_ref,
+    profile_ref,
+    specs,
+    *,
+    activate=True,
+    authored_source="cli",
+):
+    if isinstance(specs, dict):
+        specs = specs.get("components")
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    plan = core_custody_component_planner.plan_component_batch(
+        conn,
+        workspace_id=workspace["id"],
+        profile_id=profile["id"],
+        specs=specs,
+        activate=activate,
+        authored_source=authored_source,
+    )
+    return core_custody_component_planner.public_component_batch_plan(plan)
 
 
 def list_custody_components(

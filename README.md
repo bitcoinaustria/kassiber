@@ -192,6 +192,8 @@ same values under `data.page`. High-impact automatic reviews support previews:
 including missing historical wallets, use the versioned custody-component
 workflow documented in
 [docs/reference/custody-components.md](docs/reference/custody-components.md).
+Custody-component preview is read-only; apply requires the exact fingerprint
+returned by the matching preview and rejects stale journal inputs.
 
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:

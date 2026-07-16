@@ -2049,7 +2049,8 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "Validate or atomically author one or more reviewed custody components after "
             "explicit consent. This is the quarantine repair path for missing wallets and "
             "1:N, N:1, or explicit N:M custody flows that cannot be represented by one pair. "
-            "Run dry_run=true first, then request consent for any final write. Activation "
+            "Run dry_run=true first, then pass its expected_fingerprint unchanged when "
+            "requesting consent for the final write. Activation "
             "remains fail-closed: every anchor, amount, "
             "fee, network, asset, chronology, and allocation must conserve exactly. The result "
             "omits local-only evidence and location references. AI output is not evidence: "
@@ -2077,6 +2078,11 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "dry_run": {
                     "type": "boolean",
                     "description": "Validate and return an exact preview without writing. Defaults to false.",
+                },
+                "expected_fingerprint": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "Required for apply; copy the fingerprint returned by dry_run.",
                 },
             },
         },

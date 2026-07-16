@@ -256,6 +256,63 @@ def _json_text(value: Any, field: str) -> str:
     return json.dumps(_json_object(value, field), sort_keys=True, separators=(",", ":"))
 
 
+def normalize_component_header(
+    *,
+    component_type: Any,
+    conservation_mode: Any = "quantity",
+    evidence_kind: Any = None,
+    evidence_grade: Any = None,
+    evidence: Any = None,
+    conversion_policy: Any = None,
+    conversion_reviewed: Any = False,
+    conversion_metadata: Any = None,
+    notes: Any = None,
+    change_reason: Any = None,
+    component_id: Any = None,
+    lineage_id: Any = None,
+    created_at: Any = None,
+    authored_source: Any = "user",
+) -> dict[str, Any]:
+    """Normalize every authored component header field without writing."""
+
+    normalized_component_id = _optional_text(component_id, "component_id")
+    normalized_lineage_id = _optional_text(lineage_id, "lineage_id")
+    normalized_source = _required_text(authored_source, "authored_source")
+    if normalized_source not in AUTHORED_SOURCES:
+        raise _error(
+            "authored_source is invalid",
+            "custody_component_validation",
+            details={"authored_source": normalized_source},
+        )
+    if type(conversion_reviewed) is not bool:
+        raise _error(
+            "conversion_reviewed must be a boolean",
+            "custody_component_validation",
+        )
+    return {
+        "component_type": _normalize_component_type(component_type),
+        "conservation_mode": _normalize_mode(conservation_mode),
+        "evidence_kind": _optional_text(evidence_kind, "evidence_kind", token=True),
+        "evidence_grade": _optional_text(
+            evidence_grade, "evidence_grade", token=True
+        ),
+        "evidence": _json_object(evidence, "evidence"),
+        "conversion_policy": _optional_text(
+            conversion_policy, "conversion_policy", token=True
+        ),
+        "conversion_reviewed": conversion_reviewed,
+        "conversion_metadata": _json_object(
+            conversion_metadata, "conversion_metadata"
+        ),
+        "notes": _optional_text(notes, "notes"),
+        "change_reason": _optional_text(change_reason, "change_reason"),
+        "component_id": normalized_component_id,
+        "lineage_id": normalized_lineage_id or normalized_component_id,
+        "created_at": parse_timestamp(created_at) if created_at is not None else None,
+        "authored_source": normalized_source,
+    }
+
+
 @contextmanager
 def _savepoint(conn: sqlite3.Connection):
     """Provide nested atomicity without committing the caller's transaction."""
@@ -1942,6 +1999,7 @@ def _validate_leg_anchors(
     workspace_id: str,
     profile_id: str,
     legs: Sequence[Mapping[str, Any]],
+    planned_wallet_ids: frozenset[str] = frozenset(),
 ) -> None:
     for leg in legs:
         transaction_id = leg.get("transaction_id")
@@ -1983,6 +2041,8 @@ def _validate_leg_anchors(
             row = conn.execute(
                 "SELECT workspace_id, profile_id FROM wallets WHERE id = ?", (wallet_id,)
             ).fetchone()
+            if not row and str(wallet_id) in planned_wallet_ids:
+                continue
             if not row:
                 raise _error(
                     "custody leg wallet was not found",
@@ -2299,6 +2359,7 @@ def validate_component_plan(
     conversion_reviewed: bool = False,
     evidence_grade: str | None = None,
     replacing_lineage_id: str | None = None,
+    planned_wallet_ids: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Validate an exact prospective component without writing any rows.
 
@@ -2320,6 +2381,7 @@ def validate_component_plan(
         workspace_id=workspace_id,
         profile_id=profile_id,
         legs=normalized_legs,
+        planned_wallet_ids=frozenset(str(item) for item in planned_wallet_ids),
     )
     validation = validate_conservation(
         normalized_legs,
@@ -2330,6 +2392,26 @@ def validate_component_plan(
         component_type=normalized_type,
         evidence_grade=evidence_grade,
     )
+    anchor_validation = _db_anchor_validation(
+        conn,
+        normalized_legs,
+        allocations=normalized_allocations,
+        conservation_mode=normalized_mode,
+    )
+    if anchor_validation["issues"]:
+        validation = dict(validation)
+        validation["activatable"] = False
+        validation["issues"] = [
+            *validation["issues"],
+            *anchor_validation["issues"],
+        ]
+    if anchor_validation["warnings"]:
+        validation = dict(validation)
+        validation["warnings"] = [
+            *validation.get("warnings", ()),
+            *anchor_validation["warnings"],
+        ]
+    validation["anchors"] = anchor_validation
     transaction_ids = sorted(
         {
             str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
@@ -2381,6 +2463,130 @@ def validate_component_plan(
         "allocations": normalized_allocations,
         "validation": validation,
     }
+
+
+def validate_planned_active_batch(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    components: Sequence[Mapping[str, Any]],
+    planned_untracked_wallet_ids: Iterable[str] = (),
+) -> list[dict[str, Any]]:
+    """Validate conflicts and route continuity across a read-only active batch."""
+
+    if not components:
+        return []
+    quantity_candidates = [
+        component
+        for component in components
+        if component.get("conservation_mode") == "quantity"
+    ]
+    quantity_candidate_ids = {
+        str(component["id"]) for component in quantity_candidates
+    }
+    issues: list[dict[str, Any]] = []
+    transaction_components: dict[str, set[str]] = defaultdict(set)
+    for component in components:
+        component_id = str(component["id"])
+        for leg in component.get("legs", ()):
+            transaction_id = leg.get("anchor_transaction_id") or leg.get(
+                "transaction_id"
+            )
+            if transaction_id not in (None, ""):
+                transaction_components[str(transaction_id)].add(component_id)
+    for transaction_id, component_ids in sorted(transaction_components.items()):
+        if len(component_ids) > 1:
+            issues.append(
+                {
+                    "code": "active_transaction_membership_conflict",
+                    "message": "a transaction belongs to multiple planned active components",
+                    "transaction_id": transaction_id,
+                    "component_ids": sorted(component_ids),
+                }
+            )
+
+    if not quantity_candidates:
+        return issues
+
+    existing_legs = [
+        _leg_dict(row)
+        for row in conn.execute(
+            """
+            SELECT l.*
+            FROM custody_component_legs l
+            JOIN custody_components c ON c.id = l.component_id
+            WHERE c.profile_id = ? AND c.state = 'active'
+              AND c.conservation_mode = 'quantity'
+            ORDER BY c.id, l.ordinal, l.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    existing_allocations = [
+        _allocation_dict(row)
+        for row in conn.execute(
+            """
+            SELECT a.*
+            FROM custody_component_allocations a
+            JOIN custody_components c ON c.id = a.component_id
+            WHERE c.profile_id = ? AND c.state = 'active'
+              AND c.conservation_mode = 'quantity'
+            ORDER BY c.id, a.ordinal, a.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    candidate_legs = [
+        {**dict(leg), "component_id": str(component["id"])}
+        for component in quantity_candidates
+        for leg in component.get("legs", ())
+    ]
+    candidate_allocations = [
+        {**dict(allocation), "component_id": str(component["id"])}
+        for component in quantity_candidates
+        for allocation in component.get("allocations", ())
+    ]
+    combined_legs = [*existing_legs, *candidate_legs]
+    transaction_rows, wallet_rows = _load_scope_evidence(conn, combined_legs)
+    for wallet_id in planned_untracked_wallet_ids:
+        wallet_rows.setdefault(
+            str(wallet_id),
+            {
+                "id": str(wallet_id),
+                "wallet_kind": "untracked",
+                "config_json": "{}",
+            },
+        )
+    scoped_legs = _scoped_leg_copies(
+        combined_legs,
+        transaction_rows,
+        wallet_rows,
+    )
+    completed_allocations = _allocations_with_component_inference(
+        scoped_legs,
+        [*existing_allocations, *candidate_allocations],
+        conservation_mode="quantity",
+    )
+    route_issues = [
+        *_quantity_scope_connectivity_issues(
+            scoped_legs,
+            completed_allocations,
+            conservation_mode="quantity",
+        ),
+        *_cross_component_untracked_continuity_issues(
+            scoped_legs,
+            wallet_rows,
+            current_component_ids=quantity_candidate_ids,
+        ),
+    ]
+    issues.extend(
+        issue
+        for issue in route_issues
+        if not issue.get("component_ids")
+        or quantity_candidate_ids
+        & {str(item) for item in issue.get("component_ids", ())}
+    )
+    return issues
 
 
 def _replicated_lineage_issues(
@@ -3688,25 +3894,29 @@ def create_component(
 ) -> dict[str, Any]:
     workspace_id = _required_text(workspace_id, "workspace_id")
     profile_id = _required_text(profile_id, "profile_id")
-    component_type = _normalize_component_type(component_type)
-    conservation_mode = _normalize_mode(conservation_mode)
     normalized_legs = normalize_legs(legs)
     normalized_allocations = normalize_allocations(allocations, normalized_legs)
     component_id = _optional_text(component_id, "component_id") or str(uuid.uuid4())
-    lineage_id = _optional_text(lineage_id, "lineage_id") or component_id
-    timestamp = parse_timestamp(created_at) if created_at is not None else _now_iso()
-    authored_source = _required_text(authored_source, "authored_source")
-    if authored_source not in AUTHORED_SOURCES:
-        raise _error(
-            "authored_source is invalid",
-            "custody_component_validation",
-            details={"authored_source": authored_source},
-        )
-    if type(conversion_reviewed) is not bool:
-        raise _error(
-            "conversion_reviewed must be a boolean",
-            "custody_component_validation",
-        )
+    header = normalize_component_header(
+        component_type=component_type,
+        conservation_mode=conservation_mode,
+        evidence_kind=evidence_kind,
+        evidence_grade=evidence_grade,
+        evidence=evidence,
+        conversion_policy=conversion_policy,
+        conversion_reviewed=conversion_reviewed,
+        conversion_metadata=conversion_metadata,
+        notes=notes,
+        change_reason=change_reason,
+        component_id=component_id,
+        lineage_id=lineage_id,
+        created_at=created_at,
+        authored_source=authored_source,
+    )
+    component_type = header["component_type"]
+    conservation_mode = header["conservation_mode"]
+    lineage_id = header["lineage_id"]
+    timestamp = header["created_at"] or _now_iso()
     _scope(conn, workspace_id, profile_id)
     _validate_leg_anchors(
         conn,
@@ -3740,16 +3950,16 @@ def create_component(
             (
                 component_id, lineage_id, workspace_id, profile_id, component_type,
                 conservation_mode,
-                _optional_text(evidence_kind, "evidence_kind", token=True),
-                _optional_text(evidence_grade, "evidence_grade", token=True),
-                _json_text(evidence, "evidence"),
-                _optional_text(conversion_policy, "conversion_policy", token=True),
-                int(conversion_reviewed),
-                _json_text(conversion_metadata, "conversion_metadata"),
+                header["evidence_kind"],
+                header["evidence_grade"],
+                _json_text(header["evidence"], "evidence"),
+                header["conversion_policy"],
+                int(header["conversion_reviewed"]),
+                _json_text(header["conversion_metadata"], "conversion_metadata"),
                 len(normalized_legs), len(normalized_allocations),
-                authored_source,
-                _optional_text(notes, "notes"),
-                _optional_text(change_reason, "change_reason"),
+                header["authored_source"],
+                header["notes"],
+                header["change_reason"],
                 timestamp,
             ),
         )
@@ -4459,9 +4669,12 @@ __all__ = [
     "list_effective_components",
     "normalize_legs",
     "normalize_allocations",
+    "normalize_component_header",
     "reconcile_active_memberships",
     "supersede_component",
     "undo_supersede",
     "update_component",
     "validate_conservation",
+    "validate_component_plan",
+    "validate_planned_active_batch",
 ]
