@@ -8,8 +8,8 @@ at fair market value of Neubestand holdings, taxed at the 27.5 % Sondersteuersat
 
 Design (see docs/plan/11-exit-tax-deemed-disposal.md):
 
-- This module owns NO tax math. It reads the journal state RP2 already computed
-  (`hooks.build_ledger_state`) and reconstructs the remaining inventory and its
+- This module owns NO tax math. It reads the stored journal projection RP2
+  already computed and reconstructs the remaining inventory and its
   cost basis per regime directly from those entries: acquisitions add (by
   acquisition-date regime), disposals subtract (by their `at_category` regime
   and the engine's own consumed cost basis). Income recognition lines are
@@ -37,6 +37,7 @@ from ..tax_policy import build_tax_policy
 from ..time_utils import parse_timestamp
 from . import pricing
 from . import report_context as core_report_context
+from . import custody_journal
 from . import rates as core_rates
 from .journal_markers import MARKER_REGIME, parse_marker
 from .austrian import infer_regime_from_timestamp, kennzahl_for_disposal_category
@@ -527,7 +528,7 @@ def report_exit_tax(
         )
     workspace = report_context.workspace
     profile = report_context.profile
-    state = hooks.build_ledger_state(conn, profile)
+    state = custody_journal.load_stored_ledger_state(conn, profile)
     profile = dict(profile)
     workspace_label = workspace["label"] if "label" in workspace.keys() else None
     profile.setdefault("workspace_label", workspace_label)

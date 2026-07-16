@@ -458,39 +458,17 @@ class ExitTaxComputeTests(unittest.TestCase):
         )
 
 
-class _FakeHooks:
-    def __init__(self, profile, state):
-        self._profile = profile
-        self._state = state
-
-    def resolve_scope(self, conn, workspace_ref, profile_ref):
-        return ({"label": "Books", "id": "ws1"}, self._profile)
-
-    def build_ledger_state(self, conn, profile):
-        return self._state
-
-
 class ExitTaxReportLinesTests(unittest.TestCase):
     def test_plain_lines_render_headline_and_review_gate(self):
         conn = _conn_with_rate(Decimal("60000"))
-        hooks = _FakeHooks(_profile("at"), _state())
-        report_context = exit_tax.core_report_context.ReportContext(
-            workspace={"label": "Books", "id": "ws1"},
-            profile=hooks._profile,
-            active_transaction_count=0,
-            journal_input_version=0,
-            last_processed_input_version=0,
-            last_processed_at="2026-06-16T00:00:00Z",
-        )
-        lines = exit_tax.build_exit_tax_report_lines(
+        report = exit_tax.compute_deemed_disposal(
             conn,
-            None,
-            None,
-            hooks,
+            _profile("at"),
+            _state(),
             departure_date="2026-06-16",
             destination="eu_eea",
-            report_context=report_context,
         )
+        lines = exit_tax.format_exit_tax_lines(report)
         text = "\n".join(lines)
         self.assertIn("Estimated exit tax:", text)
         self.assertIn("2,200.00 EUR", text)

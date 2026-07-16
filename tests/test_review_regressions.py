@@ -688,7 +688,6 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
             resolve_account=unused,
             resolve_wallet=unused,
-            build_ledger_state=unused,
             list_journal_entries=unused,
             list_wallets=unused,
             parse_iso_datetime=unused,
@@ -4585,9 +4584,6 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
             resolve_account=lambda *_args, **_kwargs: None,
             resolve_wallet=lambda *_args, **_kwargs: None,
-            build_ledger_state=lambda *_args, **_kwargs: self.fail(
-                "tax summary reports should read the processed journal snapshot"
-            ),
             list_journal_entries=lambda *_args, **_kwargs: [],
             list_wallets=lambda *_args, **_kwargs: [],
             parse_iso_datetime=lambda *_args, **_kwargs: None,

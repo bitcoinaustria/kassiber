@@ -869,6 +869,58 @@ def store_ledger_state(
     }
 
 
+def load_stored_ledger_state(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Load the report-facing ledger projection without reinterpreting custody."""
+
+    profile_id = str(profile["id"])
+    entries = []
+    for row in conn.execute(
+        "SELECT * FROM journal_entries WHERE profile_id = ? "
+        "ORDER BY occurred_at ASC, created_at ASC, id ASC",
+        (profile_id,),
+    ).fetchall():
+        entry = dict(row)
+        entry["quantity"] = msat_to_btc(row["quantity"])
+        for field in ("fiat_value", "unit_cost", "cost_basis", "proceeds", "gain_loss"):
+            entry[field] = pricing.decimal_from_exact(
+                row[f"{field}_exact"], row[field]
+            )
+        entries.append(entry)
+    quarantines = [
+        dict(row)
+        for row in conn.execute(
+            "SELECT * FROM journal_quarantines WHERE profile_id = ? "
+            "ORDER BY transaction_id ASC, reason ASC",
+            (profile_id,),
+        ).fetchall()
+    ]
+    wallet_holdings = {
+        (
+            row["wallet_id"],
+            row["wallet_label"],
+            row["account_code"],
+            row["asset"],
+        ): {
+            "quantity": msat_to_btc(row["quantity"]),
+            "cost_basis": pricing.decimal_from_exact(row["cost_basis"]),
+        }
+        for row in conn.execute(
+            "SELECT wallet_id, wallet_label, account_code, asset, quantity, cost_basis "
+            "FROM journal_wallet_holdings WHERE profile_id = ?",
+            (profile_id,),
+        ).fetchall()
+    }
+    return {
+        "entries": entries,
+        "quarantines": quarantines,
+        "wallet_holdings": wallet_holdings,
+        "latest_rates": latest_transaction_rates_for_profile(conn, profile_id),
+    }
+
+
 def process_journals(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -968,6 +1020,7 @@ __all__ = [
     "component_integrity_blockers",
     "duplicate_label_warnings",
     "latest_transaction_rates_for_profile",
+    "load_stored_ledger_state",
     "ownership_review_counts",
     "process_journals",
 ]

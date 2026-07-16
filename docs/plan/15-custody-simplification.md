@@ -264,6 +264,12 @@ binary.
    core service directly. The source-overlap integration test now creates a
    real active reviewed component through plan/apply instead of manufacturing
    a legacy `transaction_pairs` row.
+   Balance sheet, current portfolio, tax summary and exit-tax reports now read
+   only the gated stored journal projection. Their live-builder fallbacks and
+   the `ReportHooks.build_ledger_state` injection seam are deleted. Exit tax
+   reconstructs exact quantities and fiat fields through the core stored-ledger
+   loader, so an empty projection stays empty instead of silently reinterpreting
+   custody during report rendering.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

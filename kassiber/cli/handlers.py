@@ -2607,7 +2607,6 @@ def _report_hooks():
         resolve_scope=resolve_scope,
         resolve_account=resolve_account,
         resolve_wallet=resolve_wallet,
-        build_ledger_state=core_custody_journal.build_ledger_state,
         list_journal_entries=list_journal_entries,
         list_wallets=core_wallets.list_wallets,
         parse_iso_datetime=_parse_iso_datetime,
