@@ -630,6 +630,84 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             "component:reviewed-split:allocation:external-allocation",
         )
 
+    def test_component_network_fee_covers_wallet_delta_without_consuming_principal(self):
+        rows = [
+            _row(
+                "out",
+                "wallet-a",
+                "outbound",
+                5_000,
+                "2025-01-01T00:00:00Z",
+                fee=1,
+            ),
+            _row("in", "wallet-b", "inbound", 5_000, "2025-01-01T00:01:00Z"),
+        ]
+        component = {
+            "id": "reviewed-fee",
+            "effective_state": "active",
+            "component_type": "native_transfer",
+            "conservation_mode": "quantity",
+            "legs": [
+                {
+                    "id": "source",
+                    "role": "source",
+                    "transaction_id": "out",
+                    "asset": "BTC",
+                    "amount_msat": 5_001,
+                },
+                {
+                    "id": "owned",
+                    "role": "destination",
+                    "transaction_id": "in",
+                    "asset": "BTC",
+                    "amount_msat": 5_000,
+                },
+                {
+                    "id": "fee",
+                    "role": "fee",
+                    "transaction_id": "out",
+                    "asset": "BTC",
+                    "amount_msat": 1,
+                },
+            ],
+            "allocations": [
+                {
+                    "id": "owned-allocation",
+                    "source_leg_id": "source",
+                    "sink_leg_id": "owned",
+                    "source_amount_msat": 5_000,
+                    "sink_amount_msat": 5_000,
+                },
+                {
+                    "id": "fee-allocation",
+                    "source_leg_id": "source",
+                    "sink_leg_id": "fee",
+                    "source_amount_msat": 1,
+                    "sink_amount_msat": 1,
+                },
+            ],
+        }
+
+        state = build_canonical_quantity_state(rows, effective_components=[component])
+
+        self.assertEqual(state.issues, ())
+        self.assertEqual(
+            [(item.state, item.source.amount_msat) for item in state.projection.decisions],
+            [(INTERNAL_REVIEWED, 5_000)],
+        )
+        fee = next(
+            item for item in state.projection.postings if item.location_kind == "fee"
+        )
+        self.assertEqual(fee.amount_msat, 1)
+
+        component["allocations"][1]["source_amount_msat"] = 2
+        component["allocations"][1]["sink_amount_msat"] = 2
+        failed = build_canonical_quantity_state(rows, effective_components=[component])
+        self.assertIn(
+            "component_claim_compile_failed",
+            {issue.issue_type for issue in failed.issues},
+        )
+
     def test_promoted_gap_candidate_holds_boundaries_without_transfer_edge(self):
         rows = [
             _row(

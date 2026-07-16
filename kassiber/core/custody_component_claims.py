@@ -375,6 +375,19 @@ def compile_component_quantity_claims(
                 component_id=component_id,
                 source_leg_id=source.get("id"),
             )
+        if conservation_mode != "conversion" and sink.get("role") == "fee":
+            # The observation projector emits network fees independently of
+            # principal. The authored fee allocation proves exact boundary
+            # coverage but must not consume the principal slice cursor.
+            if source_amount != source_observation.fee_msat:
+                raise _error(
+                    "component fee allocation does not match the observed fee",
+                    component_id=component_id,
+                    transaction_id=source_observation.transaction_id,
+                    claimed_fee_msat=source_amount,
+                    observed_fee_msat=source_observation.fee_msat,
+                )
+            continue
         source_start = source_cursors.get(source_observation.quantity_hash, 0)
         source_end = source_start + source_amount
         if source_end > source_observation.principal_msat:
@@ -389,12 +402,6 @@ def compile_component_quantity_claims(
         source_slice = QuantitySlice(
             source_observation.quantity_hash, source_start, source_end
         )
-
-        if conservation_mode != "conversion" and sink.get("role") == "fee":
-            # QuantityObservation emits the exact fee posting independently.
-            # Still advance the authored source cursor so exact component
-            # conservation can account for the explicitly separated fee leg.
-            continue
 
         sink_role = str(sink.get("role") or "")
         target_slice = None
