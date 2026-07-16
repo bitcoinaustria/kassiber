@@ -8,7 +8,8 @@ import tempfile
 import unittest
 
 from kassiber import db as db_module
-from kassiber.cli.handlers import process_journals, require_processed_journals
+from kassiber.cli.handlers import process_journals, resolve_scope
+from kassiber.core.report_context import require_report_context
 from kassiber.core.custody_components import (
     activate_component,
     create_component,
@@ -1030,7 +1031,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             "SELECT * FROM profiles WHERE id = 'profile'"
         ).fetchone()
         with self.assertRaises(AppError) as blocked:
-            require_processed_journals(self.conn, profile)
+            require_report_context(self.conn, "ws", "profile", resolve_scope)
         self.assertEqual("custody_component_incomplete", blocked.exception.code)
         self.assertIn(
             "anchor_transaction_excluded",
@@ -1072,7 +1073,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             "SELECT * FROM profiles WHERE id = 'profile'"
         ).fetchone()
         with self.assertRaises(AppError) as blocked:
-            require_processed_journals(self.conn, profile)
+            require_report_context(self.conn, "ws", "profile", resolve_scope)
         self.assertEqual("custody_component_incomplete", blocked.exception.code)
         self.assertEqual(
             "partial-header",

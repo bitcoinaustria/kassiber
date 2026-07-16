@@ -2440,13 +2440,14 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             snapshot["custody_quantity"]["qualification"],
         )
 
-        from kassiber.cli.handlers import require_processed_journals
+        from kassiber.cli.handlers import resolve_scope
+        from kassiber.core.report_context import require_report_context
 
         profile = self.conn.execute(
             "SELECT * FROM profiles WHERE id = 'profile'"
         ).fetchone()
         with self.assertRaises(AppError) as raised:
-            require_processed_journals(self.conn, profile)
+            require_report_context(self.conn, "ws", "profile", resolve_scope)
         self.assertEqual(raised.exception.code, "custody_quantity_unresolved")
 
 

@@ -6,6 +6,7 @@ from kassiber.core.chain_observer.provenance import (
     persist_chain_observation_provenance,
 )
 from kassiber.core.custody_components import activate_component, create_component
+from kassiber.core import report_context as core_report_context
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -564,7 +565,9 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                         "SELECT * FROM profiles WHERE id = 'profile'"
                     ).fetchone()
                     with self.assertRaises(AppError) as blocked:
-                        handlers.require_processed_journals(conn, profile)
+                        core_report_context.require_report_context(
+                            conn, "ws", "profile", handlers.resolve_scope
+                        )
                     self.assertEqual(
                         blocked.exception.code,
                         "custody_quantity_unresolved",
@@ -684,7 +687,9 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                     "SELECT * FROM profiles WHERE id = 'profile'"
                 ).fetchone()
                 with self.assertRaises(AppError) as blocked:
-                    handlers.require_processed_journals(conn, profile)
+                    core_report_context.require_report_context(
+                        conn, "ws", "profile", handlers.resolve_scope
+                    )
                 self.assertEqual(
                     blocked.exception.code,
                     "custody_quantity_unresolved",

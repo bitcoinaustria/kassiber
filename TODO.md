@@ -199,8 +199,11 @@ same verification surface.
     stored custody decisions/economic relations. Reviewed kind, policy,
     authorship, notes, swap fee and direct-payout metadata are losslessly
     projected for those readers. Stale books expose an explicit projection
-    state and do not render old custody grouping as current booked truth.
-    Mandatory gated report contexts, builder compatibility deletion, producer
+    state and do not render old custody grouping as current booked truth. Every
+    journal-derived report/export now acquires one core `ReportContext` proving
+    tax support, current journals, complete active components and clear
+    quantity barriers; composed reports reuse that proof, and the CLI report
+    hook/back-edge has been deleted. Builder compatibility deletion, producer
     cutover and speculative-scaffolding removal remain.
 
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old

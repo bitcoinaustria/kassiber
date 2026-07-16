@@ -3122,7 +3122,6 @@ def _report_hooks():
         resolve_scope=resolve_scope,
         resolve_account=resolve_account,
         resolve_wallet=resolve_wallet,
-        require_processed_journals=require_processed_journals,
         build_ledger_state=build_ledger_state,
         list_journal_entries=list_journal_entries,
         list_wallets=core_wallets.list_wallets,
@@ -6343,52 +6342,6 @@ def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "resolution": "clear",
         "note": "Run `kassiber journals process` to re-evaluate.",
     }
-
-
-def require_processed_journals(conn, profile):
-    custody_component_blockers = core_custody_journal.component_integrity_blockers(
-        conn, profile["id"]
-    )
-    if custody_component_blockers:
-        raise AppError(
-            "Reports are blocked by an incomplete or conflicting custody component.",
-            code="custody_component_incomplete",
-            hint=(
-                "Repair or supersede every authored active component in "
-                "`kassiber transfers components list` before relying on reports."
-            ),
-            details={"components": custody_component_blockers},
-            retryable=False,
-        )
-    quantity_issues = core_custody_quantity_store.blocking_quantity_issues(
-        conn,
-        profile["id"],
-    )
-    if quantity_issues:
-        blocked_from = next(
-            (
-                str(item["blocks_from"])
-                for item in quantity_issues
-                if item.get("blocks_from")
-            ),
-            None,
-        )
-        raise AppError(
-            "Reports are blocked by unresolved custody quantity.",
-            code="custody_quantity_unresolved",
-            hint=(
-                "Review the custody quantity issues before relying on tax or "
-                "portfolio reports. Later basis is not final."
-            ),
-            details={
-                "blocked_from": blocked_from,
-                "issues": quantity_issues[:20],
-            },
-            retryable=False,
-        )
-    _, processed_current = _journals_current_for_profile(conn, profile)
-    if not processed_current:
-        raise AppError("Reports require fresh journals. Run `kassiber journals process` first.")
 
 
 def show_status(conn, data_root):

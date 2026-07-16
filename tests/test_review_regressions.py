@@ -52,6 +52,7 @@ from kassiber.core.reports import (
     report_portfolio_summary,
     report_tax_summary,
 )
+from kassiber.core.report_context import ReportContext
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
@@ -685,7 +686,6 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
             resolve_account=unused,
             resolve_wallet=unused,
-            require_processed_journals=lambda _conn, _profile: None,
             build_ledger_state=unused,
             list_journal_entries=unused,
             list_wallets=unused,
@@ -695,14 +695,26 @@ class ReviewRegressionTest(unittest.TestCase):
             format_table=unused,
             write_text_pdf=unused,
         )
+        report_context = ReportContext(
+            workspace={"id": "ws-current"},
+            profile=profile,
+            active_transaction_count=2,
+            journal_input_version=0,
+            last_processed_input_version=0,
+            last_processed_at="2026-06-13T13:09:04Z",
+        )
 
         balance_rows = {
             row["asset"]: row
-            for row in report_balance_sheet(conn, None, None, hooks)
+            for row in report_balance_sheet(
+                conn, None, None, hooks, report_context=report_context
+            )
         }
         portfolio_rows = {
             row["asset"]: row
-            for row in report_portfolio_summary(conn, None, None, hooks)
+            for row in report_portfolio_summary(
+                conn, None, None, hooks, report_context=report_context
+            )
         }
 
         self.assertAlmostEqual(balance_rows["BTC"]["market_value"], 27_727.625)
@@ -4571,7 +4583,6 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
             resolve_account=lambda *_args, **_kwargs: None,
             resolve_wallet=lambda *_args, **_kwargs: None,
-            require_processed_journals=lambda *_args, **_kwargs: None,
             build_ledger_state=lambda *_args, **_kwargs: self.fail(
                 "tax summary reports should read the processed journal snapshot"
             ),

@@ -466,9 +466,6 @@ class _FakeHooks:
     def resolve_scope(self, conn, workspace_ref, profile_ref):
         return ({"label": "Books", "id": "ws1"}, self._profile)
 
-    def require_processed_journals(self, conn, profile):
-        return None
-
     def build_ledger_state(self, conn, profile):
         return self._state
 
@@ -477,8 +474,22 @@ class ExitTaxReportLinesTests(unittest.TestCase):
     def test_plain_lines_render_headline_and_review_gate(self):
         conn = _conn_with_rate(Decimal("60000"))
         hooks = _FakeHooks(_profile("at"), _state())
+        report_context = exit_tax.core_report_context.ReportContext(
+            workspace={"label": "Books", "id": "ws1"},
+            profile=hooks._profile,
+            active_transaction_count=0,
+            journal_input_version=0,
+            last_processed_input_version=0,
+            last_processed_at="2026-06-16T00:00:00Z",
+        )
         lines = exit_tax.build_exit_tax_report_lines(
-            conn, None, None, hooks, departure_date="2026-06-16", destination="eu_eea"
+            conn,
+            None,
+            None,
+            hooks,
+            departure_date="2026-06-16",
+            destination="eu_eea",
+            report_context=report_context,
         )
         text = "\n".join(lines)
         self.assertIn("Estimated exit tax:", text)

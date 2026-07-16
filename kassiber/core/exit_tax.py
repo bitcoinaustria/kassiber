@@ -36,6 +36,7 @@ from ..errors import AppError
 from ..tax_policy import build_tax_policy
 from ..time_utils import parse_timestamp
 from . import pricing
+from . import report_context as core_report_context
 from . import rates as core_rates
 from .journal_markers import MARKER_REGIME, parse_marker
 from .austrian import infer_regime_from_timestamp, kennzahl_for_disposal_category
@@ -513,14 +514,19 @@ def report_exit_tax(
     *,
     departure_date: Optional[str] = None,
     destination: Optional[str] = None,
+    report_context: core_report_context.ReportContext | None = None,
 ) -> dict[str, Any]:
-    """Resolve scope, require processed journals, and build the exit-tax payload."""
+    """Build the exit-tax payload from a mandatory fresh report context."""
 
-    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    from ..tax_policy import require_tax_processing_supported
-
-    require_tax_processing_supported(profile)
-    hooks.require_processed_journals(conn, profile)
+    if report_context is None:
+        report_context = core_report_context.require_report_context(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks.resolve_scope,
+        )
+    workspace = report_context.workspace
+    profile = report_context.profile
     state = hooks.build_ledger_state(conn, profile)
     profile = dict(profile)
     workspace_label = workspace["label"] if "label" in workspace.keys() else None
@@ -552,6 +558,7 @@ def build_exit_tax_report_lines(
     *,
     departure_date: Optional[str] = None,
     destination: Optional[str] = None,
+    report_context: core_report_context.ReportContext | None = None,
 ) -> list[str]:
     """Human-readable plain-text rendering of the exit-tax estimate."""
 
@@ -562,6 +569,7 @@ def build_exit_tax_report_lines(
         hooks,
         departure_date=departure_date,
         destination=destination,
+        report_context=report_context,
     )
     return format_exit_tax_lines(report)
 

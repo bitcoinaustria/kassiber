@@ -17,6 +17,7 @@ from . import custody_filed_reports as core_custody_filed_reports
 from . import custody_journal as core_custody_journal
 from . import pricing
 from . import rates as core_rates
+from . import report_context as core_report_context
 from .austrian import (
     kennzahl_for_disposal_category,
     tax_year_in_vienna,
@@ -33,7 +34,6 @@ from .privacy_linkage import analyze_psbt_privacy, build_privacy_linkage_graph
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
-from ..tax_policy import require_tax_processing_supported
 from ..wallet_descriptors import normalize_asset_code
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
@@ -219,7 +219,6 @@ AUSTRIAN_TAX_SECTION_GROUPS = (
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
-RequireProcessedJournals = Callable[[sqlite3.Connection, Mapping[str, Any]], None]
 BuildLedgerState = Callable[[sqlite3.Connection, Mapping[str, Any]], Mapping[str, Any]]
 ListJournalEntries = Callable[..., list[Mapping[str, Any]]]
 ListWallets = Callable[..., list[Mapping[str, Any]]]
@@ -266,7 +265,6 @@ class ReportHooks:
     resolve_scope: ScopeResolver
     resolve_account: AccountResolver
     resolve_wallet: WalletResolver
-    require_processed_journals: RequireProcessedJournals
     build_ledger_state: BuildLedgerState
     list_journal_entries: ListJournalEntries
     list_wallets: ListWallets
@@ -277,10 +275,26 @@ class ReportHooks:
     write_text_pdf: WriteTextPdf
 
 
-def _resolve_report_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    require_tax_processing_supported(profile)
-    return workspace, profile
+def _require_report_context(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    report_context: core_report_context.ReportContext | None = None,
+    *,
+    validate_profile: core_report_context.ProfileValidator | None = None,
+) -> core_report_context.ReportContext:
+    if report_context is not None:
+        if validate_profile is not None:
+            validate_profile(report_context.profile)
+        return report_context
+    return core_report_context.require_report_context(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks.resolve_scope,
+        validate_profile=validate_profile,
+    )
 
 
 def _register_saved_export(
@@ -1870,9 +1884,18 @@ def _profile_has_journal_entries(conn, profile_id):
     return row is not None
 
 
-def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_balance_sheet(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     fallback_rates = None
     rows = []
     try:
@@ -2088,9 +2111,20 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
     return results
 
 
-def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks, as_of=None, *, include_wallet_id=False):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_portfolio_summary(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    as_of=None,
+    *,
+    include_wallet_id=False,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     if as_of is not None:
         as_of_dt = hooks.parse_iso_datetime(as_of, "as_of") if not isinstance(as_of, datetime) else as_of
         return _historical_portfolio_summary(conn, profile, hooks, as_of_dt, include_wallet_id=include_wallet_id)
@@ -2157,9 +2191,19 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
     return rows
 
 
-def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_capital_gains(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    tax_year=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     where = [
         "je.profile_id = ?",
         "je.entry_type IN ('disposal', 'income')",
@@ -2222,9 +2266,18 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     return results
 
 
-def report_journal_entries(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_journal_entries(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     return hooks.list_journal_entries(conn, profile["workspace_id"], profile["id"], limit=None)
 
 
@@ -2266,6 +2319,7 @@ def report_balance_history(
     wallet_ref=None,
     account_ref=None,
     asset=None,
+    report_context: core_report_context.ReportContext | None = None,
 ):
     if interval not in INTERVAL_CHOICES:
         raise AppError(
@@ -2273,8 +2327,10 @@ def report_balance_history(
             code="validation",
             hint=f"Choose one of: {', '.join(INTERVAL_CHOICES)}",
         )
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     start_dt = hooks.parse_iso_datetime(start, "start")
     end_dt = hooks.parse_iso_datetime(end, "end")
     if start_dt and end_dt and start_dt > end_dt:
@@ -3251,17 +3307,22 @@ def _summary_wallet_flow_rows(rows):
 
 
 def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    hooks.require_processed_journals(conn, profile)
 
     scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
-    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
+    portfolio_rows = report_portfolio_summary(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
     balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
 
-    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"], hooks)
+    capital_rows = report_capital_gains(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
 
@@ -3272,6 +3333,7 @@ def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     return {
         "workspace": workspace,
         "profile": profile,
+        "report_context": report_context,
         "wallet": wallet,
         "scope_wallets": scope_wallets,
         "portfolio_rows": portfolio_rows,
@@ -3283,20 +3345,35 @@ def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     }
 
 
-def _build_full_report_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+def _build_full_report_context(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    wallet_ref=None,
+    history_limit=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
     if history_limit is not None and int(history_limit) < 0:
         raise AppError("--history-limit must be zero or positive", code="validation")
-    hooks.require_processed_journals(conn, profile)
-
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    workspace = report_context.workspace
+    profile = report_context.profile
+    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
-    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
+    portfolio_rows = report_portfolio_summary(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
     balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
 
-    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"], hooks)
+    capital_rows = report_capital_gains(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
     history_rows = report_balance_history(
@@ -3306,6 +3383,7 @@ def _build_full_report_context(conn, workspace_ref, profile_ref, hooks: ReportHo
         hooks,
         interval="month",
         wallet_ref=wallet["id"] if wallet else None,
+        report_context=report_context,
     )
     if history_limit is not None and int(history_limit) > 0:
         history_rows = history_rows[-int(history_limit) :]
@@ -3318,6 +3396,7 @@ def _build_full_report_context(conn, workspace_ref, profile_ref, hooks: ReportHo
     return {
         "workspace": workspace,
         "profile": profile,
+        "report_context": report_context,
         "wallet": wallet,
         "scope_wallets": scope_wallets,
         "portfolio_rows": portfolio_rows,
@@ -3510,8 +3589,25 @@ def _summary_pdf_tx_counts(conn, profile_id, wallets, hooks: ReportHooks, start_
     return {row["wallet_id"]: int(row["tx_count"] or 0) for row in rows}
 
 
-def _summary_pdf_portfolio_rows(conn, workspace_id, profile_id, hooks: ReportHooks, wallets, *, as_of=None):
-    rows = report_portfolio_summary(conn, workspace_id, profile_id, hooks, as_of=as_of, include_wallet_id=True)
+def _summary_pdf_portfolio_rows(
+    conn,
+    workspace_id,
+    profile_id,
+    hooks: ReportHooks,
+    wallets,
+    *,
+    as_of=None,
+    report_context: core_report_context.ReportContext,
+):
+    rows = report_portfolio_summary(
+        conn,
+        workspace_id,
+        profile_id,
+        hooks,
+        as_of=as_of,
+        include_wallet_id=True,
+        report_context=report_context,
+    )
     if _summary_pdf_wallet_scope_is_all(conn, workspace_id, profile_id, hooks, wallets):
         return rows
     selected_ids = {str(row["id"]) for row in wallets}
@@ -3566,7 +3662,17 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
     return results
 
 
-def _summary_pdf_balance_history_from_report(conn, workspace_id, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
+def _summary_pdf_balance_history_from_report(
+    conn,
+    workspace_id,
+    profile_id,
+    wallets,
+    hooks: ReportHooks,
+    start_dt,
+    end_dt,
+    *,
+    report_context: core_report_context.ReportContext,
+):
     start_text = hooks.iso_z(start_dt)
     end_text = hooks.iso_z(end_dt)
     if _summary_pdf_wallet_scope_is_all(conn, workspace_id, profile_id, hooks, wallets):
@@ -3578,6 +3684,7 @@ def _summary_pdf_balance_history_from_report(conn, workspace_id, profile_id, wal
             interval="month",
             start=start_text,
             end=end_text,
+            report_context=report_context,
         )
     else:
         rows = []
@@ -3592,6 +3699,7 @@ def _summary_pdf_balance_history_from_report(conn, workspace_id, profile_id, wal
                     start=start_text,
                     end=end_text,
                     wallet_ref=wallet["id"],
+                    report_context=report_context,
                 )
             )
     buckets = defaultdict(
@@ -4023,9 +4131,13 @@ def build_summary_pdf_report_data(
     end=None,
     wallet_refs=None,
     include_snapshot=False,
+    report_context: core_report_context.ReportContext | None = None,
 ):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    workspace = report_context.workspace
+    profile = report_context.profile
     start_dt, end_dt = _summary_pdf_period(hooks, start=start, end=end)
     wallets = _resolve_wallet_scope_refs(conn, workspace["id"], profile["id"], hooks, wallet_refs=wallet_refs)
     generated_at = hooks.now_iso()
@@ -4036,6 +4148,7 @@ def build_summary_pdf_report_data(
         hooks,
         wallets,
         as_of=end_dt,
+        report_context=report_context,
     )
     tx_counts = _summary_pdf_tx_counts(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     wallet_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_counts)
@@ -4044,7 +4157,16 @@ def build_summary_pdf_report_data(
         "asset_quantities": _summary_pdf_total_asset_quantities_from_holdings(wallet_holdings),
         "total_market_value": _summary_pdf_total_market_value_from_holdings(wallet_holdings),
     }
-    history_rows = _summary_pdf_balance_history_from_report(conn, workspace["id"], profile["id"], wallets, hooks, start_dt, end_dt)
+    history_rows = _summary_pdf_balance_history_from_report(
+        conn,
+        workspace["id"],
+        profile["id"],
+        wallets,
+        hooks,
+        start_dt,
+        end_dt,
+        report_context=report_context,
+    )
     flow_periods, flow_totals = _summary_pdf_flow_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     realized_periods, realized_total = _summary_pdf_realized_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     period_start_value = history_rows[0]["market_value"] if history_rows else 0.0
@@ -4061,7 +4183,14 @@ def build_summary_pdf_report_data(
     title = f"Kassiber Summary Report - {profile['label']}"
     snapshot = None
     if include_snapshot:
-        snapshot_rows = _summary_pdf_portfolio_rows(conn, workspace["id"], profile["id"], hooks, wallets)
+        snapshot_rows = _summary_pdf_portfolio_rows(
+            conn,
+            workspace["id"],
+            profile["id"],
+            hooks,
+            wallets,
+            report_context=report_context,
+        )
         snapshot_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, snapshot_rows, tx_counts)
         snapshot_totals = {
             "total_quantity": _summary_pdf_total_quantity_from_holdings(snapshot_holdings),
@@ -4394,9 +4523,18 @@ def _tax_summary_from_journal_entries(conn, profile_id, *, use_vienna_year=False
     ]
 
 
-def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_tax_summary(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     use_vienna_year = str(_row_get(profile, "tax_country") or "").lower() == "at"
     if use_vienna_year:
         # Rebuild from journal entries so year buckets follow Europe/Vienna
@@ -5171,10 +5309,25 @@ def _austrian_kennzahl_table_rows(summary_rows):
     ]
 
 
-def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    _require_austrian_e1kv_profile(profile)
-    hooks.require_processed_journals(conn, profile)
+def report_austrian_e1kv(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    tax_year=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        report_context,
+        validate_profile=_require_austrian_e1kv_profile,
+    )
+    workspace = report_context.workspace
+    profile = report_context.profile
     normalized_year = _normalize_tax_year(tax_year)
     rows = _austrian_e1kv_rows(conn, profile, normalized_year)
     quarantines = _austrian_e1kv_quarantines(conn, profile, normalized_year)
@@ -5201,8 +5354,23 @@ def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     }
 
 
-def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
+def _build_austrian_e1kv_report_lines(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    tax_year=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     scope = str(report["tax_year"])
     title = f"Kassiber Austrian E 1kv / Steuerbericht - {report['profile']} ({scope})"
     lines = [title, "=" * len(title), ""]
@@ -5327,8 +5495,17 @@ def build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: Re
 
 
 def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     transaction_rows = _austrian_e1kv_transaction_rows(conn, profile, report["tax_year"])
     from ..austrian_pdf_report import write_austrian_e1kv_pdf
 
@@ -5337,7 +5514,13 @@ def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path,
             file_path,
             report=report,
             profile=dict(profile),
-            portfolio_rows=report_portfolio_summary(conn, workspace_ref, profile_ref, hooks),
+            portfolio_rows=report_portfolio_summary(
+                conn,
+                workspace_ref,
+                profile_ref,
+                hooks,
+                report_context=report_context,
+            ),
             transaction_rows=transaction_rows,
             section_specs=_austrian_e1kv_section_table_specs(report),
             generated_at=hooks.now_iso(),
@@ -5970,8 +6153,17 @@ def _austrian_e1kv_xlsx_write_section_sheets(report, workbook, formats):
 def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
     import xlsxwriter
 
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -6098,8 +6290,17 @@ def _austrian_e1kv_explanation_csv_rows(report):
 
 
 def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, hooks: ReportHooks, tax_year=None):
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     directory = Path(dir_path).expanduser()
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -7222,8 +7423,9 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
     Reuses the same row builder + columns as the full report's Transactions
     sheet — including note, counterparty, tags, and the linked-file/URL
     attachments — so the standalone export matches the report."""
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     query_rows = _report_query_rows(conn, profile, wallet=wallet)
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
@@ -7240,6 +7442,7 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
         "wallet": wallet,
         "workspace": workspace,
         "profile": profile,
+        "report_context": report_context,
     }
 
 
@@ -7288,7 +7491,16 @@ def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path,
     }
 
 
-def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+def build_pdf_report_lines(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    wallet_ref=None,
+    history_limit=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
     context = _build_full_report_context(
         conn,
         workspace_ref,
@@ -7296,6 +7508,7 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
         hooks,
         wallet_ref=wallet_ref,
         history_limit=history_limit,
+        report_context=report_context,
     )
     workspace = context["workspace"]
     profile = context["profile"]
@@ -7611,6 +7824,9 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
 
 
 def export_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+    if history_limit is not None and int(history_limit) < 0:
+        raise AppError("--history-limit must be zero or positive", code="validation")
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
     title, lines = build_pdf_report_lines(
         conn,
         workspace_ref,
@@ -7618,10 +7834,12 @@ def export_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
         hooks,
         wallet_ref=wallet_ref,
         history_limit=history_limit,
+        report_context=report_context,
     )
     written = dict(hooks.write_text_pdf(file_path, title, lines))
     written["wallet"] = wallet_ref or ""
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     report_scope = None
     if wallet_ref:
         wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref)
@@ -7651,6 +7869,7 @@ def export_summary_pdf_report(
 ):
     from ..summary_pdf_report import write_summary_pdf
 
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
     report = build_summary_pdf_report_data(
         conn,
         workspace_ref,
@@ -7660,6 +7879,7 @@ def export_summary_pdf_report(
         end=end,
         wallet_refs=wallet_refs,
         include_snapshot=include_snapshot,
+        report_context=report_context,
     )
     written = dict(write_summary_pdf(file_path, report))
     written.update(
@@ -7688,7 +7908,8 @@ def export_summary_pdf_report(
             "balance_history": report["balance_history"],
         }
     )
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     written["report_snapshot"] = _register_saved_export(
         conn,
         workspace=workspace,

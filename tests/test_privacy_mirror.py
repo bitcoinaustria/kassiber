@@ -88,7 +88,6 @@ def _privacy_report_hooks(workspace_id: str, profile_id: str) -> core_reports.Re
         resolve_scope=_resolve_scope,
         resolve_account=_unused_report_hook,
         resolve_wallet=_unused_report_hook,
-        require_processed_journals=_unused_report_hook,
         build_ledger_state=_unused_report_hook,
         list_journal_entries=_unused_report_hook,
         list_wallets=_unused_report_hook,

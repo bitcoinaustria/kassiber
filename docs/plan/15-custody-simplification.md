@@ -180,9 +180,13 @@ binary.
    grouping as current booked truth. Source-of-funds no longer has private pair,
    component, UTXO or payment-hash allocation engines. Consumer-side calls to
    transfer detection have consequently been deleted, leaving the custody
-   journal interpreter as the only production caller. The remaining work is a
-   mandatory gated report context, component-only producer/builder cutover and
-   deletion of obsolete compatibility and speculative layer surfaces.
+   journal interpreter as the only production caller. Journal-derived reports
+   and exports now enter through one core `ReportContext` that proves tax
+   support, journal input-version freshness, active-component integrity and
+   clear quantity barriers. Nested report composition reuses the same proof;
+   the former CLI-owned `require_processed_journals` hook is deleted. The
+   remaining work is the component-only producer/builder cutover and deletion
+   of obsolete compatibility and speculative layer surfaces.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 
