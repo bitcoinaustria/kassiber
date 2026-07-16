@@ -4515,24 +4515,43 @@ def _normalize_transaction_payment_method(value):
     )
 
 
-def _transaction_pair_exists_sql(pair_type=None):
-    if pair_type == "swap":
-        type_predicate = "AND tout.asset <> tin.asset"
-    elif pair_type == "transfer":
-        type_predicate = "AND tout.asset = tin.asset"
-    else:
-        type_predicate = ""
-    return f"""
+def _transaction_custody_projection_exists_sql(relation_type=None):
+    freshness = """
         EXISTS (
-          SELECT 1
-          FROM transaction_pairs p
-          JOIN transactions tout ON tout.id = p.out_transaction_id
-          JOIN transactions tin ON tin.id = p.in_transaction_id
-          WHERE p.deleted_at IS NULL
-            AND (p.out_transaction_id = t.id OR p.in_transaction_id = t.id)
-            {type_predicate}
+          SELECT 1 FROM profiles custody_profile
+          WHERE custody_profile.id = t.profile_id
+            AND custody_profile.last_processed_at IS NOT NULL
+            AND custody_profile.journal_input_version =
+                custody_profile.last_processed_input_version
         )
     """
+    move = """
+        EXISTS (
+          SELECT 1 FROM journal_custody_decisions decision
+          WHERE decision.profile_id = t.profile_id
+            AND (
+              decision.source_transaction_id = t.id
+              OR decision.target_transaction_id = t.id
+            )
+        )
+    """
+    economic = """
+        EXISTS (
+          SELECT 1 FROM journal_custody_economic_relations relation
+          WHERE relation.profile_id = t.profile_id
+            AND (
+              relation.source_transaction_id = t.id
+              OR relation.target_transaction_id = t.id
+            )
+        )
+    """
+    if relation_type == "transfer":
+        projection = move
+    elif relation_type == "swap":
+        projection = economic
+    else:
+        projection = f"({move} OR {economic})"
+    return f"({freshness} AND {projection})"
 
 
 def _transaction_payment_method_sql():
@@ -4766,7 +4785,7 @@ def list_transactions(
             f"""(
               t.direction = 'inbound'
               AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in flow_kinds)})
-              AND NOT {_transaction_pair_exists_sql()}
+              AND NOT {_transaction_custody_projection_exists_sql()}
             )"""
         )
         params.extend(flow_kinds)
@@ -4776,19 +4795,20 @@ def list_transactions(
             f"""(
               t.direction = 'outbound'
               AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in flow_kinds)})
-              AND NOT {_transaction_pair_exists_sql()}
+              AND NOT {_transaction_custody_projection_exists_sql()}
             )"""
         )
         params.extend(flow_kinds)
     elif flow == "transfer":
         filters.append(
-            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {_transaction_pair_exists_sql('transfer')})"
+            "(lower(COALESCE(t.kind, '')) = 'transfer' OR "
+            f"{_transaction_custody_projection_exists_sql('transfer')})"
         )
     elif flow == "swap":
         filters.append(
             f"""(
               lower(COALESCE(t.kind, '')) IN ({", ".join("?" for _ in TRANSACTION_FLOW_KINDS)})
-              OR {_transaction_pair_exists_sql('swap')}
+              OR {_transaction_custody_projection_exists_sql('swap')}
             )"""
         )
         params.extend(sorted(TRANSACTION_FLOW_KINDS))

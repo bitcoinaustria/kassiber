@@ -182,6 +182,9 @@ binary.
    views also materialize from effective terms, including immutable replicated
    per-review notes; their only legacy inputs are ineffective partial-source
    exceptions and the explicitly requested deleted-history compatibility view.
+   Transaction-list flow filters use only a current stored custody projection,
+   and diagnostics count the same component-first authored population instead
+   of reopening compatibility tables.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.

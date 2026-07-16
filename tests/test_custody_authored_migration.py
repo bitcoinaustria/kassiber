@@ -11,6 +11,7 @@ from kassiber.cli.handlers import (
     create_transaction_pair,
     list_direct_swap_payouts,
     list_transaction_pairs,
+    list_transactions,
 )
 from kassiber.core.custody_authored_migration import (
     backfill_legacy_authored_components,
@@ -369,6 +370,71 @@ def test_active_component_without_legacy_terms_claims_every_boundary(tmp_path):
             payout_asset="BTC",
             payout_amount="0.0000000099",
         )
+    conn.close()
+
+
+def test_transaction_flow_filters_use_only_current_custody_projection(tmp_path):
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, "flow-out", "btc", "outbound", "BTC", 990, NOW)
+    _tx(conn, "flow-in", "btc", "inbound", "BTC", 990, NOW)
+    conn.execute(
+        "UPDATE transactions SET kind = 'payment' "
+        "WHERE id IN ('flow-out', 'flow-in')"
+    )
+    conn.execute(
+        """
+        UPDATE profiles
+        SET last_processed_at = ?, journal_input_version = 1,
+            last_processed_input_version = 1,
+            last_processed_tx_count = 2
+        WHERE id = 'profile'
+        """,
+        (NOW,),
+    )
+    conn.execute(
+        """
+        INSERT INTO journal_custody_decisions(
+            decision_id, workspace_id, profile_id,
+            source_transaction_id, target_transaction_id,
+            source_observation_hash, source_start_msat, source_end_msat,
+            target_observation_hash, target_start_msat, target_end_msat,
+            source_network, target_network, source_rail, target_rail,
+            source_asset, target_asset, state, basis_state, reason,
+            created_at
+        ) VALUES(
+            ?, 'ws', 'profile', 'flow-out', 'flow-in',
+            ?, 0, 990, ?, 0, 990,
+            'main', 'main', 'bitcoin', 'bitcoin',
+            'BTC', 'BTC', 'internal_reviewed', 'eligible',
+            'reviewed_component', ?
+        )
+        """,
+        ("a" * 64, "b" * 64, "c" * 64, NOW),
+    )
+
+    transfers, _ = list_transactions(conn, "ws", "profile", flow="transfer")
+    assert {row["id"] for row in transfers} == {"flow-out", "flow-in"}
+    incoming, _ = list_transactions(conn, "ws", "profile", flow="incoming")
+    assert incoming == []
+
+    conn.execute(
+        "UPDATE profiles SET journal_input_version = 2 WHERE id = 'profile'"
+    )
+    stale_transfers, _ = list_transactions(
+        conn,
+        "ws",
+        "profile",
+        flow="transfer",
+    )
+    assert stale_transfers == []
+    stale_incoming, _ = list_transactions(
+        conn,
+        "ws",
+        "profile",
+        flow="incoming",
+    )
+    assert [row["id"] for row in stale_incoming] == ["flow-in"]
     conn.close()
 
 

@@ -204,6 +204,9 @@ same verification surface.
     only bounded ineffective-history exceptions. Immutable replicated terms
     gained deterministically backfilled per-review notes, closing the final
     metadata dependency that had kept active lists on legacy projections.
+    Transaction flow filters and public diagnostics now consume current stored
+    custody decisions/economic relations or the component-first authored view;
+    a stale projection cannot label a transaction as a booked transfer/swap.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The

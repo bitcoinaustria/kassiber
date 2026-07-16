@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from . import __version__
+from .core import custody_authored_migration
 from .core.runtime import resolve_runtime_paths
 from .envelope import SCHEMA_VERSION, derive_kind, json_ready
 from .time_utils import now_iso
@@ -603,12 +604,25 @@ def _attachment_summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def _manual_pair_summary(conn: sqlite3.Connection) -> dict[str, Any]:
-    pair_rows = conn.execute(
-        "SELECT kind, policy FROM transaction_pairs WHERE deleted_at IS NULL"
-    ).fetchall()
-    payout_rows = conn.execute(
-        "SELECT kind, policy FROM direct_swap_payouts WHERE deleted_at IS NULL"
-    ).fetchall()
+    profile_ids = [
+        str(row["id"])
+        for row in conn.execute("SELECT id FROM profiles ORDER BY id").fetchall()
+    ]
+    reviews = [
+        review
+        for profile_id in profile_ids
+        for review in custody_authored_migration.list_active_review_refs(
+            conn,
+            profile_id=profile_id,
+        )
+        if review["term_kind"] in {"transaction_pair", "direct_swap_payout"}
+    ]
+    pair_rows = [
+        row for row in reviews if row["term_kind"] == "transaction_pair"
+    ]
+    payout_rows = [
+        row for row in reviews if row["term_kind"] == "direct_swap_payout"
+    ]
     by_kind = Counter()
     by_policy = Counter()
     for row in [*pair_rows, *payout_rows]:
