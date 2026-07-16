@@ -426,7 +426,8 @@ SUPPORTED_KINDS = (
     "ui.transfers.components.activate",
     "ui.transfers.components.supersede",
     "ui.transfers.components.undo",
-    "ui.transfers.components.bulk_resolve",
+    "ui.transfers.components.plan",
+    "ui.transfers.components.apply",
     "ui.custody.coverage.snapshot",
     "ui.custody.lineage.snapshot",
     "ui.custody.gaps.list",
@@ -670,7 +671,7 @@ AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.journals.quarantine.resolve",
-        "ui.transfers.components.bulk_resolve",
+        "ui.transfers.components.apply",
         "ui.custody.review.apply",
     }
 )
@@ -1910,7 +1911,7 @@ def _ui_swap_matching_payload_from_conn(
                 authored_source=authored_source,
             )
         )
-    if kind == "ui.transfers.components.bulk_resolve":
+    if kind in {"ui.transfers.components.plan", "ui.transfers.components.apply"}:
         components = args.get("components")
         if not isinstance(components, list) or not components or not all(
             isinstance(item, dict) for item in components
@@ -1929,14 +1930,13 @@ def _ui_swap_matching_payload_from_conn(
                 },
             )
         activate = exact_bool("activate", True)
-        dry_run = exact_bool("dry_run")
         if authored_source == "ai_tool":
             _validate_ai_custody_conversion_boundary(components, activate=activate)
-        if not dry_run:
+        if kind == "ui.transfers.components.apply":
             expected_fingerprint = args.get("expected_fingerprint")
             if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
                 raise AppError(
-                    f"{kind} apply requires the fingerprint returned by dry_run",
+                    f"{kind} requires the fingerprint returned by plan",
                     code="validation",
                 )
             return _ui_exact_integer_payload(

@@ -28,7 +28,8 @@ COMPONENT_KINDS = {
     "ui.transfers.components.activate",
     "ui.transfers.components.supersede",
     "ui.transfers.components.undo",
-    "ui.transfers.components.bulk_resolve",
+    "ui.transfers.components.plan",
+    "ui.transfers.components.apply",
 }
 
 
@@ -184,21 +185,19 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "profile": "Book",
             "components": [_component_spec()],
             "activate": False,
-            "dry_run": True,
         }
         preview = _ui_swap_matching_payload_from_conn(
             self.conn,
-            "ui.transfers.components.bulk_resolve",
+            "ui.transfers.components.plan",
             args,
             authored_source="ai_tool",
         )
         args.update(
-            dry_run=False,
             expected_fingerprint=preview["fingerprint"],
         )
         result = _ui_swap_matching_payload_from_conn(
             self.conn,
-            "ui.transfers.components.bulk_resolve",
+            "ui.transfers.components.apply",
             args,
             authored_source="ai_tool",
         )
@@ -214,13 +213,12 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [_component_spec() for _ in range(51)],
                     "activate": False,
-                    "dry_run": True,
                 },
             )
 
@@ -233,18 +231,17 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "profile": "Book",
             "components": [_component_spec()],
             "activate": False,
-            "dry_run": True,
         }
         preview = _ui_swap_matching_payload_from_conn(
-            self.conn, "ui.transfers.components.bulk_resolve", args
+            self.conn, "ui.transfers.components.plan", args
         )
-        args.update(dry_run=False, expected_fingerprint=preview["fingerprint"])
+        args.update(expected_fingerprint=preview["fingerprint"])
         first = _ui_swap_matching_payload_from_conn(
-            self.conn, "ui.transfers.components.bulk_resolve", args
+            self.conn, "ui.transfers.components.apply", args
         )
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
-                self.conn, "ui.transfers.components.bulk_resolve", args
+                self.conn, "ui.transfers.components.apply", args
             )
 
         self.assertEqual(caught.exception.code, "custody_review_plan_stale")
@@ -260,13 +257,12 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [spec],
                     "activate": False,
-                    "dry_run": True,
                 },
             )
 
@@ -287,13 +283,12 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
 
         preview = _ui_swap_matching_payload_from_conn(
             self.conn,
-            "ui.transfers.components.bulk_resolve",
+            "ui.transfers.components.plan",
             {
                 "workspace": "Main",
                 "profile": "Book",
                 "components": [spec],
                 "activate": False,
-                "dry_run": True,
             },
         )
 
@@ -322,21 +317,20 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "profile": "Book",
             "components": [_component_spec()],
             "activate": False,
-            "dry_run": True,
         }
         preview = _ui_swap_matching_payload_from_conn(
-            self.conn, "ui.transfers.components.bulk_resolve", args
+            self.conn, "ui.transfers.components.plan", args
         )
         self.conn.execute(
             "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
             "WHERE id = 'profile'"
         )
         self.conn.commit()
-        args.update(dry_run=False, expected_fingerprint=preview["fingerprint"])
+        args.update(expected_fingerprint=preview["fingerprint"])
 
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
-                self.conn, "ui.transfers.components.bulk_resolve", args
+                self.conn, "ui.transfers.components.apply", args
             )
 
         self.assertEqual(caught.exception.code, "custody_review_plan_stale")
@@ -352,13 +346,12 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [first, second],
                     "activate": True,
-                    "dry_run": True,
                 },
             )
 
@@ -380,13 +373,12 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [spec],
                     "activate": True,
-                    "dry_run": True,
                 },
             )
 
@@ -404,13 +396,12 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [spec],
                     "activate": False,
-                    "dry_run": True,
                 },
             )
 
@@ -424,21 +415,24 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "plan",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--json",
             spec_json,
-            "--dry-run",
         )
         created = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "apply",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
@@ -448,7 +442,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--expected-fingerprint",
             preview["data"]["fingerprint"],
         )
-        self.assertEqual(created["kind"], "transfers.components.bulk-resolve")
+        self.assertEqual(created["kind"], "transfers.components.apply")
         created_component = created["data"]["components"][0]
         self.assertEqual(created_component["effective_state"], "active")
         first_id = created_component["id"]
@@ -564,7 +558,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "plan",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
@@ -572,9 +568,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--file",
             str(spec_path),
             "--draft",
-            "--dry-run",
         )
-        self.assertEqual(preview["kind"], "transfers.components.bulk-resolve")
+        self.assertEqual(preview["kind"], "transfers.components.plan")
         self.assertTrue(preview["data"]["dry_run"])
         self.assertEqual(preview["data"]["summary"]["draft"], 1)
         count = self.conn.execute(
@@ -593,7 +588,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "bulk-resolve",
+                "plan",
+                "--action",
+                "create",
                 "--workspace",
                 "Main",
                 "--profile",
@@ -601,7 +598,6 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 "--file",
                 str(invalid_path),
                 "--draft",
-                "--dry-run",
             )
         count = self.conn.execute(
             "SELECT COUNT(*) AS count FROM custody_components"
@@ -620,7 +616,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "apply",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
@@ -634,7 +632,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "bulk-resolve",
+                "plan",
+                "--action",
+                "create",
                 "--workspace",
                 "Main",
                 "--profile",
@@ -642,7 +642,6 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 "--file",
                 str(spec_path),
                 "--draft",
-                "--dry-run",
             )["data"]["fingerprint"],
         )
 
@@ -676,14 +675,15 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "plan",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--file",
             str(spec_path),
-            "--dry-run",
         )
         self.assertTrue(preview["data"]["dry_run"])
         self.assertIsNone(
@@ -697,7 +697,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "apply",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
@@ -746,14 +748,15 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "bulk-resolve",
+                "plan",
+            "--action",
+            "create",
                 "--workspace",
                 "Main",
                 "--profile",
                 "Book",
                 "--file",
                 str(spec_path),
-                "--dry-run",
             )
 
         self.assertIsNone(
@@ -776,14 +779,15 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "plan",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--file",
             str(initial_path),
-            "--dry-run",
             "--draft",
         )["data"]
         initial = _dispatch_json(
@@ -791,7 +795,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "apply",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
@@ -879,33 +885,31 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             preview = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.bulk_resolve",
+                    "kind": "ui.transfers.components.plan",
                     "request_id": "component-create-plan",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
                         "components": [component_spec],
                         "activate": True,
-                        "dry_run": True,
                     },
                 },
             )
             created = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.bulk_resolve",
+                    "kind": "ui.transfers.components.apply",
                     "request_id": "component-create-apply",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
                         "components": [component_spec],
                         "activate": True,
-                        "dry_run": False,
                         "expected_fingerprint": preview["data"]["fingerprint"],
                     },
                 },
             )
-            self.assertEqual(created["kind"], "ui.transfers.components.bulk_resolve")
+            self.assertEqual(created["kind"], "ui.transfers.components.apply")
             created_component = created["data"]["components"][0]
             self.assertEqual(created_component["effective_state"], "active")
             self.assertIsInstance(created_component["legs"][0]["amount_msat"], int)
@@ -1037,14 +1041,13 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             preview = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.bulk_resolve",
+                    "kind": "ui.transfers.components.plan",
                     "request_id": "component-preview",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
                         "components": [_component_spec(note="preview")],
                         "activate": False,
-                        "dry_run": True,
                     },
                 },
             )
@@ -1119,33 +1122,31 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             preview = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.bulk_resolve",
+                    "kind": "ui.transfers.components.plan",
                     "request_id": "unsafe-integer-create-plan",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
                         "components": [spec],
                         "activate": False,
-                        "dry_run": True,
                     },
                 },
             )
             created = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.bulk_resolve",
+                    "kind": "ui.transfers.components.apply",
                     "request_id": "unsafe-integer-create-apply",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
                         "components": [spec],
                         "activate": False,
-                        "dry_run": False,
                         "expected_fingerprint": preview["data"]["fingerprint"],
                     },
                 },
             )
-            self.assertEqual(created["kind"], "ui.transfers.components.bulk_resolve")
+            self.assertEqual(created["kind"], "ui.transfers.components.apply")
             created_component = created["data"]["components"][0]
             for leg in created_component["legs"]:
                 self.assertEqual(exact, leg["amount_msat"])

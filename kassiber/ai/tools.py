@@ -1891,13 +1891,12 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read custody components",
     ),
     ToolEntry(
-        name="ui.transfers.components.bulk_resolve",
+        name="ui.transfers.components.plan",
         description=(
-            "Validate or atomically author one or more reviewed custody components after "
-            "explicit consent. This is the quarantine repair path for missing wallets and "
+            "Purely validate one or more reviewed custody components. This is the review "
+            "planner for missing wallets and "
             "1:N, N:1, or explicit N:M custody flows that cannot be represented by one pair. "
-            "Run dry_run=true first, then pass its expected_fingerprint unchanged when "
-            "requesting consent for the final write. Activation "
+            "Pass its fingerprint unchanged to ui.transfers.components.apply. Activation "
             "remains fail-closed: every anchor, amount, "
             "fee, network, asset, chronology, and allocation must conserve exactly. The result "
             "omits local-only evidence and location references. AI output is not evidence: "
@@ -1922,21 +1921,43 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                         "Conversion components must remain drafts for separate human review."
                     ),
                 },
-                "dry_run": {
-                    "type": "boolean",
-                    "description": "Validate and return an exact preview without writing. Defaults to false.",
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transfers_components_plan",
+        daemon_kind="ui.transfers.components.plan",
+        summary_template="Plan custody components",
+    ),
+    ToolEntry(
+        name="ui.transfers.components.apply",
+        description=(
+            "Atomically persist the exact custody component plan previously returned by "
+            "ui.transfers.components.plan. Requires explicit consent and rejects changed "
+            "journal inputs or a mismatched fingerprint. Conversion components must remain "
+            "drafts until separately reviewed by a human."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["components", "expected_fingerprint"],
+            "properties": {
+                "components": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
                 },
+                "activate": {"type": "boolean"},
                 "expected_fingerprint": {
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$",
-                    "description": "Required for apply; copy the fingerprint returned by dry_run.",
                 },
             },
         },
         kind_class="mutating",
-        wire_name="ui_transfers_components_bulk_resolve",
-        daemon_kind="ui.transfers.components.bulk_resolve",
-        summary_template="Resolve custody gaps in bulk",
+        wire_name="ui_transfers_components_apply",
+        daemon_kind="ui.transfers.components.apply",
+        summary_template="Apply custody component plan",
     ),
     ToolEntry(
         name="ui.transfers.payouts.create",
@@ -3306,11 +3327,14 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
             if isinstance(pair, str) and pair.strip()
             else "Update reviewed transfer pair"
         )
-    if tool.name == "ui.transfers.components.bulk_resolve":
+    if tool.name in {
+        "ui.transfers.components.plan",
+        "ui.transfers.components.apply",
+    }:
         components = arguments.get("components")
         count = len(components) if isinstance(components, list) else 0
         noun = "component" if count == 1 else "components"
-        if arguments.get("dry_run") is True:
+        if tool.name == "ui.transfers.components.plan":
             return f"Preview {count or 'custody'} gap-resolution {noun}"
         return f"Create {count or 'custody'} gap-resolution {noun}"
     if tool.name == "ui.reports.export":
@@ -3382,7 +3406,7 @@ receipts should remain unpaired. Read swap-matching when review policy,
 confidence bands, or pairing workflow matters.
 For missing wallets, multi-hop migrations, or 1:N/N:1/N:M self-custody gaps,
 read ui.transfers.components.list and the relevant transaction/transfer review
-context, then validate ui.transfers.components.bulk_resolve with dry_run=true.
+context, then validate ui.transfers.components.plan before applying its fingerprint.
 Ask for consent before the final atomic write; exact conservation and complete
 anchor coverage are mandatory, and tax policy is downstream of custody proof.
 For source-of-funds/provenance questions, read source-funds links and preview

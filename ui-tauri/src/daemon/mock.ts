@@ -4493,16 +4493,18 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
-    if (req.kind === "ui.transfers.components.bulk_resolve") {
+    if (
+      req.kind === "ui.transfers.components.plan" ||
+      req.kind === "ui.transfers.components.apply"
+    ) {
       const args = (req.args ?? {}) as {
         components?: unknown;
         activate?: unknown;
-        dry_run?: unknown;
       };
       const specs = Array.isArray(args.components) ? args.components : [];
       const activate = args.activate !== false;
       const base = structuredClone(
-        fixtures["ui.transfers.components.bulk_resolve"],
+        fixtures[req.kind],
       ) as {
         components: Array<Record<string, unknown>>;
       };
@@ -4526,7 +4528,9 @@ export const mockDaemon: DaemonTransport = {
             active: activate ? components.length : 0,
             draft: activate ? 0 : components.length,
           },
-          ...(args.dry_run === true ? { dry_run: true } : {}),
+          ...(req.kind === "ui.transfers.components.plan"
+            ? { dry_run: true }
+            : {}),
         } as T,
       };
     }

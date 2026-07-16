@@ -337,7 +337,7 @@ describe("AI stream reducer helpers", () => {
       aiToolAllowsSessionConsent("ui.journals.quarantine.resolve"),
     ).toBe(false);
     expect(
-      aiToolAllowsSessionConsent("ui.transfers.components.bulk_resolve"),
+      aiToolAllowsSessionConsent("ui.transfers.components.apply"),
     ).toBe(false);
   });
 

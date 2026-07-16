@@ -287,7 +287,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.report.blockers",
     "ui.workspace.health",
   ],
-  "ui.transfers.components.bulk_resolve": [
+  "ui.transfers.components.apply": [
     "ui.activity.history",
     "ui.activity.stale",
     "ui.journals.quarantine",

@@ -147,11 +147,11 @@ only after the route is proven.
 
 ## Closing multi-wallet gaps
 
-Use `transfers components bulk-resolve --dry-run` for 1:N, N:1, N:M,
+Use `transfers components plan --action create` for 1:N, N:1, N:M,
 multi-hop migrations, or missing intermediate wallets. Represent missing owned
 custody with `untracked_wallet`; genuine N:M requires explicit allocations.
 The equivalent chat workflow is `ui.transfers.components.list`, followed by a
-`dry_run=true` call to `ui.transfers.components.bulk_resolve` and a separately
+`ui.transfers.components.plan` call and a separately
 consented final write carrying that preview's `expected_fingerprint`.
 Activate the complete component only after every imported anchor is covered and
 quantity/conversion conservation passes atomically. An unknown intermediate

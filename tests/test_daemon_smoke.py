@@ -5141,7 +5141,7 @@ class DaemonSmokeTest(unittest.TestCase):
         for index, tool_name in enumerate(
             (
                 "ui.journals.quarantine.resolve",
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.apply",
             ),
             1,
         ):

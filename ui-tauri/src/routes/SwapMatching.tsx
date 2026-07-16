@@ -933,11 +933,11 @@ function CustodyComponentResolver() {
   );
   const previewMutation =
     useDaemonMutation<CustodyBulkResolveResult>(
-      "ui.transfers.components.bulk_resolve",
+      "ui.transfers.components.plan",
       { invalidateQueries: false },
     );
   const bulkMutation =
-    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.bulk_resolve");
+    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.apply");
   const updateMutation =
     useDaemonMutation<CustodyComponent>("ui.transfers.components.update");
   const activateMutation =
@@ -976,7 +976,7 @@ function CustodyComponentResolver() {
     setServerPreviewError(null);
     try {
       const response = await previewMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, { activate, dryRun: true }),
+        buildCustodyBulkRequest(nextPreview, { activate }),
       );
       if (!response.data) {
         setServerPreviewError(t("swap.components.backendError.unexpected"));

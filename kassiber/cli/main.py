@@ -2308,28 +2308,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     transfers_components_undo.add_argument("--reason", default="undo")
 
-    transfers_components_bulk = transfers_components_sub.add_parser(
-        "bulk-resolve",
-        help="Atomically create one or more N:M custody components",
-    )
-    _add_workspace_profile_args(transfers_components_bulk)
-    _add_json_document_args(
-        transfers_components_bulk, label="component array or bulk object"
-    )
-    transfers_components_bulk.add_argument(
-        "--draft",
-        action="store_true",
-        help="Create draft components instead of activating them",
-    )
-    transfers_components_bulk.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Purely validate and preview every component without writing",
-    )
-    transfers_components_bulk.add_argument(
-        "--expected-fingerprint",
-        help="Required for apply; copy the fingerprint from the matching --dry-run",
-    )
+    for command_name, help_text in (
+        ("plan", "Purely plan one or more N:M custody components"),
+        ("apply", "Atomically persist an unchanged custody component plan"),
+    ):
+        component_review = transfers_components_sub.add_parser(
+            command_name, help=help_text
+        )
+        _add_workspace_profile_args(component_review)
+        component_review.add_argument("--action", required=True, choices=("create",))
+        _add_json_document_args(
+            component_review, label="component array or bulk object"
+        )
+        component_review.add_argument(
+            "--draft",
+            action="store_true",
+            help="Create draft components instead of activating them",
+        )
+        if command_name == "apply":
+            component_review.add_argument(
+                "--expected-fingerprint",
+                required=True,
+                help="Copy the fingerprint from the matching plan",
+            )
 
     transfers_payouts = transfers_sub.add_parser("payouts")
     transfers_payouts_sub = transfers_payouts.add_subparsers(dest="payouts_command", required=True)
@@ -4394,13 +4395,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         reason=args.reason,
                     ),
                 )
-            if args.transfers_components_command == "bulk-resolve":
+            if args.transfers_components_command in {"plan", "apply"}:
                 specs = _read_json_document(
                     args.json_text,
                     args.json_file,
                     label="component array or bulk object",
                 )
-                if args.dry_run:
+                if args.transfers_components_command == "plan":
                     preview = plan_bulk_custody_components(
                         conn,
                         args.workspace,
@@ -4410,11 +4411,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     )
                     preview["dry_run"] = True
                     return emit(args, preview)
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "bulk-resolve apply requires --expected-fingerprint from --dry-run",
-                        code="validation",
-                    )
                 return emit(
                     args,
                     bulk_resolve_custody_components(

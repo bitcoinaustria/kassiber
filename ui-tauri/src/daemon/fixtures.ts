@@ -911,7 +911,13 @@ export const fixtures: Record<string, unknown> = {
     effective_state: "superseded",
   },
   "ui.transfers.components.undo": MOCK_CUSTODY_COMPONENT,
-  "ui.transfers.components.bulk_resolve": {
+  "ui.transfers.components.plan": {
+    fingerprint: "a".repeat(64),
+    components: [MOCK_CUSTODY_COMPONENT],
+    summary: { count: 1, active: 1, draft: 0 },
+    dry_run: true,
+  },
+  "ui.transfers.components.apply": {
     fingerprint: "a".repeat(64),
     components: [MOCK_CUSTODY_COMPONENT],
     summary: { count: 1, active: 1, draft: 0 },

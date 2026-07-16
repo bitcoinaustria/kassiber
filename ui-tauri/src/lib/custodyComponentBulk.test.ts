@@ -619,22 +619,20 @@ describe("previewCustodyComponentBatch", () => {
       ]),
     );
 
-    const dryRun = buildCustodyBulkRequest(preview, {
+    const plan = buildCustodyBulkRequest(preview, {
       activate: false,
-      dryRun: true,
     });
     const commit = buildCustodyBulkRequest(preview, {
       activate: false,
       expectedFingerprint: "a".repeat(64),
     });
 
-    expect(dryRun).toEqual({
+    expect(plan).toEqual({
       components: [expect.not.objectContaining({ activate: expect.anything() })],
       activate: false,
-      dry_run: true,
     });
     expect(commit).toEqual({
-      components: dryRun.components,
+      components: plan.components,
       activate: false,
       expected_fingerprint: "a".repeat(64),
     });

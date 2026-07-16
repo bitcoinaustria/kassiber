@@ -222,6 +222,9 @@ binary.
    explicit completeness, limit, partial-population and scoped-blocker fields;
    `CustodyGapSearchLimitError` and all exception-carried partial results are
    deleted.
+   Component authoring now exposes distinct `components plan/apply` CLI,
+   desktop and AI operations; the overloaded `bulk_resolve(dry_run=...)`
+   command/kind is deleted, and apply requires the exact pure-plan fingerprint.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

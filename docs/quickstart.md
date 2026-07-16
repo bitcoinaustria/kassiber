@@ -131,9 +131,9 @@ wallets, use the atomic custody-component resolver instead of forcing a chain
 of ambiguous pairs:
 
 ```bash
-python3 -m kassiber transfers components bulk-resolve \
-  --file migrations.json --dry-run
-python3 -m kassiber transfers components bulk-resolve \
+python3 -m kassiber transfers components plan --action create \
+  --file migrations.json
+python3 -m kassiber transfers components apply --action create \
   --file migrations.json \
   --expected-fingerprint <fingerprint-from-preview>
 ```

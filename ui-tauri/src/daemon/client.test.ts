@@ -265,7 +265,7 @@ describe("daemon mutation invalidation scope", () => {
 
   it("keeps custody component refreshes targeted", () => {
     for (const kind of [
-      "ui.transfers.components.bulk_resolve",
+      "ui.transfers.components.apply",
       "ui.transfers.components.update",
       "ui.transfers.components.activate",
       "ui.transfers.components.supersede",
