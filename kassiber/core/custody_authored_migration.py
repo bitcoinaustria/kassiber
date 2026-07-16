@@ -688,6 +688,33 @@ def _connected_pair_groups(rows: Sequence[Mapping[str, Any]]) -> list[list[Mappi
     return groups
 
 
+def _allocation_signature(
+    legs: Sequence[Mapping[str, Any]],
+    allocations: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[str, str, int, int], ...]:
+    legs_by_id = {str(_field(leg, "id")): leg for leg in legs}
+
+    def transaction_id(leg_id: Any) -> str:
+        leg = legs_by_id[str(leg_id)]
+        return str(
+            _field(leg, "anchor_transaction_id")
+            or _field(leg, "transaction_id")
+            or ""
+        )
+
+    return tuple(
+        sorted(
+            (
+                transaction_id(_field(allocation, "source_leg_id")),
+                transaction_id(_field(allocation, "sink_leg_id")),
+                int(_field(allocation, "source_amount_msat") or 0),
+                int(_field(allocation, "sink_amount_msat") or 0),
+            )
+            for allocation in allocations
+        )
+    )
+
+
 def _pair_group_spec(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     ordered = sorted(
         rows,
@@ -742,8 +769,16 @@ def _pair_group_spec(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         available_target = target_principal - target_used.get(target_id, 0)
         explicit = _field(row, "out_amount")
         requested = available_source if explicit in (None, "") else int(explicit)
-        source_amount = min(requested, available_source)
-        target_amount = available_target if conversion else min(source_amount, available_target)
+        if conversion:
+            source_amount = min(requested, available_source)
+            target_amount = available_target
+        else:
+            # A same-asset row reviews only the exact common slice. Consuming
+            # the whole source on the first edge would make an incrementally
+            # authored 1:N group impossible to complete and could activate a
+            # partial source as if its residual had been classified.
+            source_amount = min(requested, available_source, available_target)
+            target_amount = source_amount
         if source_amount <= 0 or target_amount <= 0:
             raise AppError(
                 "a reviewed pair has no remaining positive component slice",
@@ -963,6 +998,10 @@ def _consolidate_pair_group(
                 len(group) == 1
                 and current["state"] == "draft"
                 and current["validation"]["activatable"]
+                and _allocation_signature(
+                    current["legs"], current["allocations"]
+                )
+                == _allocation_signature(spec["legs"], spec["allocations"])
             ):
                 activate_component(conn, current["id"])
                 return "activated"

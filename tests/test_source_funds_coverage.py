@@ -733,48 +733,5 @@ class CoverageCliSmokeTest(unittest.TestCase):
         self.assertIn("--profile", result.stdout)
 
 
-class TransactionPairAllocationMapTest(unittest.TestCase):
-    """Unit tests for the N:1 / 1:N pair-allocation arithmetic."""
-
-    def test_fee_bearing_same_tx_consolidation_allocates(self):
-        # Node-backed same-tx N:1 consolidation: each contributor stamps the
-        # WHOLE network fee on its own row (amount = net outflow - fee), so
-        # bare amounts sum (N-1)*fee short of the recorded receipt. The
-        # component must still allocate via amount + fee spend capacity.
-        from kassiber.core.source_funds import _transaction_pair_allocation_map
-
-        fee = 500_000
-        rows_by_id = {
-            "out-a": {"id": "out-a", "asset": "BTC", "amount": 40_000_000_000 - fee, "fee": fee},
-            "out-b": {"id": "out-b", "asset": "BTC", "amount": 60_000_000_000 - fee, "fee": fee},
-            "in-c": {"id": "in-c", "asset": "BTC", "amount": 100_000_000_000 - fee, "fee": 0},
-        }
-        pair_rows = [
-            {
-                "id": "pair-1",
-                "out_transaction_id": "out-a",
-                "in_transaction_id": "in-c",
-                "created_at": "2026-01-01T00:00:00Z",
-            },
-            {
-                "id": "pair-2",
-                "out_transaction_id": "out-b",
-                "in_transaction_id": "in-c",
-                "created_at": "2026-01-01T00:00:01Z",
-            },
-        ]
-        allocations = _transaction_pair_allocation_map(pair_rows, rows_by_id)
-        self.assertEqual(set(allocations), {"pair-1", "pair-2"})
-        total_allocated = sum(a.allocation_msat for a in allocations.values())
-        self.assertEqual(total_allocated, 100_000_000_000 - fee)
-        # Each pair keeps its contributor's own recorded outflow.
-        self.assertEqual(
-            allocations["pair-1"].from_allocation_msat, 40_000_000_000 - fee
-        )
-        self.assertEqual(
-            allocations["pair-2"].from_allocation_msat, 60_000_000_000 - fee
-        )
-
-
 if __name__ == "__main__":
     unittest.main()

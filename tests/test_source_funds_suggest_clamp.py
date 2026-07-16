@@ -134,6 +134,69 @@ class SuggestLinksClampTest(unittest.TestCase):
         self.conn.commit()
         return tx_id
 
+    def _store_moves(self, pairs: list[tuple[str, str]]) -> None:
+        for ordinal, (source_id, target_id) in enumerate(pairs):
+            source_wallet = self.conn.execute(
+                "SELECT wallet_id FROM transactions WHERE id = ?", (source_id,)
+            ).fetchone()[0]
+            target_wallet = self.conn.execute(
+                "SELECT wallet_id FROM transactions WHERE id = ?", (target_id,)
+            ).fetchone()[0]
+            decision_id = hashlib.sha256(
+                f"stored-move:{source_id}:{target_id}".encode()
+            ).hexdigest()
+            source_hash = hashlib.sha256(
+                f"source:{source_id}".encode()
+            ).hexdigest()
+            target_hash = hashlib.sha256(
+                f"target:{target_id}".encode()
+            ).hexdigest()
+            self.conn.execute(
+                """
+                INSERT INTO journal_custody_decisions(
+                    decision_id, workspace_id, profile_id,
+                    source_transaction_id, target_transaction_id,
+                    source_observation_hash, source_start_msat, source_end_msat,
+                    target_observation_hash, target_start_msat, target_end_msat,
+                    source_wallet_id, target_wallet_id,
+                    source_network, target_network, source_rail, target_rail,
+                    source_asset, target_asset, state, basis_state, reason,
+                    atomic_group_id, occurred_at, target_occurred_at, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, 0, 100000000, ?, 0, 100000000,
+                         ?, ?, 'main', 'main', 'bitcoin', 'bitcoin', 'BTC', 'BTC',
+                         'internal_verified', 'eligible', 'test_stored_move', ?,
+                         '2026-04-01T09:00:00Z', '2026-04-01T09:00:00Z',
+                         '2026-04-01T09:00:00Z')
+                """,
+                (
+                    decision_id,
+                    self.workspace_id,
+                    self.profile_id,
+                    source_id,
+                    target_id,
+                    source_hash,
+                    target_hash,
+                    source_wallet,
+                    target_wallet,
+                    f"group-{ordinal}",
+                ),
+            )
+        count = self.conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0",
+            (self.profile_id,),
+        ).fetchone()[0]
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = '2026-04-01T09:00:00Z',
+                last_processed_tx_count = ?,
+                last_processed_input_version = journal_input_version
+            WHERE id = ?
+            """,
+            (count, self.profile_id),
+        )
+        self.conn.commit()
+
     def test_oversized_max_suggestions_arg_does_not_lift_ceiling(self):
         """A caller passing max_suggestions > SUGGESTION_WRITE_CAP gets
         clamped to the ceiling: even when two same-id pairs are
@@ -144,9 +207,15 @@ class SuggestLinksClampTest(unittest.TestCase):
         # Two same-external-id pairs would normally produce two
         # suggestions. With cap=1, only the first should land before
         # the rollback triggers.
+        pairs = []
         for external_id in ("pair-one", "pair-two"):
-            self._tx(wallet_a, external_id, "outbound")
-            self._tx(wallet_b, external_id, "inbound")
+            pairs.append(
+                (
+                    self._tx(wallet_a, external_id, "outbound"),
+                    self._tx(wallet_b, external_id, "inbound"),
+                )
+            )
+        self._store_moves(pairs)
 
         with unittest.mock.patch.object(sf, "SUGGESTION_WRITE_CAP", 1):
             with self.assertRaises(AppError) as cm:
@@ -171,9 +240,15 @@ class SuggestLinksClampTest(unittest.TestCase):
         should still see their tighter limit enforced."""
         wallet_a = self._wallet("Wallet A")
         wallet_b = self._wallet("Wallet B")
+        pairs = []
         for external_id in ("pair-one", "pair-two", "pair-three"):
-            self._tx(wallet_a, external_id, "outbound")
-            self._tx(wallet_b, external_id, "inbound")
+            pairs.append(
+                (
+                    self._tx(wallet_a, external_id, "outbound"),
+                    self._tx(wallet_b, external_id, "inbound"),
+                )
+            )
+        self._store_moves(pairs)
 
         with self.assertRaises(AppError) as cm:
             sf.suggest_links(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 
+from kassiber.cli.handlers import process_journals
 from kassiber.core import custody_components, source_funds
 from kassiber.core.source_funds import SourceFundsHooks
 from kassiber.db import open_db
@@ -117,6 +118,7 @@ def test_effective_nm_bridge_becomes_reviewed_source_funds_lineage() -> None:
             )
             activated = custody_components.activate_component(conn, component["id"])
             assert activated["effective_state"] == "active"
+            process_journals(conn, "ws", "profile")
 
             assembled = source_funds.assemble_history(
                 conn,
