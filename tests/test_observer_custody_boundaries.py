@@ -15,7 +15,6 @@ from kassiber.core.custody_evidence import (
 )
 from kassiber.core.custody_interpreters import compile_custody_interpreters
 from kassiber.core.custody_quantity import (
-    CUSTODY_CANDIDATE,
     CUSTODY_SUSPENSE,
     EXTERNAL_CONFIRMED,
     EXTERNAL_PRESUMED,
@@ -419,16 +418,17 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
         )
 
         states = {decision.state for decision in state.projection.decisions}
-        self.assertEqual(states, {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE})
+        self.assertEqual(states, {CUSTODY_SUSPENSE})
         self.assertNotIn(EXTERNAL_CONFIRMED, states)
+        self.assertTrue(all(decision.target is None for decision in state.projection.decisions))
         self.assertFalse(
             self.conn.execute(
                 "SELECT 1 FROM wallets WHERE id = 'missing-whirlpool'"
             ).fetchone()
         )
-        self.assertEqual(
-            {issue.state for issue in state.issues},
-            {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE},
+        self.assertEqual({issue.state for issue in state.issues}, {CUSTODY_SUSPENSE})
+        self.assertTrue(
+            any(issue.issue_type == "custody_gap_review_hold" for issue in state.issues)
         )
 
     def test_duplicate_event_fee_normalization_preserves_closed_authority(self):

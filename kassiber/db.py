@@ -1017,6 +1017,9 @@ CREATE TABLE IF NOT EXISTS journal_quantity_issues (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     issue_type TEXT NOT NULL,
+    -- custody_candidate is accepted only so a pre-simplification derived
+    -- journal can be opened and rebuilt; current production emitters use
+    -- custody_suspense/conflicting and replacement removes the legacy rows.
     state TEXT NOT NULL CHECK(state IN (
         'custody_candidate', 'custody_suspense', 'conflicting'
     )),

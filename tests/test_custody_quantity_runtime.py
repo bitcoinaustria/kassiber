@@ -583,7 +583,7 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         self.assertEqual(payout.amount_msat, 2_000)
         self.assertEqual(payout.location_id, "direct-payout:payout:source")
 
-    def test_promoted_gap_candidate_enters_live_canonical_projection_and_exposes_exact_residual(self):
+    def test_promoted_gap_candidate_holds_boundaries_without_transfer_edge(self):
         rows = [
             _row(
                 "out",
@@ -606,11 +606,15 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
 
         self.assertEqual(
             [(item.state, item.source.amount_msat) for item in state.projection.decisions],
-            [("custody_candidate", 9_900), (CUSTODY_SUSPENSE, 100)],
+            [(CUSTODY_SUSPENSE, 10_000)],
         )
+        self.assertTrue(all(item.target is None for item in state.projection.decisions))
         self.assertEqual(
-            {(item.state, item.amount_msat) for item in state.issues},
-            {("custody_candidate", 9_900), (CUSTODY_SUSPENSE, 100)},
+            {hold.transaction_id for hold in state.gap_holds},
+            {"out", "return"},
+        )
+        self.assertTrue(
+            any(item.issue_type == "custody_gap_review_hold" for item in state.issues)
         )
         self.assertEqual(state.tax_eligibility.blocked_from, "2020-01-01T00:00:00Z")
 
@@ -851,82 +855,6 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         self.assertEqual(
             state.gap_candidate_transaction_ids,
             ("out", "return"),
-        )
-
-    def test_promoted_candidate_compile_failure_still_holds_boundaries(self):
-        rows = [
-            _row(
-                "out",
-                "wallet-a",
-                "outbound",
-                10_000,
-                "2020-01-01T00:00:00Z",
-                privacy_boundary="coinjoin",
-            ),
-            _row(
-                "return",
-                "wallet-c",
-                "inbound",
-                9_900,
-                "2021-01-01T00:00:00Z",
-            ),
-        ]
-
-        with patch(
-            "kassiber.core.custody_quantity_runtime.compile_gap_candidate_claims",
-            side_effect=ValueError("canonical mismatch"),
-        ):
-            state = build_canonical_quantity_state(rows)
-
-        self.assertEqual(
-            state.gap_candidate_transaction_ids,
-            ("out", "return"),
-        )
-        self.assertTrue(
-            any(
-                item.issue_type == "custody_gap_claim_compile_failed"
-                for item in state.issues
-            )
-        )
-        observations_by_hash = {
-            item.quantity_hash: item
-            for item in state.projection.observations
-        }
-        source_decision = next(
-            item
-            for item in state.projection.decisions
-            if observations_by_hash[item.source.observation_hash].transaction_id
-            == "out"
-        )
-        self.assertEqual(source_decision.state, CUSTODY_SUSPENSE)
-        self.assertTrue(
-            source_decision.atomic_bundle_id.startswith("candidate:")
-        )
-        self.assertFalse(
-            any(
-                item.location_kind == "external"
-                for item in state.projection.postings
-            )
-        )
-        self.assertFalse(state.tax_eligibility.eligible_decisions)
-        self.assertEqual(
-            sum(item.amount_msat or 0 for item in state.issues),
-            10_000,
-        )
-
-        projection = compile_finalized_tax_projection(
-            {
-                "id": "profile-one",
-                "workspace_id": "workspace-one",
-                "label": "Book",
-            },
-            rows,
-            state,
-        )
-        self.assertFalse(projection.rows)
-        self.assertEqual(
-            {item["transaction_id"] for item in projection.quarantines},
-            {"out", "return"},
         )
 
     def test_known_correct_acquisition_and_payment_match_current_wallet_balance(self):

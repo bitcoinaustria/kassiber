@@ -137,8 +137,11 @@ binary.
    and bridge plans share one all-or-nothing FIFO allocator with exact offsets
    and residuals. Transactionless component-route flattening remains a narrow
    provenance operation rather than a competing allocation policy.
-3. Persist normalized candidates/completeness once per input version, replace
-   candidate transfer claims with scoped holds, and introduce pure plan/apply.
+3. Replace candidate transfer claims with scoped holds; persist normalized
+   candidates/completeness once per input version; introduce pure plan/apply.
+   The first part is complete: promotion now emits independent source/return
+   holds and typed issues, never a source-to-target claim. The normalized
+   projection and pure planner remain separate migration slices.
 4. Add typed replicated component economic terms, migrate pair/payout authored
    state deterministically, and freeze legacy writes.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;

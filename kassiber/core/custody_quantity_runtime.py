@@ -22,7 +22,7 @@ from .custody_evidence import (
     enriched_quantity_rows,
     resolve_protocol_scope,
 )
-from .custody_gap_claims import compile_gap_candidate_claims
+from .custody_gap_holds import CustodyGapHold, compile_gap_candidate_holds
 from .custody_gap_reviews import candidate_fingerprint
 from .custody_gaps import (
     search_custody_gap_candidates,
@@ -155,6 +155,7 @@ class CanonicalQuantityState:
     issues: tuple[QuantityIssue, ...]
     tax_eligibility: QuantityTaxEligibility
     gap_candidate_transaction_ids: tuple[str, ...] = ()
+    gap_holds: tuple[CustodyGapHold, ...] = ()
     reviewed_conversion_pairs: tuple[Mapping[str, Any], ...] = ()
 
     @property
@@ -511,7 +512,7 @@ def _observations_by_transaction(
     }
 
 
-def _gap_candidate_claims_and_issues(
+def _gap_candidate_holds_and_issues(
     rows: Sequence[Mapping[str, Any]],
     canonical: CanonicalQuantityInput,
     *,
@@ -521,8 +522,9 @@ def _gap_candidate_claims_and_issues(
     tuple[QuantityClaim, ...],
     tuple[QuantityIssue, ...],
     tuple[str, ...],
+    tuple[CustodyGapHold, ...],
 ]:
-    """Compile only unambiguous structured gap suggestions into canonical claims."""
+    """Compile structured suggestions into independent, non-lineage holds."""
 
     ignored = tuple(sorted({str(item) for item in ignored_transaction_ids if item}))
     capacity_blocking_source_ids: set[str] = set()
@@ -538,11 +540,12 @@ def _gap_candidate_claims_and_issues(
         candidates = search_result.accounting_candidates
         capacity_blocking_source_ids.update(search_result.blocking_source_ids)
         if not candidates and not capacity_blocking_source_ids:
-            return (), (), ()
+            return (), (), (), ()
 
     observations = _observations_by_transaction(canonical)
     claims: list[QuantityClaim] = []
     issues: list[QuantityIssue] = []
+    holds: list[CustodyGapHold] = []
     candidate_transaction_ids: set[str] = set()
     # Capacity cannot prove a transfer, but it also must not silently finalize
     # a typed privacy/Samourai boundary as an external disposal. Hold only the
@@ -558,23 +561,22 @@ def _gap_candidate_claims_and_issues(
         ):
             continue
         candidate_transaction_ids.add(transaction_id)
+        quantity = QuantitySlice(
+            observation.quantity_hash,
+            0,
+            observation.principal_msat,
+        )
+        hold = CustodyGapHold(
+            hold_id="gap-capacity-hold:" + observation.quantity_hash,
+            gap_id="capacity-incomplete",
+            transaction_id=observation.transaction_id,
+            direction="outbound",
+            quantity=quantity,
+            evidence_detail_hash=observation.evidence_detail_hash,
+        )
+        holds.append(hold)
         claims.append(
-            QuantityClaim(
-                claim_id=(
-                    "gap-capacity-suspense:" + observation.quantity_hash
-                ),
-                source=QuantitySlice(
-                    observation.quantity_hash,
-                    0,
-                    observation.principal_msat,
-                ),
-                state=CUSTODY_SUSPENSE,
-                priority=ClaimPriority.ACCOUNTING_CONVENTION,
-                reason="custody_gap_search_incomplete_structured_source",
-                supporting_evidence_hashes=(
-                    observation.evidence_detail_hash,
-                ),
-            )
+            _source_hold_claim(hold, "custody_gap_search_incomplete_structured_source")
         )
     for candidate in candidates:
         if not candidate.promotion_eligible:
@@ -589,10 +591,10 @@ def _gap_candidate_claims_and_issues(
         candidate_transaction_ids.update(candidate.source_ids)
         candidate_transaction_ids.update(candidate.return_ids)
         try:
-            compiled = compile_gap_candidate_claims(candidate, observations)
+            compiled = compile_gap_candidate_holds(candidate, observations)
         except (TypeError, ValueError) as exc:
             error_code = str(
-                getattr(exc, "code", "custody_gap_claim_compile")
+                getattr(exc, "code", "custody_gap_hold_compile")
             )
             source_observations = {
                 observations[transaction_id].quantity_hash:
@@ -626,7 +628,7 @@ def _gap_candidate_claims_and_issues(
             issues.append(
                 QuantityIssue(
                     issue_id=_issue_id(("gap_compile", candidate.gap_id)),
-                    issue_type="custody_gap_claim_compile_failed",
+                    issue_type="custody_gap_hold_compile_failed",
                     state=CONFLICTING,
                     asset=candidate.asset,
                     # Exact source principal is represented by the suspense
@@ -648,8 +650,67 @@ def _gap_candidate_claims_and_issues(
                 )
             )
         else:
-            claims.extend(compiled.claims)
-    return tuple(claims), tuple(issues), tuple(sorted(candidate_transaction_ids))
+            holds.extend(compiled.holds)
+            issues.append(
+                QuantityIssue(
+                    issue_id=_issue_id(("custody_gap_hold", candidate.gap_id)),
+                    issue_type="custody_gap_review_hold",
+                    state=CUSTODY_SUSPENSE,
+                    asset=candidate.asset,
+                    # Source decisions quantify suspense exactly. This issue
+                    # scopes both boundaries and is not counted a second time.
+                    amount_msat=None,
+                    occurred_at=candidate.started_at,
+                    transaction_ids=tuple(
+                        sorted((*candidate.source_ids, *candidate.return_ids))
+                    ),
+                    reason="custody_gap_review_required",
+                    details={
+                        "gap_id": candidate.gap_id,
+                        "retained_msat": candidate.retained_msat,
+                        "residual_msat": candidate.residual_msat,
+                        "excess_msat": candidate.excess_msat,
+                        "held_transaction_ids": [
+                            hold.transaction_id for hold in compiled.holds
+                        ],
+                    },
+                )
+            )
+
+    # Conflicting candidates can name the same source. One source hold is
+    # enough to suppress its presumed-external default; candidate identity
+    # remains on typed issues and independent return holds.
+    source_holds: dict[str, CustodyGapHold] = {}
+    for hold in holds:
+        if hold.direction == "outbound":
+            source_holds.setdefault(hold.quantity.observation_hash, hold)
+    claimed_slices = {claim.source for claim in claims}
+    claims.extend(
+        _source_hold_claim(hold, "custody_gap_review_required")
+        for hold in source_holds.values()
+        if hold.quantity not in claimed_slices
+    )
+    return (
+        tuple(claims),
+        tuple(issues),
+        tuple(sorted(candidate_transaction_ids)),
+        tuple(sorted(holds, key=lambda item: item.hold_id)),
+    )
+
+
+def _source_hold_claim(hold: CustodyGapHold, reason: str) -> QuantityClaim:
+    """Adapt a source hold to suspense arbitration without creating an edge."""
+
+    if hold.direction != "outbound":
+        raise ValueError("only outbound holds participate in source arbitration")
+    return QuantityClaim(
+        claim_id=hold.hold_id,
+        source=hold.quantity,
+        state=CUSTODY_SUSPENSE,
+        priority=ClaimPriority.ACCOUNTING_CONVENTION,
+        reason=reason,
+        supporting_evidence_hashes=(hold.evidence_detail_hash,),
+    )
 
 
 def _tax_eligibility(
@@ -722,7 +783,11 @@ def _tax_eligibility(
             barriers_by_pool[pool] = barrier
 
     for issue in issues:
-        if issue.issue_type == "native_audit_evidence_invalid":
+        if issue.issue_type in {
+            "native_audit_evidence_invalid",
+            "custody_gap_review_hold",
+            "custody_gap_hold_compile_failed",
+        }:
             directly_blocked_hashes.update(
                 transaction_to_hash[transaction_id]
                 for transaction_id in issue.transaction_ids
@@ -914,8 +979,8 @@ def build_canonical_quantity_state(
             target = observations_by_hash.get(claim.target.observation_hash)
             if target is not None:
                 ignored_transaction_ids.add(target.transaction_id)
-    gap_claims, gap_issues, gap_candidate_transaction_ids = (
-        _gap_candidate_claims_and_issues(
+    gap_hold_claims, gap_issues, gap_candidate_transaction_ids, gap_holds = (
+        _gap_candidate_holds_and_issues(
             safe_rows,
             canonical,
             ignored_transaction_ids=ignored_transaction_ids,
@@ -943,7 +1008,7 @@ def build_canonical_quantity_state(
     claims = (
         *baseline_fallback_claims(canonical.observations),
         *component_claims,
-        *gap_claims,
+        *gap_hold_claims,
         *direct_payout_claims,
         *native_audit.claims,
         *interpreter_claims,
@@ -1062,6 +1127,7 @@ def build_canonical_quantity_state(
             rows_by_id,
         ),
         gap_candidate_transaction_ids=gap_candidate_transaction_ids,
+        gap_holds=gap_holds,
         reviewed_conversion_pairs=reviewed_conversion_pairs,
     )
 

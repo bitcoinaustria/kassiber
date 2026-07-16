@@ -17,7 +17,6 @@ from kassiber.core.chain_observer.provenance import (
 from kassiber.core.custody_quantity import (
     ArbitratedSlice,
     CONFLICTING,
-    CUSTODY_CANDIDATE,
     CUSTODY_SUSPENSE,
     ClaimPriority,
     EvidenceSnapshot,
@@ -564,10 +563,9 @@ class CustodyQuantityTests(unittest.TestCase):
         target = _observation("in", "wallet-b", "inbound", 100)
         with self.assertRaisesRegex(ValueError, "cannot use reviewed_component"):
             QuantityClaim(
-                claim_id="bad-candidate",
+                claim_id="bad-presumed-external",
                 source=QuantitySlice(source.quantity_hash, 0, 100),
-                target=QuantitySlice(target.quantity_hash, 0, 100),
-                state=CUSTODY_CANDIDATE,
+                state=EXTERNAL_PRESUMED,
                 priority=ClaimPriority.REVIEWED_COMPONENT,
                 reason="invalid",
             )
@@ -679,42 +677,6 @@ class CustodyQuantityTests(unittest.TestCase):
         self.assertEqual(projection.unresolved_msat_by_asset(), {"BTC": 100})
         self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
 
-    def test_split_selected_claim_maps_target_offsets_exactly(self):
-        source = _observation("out", "wallet-a", "outbound", 1_000)
-        candidate_target = _observation("candidate", "wallet-b", "inbound", 1_200)
-        exact_target = _observation("exact", "wallet-c", "inbound", 200)
-        candidate = QuantityClaim(
-            claim_id="candidate",
-            source=QuantitySlice(source.quantity_hash, 0, 1_000),
-            target=QuantitySlice(candidate_target.quantity_hash, 100, 1_100),
-            state=CUSTODY_CANDIDATE,
-            priority=ClaimPriority.HEURISTIC_CANDIDATE,
-            reason="candidate",
-        )
-        exact = QuantityClaim(
-            claim_id="exact",
-            source=QuantitySlice(source.quantity_hash, 400, 600),
-            target=QuantitySlice(exact_target.quantity_hash, 0, 200),
-            state=INTERNAL_VERIFIED,
-            priority=ClaimPriority.EXACT_NATIVE_EVENT,
-            reason="exact",
-        )
-        projection = project_quantities(
-            [source, candidate_target, exact_target],
-            [candidate, exact],
-        )
-        candidate_parts = [
-            item for item in projection.decisions if item.selected_claim_id == "candidate"
-        ]
-        self.assertEqual(
-            [
-                (item.source.start_msat, item.source.end_msat,
-                 item.target.start_msat, item.target.end_msat)
-                for item in candidate_parts
-            ],
-            [(0, 400, 100, 500), (600, 1_000, 700, 1_100)],
-        )
-
     def test_cross_network_claim_isolated_as_source_suspense(self):
         source = _observation(
             "out", "wallet-a", "outbound", 100, network="main"
@@ -781,80 +743,6 @@ class CustodyQuantityTests(unittest.TestCase):
         )
         self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
 
-    def test_flagship_candidate_preserves_wallets_and_only_residual_is_suspense(self):
-        source = _observation("out", "multisig-b", "outbound", 10_000)
-        return_one = _observation("in-1", "operative-c", "inbound", 6_000)
-        return_two = _observation("in-2", "operative-c", "inbound", 3_900)
-        claims = [
-            QuantityClaim(
-                claim_id="fallback-disposal",
-                source=QuantitySlice(source.quantity_hash, 0, 10_000),
-                state=EXTERNAL_PRESUMED,
-                priority=ClaimPriority.PRESUMED_EXTERNAL_FALLBACK,
-                reason="unmatched_outflow",
-                fallback=True,
-            ),
-            QuantityClaim(
-                claim_id="candidate-1",
-                source=QuantitySlice(source.quantity_hash, 0, 6_000),
-                target=QuantitySlice(return_one.quantity_hash, 0, 6_000),
-                state=CUSTODY_CANDIDATE,
-                priority=ClaimPriority.HEURISTIC_CANDIDATE,
-                reason="plausible_missing_wallet_bridge",
-            ),
-            QuantityClaim(
-                claim_id="candidate-2",
-                source=QuantitySlice(source.quantity_hash, 6_000, 9_900),
-                target=QuantitySlice(return_two.quantity_hash, 0, 3_900),
-                state=CUSTODY_CANDIDATE,
-                priority=ClaimPriority.HEURISTIC_CANDIDATE,
-                reason="plausible_missing_wallet_bridge",
-            ),
-        ]
-
-        projection = project_quantities(
-            [source, return_one, return_two],
-            claims,
-        )
-
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
-        self.assertEqual(projection.unresolved_msat_by_asset(), {"BTC": 10_000})
-        self.assertEqual(
-            sum(
-                item.source.amount_msat
-                for item in projection.decisions
-                if item.state == CUSTODY_SUSPENSE
-            ),
-            100,
-        )
-        self.assertFalse(
-            any(item.state == EXTERNAL_PRESUMED for item in projection.decisions)
-        )
-        self.assertFalse(any(item.finalized for item in projection.decisions))
-        wallet_postings = {
-            item.location_id: item.amount_msat
-            for item in projection.postings
-            if item.location_kind == "wallet"
-        }
-        self.assertEqual(wallet_postings["multisig-b"], -10_000)
-        self.assertEqual(
-            sum(
-                item.amount_msat
-                for item in projection.postings
-                if item.location_kind == "wallet"
-                and item.location_id == "operative-c"
-            ),
-            9_900,
-        )
-        self.assertEqual(
-            sum(
-                item.amount_msat
-                for item in projection.postings
-                if item.location_kind == "custody_suspense"
-            ),
-            100,
-        )
-
     def test_network_fee_is_separate_and_conserved(self):
         source = _observation(
             "out", "wallet-a", "outbound", 100_000, fee_msat=2_000
@@ -916,15 +804,7 @@ class CustodyQuantityTests(unittest.TestCase):
             priority=ClaimPriority.REVIEWED_COMPONENT,
             reason="approved_bridge",
         )
-        candidate = QuantityClaim(
-            claim_id="candidate",
-            source=QuantitySlice(source.quantity_hash, 0, 1_000),
-            target=QuantitySlice(target.quantity_hash, 0, 1_000),
-            state=CUSTODY_CANDIDATE,
-            priority=ClaimPriority.HEURISTIC_CANDIDATE,
-            reason="heuristic",
-        )
-        projection = project_quantities([source, target], [candidate, reviewed])
+        projection = project_quantities([source, target], [reviewed])
         self.assertEqual(projection.decisions[0].selected_claim_id, "reviewed")
         self.assertEqual(projection.decisions[0].state, INTERNAL_REVIEWED)
 
@@ -1095,21 +975,6 @@ class CustodyQuantityTests(unittest.TestCase):
                         priority=ClaimPriority.PRESUMED_EXTERNAL_FALLBACK,
                         reason="fallback",
                         fallback=True,
-                    )
-                )
-                candidate_start = rng.randint(0, 100)
-                claims.append(
-                    QuantityClaim(
-                        claim_id=f"candidate-{case}-{index}",
-                        source=QuantitySlice(source.quantity_hash, 0, 100),
-                        target=QuantitySlice(
-                            targets[0].quantity_hash,
-                            candidate_start,
-                            candidate_start + 100,
-                        ),
-                        state=CUSTODY_CANDIDATE,
-                        priority=ClaimPriority.HEURISTIC_CANDIDATE,
-                        reason="candidate",
                     )
                 )
                 exact_start = rng.randint(0, 79)

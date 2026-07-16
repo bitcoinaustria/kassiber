@@ -35,6 +35,8 @@ _CLASSIFICATION_ORDER = (
     "disposal",
     "retained",
     "suspense",
+    # Read-only compatibility for behavioral baselines captured by the
+    # pre-simplification journal. No current quantity emitter produces it.
     "custody_candidate",
     "conflicting",
     "quarantined",

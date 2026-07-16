@@ -45,7 +45,6 @@ INTERNAL_VERIFIED = "internal_verified"
 INTERNAL_REVIEWED = "internal_reviewed"
 EXTERNAL_CONFIRMED = "external_confirmed"
 EXTERNAL_PRESUMED = "external_presumed"
-CUSTODY_CANDIDATE = "custody_candidate"
 CUSTODY_SUSPENSE = "custody_suspense"
 CONFLICTING = "conflicting"
 
@@ -55,19 +54,14 @@ CLAIM_STATES = frozenset(
         INTERNAL_REVIEWED,
         EXTERNAL_CONFIRMED,
         EXTERNAL_PRESUMED,
-        CUSTODY_CANDIDATE,
         CUSTODY_SUSPENSE,
     }
 )
 EXTERNAL_ECONOMIC_SUBTYPES = frozenset(
     {"payment", "disposal", "gift", "lost"}
 )
-TARGET_STATES = frozenset(
-    {INTERNAL_VERIFIED, INTERNAL_REVIEWED, CUSTODY_CANDIDATE}
-)
-UNRESOLVED_STATES = frozenset(
-    {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE, CONFLICTING}
-)
+TARGET_STATES = frozenset({INTERNAL_VERIFIED, INTERNAL_REVIEWED})
+UNRESOLVED_STATES = frozenset({CUSTODY_SUSPENSE, CONFLICTING})
 FINALIZED_STATES = frozenset(
     {
         INTERNAL_VERIFIED,
@@ -128,7 +122,6 @@ class ClaimPriority(IntEnum):
     EXACT_NATIVE_EVENT = 20
     REVIEWED_PAIR = 30
     ACCOUNTING_CONVENTION = 40
-    HEURISTIC_CANDIDATE = 50
     PRESUMED_EXTERNAL_FALLBACK = 60
 
 
@@ -147,7 +140,6 @@ STATE_PRIORITIES = {
     EXTERNAL_PRESUMED: frozenset(
         {ClaimPriority.PRESUMED_EXTERNAL_FALLBACK}
     ),
-    CUSTODY_CANDIDATE: frozenset({ClaimPriority.HEURISTIC_CANDIDATE}),
     CUSTODY_SUSPENSE: frozenset(
         {
             ClaimPriority.REVIEWED_COMPONENT,
@@ -513,7 +505,7 @@ def _source_decisions(
         # than silently reverting to presumed disposal.
         if any(
             not claim.fallback
-            and claim.state in {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE}
+            and claim.state == CUSTODY_SUSPENSE
             for claim in source_claims
         ):
             source_claims = [claim for claim in source_claims if not claim.fallback]
@@ -861,7 +853,6 @@ def _build_postings(
         location_kind = decision.destination_kind or {
             EXTERNAL_CONFIRMED: "external",
             EXTERNAL_PRESUMED: "external",
-            CUSTODY_CANDIDATE: "custody_candidate",
             CUSTODY_SUSPENSE: "custody_suspense",
             CONFLICTING: "conflicting",
         }.get(decision.state)
@@ -955,7 +946,6 @@ __all__ = [
     "CanonicalQuantityEvent",
     "CanonicalQuantityInput",
     "CONFLICTING",
-    "CUSTODY_CANDIDATE",
     "CUSTODY_SUSPENSE",
     "ClaimPriority",
     "EXTERNAL_CONFIRMED",

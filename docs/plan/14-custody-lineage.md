@@ -81,8 +81,9 @@ that Kassiber cannot know whether unimported wallets exist. It is never
   movement, carry quantity and basis automatically.
 - Ordinary unmatched outflows with no plausible return may remain
   `external_presumed`; reports must distinguish and count this presumption.
-- A plausible return through missing history becomes `custody_candidate` and
-  withholds the affected presumed tax classification.
+- A plausible return through missing history creates independent derived
+  source/return review holds and withholds the affected presumed tax
+  classifications. It does not create a transfer claim.
 - A candidate never activates automatically. One reviewed N:M bridge may close
   a complete missing-wallet interval and carry basis durably.
 - A reviewed retained amount and an unresolved residual are independent. The
@@ -144,13 +145,12 @@ users or AI to author low-level legs and allocation JSON.
 | `internal_reviewed` | A user approved a durable missing-history bridge | Move/carry the reviewed quantity | Non-taxable custody movement; residuals remain separate |
 | `external_confirmed` | Explicit reviewed payment, disposal, gift, loss, or other external evidence exists | Leave profile custody | Emit only the finalized selected economic event |
 | `external_presumed` | Unmatched outflow has no currently plausible owned return | Leave observed wallet; disclose presumption | May enter tax projection under the documented default, but remains revisable |
-| `custody_candidate` | Deterministic evidence suggests a possible missing-wallet return | No authored change until review | Withhold the affected presumed external event |
 | `custody_suspense` | Quantity is known to have left an observed location but its custody destination/classification is unresolved | Reduce observed wallet and retain explicit suspense quantity | Never enter the finalized taxable-event projection |
 | `conflicting` | Active interpretations or evidence disagree | Preserve all claims; choose none silently | Block affected quantity and reports |
 
 These are interpretation states, not one overloaded quarantine flag. Report
 readiness is separate: `clear`, `warning`, or `blocked`. A warning can disclose
-presumptions; candidate, suspense, and conflict states block only their affected
+presumptions; derived holds, suspense, and conflict states block only their affected
 tax quantities and any downstream lots that require them.
 
 ## Architecture
@@ -333,7 +333,7 @@ reason codes, alternatives, residuals, and downstream impact. It never creates
 an authored bridge.
 
 Candidate promotion uses a versioned deterministic threshold. Amount and time
-similarity alone are insufficient: a blocking `custody_candidate` also needs a
+similarity alone are insufficient: blocking source/return holds also need a
 meaningful chronology/privacy/topology signal and a clear margin over competing
 groups. Lower-scoring relationships may appear as non-blocking search hints
 while the transaction remains `external_presumed`. Conversely, the flagship

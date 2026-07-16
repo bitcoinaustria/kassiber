@@ -167,8 +167,11 @@ same verification surface.
   - [x] Centralize boundary-leg principal/fee/wallet-movement normalization and
     deterministic FIFO N:M allocation; make gap claims and reviewed bridge
     plans consume the same exact-msat cells and residuals.
-  - [ ] Persist one versioned candidate projection and replace heuristic
-    transfer claims with independently scoped source/return holds.
+  - [x] Replace heuristic transfer claims with independently scoped
+    source/return holds; delete `CUSTODY_CANDIDATE` / `HEURISTIC_CANDIDATE`
+    arbitration so suggestions cannot contain a basis-carrying target edge.
+  - [ ] Persist one normalized, versioned candidate projection with explicit
+    completeness metadata and indexed keyset pagination.
   - [ ] Add pure review planning and fingerprint/version-checked apply.
   - [ ] Migrate pair/payout authored meaning into components with typed
     replicated economic terms; freeze legacy writes and retain replay history.
