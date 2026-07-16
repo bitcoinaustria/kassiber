@@ -6,6 +6,10 @@ from unittest.mock import patch
 import pytest
 
 from kassiber import db as db_module
+from kassiber.cli.handlers import (
+    create_direct_swap_payout,
+    create_transaction_pair,
+)
 from kassiber.core.custody_authored_migration import (
     backfill_legacy_authored_components,
     find_active_review_for_transaction,
@@ -20,6 +24,7 @@ from kassiber.core.custody_components import (
 )
 from kassiber.core.custody_journal import CustodyJournalBuilder
 from kassiber.db import open_db
+from kassiber.errors import AppError
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -217,9 +222,18 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
 
         refs = list_active_review_refs(migrated, profile_id="profile")
         assert {
-            (row["id"], row["compatibility"])
+            (
+                row["id"],
+                row["term_kind"],
+                row["out_asset"],
+                row["in_asset"],
+                row["compatibility"],
+            )
             for row in refs
-        } == {("pair", True), ("payout", False)}
+        } == {
+            ("pair", "transaction_pair", "BTC", "BTC", True),
+            ("payout", "direct_swap_payout", "BTC", None, False),
+        }
         assert find_active_review_for_transaction(
             migrated,
             profile_id="profile",
@@ -328,6 +342,23 @@ def test_active_component_without_legacy_terms_claims_every_boundary(tmp_path):
         assert review["id"] == "native-bridge"
         assert review["component_id"] == "native-bridge"
         assert review["compatibility"] is False
+    with pytest.raises(AppError, match="active custody component"):
+        create_transaction_pair(
+            conn,
+            "ws",
+            "profile",
+            "bridge-out",
+            "bridge-in",
+        )
+    with pytest.raises(AppError, match="active custody component"):
+        create_direct_swap_payout(
+            conn,
+            "ws",
+            "profile",
+            "bridge-out",
+            payout_asset="BTC",
+            payout_amount="0.0000000099",
+        )
     conn.close()
 
 

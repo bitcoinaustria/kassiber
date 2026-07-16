@@ -1154,6 +1154,7 @@ def list_active_review_refs(
                 f"""
                 SELECT term.legacy_source_id AS id,
                        term.component_id,
+                       term.term_kind,
                        COALESCE(source.anchor_transaction_id,
                                 source.transaction_id) AS out_transaction_id,
                        CASE WHEN term.term_kind = 'transaction_pair'
@@ -1200,6 +1201,7 @@ def list_active_review_refs(
                 ),
                 "kind": "custody-component",
                 "policy": None,
+                "term_kind": "custody_component",
                 "deleted_at": None,
                 "compatibility": False,
             }
@@ -1224,10 +1226,50 @@ def list_active_review_refs(
         effective_component_ids=effective_ids,
     )
     compatibility_rows = [
-        {**dict(row), "compatibility": True}
-        for row in (*pairs, *payouts)
+        {**dict(row), "term_kind": "transaction_pair", "compatibility": True}
+        for row in pairs
+    ] + [
+        {
+            **dict(row),
+            "term_kind": "direct_swap_payout",
+            "compatibility": True,
+        }
+        for row in payouts
     ]
-    return [*component_rows, *compatibility_rows]
+    rows = [*component_rows, *compatibility_rows]
+    transaction_ids = sorted(
+        {
+            str(transaction_id)
+            for row in rows
+            for transaction_id in (
+                _field(row, "out_transaction_id"),
+                _field(row, "in_transaction_id"),
+            )
+            if transaction_id not in (None, "")
+        }
+    )
+    assets_by_transaction: dict[str, str] = {}
+    if transaction_ids:
+        placeholders = ",".join("?" for _ in transaction_ids)
+        assets_by_transaction = {
+            str(row["id"]): str(row["asset"])
+            for row in conn.execute(
+                f"SELECT id, asset FROM transactions WHERE id IN ({placeholders})",
+                transaction_ids,
+            ).fetchall()
+        }
+    return [
+        {
+            **row,
+            "out_asset": assets_by_transaction.get(
+                str(_field(row, "out_transaction_id") or "")
+            ),
+            "in_asset": assets_by_transaction.get(
+                str(_field(row, "in_transaction_id") or "")
+            ),
+        }
+        for row in rows
+    ]
 
 
 def find_active_review_for_transaction(

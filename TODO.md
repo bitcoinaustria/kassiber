@@ -197,7 +197,9 @@ same verification surface.
     matching, gap discovery, transaction-exclusion guards and commercial
     classification now resolve active reviews through that same store; every
     effective component boundary is claimed even when the component has no
-    migrated pair/payout economic term.
+    migrated pair/payout economic term. Pair/payout create and revision
+    conflict checks also use those component-first references, so native
+    reviewed bridges cannot be overwritten by a compatibility command.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The

@@ -458,32 +458,24 @@ def _active_pairs_reusing_leg(
     in_transaction_id,
     *,
     exclude_pair_id=None,
+    review_refs=None,
 ):
-    params = [profile_id, out_transaction_id, in_transaction_id]
-    exclude_sql = ""
-    if exclude_pair_id is not None:
-        exclude_sql = " AND transaction_pairs.id != ?"
-        params.append(exclude_pair_id)
-    return conn.execute(
-        f"""
-        SELECT
-          transaction_pairs.id,
-          transaction_pairs.out_transaction_id,
-          transaction_pairs.in_transaction_id,
-          transaction_pairs.kind,
-          transaction_pairs.policy,
-          out_tx.asset AS out_asset,
-          in_tx.asset AS in_asset
-        FROM transaction_pairs
-        JOIN transactions AS out_tx ON out_tx.id = transaction_pairs.out_transaction_id
-        JOIN transactions AS in_tx ON in_tx.id = transaction_pairs.in_transaction_id
-        WHERE transaction_pairs.profile_id = ? AND transaction_pairs.deleted_at IS NULL
-          AND (out_transaction_id = ? OR in_transaction_id = ?)
-          {exclude_sql}
-        ORDER BY transaction_pairs.created_at, transaction_pairs.id
-        """,
-        tuple(params),
-    ).fetchall()
+    refs = review_refs
+    if refs is None:
+        refs = core_custody_authored_migration.list_active_review_refs(
+            conn,
+            profile_id=profile_id,
+        )
+    return [
+        row
+        for row in refs
+        if row["term_kind"] == "transaction_pair"
+        and row["id"] != exclude_pair_id
+        and (
+            row["out_transaction_id"] == out_transaction_id
+            or row["in_transaction_id"] == in_transaction_id
+        )
+    ]
 
 
 def _reject_disallowed_leg_reuse(
@@ -497,6 +489,7 @@ def _reject_disallowed_leg_reuse(
     policy,
     *,
     exclude_pair_id=None,
+    review_refs=None,
 ):
     new_pair_allows_reuse = _pair_allows_leg_reuse(out_asset, in_asset, kind, policy)
     for existing_pair in _active_pairs_reusing_leg(
@@ -505,6 +498,7 @@ def _reject_disallowed_leg_reuse(
         out_transaction_id,
         in_transaction_id,
         exclude_pair_id=exclude_pair_id,
+        review_refs=review_refs,
     ):
         existing_pair_allows_reuse = _pair_allows_leg_reuse(
             existing_pair["out_asset"],
@@ -529,6 +523,37 @@ def _raise_leg_reuse_conflict(existing_pair, out_transaction_id):
         "must remain one-to-one.",
         code="conflict",
         hint=f"Unpair `{existing_pair['id']}` first, or use a same-asset privacy/manual pair kind.",
+    )
+
+
+def _review_ref_uses_transaction(review, transaction_ids):
+    return bool(
+        {
+            review.get("out_transaction_id"),
+            review.get("in_transaction_id"),
+        }
+        & set(transaction_ids)
+    )
+
+
+def _raise_non_pair_review_conflict(review):
+    review_id = review["id"]
+    if review["term_kind"] == "direct_swap_payout":
+        raise AppError(
+            "One of the transactions already has an active direct swap payout "
+            f"(id={review_id}). Delete that payout review before pairing.",
+            code="conflict",
+            hint=(
+                "Run `kassiber transfers payouts delete --payout-id "
+                f"{review_id}` first."
+            ),
+        )
+    raise AppError(
+        "One of the transactions belongs to active custody component "
+        f"{review['component_id']}.",
+        code="conflict",
+        hint="Reopen or supersede that custody review before creating a pair.",
+        details={"component_id": review["component_id"]},
     )
 
 
@@ -733,21 +758,40 @@ def create_transaction_pair(
                 f"({out_amount_msat} > {full_out_msat} msat).",
                 code="validation",
             )
-    existing = conn.execute(
-        """
-        SELECT id FROM transaction_pairs
-        WHERE profile_id = ? AND deleted_at IS NULL
-          AND out_transaction_id = ? AND in_transaction_id = ?
-        LIMIT 1
-        """,
-        (profile["id"], out_row["id"], in_row["id"]),
-    ).fetchone()
+    review_refs = core_custody_authored_migration.list_active_review_refs(
+        conn,
+        profile_id=profile["id"],
+    )
+    existing = next(
+        (
+            row
+            for row in review_refs
+            if row["term_kind"] == "transaction_pair"
+            and row["out_transaction_id"] == out_row["id"]
+            and row["in_transaction_id"] == in_row["id"]
+        ),
+        None,
+    )
     if existing:
         raise AppError(
             f"Those transactions are already paired (pair id={existing['id']}). "
             f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
             code="conflict",
         )
+    conflicting_review = next(
+        (
+            row
+            for row in review_refs
+            if row["term_kind"] != "transaction_pair"
+            and _review_ref_uses_transaction(
+                row,
+                {out_row["id"], in_row["id"]},
+            )
+        ),
+        None,
+    )
+    if conflicting_review:
+        _raise_non_pair_review_conflict(conflicting_review)
     _reject_disallowed_leg_reuse(
         conn,
         profile["id"],
@@ -757,24 +801,8 @@ def create_transaction_pair(
         in_row["asset"],
         kind,
         policy,
+        review_refs=review_refs,
     )
-    existing_payout = conn.execute(
-        """
-        SELECT id FROM direct_swap_payouts
-        WHERE profile_id = ? AND deleted_at IS NULL
-          AND out_transaction_id IN (?, ?)
-        LIMIT 1
-        """,
-        (profile["id"], out_row["id"], in_row["id"]),
-    ).fetchone()
-    if existing_payout:
-        raise AppError(
-            f"One of the transactions already has an active direct swap payout "
-            f"(id={existing_payout['id']}). Delete that payout review before pairing.",
-            code="conflict",
-            hint="Run `kassiber transfers payouts delete --payout-id "
-            f"{existing_payout['id']}` first.",
-        )
     if _pair_stores_swap_fee(out_row, in_row, kind):
         # On a split pair only the swapped portion (`out_amount`) crosses to the
         # other asset, so the persisted swap fee must be measured against that,
@@ -876,34 +904,42 @@ def create_direct_swap_payout(
                 hint="Re-run with --policy taxable, or use carrying-value only for BTC/LBTC rail payouts outside Austrian profiles.",
             )
 
-    existing_pair = conn.execute(
-        """
-        SELECT id FROM transaction_pairs
-        WHERE profile_id = ? AND deleted_at IS NULL
-          AND (out_transaction_id = ? OR in_transaction_id = ?)
-        LIMIT 1
-        """,
-        (profile["id"], out_row["id"], out_row["id"]),
-    ).fetchone()
-    if existing_pair:
+    review_refs = core_custody_authored_migration.list_active_review_refs(
+        conn,
+        profile_id=profile["id"],
+    )
+    existing_review = next(
+        (
+            row
+            for row in review_refs
+            if _review_ref_uses_transaction(row, {out_row["id"]})
+        ),
+        None,
+    )
+    if existing_review and existing_review["term_kind"] == "transaction_pair":
         raise AppError(
-            f"Transaction is already paired (pair id={existing_pair['id']}). "
-            f"Run `kassiber transfers unpair --pair-id {existing_pair['id']}` first.",
+            f"Transaction is already paired (pair id={existing_review['id']}). "
+            "Run `kassiber transfers unpair --pair-id "
+            f"{existing_review['id']}` first.",
             code="conflict",
         )
-    existing_payout = conn.execute(
-        """
-        SELECT id FROM direct_swap_payouts
-        WHERE profile_id = ? AND out_transaction_id = ? AND deleted_at IS NULL
-        LIMIT 1
-        """,
-        (profile["id"], out_row["id"]),
-    ).fetchone()
-    if existing_payout:
+    if existing_review and existing_review["term_kind"] == "direct_swap_payout":
         raise AppError(
-            f"Transaction already has an active direct swap payout (id={existing_payout['id']}).",
+            "Transaction already has an active direct swap payout "
+            f"(id={existing_review['id']}).",
             code="conflict",
             hint="Delete the existing payout review before creating a replacement.",
+        )
+    if existing_review:
+        raise AppError(
+            "Transaction belongs to active custody component "
+            f"{existing_review['component_id']}.",
+            code="conflict",
+            hint=(
+                "Reopen or supersede that custody review before creating a "
+                "direct payout."
+            ),
+            details={"component_id": existing_review["component_id"]},
         )
 
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(

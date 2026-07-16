@@ -176,7 +176,9 @@ binary.
    cutover. Active-review suppression and mutation guards now enter through the
    same component-first authored store, including native reviewed bridges that
    have no migrated economic-term row; only ineffective historical reviews are
-   returned as explicit compatibility references.
+   returned as explicit compatibility references. Compatibility pair/payout
+   commands use the same references for duplicate and leg-reuse checks rather
+   than querying their projection tables independently.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.
