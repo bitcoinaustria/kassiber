@@ -1600,6 +1600,53 @@ def list_payout_review_records(
     return sorted(records, key=lambda row: (row["created_at"], row["id"]), reverse=True)
 
 
+def get_compatibility_review_projection(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    review_id: str,
+    term_kind: str,
+    active_only: bool = False,
+    include_pair_assets: bool = False,
+) -> Mapping[str, Any] | None:
+    """Load the frozen row needed only by the bounded mutation bridge."""
+
+    tables = {
+        "transaction_pair": "transaction_pairs",
+        "direct_swap_payout": "direct_swap_payouts",
+    }
+    table = tables.get(term_kind)
+    if table is None:
+        raise AssertionError(f"unsupported review term kind: {term_kind}")
+    active_sql = " AND projection.deleted_at IS NULL" if active_only else ""
+    if include_pair_assets:
+        if term_kind != "transaction_pair":
+            raise AssertionError("pair assets requested for a non-pair review")
+        return conn.execute(
+            f"""
+            SELECT projection.*,
+                   out_transaction.asset AS out_asset,
+                   in_transaction.asset AS in_asset
+            FROM {table} projection
+            JOIN transactions out_transaction
+              ON out_transaction.id = projection.out_transaction_id
+            JOIN transactions in_transaction
+              ON in_transaction.id = projection.in_transaction_id
+            WHERE projection.id = ? AND projection.profile_id = ?
+              {active_sql}
+            """,
+            (review_id, profile_id),
+        ).fetchone()
+    return conn.execute(
+        f"""
+        SELECT projection.* FROM {table} projection
+        WHERE projection.id = ? AND projection.profile_id = ?
+          {active_sql}
+        """,
+        (review_id, profile_id),
+    ).fetchone()
+
+
 def retire_linked_component(
     conn: sqlite3.Connection,
     component_id: Any,

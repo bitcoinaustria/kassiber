@@ -185,6 +185,9 @@ binary.
    Transaction-list flow filters use only a current stored custody projection,
    and diagnostics count the same component-first authored population instead
    of reopening compatibility tables.
+   CLI handlers now contain no pair/payout table reads; their remaining
+   delete/revise compatibility lookup is isolated inside the authored store and
+   will be deleted with the component-native producer cutover.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.

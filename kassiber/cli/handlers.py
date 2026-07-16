@@ -1017,10 +1017,12 @@ def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_delete
 
 def delete_direct_swap_payout(conn, workspace_ref, profile_ref, payout_id):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = conn.execute(
-        "SELECT * FROM direct_swap_payouts WHERE id = ? AND profile_id = ?",
-        (payout_id, profile["id"]),
-    ).fetchone()
+    row = core_custody_authored_migration.get_compatibility_review_projection(
+        conn,
+        profile_id=profile["id"],
+        review_id=payout_id,
+        term_kind="direct_swap_payout",
+    )
     if not row:
         raise AppError("Direct swap payout not found", code="not_found")
     if row["deleted_at"]:
@@ -2477,10 +2479,12 @@ def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
     the historic record. Already soft-deleted pairs are a no-op.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE id = ? AND profile_id = ?",
-        (pair_id, profile["id"]),
-    ).fetchone()
+    row = core_custody_authored_migration.get_compatibility_review_projection(
+        conn,
+        profile_id=profile["id"],
+        review_id=pair_id,
+        term_kind="transaction_pair",
+    )
     if not row:
         raise AppError(f"Pair '{pair_id}' not found", code="not_found")
     if row["deleted_at"] is None:
@@ -2517,16 +2521,14 @@ def update_transaction_pair(
     reach an unsupported combination.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = conn.execute(
-        """
-        SELECT p.*, tout.asset AS out_asset, tin.asset AS in_asset
-        FROM transaction_pairs p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
-        JOIN transactions tin ON tin.id = p.in_transaction_id
-        WHERE p.id = ? AND p.profile_id = ? AND p.deleted_at IS NULL
-        """,
-        (pair_id, profile["id"]),
-    ).fetchone()
+    row = core_custody_authored_migration.get_compatibility_review_projection(
+        conn,
+        profile_id=profile["id"],
+        review_id=pair_id,
+        term_kind="transaction_pair",
+        active_only=True,
+        include_pair_assets=True,
+    )
     if not row:
         raise AppError(f"Pair '{pair_id}' not found", code="not_found")
     new_kind = row["kind"] if kind is None else kind

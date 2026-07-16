@@ -207,6 +207,9 @@ same verification surface.
     Transaction flow filters and public diagnostics now consume current stored
     custody decisions/economic relations or the component-first authored view;
     a stale projection cannot label a transaction as a booked transfer/swap.
+    CLI handlers no longer query either legacy review table, including
+    delete/revise lookup; the core authored store owns the remaining frozen-row
+    mutation bridge pending component-native producer cutover.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The
