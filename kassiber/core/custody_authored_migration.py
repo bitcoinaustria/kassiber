@@ -1073,6 +1073,52 @@ def refresh_legacy_authored_components(
     return staged, pairs, payouts
 
 
+def load_legacy_compatibility_records(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    effective_component_ids: set[str],
+) -> tuple[list[sqlite3.Row], list[sqlite3.Row]]:
+    """Load only historical reviews that lack an effective component.
+
+    This is the bounded compatibility exception for partial-source reviews
+    whose unreviewed residual cannot be silently reclassified during
+    migration. The producer cutover must replace these rows with an explicitly
+    planned residual before this loader can be deleted.
+    """
+
+    pairs = conn.execute(
+        "SELECT * FROM transaction_pairs "
+        "WHERE profile_id = ? AND deleted_at IS NULL "
+        "ORDER BY created_at, id",
+        (profile_id,),
+    ).fetchall()
+    payouts = conn.execute(
+        """
+        SELECT p.*, t.asset AS out_asset, t.amount AS out_amount_msat
+        FROM direct_swap_payouts p
+        JOIN transactions t ON t.id = p.out_transaction_id
+        WHERE p.profile_id = ? AND p.deleted_at IS NULL
+        ORDER BY p.created_at, p.id
+        """,
+        (profile_id,),
+    ).fetchall()
+    return (
+        [
+            row
+            for row in pairs
+            if str(_field(row, "component_id") or "")
+            not in effective_component_ids
+        ],
+        [
+            row
+            for row in payouts
+            if str(_field(row, "component_id") or "")
+            not in effective_component_ids
+        ],
+    )
+
+
 def retire_linked_component(
     conn: sqlite3.Connection,
     component_id: Any,

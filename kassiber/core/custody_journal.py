@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import require_tax_processing_supported
+from . import custody_authored_migration
 from . import custody_components
 from . import custody_gap_reviews
 from . import custody_gaps
@@ -313,20 +314,6 @@ class CustodyJournalBuilder:
     def build_custody_decisions(self) -> CustodyJournalDecisions:
         require_tax_processing_supported(self.profile)
         rows = self._transactions()
-        manual_pair_records = self.conn.execute(
-            "SELECT * FROM transaction_pairs "
-            "WHERE profile_id = ? AND deleted_at IS NULL",
-            (self.profile_id,),
-        ).fetchall()
-        direct_payout_records = self.conn.execute(
-            """
-            SELECT p.*, t.asset AS out_asset, t.amount AS out_amount_msat
-            FROM direct_swap_payouts p
-            JOIN transactions t ON t.id = p.out_transaction_id
-            WHERE p.profile_id = ? AND p.deleted_at IS NULL
-            """,
-            (self.profile_id,),
-        ).fetchall()
         rates = latest_transaction_rates_for_profile(
             self.conn,
             self.profile_id,
@@ -372,16 +359,14 @@ class CustodyJournalBuilder:
             for component in active_components
             if component.get("effective_state") == "active"
         }
-        manual_pair_records = [
-            record
-            for record in manual_pair_records
-            if record["component_id"] not in effective_component_ids
-        ]
-        direct_payout_records = [
-            record
-            for record in direct_payout_records
-            if record["component_id"] not in effective_component_ids
-        ]
+        (
+            manual_pair_records,
+            direct_payout_records,
+        ) = custody_authored_migration.load_legacy_compatibility_records(
+            self.conn,
+            profile_id=self.profile_id,
+            effective_component_ids=effective_component_ids,
+        )
         component_blockers = component_integrity_blockers(
             self.conn,
             self.profile_id,

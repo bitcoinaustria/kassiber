@@ -190,7 +190,10 @@ same verification surface.
     component atomically through the core authored-review store. CLI handlers
     no longer own pair/payout INSERT, UPDATE or tombstone SQL. Removing the
     frozen compatibility projections from new writes is the final producer
-    cutover after all readers move to component terms.
+    cutover after all readers move to component terms. The journal builder no
+    longer queries either legacy table directly: the core authored store now
+    exposes only linked rows whose component is ineffective, keeping the
+    partial-source residual exception explicit and deletable.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The

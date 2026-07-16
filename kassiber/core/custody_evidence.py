@@ -16,7 +16,9 @@ from .chain_observer.provenance import (
 from ..wallet_descriptors import normalize_chain, normalize_network
 
 
-_LIGHTNING_WALLET_KINDS = frozenset({"lnd", "coreln", "cln", "lightning", "nwc"})
+_LIGHTNING_WALLET_KINDS = frozenset(
+    {"lnd", "coreln", "cln", "lightning", "nwc", "phoenix"}
+)
 _VERIFIED_AUTHORITY_KEY = "_kassiber_verified_chain_observation"
 
 

@@ -168,7 +168,12 @@ binary.
    belongs to the core authored-review store, not CLI handlers. That store still
    emits frozen compatibility projections for readers not yet cut over; those
    projection writes disappear with the consumer migration before physical
-   legacy deletion can be considered.
+   legacy deletion can be considered. The journal builder itself no longer
+   queries the compatibility tables: it receives only the bounded historical
+   rows whose linked component is ineffective, principally partial-source
+   reviews with no explicit residual classification. That narrow loader is the
+   remaining compatibility interpreter and must disappear with producer
+   cutover.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.
