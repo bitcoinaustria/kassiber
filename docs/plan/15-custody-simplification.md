@@ -211,6 +211,9 @@ binary.
    consume one privacy-safe plan serializer owned by the review core. The former
    Python preview/create/reopen/revise/residual/dismiss compatibility wrappers
    are deleted; every mutation now enters through `apply_review`.
+   The unused specialized component-create CLI/daemon path is deleted as well;
+   one-component authoring uses the same pure fingerprinted batch plan/apply
+   path as N:M authoring.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

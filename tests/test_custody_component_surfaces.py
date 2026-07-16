@@ -24,7 +24,6 @@ NOW = "2026-01-01T00:00:00Z"
 COMPONENT_KINDS = {
     "ui.transfers.components.list",
     "ui.transfers.components.get",
-    "ui.transfers.components.create",
     "ui.transfers.components.update",
     "ui.transfers.components.activate",
     "ui.transfers.components.supersede",
@@ -419,23 +418,40 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertIn("transaction with untracked_wallet", str(caught.exception))
 
     def test_full_revision_lifecycle_and_envelope_kinds(self):
-        created = _dispatch_json(
+        spec_json = json.dumps([_component_spec()])
+        preview = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
-            "create",
+            "bulk-resolve",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--json",
-            json.dumps(_component_spec()),
-            "--activate",
+            spec_json,
+            "--dry-run",
         )
-        self.assertEqual(created["kind"], "transfers.components.create")
-        self.assertEqual(created["data"]["effective_state"], "active")
-        first_id = created["data"]["id"]
+        created = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "bulk-resolve",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--json",
+            spec_json,
+            "--expected-fingerprint",
+            preview["data"]["fingerprint"],
+        )
+        self.assertEqual(created["kind"], "transfers.components.bulk-resolve")
+        created_component = created["data"]["components"][0]
+        self.assertEqual(created_component["effective_state"], "active")
+        first_id = created_component["id"]
 
         revised = _dispatch_json(
             self.conn,
@@ -702,7 +718,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(leg["wallet_id"], wallet["id"])
 
-    def test_failed_single_create_rolls_back_untracked_wallet_placeholder(self):
+    def test_failed_single_plan_never_writes_untracked_wallet_placeholder(self):
         invalid = {
             "component_type": "manual_bridge",
             "evidence_kind": "manual_migration_review",
@@ -722,7 +738,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             ],
         }
         spec_path = Path(self.tmp.name) / "invalid-single-component.json"
-        spec_path.write_text(json.dumps(invalid), encoding="utf-8")
+        spec_path.write_text(json.dumps([invalid]), encoding="utf-8")
 
         with self.assertRaises(AppError):
             _dispatch_json(
@@ -730,14 +746,14 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "create",
+                "bulk-resolve",
                 "--workspace",
                 "Main",
                 "--profile",
                 "Book",
                 "--file",
                 str(spec_path),
-                "--activate",
+                "--dry-run",
             )
 
         self.assertIsNone(
@@ -754,20 +770,38 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
 
     def test_failed_revision_rolls_back_untracked_wallet_placeholder(self):
         initial_path = Path(self.tmp.name) / "initial-component.json"
-        initial_path.write_text(json.dumps(_component_spec()), encoding="utf-8")
-        initial = _dispatch_json(
+        initial_path.write_text(json.dumps([_component_spec()]), encoding="utf-8")
+        preview = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
-            "create",
+            "bulk-resolve",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--file",
             str(initial_path),
+            "--dry-run",
+            "--draft",
         )["data"]
+        initial = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "bulk-resolve",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--file",
+            str(initial_path),
+            "--expected-fingerprint",
+            preview["fingerprint"],
+            "--draft",
+        )["data"]["components"][0]
 
         invalid_revision = {
             "legs": [
@@ -842,28 +876,45 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             component_spec["evidence"] = {"private": "local-only"}
             component_spec["conversion_metadata"] = {"private": "local-only"}
             component_spec["legs"][0]["location_ref"] = "/private/node/channel"
-            created = _request(
+            preview = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.create",
-                    "request_id": "component-create",
+                    "kind": "ui.transfers.components.bulk_resolve",
+                    "request_id": "component-create-plan",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
-                        "spec": component_spec,
+                        "components": [component_spec],
                         "activate": True,
+                        "dry_run": True,
                     },
                 },
             )
-            self.assertEqual(created["kind"], "ui.transfers.components.create")
-            self.assertEqual(created["data"]["effective_state"], "active")
-            self.assertIsInstance(created["data"]["legs"][0]["amount_msat"], int)
-            self.assertNotIn("evidence", created["data"])
-            self.assertNotIn("conversion_metadata", created["data"])
-            self.assertTrue(
-                all("location_ref" not in leg for leg in created["data"]["legs"])
+            created = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.bulk_resolve",
+                    "request_id": "component-create-apply",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Book",
+                        "components": [component_spec],
+                        "activate": True,
+                        "dry_run": False,
+                        "expected_fingerprint": preview["data"]["fingerprint"],
+                    },
+                },
             )
-            component_id = created["data"]["id"]
+            self.assertEqual(created["kind"], "ui.transfers.components.bulk_resolve")
+            created_component = created["data"]["components"][0]
+            self.assertEqual(created_component["effective_state"], "active")
+            self.assertIsInstance(created_component["legs"][0]["amount_msat"], int)
+            self.assertNotIn("evidence", created_component)
+            self.assertNotIn("conversion_metadata", created_component)
+            self.assertTrue(
+                all("location_ref" not in leg for leg in created_component["legs"])
+            )
+            component_id = created_component["id"]
 
             revised = _request(
                 proc,
@@ -876,8 +927,8 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                         "component_id": component_id,
                         "spec": {
                             "notes": "daemon revision",
-                            "legs": created["data"]["legs"],
-                            "allocations": created["data"]["allocations"],
+                            "legs": created_component["legs"],
+                            "allocations": created_component["allocations"],
                         },
                         "activate": True,
                     },
@@ -1065,24 +1116,41 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     }
                 ],
             }
-            created = _request(
+            preview = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.create",
-                    "request_id": "unsafe-integer-create",
+                    "kind": "ui.transfers.components.bulk_resolve",
+                    "request_id": "unsafe-integer-create-plan",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
-                        "spec": spec,
+                        "components": [spec],
                         "activate": False,
+                        "dry_run": True,
                     },
                 },
             )
-            self.assertEqual(created["kind"], "ui.transfers.components.create")
-            for leg in created["data"]["legs"]:
+            created = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.bulk_resolve",
+                    "request_id": "unsafe-integer-create-apply",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Book",
+                        "components": [spec],
+                        "activate": False,
+                        "dry_run": False,
+                        "expected_fingerprint": preview["data"]["fingerprint"],
+                    },
+                },
+            )
+            self.assertEqual(created["kind"], "ui.transfers.components.bulk_resolve")
+            created_component = created["data"]["components"][0]
+            for leg in created_component["legs"]:
                 self.assertEqual(exact, leg["amount_msat"])
                 self.assertEqual(exact, leg["valuation_amount"])
-            allocation = created["data"]["allocations"][0]
+            allocation = created_component["allocations"][0]
             self.assertEqual(exact, allocation["source_amount_msat"])
             self.assertEqual(exact, allocation["sink_amount_msat"])
 
@@ -1094,11 +1162,11 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
-                        "component_id": created["data"]["id"],
+                        "component_id": created_component["id"],
                         "spec": {
                             "notes": "exact renderer revision",
-                            "legs": created["data"]["legs"],
-                            "allocations": created["data"]["allocations"],
+                            "legs": created_component["legs"],
+                            "allocations": created_component["allocations"],
                         },
                         "activate": False,
                     },

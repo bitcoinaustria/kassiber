@@ -63,7 +63,6 @@ from .handlers import (
     bulk_resolve_custody_components,
     plan_bulk_custody_components,
     bulk_pair_transfers,
-    create_custody_component,
     create_direct_swap_payout,
     chat_history_config_cli,
     clear_chat_sessions_cli,
@@ -2269,17 +2268,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-local-evidence", action="store_true"
     )
 
-    transfers_components_create = transfers_components_sub.add_parser(
-        "create", help="Create a draft custody component"
-    )
-    _add_workspace_profile_args(transfers_components_create)
-    _add_json_document_args(transfers_components_create, label="component spec")
-    transfers_components_create.add_argument(
-        "--activate",
-        action="store_true",
-        help="Activate after complete conservation and anchor validation",
-    )
-
     transfers_components_update = transfers_components_sub.add_parser(
         "update", help="Create a new immutable revision of a component"
     )
@@ -4357,20 +4345,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         args.profile,
                         args.component_id,
                         include_local_evidence=args.include_local_evidence,
-                    ),
-                )
-            if args.transfers_components_command == "create":
-                spec = _read_json_document(
-                    args.json_text, args.json_file, label="component spec"
-                )
-                return emit(
-                    args,
-                    create_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        spec,
-                        activate=args.activate,
                     ),
                 )
             if args.transfers_components_command == "update":

@@ -75,7 +75,6 @@ from .cli.handlers import (
     apply_transfer_rules,
     bulk_resolve_custody_components,
     bulk_pair_transfers,
-    create_custody_component,
     create_direct_swap_payout,
     create_saved_view_cli,
     create_transaction_pair,
@@ -423,7 +422,6 @@ SUPPORTED_KINDS = (
     "ui.transfers.dismiss",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
-    "ui.transfers.components.create",
     "ui.transfers.components.update",
     "ui.transfers.components.activate",
     "ui.transfers.components.supersede",
@@ -1858,18 +1856,6 @@ def _ui_swap_matching_payload_from_conn(
                 profile,
                 component_id(),
                 include_local_evidence=False,
-            )
-        )
-    if kind == "ui.transfers.components.create":
-        return _ui_exact_integer_payload(
-            create_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_spec(),
-                activate=exact_bool("activate"),
-                include_local_evidence=False,
-                authored_source=authored_source,
             )
         )
     if kind == "ui.transfers.components.update":
