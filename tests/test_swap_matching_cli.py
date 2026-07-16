@@ -667,7 +667,25 @@ class SwapMatchingCliTest(unittest.TestCase):
             "--policy", "taxable",
         )
         self.assertEqual(code, 0, payload)
-        _mark_journals_processed(data_root)
+        payload, code = _run(
+            data_root,
+            "journals",
+            "process",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Swap",
+        )
+        self.assertEqual(code, 0, payload)
+        conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+        try:
+            projected_fees = conn.execute(
+                "SELECT relation_kind, swap_fee_msat FROM "
+                "journal_custody_economic_relations"
+            ).fetchall()
+        finally:
+            conn.close()
+        self.assertTrue(projected_fees, payload)
 
         result = _run_raw(
             data_root,

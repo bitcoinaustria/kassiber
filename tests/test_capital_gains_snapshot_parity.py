@@ -39,10 +39,13 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             );
             CREATE TABLE journal_quarantines (profile_id TEXT);
             CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
-            CREATE TABLE transaction_pairs (
-              id TEXT, out_transaction_id TEXT, in_transaction_id TEXT,
-              profile_id TEXT, deleted_at TEXT, kind TEXT, policy TEXT,
-              swap_fee_msat INTEGER, swap_fee_kind TEXT, out_amount INTEGER
+            CREATE TABLE journal_custody_economic_relations (
+              relation_id TEXT, profile_id TEXT, relation_kind TEXT,
+              source_transaction_id TEXT, target_transaction_id TEXT,
+              review_kind TEXT, policy TEXT, swap_fee_msat INTEGER,
+              swap_fee_kind TEXT, source_asset TEXT,
+              source_amount_msat INTEGER, target_asset TEXT,
+              target_amount_msat INTEGER, target_occurred_at TEXT
             );
             """
         )
@@ -221,18 +224,22 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ],
         )
         conn.execute(
-            "INSERT INTO transaction_pairs VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO journal_custody_economic_relations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 "pair-1",
+                "p1",
+                "conversion",
                 "t-swap-out",
                 "t-swap-in",
-                "p1",
-                None,
                 "peg-out",
                 "carrying-value",
                 100_000_000,
                 "network",
+                "BTC",
                 25_000_000_000,
+                "LBTC",
+                24_900_000_000,
+                occurred_at,
             ),
         )
 

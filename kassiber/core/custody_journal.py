@@ -8,7 +8,7 @@ reassembling custody interpretation themselves.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 import sqlite3
 from typing import Any, Mapping
 
@@ -493,6 +493,27 @@ class CustodyJournalBuilder:
             dismissed_gap_fingerprints=dismissed_fingerprints,
             gap_search_result=gap_search_result,
         )
+        component_conversion_ids = {
+            str(item.get("pair_id") or "")
+            for item in quantity_state.reviewed_conversion_pairs
+        }
+        compatibility_conversions = tuple(
+            item
+            for item in interpretation.cross_asset_pairs
+            if str(item.get("pair_id") or "") not in component_conversion_ids
+        )
+        if compatibility_conversions:
+            # During the bounded migration window, the builder remains the
+            # sole compatibility interpreter. Persist its reviewed conversion
+            # result into the same projection as component-native relations so
+            # no report/UI consumer needs to reopen transaction_pairs.
+            quantity_state = replace(
+                quantity_state,
+                reviewed_conversion_pairs=(
+                    *quantity_state.reviewed_conversion_pairs,
+                    *compatibility_conversions,
+                ),
+            )
         direct_payout_records = [
             *direct_payout_records,
             *quantity_state.reviewed_direct_payouts,

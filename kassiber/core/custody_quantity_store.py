@@ -936,15 +936,21 @@ def _replace_canonical_quantity_state(
         )
         if source is None:
             continue
-        source_amount = int(
-            relation.get("out_amount")
-            or relation.get("out_amount_msat")
-            or 0
+        raw_source_amount = relation.get("out_amount")
+        if raw_source_amount in (None, ""):
+            raw_source_amount = relation.get("out_amount_msat")
+        source_amount = (
+            source.principal_msat
+            if raw_source_amount in (None, "")
+            else int(raw_source_amount)
         )
-        target_amount = int(
-            relation.get("in_amount")
-            or relation.get("payout_amount")
-            or 0
+        raw_target_amount = relation.get("in_amount")
+        if raw_target_amount in (None, ""):
+            raw_target_amount = relation.get("payout_amount")
+        target_amount = (
+            target.principal_msat
+            if raw_target_amount in (None, "") and target is not None
+            else int(raw_target_amount or 0)
         )
         if source_amount <= 0 or target_amount <= 0:
             continue

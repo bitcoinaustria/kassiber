@@ -572,6 +572,15 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
                     "out_asset": out_row["asset"],
                     "in_asset": in_row["asset"],
                     "out_amount": _row_field(record, "out_amount"),
+                    "swap_fee_msat": _row_field(record, "swap_fee_msat"),
+                    "swap_fee_kind": _row_field(record, "swap_fee_kind"),
+                    "confidence_at_review": _row_field(
+                        record, "confidence_at_review"
+                    ),
+                    "review_source": (
+                        _row_field(record, "pair_source") or "manual"
+                    ),
+                    "notes": _row_field(record, "notes"),
                     **(
                         {"component_id": component_id}
                         if component_id is not None
