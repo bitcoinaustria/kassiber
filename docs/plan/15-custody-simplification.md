@@ -192,6 +192,10 @@ binary.
    types are removed. The small canonical observation/interpreter boundary and
    real Lightning lifecycle interpreter remain; later layers must introduce a
    concrete adapter and tests with their actual protocol semantics.
+   Unmatched outbound slices are now the arbiter's direct
+   `external_presumed` default, not manufactured low-priority claims. A scoped
+   hold still converts the uncovered remainder to suspense, preserving the
+   report barrier without creating a basis edge.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.

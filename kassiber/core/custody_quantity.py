@@ -7,8 +7,8 @@ observed quantity go?  It deliberately has no SQLite or RP2 dependency.
 Imported transaction rows become content-addressed observations.  Interpreters
 may propose claims over half-open msat slices of an outbound observation.  One
 arbiter selects the strongest claim for every slice, fails closed on equal-rank
-overlap, prevents two sources from consuming the same inbound slice, and fills
-every unclaimed residual with custody suspense.
+overlap, prevents two sources from consuming the same inbound slice, and
+classifies unmatched outbound residuals directly as presumed external.
 
 The resulting postings preserve every observed wallet debit and credit even
 when no tax classification is final.  Their per-asset sum is always zero:
@@ -53,7 +53,6 @@ CLAIM_STATES = frozenset(
         INTERNAL_VERIFIED,
         INTERNAL_REVIEWED,
         EXTERNAL_CONFIRMED,
-        EXTERNAL_PRESUMED,
         CUSTODY_SUSPENSE,
     }
 )
@@ -122,7 +121,6 @@ class ClaimPriority(IntEnum):
     EXACT_NATIVE_EVENT = 20
     REVIEWED_PAIR = 30
     ACCOUNTING_CONVENTION = 40
-    PRESUMED_EXTERNAL_FALLBACK = 60
 
 
 STATE_PRIORITIES = {
@@ -136,9 +134,6 @@ STATE_PRIORITIES = {
             ClaimPriority.EXACT_NATIVE_EVENT,
             ClaimPriority.REVIEWED_PAIR,
         }
-    ),
-    EXTERNAL_PRESUMED: frozenset(
-        {ClaimPriority.PRESUMED_EXTERNAL_FALLBACK}
     ),
     CUSTODY_SUSPENSE: frozenset(
         {
@@ -184,7 +179,6 @@ class QuantityClaim:
     reason: str
     target: QuantitySlice | None = None
     supporting_evidence_hashes: tuple[str, ...] = ()
-    fallback: bool = False
     atomic_bundle_id: str | None = None
     destination_kind: str | None = None
     # Country-neutral economic meaning attached to an exact reviewed external
@@ -229,14 +223,8 @@ class QuantityClaim:
             raise ValueError(f"{self.state} claims cannot consume a target slice")
         if self.target is not None and self.target.amount_msat != self.source.amount_msat:
             raise ValueError("source and target quantity slices must conserve exact msat")
-        if self.fallback and self.priority != ClaimPriority.PRESUMED_EXTERNAL_FALLBACK:
-            raise ValueError("fallback claims must use presumed-external fallback priority")
-        if self.state == EXTERNAL_PRESUMED and not self.fallback:
-            raise ValueError("external_presumed is only valid as an explicit fallback")
         if self.atomic_bundle_id is not None and not self.atomic_bundle_id.strip():
             raise ValueError("atomic_bundle_id cannot be empty")
-        if self.atomic_bundle_id is not None and self.fallback:
-            raise ValueError("presumed-external fallbacks cannot join atomic bundles")
         if self.destination_kind not in {
             None,
             "external",
@@ -497,18 +485,13 @@ def _source_decisions(
         key=lambda item: (item.occurred_at, item.quantity_hash),
     ):
         source_claims = claims_by_source.get(source.quantity_hash, [])
-        # The whole-row fallback remains available where a positive internal or
-        # external classification leaves a source slice unclaimed. Boundaries
-        # below split it around those stronger claims. A candidate or suspense
-        # claim is different: it positively says this source has unresolved
-        # custody history, so its uncovered remainder must stay suspense rather
-        # than silently reverting to presumed disposal.
-        if any(
-            not claim.fallback
-            and claim.state == CUSTODY_SUSPENSE
-            for claim in source_claims
-        ):
-            source_claims = [claim for claim in source_claims if not claim.fallback]
+        # Unmatched source slices are presumed external directly. A positive
+        # suspense/hold claim says this boundary has unresolved custody history,
+        # so its uncovered remainder also stays suspense rather than silently
+        # becoming a disposal.
+        source_requires_suspense = any(
+            claim.state == CUSTODY_SUSPENSE for claim in source_claims
+        )
         boundaries = {0, source.principal_msat}
         for claim in source_claims:
             boundaries.update((claim.source.start_msat, claim.source.end_msat))
@@ -526,8 +509,16 @@ def _source_decisions(
                 decisions.append(
                     ArbitratedSlice(
                         source=segment,
-                        state=CUSTODY_SUSPENSE,
-                        reason="unclaimed_source_residual",
+                        state=(
+                            CUSTODY_SUSPENSE
+                            if source_requires_suspense
+                            else EXTERNAL_PRESUMED
+                        ),
+                        reason=(
+                            "unclaimed_source_residual"
+                            if source_requires_suspense
+                            else "unmatched_outbound_default"
+                        ),
                     )
                 )
                 continue

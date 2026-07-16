@@ -561,7 +561,7 @@ class CustodyQuantityTests(unittest.TestCase):
     def test_state_priority_matrix_rejects_semantic_mismatches(self):
         source = _observation("out", "wallet-a", "outbound", 100)
         target = _observation("in", "wallet-b", "inbound", 100)
-        with self.assertRaisesRegex(ValueError, "cannot use reviewed_component"):
+        with self.assertRaisesRegex(ValueError, "unsupported quantity claim state"):
             QuantityClaim(
                 claim_id="bad-presumed-external",
                 source=QuantitySlice(source.quantity_hash, 0, 100),
@@ -747,19 +747,7 @@ class CustodyQuantityTests(unittest.TestCase):
         source = _observation(
             "out", "wallet-a", "outbound", 100_000, fee_msat=2_000
         )
-        projection = project_quantities(
-            [source],
-            [
-                QuantityClaim(
-                    claim_id="presumed",
-                    source=QuantitySlice(source.quantity_hash, 0, 100_000),
-                    state=EXTERNAL_PRESUMED,
-                    priority=ClaimPriority.PRESUMED_EXTERNAL_FALLBACK,
-                    reason="ordinary_unmatched_outflow",
-                    fallback=True,
-                )
-            ],
-        )
+        projection = project_quantities([source], [])
         by_kind = {
             item.location_kind: item.amount_msat for item in projection.postings
         }
@@ -772,19 +760,7 @@ class CustodyQuantityTests(unittest.TestCase):
         row = _row("out", "wallet-a", "outbound", 100_000, fee_msat=2_000)
         row["amount_includes_fee"] = 1
         source = QuantityObservation.from_transaction(row)
-        projection = project_quantities(
-            [source],
-            [
-                QuantityClaim(
-                    claim_id="presumed",
-                    source=QuantitySlice(source.quantity_hash, 0, 98_000),
-                    state=EXTERNAL_PRESUMED,
-                    priority=ClaimPriority.PRESUMED_EXTERNAL_FALLBACK,
-                    reason="ordinary_unmatched_outflow",
-                    fallback=True,
-                )
-            ],
-        )
+        projection = project_quantities([source], [])
         by_kind = {
             item.location_kind: item.amount_msat for item in projection.postings
         }
@@ -918,26 +894,10 @@ class CustodyQuantityTests(unittest.TestCase):
         rng = random.Random(0xC0570D9)
         for case in range(100):
             total = rng.randint(2, 50_000)
-            cut_count = rng.randint(0, min(8, total - 1))
-            cuts = sorted(rng.sample(range(1, total), cut_count))
-            boundaries = [0, *cuts, total]
             source = _observation(
                 f"out-{case}", "wallet-a", "outbound", total
             )
-            claims = [
-                QuantityClaim(
-                    claim_id=f"claim-{case}-{index}",
-                    source=QuantitySlice(source.quantity_hash, start, end),
-                    state=EXTERNAL_PRESUMED,
-                    priority=ClaimPriority.PRESUMED_EXTERNAL_FALLBACK,
-                    reason="partition",
-                    fallback=True,
-                )
-                for index, (start, end) in enumerate(
-                    zip(boundaries, boundaries[1:])
-                )
-            ]
-            projection = project_quantities([source], claims)
+            projection = project_quantities([source], [])
             self.assertEqual(
                 sum(item.source.amount_msat for item in projection.decisions),
                 total,
@@ -967,16 +927,6 @@ class CustodyQuantityTests(unittest.TestCase):
             ]
             claims = []
             for index, source in enumerate(sources):
-                claims.append(
-                    QuantityClaim(
-                        claim_id=f"fallback-{case}-{index}",
-                        source=QuantitySlice(source.quantity_hash, 0, 100),
-                        state=EXTERNAL_PRESUMED,
-                        priority=ClaimPriority.PRESUMED_EXTERNAL_FALLBACK,
-                        reason="fallback",
-                        fallback=True,
-                    )
-                )
                 exact_start = rng.randint(0, 79)
                 exact_end = rng.randint(exact_start + 1, 100)
                 target_start = rng.randint(0, 200 - (exact_end - exact_start))

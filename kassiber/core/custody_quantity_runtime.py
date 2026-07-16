@@ -34,7 +34,6 @@ from .custody_quantity import (
     CUSTODY_SUSPENSE,
     ClaimPriority,
     EXTERNAL_CONFIRMED,
-    EXTERNAL_PRESUMED,
     INTERNAL_REVIEWED,
     INTERNAL_VERIFIED,
     UNRESOLVED_STATES,
@@ -53,32 +52,6 @@ def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
     if hasattr(row, "get"):
         return row.get(key, default)
     return row[key]
-
-
-def baseline_fallback_claims(
-    observations: Sequence[QuantityObservation],
-) -> tuple[QuantityClaim, ...]:
-    """Produce the visible conservative default for every outbound principal."""
-
-    return tuple(
-        QuantityClaim(
-            claim_id=f"fallback:{observation.quantity_hash}",
-            source=QuantitySlice(
-                observation.quantity_hash,
-                0,
-                observation.principal_msat,
-            ),
-            state=EXTERNAL_PRESUMED,
-            priority=ClaimPriority.PRESUMED_EXTERNAL_FALLBACK,
-            reason="unmatched_outbound_default",
-            fallback=True,
-        )
-        for observation in sorted(
-            observations,
-            key=lambda item: item.quantity_hash,
-        )
-        if observation.direction == "outbound" and observation.principal_msat > 0
-    )
 
 
 @dataclass(frozen=True)
@@ -862,11 +835,11 @@ def _tax_eligibility(
     def eligible_decision(item: ArbitratedSlice) -> bool:
         if not item.finalized:
             return False
-        # A finalized fallback at the first barrier event is normally useful:
+        # A presumed-external default at the first barrier event is normally useful:
         # an unresolved sibling slice must not erase unrelated conclusions from
         # the same physical transaction. It is not useful when the issue names
         # this observation itself. In that case (for example a failed native
-        # ownership proof) projecting the fallback would book the exact
+        # ownership proof) projecting that default would book the exact
         # quantity whose custody evidence failed.
         if item.source.observation_hash in directly_blocked_hashes:
             return False
@@ -1036,7 +1009,6 @@ def build_canonical_quantity_state(
     )
     canonical = native_audit.canonical_input
     claims = (
-        *baseline_fallback_claims(canonical.observations),
         *component_claims,
         *gap_hold_claims,
         *direct_payout_claims,
@@ -1221,7 +1193,6 @@ __all__ = [
     "TaxExposurePool",
     "CanonicalQuantityState",
     "WalletBalanceDifference",
-    "baseline_fallback_claims",
     "build_canonical_quantity_state",
     "compare_wallet_balances",
     "enriched_quantity_rows",

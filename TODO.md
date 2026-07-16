@@ -214,6 +214,10 @@ same verification surface.
     `channel_lifecycle`/`peg`/`refund` authored types are deleted. Real
     Lightning lifecycle interpretation remains at the canonical observation
     boundary; future Ark/Bark adapters will add their native types when built.
+  - [x] Remove manufactured presumed-external fallback claims. The quantity
+    arbiter now defaults unmatched outbound slices directly to
+    `external_presumed`, while any positive hold/suspense claim keeps the
+    uncovered boundary in suspense.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The
