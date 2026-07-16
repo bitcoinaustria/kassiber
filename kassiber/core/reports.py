@@ -30,12 +30,10 @@ from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_rep
     report_exit_tax,
 )
 from .privacy_linkage import analyze_psbt_privacy, build_privacy_linkage_graph
-from .custody_evidence import row_principal_msat
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
 from ..tax_policy import require_tax_processing_supported
-from ..transfers import apply_manual_pairs, detect_intra_transfers
 from ..wallet_descriptors import normalize_asset_code
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
@@ -2705,14 +2703,11 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
     nothing it withheld, quarantined, or replaced with a direct-payout
     disposal. Reviewed carrying-value cross-asset pairs never book transfer
     entries (they carry through the swap path), so those are labeled from the
-    pair records unless a leg quarantined.
+    stored economic relations unless a leg quarantined.
 
-    Without current journals a best-effort heuristic reuses the same pure
-    detection + manual-pair layer as the journal pipeline
-    (``detect_intra_transfers`` + ``apply_manual_pairs``), including the
-    engine's whole-row direct-payout pruning. Detection spans the whole
-    profile (a transfer is two wallets), so this always works on the full
-    profile row set even when the export is wallet-scoped.
+    Without current journals no transfer label is emitted. Raw transaction
+    exports remain possible, but a stale report context never redetects or
+    presents provisional observations as booked custody truth.
     """
     rows = conn.execute(
         """
@@ -2737,8 +2732,17 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         (profile["id"],),
     ).fetchall()
     rows_by_id = {row["id"]: row for row in rows}
-    manual_records = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
+    if not journals_current:
+        # A stale report context must not reconstruct booked custody truth from
+        # observations or compatibility rows. Callers may still export the raw
+        # transaction ledger, but transfer labels remain empty until the
+        # canonical journal projection is rebuilt.
+        return {}
+    conversion_records = conn.execute(
+        "SELECT source_transaction_id, target_transaction_id "
+        "FROM journal_custody_economic_relations "
+        "WHERE profile_id = ? AND relation_kind = 'conversion' "
+        "AND policy = 'carrying-value' AND basis_state = 'eligible'",
         (profile["id"],),
     ).fetchall()
 
@@ -2754,11 +2758,9 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         # Only carrying-value cross-asset pairs are reviewed as own-wallet
         # moves; `--policy taxable` pairs stay SELL + BUY in the engine and
         # must not be labeled as internal transfers.
-        for record in manual_records:
-            if record["policy"] != "carrying-value":
-                continue
-            out_row = rows_by_id.get(record["out_transaction_id"])
-            in_row = rows_by_id.get(record["in_transaction_id"])
+        for record in conversion_records:
+            out_row = rows_by_id.get(record["source_transaction_id"])
+            in_row = rows_by_id.get(record["target_transaction_id"])
             if out_row is None or in_row is None or out_row["asset"] == in_row["asset"]:
                 continue
             yield out_row, in_row
@@ -2849,58 +2851,6 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
             _add(in_row["id"], {out_row["wallet_label"]})
         return {tx_id: ", ".join(sorted(labels)) for tx_id, labels in label_sets.items()}
 
-    auto_pairs, _ = detect_intra_transfers(rows)
-
-    # A reviewed whole-row direct payout books its outbound as a taxable
-    # disposal, and the engine prunes any auto self-transfer pair touching it
-    # before apply_manual_pairs so the disposal cannot be relabelled as a MOVE.
-    # Mirror that here or the export would label the payout's source as a
-    # transfer to the owned change wallet. Partial and over-amount (rejected)
-    # payouts keep their auto pair, matching the engine.
-    payout_records = conn.execute(
-        "SELECT out_transaction_id, out_amount FROM direct_swap_payouts "
-        "WHERE profile_id = ? AND deleted_at IS NULL",
-        (profile["id"],),
-    ).fetchall()
-    payout_claimed_ids = set()
-    for record in payout_records:
-        out_row = rows_by_id.get(record["out_transaction_id"])
-        if out_row is None:
-            continue
-        reviewed = record["out_amount"]
-        full_amount = row_principal_msat(out_row)
-        if reviewed in (None, "") or int(reviewed) == full_amount:
-            payout_claimed_ids.add(out_row["id"])
-    auto_pairs = [
-        pair
-        for pair in auto_pairs
-        if pair["out"]["id"] not in payout_claimed_ids
-        and pair["in"]["id"] not in payout_claimed_ids
-    ]
-
-    manual_leg_ids = set()
-    for record in manual_records:
-        manual_leg_ids.add(record["out_transaction_id"])
-        manual_leg_ids.add(record["in_transaction_id"])
-    same_asset_pairs, _cross_asset = apply_manual_pairs(rows, auto_pairs, manual_records)
-
-    for pair in same_asset_pairs:
-        # The out leg's counterparty is the destination wallet, and vice versa.
-        _add(pair["out"]["id"], {pair["in"]["wallet_label"]})
-        _add(pair["in"]["id"], {pair["out"]["wallet_label"]})
-    for out_row, in_row in _carrying_value_cross_asset_pairs():
-        _add(out_row["id"], {in_row["wallet_label"]})
-        _add(in_row["id"], {out_row["wallet_label"]})
-    # A partial cross-asset pair (split swap: part swapped, part change back to
-    # an owned wallet) suppresses the same-txid auto pair in apply_manual_pairs,
-    # but the engine splits the source row so the change leg stays a
-    # self-transfer. Recover the label for suppressed legs that are not
-    # themselves part of any reviewed pair.
-    for pair in auto_pairs:
-        for leg, other in ((pair["out"], pair["in"]), (pair["in"], pair["out"])):
-            if leg["id"] in label_sets or leg["id"] in manual_leg_ids:
-                continue
-            _add(leg["id"], {other["wallet_label"]})
     return {tx_id: ", ".join(sorted(labels)) for tx_id, labels in label_sets.items()}
 
 

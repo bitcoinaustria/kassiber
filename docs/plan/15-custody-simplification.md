@@ -172,6 +172,12 @@ binary.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.
+   In progress: MOVE decisions and non-quantity conversion/payout relations are
+   stored together by the canonical projection replacement. Transaction-graph
+   accounting annotations and report transfer labels read that projection;
+   when it is stale they expose no provisional booked truth. Consumer-side
+   calls to transfer detection have consequently been deleted, leaving the
+   custody journal interpreter as the only production caller.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

@@ -1522,7 +1522,13 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         )
         self.assertEqual(
             counts,
-            {"postings": 2, "issues": 0, "balances": 2, "decisions": 0},
+            {
+                "postings": 2,
+                "issues": 0,
+                "balances": 2,
+                "decisions": 0,
+                "economic_relations": 0,
+            },
         )
         readiness = custody_quantity_readiness_summary(
             self.conn,
@@ -1555,6 +1561,95 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
+
+    def test_reviewed_conversion_is_stored_as_an_economic_relation(self):
+        self.conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, label, kind, created_at) "
+            "VALUES('wallet-b', 'ws', 'profile', 'B', 'descriptor', 'now')"
+        )
+        source = _row(
+            "conversion-out",
+            "wallet-a",
+            "outbound",
+            1_000,
+            "2025-01-01T00:00:00Z",
+        )
+        target = _row(
+            "conversion-in",
+            "wallet-b",
+            "inbound",
+            900,
+            "2025-01-01T00:01:00Z",
+            config={"chain": "liquid", "network": "liquidv1"},
+        )
+        target["asset"] = "LBTC"
+        self._insert_transaction(source)
+        self._insert_transaction(target)
+        component = {
+            "id": "conversion-component",
+            "component_type": "swap",
+            "conservation_mode": "conversion",
+            "conversion_policy": "carrying-value",
+            "conversion_reviewed": True,
+            "effective_state": "active",
+            "legs": [
+                {
+                    "id": "source-leg",
+                    "role": "source",
+                    "transaction_id": source["id"],
+                    "amount_msat": 1_000,
+                },
+                {
+                    "id": "target-leg",
+                    "role": "destination",
+                    "transaction_id": target["id"],
+                    "amount_msat": 900,
+                },
+            ],
+            "allocations": [
+                {
+                    "id": "conversion-allocation",
+                    "source_leg_id": "source-leg",
+                    "sink_leg_id": "target-leg",
+                    "source_amount_msat": 1_000,
+                    "sink_amount_msat": 900,
+                }
+            ],
+            "economic_terms": [
+                {
+                    "term_kind": "transaction_pair",
+                    "source_leg_id": "source-leg",
+                    "sink_leg_id": "target-leg",
+                    "legacy_source_id": "reviewed-conversion",
+                    "review_kind": "peg-in",
+                    "tax_policy": "carrying-value",
+                }
+            ],
+        }
+        state = build_canonical_quantity_state(
+            [source, target],
+            effective_components=[component],
+        )
+
+        counts = replace_canonical_quantity_state(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            state=state,
+            created_at="now",
+        )
+
+        self.assertEqual(counts["economic_relations"], 1)
+        relation = self.conn.execute(
+            "SELECT * FROM journal_custody_economic_relations"
+        ).fetchone()
+        self.assertEqual(relation["relation_kind"], "conversion")
+        self.assertEqual(relation["source_transaction_id"], source["id"])
+        self.assertEqual(relation["target_transaction_id"], target["id"])
+        self.assertEqual(relation["source_amount_msat"], 1_000)
+        self.assertEqual(relation["target_amount_msat"], 900)
+        self.assertEqual(relation["basis_state"], "eligible")
+        self.assertEqual(relation["component_id"], component["id"])
 
     def test_missing_blocker_table_fails_closed(self):
         self.conn.execute("DROP TABLE journal_quantity_issues")

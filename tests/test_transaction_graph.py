@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import kassiber.core.transaction_graph as tg
 from kassiber.backends import DEFAULT_BACKENDS, create_db_backend
+from kassiber.cli.handlers import create_transaction_pair, process_journals
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
 from kassiber.errors import AppError
@@ -2222,11 +2223,8 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("a-out")
 
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("multi_source_consolidation", codes)
-        self.assertIn(
-            f"multi-consol:{CONSOL_TXID}",
-            payload["accounting"]["transferGroupIds"],
-        )
+        self.assertNotIn("multi_source_consolidation", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_partial_external_residual_annotation(self):
         # A partial owned-output interpretation also books an external
@@ -2263,8 +2261,9 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("partial-out")
 
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("ownership_derived", codes)
-        self.assertIn("partial_external_residual", codes)
+        self.assertNotIn("ownership_derived", codes)
+        self.assertNotIn("partial_external_residual", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_ambiguous_destination_receipt_warns(self):
         self._utxo("wallet-a", ADDR_A, "prev-ambig", 0, amount=51_000_000)
@@ -2281,7 +2280,8 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("ambig-out")
 
         codes = {warning["code"] for warning in payload["warnings"]}
-        self.assertIn("ownership_transfer_destination_ambiguous", codes)
+        self.assertIn("custody_projection_stale", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_mixed_case_recorded_fanout_is_annotated(self):
         txid = "ABCDEF" + "1" * 58
@@ -2293,7 +2293,8 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertEqual(payload["supportLevel"], "graphless")
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("recorded_fanout", codes)
+        self.assertNotIn("recorded_fanout", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_recorded_one_to_one_transfer_is_annotated(self):
         txid = "abcd" + "2" * 60
@@ -2314,15 +2315,22 @@ class TransactionGraphTest(unittest.TestCase):
             json.dumps({"txid": txid.upper()}),
         )
 
+        self.conn.commit()
+        create_transaction_pair(
+            self.conn,
+            "ws-1",
+            "profile-1",
+            "one-out",
+            "one-in",
+        )
+        process_journals(self.conn, "ws-1", "profile-1")
         payload = self._graph("one-out")
 
         self.assertEqual(payload["supportLevel"], "graphless")
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("recorded_self_transfer", codes)
-        self.assertIn(
-            f"recorded-self-transfer:{txid.lower()}",
-            payload["accounting"]["transferGroupIds"],
-        )
+        self.assertIn("booked_custody_move", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "current")
+        self.assertTrue(payload["accounting"]["transferGroupIds"])
 
     def test_excluded_rows_are_ignored_for_graph_semantics(self):
         txid = "cdef" + "3" * 60
@@ -2338,8 +2346,9 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("excluded-fan-out")
 
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("recorded_self_transfer", codes)
+        self.assertNotIn("recorded_self_transfer", codes)
         self.assertNotIn("recorded_fanout", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_manual_pair_ids_suppress_graph_derivation(self):
         self._utxo("wallet-a", ADDR_A, "manual-prev", 0, amount=51_000_000)

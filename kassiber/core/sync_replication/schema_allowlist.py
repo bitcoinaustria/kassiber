@@ -751,6 +751,7 @@ NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset(
         "journal_quantity_issues",
         "journal_quantity_balances",
         "journal_custody_decisions",
+        "journal_custody_economic_relations",
         "custody_authored_evidence_snapshots",
         "wallet_utxos",
         "wallet_utxo_refreshes",

@@ -631,6 +631,7 @@ def _replace_canonical_quantity_state(
         "journal_quantity_issues",
         "journal_quantity_balances",
         "journal_custody_decisions",
+        "journal_custody_economic_relations",
     ):
         conn.execute(f"DELETE FROM {table} WHERE profile_id = ?", (profile_id,))
 
@@ -811,11 +812,133 @@ def _replace_canonical_quantity_state(
         """,
         decision_rows,
     )
+    observations_by_transaction = {
+        item.anchor_transaction_id: item
+        for item in state.projection.observations
+        if item.anchor_transaction_id
+    }
+    eligible_source_slices = {
+        (
+            observations[item.source.observation_hash].anchor_transaction_id,
+            item.source.amount_msat,
+            item.component_id,
+        )
+        for item in state.tax_eligibility.eligible_decisions
+    }
+    relation_rows = []
+    relations = (
+        *(
+            ("conversion", relation)
+            for relation in state.reviewed_conversion_pairs
+        ),
+        *(
+            ("direct_payout", relation)
+            for relation in state.reviewed_direct_payouts
+        ),
+    )
+    for relation_kind, relation in relations:
+        source_transaction_id = str(
+            relation.get("out_id")
+            or relation.get("out_transaction_id")
+            or ""
+        )
+        target_transaction_id = (
+            str(relation.get("in_id"))
+            if relation.get("in_id") not in (None, "")
+            else None
+        )
+        source = observations_by_transaction.get(source_transaction_id)
+        target = (
+            observations_by_transaction.get(target_transaction_id)
+            if target_transaction_id is not None
+            else None
+        )
+        if source is None:
+            continue
+        source_amount = int(
+            relation.get("out_amount")
+            or relation.get("out_amount_msat")
+            or 0
+        )
+        target_amount = int(
+            relation.get("in_amount")
+            or relation.get("payout_amount")
+            or 0
+        )
+        if source_amount <= 0 or target_amount <= 0:
+            continue
+        payload = [
+            "canonical-custody-economic-relation-v1",
+            relation_kind,
+            source_transaction_id,
+            target_transaction_id,
+            relation.get("component_id"),
+            source.asset,
+            (target.asset if target is not None else relation.get("payout_asset")),
+            source_amount,
+            target_amount,
+            relation.get("kind"),
+            relation.get("policy"),
+        ]
+        relation_id = hashlib.sha256(
+            json.dumps(
+                payload,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        relation_rows.append(
+            (
+                relation_id,
+                workspace_id,
+                profile_id,
+                relation_kind,
+                source_transaction_id,
+                target_transaction_id,
+                relation.get("component_id"),
+                source.asset,
+                target.asset if target is not None else relation.get("payout_asset"),
+                source_amount,
+                target_amount,
+                str(relation.get("kind") or relation_kind),
+                str(relation.get("policy") or "taxable"),
+                (
+                    "eligible"
+                    if (
+                        source_transaction_id,
+                        source_amount,
+                        relation.get("component_id"),
+                    )
+                    in eligible_source_slices
+                    else "blocked_by_prior_custody_basis"
+                ),
+                source.occurred_at or None,
+                (
+                    target.occurred_at
+                    if target is not None
+                    else relation.get("payout_occurred_at")
+                ),
+                created_at,
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO journal_custody_economic_relations(
+            relation_id, workspace_id, profile_id, relation_kind,
+            source_transaction_id, target_transaction_id, component_id,
+            source_asset, target_asset, source_amount_msat,
+            target_amount_msat, review_kind, policy, basis_state,
+            occurred_at, target_occurred_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        relation_rows,
+    )
     return {
         "postings": len(posting_rows),
         "issues": len(state.issues),
         "balances": sum(amount != 0 for amount in balances.values()),
         "decisions": len(decision_rows),
+        "economic_relations": len(relation_rows),
     }
 
 

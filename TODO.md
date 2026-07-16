@@ -193,7 +193,11 @@ same verification surface.
     cutover after all readers move to component terms.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
-    and demonstrate the final simplicity/LOC/performance stop state.
+    and demonstrate the final simplicity/LOC/performance stop state. The
+    transaction graph and report transfer-label path now consume only current
+    stored custody decisions/economic relations; stale books expose an explicit
+    projection state and never rerun transfer detection. Source-of-funds and
+    remaining UI/report compatibility reads are the next cutover boundary.
 
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an

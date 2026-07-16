@@ -69,6 +69,7 @@ WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
         "journal_quantity_issues",
         "journal_quantity_balances",
         "journal_custody_decisions",
+        "journal_custody_economic_relations",
         "custody_authored_evidence_snapshots",
         "custody_gap_candidate_snapshots",
         "custody_gap_candidate_projections",

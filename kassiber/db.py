@@ -1105,6 +1105,36 @@ CREATE TABLE IF NOT EXISTS journal_custody_decisions (
     PRIMARY KEY(profile_id, decision_id)
 );
 
+-- Stored non-quantity custody relations. Conversions and reviewed payouts are
+-- economic links, not assertions that unlike native quantities are the same
+-- conserved object, so they complement rather than overload MOVE decisions.
+CREATE TABLE IF NOT EXISTS journal_custody_economic_relations (
+    relation_id TEXT NOT NULL CHECK(length(relation_id) = 64),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    relation_kind TEXT NOT NULL CHECK(relation_kind IN (
+        'conversion', 'direct_payout'
+    )),
+    source_transaction_id TEXT NOT NULL
+        REFERENCES transactions(id) ON DELETE CASCADE,
+    target_transaction_id TEXT
+        REFERENCES transactions(id) ON DELETE CASCADE,
+    component_id TEXT,
+    source_asset TEXT NOT NULL,
+    target_asset TEXT NOT NULL,
+    source_amount_msat INTEGER NOT NULL CHECK(source_amount_msat > 0),
+    target_amount_msat INTEGER NOT NULL CHECK(target_amount_msat > 0),
+    review_kind TEXT NOT NULL,
+    policy TEXT NOT NULL,
+    basis_state TEXT NOT NULL CHECK(basis_state IN (
+        'eligible', 'blocked_by_prior_custody_basis'
+    )),
+    occurred_at TEXT,
+    target_occurred_at TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, relation_id)
+);
+
 -- Evidence detail is written once when a durable authored claim/component
 -- explicitly binds it. Rows cannot be updated; scoped book reset/profile
 -- teardown may delete them. Journal refresh never snapshots every import row.
@@ -1172,6 +1202,21 @@ CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_source
 
 CREATE INDEX IF NOT EXISTS idx_journal_custody_decisions_target
     ON journal_custody_decisions(profile_id, target_transaction_id, decision_id);
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_relations_profile_time
+    ON journal_custody_economic_relations(
+        profile_id, occurred_at, relation_id
+    );
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_relations_source
+    ON journal_custody_economic_relations(
+        profile_id, source_transaction_id, relation_id
+    );
+
+CREATE INDEX IF NOT EXISTS idx_journal_custody_relations_target
+    ON journal_custody_economic_relations(
+        profile_id, target_transaction_id, relation_id
+    );
 
 CREATE INDEX IF NOT EXISTS idx_custody_authored_evidence_subject
     ON custody_authored_evidence_snapshots(
