@@ -39,7 +39,6 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
-from ..core import custody_tax_migration as core_custody_tax_migration
 from ..core.custody_evidence import (
     row_principal_msat,
 )
@@ -4776,88 +4775,14 @@ def _journal_source_overlap_warning(conn, profile, repair_attempt=None):
 
 
 def process_journals(conn, workspace_ref, profile_ref):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    require_tax_processing_supported(profile)
-    sync_conflicts = conn.execute(
-        "SELECT COUNT(*) AS count FROM sync_conflicts WHERE profile_id = ? AND status = 'open'",
-        (profile["id"],),
-    ).fetchone()["count"]
-    if sync_conflicts:
-        raise AppError(
-            "journal processing is blocked by unresolved sync conflicts",
-            code="sync_conflicts_open",
-            hint="Run `kassiber sync conflicts list` and resolve every high-stakes conflict first.",
-            details={"profile_id": profile["id"], "open_conflicts": int(sync_conflicts)},
-            retryable=False,
-        )
-    conn.execute("SAVEPOINT journals_process")
-    try:
-        core_custody_tax_migration.capture_legacy_baseline(
-            conn,
-            workspace_id=profile["workspace_id"],
-            profile_id=profile["id"],
-        )
-        source_overlap_repair = _repair_journal_source_overlaps(conn, profile)
-        source_overlap_warning = _journal_source_overlap_warning(
-            conn,
-            profile,
-            source_overlap_repair,
-        )
-        auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
-        state = build_ledger_state(conn, profile)
-        stored = core_custody_journal.store_ledger_state(conn, profile, state)
-        created_at = stored["processed_at"]
-        tx_count = stored["processed_transactions"]
-        deduped_quarantines = stored["quarantines"]
-        custody_quantity = stored["custody_quantity"]
-        quantity_counts = stored["quantity_counts"]
-        filed_impact_resolutions = stored["filed_report_impacts_resolved"]
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT journals_process")
-        conn.execute("RELEASE SAVEPOINT journals_process")
-        raise
-    conn.execute("RELEASE SAVEPOINT journals_process")
-    conn.commit()
-    result = {
-        "profile": profile["label"],
-        "entries_created": len(state["entries"]),
-        "quarantined": len(deduped_quarantines),
-        "transfers_detected": len(state.get("intra_audit", [])),
-        "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
-        "auto_priced": auto_priced,
-        "processed_transactions": tx_count,
-        "processed_at": created_at,
-        "custody_quantity": {
-            **quantity_counts,
-            "differences": len(state.get("quantity_differences", ())),
-            "blocked": bool(custody_quantity and custody_quantity.report_blocked),
-            "blocked_from": (
-                custody_quantity.tax_eligibility.blocked_from
-                if custody_quantity is not None
-                else None
-            ),
-        },
-    }
-    if state.get("direct_swap_payouts"):
-        result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
-    if state.get("warnings"):
-        result["warnings"] = state["warnings"]
-    if state.get("custody_component_blockers"):
-        # Some integrity failures (notably a replicated active header whose
-        # child rows or anchors have not arrived) have no live transaction FK
-        # and therefore cannot produce journal_quarantines rows. Surface them
-        # explicitly even though the partial journal snapshot is persisted for
-        # inspection; every report gate below rejects it.
-        result["custody_component_blockers"] = state[
-            "custody_component_blockers"
-        ]
-    if source_overlap_repair is not None:
-        result["source_overlap_repair"] = source_overlap_repair
-    if source_overlap_warning is not None:
-        result["source_overlap_warning"] = source_overlap_warning
-    if filed_impact_resolutions:
-        result["filed_report_impacts_resolved"] = filed_impact_resolutions
-    return result
+    return core_custody_journal.process_journals(
+        conn,
+        workspace_ref,
+        profile_ref,
+        repair_source_overlaps=_repair_journal_source_overlaps,
+        source_overlap_warning=_journal_source_overlap_warning,
+        auto_price=auto_price_transactions_from_rates_cache,
+    )
 
 
 def _journal_processing_status(conn, profile):

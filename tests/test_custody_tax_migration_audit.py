@@ -161,7 +161,7 @@ def _state(entries: list[dict], *, custody_quantity=None) -> dict:
 
 def _run(conn, state, *, replace_quantity=None):
     patches = [
-        patch("kassiber.cli.handlers.build_ledger_state", return_value=state),
+        patch("kassiber.core.custody_journal.build_ledger_state", return_value=state),
         patch(
             "kassiber.cli.handlers.auto_price_transactions_from_rates_cache",
             return_value=0,
@@ -530,7 +530,7 @@ def test_failed_rebuild_rolls_back_baseline_and_preserves_legacy_rows(tmp_path):
                 return_value=0,
             ),
             patch(
-                "kassiber.cli.handlers.build_ledger_state",
+                "kassiber.core.custody_journal.build_ledger_state",
                 side_effect=RuntimeError("new engine failed"),
             ),
             pytest.raises(RuntimeError, match="new engine failed"),

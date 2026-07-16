@@ -274,7 +274,7 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
             },
             "warnings": [],
         }
-        with patch.object(handlers, "build_ledger_state", return_value=state):
+        with patch.object(custody_journal, "build_ledger_state", return_value=state):
             handlers.process_journals(self.conn, "Main", "Book")
         cached = self.conn.execute(
             "SELECT ownership_review_counts_json FROM profiles WHERE id = ?",

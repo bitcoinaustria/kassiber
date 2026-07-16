@@ -253,6 +253,12 @@ binary.
    filed-report impact resolution. The CLI layer retains only pre-build source
    overlap repair and cached-rate pricing until their independent transaction
    edit/audit hooks move in the next ordered slice.
+   The same core service now owns the complete journal-processing transaction:
+   tax-policy and sync-conflict gates, legacy-baseline capture, one savepoint,
+   canonical build, stored-projection replacement, commit/rollback and the
+   stable result contract. The CLI wrapper only injects the existing audited
+   source-overlap repair/warning and cached-rate pricing preflights; it no
+   longer decides custody behavior or coordinates projection persistence.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

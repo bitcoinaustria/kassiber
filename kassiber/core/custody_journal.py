@@ -12,8 +12,9 @@ from dataclasses import dataclass, fields, replace
 import json
 import sqlite3
 import uuid
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
+from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..time_utils import now_iso
 from ..tax_policy import require_tax_processing_supported
@@ -35,6 +36,7 @@ from . import tax_events
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from .engines import TaxEngineLedgerInputs, build_tax_engine
 from .lightning import channel_lifecycle
+from .repo import resolve_scope
 
 
 def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any]:
@@ -867,6 +869,96 @@ def store_ledger_state(
     }
 
 
+def process_journals(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    *,
+    repair_source_overlaps: Callable[[sqlite3.Connection, Mapping[str, Any]], Any],
+    source_overlap_warning: Callable[
+        [sqlite3.Connection, Mapping[str, Any], Any], Any
+    ],
+    auto_price: Callable[[sqlite3.Connection, Mapping[str, Any]], int],
+) -> dict[str, Any]:
+    """Build and store one complete journal projection in one core transaction."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    require_tax_processing_supported(profile)
+    sync_conflicts = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM sync_conflicts "
+            "WHERE profile_id = ? AND status = 'open'",
+            (profile["id"],),
+        ).fetchone()[0]
+    )
+    if sync_conflicts:
+        raise AppError(
+            "journal processing is blocked by unresolved sync conflicts",
+            code="sync_conflicts_open",
+            hint=(
+                "Run `kassiber sync conflicts list` and resolve every "
+                "high-stakes conflict first."
+            ),
+            details={"profile_id": profile["id"], "open_conflicts": sync_conflicts},
+            retryable=False,
+        )
+    conn.execute("SAVEPOINT journals_process")
+    try:
+        custody_tax_migration.capture_legacy_baseline(
+            conn,
+            workspace_id=profile["workspace_id"],
+            profile_id=profile["id"],
+        )
+        overlap_repair = repair_source_overlaps(conn, profile)
+        overlap_warning = source_overlap_warning(conn, profile, overlap_repair)
+        auto_priced = auto_price(conn, profile)
+        state = build_ledger_state(conn, profile)
+        stored = store_ledger_state(conn, profile, state)
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT journals_process")
+        conn.execute("RELEASE SAVEPOINT journals_process")
+        raise
+    conn.execute("RELEASE SAVEPOINT journals_process")
+    conn.commit()
+
+    custody_quantity = stored["custody_quantity"]
+    result = {
+        "profile": profile["label"],
+        "entries_created": len(state["entries"]),
+        "quarantined": len(stored["quarantines"]),
+        "transfers_detected": len(state.get("intra_audit", [])),
+        "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
+        "auto_priced": auto_priced,
+        "processed_transactions": stored["processed_transactions"],
+        "processed_at": stored["processed_at"],
+        "custody_quantity": {
+            **stored["quantity_counts"],
+            "differences": len(state.get("quantity_differences", ())),
+            "blocked": bool(custody_quantity and custody_quantity.report_blocked),
+            "blocked_from": (
+                custody_quantity.tax_eligibility.blocked_from
+                if custody_quantity is not None
+                else None
+            ),
+        },
+    }
+    if state.get("direct_swap_payouts"):
+        result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
+    if state.get("warnings"):
+        result["warnings"] = state["warnings"]
+    if state.get("custody_component_blockers"):
+        result["custody_component_blockers"] = state["custody_component_blockers"]
+    if overlap_repair is not None:
+        result["source_overlap_repair"] = overlap_repair
+    if overlap_warning is not None:
+        result["source_overlap_warning"] = overlap_warning
+    if stored["filed_report_impacts_resolved"]:
+        result["filed_report_impacts_resolved"] = stored[
+            "filed_report_impacts_resolved"
+        ]
+    return result
+
+
 __all__ = [
     "CustodyJournalBuilder",
     "CustodyJournalDecisions",
@@ -877,4 +969,5 @@ __all__ = [
     "duplicate_label_warnings",
     "latest_transaction_rates_for_profile",
     "ownership_review_counts",
+    "process_journals",
 ]
