@@ -577,9 +577,13 @@ def public_component_batch_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
     """Drop apply-only prepared rows from the UI/AI preview payload."""
 
     return {
-        key: value
-        for key, value in plan.items()
-        if key not in {"prepared_components", "planned_wallets"}
+        "dry_run": True,
+        "requires_explicit_confirmation": True,
+        **{
+            key: value
+            for key, value in plan.items()
+            if key not in {"prepared_components", "planned_wallets"}
+        },
     }
 
 

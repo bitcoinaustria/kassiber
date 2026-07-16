@@ -38,8 +38,6 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
-from ..core import custody_components as core_custody_components
-from ..core import custody_component_planner as core_custody_component_planner
 from ..core import custody_journal as core_custody_journal
 from ..core import custody_quantity_store as core_custody_quantity_store
 from ..core import custody_tax_migration as core_custody_tax_migration
@@ -1090,97 +1088,6 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
         }
         output.append(entry)
     return output
-
-
-def bulk_resolve_custody_components(
-    conn,
-    workspace_ref,
-    profile_ref,
-    specs,
-    *,
-    expected_fingerprint,
-    activate=True,
-    commit=True,
-    include_local_evidence=True,
-    authored_source="cli",
-):
-    if isinstance(specs, dict):
-        specs = specs.get("components")
-    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    return core_custody_component_planner.apply_component_batch(
-        conn,
-        workspace_id=workspace["id"],
-        profile_id=profile["id"],
-        specs=specs,
-        activate=activate,
-        authored_source=authored_source,
-        expected_fingerprint=expected_fingerprint,
-        include_local_evidence=include_local_evidence,
-        commit=commit,
-    )
-
-
-def plan_bulk_custody_components(
-    conn,
-    workspace_ref,
-    profile_ref,
-    specs,
-    *,
-    activate=True,
-    authored_source="cli",
-):
-    if isinstance(specs, dict):
-        specs = specs.get("components")
-    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    plan = core_custody_component_planner.plan_component_batch(
-        conn,
-        workspace_id=workspace["id"],
-        profile_id=profile["id"],
-        specs=specs,
-        activate=activate,
-        authored_source=authored_source,
-    )
-    return core_custody_component_planner.public_component_batch_plan(plan)
-
-
-def list_custody_components(
-    conn,
-    workspace_ref,
-    profile_ref,
-    *,
-    state=None,
-    component_type=None,
-    transaction=None,
-    effective_only=False,
-    include_local_evidence=False,
-    limit=200,
-):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    transaction_id = None
-    if transaction is not None:
-        transaction_id = resolve_transaction(conn, profile["id"], transaction)["id"]
-    return core_custody_components.list_components(
-        conn,
-        profile_id=profile["id"],
-        state=state,
-        component_type=component_type,
-        transaction_id=transaction_id,
-        effective_only=effective_only,
-        include_local_evidence=include_local_evidence,
-        limit=int(limit),
-    )
-
-
-def get_custody_component(
-    conn, workspace_ref, profile_ref, component_id, *, include_local_evidence=False
-):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    return core_custody_components.get_component(
-        conn,
-        component_id,
-        profile_id=profile["id"],
-        include_local_evidence=include_local_evidence,
-    )
 
 
 def _candidate_to_dict(candidate):

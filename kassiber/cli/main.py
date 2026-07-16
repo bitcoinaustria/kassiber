@@ -59,8 +59,6 @@ from .handlers import (
     cmd_init,
     cmd_status,
     apply_transfer_rules,
-    bulk_resolve_custody_components,
-    plan_bulk_custody_components,
     bulk_pair_transfers,
     create_direct_swap_payout,
     chat_history_config_cli,
@@ -87,13 +85,11 @@ from .handlers import (
     derive_wallet_targets,
     emit,
     get_journal_event,
-    get_custody_component,
     identify_wallet_owners,
     import_exchange_api,
     import_into_wallet,
     inspect_transfer_audit,
     list_direct_swap_payouts,
-    list_custody_components,
     list_journal_entries,
     list_journal_events,
     list_quarantines,
@@ -4296,28 +4292,33 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 )
         if args.transfers_command == "components":
             if args.transfers_components_command == "list":
+                _, profile = resolve_scope(conn, args.workspace, args.profile)
+                transaction_id = None
+                if args.transaction is not None:
+                    transaction_id = resolve_transaction(
+                        conn, profile["id"], args.transaction
+                    )["id"]
                 return emit(
                     args,
-                    list_custody_components(
+                    core_custody_components.list_components(
                         conn,
-                        args.workspace,
-                        args.profile,
+                        profile_id=profile["id"],
                         state=args.state,
                         component_type=args.component_type,
-                        transaction=args.transaction,
+                        transaction_id=transaction_id,
                         effective_only=args.effective_only,
                         include_local_evidence=args.include_local_evidence,
                         limit=args.limit,
                     ),
                 )
             if args.transfers_components_command == "show":
+                _, profile = resolve_scope(conn, args.workspace, args.profile)
                 return emit(
                     args,
-                    get_custody_component(
+                    core_custody_components.get_component(
                         conn,
-                        args.workspace,
-                        args.profile,
                         args.component_id,
+                        profile_id=profile["id"],
                         include_local_evidence=args.include_local_evidence,
                     ),
                 )
@@ -4435,24 +4436,32 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.json_file,
                     label="component array or bulk object",
                 )
+                if isinstance(specs, dict):
+                    specs = specs.get("components")
                 if args.transfers_components_command == "plan":
-                    preview = plan_bulk_custody_components(
+                    preview = core_custody_component_planner.plan_component_batch(
                         conn,
-                        args.workspace,
-                        args.profile,
-                        specs,
+                        workspace_id=workspace["id"],
+                        profile_id=profile["id"],
+                        specs=specs,
                         activate=not args.draft,
+                        authored_source="cli",
                     )
-                    preview["dry_run"] = True
-                    return emit(args, preview)
+                    return emit(
+                        args,
+                        core_custody_component_planner.public_component_batch_plan(
+                            preview
+                        ),
+                    )
                 return emit(
                     args,
-                    bulk_resolve_custody_components(
+                    core_custody_component_planner.apply_component_batch(
                         conn,
-                        args.workspace,
-                        args.profile,
-                        specs,
+                        workspace_id=workspace["id"],
+                        profile_id=profile["id"],
+                        specs=specs,
                         activate=not args.draft,
+                        authored_source="cli",
                         expected_fingerprint=args.expected_fingerprint,
                     ),
                 )

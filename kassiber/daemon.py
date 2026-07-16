@@ -72,7 +72,6 @@ from .cli.handlers import (
     _report_hooks,
     auto_price_transactions_from_rates_cache,
     apply_transfer_rules,
-    bulk_resolve_custody_components,
     bulk_pair_transfers,
     create_direct_swap_payout,
     create_saved_view_cli,
@@ -83,9 +82,7 @@ from .cli.handlers import (
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
-    get_custody_component,
     invalidate_journals,
-    plan_bulk_custody_components,
     loans_link,
     loans_mark,
     loans_unmark,
@@ -93,7 +90,6 @@ from .cli.handlers import (
     import_into_wallet,
     list_saved_views_cli,
     list_direct_swap_payouts,
-    list_custody_components,
     list_transaction_pairs,
     list_transfer_rules,
     process_journals,
@@ -112,6 +108,7 @@ from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import custody_gaps as core_custody_gaps
 from .core import custody_component_planner as core_custody_component_planner
+from .core import custody_components as core_custody_components
 from .core import custody_gap_reviews as core_custody_gap_reviews
 from .core import custody_ai_audit as core_custody_ai_audit
 from .core import ownership_policy_epochs as core_ownership_policy_epochs
@@ -1814,13 +1811,18 @@ def _ui_swap_matching_payload_from_conn(
                 f"{kind} limit must be an integer between 1 and 1000",
                 code="validation",
             )
-        components = list_custody_components(
+        _, resolved_profile = resolve_scope(conn, workspace, profile)
+        transaction_id = None
+        if args.get("transaction") is not None:
+            transaction_id = resolve_transaction(
+                conn, resolved_profile["id"], args["transaction"]
+            )["id"]
+        components = core_custody_components.list_components(
             conn,
-            workspace,
-            profile,
+            profile_id=resolved_profile["id"],
             state=args.get("state"),
             component_type=args.get("component_type"),
-            transaction=args.get("transaction"),
+            transaction_id=transaction_id,
             effective_only=exact_bool("effective_only"),
             # The renderer gets the privacy-safe projection. Local evidence
             # and location references stay behind the daemon boundary.
@@ -1835,12 +1837,12 @@ def _ui_swap_matching_payload_from_conn(
             }
         )
     if kind == "ui.transfers.components.get":
+        _, resolved_profile = resolve_scope(conn, workspace, profile)
         return _ui_exact_integer_payload(
-            get_custody_component(
+            core_custody_components.get_component(
                 conn,
-                workspace,
-                profile,
                 component_id(),
+                profile_id=resolved_profile["id"],
                 include_local_evidence=False,
             )
         )
@@ -1994,28 +1996,33 @@ def _ui_swap_matching_payload_from_conn(
                     f"{kind} requires the fingerprint returned by plan",
                     code="validation",
                 )
+            resolved_workspace, resolved_profile = resolve_scope(
+                conn, workspace, profile
+            )
             return _ui_exact_integer_payload(
-                bulk_resolve_custody_components(
+                core_custody_component_planner.apply_component_batch(
                     conn,
-                    workspace,
-                    profile,
-                    components,
+                    workspace_id=resolved_workspace["id"],
+                    profile_id=resolved_profile["id"],
+                    specs=components,
                     activate=activate,
                     include_local_evidence=False,
                     authored_source=authored_source,
                     expected_fingerprint=expected_fingerprint,
                 )
             )
-        preview = plan_bulk_custody_components(
+        resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
+        preview = core_custody_component_planner.plan_component_batch(
             conn,
-            workspace,
-            profile,
-            components,
+            workspace_id=resolved_workspace["id"],
+            profile_id=resolved_profile["id"],
+            specs=components,
             activate=activate,
             authored_source=authored_source,
         )
-        preview["dry_run"] = True
-        return _ui_exact_integer_payload(preview)
+        return _ui_exact_integer_payload(
+            core_custody_component_planner.public_component_batch_plan(preview)
+        )
 
     if kind == "ui.transfers.suggest":
         return suggest_transfer_candidates(

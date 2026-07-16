@@ -238,6 +238,10 @@ binary.
    fee terms onto note-only/restored revisions. Removing a term-bound leg fails
    closed. The direct update/undo CLI commands, daemon kinds, handler
    orchestration and unused core undo convenience path are deleted.
+   The remaining component list/get and batch plan/apply handler wrappers are
+   deleted as well. CLI and daemon routing now resolve scope and call the core
+   component store/planner directly; `cli.handlers` contains no component
+   review orchestration.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 
