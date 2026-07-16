@@ -27,6 +27,7 @@ from typing import Any, Iterator, Mapping, Sequence
 import uuid
 
 from ..errors import AppError
+from ..time_utils import now_iso
 from ..wallet_descriptors import normalize_asset_code
 from .custody_components import (
     activate_component,
@@ -430,6 +431,15 @@ def _retarget_revision_spec(
             }
             for index, allocation in enumerate(spec["allocations"])
         ],
+        "terms": [
+            {
+                **term,
+                "id": _stable_id(component_id, "term", str(index)),
+                "source_leg_id": leg_ids[str(term["source_leg_id"])],
+                "target_leg_id": leg_ids[str(term["target_leg_id"])],
+            }
+            for index, term in enumerate(spec.get("terms", ()))
+        ],
     }
 
 
@@ -578,7 +588,10 @@ def _migrate_row(
     )
     if created["id"] != spec["component_id"]:
         raise AssertionError("migrated custody component id changed")
-    _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
+    if spec.get("terms"):
+        seal_component_economic_terms(conn, component["id"], spec["terms"])
+    else:
+        _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
     _link_legacy_row(
         conn,
         legacy_table=str(_field(row, "legacy_table")),
@@ -716,7 +729,11 @@ def _allocation_signature(
     )
 
 
-def _pair_group_spec(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _pair_group_spec(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    require_full_source: bool = True,
+) -> dict[str, Any]:
     ordered = sorted(
         rows,
         key=lambda row: (str(_field(row, "created_at")), str(_field(row, "id"))),
@@ -864,7 +881,7 @@ def _pair_group_spec(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         for source_id, principal_msat in source_totals.items()
         if source_used.get(source_id, 0) != principal_msat
     }
-    if partial_sources:
+    if partial_sources and require_full_source:
         # The legacy interpreter still owns the unreviewed tail. Activating a
         # component before that residual becomes an explicit authored decision
         # would either lose it or falsely upgrade a presumed disposal to a
@@ -1359,34 +1376,49 @@ def _review_transaction_contexts(
     }
 
 
-def _active_component_term_rows(
+def _current_component_term_rows(
     conn: sqlite3.Connection,
     *,
     profile_id: str,
     term_kind: str,
+    include_deleted: bool = False,
 ) -> list[dict[str, Any]]:
     effective_ids = effective_component_ids(conn, profile_id=profile_id)
-    if not effective_ids:
+    conditions: list[str] = []
+    params: list[Any] = [profile_id, term_kind]
+    if effective_ids:
+        placeholders = ",".join("?" for _ in effective_ids)
+        conditions.append(f"term.component_id IN ({placeholders})")
+        params.extend(sorted(effective_ids))
+    if include_deleted:
+        conditions.append(
+            "(component.state = 'superseded' AND NOT EXISTS ("
+            "SELECT 1 FROM custody_components successor "
+            "WHERE successor.supersedes_component_id = component.id))"
+        )
+    if not conditions:
         return []
-    placeholders = ",".join("?" for _ in effective_ids)
     return [
         dict(row)
         for row in conn.execute(
             f"""
             SELECT term.*,
+                   component.state AS component_state,
+                   component.superseded_at,
                    COALESCE(source.anchor_transaction_id,
                             source.transaction_id) AS out_transaction_id,
                    COALESCE(target.anchor_transaction_id,
                             target.transaction_id) AS in_transaction_id
             FROM custody_component_economic_terms term
+            JOIN custody_components component ON component.id = term.component_id
             JOIN custody_component_legs source ON source.id = term.source_leg_id
             JOIN custody_component_legs target ON target.id = term.target_leg_id
             WHERE term.profile_id = ?
               AND term.term_kind = ?
-              AND term.component_id IN ({placeholders})
+              AND ({' OR '.join(conditions)})
             ORDER BY term.created_at DESC, term.component_id, term.ordinal
             """,
-            (profile_id, term_kind, *sorted(effective_ids)),
+            tuple(params),
         ).fetchall()
     ]
 
@@ -1415,10 +1447,11 @@ def list_pair_review_records(
                 (profile_id,),
             ).fetchall()
         )
-    component_rows = _active_component_term_rows(
+    component_rows = _current_component_term_rows(
         conn,
         profile_id=profile_id,
         term_kind="transaction_pair",
+        include_deleted=include_deleted,
     )
     transaction_ids = sorted(
         {
@@ -1455,7 +1488,7 @@ def list_pair_review_records(
                 "confidence_at_pair": row["confidence_at_review"],
                 "pair_source": row["review_source"],
                 "out_amount": reviewed_out,
-                "deleted_at": None,
+                "deleted_at": row.get("superseded_at"),
                 "created_at": row["created_at"],
                 "out_external_id": out_context["external_id"],
                 "out_asset": out_context["asset"],
@@ -1502,7 +1535,12 @@ def list_pair_review_records(
                 "in_wallet_kind": in_context["wallet_kind"],
             }
         )
-    return sorted(records, key=lambda row: (row["created_at"], row["id"]), reverse=True)
+    current_by_review_id = {str(row["id"]): row for row in records}
+    return sorted(
+        current_by_review_id.values(),
+        key=lambda row: (row["created_at"], row["id"]),
+        reverse=True,
+    )
 
 
 def list_payout_review_records(
@@ -1529,10 +1567,11 @@ def list_payout_review_records(
                 (profile_id,),
             ).fetchall()
         )
-    component_rows = _active_component_term_rows(
+    component_rows = _current_component_term_rows(
         conn,
         profile_id=profile_id,
         term_kind="direct_swap_payout",
+        include_deleted=include_deleted,
     )
     transaction_ids = sorted(
         {
@@ -1565,7 +1604,7 @@ def list_payout_review_records(
                 "swap_fee_msat": row["swap_fee_msat"],
                 "swap_fee_kind": row["swap_fee_kind"],
                 "out_amount": reviewed_out,
-                "deleted_at": None,
+                "deleted_at": row.get("superseded_at"),
                 "created_at": row["created_at"],
                 "out_external_id": out_context["external_id"],
                 "out_asset": out_context["asset"],
@@ -1597,7 +1636,12 @@ def list_payout_review_records(
                 "out_wallet": out_context["wallet"],
             }
         )
-    return sorted(records, key=lambda row: (row["created_at"], row["id"]), reverse=True)
+    current_by_review_id = {str(row["id"]): row for row in records}
+    return sorted(
+        current_by_review_id.values(),
+        key=lambda row: (row["created_at"], row["id"]),
+        reverse=True,
+    )
 
 
 def get_compatibility_review_projection(
@@ -1647,6 +1691,32 @@ def get_compatibility_review_projection(
     ).fetchone()
 
 
+def _active_review_component(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    review_id: str,
+    term_kind: str,
+) -> Mapping[str, Any] | None:
+    effective_ids = effective_component_ids(conn, profile_id=profile_id)
+    if not effective_ids:
+        return None
+    placeholders = ",".join("?" for _ in effective_ids)
+    return conn.execute(
+        f"""
+        SELECT component.id AS component_id, component.lineage_id
+        FROM custody_component_economic_terms term
+        JOIN custody_components component ON component.id = term.component_id
+        WHERE term.profile_id = ? AND term.legacy_source_id = ?
+          AND term.term_kind = ?
+          AND term.component_id IN ({placeholders})
+        ORDER BY component.revision DESC, component.created_at DESC
+        LIMIT 1
+        """,
+        (profile_id, review_id, term_kind, *sorted(effective_ids)),
+    ).fetchone()
+
+
 def retire_linked_component(
     conn: sqlite3.Connection,
     component_id: Any,
@@ -1662,7 +1732,199 @@ def retire_linked_component(
         supersede_component(conn, component["id"], reason=reason)
 
 
-def create_pair_review_projection(
+def _review_boundary_row(
+    conn: sqlite3.Connection,
+    base: Mapping[str, Any],
+    *,
+    include_target: bool,
+) -> dict[str, Any]:
+    target_select = """
+        , in_tx.asset AS in_asset, in_tx.amount AS in_tx_amount,
+          in_tx.fee AS in_fee,
+          in_tx.amount_includes_fee AS in_amount_includes_fee,
+          in_tx.direction AS in_direction,
+          in_tx.occurred_at AS in_occurred_at,
+          in_tx.raw_json AS in_raw_json,
+          in_tx.wallet_id AS in_wallet_id,
+          in_wallet.kind AS in_wallet_kind,
+          in_wallet.config_json AS in_wallet_config_json
+    """ if include_target else ""
+    target_join = """
+        JOIN transactions in_tx ON in_tx.id = ?
+        JOIN wallets in_wallet ON in_wallet.id = in_tx.wallet_id
+    """ if include_target else ""
+    params = [base["out_transaction_id"]]
+    if include_target:
+        params.append(base["in_transaction_id"])
+    row = conn.execute(
+        f"""
+        SELECT out_tx.asset AS out_asset, out_tx.amount AS out_tx_amount,
+               out_tx.fee AS out_fee,
+               out_tx.amount_includes_fee AS out_amount_includes_fee,
+               out_tx.direction AS out_direction,
+               out_tx.occurred_at AS out_occurred_at,
+               out_tx.raw_json AS out_raw_json,
+               out_tx.wallet_id AS out_wallet_id,
+               out_wallet.kind AS out_wallet_kind,
+               out_wallet.config_json AS out_wallet_config_json
+               {target_select}
+        FROM transactions out_tx
+        JOIN wallets out_wallet ON out_wallet.id = out_tx.wallet_id
+        {target_join}
+        WHERE out_tx.id = ?
+        """,
+        (*params[1:], params[0]),
+    ).fetchone()
+    if row is None:
+        raise AppError("Custody review boundary was not found", code="not_found")
+    return {**dict(base), **dict(row)}
+
+
+def _append_source_residual(
+    spec: dict[str, Any],
+    row: Mapping[str, Any],
+    *,
+    reviewed_source_msat: int,
+    classification: str,
+) -> None:
+    boundary = row_boundary_amounts(
+        {
+            "direction": _field(row, "out_direction"),
+            "amount": _field(row, "out_tx_amount"),
+            "fee": _field(row, "out_fee"),
+            "amount_includes_fee": _field(row, "out_amount_includes_fee"),
+        }
+    )
+    residual = boundary.principal_msat - reviewed_source_msat
+    if residual <= 0:
+        return
+    # An imported miner fee is authoritative physical evidence, not custody
+    # suspense.  Historical pair matching commonly represented a destination
+    # shortfall equal to that fee, so preserve it as an explicit fee sink.  A
+    # larger or fee-less shortfall remains unresolved custody until reviewed.
+    residual_classification = classification
+    if classification == "suspense_continuation" and residual == boundary.fee_msat:
+        residual_classification = "network_fee"
+    component_id = str(spec["component_id"])
+    source = spec["legs"][0]
+    source_id = str(source["id"])
+    source["amount_msat"] = int(source["amount_msat"]) + residual
+    if (
+        spec.get("conservation_mode") == "conversion"
+        and residual_classification == "retained_custody"
+    ):
+        source["valuation_amount"] = int(source.get("valuation_amount") or 0) + residual
+    sink_id = _stable_id(component_id, "leg", "residual-sink")
+    sink = {
+        **source,
+        "id": sink_id,
+        "amount_msat": residual,
+        "valuation_unit": (
+            source.get("valuation_unit")
+            if spec.get("conservation_mode") == "conversion"
+            and residual_classification == "retained_custody"
+            else None
+        ),
+        "valuation_amount": (
+            residual
+            if spec.get("conservation_mode") == "conversion"
+            and residual_classification == "retained_custody"
+            else None
+        ),
+        "role": {
+            "retained_custody": "retained",
+            "network_fee": "fee",
+        }.get(residual_classification, "suspense"),
+        "transaction_id": None,
+        "anchor_transaction_id": None,
+        "location_ref": (
+            f"reviewed-retained-custody:{row['id']}"
+            if residual_classification == "retained_custody"
+            else (
+                f"network-fee:{row['id']}"
+                if residual_classification == "network_fee"
+                else f"reviewed-custody-suspense:{row['id']}"
+            )
+        ),
+        "notes": f"reviewed_residual:{residual_classification}",
+    }
+    if residual_classification != "retained_custody":
+        sink["wallet_id"] = None
+    spec["legs"].append(sink)
+    spec["allocations"].append(
+        _allocation(
+            allocation_id=_stable_id(component_id, "allocation", "residual"),
+            source_leg_id=source_id,
+            sink_leg_id=sink_id,
+            source_amount_msat=residual,
+            sink_amount_msat=residual,
+        )
+    )
+
+
+def _activate_native_review(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    spec: dict[str, Any],
+    *,
+    term_kind: str,
+    source_hash: str,
+    authored_source: str,
+    change_reason: str | None = None,
+) -> dict[str, Any]:
+    prior = conn.execute(
+        "SELECT id FROM custody_components "
+        "WHERE profile_id = ? AND lineage_id = ? AND state = 'active' "
+        "ORDER BY revision DESC LIMIT 1",
+        (row["profile_id"], spec["lineage_id"]),
+    ).fetchone()
+    if prior is not None and conn.execute(
+        "SELECT 1 FROM custody_components WHERE id = ?", (spec["component_id"],)
+    ).fetchone() is not None:
+        spec = _retarget_revision_spec(
+            spec, supersedes_component_id=str(prior["id"])
+        )
+    component_kwargs = {
+        "component_type": str(spec["component_type"]),
+        "conservation_mode": str(spec["conservation_mode"]),
+        "conversion_policy": spec.get("conversion_policy"),
+        "conversion_reviewed": bool(spec.get("conversion_reviewed")),
+        "legs": spec["legs"],
+        "allocations": spec["allocations"],
+        "evidence_kind": "reviewed_custody",
+        "evidence_grade": "reviewed",
+        "evidence": {"review_id": row["id"], "term_kind": term_kind},
+        "notes": _field(row, "notes"),
+        "authored_source": authored_source,
+        "created_at": str(row["created_at"]),
+    }
+    if prior is None:
+        component = create_component(
+            conn,
+            workspace_id=str(row["workspace_id"]),
+            profile_id=str(row["profile_id"]),
+            component_id=str(spec["component_id"]),
+            lineage_id=str(spec["lineage_id"]),
+            **component_kwargs,
+        )
+    else:
+        component = update_component(
+            conn,
+            str(prior["id"]),
+            new_component_id=str(spec["component_id"]),
+            preserve_planned_row_ids=True,
+            change_reason=change_reason or f"{term_kind} review revised",
+            **component_kwargs,
+        )
+    if spec.get("terms"):
+        seal_component_economic_terms(conn, component["id"], spec["terms"])
+    else:
+        _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
+    activate_component(conn, component["id"], activated_at=str(row["created_at"]))
+    return {**dict(row), "component_id": component["id"]}
+
+
+def create_pair_review_component(
     conn: sqlite3.Connection,
     *,
     review_id: str,
@@ -1679,43 +1941,65 @@ def create_pair_review_projection(
     pair_source: str,
     out_amount_msat: int | None,
     created_at: str,
-) -> sqlite3.Row:
-    """Author a pair and its frozen compatibility projection atomically."""
+    authored_source: str,
+) -> Mapping[str, Any]:
+    """Author a pair directly as one immutable active component."""
 
-    with _savepoint(conn, f"custody_pair_create_{uuid.uuid4().hex}"):
-        conn.execute(
-            """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id,
-                in_transaction_id, kind, policy, notes, swap_fee_msat,
-                swap_fee_kind, confidence_at_pair, pair_source, out_amount,
-                deleted_at, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-            """,
-            (
-                review_id,
-                workspace_id,
-                profile_id,
-                out_transaction_id,
-                in_transaction_id,
-                kind,
-                policy,
-                notes,
-                swap_fee_msat,
-                swap_fee_kind,
-                confidence_at_pair,
-                pair_source,
-                out_amount_msat,
-                created_at,
+    base = {
+        "id": review_id, "workspace_id": workspace_id, "profile_id": profile_id,
+        "out_transaction_id": out_transaction_id,
+        "in_transaction_id": in_transaction_id, "kind": kind, "policy": policy,
+        "notes": notes, "swap_fee_msat": swap_fee_msat,
+        "swap_fee_kind": swap_fee_kind, "confidence_at_pair": confidence_at_pair,
+        "pair_source": pair_source, "out_amount": out_amount_msat,
+        "deleted_at": None, "created_at": created_at,
+    }
+    row = _review_boundary_row(conn, base, include_target=True)
+    source_hash = _hash_payload(_canonical_payload(row, _PAIR_HASH_FIELDS))
+    related = [
+        record
+        for record in list_pair_review_records(conn, profile_id=profile_id)
+        if record["out_transaction_id"] == out_transaction_id
+    ]
+    if related:
+        component_ids = {str(record.get("component_id") or "") for record in related}
+        if len(component_ids) != 1 or "" in component_ids:
+            raise AppError(
+                "Reviewed fan-out does not have one active component",
+                code="custody_component_membership_conflict",
+            )
+        active_component = get_component(conn, component_ids.pop())
+        group_rows = [
+            _review_boundary_row(conn, record, include_target=True)
+            for record in related
+        ] + [row]
+        spec = _pair_group_spec(group_rows)
+        spec["lineage_id"] = active_component["lineage_id"]
+    else:
+        spec = _pair_spec(row, source_hash)
+    reviewed = int(spec["legs"][0]["amount_msat"])
+    if not related:
+        _append_source_residual(
+            spec,
+            row,
+            reviewed_source_msat=reviewed,
+            classification=(
+                "retained_custody"
+                if out_amount_msat is not None
+                else "suspense_continuation"
             ),
         )
-        refresh_legacy_authored_components(conn)
-    return conn.execute(
-        "SELECT * FROM transaction_pairs WHERE id = ?", (review_id,)
-    ).fetchone()
+    return _activate_native_review(
+        conn,
+        row,
+        spec,
+        term_kind="transaction_pair",
+        source_hash=source_hash,
+        authored_source=authored_source,
+    )
 
 
-def create_payout_review_projection(
+def create_payout_review_component(
     conn: sqlite3.Connection,
     *,
     review_id: str,
@@ -1735,46 +2019,41 @@ def create_payout_review_projection(
     swap_fee_kind: str | None,
     out_amount_msat: int | None,
     created_at: str,
-) -> sqlite3.Row:
-    """Author a direct payout and its frozen projection atomically."""
+    authored_source: str,
+) -> Mapping[str, Any]:
+    """Author a direct payout directly as one immutable active component."""
 
-    with _savepoint(conn, f"custody_payout_create_{uuid.uuid4().hex}"):
-        conn.execute(
-            """
-            INSERT INTO direct_swap_payouts(
-                id, workspace_id, profile_id, out_transaction_id, kind,
-                policy, payout_asset, payout_amount, payout_occurred_at,
-                payout_fiat_value, payout_external_id, counterparty, notes,
-                swap_fee_msat, swap_fee_kind, out_amount, deleted_at, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-            """,
-            (
-                review_id,
-                workspace_id,
-                profile_id,
-                out_transaction_id,
-                kind,
-                policy,
-                payout_asset,
-                payout_amount_msat,
-                payout_occurred_at,
-                payout_fiat_value,
-                payout_external_id,
-                counterparty,
-                notes,
-                swap_fee_msat,
-                swap_fee_kind,
-                out_amount_msat,
-                created_at,
-            ),
-        )
-        refresh_legacy_authored_components(conn)
-    return conn.execute(
-        "SELECT * FROM direct_swap_payouts WHERE id = ?", (review_id,)
-    ).fetchone()
+    base = {
+        "id": review_id, "workspace_id": workspace_id, "profile_id": profile_id,
+        "out_transaction_id": out_transaction_id, "kind": kind, "policy": policy,
+        "payout_asset": payout_asset, "payout_amount": payout_amount_msat,
+        "payout_occurred_at": payout_occurred_at,
+        "payout_fiat_value": payout_fiat_value,
+        "payout_external_id": payout_external_id, "counterparty": counterparty,
+        "notes": notes, "swap_fee_msat": swap_fee_msat,
+        "swap_fee_kind": swap_fee_kind, "out_amount": out_amount_msat,
+        "deleted_at": None, "created_at": created_at,
+    }
+    row = _review_boundary_row(conn, base, include_target=False)
+    source_hash = _hash_payload(_canonical_payload(row, _PAYOUT_HASH_FIELDS))
+    spec = _payout_spec(row, source_hash)
+    _append_source_residual(
+        spec,
+        row,
+        reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
+        classification="retained_custody",
+    )
+    return _activate_native_review(
+        conn,
+        row,
+        spec,
+        term_kind="direct_swap_payout",
+        source_hash=source_hash,
+        authored_source=authored_source,
+    )
 
 
-def revise_pair_review_projection(
+def revise_pair_review_component(
     conn: sqlite3.Connection,
     row: Mapping[str, Any],
     *,
@@ -1783,10 +2062,74 @@ def revise_pair_review_projection(
     notes: str | None,
     swap_fee_msat: int | None,
     swap_fee_kind: str | None,
-) -> sqlite3.Row:
-    """Append a component revision, then refresh the frozen pair projection."""
+    authored_source: str,
+) -> Mapping[str, Any]:
+    """Append an immutable pair component revision."""
 
     review_id = str(_field(row, "id"))
+    compatibility = get_compatibility_review_projection(
+        conn,
+        profile_id=str(row["profile_id"]),
+        review_id=review_id,
+        term_kind="transaction_pair",
+        active_only=True,
+    )
+    if compatibility is None:
+        active = _active_review_component(
+            conn,
+            profile_id=str(row["profile_id"]),
+            review_id=review_id,
+            term_kind="transaction_pair",
+        )
+        if active is None:
+            raise AppError("Transaction pair review was not found", code="not_found")
+        revised = {
+            **dict(row),
+            "kind": kind,
+            "policy": policy,
+            "notes": notes,
+            "swap_fee_msat": swap_fee_msat,
+            "swap_fee_kind": swap_fee_kind,
+            "created_at": now_iso(),
+        }
+        boundary = _review_boundary_row(conn, revised, include_target=True)
+        source_hash = _hash_payload(_canonical_payload(boundary, _PAIR_HASH_FIELDS))
+        component_records = [
+            record
+            for record in list_pair_review_records(
+                conn, profile_id=str(row["profile_id"])
+            )
+            if str(record.get("component_id") or "") == str(active["component_id"])
+        ]
+        if len(component_records) > 1:
+            group_rows = [
+                boundary
+                if str(record["id"]) == review_id
+                else _review_boundary_row(conn, record, include_target=True)
+                for record in component_records
+            ]
+            spec = _pair_group_spec(group_rows)
+        else:
+            spec = _pair_spec(boundary, source_hash)
+            _append_source_residual(
+                spec,
+                boundary,
+                reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
+                classification=(
+                    "retained_custody"
+                    if boundary.get("out_amount") is not None
+                    else "suspense_continuation"
+                ),
+            )
+        spec["lineage_id"] = str(active["lineage_id"])
+        return _activate_native_review(
+            conn,
+            boundary,
+            spec,
+            term_kind="transaction_pair",
+            source_hash=source_hash,
+            authored_source=authored_source,
+        )
     with _savepoint(conn, f"custody_pair_revise_{uuid.uuid4().hex}"):
         retire_linked_component(
             conn,
@@ -1802,6 +2145,109 @@ def revise_pair_review_projection(
     return conn.execute(
         "SELECT * FROM transaction_pairs WHERE id = ?", (review_id,)
     ).fetchone()
+
+
+def delete_authored_review(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    review_id: str,
+    term_kind: str,
+    deleted_at: str,
+    authored_source: str,
+) -> None:
+    table = (
+        "transaction_pairs"
+        if term_kind == "transaction_pair"
+        else "direct_swap_payouts"
+    )
+    compatibility = get_compatibility_review_projection(
+        conn,
+        profile_id=profile_id,
+        review_id=review_id,
+        term_kind=term_kind,
+    )
+    if compatibility is not None:
+        delete_review_projection(
+            conn,
+            table=table,
+            row=compatibility,
+            deleted_at=deleted_at,
+        )
+        return
+    active = _active_review_component(
+        conn,
+        profile_id=profile_id,
+        review_id=review_id,
+        term_kind=term_kind,
+    )
+    if active is None:
+        raise AppError("Custody review was not found", code="not_found")
+    if term_kind == "transaction_pair":
+        component_records = [
+            record
+            for record in list_pair_review_records(conn, profile_id=profile_id)
+            if str(record.get("component_id") or "") == str(active["component_id"])
+            and str(record["id"]) != review_id
+        ]
+        if component_records:
+            rows = [
+                _review_boundary_row(conn, record, include_target=True)
+                for record in component_records
+            ]
+            spec = (
+                _pair_group_spec(rows, require_full_source=False)
+                if len(rows) > 1
+                else _pair_spec(
+                    rows[0],
+                    _hash_payload(_canonical_payload(rows[0], _PAIR_HASH_FIELDS)),
+                )
+            )
+            spec["lineage_id"] = str(active["lineage_id"])
+            activation_row = {**rows[0], "created_at": deleted_at}
+            _activate_native_review(
+                conn,
+                activation_row,
+                spec,
+                term_kind="transaction_pair",
+                source_hash=_hash_payload(
+                    _canonical_payload(rows[0], _PAIR_HASH_FIELDS)
+                ),
+                authored_source=authored_source,
+                change_reason=(
+                    f"transaction_pair review {review_id} deleted"
+                ),
+            )
+            return
+    supersede_component(
+        conn,
+        str(active["component_id"]),
+        reason=f"{term_kind} review deleted by {authored_source}",
+        superseded_at=deleted_at,
+    )
+
+
+def authored_review_exists(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    review_id: str,
+    term_kind: str,
+) -> bool:
+    """Return whether immutable authored history contains the review id."""
+
+    if get_compatibility_review_projection(
+        conn,
+        profile_id=profile_id,
+        review_id=review_id,
+        term_kind=term_kind,
+    ) is not None:
+        return True
+    return conn.execute(
+        "SELECT 1 FROM custody_component_economic_terms "
+        "WHERE profile_id = ? AND legacy_source_id = ? AND term_kind = ? LIMIT 1",
+        (profile_id, review_id, term_kind),
+    ).fetchone() is not None
 
 
 def delete_review_projection(

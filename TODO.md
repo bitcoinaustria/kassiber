@@ -208,8 +208,12 @@ same verification surface.
     custody decisions/economic relations or the component-first authored view;
     a stale projection cannot label a transaction as a booked transfer/swap.
     CLI handlers no longer query either legacy review table, including
-    delete/revise lookup; the core authored store owns the remaining frozen-row
-    mutation bridge pending component-native producer cutover.
+    delete/revise lookup. New pair and direct-payout reviews, revisions and
+    retirements now author immutable components/terms directly and never write
+    legacy projection rows. Shared fan-out revisions preserve sibling terms;
+    miner-fee, retained and suspense residuals are explicit and exactly
+    allocated. The core store retains only the bounded frozen-row mutation
+    bridge needed to upgrade historical compatibility exceptions.
     The producerless future-layer adapter contract and unproduced
     `channel_lifecycle`/`peg`/`refund` authored types are deleted. Real
     Lightning lifecycle interpretation remains at the canonical observation
@@ -230,8 +234,9 @@ same verification surface.
     journal-derived report/export now acquires one core `ReportContext` proving
     tax support, current journals, complete active components and clear
     quantity barriers; composed reports reuse that proof, and the CLI report
-    hook/back-edge has been deleted. Builder compatibility deletion, producer
-    cutover and speculative-scaffolding removal remain.
+    hook/back-edge has been deleted. Component-native producer cutover and
+    speculative-scaffolding removal are complete; builder compatibility
+    deletion and the final simplicity/performance proof remain.
 
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an

@@ -31,6 +31,8 @@ from kassiber.cli.handlers import (
     delete_direct_swap_payout,
     delete_transaction_pair,
     dismiss_transfer_candidate,
+    list_direct_swap_payouts,
+    list_transaction_pairs,
     update_transaction_pair,
 )
 from kassiber.core.reports import _swap_fee_summary_rows
@@ -358,6 +360,25 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertEqual(first["kind"], "whirlpool")
                 self.assertIsNone(first["swap_fee_msat"])
 
+                revised = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    second["id"],
+                    notes="fan-out review",
+                )
+                active_pairs = list_transaction_pairs(
+                    conn, workspace_id, profile_id
+                )
+                self.assertEqual(
+                    {row["id"] for row in active_pairs},
+                    {first["id"], second["id"]},
+                )
+                self.assertEqual(
+                    {row["component_id"] for row in active_pairs},
+                    {revised["component_id"]},
+                )
+
                 with self.assertRaisesRegex(Exception, "already paired"):
                     create_transaction_pair(
                         conn, workspace_id, profile_id, "tx-out", "tx-in-1"
@@ -370,6 +391,20 @@ class FreshSchemaTests(unittest.TestCase):
                         second["id"],
                         kind="submarine-swap",
                     )
+
+                delete_transaction_pair(
+                    conn, workspace_id, profile_id, second["id"]
+                )
+                remaining = list_transaction_pairs(
+                    conn, workspace_id, profile_id
+                )
+                self.assertEqual([row["id"] for row in remaining], [first["id"]])
+                self.assertEqual(
+                    delete_transaction_pair(
+                        conn, workspace_id, profile_id, second["id"]
+                    ),
+                    {"deleted": second["id"]},
+                )
             finally:
                 conn.close()
 
@@ -434,7 +469,7 @@ class FreshSchemaTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_active_pair_component_freezes_compatibility_row_until_revision(self):
+    def test_active_pair_component_revises_and_retires_without_projection_row(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)
             try:
@@ -456,10 +491,7 @@ class FreshSchemaTests(unittest.TestCase):
                 pair = create_transaction_pair(
                     conn, workspace_id, profile_id, "tx-out", "tx-in"
                 )
-                first_component_id = conn.execute(
-                    "SELECT component_id FROM transaction_pairs WHERE id = ?",
-                    (pair["id"],),
-                ).fetchone()[0]
+                first_component_id = pair["component_id"]
                 self.assertIsNotNone(first_component_id)
                 self.assertEqual(
                     conn.execute(
@@ -469,14 +501,11 @@ class FreshSchemaTests(unittest.TestCase):
                     "active",
                 )
 
-                with self.assertRaisesRegex(
-                    sqlite3.IntegrityError,
-                    "legacy_custody_review_write_frozen",
-                ):
+                self.assertIsNone(
                     conn.execute(
-                        "UPDATE transaction_pairs SET notes = 'bypass' WHERE id = ?",
-                        (pair["id"],),
-                    )
+                        "SELECT 1 FROM transaction_pairs WHERE id = ?", (pair["id"],)
+                    ).fetchone()
+                )
 
                 revised = update_transaction_pair(
                     conn,
@@ -485,10 +514,7 @@ class FreshSchemaTests(unittest.TestCase):
                     pair["id"],
                     notes="reviewed revision",
                 )
-                revised_component_id = conn.execute(
-                    "SELECT component_id FROM transaction_pairs WHERE id = ?",
-                    (pair["id"],),
-                ).fetchone()[0]
+                revised_component_id = revised["component_id"]
                 self.assertNotEqual(revised_component_id, first_component_id)
                 self.assertEqual(
                     conn.execute(
@@ -516,11 +542,20 @@ class FreshSchemaTests(unittest.TestCase):
                     ).fetchone()[0],
                     "superseded",
                 )
-                self.assertIsNotNone(
-                    conn.execute(
-                        "SELECT deleted_at FROM transaction_pairs WHERE id = ?",
-                        (pair["id"],),
-                    ).fetchone()[0]
+                self.assertEqual(
+                    list_transaction_pairs(conn, workspace_id, profile_id), []
+                )
+                deleted = list_transaction_pairs(
+                    conn, workspace_id, profile_id, include_deleted=True
+                )
+                self.assertEqual(len(deleted), 1)
+                self.assertEqual(deleted[0]["id"], pair["id"])
+                self.assertIsNotNone(deleted[0]["deleted_at"])
+                self.assertEqual(
+                    delete_transaction_pair(
+                        conn, workspace_id, profile_id, pair["id"]
+                    ),
+                    {"deleted": pair["id"]},
                 )
             finally:
                 conn.close()
@@ -548,10 +583,7 @@ class FreshSchemaTests(unittest.TestCase):
                     payout_asset="BTC",
                     payout_amount="0.000001",
                 )
-                component_id = conn.execute(
-                    "SELECT component_id FROM direct_swap_payouts WHERE id = ?",
-                    (payout["id"],),
-                ).fetchone()[0]
+                component_id = payout["component_id"]
                 self.assertEqual(
                     conn.execute(
                         "SELECT state FROM custody_components WHERE id = ?",
@@ -559,14 +591,12 @@ class FreshSchemaTests(unittest.TestCase):
                     ).fetchone()[0],
                     "active",
                 )
-                with self.assertRaisesRegex(
-                    sqlite3.IntegrityError,
-                    "legacy_custody_review_write_frozen",
-                ):
+                self.assertIsNone(
                     conn.execute(
-                        "UPDATE direct_swap_payouts SET notes = 'bypass' WHERE id = ?",
+                        "SELECT 1 FROM direct_swap_payouts WHERE id = ?",
                         (payout["id"],),
-                    )
+                    ).fetchone()
+                )
 
                 delete_direct_swap_payout(
                     conn, workspace_id, profile_id, payout["id"]
@@ -578,11 +608,129 @@ class FreshSchemaTests(unittest.TestCase):
                     ).fetchone()[0],
                     "superseded",
                 )
-                self.assertIsNotNone(
+                self.assertEqual(
+                    list_direct_swap_payouts(conn, workspace_id, profile_id), []
+                )
+                deleted = list_direct_swap_payouts(
+                    conn, workspace_id, profile_id, include_deleted=True
+                )
+                self.assertEqual(len(deleted), 1)
+                self.assertEqual(deleted[0]["id"], payout["id"])
+                self.assertIsNotNone(deleted[0]["deleted_at"])
+                self.assertEqual(
+                    delete_direct_swap_payout(
+                        conn, workspace_id, profile_id, payout["id"]
+                    )["id"],
+                    payout["id"],
+                )
+            finally:
+                conn.close()
+
+    def test_same_asset_shortfall_is_explicit_suspense_when_not_a_network_fee(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                _insert_tx(
+                    conn,
+                    tx_id="tx-in",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="inbound",
+                    amount_msat=90_000,
+                )
+
+                pair = create_transaction_pair(
+                    conn, workspace_id, profile_id, "tx-out", "tx-in"
+                )
+                legs = conn.execute(
+                    "SELECT role, amount_msat FROM custody_component_legs "
+                    "WHERE component_id = ? ORDER BY ordinal",
+                    (pair["component_id"],),
+                ).fetchall()
+
+                self.assertEqual(
+                    [(row["role"], row["amount_msat"]) for row in legs],
+                    [("source", 100_000), ("destination", 90_000), ("suspense", 10_000)],
+                )
+                self.assertEqual(
+                    tuple(conn.execute(
+                        "SELECT SUM(source_amount_msat), SUM(sink_amount_msat) "
+                        "FROM custody_component_allocations WHERE component_id = ?",
+                        (pair["component_id"],),
+                    ).fetchone()),
+                    (100_000, 100_000),
+                )
+            finally:
+                conn.close()
+
+    def test_explicit_partial_conversion_retains_unconverted_source_quantity(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                _insert_tx(
+                    conn,
+                    tx_id="tx-in",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="LBTC",
+                    direction="inbound",
+                    amount_msat=60_000,
+                )
+
+                pair = create_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    "tx-out",
+                    "tx-in",
+                    out_amount="0.00000060",
+                )
+                legs = conn.execute(
+                    "SELECT role, asset, amount_msat FROM custody_component_legs "
+                    "WHERE component_id = ? ORDER BY ordinal",
+                    (pair["component_id"],),
+                ).fetchall()
+
+                self.assertEqual(
+                    [(row["role"], row["asset"], row["amount_msat"]) for row in legs],
+                    [
+                        ("source", "BTC", 100_000),
+                        ("destination", "LBTC", 60_000),
+                        ("retained", "BTC", 40_000),
+                    ],
+                )
+                self.assertEqual(
                     conn.execute(
-                        "SELECT deleted_at FROM direct_swap_payouts WHERE id = ?",
-                        (payout["id"],),
-                    ).fetchone()[0]
+                        "SELECT SUM(source_amount_msat) FROM custody_component_allocations "
+                        "WHERE component_id = ?",
+                        (pair["component_id"],),
+                    ).fetchone()[0],
+                    100_000,
                 )
             finally:
                 conn.close()

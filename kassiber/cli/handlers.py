@@ -567,6 +567,7 @@ def _pair_to_dict(row):
     out_amount = row["out_amount"] if "out_amount" in keys else None
     return {
         "id": row["id"],
+        "component_id": row["component_id"] if "component_id" in keys else None,
         "workspace_id": row["workspace_id"],
         "profile_id": row["profile_id"],
         "out_transaction_id": row["out_transaction_id"],
@@ -591,6 +592,7 @@ def _direct_payout_to_dict(row):
     out_amount = row["out_amount"] if "out_amount" in keys else None
     return {
         "id": row["id"],
+        "component_id": row["component_id"] if "component_id" in keys else None,
         "workspace_id": row["workspace_id"],
         "profile_id": row["profile_id"],
         "out_transaction_id": row["out_transaction_id"],
@@ -693,6 +695,7 @@ def create_transaction_pair(
     confidence_at_pair=None,
     out_amount=None,
     commit=True,
+    authored_source="cli",
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if kind not in TRANSFER_PAIR_KINDS:
@@ -817,7 +820,7 @@ def create_transaction_pair(
     else:
         swap_fee_msat, swap_fee_kind = None, None
     pair_id = str(uuid.uuid4())
-    pair_row = core_custody_authored_migration.create_pair_review_projection(
+    pair_row = core_custody_authored_migration.create_pair_review_component(
         conn,
         review_id=pair_id,
         workspace_id=workspace["id"],
@@ -833,6 +836,7 @@ def create_transaction_pair(
         pair_source=pair_source,
         out_amount_msat=out_amount_msat,
         created_at=now_iso(),
+        authored_source=authored_source,
     )
     invalidate_journals(conn, profile["id"])
     if commit:
@@ -856,6 +860,7 @@ def create_direct_swap_payout(
     counterparty=None,
     notes=None,
     out_amount=None,
+    authored_source="cli",
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if kind not in DIRECT_SWAP_PAYOUT_KINDS:
@@ -955,7 +960,7 @@ def create_direct_swap_payout(
         ),
     )
     payout_id = str(uuid.uuid4())
-    payout_row = core_custody_authored_migration.create_payout_review_projection(
+    payout_row = core_custody_authored_migration.create_payout_review_component(
         conn,
         review_id=payout_id,
         workspace_id=workspace["id"],
@@ -976,6 +981,7 @@ def create_direct_swap_payout(
         swap_fee_kind=swap_fee_kind,
         out_amount_msat=out_amount_msat,
         created_at=now_iso(),
+        authored_source=authored_source,
     )
     invalidate_journals(conn, profile["id"])
     conn.commit()
@@ -1015,24 +1021,32 @@ def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_delete
     return output
 
 
-def delete_direct_swap_payout(conn, workspace_ref, profile_ref, payout_id):
+def delete_direct_swap_payout(
+    conn, workspace_ref, profile_ref, payout_id, *, authored_source="cli"
+):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = core_custody_authored_migration.get_compatibility_review_projection(
-        conn,
-        profile_id=profile["id"],
-        review_id=payout_id,
-        term_kind="direct_swap_payout",
+    row = next(
+        (
+            item
+            for item in core_custody_authored_migration.list_payout_review_records(
+                conn, profile_id=profile["id"], include_deleted=True
+            )
+            if item["id"] == payout_id
+        ),
+        None,
     )
     if not row:
         raise AppError("Direct swap payout not found", code="not_found")
     if row["deleted_at"]:
         return _direct_payout_to_dict(row)
-    deleted_at = now_iso()
-    deleted = core_custody_authored_migration.delete_review_projection(
+    deleted = {**row, "deleted_at": now_iso()}
+    core_custody_authored_migration.delete_authored_review(
         conn,
-        table="direct_swap_payouts",
-        row=row,
-        deleted_at=deleted_at,
+        profile_id=profile["id"],
+        review_id=payout_id,
+        term_kind="direct_swap_payout",
+        deleted_at=deleted["deleted_at"],
+        authored_source=authored_source,
     )
     invalidate_journals(conn, profile["id"])
     conn.commit()
@@ -2042,6 +2056,7 @@ def bulk_pair_transfers(
     method=None,
     candidate_type=None,
     commit=True,
+    authored_source="cli",
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
@@ -2107,6 +2122,7 @@ def bulk_pair_transfers(
                 pair_source=pair_source,
                 confidence_at_pair=candidate.confidence,
                 commit=False,
+                authored_source=authored_source,
             )
             applied.append(pair)
     except Exception:
@@ -2139,6 +2155,7 @@ def apply_transfer_rules(
     method=None,
     candidate_type=None,
     commit=True,
+    authored_source="cli",
 ):
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -2191,6 +2208,7 @@ def apply_transfer_rules(
                 pair_source="rule_auto",
                 confidence_at_pair=match.candidate.confidence,
                 commit=False,
+                authored_source=authored_source,
             )
             applied.append(pair)
     except Exception:
@@ -2470,32 +2488,42 @@ def chat_history_config_cli(conn, *, history=None, database_encrypted):
     }
 
 
-def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
-    """Soft-delete a transaction pair.
-
-    Sets ``deleted_at`` so the row stays around for audit and the
-    partial-unique indexes from commit 1 stop covering it — meaning the
-    user can immediately re-pair the same legs without first hard-deleting
-    the historic record. Already soft-deleted pairs are a no-op.
-    """
+def delete_transaction_pair(
+    conn, workspace_ref, profile_ref, pair_id, *, authored_source="cli"
+):
+    """Retire the active component revision while preserving audit history."""
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = core_custody_authored_migration.get_compatibility_review_projection(
+    row = next(
+        (
+            item
+            for item in core_custody_authored_migration.list_pair_review_records(
+                conn, profile_id=profile["id"], include_deleted=True
+            )
+            if item["id"] == pair_id
+        ),
+        None,
+    )
+    if not row:
+        if core_custody_authored_migration.authored_review_exists(
+            conn,
+            profile_id=profile["id"],
+            review_id=pair_id,
+            term_kind="transaction_pair",
+        ):
+            return {"deleted": pair_id}
+        raise AppError(f"Pair '{pair_id}' not found", code="not_found")
+    if row["deleted_at"]:
+        return {"deleted": pair_id}
+    core_custody_authored_migration.delete_authored_review(
         conn,
         profile_id=profile["id"],
         review_id=pair_id,
         term_kind="transaction_pair",
+        deleted_at=now_iso(),
+        authored_source=authored_source,
     )
-    if not row:
-        raise AppError(f"Pair '{pair_id}' not found", code="not_found")
-    if row["deleted_at"] is None:
-        core_custody_authored_migration.delete_review_projection(
-            conn,
-            table="transaction_pairs",
-            row=row,
-            deleted_at=now_iso(),
-        )
-        invalidate_journals(conn, profile["id"])
-        conn.commit()
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
     return {"deleted": pair_id}
 
 
@@ -2512,6 +2540,7 @@ def update_transaction_pair(
     policy=None,
     notes=_UNSET,
     commit=True,
+    authored_source="cli",
 ):
     """Append an authored revision and refresh its compatibility projection.
 
@@ -2521,13 +2550,15 @@ def update_transaction_pair(
     reach an unsupported combination.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = core_custody_authored_migration.get_compatibility_review_projection(
-        conn,
-        profile_id=profile["id"],
-        review_id=pair_id,
-        term_kind="transaction_pair",
-        active_only=True,
-        include_pair_assets=True,
+    row = next(
+        (
+            item
+            for item in core_custody_authored_migration.list_pair_review_records(
+                conn, profile_id=profile["id"]
+            )
+            if item["id"] == pair_id
+        ),
+        None,
     )
     if not row:
         raise AppError(f"Pair '{pair_id}' not found", code="not_found")
@@ -2615,7 +2646,7 @@ def update_transaction_pair(
             else:
                 new_fee_msat, new_fee_kind = None, None
         updated_row = (
-            core_custody_authored_migration.revise_pair_review_projection(
+            core_custody_authored_migration.revise_pair_review_component(
                 conn,
                 row,
                 kind=new_kind,
@@ -2623,6 +2654,7 @@ def update_transaction_pair(
                 notes=new_notes,
                 swap_fee_msat=new_fee_msat,
                 swap_fee_kind=new_fee_kind,
+                authored_source=authored_source,
             )
         )
         invalidate_journals(conn, profile["id"])

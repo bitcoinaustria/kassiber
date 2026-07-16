@@ -122,6 +122,14 @@ production interpretation before any physical deletion is considered. Physical
 removal requires the replication acknowledgement/tombstone protocol; it is not
 a prerequisite for one authored accounting truth.
 
+New pair and direct-payout reviews now write only immutable component revisions
+and replicated economic terms. Revisions and fan-out deletion rebuild the whole
+shared aggregate atomically without dropping sibling terms. Same-asset
+shortfalls equal to observed miner fees become fee legs; otherwise they remain
+explicit suspense, while an explicitly reviewed partial conversion retains its
+unconverted source quantity as an exact continuation. Legacy tables remain a
+read-only migration input until the bounded exception upgrader is deleted.
+
 No dual mutable writes are allowed. Downgrade after component-only writes means
 restoring the pre-migration backup, not silently continuing with an older
 binary.
@@ -212,8 +220,9 @@ binary.
    support, journal input-version freshness, active-component integrity and
    clear quantity barriers. Nested report composition reuses the same proof;
    the former CLI-owned `require_processed_journals` hook is deleted. The
-   remaining work is the component-only producer/builder cutover and deletion
-   of obsolete compatibility and speculative layer surfaces.
+   component-only producer cutover and speculative-layer deletion are complete.
+   Remaining work is upgrading the bounded historical exceptions and deleting
+   their compatibility interpreter.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

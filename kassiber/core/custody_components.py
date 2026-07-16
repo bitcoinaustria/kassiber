@@ -1772,27 +1772,78 @@ def validate_conservation(
             for leg in materialized
             if leg.get("role") == "source" and int(leg.get("amount_msat") or 0) > 0
         ]
-        positive_owned_sinks = [
+        positive_destinations = [
             leg
             for leg in materialized
-            if leg.get("role") in {"destination", "retained"}
+            if leg.get("role") == "destination"
             and int(leg.get("amount_msat") or 0) > 0
         ]
-        if len(positive_sources) != 1 or len(positive_owned_sinks) != 1:
+        positive_retained = [
+            leg
+            for leg in materialized
+            if leg.get("role") == "retained"
+            and int(leg.get("amount_msat") or 0) > 0
+        ]
+        retained_continuations: list[Mapping[str, Any]] = []
+        retained_conversion_outputs: list[Mapping[str, Any]] = []
+        if len(positive_sources) == 1:
+            source = positive_sources[0]
+            for leg in positive_retained:
+                if (
+                    normalize_asset_code(leg.get("asset"))
+                    == normalize_asset_code(source.get("asset"))
+                    and leg.get("exposure") == source.get("exposure")
+                    and leg.get("conservation_unit")
+                    == source.get("conservation_unit")
+                ):
+                    retained_continuations.append(leg)
+                else:
+                    retained_conversion_outputs.append(leg)
+        conversion_outputs = [
+            *positive_destinations,
+            *retained_conversion_outputs,
+        ]
+        if not conversion_outputs and retained_continuations:
+            # A direct external payout has no observed destination anchor. Its
+            # first retained leg is the reviewed conversion output; any later
+            # same-unit retained legs are exact source continuations.
+            conversion_outputs.append(retained_continuations.pop(0))
+        if len(positive_sources) != 1 or len(conversion_outputs) != 1:
             issues.append(
                 {
                     "code": "conversion_topology_unsupported",
                     "message": (
                         "reviewed conversions currently require exactly one "
-                        "quantity source and one owned destination; split the "
-                        "conversion into auditable components"
+                        "quantity source and one conversion output; exact "
+                        "same-asset retained continuations may be additional sinks"
                     ),
                     "source_leg_ids": [leg["id"] for leg in positive_sources],
                     "destination_leg_ids": [
-                        leg["id"] for leg in positive_owned_sinks
+                        leg["id"] for leg in conversion_outputs
                     ],
                 }
             )
+        if retained_continuations:
+            by_id = {str(leg["id"]): leg for leg in materialized}
+            invalid_allocations = []
+            for allocation in materialized_allocations:
+                sink = by_id.get(str(allocation.get("sink_leg_id")))
+                if sink not in retained_continuations:
+                    continue
+                if int(allocation.get("source_amount_msat") or 0) != int(
+                    allocation.get("sink_amount_msat") or 0
+                ):
+                    invalid_allocations.append(allocation.get("id"))
+            if invalid_allocations:
+                issues.append(
+                    {
+                        "code": "conversion_retained_quantity_mismatch",
+                        "message": (
+                            "a retained conversion residual must preserve exact quantity"
+                        ),
+                        "allocation_ids": invalid_allocations,
+                    }
+                )
         if not conversion_reviewed:
             issues.append(
                 {

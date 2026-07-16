@@ -2042,12 +2042,19 @@ def _ui_swap_matching_payload_from_conn(
             counterparty=args.get("counterparty"),
             notes=args.get("notes") or args.get("note"),
             out_amount=args.get("out_amount"),
+            authored_source=authored_source,
         )
     if kind == "ui.transfers.payouts.delete":
         payout_id = args.get("payout_id")
         if not payout_id:
             raise AppError("ui.transfers.payouts.delete requires payout_id", code="validation")
-        return delete_direct_swap_payout(conn, workspace, profile, str(payout_id))
+        return delete_direct_swap_payout(
+            conn,
+            workspace,
+            profile,
+            str(payout_id),
+            authored_source=authored_source,
+        )
     if kind == "ui.transfers.pair":
         return create_transaction_pair(
             conn,
@@ -2061,12 +2068,19 @@ def _ui_swap_matching_payload_from_conn(
             pair_source=str(args.get("pair_source") or "manual"),
             confidence_at_pair=args.get("confidence_at_pair"),
             out_amount=args.get("out_amount"),
+            authored_source=authored_source,
         )
     if kind == "ui.transfers.unpair":
         pair_id = args.get("pair_id")
         if not pair_id:
             raise AppError("ui.transfers.unpair requires pair_id", code="validation")
-        return delete_transaction_pair(conn, workspace, profile, str(pair_id))
+        return delete_transaction_pair(
+            conn,
+            workspace,
+            profile,
+            str(pair_id),
+            authored_source=authored_source,
+        )
     if kind == "ui.transfers.update":
         pair_id = args.get("pair_id")
         if not pair_id:
@@ -2082,7 +2096,12 @@ def _ui_swap_matching_payload_from_conn(
         if "notes" in args or "note" in args:
             update_kwargs["notes"] = args.get("notes") or args.get("note")
         return update_transaction_pair(
-            conn, workspace, profile, str(pair_id), **update_kwargs
+            conn,
+            workspace,
+            profile,
+            str(pair_id),
+            authored_source=authored_source,
+            **update_kwargs,
         )
     if kind == "ui.transfers.bulk_pair":
         return bulk_pair_transfers(
@@ -2104,6 +2123,7 @@ def _ui_swap_matching_payload_from_conn(
             route_pair=args.get("route_pair"),
             method=args.get("method"),
             candidate_type=args.get("candidate_type"),
+            authored_source=authored_source,
         )
     if kind == "ui.transfers.dismiss":
         return dismiss_transfer_candidate(
@@ -2168,6 +2188,7 @@ def _ui_swap_matching_payload_from_conn(
             route_pair=args.get("route_pair"),
             method=args.get("method"),
             candidate_type=args.get("candidate_type"),
+            authored_source=authored_source,
         )
 
     if kind == "ui.saved_views.list":
