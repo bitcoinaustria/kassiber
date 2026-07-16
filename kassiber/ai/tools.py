@@ -190,10 +190,7 @@ _LOAN_MARK_TYPES = (
 _DIRECT_PAYOUT_ASSETS = ("BTC", "LBTC", "LNBTC")
 _CUSTODY_COMPONENT_TYPES = (
     "native_transfer",
-    "channel_lifecycle",
-    "peg",
     "swap",
-    "refund",
     "manual_bridge",
 )
 _CUSTODY_LEG_ROLES = (

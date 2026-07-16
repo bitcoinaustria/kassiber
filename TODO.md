@@ -210,6 +210,10 @@ same verification surface.
     CLI handlers no longer query either legacy review table, including
     delete/revise lookup; the core authored store owns the remaining frozen-row
     mutation bridge pending component-native producer cutover.
+    The producerless future-layer adapter contract and unproduced
+    `channel_lifecycle`/`peg`/`refund` authored types are deleted. Real
+    Lightning lifecycle interpretation remains at the canonical observation
+    boundary; future Ark/Bark adapters will add their native types when built.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The

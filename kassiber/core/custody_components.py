@@ -45,10 +45,7 @@ from .custody_evidence import row_boundary_amounts
 COMPONENT_TYPES = frozenset(
     {
         "native_transfer",
-        "channel_lifecycle",
-        "peg",
         "swap",
-        "refund",
         "manual_bridge",
     }
 )

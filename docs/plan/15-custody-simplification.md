@@ -188,6 +188,10 @@ binary.
    CLI handlers now contain no pair/payout table reads; their remaining
    delete/revise compatibility lookup is isolated inside the authored store and
    will be deleted with the component-native producer cutover.
+   The future-only custody-layer adapter and producerless authored component
+   types are removed. The small canonical observation/interpreter boundary and
+   real Lightning lifecycle interpreter remain; later layers must introduce a
+   concrete adapter and tests with their actual protocol semantics.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.
