@@ -482,6 +482,10 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(preview["dry_run"])
         self.assertTrue(preview["activatable"])
+        self.assertEqual(
+            preview["authored_claim_fingerprint"],
+            preview["candidate_fingerprint"],
+        )
         self.assertEqual(preview["retained_msat"], 99 * BTC // 10)
         self.assertEqual(preview["residual_msat"], BTC // 10)
         self.assertEqual(preview["fee_msat"], 10_000_000)
@@ -525,6 +529,84 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 "strategy": "create_revision_then_activate",
             },
         )
+
+    def test_review_plans_are_read_only_and_apply_exact_component_rows(self):
+        candidate = self._candidate()
+        self.conn.execute("DELETE FROM custody_gap_candidate_projections")
+        self.conn.commit()
+        before = self.conn.total_changes
+        plan = custody_gap_reviews.plan_review(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            action="create",
+            candidate=candidate,
+            authored_source="cli",
+        )
+        self.assertEqual(self.conn.total_changes, before)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM custody_gap_candidate_projections"
+            ).fetchone()[0],
+            0,
+        )
+        self.assertTrue(plan["activatable"])
+        repeated = custody_gap_reviews.plan_review(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            action="create",
+            candidate=candidate,
+            authored_source="cli",
+        )
+        self.assertEqual(repeated["fingerprint"], plan["fingerprint"])
+        self.assertEqual(repeated["component_plan"], plan["component_plan"])
+
+        created = custody_gap_reviews.apply_review(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            action="create",
+            candidate=candidate,
+            expected_fingerprint=plan["fingerprint"],
+            authored_source="cli",
+        )
+        self.assertTrue(created["review_id"])
+        persisted = custody_components.get_component(
+            self.conn, created["component_id"]
+        )
+        leg_fields = tuple(plan["component_plan"]["legs"][0])
+        allocation_fields = tuple(plan["component_plan"]["allocations"][0])
+        self.assertEqual(
+            [{key: row[key] for key in leg_fields} for row in persisted["legs"]],
+            plan["component_plan"]["legs"],
+        )
+        self.assertEqual(
+            [
+                {key: row[key] for key in allocation_fields}
+                for row in persisted["allocations"]
+            ],
+            plan["component_plan"]["allocations"],
+        )
+
+        for preview_call in (
+            lambda: custody_gap_reviews.preview_residual_classification(
+                self.conn,
+                workspace_id="ws",
+                profile_id="profile",
+                gap_id=candidate.gap_id,
+                classification="external_payment",
+            ),
+            lambda: custody_gap_reviews.preview_reopen_guided_bridge(
+                self.conn,
+                workspace_id="ws",
+                profile_id="profile",
+                gap_id=candidate.gap_id,
+            ),
+        ):
+            before = self.conn.total_changes
+            preview_call()
+            self.assertEqual(self.conn.total_changes, before)
 
     def test_guided_bridge_previews_and_retains_filed_report_amendment_history(self):
         filed = custody_filed_reports.create_filed_report_snapshot(
@@ -1058,6 +1140,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_reopen_then_revise_preserves_every_revision_and_history_event(self):
         candidate, created = self._create_bridge()
+        changes_before_preview = self.conn.total_changes
         reopen_preview = custody_gap_reviews.preview_reopen_guided_bridge(
             self.conn,
             workspace_id="ws",
@@ -1065,6 +1148,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             gap_id=candidate.gap_id,
             reason="correct bridge",
         )
+        self.assertEqual(self.conn.total_changes, changes_before_preview)
         reopened = custody_gap_reviews.reopen_guided_bridge(
             self.conn,
             workspace_id="ws",
@@ -1083,6 +1167,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
 
         current = self._candidate()
+        changes_before_preview = self.conn.total_changes
         revision_preview = custody_gap_reviews.preview_guided_revision(
             self.conn,
             workspace_id="ws",
@@ -1090,6 +1175,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             candidate=current,
             reason="correct bridge",
         )
+        self.assertEqual(self.conn.total_changes, changes_before_preview)
         revised = custody_gap_reviews.revise_guided_bridge(
             self.conn,
             workspace_id="ws",
@@ -1097,6 +1183,10 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             candidate=current,
             expected_fingerprint=revision_preview["expected_fingerprint"],
             reason="correct bridge",
+        )
+        self.assertEqual(
+            revised["component_revision"],
+            revision_preview["new_component_revision"],
         )
         self.assertEqual(revised["component_revision"], 2)
         self.assertTrue(revised["review_id"])

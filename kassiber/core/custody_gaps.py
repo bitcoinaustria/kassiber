@@ -1306,6 +1306,7 @@ def load_gap_search_result(
     ignored_transaction_ids: Iterable[str] | None = None,
     accounting_ignored_transaction_ids: Iterable[str] | None = None,
     producer_kind: str = "review",
+    persist_projection: bool = True,
 ) -> tuple[CustodyGapSearchResult, list[_Leg]]:
     """Load candidates with ordinary search-completeness metadata."""
 
@@ -1511,7 +1512,7 @@ def load_gap_search_result(
     )
     cached = _load_candidate_projection(conn, projection_id)
     if cached is not None:
-        if producer_kind == "journal":
+        if producer_kind == "journal" and persist_projection:
             cached = _persist_candidate_projection(
                 conn,
                 profile_id=profile_id,
@@ -1564,8 +1565,8 @@ def load_gap_search_result(
             ),
             blocking_source_ids=accounting_result.blocking_source_ids,
         )
-    return (
-        _persist_candidate_projection(
+    if persist_projection:
+        result = _persist_candidate_projection(
             conn,
             profile_id=profile_id,
             projection_id=projection_id,
@@ -1575,9 +1576,8 @@ def load_gap_search_result(
             accounting_ignored_ids=accounting_ignored,
             producer_kind=producer_kind,
             result=result,
-        ),
-        normalized,
-    )
+        )
+    return result, normalized
 
 
 def load_gap_candidates(
@@ -1610,9 +1610,15 @@ def load_gap_candidates(
 
 
 def find_gap_candidate(
-    conn: sqlite3.Connection, profile_id: str, gap_id: str
+    conn: sqlite3.Connection,
+    profile_id: str,
+    gap_id: str,
+    *,
+    persist_projection: bool = True,
 ) -> CustodyGapCandidate:
-    result, _normalized = load_gap_search_result(conn, profile_id)
+    result, _normalized = load_gap_search_result(
+        conn, profile_id, persist_projection=persist_projection
+    )
     # A fully scored prefix remains safe to review even though the advisory
     # queue is incomplete. The action still re-derives and fingerprints the
     # exact candidate; this does not imply anything about omitted hints.

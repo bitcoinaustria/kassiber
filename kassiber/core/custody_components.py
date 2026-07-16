@@ -1977,6 +1977,103 @@ def _active_membership_conflicts(
     ]
 
 
+def validate_component_plan(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    component_type: str,
+    legs: Iterable[Mapping[str, Any]],
+    allocations: Iterable[Mapping[str, Any]] | None = None,
+    conservation_mode: str = "quantity",
+    conversion_policy: str | None = None,
+    conversion_reviewed: bool = False,
+    evidence_grade: str | None = None,
+    replacing_lineage_id: str | None = None,
+) -> dict[str, Any]:
+    """Validate an exact prospective component without writing any rows.
+
+    Preview callers use the same normalization, anchor checks, conservation
+    rules and active-membership arbitration as activation.  Evidence is still
+    captured atomically by :func:`activate_component`; apply therefore repeats
+    this validation against current rows before it writes the reviewed plan.
+    """
+
+    workspace_id = _required_text(workspace_id, "workspace_id")
+    profile_id = _required_text(profile_id, "profile_id")
+    normalized_type = _normalize_component_type(component_type)
+    normalized_mode = _normalize_mode(conservation_mode)
+    normalized_legs = normalize_legs(legs)
+    normalized_allocations = normalize_allocations(allocations, normalized_legs)
+    _scope(conn, workspace_id, profile_id)
+    _validate_leg_anchors(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        legs=normalized_legs,
+    )
+    validation = validate_conservation(
+        normalized_legs,
+        allocations=normalized_allocations,
+        conservation_mode=normalized_mode,
+        conversion_policy=conversion_policy,
+        conversion_reviewed=conversion_reviewed,
+        component_type=normalized_type,
+        evidence_grade=evidence_grade,
+    )
+    transaction_ids = sorted(
+        {
+            str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
+            for leg in normalized_legs
+            if leg.get("anchor_transaction_id") or leg.get("transaction_id")
+        }
+    )
+    conflicts: list[dict[str, str]] = []
+    if transaction_ids:
+        placeholders = ",".join("?" for _ in transaction_ids)
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT
+                   COALESCE(l.anchor_transaction_id, l.transaction_id)
+                       AS transaction_id,
+                   l.component_id, c.lineage_id
+            FROM custody_component_legs l
+            JOIN custody_components c ON c.id = l.component_id
+            WHERE l.profile_id = ?
+              AND c.state = 'active'
+              AND COALESCE(l.anchor_transaction_id, l.transaction_id)
+                  IN ({placeholders})
+            ORDER BY transaction_id, l.component_id
+            """,
+            (profile_id, *transaction_ids),
+        ).fetchall()
+        conflicts = [
+            {
+                "transaction_id": str(row["transaction_id"]),
+                "component_id": str(row["component_id"]),
+            }
+            for row in rows
+            if replacing_lineage_id is None
+            or str(row["lineage_id"]) != replacing_lineage_id
+        ]
+    if conflicts:
+        validation = dict(validation)
+        validation["activatable"] = False
+        validation["issues"] = [
+            *validation["issues"],
+            {
+                "code": "active_transaction_membership_conflict",
+                "message": "a transaction belongs to another active component",
+                "conflicts": conflicts,
+            },
+        ]
+    return {
+        "legs": normalized_legs,
+        "allocations": normalized_allocations,
+        "validation": validation,
+    }
+
+
 def _replicated_lineage_issues(
     conn: sqlite3.Connection,
     row: sqlite3.Row,
@@ -3377,6 +3474,7 @@ def update_component(
     new_component_id: str | None = None,
     created_at: str | None = None,
     authored_source: str = "user",
+    preserve_planned_row_ids: bool = False,
 ) -> dict[str, Any]:
     """Create a new immutable draft revision; never rewrite economic legs."""
 
@@ -3400,10 +3498,12 @@ def update_component(
     input_leg_ordinals = {
         str(leg["id"]): int(leg["ordinal"]) for leg in normalized_legs
     }
-    # Leg ids identify immutable revision rows, so a new revision always gets
-    # new ids even when a caller feeds a previous get_component payload back.
-    for leg in normalized_legs:
-        leg["id"] = str(uuid.uuid4())
+    # Ordinary revisions always receive fresh row ids. A reviewed plan may
+    # instead provide deterministic ids so apply can persist exactly what the
+    # user previewed; that opt-in path is validated again below.
+    if not preserve_planned_row_ids:
+        for leg in normalized_legs:
+            leg["id"] = str(uuid.uuid4())
     if allocations is _UNSET:
         if legs_unchanged:
             # Copied legs receive fresh ids, so map old allocation endpoints by
@@ -3425,6 +3525,8 @@ def update_component(
             ]
         else:
             raw_allocations = []
+    elif preserve_planned_row_ids:
+        raw_allocations = [dict(allocation) for allocation in allocations or []]  # type: ignore[union-attr]
     else:
         raw_allocations = []
         for allocation in allocations or []:  # type: ignore[union-attr]
@@ -3613,6 +3715,19 @@ def activate_component(
             "DELETE FROM custody_component_transaction_memberships WHERE component_id = ?",
             (component_id,),
         )
+        if transaction_ids:
+            placeholders = ",".join("?" for _ in transaction_ids)
+            conn.execute(
+                f"""
+                DELETE FROM custody_component_transaction_memberships
+                WHERE profile_id = ?
+                  AND transaction_id IN ({placeholders})
+                  AND component_id IN (
+                      SELECT id FROM custody_components WHERE state != 'active'
+                  )
+                """,
+                (component["profile_id"], *transaction_ids),
+            )
         try:
             conn.executemany(
                 """

@@ -144,7 +144,12 @@ binary.
    projection is also complete: accounting/review consumers share one
    input-version/ignored-boundary projection, completeness lives on its header,
    boundary relations are normalized, and presentation pages use indexed
-   keyset rows without rerunning discovery. The pure planner remains separate.
+   keyset rows without rerunning discovery. Planning is now one read-only
+   `plan_review` seam for create/revise/reopen/residual actions; it commits the
+   current journal input version, exact deterministic component rows and filed
+   report impacts. One `apply_review` seam replans and rejects any fingerprint
+   drift before performing the reviewed mutation. Existing CLI/daemon kinds
+   are redacted compatibility wrappers over those two operations.
 4. Add typed replicated component economic terms, migrate pair/payout authored
    state deterministically, and freeze legacy writes.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;

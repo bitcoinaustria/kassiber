@@ -21,6 +21,7 @@ from kassiber.core.custody_components import (
     supersede_component,
     undo_supersede,
     update_component,
+    validate_component_plan,
     validate_conservation,
 )
 from kassiber.core.chain_observer.provenance import (
@@ -1407,6 +1408,41 @@ class CustodyComponentApiTests(unittest.TestCase):
         self.assertEqual("custody_component_incomplete", raised.exception.code)
         self.assertEqual("active", get_component(self.conn, first["id"])["state"])
         self.assertEqual("draft", get_component(self.conn, second["id"])["state"])
+
+    def test_plan_membership_check_ignores_superseded_rows_like_activation(self):
+        first = activate_component(self.conn, self._balanced_component()["id"])
+        supersede_component(self.conn, first["id"], reason="retracted review")
+        self.conn.executemany(
+            "INSERT OR IGNORE INTO custody_component_transaction_memberships("
+            "component_id, profile_id, transaction_id, created_at) "
+            "VALUES(?, 'profile', ?, ?)",
+            [(first["id"], transaction_id, NOW) for transaction_id in ("out", "in-1", "in-2")],
+        )
+
+        checked = validate_component_plan(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="native_transfer",
+            legs=first["legs"],
+            allocations=first["allocations"],
+        )
+        self.assertTrue(checked["validation"]["activatable"])
+        replacement = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="native_transfer",
+            legs=[
+                _leg("source", 100, tx="out", wallet="btc"),
+                _leg("destination", 60, tx="in-1", wallet="btc"),
+                _leg("destination", 39, tx="in-2", wallet="btc"),
+                _leg("fee", 1, tx="out", wallet="btc"),
+            ],
+        )
+        self.assertEqual(
+            "active", activate_component(self.conn, replacement["id"])["state"]
+        )
 
     def test_revision_activation_supersedes_old_only_when_new_is_valid(self):
         draft = self._balanced_component()

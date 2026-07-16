@@ -173,7 +173,11 @@ same verification surface.
   - [x] Persist one normalized, versioned candidate projection with explicit
     completeness metadata and indexed keyset pagination; make journal, UI and
     AI reuse it and clear the obsolete serialized page cache after replacement.
-  - [ ] Add pure review planning and fingerprint/version-checked apply.
+  - [x] Add one read-only `plan_review` and one fingerprint/version-checked
+    `apply_review` seam for bridge creation, revision, reopening and residual
+    classification. Plans contain deterministic exact component rows and
+    report impacts; compatibility previews expose only redacted summaries and
+    perform zero SQLite writes.
   - [ ] Migrate pair/payout authored meaning into components with typed
     replicated economic terms; freeze legacy writes and retain replay history.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
