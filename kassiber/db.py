@@ -1093,6 +1093,13 @@ CREATE TABLE IF NOT EXISTS journal_custody_decisions (
     )),
     basis_barrier_at TEXT,
     reason TEXT NOT NULL,
+    review_kind TEXT NOT NULL DEFAULT 'custody_move',
+    policy TEXT NOT NULL DEFAULT 'carrying-value',
+    confidence_at_review TEXT,
+    review_source TEXT,
+    notes TEXT,
+    swap_fee_msat INTEGER,
+    swap_fee_kind TEXT,
     atomic_group_id TEXT,
     component_id TEXT,
     occurred_at TEXT,
@@ -1126,6 +1133,14 @@ CREATE TABLE IF NOT EXISTS journal_custody_economic_relations (
     target_amount_msat INTEGER NOT NULL CHECK(target_amount_msat > 0),
     review_kind TEXT NOT NULL,
     policy TEXT NOT NULL,
+    swap_fee_msat INTEGER,
+    swap_fee_kind TEXT,
+    notes TEXT,
+    confidence_at_review TEXT,
+    review_source TEXT,
+    target_external_id TEXT,
+    counterparty TEXT,
+    target_fiat_value_exact TEXT,
     basis_state TEXT NOT NULL CHECK(basis_state IN (
         'eligible', 'blocked_by_prior_custody_basis'
     )),
@@ -4416,6 +4431,31 @@ def ensure_schema_compat(conn):
         "target_rail",
         "TEXT NOT NULL DEFAULT 'unknown'",
     )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "review_kind",
+        "TEXT NOT NULL DEFAULT 'custody_move'",
+    )
+    ensure_column(
+        conn,
+        "journal_custody_decisions",
+        "policy",
+        "TEXT NOT NULL DEFAULT 'carrying-value'",
+    )
+    ensure_column(conn, "journal_custody_decisions", "confidence_at_review", "TEXT")
+    ensure_column(conn, "journal_custody_decisions", "review_source", "TEXT")
+    ensure_column(conn, "journal_custody_decisions", "notes", "TEXT")
+    ensure_column(conn, "journal_custody_decisions", "swap_fee_msat", "INTEGER")
+    ensure_column(conn, "journal_custody_decisions", "swap_fee_kind", "TEXT")
+    ensure_column(conn, "journal_custody_economic_relations", "swap_fee_msat", "INTEGER")
+    ensure_column(conn, "journal_custody_economic_relations", "swap_fee_kind", "TEXT")
+    ensure_column(conn, "journal_custody_economic_relations", "notes", "TEXT")
+    ensure_column(conn, "journal_custody_economic_relations", "confidence_at_review", "TEXT")
+    ensure_column(conn, "journal_custody_economic_relations", "review_source", "TEXT")
+    ensure_column(conn, "journal_custody_economic_relations", "target_external_id", "TEXT")
+    ensure_column(conn, "journal_custody_economic_relations", "counterparty", "TEXT")
+    ensure_column(conn, "journal_custody_economic_relations", "target_fiat_value_exact", "TEXT")
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")

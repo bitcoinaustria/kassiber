@@ -3057,7 +3057,7 @@ def _report_query_rows(conn, profile, wallet=None):
             }
         )
 
-    pair_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
+    pair_filters = ["p.profile_id = ?"]
     pair_params = [profile["id"]]
     if wallet:
         pair_filters.append("(tout.wallet_id = ? OR tin.wallet_id = ?)")
@@ -3077,18 +3077,47 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            -- Split cross-asset pairs cross only `out_amount`; the swap fee is
-            -- measured against that portion, so the Transfers & Swaps sheet must
-            -- report it too (NULL out_amount on whole/same-asset pairs).
-            COALESCE(p.out_amount, tout.amount) AS out_amount,
+            p.out_amount,
             tout.fee AS out_fee,
             tin.occurred_at AS in_occurred_at,
             COALESCE(tin.external_id, '') AS in_transaction_id,
             win.label AS in_wallet,
             tin.asset AS in_asset,
-            tin.amount AS in_amount,
+            p.in_amount,
             tin.fee AS in_fee
-        FROM transaction_pairs p
+        FROM (
+            SELECT
+                decision.profile_id,
+                decision.decision_id AS id,
+                decision.review_kind AS kind,
+                decision.policy,
+                decision.swap_fee_msat,
+                decision.swap_fee_kind,
+                COALESCE(decision.notes, '') AS notes,
+                decision.created_at,
+                decision.source_transaction_id AS out_transaction_id,
+                decision.target_transaction_id AS in_transaction_id,
+                decision.source_end_msat - decision.source_start_msat AS out_amount,
+                decision.target_end_msat - decision.target_start_msat AS in_amount
+            FROM journal_custody_decisions decision
+            UNION ALL
+            SELECT
+                relation.profile_id,
+                relation.relation_id AS id,
+                relation.review_kind AS kind,
+                relation.policy,
+                relation.swap_fee_msat,
+                relation.swap_fee_kind,
+                COALESCE(relation.notes, '') AS notes,
+                relation.created_at,
+                relation.source_transaction_id AS out_transaction_id,
+                relation.target_transaction_id AS in_transaction_id,
+                relation.source_amount_msat AS out_amount,
+                relation.target_amount_msat AS in_amount
+            FROM journal_custody_economic_relations relation
+            WHERE relation.relation_kind = 'conversion'
+              AND relation.target_transaction_id IS NOT NULL
+        ) p
         JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN transactions tin ON tin.id = p.in_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
@@ -3102,7 +3131,7 @@ def _report_query_rows(conn, profile, wallet=None):
         pair_params,
     ).fetchall()
 
-    direct_payout_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
+    direct_payout_filters = ["p.profile_id = ?"]
     direct_payout_params = [profile["id"]]
     if wallet:
         direct_payout_filters.append("tout.wallet_id = ?")
@@ -3111,13 +3140,13 @@ def _report_query_rows(conn, profile, wallet=None):
     direct_swap_payouts = conn.execute(
         f"""
         SELECT
-            p.id,
-            p.kind,
+            p.relation_id AS id,
+            p.review_kind AS kind,
             p.policy,
-            p.payout_asset,
-            p.payout_amount,
-            p.payout_occurred_at,
-            p.payout_external_id,
+            p.target_asset AS payout_asset,
+            p.target_amount_msat AS payout_amount,
+            p.target_occurred_at AS payout_occurred_at,
+            p.target_external_id AS payout_external_id,
             p.counterparty,
             p.swap_fee_msat,
             COALESCE(p.swap_fee_kind, '') AS swap_fee_kind,
@@ -3127,16 +3156,17 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            COALESCE(p.out_amount, tout.amount) AS out_amount,
+            p.source_amount_msat AS out_amount,
             tout.fee AS out_fee
-        FROM direct_swap_payouts p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
+        FROM journal_custody_economic_relations p
+        JOIN transactions tout ON tout.id = p.source_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
-        WHERE {direct_payout_where}
+        WHERE p.relation_kind = 'direct_payout'
+          AND {direct_payout_where}
         ORDER BY
-            COALESCE(p.payout_occurred_at, tout.occurred_at) ASC,
+            COALESCE(p.target_occurred_at, tout.occurred_at) ASC,
             p.created_at ASC,
-            p.id ASC
+            p.relation_id ASC
         """,
         direct_payout_params,
     ).fetchall()
@@ -3918,9 +3948,9 @@ def _summary_pdf_top_disposals(conn, profile_id, wallets, hooks: ReportHooks, st
 
 def _summary_pdf_internal_transfers(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
     wallet_filter, wallet_params = _wallet_scope_sql("tout.wallet_id", wallets)
-    # A multi-pair component (whirlpool 1->N review) repeats the SAME out leg
-    # on every pair row, so aggregate over distinct out transactions — one
-    # spend is one internal transfer, whatever the number of receipt legs.
+    # A fan-out component repeats the same source transaction on several
+    # projected decisions. Aggregate distinct sources: one spend is one
+    # internal transfer, whatever the number of destination slices.
     rows = conn.execute(
         f"""
         SELECT COUNT(*) AS count,
@@ -3928,13 +3958,10 @@ def _summary_pdf_internal_transfers(conn, profile_id, wallets, hooks: ReportHook
                COALESCE(SUM(amount), 0) AS amount_msat
         FROM (
             SELECT DISTINCT tout.id, tout.fiat_value, tout.amount
-            FROM transaction_pairs p
-            JOIN transactions tout ON tout.id = p.out_transaction_id
-            JOIN transactions tin ON tin.id = p.in_transaction_id
-            WHERE p.profile_id = ?
-              AND p.deleted_at IS NULL
-              AND p.policy = 'carrying-value'
-              AND tout.asset = tin.asset
+            FROM journal_custody_decisions decision
+            JOIN transactions tout ON tout.id = decision.source_transaction_id
+            WHERE decision.profile_id = ?
+              AND decision.source_asset = decision.target_asset
               AND {wallet_filter}
               AND tout.occurred_at >= ?
               AND tout.occurred_at <= ?
@@ -4496,8 +4523,7 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
 
 
 def _swap_fee_summary_rows(conn, profile_id, *, use_vienna_year=False):
-    """Aggregate ``transaction_pairs.swap_fee_msat`` per tax year and per
-    grand total, returning rows shaped to slot into the tax-summary list.
+    """Aggregate reviewed projected swap fees per tax year and grand total.
 
     Surfaces the "what actually left your custody" line that's invisible
     to the per-asset capital-gains breakdown above. For carrying-value
@@ -4507,30 +4533,27 @@ def _swap_fee_summary_rows(conn, profile_id, *, use_vienna_year=False):
     """
     rows = conn.execute(
         """
-        SELECT p.kind,
+        SELECT p.review_kind AS kind,
                p.policy,
                p.swap_fee_msat,
                t_out.asset AS out_asset,
-               t_in.asset AS in_asset,
-               t_out.occurred_at AS occurred_at
-        FROM transaction_pairs p
-        JOIN transactions t_out ON t_out.id = p.out_transaction_id
-        JOIN transactions t_in ON t_in.id = p.in_transaction_id
+               p.target_asset AS in_asset,
+               COALESCE(p.target_occurred_at, t_out.occurred_at) AS occurred_at
+        FROM journal_custody_economic_relations p
+        JOIN transactions t_out ON t_out.id = p.source_transaction_id
         WHERE p.profile_id = ?
-          AND p.deleted_at IS NULL
           AND p.swap_fee_msat IS NOT NULL
         UNION ALL
-        SELECT p.kind,
-               p.policy,
-               p.swap_fee_msat,
-               t_out.asset AS out_asset,
-               p.payout_asset AS in_asset,
-               COALESCE(p.payout_occurred_at, t_out.occurred_at) AS occurred_at
-        FROM direct_swap_payouts p
-        JOIN transactions t_out ON t_out.id = p.out_transaction_id
-        WHERE p.profile_id = ?
-          AND p.deleted_at IS NULL
-          AND p.swap_fee_msat IS NOT NULL
+        SELECT decision.review_kind AS kind,
+               decision.policy,
+               decision.swap_fee_msat,
+               decision.source_asset AS out_asset,
+               decision.target_asset AS in_asset,
+               COALESCE(decision.target_occurred_at,
+                        decision.occurred_at) AS occurred_at
+        FROM journal_custody_decisions decision
+        WHERE decision.profile_id = ?
+          AND decision.swap_fee_msat IS NOT NULL
         """,
         (profile_id, profile_id),
     ).fetchall()

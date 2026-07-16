@@ -173,13 +173,16 @@ binary.
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.
    In progress: MOVE decisions and non-quantity conversion/payout relations are
-   stored together by the canonical projection replacement. Transaction-graph
-   accounting annotations, report transfer labels and source-of-funds lineage
-   read that projection; when it is stale they expose no provisional booked
-   truth. Source-of-funds no longer has private pair, component, UTXO or payment
-   hash allocation engines. Consumer-side calls to transfer detection have
-   consequently been deleted, leaving the custody journal interpreter as the
-   only production caller.
+   stored together by the canonical projection replacement, including reviewed
+   kind/policy/source, notes, fees and payout presentation metadata. Reports,
+   exports, transaction graphs, source-of-funds, transaction/journal UI and AI
+   snapshots read that projection; stale books do not render old custody
+   grouping as current booked truth. Source-of-funds no longer has private pair,
+   component, UTXO or payment-hash allocation engines. Consumer-side calls to
+   transfer detection have consequently been deleted, leaving the custody
+   journal interpreter as the only production caller. The remaining work is a
+   mandatory gated report context, component-only producer/builder cutover and
+   deletion of obsolete compatibility and speculative layer surfaces.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

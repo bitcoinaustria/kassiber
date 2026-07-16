@@ -2482,28 +2482,44 @@ class TransactionGraphTest(unittest.TestCase):
         )
         self.conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-                pair_source, out_amount, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_custody_economic_relations(
+                relation_id, workspace_id, profile_id, relation_kind,
+                source_transaction_id, target_transaction_id, source_asset,
+                target_asset, source_amount_msat, target_amount_msat,
+                review_kind, policy, swap_fee_msat, swap_fee_kind, notes,
+                basis_state, occurred_at, target_occurred_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "pair-swap-1",
+                "a" * 64,
                 "ws-1",
                 "profile-1",
+                "conversion",
                 "swap-out",
                 "swap-in",
+                "LBTC",
+                "BTC",
+                124_262_750_000,
+                124_132_980_000,
                 "swap",
                 "carrying-value",
-                "reviewed cross-chain swap",
                 129_770_000,
                 "network_or_provider_fee",
-                "manual",
-                "manual",
-                124_262_750_000,
+                "reviewed cross-chain swap",
+                "eligible",
+                NOW,
+                NOW,
                 NOW,
             ),
+        )
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
+            """,
+            (NOW,),
         )
 
         payload = self._graph("swap-out")
@@ -2524,6 +2540,14 @@ class TransactionGraphTest(unittest.TestCase):
         serialized = json.dumps(payload)
         self.assertNotIn("reviewed cross-chain swap", serialized)
         self.assertNotIn("raw_json", serialized)
+
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = 1, "
+            "last_processed_input_version = 0 WHERE id = 'profile-1'"
+        )
+        stale = self._graph("swap-out")
+        self.assertEqual(stale["accounting"]["custodyProjection"], "stale")
+        self.assertIsNone(stale["swapRoute"])
 
     def test_manual_coinjoin_pair_routes_as_coinjoin(self):
         self._tx(
@@ -2553,28 +2577,59 @@ class TransactionGraphTest(unittest.TestCase):
         )
         self.conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-                pair_source, out_amount, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_custody_decisions(
+                decision_id, workspace_id, profile_id,
+                source_transaction_id, target_transaction_id,
+                source_observation_hash, source_start_msat, source_end_msat,
+                target_observation_hash, target_start_msat, target_end_msat,
+                source_wallet_id, target_wallet_id,
+                source_network, target_network, source_rail, target_rail,
+                source_asset, target_asset, state, basis_state, reason,
+                review_kind, policy, confidence_at_review, review_source, notes,
+                occurred_at, target_occurred_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "pair-coinjoin-1",
+                "b" * 64,
                 "ws-1",
                 "profile-1",
                 "coinjoin-out",
                 "coinjoin-in",
+                "1" * 64,
+                0,
+                99_500_000_000,
+                "2" * 64,
+                0,
+                99_500_000_000,
+                "wallet-a",
+                "wallet-b",
+                "main",
+                "main",
+                "bitcoin",
+                "bitcoin",
+                "BTC",
+                "BTC",
+                "internal_reviewed",
+                "eligible",
+                "reviewed_custody_component",
                 "coinjoin",
                 "carrying-value",
+                "manual",
+                "manual",
                 "reviewed generic Coinjoin hop",
-                None,
-                None,
-                "manual",
-                "manual",
-                None,
+                NOW,
+                NOW,
                 NOW,
             ),
+        )
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
+            """,
+            (NOW,),
         )
 
         payload = self._graph("coinjoin-out")

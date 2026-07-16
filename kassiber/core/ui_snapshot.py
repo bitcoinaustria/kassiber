@@ -541,22 +541,70 @@ def _normalize_ui_transaction_quick_filter(value: str) -> str:
 
 def _ui_transaction_pair_exists_sql(pair_type: str | None = None) -> str:
     if pair_type == "swap":
-        type_predicate = "AND tout.asset <> tin.asset"
-    elif pair_type == "transfer":
-        type_predicate = "AND tout.asset = tin.asset"
-    else:
-        type_predicate = ""
-    return f"""
+        return """
         EXISTS (
           SELECT 1
-          FROM transaction_pairs p
-          JOIN transactions tout ON tout.id = p.out_transaction_id
-          JOIN transactions tin ON tin.id = p.in_transaction_id
-          WHERE p.deleted_at IS NULL
-            AND (p.out_transaction_id = t.id OR p.in_transaction_id = t.id)
-            {type_predicate}
+          FROM journal_custody_economic_relations relation
+          WHERE relation.profile_id = t.profile_id
+            AND relation.relation_kind = 'conversion'
+            AND relation.target_transaction_id IS NOT NULL
+            AND (
+              relation.source_transaction_id = t.id
+              OR relation.target_transaction_id = t.id
+            )
         )
+        """
+    elif pair_type == "transfer":
+        return """
+        EXISTS (
+          SELECT 1
+          FROM journal_custody_decisions decision
+          WHERE decision.profile_id = t.profile_id
+            AND decision.source_asset = decision.target_asset
+            AND (
+              decision.source_transaction_id = t.id
+              OR decision.target_transaction_id = t.id
+            )
+        )
+        """
+    return f"""
+        ({_ui_transaction_pair_exists_sql('transfer')}
+         OR {_ui_transaction_pair_exists_sql('swap')})
     """
+
+
+def _ui_transaction_custody_group_sql(*, projection_current: bool = True) -> str:
+    if not projection_current:
+        return "'tx:' || t.id"
+    return """
+        COALESCE(
+          (
+            SELECT 'decision:' || decision.decision_id
+            FROM journal_custody_decisions decision
+            WHERE decision.profile_id = t.profile_id
+              AND (
+                decision.source_transaction_id = t.id
+                OR decision.target_transaction_id = t.id
+              )
+            ORDER BY decision.occurred_at, decision.decision_id
+            LIMIT 1
+          ),
+          (
+            SELECT 'relation:' || relation.relation_id
+            FROM journal_custody_economic_relations relation
+            WHERE relation.profile_id = t.profile_id
+              AND relation.relation_kind = 'conversion'
+              AND relation.target_transaction_id IS NOT NULL
+              AND (
+                relation.source_transaction_id = t.id
+                OR relation.target_transaction_id = t.id
+              )
+            ORDER BY relation.occurred_at, relation.relation_id
+            LIMIT 1
+          ),
+          'tx:' || t.id
+        )
+    """.strip()
 
 
 def _ui_transaction_payment_method_sql() -> str:
@@ -1845,37 +1893,76 @@ def _transaction_pair_display_meta(
         return {}
     ids = [row["id"] for row in rows]
     placeholders = ", ".join("?" for _ in ids)
+    profile_rows = conn.execute(
+        f"SELECT DISTINCT profile_id FROM transactions WHERE id IN ({placeholders})",
+        ids,
+    ).fetchall()
+    if len(profile_rows) != 1:
+        return {}
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?",
+        (profile_rows[0]["profile_id"],),
+    ).fetchone()
+    if profile is None or _journal_freshness(conn, profile)["needs_processing"]:
+        return {}
     pair_rows = conn.execute(
         f"""
         SELECT
-            p.id,
-            p.kind,
-            p.policy,
-            p.swap_fee_msat,
-            p.swap_fee_kind,
-            p.out_transaction_id,
-            p.in_transaction_id,
-            tout.asset AS out_asset,
-            -- Split cross-asset pairs cross only `out_amount`; keep the pair's
-            -- out amount consistent with swap_fee_msat (NULL on whole pairs).
-            COALESCE(p.out_amount, tout.amount) AS out_amount,
+            decision.decision_id AS id,
+            decision.review_kind AS kind,
+            decision.policy,
+            decision.swap_fee_msat,
+            decision.swap_fee_kind,
+            decision.source_transaction_id AS out_transaction_id,
+            decision.target_transaction_id AS in_transaction_id,
+            decision.source_asset AS out_asset,
+            decision.source_end_msat - decision.source_start_msat AS out_amount,
             tout.fiat_rate AS out_fiat_rate,
-            tin.asset AS in_asset,
-            tin.amount AS in_amount,
+            decision.target_asset AS in_asset,
+            decision.target_end_msat - decision.target_start_msat AS in_amount,
             tin.fiat_rate AS in_fiat_rate,
             wout.label AS out_wallet,
-            win.label AS in_wallet
-        FROM transaction_pairs p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
-        JOIN transactions tin ON tin.id = p.in_transaction_id
+            win.label AS in_wallet,
+            decision.occurred_at AS sort_at
+        FROM journal_custody_decisions decision
+        JOIN transactions tout ON tout.id = decision.source_transaction_id
+        JOIN transactions tin ON tin.id = decision.target_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
         JOIN wallets win ON win.id = tin.wallet_id
-        WHERE p.deleted_at IS NULL
-          AND (p.out_transaction_id IN ({placeholders})
-               OR p.in_transaction_id IN ({placeholders}))
-        ORDER BY p.created_at, p.id
+        WHERE decision.source_transaction_id IN ({placeholders})
+           OR decision.target_transaction_id IN ({placeholders})
+        UNION ALL
+        SELECT
+            relation.relation_id AS id,
+            relation.review_kind AS kind,
+            relation.policy AS policy,
+            relation.swap_fee_msat,
+            relation.swap_fee_kind,
+            relation.source_transaction_id AS out_transaction_id,
+            relation.target_transaction_id AS in_transaction_id,
+            relation.source_asset AS out_asset,
+            relation.source_amount_msat AS out_amount,
+            tout.fiat_rate AS out_fiat_rate,
+            relation.target_asset AS in_asset,
+            relation.target_amount_msat AS in_amount,
+            tin.fiat_rate AS in_fiat_rate,
+            wout.label AS out_wallet,
+            win.label AS in_wallet,
+            relation.occurred_at AS sort_at
+        FROM journal_custody_economic_relations relation
+        JOIN transactions tout ON tout.id = relation.source_transaction_id
+        JOIN transactions tin ON tin.id = relation.target_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        JOIN wallets win ON win.id = tin.wallet_id
+        WHERE relation.relation_kind = 'conversion'
+          AND relation.target_transaction_id IS NOT NULL
+          AND (
+            relation.source_transaction_id IN ({placeholders})
+            OR relation.target_transaction_id IN ({placeholders})
+          )
+        ORDER BY sort_at, id
         """,
-        [*ids, *ids],
+        [*ids, *ids, *ids, *ids],
     ).fetchall()
     pair_meta: dict[str, dict[str, Any]] = {}
     for pair in pair_rows:
@@ -3404,6 +3491,17 @@ def _build_transactions_page_snapshot(
         )
 
     limit = _coerce_limit(raw_args, default=default_limit, maximum=maximum_limit)
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?", (context["profile_id"],)
+    ).fetchone()
+    projection_current = bool(
+        profile is not None
+        and not _journal_freshness(conn, profile)["needs_processing"]
+    )
+
+    def pair_exists_sql(pair_type: str | None = None) -> str:
+        return _ui_transaction_pair_exists_sql(pair_type) if projection_current else "0"
+
     filters = ["t.profile_id = ?"]
     params: list[Any] = [context["profile_id"]]
     direction = _coerce_optional_string_arg(raw_args, "direction")
@@ -3476,7 +3574,7 @@ def _build_transactions_page_snapshot(
             f"""(
               t.direction = 'inbound'
               AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in _UI_TRANSACTION_FLOW_KINDS | {"transfer"})})
-              AND NOT {_ui_transaction_pair_exists_sql()}
+              AND NOT {pair_exists_sql()}
             )"""
         )
         params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS | {"transfer"}))
@@ -3485,19 +3583,19 @@ def _build_transactions_page_snapshot(
             f"""(
               t.direction = 'outbound'
               AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in _UI_TRANSACTION_FLOW_KINDS | {"transfer"})})
-              AND NOT {_ui_transaction_pair_exists_sql()}
+              AND NOT {pair_exists_sql()}
             )"""
         )
         params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS | {"transfer"}))
     elif flow_filter == "transfer":
         filters.append(
-            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {_ui_transaction_pair_exists_sql('transfer')})"
+            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {pair_exists_sql('transfer')})"
         )
     elif flow_filter == "swap":
         filters.append(
             f"""(
               lower(COALESCE(t.kind, '')) IN ({", ".join("?" for _ in _UI_TRANSACTION_FLOW_KINDS)})
-              OR {_ui_transaction_pair_exists_sql('swap')}
+              OR {pair_exists_sql('swap')}
             )"""
         )
         params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS))
@@ -3635,13 +3733,10 @@ def _build_transactions_page_snapshot(
     base_params = list(params)
     total_row = conn.execute(
         f"""
-        SELECT COUNT(DISTINCT COALESCE('pair:' || p.id, 'tx:' || t.id)) AS count
+        SELECT COUNT(DISTINCT {_ui_transaction_custody_group_sql(projection_current=projection_current)}) AS count
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        LEFT JOIN transaction_pairs p
-          ON p.deleted_at IS NULL
-         AND (p.out_transaction_id = t.id OR p.in_transaction_id = t.id)
         WHERE {' AND '.join(base_filters)}
         """,
         base_params,
@@ -4118,26 +4213,26 @@ def _capital_gains_neutral_swap_rows(
             je.cost_basis,
             je.proceeds,
             je.gain_loss,
-            COALESCE(p.id, '') AS pair_id,
-            COALESCE(p.kind, '') AS kind,
-            COALESCE(p.policy, '') AS policy,
-            COALESCE(p.swap_fee_msat, 0) AS swap_fee_msat,
-            COALESCE(p.swap_fee_kind, '') AS swap_fee_kind,
+            COALESCE(relation.relation_id, '') AS pair_id,
+            COALESCE(relation.review_kind, '') AS kind,
+            COALESCE(relation.policy, '') AS policy,
+            COALESCE(relation.swap_fee_msat, 0) AS swap_fee_msat,
+            COALESCE(relation.swap_fee_kind, '') AS swap_fee_kind,
             wout.label AS out_wallet,
-            tout.asset AS out_asset,
+            relation.source_asset AS out_asset,
             -- Split cross-asset swaps cross only `out_amount`; keep outSats
             -- consistent with feeSats (swap_fee_msat) on neu_swap detail rows.
-            COALESCE(p.out_amount, tout.amount) AS out_amount,
+            COALESCE(relation.source_amount_msat, tout.amount) AS out_amount,
             win.label AS in_wallet,
-            tin.asset AS in_asset,
-            tin.amount AS in_amount
+            relation.target_asset AS in_asset,
+            relation.target_amount_msat AS in_amount
         FROM journal_entries je
-        LEFT JOIN transaction_pairs p
-          ON p.out_transaction_id = je.transaction_id
-         AND p.profile_id = je.profile_id
-         AND p.deleted_at IS NULL
-        LEFT JOIN transactions tout ON tout.id = p.out_transaction_id
-        LEFT JOIN transactions tin ON tin.id = p.in_transaction_id
+        LEFT JOIN journal_custody_economic_relations relation
+          ON relation.source_transaction_id = je.transaction_id
+         AND relation.profile_id = je.profile_id
+         AND relation.relation_kind = 'conversion'
+        LEFT JOIN transactions tout ON tout.id = relation.source_transaction_id
+        LEFT JOIN transactions tin ON tin.id = relation.target_transaction_id
         LEFT JOIN wallets wout ON wout.id = tout.wallet_id
         LEFT JOIN wallets win ON win.id = tin.wallet_id
         WHERE {' AND '.join(where)}
@@ -4406,40 +4501,86 @@ def _journal_pair_payload(row: sqlite3.Row) -> dict[str, Any] | None:
     }
 
 
-# A leg can carry SEVERAL active pairs since the multi-pair feature dropped
-# the per-leg UNIQUE indexes (a whirlpool out leg pairs with N postmix
-# receipts). Joining the raw table would multiply every journal entry of that
-# transaction N times, so each side picks one deterministic representative
-# pair (oldest, then smallest id) — display metadata only, never accounting.
-_JOURNAL_PAIR_JOIN_SQL = """
+# A leg can carry several projected custody relations (fan-out, consolidation,
+# or a split conversion). Journal rows show one deterministic representative
+# relation as display metadata only; the stored decision/relation projection,
+# never authored compatibility rows, is the source.
+_JOURNAL_CUSTODY_RELATION_SQL = """
+                    SELECT
+                        decision.profile_id,
+                        decision.decision_id AS id,
+                        decision.review_kind AS kind,
+                        decision.policy,
+                        decision.swap_fee_msat,
+                        decision.swap_fee_kind,
+                        decision.source_transaction_id AS out_transaction_id,
+                        decision.target_transaction_id AS in_transaction_id,
+                        decision.source_end_msat - decision.source_start_msat
+                            AS out_amount,
+                        decision.target_end_msat - decision.target_start_msat
+                            AS in_amount,
+                        decision.created_at
+                    FROM journal_custody_decisions decision
+                    UNION ALL
+                    SELECT
+                        relation.profile_id,
+                        relation.relation_id AS id,
+                        relation.review_kind AS kind,
+                        relation.policy,
+                        relation.swap_fee_msat,
+                        relation.swap_fee_kind,
+                        relation.source_transaction_id AS out_transaction_id,
+                        relation.target_transaction_id AS in_transaction_id,
+                        relation.source_amount_msat AS out_amount,
+                        relation.target_amount_msat AS in_amount,
+                        relation.created_at
+                    FROM journal_custody_economic_relations relation
+                    WHERE relation.relation_kind = 'conversion'
+                      AND relation.target_transaction_id IS NOT NULL
+"""
+
+_JOURNAL_PAIR_JOIN_SQL = f"""
             LEFT JOIN (
-                SELECT * FROM transaction_pairs tp
-                WHERE tp.deleted_at IS NULL
-                  AND tp.id = (
-                    SELECT tp2.id FROM transaction_pairs tp2
-                    WHERE tp2.profile_id = tp.profile_id
-                      AND tp2.out_transaction_id = tp.out_transaction_id
-                      AND tp2.deleted_at IS NULL
-                    ORDER BY tp2.created_at, tp2.id
-                    LIMIT 1
-                  )
+                SELECT * FROM (
+                    SELECT relation.*,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY profile_id, out_transaction_id
+                               ORDER BY created_at, id
+                           ) AS relation_rank
+                    FROM ({_JOURNAL_CUSTODY_RELATION_SQL}) relation
+                )
+                WHERE relation_rank = 1
             ) p_out
               ON p_out.profile_id = je.profile_id
              AND p_out.out_transaction_id = je.transaction_id
             LEFT JOIN (
-                SELECT * FROM transaction_pairs tp
-                WHERE tp.deleted_at IS NULL
-                  AND tp.id = (
-                    SELECT tp2.id FROM transaction_pairs tp2
-                    WHERE tp2.profile_id = tp.profile_id
-                      AND tp2.in_transaction_id = tp.in_transaction_id
-                      AND tp2.deleted_at IS NULL
-                    ORDER BY tp2.created_at, tp2.id
-                    LIMIT 1
-                  )
+                SELECT * FROM (
+                    SELECT relation.*,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY profile_id, in_transaction_id
+                               ORDER BY created_at, id
+                           ) AS relation_rank
+                    FROM ({_JOURNAL_CUSTODY_RELATION_SQL}) relation
+                )
+                WHERE relation_rank = 1
             ) p_in
               ON p_in.profile_id = je.profile_id
              AND p_in.in_transaction_id = je.transaction_id
+"""
+
+_JOURNAL_EMPTY_PAIR_JOIN_SQL = """
+            LEFT JOIN (
+                SELECT NULL AS id, NULL AS kind, NULL AS policy,
+                       NULL AS swap_fee_msat, NULL AS out_transaction_id,
+                       NULL AS in_transaction_id, NULL AS out_amount
+                WHERE 0
+            ) p_out ON 0
+            LEFT JOIN (
+                SELECT NULL AS id, NULL AS kind, NULL AS policy,
+                       NULL AS swap_fee_msat, NULL AS out_transaction_id,
+                       NULL AS in_transaction_id, NULL AS out_amount
+                WHERE 0
+            ) p_in ON 0
 """
 
 _JOURNAL_PAIR_ID_SQL = (
@@ -4507,6 +4648,11 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         }
 
     freshness = _journal_freshness(conn, profile)
+    pair_join_sql = (
+        _JOURNAL_EMPTY_PAIR_JOIN_SQL
+        if freshness["needs_processing"]
+        else _JOURNAL_PAIR_JOIN_SQL
+    )
     entry_rows = conn.execute(
         f"""
         SELECT
@@ -4553,7 +4699,7 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             FROM journal_entries je
             JOIN wallets w ON w.id = je.wallet_id
             LEFT JOIN transactions t ON t.id = je.transaction_id
-            {_JOURNAL_PAIR_JOIN_SQL}
+            {pair_join_sql}
             LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
             LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
             LEFT JOIN wallets wout ON wout.id = tout.wallet_id
@@ -4602,7 +4748,7 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 FROM journal_entries je
                 JOIN wallets w ON w.id = je.wallet_id
                 LEFT JOIN transactions t ON t.id = je.transaction_id
-                {_JOURNAL_PAIR_JOIN_SQL}
+                {pair_join_sql}
                 LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
                 LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
                 LEFT JOIN wallets wout ON wout.id = tout.wallet_id
@@ -4838,6 +4984,11 @@ def build_journal_events_list_snapshot(
         return {"summary": empty_summary, "events": []}
 
     freshness = _journal_freshness(conn, profile)
+    pair_join_sql = (
+        _JOURNAL_EMPTY_PAIR_JOIN_SQL
+        if freshness["needs_processing"]
+        else _JOURNAL_PAIR_JOIN_SQL
+    )
     where_sql = "WHERE je.profile_id = ?"
     params: list[Any] = [profile["id"]]
     if transaction_ref:
@@ -4916,7 +5067,7 @@ def build_journal_events_list_snapshot(
         JOIN wallets w ON w.id = je.wallet_id
         LEFT JOIN accounts a ON a.id = je.account_id
         LEFT JOIN transactions t ON t.id = je.transaction_id
-        {_JOURNAL_PAIR_JOIN_SQL}
+        {pair_join_sql}
         LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
         LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
         LEFT JOIN wallets wout ON wout.id = tout.wallet_id
@@ -5813,18 +5964,42 @@ def build_journals_transfers_list_snapshot(
             "pairs": [],
         }
 
+    freshness = _journal_freshness(conn, profile)
+    if freshness["needs_processing"]:
+        return {
+            "summary": {
+                "workspace": context["workspace_label"] or None,
+                "profile": context["profile_label"] or None,
+                "manual_pairs": 0,
+                "same_asset_pairs": 0,
+                "cross_asset_pairs": 0,
+                "journal_transfer_entries": 0,
+                "limit": limit,
+                "projection_status": "stale",
+            },
+            "pairs": [],
+        }
+
     summary = conn.execute(
         """
         SELECT
             COUNT(*) AS manual_pairs,
-            SUM(CASE WHEN tout.asset = tin.asset THEN 1 ELSE 0 END) AS same_asset_pairs,
-            SUM(CASE WHEN tout.asset <> tin.asset THEN 1 ELSE 0 END) AS cross_asset_pairs
-        FROM transaction_pairs p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
-        JOIN transactions tin ON tin.id = p.in_transaction_id
-        WHERE p.profile_id = ? AND p.deleted_at IS NULL
+            SUM(CASE WHEN source_asset = target_asset THEN 1 ELSE 0 END)
+                AS same_asset_pairs,
+            SUM(CASE WHEN source_asset <> target_asset THEN 1 ELSE 0 END)
+                AS cross_asset_pairs
+        FROM (
+            SELECT source_asset, target_asset
+            FROM journal_custody_decisions
+            WHERE profile_id = ?
+            UNION ALL
+            SELECT source_asset, target_asset
+            FROM journal_custody_economic_relations
+            WHERE profile_id = ? AND relation_kind = 'conversion'
+              AND target_transaction_id IS NOT NULL
+        )
         """,
-        (profile["id"],),
+        (profile["id"], profile["id"]),
     ).fetchone()
     journal_transfer_entries = conn.execute(
         """
@@ -5837,34 +6012,59 @@ def build_journals_transfers_list_snapshot(
     rows = conn.execute(
         """
         SELECT
-            p.id,
-            p.kind,
-            p.policy,
-            p.created_at,
-            p.out_transaction_id,
-            p.in_transaction_id,
+            decision.decision_id AS id,
+            decision.review_kind AS kind,
+            decision.policy,
+            decision.created_at,
+            decision.source_transaction_id AS out_transaction_id,
+            decision.target_transaction_id AS in_transaction_id,
             tout.external_id AS out_external_id,
             tout.occurred_at AS out_occurred_at,
-            tout.asset AS out_asset,
-            -- Split cross-asset pairs cross only `out_amount`; mirror the CLI
-            -- transfers-list (swap_fee_msat is measured against this portion).
-            COALESCE(p.out_amount, tout.amount) AS out_amount,
+            decision.source_asset AS out_asset,
+            decision.source_end_msat - decision.source_start_msat AS out_amount,
             wout.label AS out_wallet,
             tin.external_id AS in_external_id,
             tin.occurred_at AS in_occurred_at,
-            tin.asset AS in_asset,
-            tin.amount AS in_amount,
-            win.label AS in_wallet
-        FROM transaction_pairs p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
-        JOIN transactions tin ON tin.id = p.in_transaction_id
+            decision.target_asset AS in_asset,
+            decision.target_end_msat - decision.target_start_msat AS in_amount,
+            win.label AS in_wallet,
+            decision.occurred_at AS sort_at
+        FROM journal_custody_decisions decision
+        JOIN transactions tout ON tout.id = decision.source_transaction_id
+        JOIN transactions tin ON tin.id = decision.target_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
         JOIN wallets win ON win.id = tin.wallet_id
-        WHERE p.profile_id = ? AND p.deleted_at IS NULL
-        ORDER BY p.created_at DESC
+        WHERE decision.profile_id = ?
+        UNION ALL
+        SELECT
+            relation.relation_id AS id,
+            relation.review_kind AS kind,
+            relation.policy,
+            relation.created_at,
+            relation.source_transaction_id AS out_transaction_id,
+            relation.target_transaction_id AS in_transaction_id,
+            tout.external_id AS out_external_id,
+            tout.occurred_at AS out_occurred_at,
+            relation.source_asset AS out_asset,
+            relation.source_amount_msat AS out_amount,
+            wout.label AS out_wallet,
+            tin.external_id AS in_external_id,
+            tin.occurred_at AS in_occurred_at,
+            relation.target_asset AS in_asset,
+            relation.target_amount_msat AS in_amount,
+            win.label AS in_wallet,
+            relation.occurred_at AS sort_at
+        FROM journal_custody_economic_relations relation
+        JOIN transactions tout ON tout.id = relation.source_transaction_id
+        JOIN transactions tin ON tin.id = relation.target_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        JOIN wallets win ON win.id = tin.wallet_id
+        WHERE relation.profile_id = ? AND relation.relation_kind = 'conversion'
+          AND relation.target_transaction_id IS NOT NULL
+        ORDER BY sort_at DESC, id DESC
         LIMIT ?
         """,
-        (profile["id"], limit),
+        (profile["id"], profile["id"], limit),
     ).fetchall()
     return {
         "summary": {
@@ -6276,23 +6476,28 @@ def _active_swap_review_refs(
     conn: sqlite3.Connection,
     profile_id: str,
 ) -> list[sqlite3.Row]:
-    pair_records = conn.execute(
+    return conn.execute(
         """
-        SELECT out_transaction_id, in_transaction_id, kind, policy, deleted_at
-        FROM transaction_pairs
+        SELECT
+            source_transaction_id AS out_transaction_id,
+            target_transaction_id AS in_transaction_id,
+            review_kind AS kind,
+            policy,
+            NULL AS deleted_at
+        FROM journal_custody_decisions
+        WHERE profile_id = ?
+        UNION ALL
+        SELECT
+            source_transaction_id AS out_transaction_id,
+            target_transaction_id AS in_transaction_id,
+            review_kind AS kind,
+            policy,
+            NULL AS deleted_at
+        FROM journal_custody_economic_relations
         WHERE profile_id = ?
         """,
-        (profile_id,),
+        (profile_id, profile_id),
     ).fetchall()
-    payout_records = conn.execute(
-        """
-        SELECT out_transaction_id, NULL AS in_transaction_id, kind, policy, deleted_at
-        FROM direct_swap_payouts
-        WHERE profile_id = ?
-        """,
-        (profile_id,),
-    ).fetchall()
-    return [*pair_records, *payout_records]
 
 
 def _swap_candidate_blocks_reports(

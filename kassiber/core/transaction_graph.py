@@ -142,7 +142,11 @@ def build_transaction_graph_snapshot(
 
     tx_meta = _transaction_meta(row, graph)
     tx_id = str(row["id"])
-    swap_route = _swap_route_for_row(conn, profile_id, row)
+    swap_route = (
+        _swap_route_for_row(conn, profile_id, row)
+        if semantics.get("projection_current")
+        else None
+    )
     return {
         "transaction": tx_meta,
         "supportLevel": graph["supportLevel"],
@@ -2335,14 +2339,14 @@ def _swap_route_for_row(
             p.swap_fee_kind,
             p.confidence_at_pair,
             p.pair_source,
-            p.out_amount AS pair_out_amount_msat,
+            p.source_amount_msat AS pair_out_amount_msat,
             p.created_at AS pair_created_at,
             out_t.id AS out_id,
             out_t.external_id AS out_external_id,
             out_t.direction AS out_direction,
             out_t.asset AS out_asset,
             out_t.amount AS out_full_amount_msat,
-            COALESCE(p.out_amount, out_t.amount) AS out_amount_msat,
+            p.source_amount_msat AS out_amount_msat,
             out_t.fee AS out_fee_msat,
             out_t.occurred_at AS out_occurred_at,
             out_t.confirmed_at AS out_confirmed_at,
@@ -2357,7 +2361,7 @@ def _swap_route_for_row(
             in_t.external_id AS in_external_id,
             in_t.direction AS in_direction,
             in_t.asset AS in_asset,
-            in_t.amount AS in_amount_msat,
+            p.target_amount_msat AS in_amount_msat,
             in_t.fee AS in_fee_msat,
             in_t.occurred_at AS in_occurred_at,
             in_t.confirmed_at AS in_confirmed_at,
@@ -2368,14 +2372,52 @@ def _swap_route_for_row(
             in_w.id AS in_wallet_id,
             in_w.label AS in_wallet_label,
             in_w.kind AS in_wallet_kind
-        FROM transaction_pairs p
-        JOIN transactions out_t ON out_t.id = p.out_transaction_id
-        JOIN transactions in_t ON in_t.id = p.in_transaction_id
+        FROM (
+            SELECT
+                decision.profile_id,
+                decision.decision_id AS id,
+                decision.review_kind AS kind,
+                decision.policy,
+                decision.swap_fee_msat,
+                decision.swap_fee_kind,
+                decision.confidence_at_review AS confidence_at_pair,
+                decision.review_source AS pair_source,
+                decision.source_amount_msat,
+                decision.target_amount_msat,
+                decision.source_transaction_id,
+                decision.target_transaction_id,
+                decision.created_at
+            FROM (
+                SELECT decision.*,
+                       source_end_msat - source_start_msat AS source_amount_msat,
+                       target_end_msat - target_start_msat AS target_amount_msat
+                FROM journal_custody_decisions decision
+            ) decision
+            UNION ALL
+            SELECT
+                relation.profile_id,
+                relation.relation_id AS id,
+                relation.review_kind AS kind,
+                relation.policy,
+                relation.swap_fee_msat,
+                relation.swap_fee_kind,
+                relation.confidence_at_review AS confidence_at_pair,
+                relation.review_source AS pair_source,
+                relation.source_amount_msat,
+                relation.target_amount_msat,
+                relation.source_transaction_id,
+                relation.target_transaction_id,
+                relation.created_at
+            FROM journal_custody_economic_relations relation
+            WHERE relation.relation_kind = 'conversion'
+              AND relation.target_transaction_id IS NOT NULL
+        ) p
+        JOIN transactions out_t ON out_t.id = p.source_transaction_id
+        JOIN transactions in_t ON in_t.id = p.target_transaction_id
         JOIN wallets out_w ON out_w.id = out_t.wallet_id
         JOIN wallets in_w ON in_w.id = in_t.wallet_id
         WHERE p.profile_id = ?
-          AND p.deleted_at IS NULL
-          AND (p.out_transaction_id = ? OR p.in_transaction_id = ?)
+          AND (p.source_transaction_id = ? OR p.target_transaction_id = ?)
         ORDER BY p.created_at DESC, p.id DESC
         LIMIT 1
         """,

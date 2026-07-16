@@ -3151,24 +3151,23 @@ class ReviewRegressionTest(unittest.TestCase):
         # Two journal entries on the out tx, NOT multiplied by the two pairs.
         self.assertEqual(events["summary"]["count"], 2)
         self.assertEqual(len(events["events"]), 2)
-        # Deterministic representative pair: the oldest by (created_at, id).
+        # Legacy compatibility rows are not display authority. They neither
+        # multiply journal rows nor appear as booked pair metadata.
         self.assertEqual(
-            {event["pair"]["pairId"] for event in events["events"]},
-            {"pair-mp-1"},
+            {event["pair"] for event in events["events"]},
+            {None},
         )
 
         journals = build_journals_snapshot(conn)
         self.assertEqual(len(journals["recent"]), 2)
 
-        # Window coupling: a fetch window holding only ONE receipt of the
-        # multi-pair must still suppress the giant out-in fee fallback (the
-        # counts come from the DB, not the window) — and pick a deterministic
-        # representative pair.
+        # Transaction-list display metadata no longer reads legacy pair rows;
+        # only the current stored projection may group these rows.
         window_rows = conn.execute(
             "SELECT id FROM transactions WHERE id = 'tx-mp-in-1'"
         ).fetchall()
         meta = _transaction_pair_display_meta(conn, window_rows)
-        self.assertEqual(meta["tx-mp-in-1"]["fee_msat"], 0)
+        self.assertEqual(meta, {})
 
     def test_journal_pair_payload_picks_one_pair_for_chain_edge_case(self):
         conn = open_db(self.data_root)
@@ -3305,41 +3304,76 @@ class ReviewRegressionTest(unittest.TestCase):
                 ),
             ],
         )
-        conn.executemany(
+        conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, pair_source, out_amount, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_custody_economic_relations(
+                relation_id, workspace_id, profile_id, relation_kind,
+                source_transaction_id, target_transaction_id,
+                source_asset, target_asset, source_amount_msat,
+                target_amount_msat, review_kind, policy, swap_fee_msat,
+                basis_state, occurred_at, target_occurred_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [
-                (
-                    "pair-middle-as-in",
-                    "ws-pair-chain",
-                    "pf-pair-chain",
-                    "tx-chain-a",
-                    "tx-chain-middle",
-                    "peg-out",
-                    "carrying-value",
-                    btc_to_msat("0.01"),
-                    "manual",
-                    123,
-                    now,
-                ),
-                (
-                    "pair-middle-as-out",
-                    "ws-pair-chain",
-                    "pf-pair-chain",
-                    "tx-chain-middle",
-                    "tx-chain-c",
-                    "manual",
-                    "carrying-value",
-                    btc_to_msat("0.01"),
-                    "manual",
-                    None,
-                    now,
-                ),
-            ],
+            (
+                "a" * 64,
+                "ws-pair-chain",
+                "pf-pair-chain",
+                "conversion",
+                "tx-chain-a",
+                "tx-chain-middle",
+                "LBTC",
+                "BTC",
+                btc_to_msat("0.5"),
+                btc_to_msat("0.49"),
+                "peg-out",
+                "carrying-value",
+                btc_to_msat("0.01"),
+                "eligible",
+                "2026-01-01T00:00:00Z",
+                "2026-01-01T00:02:00Z",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_custody_decisions(
+                decision_id, workspace_id, profile_id,
+                source_transaction_id, target_transaction_id,
+                source_observation_hash, source_start_msat, source_end_msat,
+                target_observation_hash, target_start_msat, target_end_msat,
+                source_wallet_id, target_wallet_id,
+                source_network, target_network, source_rail, target_rail,
+                source_asset, target_asset, state, basis_state, reason,
+                occurred_at, target_occurred_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "b" * 64,
+                "ws-pair-chain",
+                "pf-pair-chain",
+                "tx-chain-middle",
+                "tx-chain-c",
+                "1" * 64,
+                0,
+                btc_to_msat("0.48"),
+                "2" * 64,
+                0,
+                btc_to_msat("0.48"),
+                "wal-pair-chain",
+                "wal-pair-chain",
+                "main",
+                "main",
+                "bitcoin",
+                "bitcoin",
+                "BTC",
+                "BTC",
+                "internal_reviewed",
+                "eligible",
+                "reviewed_custody_component",
+                "2026-01-01T00:02:00Z",
+                "2026-01-01T00:04:00Z",
+                now,
+            ),
         )
         conn.execute(
             """
@@ -3369,18 +3403,18 @@ class ReviewRegressionTest(unittest.TestCase):
         events = build_journal_events_list_snapshot(conn, {"limit": 10})
         self.assertEqual(events["summary"]["count"], 1)
         self.assertEqual(len(events["events"]), 1)
-        self.assertEqual(events["events"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(events["events"][0]["pair"]["pairId"], "b" * 64)
         self.assertEqual(
             events["events"][0]["pair"]["out"]["amountMsat"],
-            btc_to_msat("0.49"),
+            btc_to_msat("0.48"),
         )
 
         journals = build_journals_snapshot(conn)
         self.assertEqual(len(journals["recent"]), 1)
-        self.assertEqual(journals["recent"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(journals["recent"][0]["pair"]["pairId"], "b" * 64)
         self.assertEqual(
             journals["recent"][0]["pair"]["out"]["amountMsat"],
-            btc_to_msat("0.49"),
+            btc_to_msat("0.48"),
         )
 
     def test_ui_snapshots_show_reviewed_swap_movement_with_fee(self):
@@ -3525,24 +3559,87 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_custody_economic_relations(
+                relation_id, workspace_id, profile_id, relation_kind,
+                source_transaction_id, target_transaction_id,
+                source_asset, target_asset, source_amount_msat,
+                target_amount_msat, review_kind, policy, swap_fee_msat,
+                swap_fee_kind, basis_state, occurred_at, target_occurred_at,
+                created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "pair-swap-ui",
+                "c" * 64,
                 "ws-swap-ui",
                 "pf-swap-ui",
+                "conversion",
                 "swap-out-leg",
                 "swap-in-leg",
+                "BTC",
+                "LBTC",
+                btc_to_msat("0.10000000"),
+                btc_to_msat("0.09990000"),
                 "manual",
                 "carrying-value",
                 btc_to_msat("0.00010000"),
                 "deducted",
-                "manual",
+                "eligible",
+                "2026-03-01T10:00:00Z",
+                "2026-03-01T10:05:00Z",
                 now,
             ),
+        )
+        conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = 3,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'pf-swap-ui'
+            """,
+            (now,),
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, created_at
+            ) VALUES(?, 'ws-swap-ui', 'pf-swap-ui', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-older-income",
+                    "older-income",
+                    "wal-swap-btc",
+                    "2026-02-01T10:00:00Z",
+                    "acquisition",
+                    "BTC",
+                    btc_to_msat("0.01000000"),
+                    600,
+                    now,
+                ),
+                (
+                    "je-swap-out",
+                    "swap-out-leg",
+                    "wal-swap-btc",
+                    "2026-03-01T10:00:00Z",
+                    "disposal",
+                    "BTC",
+                    -btc_to_msat("0.10000000"),
+                    -6_500,
+                    now,
+                ),
+                (
+                    "je-swap-in",
+                    "swap-in-leg",
+                    "wal-swap-lbtc",
+                    "2026-03-01T10:05:00Z",
+                    "acquisition",
+                    "LBTC",
+                    btc_to_msat("0.09990000"),
+                    0,
+                    now,
+                ),
+            ],
         )
         set_setting(conn, "context_workspace", "ws-swap-ui")
         set_setting(conn, "context_profile", "pf-swap-ui")
@@ -4196,7 +4293,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 365,
                 "moving_average_at",
                 now,
-                2,
+                3,
                 now,
             ),
         )
@@ -4300,22 +4397,33 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_custody_economic_relations(
+                relation_id, workspace_id, profile_id, relation_kind,
+                source_transaction_id, target_transaction_id,
+                source_asset, target_asset, source_amount_msat,
+                target_amount_msat, review_kind, policy, swap_fee_msat,
+                swap_fee_kind, basis_state, occurred_at, target_occurred_at,
+                created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "pair-neutral-swap",
+                "d" * 64,
                 "ws-neutral-swap",
                 "pf-neutral-swap",
+                "conversion",
                 "tx-neutral-out",
                 "tx-neutral-in",
+                "LBTC",
+                "BTC",
+                btc_to_msat("0.12426275"),
+                btc_to_msat("0.12413298"),
                 "peg-out",
                 "carrying-value",
                 btc_to_msat("0.00012977"),
                 "combined",
-                "manual",
+                "eligible",
+                "2026-03-14T17:30:10Z",
+                "2026-03-14T17:32:32Z",
                 now,
             ),
         )

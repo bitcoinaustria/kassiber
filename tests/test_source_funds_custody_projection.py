@@ -5,7 +5,13 @@ import tempfile
 from kassiber.cli.handlers import process_journals
 from kassiber.core import custody_components, source_funds
 from kassiber.core.source_funds import SourceFundsHooks
-from kassiber.db import open_db
+from kassiber.core.ui_snapshot import (
+    build_journal_events_list_snapshot,
+    build_journals_snapshot,
+    build_journals_transfers_list_snapshot,
+    build_transactions_snapshot,
+)
+from kassiber.db import open_db, set_setting
 
 
 NOW = "2026-03-01T09:00:00Z"
@@ -119,6 +125,25 @@ def test_effective_nm_bridge_becomes_reviewed_source_funds_lineage() -> None:
             activated = custody_components.activate_component(conn, component["id"])
             assert activated["effective_state"] == "active"
             process_journals(conn, "ws", "profile")
+            set_setting(conn, "context_workspace", "ws")
+            set_setting(conn, "context_profile", "profile")
+            conn.commit()
+
+            transfer_snapshot = build_journals_transfers_list_snapshot(
+                conn, {"limit": 10}
+            )
+            assert transfer_snapshot["summary"]["manual_pairs"] == 2
+            assert {
+                item["in"]["amount_msat"]
+                for item in transfer_snapshot["pairs"]
+            } == {40, 60}
+            transaction_snapshot = build_transactions_snapshot(
+                conn, {"limit": 10}
+            )
+            assert transaction_snapshot["count"] == 2
+            assert {
+                item["pair"]["type"] for item in transaction_snapshot["txs"]
+            } == {"transfer"}
 
             assembled = source_funds.assemble_history(
                 conn,
@@ -137,6 +162,18 @@ def test_effective_nm_bridge_becomes_reviewed_source_funds_lineage() -> None:
             assert link["from_allocation_amount"] == 40
 
             custody_components.supersede_component(conn, component["id"])
+            stale_transactions = build_transactions_snapshot(conn, {"limit": 10})
+            assert stale_transactions["count"] == 3
+            assert all("pair" not in item for item in stale_transactions["txs"])
+            stale_transfers = build_journals_transfers_list_snapshot(
+                conn, {"limit": 10}
+            )
+            assert stale_transfers["summary"]["projection_status"] == "stale"
+            assert stale_transfers["pairs"] == []
+            stale_events = build_journal_events_list_snapshot(conn, {"limit": 20})
+            assert all(item["pair"] is None for item in stale_events["events"])
+            stale_journals = build_journals_snapshot(conn)
+            assert all("pair" not in item for item in stale_journals["recent"])
             report = source_funds.build_report(
                 conn,
                 None,

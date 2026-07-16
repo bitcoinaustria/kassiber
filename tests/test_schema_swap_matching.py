@@ -623,15 +623,53 @@ class FreshSchemaTests(unittest.TestCase):
                         direction="inbound",
                         amount_msat=amount,
                     )
-                for pair_id, in_id in (("pair-1", "tx-in-1"), ("pair-2", "tx-in-2")):
-                    create_transaction_pair(
-                        conn,
-                        workspace_id,
-                        profile_id,
-                        "tx-out",
-                        in_id,
-                        kind="whirlpool",
-                    )
+                conn.executemany(
+                    """
+                    INSERT INTO journal_custody_decisions(
+                        decision_id, workspace_id, profile_id,
+                        source_transaction_id, target_transaction_id,
+                        source_observation_hash, source_start_msat, source_end_msat,
+                        target_observation_hash, target_start_msat, target_end_msat,
+                        source_wallet_id, target_wallet_id,
+                        source_network, target_network, source_rail, target_rail,
+                        source_asset, target_asset, state, basis_state, reason,
+                        occurred_at, target_occurred_at, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            decision_id,
+                            workspace_id,
+                            profile_id,
+                            "tx-out",
+                            in_id,
+                            "1" * 64,
+                            source_start,
+                            source_start + amount,
+                            target_hash,
+                            0,
+                            amount,
+                            wallet_id,
+                            wallet_id,
+                            "main",
+                            "main",
+                            "bitcoin",
+                            "bitcoin",
+                            "BTC",
+                            "BTC",
+                            "internal_reviewed",
+                            "eligible",
+                            "reviewed_custody_component",
+                            _now(),
+                            _now(),
+                            _now(),
+                        )
+                        for decision_id, in_id, target_hash, source_start, amount in (
+                            ("a" * 64, "tx-in-1", "2" * 64, 0, 50_000),
+                            ("b" * 64, "tx-in-2", "3" * 64, 50_000, 49_000),
+                        )
+                    ],
+                )
                 hooks = SimpleNamespace(iso_z=lambda value: value)
                 summary = _summary_pdf_internal_transfers(
                     conn,
@@ -727,6 +765,38 @@ class FreshSchemaTests(unittest.TestCase):
                         "carrying-value",
                         456,
                         "loss",
+                        _now(),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO journal_custody_economic_relations(
+                        relation_id, workspace_id, profile_id, relation_kind,
+                        source_transaction_id, target_transaction_id,
+                        source_asset, target_asset, source_amount_msat,
+                        target_amount_msat, review_kind, policy,
+                        swap_fee_msat, swap_fee_kind, basis_state,
+                        occurred_at, target_occurred_at, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "e" * 64,
+                        workspace_id,
+                        profile_id,
+                        "conversion",
+                        "cross-out",
+                        "cross-in",
+                        "BTC",
+                        "LBTC",
+                        1_000,
+                        900,
+                        "manual",
+                        "carrying-value",
+                        456,
+                        "loss",
+                        "eligible",
+                        _now(),
+                        _now(),
                         _now(),
                     ),
                 )

@@ -194,11 +194,14 @@ same verification surface.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The
-    transaction graph, report transfer-label path and source-of-funds lineage
-    now consume only current stored custody decisions/economic relations;
-    stale books expose an explicit projection state and never rerun transfer
-    detection. Remaining UI/report compatibility reads are the next cutover
-    boundary.
+    transaction graph, report/export transfer and swap rows, source-of-funds
+    lineage, transaction UI, journal UI and AI snapshots now consume only
+    stored custody decisions/economic relations. Reviewed kind, policy,
+    authorship, notes, swap fee and direct-payout metadata are losslessly
+    projected for those readers. Stale books expose an explicit projection
+    state and do not render old custody grouping as current booked truth.
+    Mandatory gated report contexts, builder compatibility deletion, producer
+    cutover and speculative-scaffolding removal remain.
 
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an

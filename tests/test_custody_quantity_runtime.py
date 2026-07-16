@@ -1619,10 +1619,14 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 {
                     "term_kind": "transaction_pair",
                     "source_leg_id": "source-leg",
-                    "sink_leg_id": "target-leg",
+                    "target_leg_id": "target-leg",
                     "legacy_source_id": "reviewed-conversion",
                     "review_kind": "peg-in",
                     "tax_policy": "carrying-value",
+                    "swap_fee_msat": 25,
+                    "swap_fee_kind": "network",
+                    "confidence_at_review": "manual",
+                    "review_source": "migration",
                 }
             ],
         }
@@ -1650,6 +1654,129 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         self.assertEqual(relation["target_amount_msat"], 900)
         self.assertEqual(relation["basis_state"], "eligible")
         self.assertEqual(relation["component_id"], component["id"])
+        self.assertEqual(relation["swap_fee_msat"], 25)
+        self.assertEqual(relation["swap_fee_kind"], "network")
+        self.assertEqual(relation["confidence_at_review"], "manual")
+        self.assertEqual(relation["review_source"], "migration")
+
+    def test_reviewed_move_metadata_is_stored_on_decision(self):
+        self.conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, label, kind, created_at) "
+            "VALUES('wallet-b', 'ws', 'profile', 'B', 'descriptor', 'now')"
+        )
+        source = _row("move-out", "wallet-a", "outbound", 100, "2025-01-01T00:00:00Z")
+        target = _row("move-in", "wallet-b", "inbound", 100, "2025-01-01T00:01:00Z")
+        self._insert_transaction(source)
+        self._insert_transaction(target)
+        component = {
+            "id": "move-component",
+            "component_type": "coinjoin",
+            "conservation_mode": "quantity",
+            "effective_state": "active",
+            "legs": [
+                {
+                    "id": "source-leg",
+                    "role": "source",
+                    "transaction_id": source["id"],
+                    "amount_msat": 100,
+                },
+                {
+                    "id": "target-leg",
+                    "role": "destination",
+                    "transaction_id": target["id"],
+                    "amount_msat": 100,
+                },
+            ],
+            "allocations": [
+                {
+                    "id": "move-allocation",
+                    "source_leg_id": "source-leg",
+                    "sink_leg_id": "target-leg",
+                    "source_amount_msat": 100,
+                    "sink_amount_msat": 100,
+                }
+            ],
+            "economic_terms": [
+                {
+                    "term_kind": "transaction_pair",
+                    "source_leg_id": "source-leg",
+                    "target_leg_id": "target-leg",
+                    "legacy_source_id": "reviewed-move",
+                    "review_kind": "coinjoin",
+                    "tax_policy": "carrying-value",
+                    "swap_fee_msat": 5,
+                    "swap_fee_kind": "provider",
+                }
+            ],
+        }
+        self.conn.execute(
+            """
+            INSERT INTO custody_components(
+                id, lineage_id, workspace_id, profile_id, revision,
+                component_type, state, authored_source, notes, created_at
+            ) VALUES(?, ?, 'ws', 'profile', 1, ?, 'active', ?, ?, 'now')
+            """,
+            ("move-component", "move-lineage", "coinjoin", "manual", "reviewed move"),
+        )
+        self.conn.executemany(
+            """
+            INSERT INTO custody_component_legs(
+                id, component_id, workspace_id, profile_id, ordinal, role,
+                rail, chain, network, asset, exposure, conservation_unit,
+                amount_msat, transaction_id, anchor_transaction_id, wallet_id,
+                created_at
+            ) VALUES(?, 'move-component', 'ws', 'profile', ?, ?, 'bitcoin',
+                     'bitcoin', 'main', 'BTC', 'bitcoin', 'msat', 100,
+                     ?, ?, ?, 'now')
+            """,
+            [
+                ("source-leg", 0, "source", source["id"], source["id"], "wallet-a"),
+                ("target-leg", 1, "destination", target["id"], target["id"], "wallet-b"),
+            ],
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_component_economic_terms(
+                id, component_id, workspace_id, profile_id, ordinal,
+                source_leg_id, target_leg_id, term_kind, legacy_source_id,
+                source_row_hash, review_kind, tax_policy, swap_fee_msat,
+                swap_fee_kind, confidence_at_review, review_source, created_at
+            ) VALUES(?, 'move-component', 'ws', 'profile', 0,
+                     'source-leg', 'target-leg', 'transaction_pair', ?, ?, ?, ?,
+                     ?, ?, ?, ?, 'now')
+            """,
+            (
+                "move-term",
+                "reviewed-move",
+                "f" * 64,
+                "coinjoin",
+                "carrying-value",
+                5,
+                "provider",
+                "manual",
+                "manual",
+            ),
+        )
+        state = build_canonical_quantity_state(
+            [source, target], effective_components=[component]
+        )
+
+        replace_canonical_quantity_state(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            state=state,
+            created_at="now",
+        )
+
+        decision = self.conn.execute(
+            "SELECT review_kind, policy, swap_fee_msat, swap_fee_kind "
+            "FROM journal_custody_decisions"
+        ).fetchone()
+        self.assertEqual(decision["review_kind"], "coinjoin")
+        self.assertEqual(decision["policy"], "carrying-value")
+        self.assertEqual(decision["swap_fee_msat"], 5)
+        self.assertEqual(decision["swap_fee_kind"], "provider")
 
     def test_missing_blocker_table_fails_closed(self):
         self.conn.execute("DROP TABLE journal_quantity_issues")
