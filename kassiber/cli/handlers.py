@@ -39,9 +39,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
-from ..core import custody_quantity_store as core_custody_quantity_store
 from ..core import custody_tax_migration as core_custody_tax_migration
-from ..core import custody_filed_reports as core_custody_filed_reports
 from ..core.custody_evidence import (
     row_principal_msat,
 )
@@ -4807,245 +4805,13 @@ def process_journals(conn, workspace_ref, profile_ref):
         )
         auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
         state = build_ledger_state(conn, profile)
-        conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile["id"],))
-        conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile["id"],))
-        conn.execute("DELETE FROM journal_tax_summary WHERE profile_id = ?", (profile["id"],))
-        conn.execute("DELETE FROM journal_account_holdings WHERE profile_id = ?", (profile["id"],))
-        conn.execute("DELETE FROM journal_wallet_holdings WHERE profile_id = ?", (profile["id"],))
-        created_at = now_iso()
-        custody_quantity = state.get("custody_quantity")
-        quantity_counts = {
-            "postings": 0,
-            "issues": 0,
-            "balances": 0,
-            "decisions": 0,
-        }
-        if custody_quantity is not None:
-            quantity_counts = core_custody_quantity_store.replace_canonical_quantity_state(
-                conn,
-                workspace_id=profile["workspace_id"],
-                profile_id=profile["id"],
-                state=custody_quantity,
-                created_at=created_at,
-            )
-        pricing_by_tx = {
-            row["id"]: row
-            for row in conn.execute(
-                """
-                SELECT id, pricing_source_kind, pricing_quality
-                FROM transactions
-                WHERE profile_id = ?
-                """,
-                (profile["id"],),
-            ).fetchall()
-        }
-        journal_entry_rows = []
-        for entry in state["entries"]:
-            exact_payload = pricing.journal_exact_payload(entry)
-            tx_pricing = pricing_by_tx.get(entry["transaction_id"])
-            journal_entry_rows.append(
-                (
-                    entry["id"],
-                    entry["workspace_id"],
-                    entry["profile_id"],
-                    entry["transaction_id"],
-                    entry["wallet_id"],
-                    entry["account_id"],
-                    entry["occurred_at"],
-                    entry["entry_type"],
-                    entry["asset"],
-                    btc_to_msat(entry["quantity"]),
-                    float(entry["fiat_value"]),
-                    float(entry["unit_cost"]),
-                    float(entry["cost_basis"]) if entry["cost_basis"] is not None else None,
-                    float(entry["proceeds"]) if entry["proceeds"] is not None else None,
-                    float(entry["gain_loss"]) if entry["gain_loss"] is not None else None,
-                    exact_payload["fiat_value_exact"],
-                    exact_payload["unit_cost_exact"],
-                    exact_payload["cost_basis_exact"],
-                    exact_payload["proceeds_exact"],
-                    exact_payload["gain_loss_exact"],
-                    tx_pricing["pricing_source_kind"] if tx_pricing else None,
-                    tx_pricing["pricing_quality"] if tx_pricing else None,
-                    entry["description"],
-                    entry.get("at_category"),
-                    entry.get("at_kennzahl"),
-                    entry.get("capital_gains_type"),
-                    created_at,
-                )
-            )
-        conn.executemany(
-            """
-            INSERT INTO journal_entries(
-                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
-                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
-                cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
-                cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
-                pricing_quality, description, at_category, at_kennzahl, capital_gains_type,
-                created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            journal_entry_rows,
-        )
-        # Collapse legs that map to the same real transaction (e.g. multiple
-        # synthetic payout/split legs of one out row) so two rows never collide
-        # on journal_quarantines' PRIMARY KEY and abort the whole run.
-        deduped_quarantines = core_tax_events.dedupe_quarantines(state["quarantines"])
-        # A durable custody-component anchor intentionally survives deletion of
-        # its raw transaction so the component fails closed.  Such an anchor is
-        # still useful in the component-level blocker, but it cannot be written
-        # to this transaction-FK table.  Filter against the live profile rows at
-        # the persistence boundary as a final invariant for every quarantine
-        # producer, including replicated/stale evidence.
-        live_transaction_ids = {
-            str(row["id"])
-            for row in conn.execute(
-                "SELECT id FROM transactions WHERE profile_id = ?",
-                (profile["id"],),
-            ).fetchall()
-        }
-        deduped_quarantines = [
-            quarantine
-            for quarantine in deduped_quarantines
-            if str(quarantine["transaction_id"]) in live_transaction_ids
-        ]
-        conn.executemany(
-            """
-            INSERT INTO journal_quarantines(
-                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    quarantine["transaction_id"],
-                    quarantine["workspace_id"],
-                    quarantine["profile_id"],
-                    quarantine["reason"],
-                    quarantine["detail_json"],
-                    created_at,
-                )
-                for quarantine in deduped_quarantines
-            ],
-        )
-        conn.executemany(
-            """
-            INSERT INTO journal_tax_summary(
-                id, workspace_id, profile_id, year, asset, transaction_type,
-                capital_gains_type, quantity, proceeds, cost_basis, gain_loss, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    str(uuid.uuid4()),
-                    profile["workspace_id"],
-                    profile["id"],
-                    int(row["year"]),
-                    row["asset"],
-                    row["transaction_type"],
-                    row.get("capital_gains_type"),
-                    int(row.get("quantity_msat") or btc_to_msat(row["quantity"])),
-                    float(row["proceeds"]),
-                    float(row["cost_basis"]),
-                    float(row["gain_loss"]),
-                    created_at,
-                )
-                for row in state["tax_summary"]
-            ],
-        )
-        conn.executemany(
-            """
-            INSERT INTO journal_account_holdings(
-                id, workspace_id, profile_id, account_id, account_code, account_label,
-                asset, quantity, cost_basis, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    str(uuid.uuid4()),
-                    profile["workspace_id"],
-                    profile["id"],
-                    account_id,
-                    account_code,
-                    account_label,
-                    asset,
-                    btc_to_msat(value["quantity"]),
-                    float(value["cost_basis"]),
-                    created_at,
-                )
-                for (account_id, account_code, account_label, asset), value in state[
-                    "account_holdings"
-                ].items()
-            ],
-        )
-        conn.executemany(
-            """
-            INSERT INTO journal_wallet_holdings(
-                id, workspace_id, profile_id, wallet_id, wallet_label, account_code,
-                asset, quantity, cost_basis, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    str(uuid.uuid4()),
-                    profile["workspace_id"],
-                    profile["id"],
-                    wallet_id,
-                    wallet_label,
-                    account_code,
-                    asset,
-                    btc_to_msat(value["quantity"]),
-                    float(value["cost_basis"]),
-                    created_at,
-                )
-                for (wallet_id, wallet_label, account_code, asset), value in state[
-                    "wallet_holdings"
-                ].items()
-            ],
-        )
-        tx_count = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            """,
-            (profile["id"],),
-        ).fetchone()["count"]
-        conn.execute(
-            """
-            UPDATE profiles
-            SET last_processed_at = ?,
-                last_processed_tx_count = ?,
-                last_processed_input_version = journal_input_version,
-                ownership_review_counts_json = ?
-            WHERE id = ?
-            """,
-            (
-                created_at,
-                tx_count,
-                json.dumps(state["ownership_review_counts"], sort_keys=True),
-                profile["id"],
-            ),
-        )
-        core_custody_tax_migration.finalize_first_rebuild(
-            conn,
-            workspace_id=profile["workspace_id"],
-            profile_id=profile["id"],
-            rebuilt_at=created_at,
-        )
-        filed_impact_resolutions = []
-        if (
-            not state.get("custody_component_blockers")
-            and not deduped_quarantines
-            and not (custody_quantity and custody_quantity.report_blocked)
-        ):
-            filed_impact_resolutions = (
-                core_custody_filed_reports.resolve_pending_custody_impacts(
-                    conn,
-                    workspace_id=profile["workspace_id"],
-                    profile_id=profile["id"],
-                    rebuilt_at=created_at,
-                )
-            )
+        stored = core_custody_journal.store_ledger_state(conn, profile, state)
+        created_at = stored["processed_at"]
+        tx_count = stored["processed_transactions"]
+        deduped_quarantines = stored["quarantines"]
+        custody_quantity = stored["custody_quantity"]
+        quantity_counts = stored["quantity_counts"]
+        filed_impact_resolutions = stored["filed_report_impacts_resolved"]
     except Exception:
         conn.execute("ROLLBACK TO SAVEPOINT journals_process")
         conn.execute("RELEASE SAVEPOINT journals_process")
@@ -5090,7 +4856,7 @@ def process_journals(conn, workspace_ref, profile_ref):
     if source_overlap_warning is not None:
         result["source_overlap_warning"] = source_overlap_warning
     if filed_impact_resolutions:
-        result["filed_report_impacts_resolved"] = len(filed_impact_resolutions)
+        result["filed_report_impacts_resolved"] = filed_impact_resolutions
     return result
 
 

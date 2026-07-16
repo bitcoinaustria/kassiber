@@ -247,6 +247,12 @@ binary.
    daemon no longer maintain parallel lifecycle schemas or select among three
    planner implementations; UI and AI consequently revalidate through the
    same core dispatcher.
+   The core custody journal service now owns replacement of stored journal
+   entries, canonical quantity decisions/issues/balances, quarantines, tax
+   summaries, holdings, processed-version metadata, migration finalization and
+   filed-report impact resolution. The CLI layer retains only pre-build source
+   overlap repair and cached-rate pricing until their independent transaction
+   edit/audit hooks move in the next ordered slice.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 
