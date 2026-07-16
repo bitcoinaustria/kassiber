@@ -1102,13 +1102,188 @@ def apply_component_state_change(
     return {"fingerprint": plan["fingerprint"], "component": component}
 
 
+COMPONENT_REVIEW_ACTIONS = frozenset(
+    {"create", "revise", "undo", "activate", "supersede"}
+)
+
+
+def _component_review_arguments(
+    *,
+    action: str,
+    components: Sequence[Mapping[str, Any]] | None,
+    component_id: str | None,
+    spec: Mapping[str, Any] | None,
+    activate: bool | None,
+    reason: str | None,
+) -> dict[str, Any]:
+    if action not in COMPONENT_REVIEW_ACTIONS:
+        raise _error("Custody component review action is unsupported", action=action)
+    if reason is not None and not isinstance(reason, str):
+        raise _error("Custody component review reason must be text")
+    if activate is not None and type(activate) is not bool:
+        raise _error("Custody component review activate must be a boolean")
+    if action == "create":
+        if component_id is not None or spec is not None or reason is not None:
+            raise _error(
+                "Create accepts components and activate only",
+                fields=[
+                    name
+                    for name, value in (
+                        ("component_id", component_id),
+                        ("spec", spec),
+                        ("reason", reason),
+                    )
+                    if value is not None
+                ],
+            )
+        return {"specs": components, "activate": True if activate is None else activate}
+    if components is not None:
+        raise _error(f"{action} does not accept components")
+    if not isinstance(component_id, str) or not component_id.strip():
+        raise _error(f"{action} requires component_id")
+    component_id = component_id.strip()
+    if action == "revise":
+        if not isinstance(spec, Mapping):
+            raise _error("Revise requires a component spec")
+        return {
+            "component_id": component_id,
+            "spec": spec,
+            "activate": False if activate is None else activate,
+            "reason": reason,
+        }
+    if action == "undo":
+        if spec is not None or activate not in (None, False):
+            raise _error("Undo does not accept spec or activation")
+        return {
+            "component_id": component_id,
+            "spec": None,
+            "activate": False,
+            "reason": reason or "undo",
+        }
+    if spec is not None or activate is not None:
+        raise _error(f"{action} does not accept spec or activate")
+    if action == "activate" and reason is not None:
+        raise _error("Activate does not accept reason")
+    return {"component_id": component_id, "reason": reason}
+
+
+def plan_component_review(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    components: Sequence[Mapping[str, Any]] | None = None,
+    component_id: str | None = None,
+    spec: Mapping[str, Any] | None = None,
+    activate: bool | None = None,
+    reason: str | None = None,
+    authored_source: str = "user",
+) -> dict[str, Any]:
+    """Plan every authored component action through one strict pure contract."""
+
+    normalized = _component_review_arguments(
+        action=action,
+        components=components,
+        component_id=component_id,
+        spec=spec,
+        activate=activate,
+        reason=reason,
+    )
+    if action == "create":
+        return public_component_batch_plan(
+            plan_component_batch(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                authored_source=authored_source,
+                **normalized,
+            )
+        )
+    if action in {"revise", "undo"}:
+        return public_component_revision_plan(
+            plan_component_revision(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                action=action,
+                authored_source=authored_source,
+                **normalized,
+            )
+        )
+    return plan_component_state_change(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        action=action,
+        **normalized,
+    )
+
+
+def apply_component_review(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    expected_fingerprint: str,
+    components: Sequence[Mapping[str, Any]] | None = None,
+    component_id: str | None = None,
+    spec: Mapping[str, Any] | None = None,
+    activate: bool | None = None,
+    reason: str | None = None,
+    authored_source: str = "user",
+    include_local_evidence: bool = False,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Apply every authored component action through one strict stale-plan gate."""
+
+    normalized = _component_review_arguments(
+        action=action,
+        components=components,
+        component_id=component_id,
+        spec=spec,
+        activate=activate,
+        reason=reason,
+    )
+    common = {
+        "conn": conn,
+        "workspace_id": workspace_id,
+        "profile_id": profile_id,
+        "expected_fingerprint": expected_fingerprint,
+        "include_local_evidence": include_local_evidence,
+        "commit": commit,
+    }
+    if action == "create":
+        return apply_component_batch(
+            authored_source=authored_source,
+            **common,
+            **normalized,
+        )
+    if action in {"revise", "undo"}:
+        return apply_component_revision(
+            action=action,
+            authored_source=authored_source,
+            **common,
+            **normalized,
+        )
+    return apply_component_state_change(
+        action=action,
+        **common,
+        **normalized,
+    )
+
+
 __all__ = [
+    "COMPONENT_REVIEW_ACTIONS",
     "MAX_COMPONENTS",
     "apply_component_batch",
     "apply_component_revision",
+    "apply_component_review",
     "apply_component_state_change",
     "plan_component_batch",
     "plan_component_revision",
+    "plan_component_review",
     "plan_component_state_change",
     "public_component_batch_plan",
     "public_component_revision_plan",

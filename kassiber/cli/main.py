@@ -4327,142 +4327,61 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn, args.workspace, args.profile
                 )
                 has_json = args.json_text is not None or args.json_file is not None
-                if args.action == "create" and (
-                    args.component_id or args.reason or args.activate
-                ):
-                    raise AppError(
-                        "create does not accept component_id, reason, or --activate",
-                        code="validation",
-                    )
-                if args.action in {"activate", "supersede"} and (
-                    has_json or args.draft or args.activate
-                ):
-                    raise AppError(
-                        f"{args.action} does not accept JSON, --draft, or --activate",
-                        code="validation",
-                    )
-                if args.action == "activate" and args.reason:
-                    raise AppError(
-                        "activate does not accept reason", code="validation"
-                    )
                 if args.action == "revise" and args.draft:
                     raise AppError(
                         "revise uses --activate; --draft is not accepted",
                         code="validation",
                     )
-                if args.action == "undo" and (
-                    has_json or args.draft or args.activate
-                ):
-                    raise AppError(
-                        "undo does not accept JSON, --draft, or --activate",
-                        code="validation",
-                    )
-                if args.action in {"activate", "supersede"}:
-                    if not args.component_id:
-                        raise AppError(
-                            f"component_id is required for {args.action}",
-                            code="validation",
-                        )
-                    kwargs = {
-                        "workspace_id": workspace["id"],
-                        "profile_id": profile["id"],
-                        "action": args.action,
-                        "component_id": args.component_id,
-                        "reason": args.reason,
-                    }
-                    if args.transfers_components_command == "plan":
-                        return emit(
-                            args,
-                            core_custody_component_planner.plan_component_state_change(
-                                conn, **kwargs
-                            ),
-                        )
-                    return emit(
-                        args,
-                        core_custody_component_planner.apply_component_state_change(
-                            conn,
-                            expected_fingerprint=args.expected_fingerprint,
-                            **kwargs,
+                document = None
+                if has_json:
+                    document = _read_json_document(
+                        args.json_text,
+                        args.json_file,
+                        label=(
+                            "component revision"
+                            if args.action == "revise"
+                            else "component array or bulk object"
                         ),
                     )
-                if args.action in {"revise", "undo"}:
-                    if not args.component_id:
-                        raise AppError(
-                            f"component_id is required for {args.action}",
-                            code="validation",
-                        )
-                    if args.action == "revise":
-                        spec = _read_json_document(
-                            args.json_text,
-                            args.json_file,
-                            label="component revision",
-                        )
-                    else:
-                        spec = None
-                    kwargs = {
-                        "workspace_id": workspace["id"],
-                        "profile_id": profile["id"],
-                        "action": args.action,
-                        "component_id": args.component_id,
-                        "spec": spec,
-                        "activate": args.activate,
-                        "reason": args.reason or (
-                            "undo" if args.action == "undo" else None
-                        ),
-                        "authored_source": "cli",
-                    }
-                    if args.transfers_components_command == "plan":
-                        plan = (
-                            core_custody_component_planner.plan_component_revision(
-                                conn, **kwargs
-                            )
-                        )
-                        return emit(
-                            args,
-                            core_custody_component_planner.public_component_revision_plan(
-                                plan
-                            ),
-                        )
-                    return emit(
-                        args,
-                        core_custody_component_planner.apply_component_revision(
-                            conn,
-                            expected_fingerprint=args.expected_fingerprint,
-                            **kwargs,
-                        ),
-                    )
-                specs = _read_json_document(
-                    args.json_text,
-                    args.json_file,
-                    label="component array or bulk object",
+                components = document if args.action == "create" else None
+                if isinstance(components, dict):
+                    components = components.get("components")
+                spec = document if args.action == "revise" else (
+                    {} if has_json and args.action != "create" else None
                 )
-                if isinstance(specs, dict):
-                    specs = specs.get("components")
+                activate = (
+                    not args.draft
+                    if args.action == "create"
+                    else args.activate
+                    if args.action == "revise"
+                    else False
+                    if args.draft or args.activate
+                    else None
+                )
+                review_args = {
+                    "workspace_id": workspace["id"],
+                    "profile_id": profile["id"],
+                    "action": args.action,
+                    "components": components,
+                    "component_id": args.component_id,
+                    "spec": spec,
+                    "activate": activate,
+                    "reason": args.reason,
+                    "authored_source": "cli",
+                }
                 if args.transfers_components_command == "plan":
-                    preview = core_custody_component_planner.plan_component_batch(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        specs=specs,
-                        activate=not args.draft,
-                        authored_source="cli",
-                    )
                     return emit(
                         args,
-                        core_custody_component_planner.public_component_batch_plan(
-                            preview
+                        core_custody_component_planner.plan_component_review(
+                            conn, **review_args
                         ),
                     )
                 return emit(
                     args,
-                    core_custody_component_planner.apply_component_batch(
+                    core_custody_component_planner.apply_component_review(
                         conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        specs=specs,
-                        activate=not args.draft,
-                        authored_source="cli",
                         expected_fingerprint=args.expected_fingerprint,
+                        **review_args,
                     ),
                 )
         if args.transfers_command == "payouts":

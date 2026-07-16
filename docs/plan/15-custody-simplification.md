@@ -242,6 +242,11 @@ binary.
    deleted as well. CLI and daemon routing now resolve scope and call the core
    component store/planner directly; `cli.handlers` contains no component
    review orchestration.
+   Create, revise, undo, activate and supersede now enter one strict core
+   `plan_component_review` / `apply_component_review` action contract. CLI and
+   daemon no longer maintain parallel lifecycle schemas or select among three
+   planner implementations; UI and AI consequently revalidate through the
+   same core dispatcher.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

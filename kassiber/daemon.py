@@ -1848,136 +1848,8 @@ def _ui_swap_matching_payload_from_conn(
         )
     if kind in {"ui.transfers.components.plan", "ui.transfers.components.apply"}:
         action = args.get("action", "create")
-        if action in {"activate", "supersede"}:
-            forbidden = sorted(
-                key
-                for key in ("components", "spec", "component", "activate")
-                if key in args
-            )
-            if forbidden:
-                raise AppError(
-                    f"{kind} {action} contains unsupported arguments",
-                    code="validation",
-                    details={"fields": forbidden},
-                )
-            reason = args.get("reason")
-            if reason is not None and not isinstance(reason, str):
-                raise AppError(f"{kind} reason must be text", code="validation")
-            if action == "activate" and reason is not None:
-                raise AppError(
-                    f"{kind} activate does not accept reason", code="validation"
-                )
-            resolved_workspace, resolved_profile = resolve_scope(
-                conn, workspace, profile
-            )
-            kwargs = {
-                "workspace_id": resolved_workspace["id"],
-                "profile_id": resolved_profile["id"],
-                "action": action,
-                "component_id": component_id(),
-                "reason": reason,
-            }
-            if kind == "ui.transfers.components.plan":
-                return _ui_exact_integer_payload(
-                    core_custody_component_planner.plan_component_state_change(
-                        conn, **kwargs
-                    )
-                )
-            expected_fingerprint = args.get("expected_fingerprint")
-            if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
-                raise AppError(
-                    f"{kind} requires the fingerprint returned by plan",
-                    code="validation",
-                )
-            return _ui_exact_integer_payload(
-                core_custody_component_planner.apply_component_state_change(
-                    conn,
-                    expected_fingerprint=expected_fingerprint,
-                    include_local_evidence=False,
-                    **kwargs,
-                )
-            )
-        if action in {"revise", "undo"}:
-            if "components" in args:
-                raise AppError(
-                    f"{kind} {action} does not accept components",
-                    code="validation",
-                )
-            reason = args.get("reason", "undo" if action == "undo" else None)
-            if reason is not None and not isinstance(reason, str):
-                raise AppError(f"{kind} reason must be text", code="validation")
-            spec = args.get("spec", args.get("component"))
-            if action == "revise" and not isinstance(spec, dict):
-                raise AppError(
-                    f"{kind} requires a JSON object in spec", code="validation"
-                )
-            if action == "undo" and (spec is not None or "activate" in args):
-                raise AppError(
-                    f"{kind} undo does not accept spec or activate",
-                    code="validation",
-                )
-            resolved_workspace, resolved_profile = resolve_scope(
-                conn, workspace, profile
-            )
-            kwargs = {
-                "workspace_id": resolved_workspace["id"],
-                "profile_id": resolved_profile["id"],
-                "action": action,
-                "component_id": component_id(),
-                "spec": spec,
-                "activate": exact_bool("activate"),
-                "reason": reason,
-                "authored_source": authored_source,
-            }
-            if kind == "ui.transfers.components.plan":
-                plan = core_custody_component_planner.plan_component_revision(
-                    conn, **kwargs
-                )
-                return _ui_exact_integer_payload(
-                    core_custody_component_planner.public_component_revision_plan(
-                        plan
-                    )
-                )
-            expected_fingerprint = args.get("expected_fingerprint")
-            if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
-                raise AppError(
-                    f"{kind} requires the fingerprint returned by plan",
-                    code="validation",
-                )
-            return _ui_exact_integer_payload(
-                core_custody_component_planner.apply_component_revision(
-                    conn,
-                    expected_fingerprint=expected_fingerprint,
-                    include_local_evidence=False,
-                    **kwargs,
-                )
-            )
-        if action != "create":
-            raise AppError(
-                f"{kind} action is unsupported",
-                code="validation",
-                details={"action": action},
-            )
-        forbidden = sorted(
-            key
-            for key in ("component_id", "spec", "component", "reason")
-            if key in args
-        )
-        if forbidden:
-            raise AppError(
-                f"{kind} create contains unsupported arguments",
-                code="validation",
-                details={"fields": forbidden},
-            )
         components = args.get("components")
-        if not isinstance(components, list) or not components or not all(
-            isinstance(item, dict) for item in components
-        ):
-            raise AppError(
-                f"{kind} requires a non-empty components array of JSON objects",
-                code="validation",
-            )
-        if len(components) > _CUSTODY_BULK_COMPONENT_CAP:
+        if isinstance(components, list) and len(components) > _CUSTODY_BULK_COMPONENT_CAP:
             raise AppError(
                 f"{kind} accepts at most {_CUSTODY_BULK_COMPONENT_CAP} components",
                 code="validation",
@@ -1986,9 +1858,26 @@ def _ui_swap_matching_payload_from_conn(
                     "max_components": _CUSTODY_BULK_COMPONENT_CAP,
                 },
             )
-        activate = exact_bool("activate", True)
-        if authored_source == "ai_tool":
-            _validate_ai_custody_conversion_boundary(components, activate=activate)
+        activate = args.get("activate")
+        if authored_source == "ai_tool" and action == "create" and isinstance(
+            components, list
+        ):
+            _validate_ai_custody_conversion_boundary(
+                components,
+                activate=True if activate is None else activate,
+            )
+        resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
+        review_args = {
+            "workspace_id": resolved_workspace["id"],
+            "profile_id": resolved_profile["id"],
+            "action": action,
+            "components": components,
+            "component_id": args.get("component_id"),
+            "spec": args.get("spec", args.get("component")),
+            "activate": activate,
+            "reason": args.get("reason"),
+            "authored_source": authored_source,
+        }
         if kind == "ui.transfers.components.apply":
             expected_fingerprint = args.get("expected_fingerprint")
             if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
@@ -2000,28 +1889,17 @@ def _ui_swap_matching_payload_from_conn(
                 conn, workspace, profile
             )
             return _ui_exact_integer_payload(
-                core_custody_component_planner.apply_component_batch(
+                core_custody_component_planner.apply_component_review(
                     conn,
-                    workspace_id=resolved_workspace["id"],
-                    profile_id=resolved_profile["id"],
-                    specs=components,
-                    activate=activate,
-                    include_local_evidence=False,
-                    authored_source=authored_source,
                     expected_fingerprint=expected_fingerprint,
+                    include_local_evidence=False,
+                    **review_args,
                 )
             )
-        resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
-        preview = core_custody_component_planner.plan_component_batch(
-            conn,
-            workspace_id=resolved_workspace["id"],
-            profile_id=resolved_profile["id"],
-            specs=components,
-            activate=activate,
-            authored_source=authored_source,
-        )
         return _ui_exact_integer_payload(
-            core_custody_component_planner.public_component_batch_plan(preview)
+            core_custody_component_planner.plan_component_review(
+                conn, **review_args
+            )
         )
 
     if kind == "ui.transfers.suggest":
