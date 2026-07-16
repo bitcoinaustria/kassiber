@@ -299,46 +299,6 @@ def latest_dismissed_fingerprints(
     }
 
 
-def append_dismissal(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    expected_fingerprint: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-    commit: bool = True,
-) -> dict[str, Any]:
-    plan = plan_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="dismiss",
-        candidate=candidate,
-        reason=reason,
-        authored_source=authored_source,
-    )
-    # Bounded compatibility for callers that previewed the former candidate
-    # fingerprint. Every mutation still runs through apply_review.
-    if expected_fingerprint in {
-        plan["authored_claim_fingerprint"],
-        candidate_fingerprint(plan["candidate"]),
-    }:
-        expected_fingerprint = plan["fingerprint"]
-    return apply_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="dismiss",
-        candidate=candidate,
-        expected_fingerprint=expected_fingerprint,
-        reason=reason,
-        authored_source=authored_source,
-        commit=commit,
-    )
-
-
 def _profile_input_version(conn: sqlite3.Connection, profile_id: str) -> int:
     row = conn.execute(
         "SELECT journal_input_version FROM profiles WHERE id = ?", (profile_id,)
@@ -980,71 +940,6 @@ def apply_review(
     return result
 
 
-def preview_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    authored_source: str = "gui",
-) -> dict[str, Any]:
-    plan = plan_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="create",
-        candidate=candidate,
-        authored_source=authored_source,
-    )
-    candidate = plan["candidate"]
-    return {
-        "gap_id": candidate.gap_id,
-        # Possession proves that this exact plan was previewed locally. Keep
-        # the older field name as a bounded desktop compatibility alias.
-        "candidate_fingerprint": plan["fingerprint"],
-        "authored_claim_fingerprint": plan["fingerprint"],
-        "review_plan_fingerprint": plan["fingerprint"],
-        "input_version": plan["input_version"],
-        "dry_run": True,
-        "activatable": plan["activatable"],
-        "review_mode": (
-            "structured_candidate"
-            if candidate.promotion_eligible and candidate.conflict_size == 1
-            else "manual_weak_hint"
-        ),
-        "warnings": plan["warnings"],
-        "requires_explicit_confirmation": True,
-        "retained_msat": candidate.retained_msat,
-        "residual_msat": candidate.residual_msat,
-        "fee_msat": candidate.source_fee_msat,
-        "source_count": len(candidate.source_ids),
-        "destination_count": len(candidate.return_ids),
-        "filed_report_impacts": plan["filed_report_impacts"],
-    }
-
-
-def create_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    expected_fingerprint: str,
-    authored_source: str = "gui",
-    commit: bool = True,
-) -> dict[str, Any]:
-    return apply_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="create",
-        expected_fingerprint=expected_fingerprint,
-        candidate=candidate,
-        authored_source=authored_source,
-        commit=commit,
-    )
-
-
 def list_review_history(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1451,185 +1346,6 @@ def _redacted_review_history_row(
     if include_gap_id:
         output["gap_id"] = row["gap_id"]
     return output
-
-
-def preview_reopen_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    reason: str | None = None,
-) -> dict[str, Any]:
-    plan = plan_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="reopen",
-        gap_id=gap_id,
-        reason=reason,
-    )
-    context = plan["context"]
-    return {
-        "gap_id": gap_id,
-        "expected_fingerprint": plan["fingerprint"],
-        "input_version": plan["input_version"],
-        "dry_run": True,
-        "requires_explicit_confirmation": True,
-        "current_component_id": context["component"]["id"],
-        "current_component_revision": context["component"]["revision"],
-        "resulting_status": "needs_review",
-        "filed_report_impacts": plan["filed_report_impacts"],
-    }
-
-
-def reopen_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    expected_fingerprint: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-    commit: bool = True,
-) -> dict[str, Any]:
-    return apply_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="reopen",
-        expected_fingerprint=expected_fingerprint,
-        gap_id=gap_id,
-        reason=reason,
-        authored_source=authored_source,
-        commit=commit,
-    )
-
-
-def preview_guided_revision(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    reason: str | None = None,
-    authored_source: str = "user",
-) -> dict[str, Any]:
-    plan = plan_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="revise",
-        candidate=candidate,
-        reason=reason,
-        authored_source=authored_source,
-    )
-    candidate = plan["candidate"]
-    context = plan["context"]
-    return {
-        "gap_id": candidate.gap_id,
-        "expected_fingerprint": plan["fingerprint"],
-        "input_version": plan["input_version"],
-        "dry_run": True,
-        "activatable": plan["activatable"],
-        "requires_explicit_confirmation": True,
-        "current_component_revision": context["component"]["revision"],
-        "new_component_revision": plan["new_component_revision"],
-        "retained_msat": candidate.retained_msat,
-        "residual_msat": candidate.residual_msat,
-        "filed_report_impacts": plan["filed_report_impacts"],
-    }
-
-
-def revise_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    expected_fingerprint: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-    commit: bool = True,
-) -> dict[str, Any]:
-    return apply_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="revise",
-        expected_fingerprint=expected_fingerprint,
-        candidate=candidate,
-        reason=reason,
-        authored_source=authored_source,
-        commit=commit,
-    )
-
-
-def preview_residual_classification(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    classification: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-) -> dict[str, Any]:
-    plan = plan_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="classify_residual",
-        gap_id=gap_id,
-        classification=classification,
-        reason=reason,
-        authored_source=authored_source,
-    )
-    normalized = plan["classification"]
-    context = plan["context"]
-    residual_msat = plan["residual_msat"]
-    return {
-        "gap_id": gap_id,
-        "expected_fingerprint": plan["fingerprint"],
-        "input_version": plan["input_version"],
-        "dry_run": True,
-        "activatable": plan["activatable"],
-        "requires_explicit_confirmation": True,
-        "classification": normalized,
-        "custody_state": _residual_custody_state(normalized),
-        "country_tax_meaning": "not_assigned",
-        "residual_msat": residual_msat,
-        "current_component_revision": context["component"]["revision"],
-        "new_component_revision": plan["new_component_revision"],
-        "filed_report_impacts": plan["filed_report_impacts"],
-    }
-
-
-def classify_residual(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    classification: str,
-    expected_fingerprint: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-    commit: bool = True,
-) -> dict[str, Any]:
-    return apply_review(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        action="classify_residual",
-        expected_fingerprint=expected_fingerprint,
-        gap_id=gap_id,
-        classification=classification,
-        reason=reason,
-        authored_source=authored_source,
-        commit=commit,
-    )
 
 
 def historical_review_gaps(
@@ -2667,22 +2383,17 @@ def _public_review(review: Mapping[str, Any]) -> dict[str, Any]:
 
 __all__ = [
     "RESIDUAL_CLASSIFICATIONS",
+    "apply_review",
     "authored_claim_fingerprint",
-    "append_dismissal",
     "candidate_fingerprint",
-    "create_guided_bridge",
     "current_dismissed_gap_ids",
-    "classify_residual",
     "historical_review_gaps",
     "latest_reviews",
     "latest_dismissed_fingerprints",
     "list_review_history",
-    "preview_guided_bridge",
-    "preview_guided_revision",
-    "preview_reopen_guided_bridge",
-    "preview_residual_classification",
-    "reopen_guided_bridge",
-    "revise_guided_bridge",
+    "plan_review",
+    "public_review_plan",
+    "residual_custody_state",
     "review_state",
     "review_status",
 ]

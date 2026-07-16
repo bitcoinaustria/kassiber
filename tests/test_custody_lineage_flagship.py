@@ -32,6 +32,26 @@ from tests.custody_tax_helpers import persist_authoritative_chain_observation
 BTC = 100_000_000_000
 
 
+def _review_candidate(conn, candidate, *, authored_source="gui"):
+    plan = custody_gap_reviews.plan_review(
+        conn,
+        workspace_id="ws",
+        profile_id="profile",
+        action="create",
+        candidate=candidate,
+        authored_source=authored_source,
+    )
+    return custody_gap_reviews.apply_review(
+        conn,
+        workspace_id="ws",
+        profile_id="profile",
+        action="create",
+        candidate=candidate,
+        expected_fingerprint=plan["fingerprint"],
+        authored_source=authored_source,
+    )
+
+
 @dataclass(frozen=True)
 class _Transaction:
     row_id: str
@@ -478,20 +498,7 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                     == ("2021-return-1", "2021-return-2")
                 )
                 self.assertTrue(candidate.promotion_eligible)
-                preview = custody_gap_reviews.preview_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                )
-                created = custody_gap_reviews.create_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                    expected_fingerprint=preview["candidate_fingerprint"],
-                    authored_source="gui",
-                )
+                created = _review_candidate(book.conn, candidate)
                 # The later vault roll arrives after review; it must not change
                 # the already reviewed missing-history boundary.
                 book.insert(
@@ -638,20 +645,7 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                     if item.source_ids == ("2020-whirlpool-out",)
                     and item.return_ids == ("2021-return-1", "2021-return-2")
                 )
-                preview = custody_gap_reviews.preview_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                )
-                created = custody_gap_reviews.create_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                    expected_fingerprint=preview["candidate_fingerprint"],
-                    authored_source="gui",
-                )
+                created = _review_candidate(book.conn, candidate)
                 self.assertEqual(created["retained_msat"], 10 * BTC)
                 self.assertEqual(created["residual_msat"], 0)
 
@@ -694,19 +688,7 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                     if item.source_ids == ("2020-whirlpool-out",)
                     and len(item.return_ids) == 2
                 )
-                preview = custody_gap_reviews.preview_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                )
-                created = custody_gap_reviews.create_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                    expected_fingerprint=preview["candidate_fingerprint"],
-                )
+                created = _review_candidate(book.conn, candidate)
                 component_id = created["component_id"]
                 original = book.conn.execute(
                     """

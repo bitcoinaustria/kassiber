@@ -25,6 +25,53 @@ from kassiber.errors import AppError
 BTC = 100_000_000_000
 
 
+def _review_action(conn, kwargs):
+    if kwargs.get("classification") is not None:
+        return "classify_residual"
+    candidate = kwargs.get("candidate")
+    if candidate is None:
+        return "reopen"
+    latest = custody_gap_reviews.latest_reviews(conn, kwargs["profile_id"]).get(
+        candidate.gap_id
+    )
+    return (
+        "revise"
+        if latest and latest.get("event_kind") == "bridge_reopened"
+        else "create"
+    )
+
+
+def _preview_review(conn, *, action=None, **kwargs):
+    action = action or _review_action(conn, kwargs)
+    plan = custody_gap_reviews.plan_review(conn, action=action, **kwargs)
+    public = custody_gap_reviews.public_review_plan(plan)
+    public["candidate_fingerprint"] = plan["fingerprint"]
+    public["authored_claim_fingerprint"] = plan["fingerprint"]
+    public["expected_fingerprint"] = plan["fingerprint"]
+    return public
+
+
+def _apply_review(conn, *, action=None, **kwargs):
+    action = action or _review_action(conn, kwargs)
+    return custody_gap_reviews.apply_review(conn, action=action, **kwargs)
+
+
+def _append_dismissal(conn, *, expected_fingerprint, **kwargs):
+    commit = kwargs.pop("commit", True)
+    plan = custody_gap_reviews.plan_review(conn, action="dismiss", **kwargs)
+    if expected_fingerprint == custody_gap_reviews.candidate_fingerprint(
+        plan["candidate"]
+    ):
+        expected_fingerprint = plan["fingerprint"]
+    return custody_gap_reviews.apply_review(
+        conn,
+        action="dismiss",
+        expected_fingerprint=expected_fingerprint,
+        commit=commit,
+        **kwargs,
+    )
+
+
 class CustodyGapLifecycleTests(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.TemporaryDirectory()
@@ -113,13 +160,13 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def _create_bridge(self):
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
         )
-        created = custody_gap_reviews.create_guided_bridge(
+        created = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -142,14 +189,14 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.conn.commit()
         candidate, _created = self._create_bridge()
-        preview = custody_gap_reviews.preview_residual_classification(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
             gap_id=candidate.gap_id,
             classification=classification,
         )
-        resolved = custody_gap_reviews.classify_residual(
+        resolved = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -191,7 +238,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self._mark_journal_current()
         candidate = self._candidate()
         fingerprint = custody_gap_reviews.candidate_fingerprint(candidate)
-        custody_gap_reviews.append_dismissal(
+        _append_dismissal(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -238,7 +285,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             side_effect=RuntimeError("relation write failed"),
         ):
             with self.assertRaisesRegex(RuntimeError, "relation write failed"):
-                custody_gap_reviews.append_dismissal(
+                _append_dismissal(
                     self.conn,
                     workspace_id="ws",
                     profile_id="profile",
@@ -256,7 +303,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             0,
         )
 
-        review = custody_gap_reviews.append_dismissal(
+        review = _append_dismissal(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -330,7 +377,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             ),
             self.assertRaises(sqlite3.OperationalError),
         ):
-            custody_gap_reviews.append_dismissal(
+            _append_dismissal(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -366,7 +413,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             custody_gap_reviews.candidate_fingerprint(changed), fingerprint
         )
         with self.assertRaises(AppError) as raised:
-            custody_gap_reviews.create_guided_bridge(
+            _apply_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -387,7 +434,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         for action in ("dismiss", "bridge"):
             with self.subTest(action=action), self.assertRaises(AppError) as raised:
                 if action == "dismiss":
-                    custody_gap_reviews.append_dismissal(
+                    _append_dismissal(
                         self.conn,
                         workspace_id="ws",
                         profile_id="profile",
@@ -395,7 +442,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                         expected_fingerprint=fingerprint,
                     )
                 else:
-                    custody_gap_reviews.create_guided_bridge(
+                    _apply_review(
                         self.conn,
                         workspace_id="ws",
                         profile_id="profile",
@@ -424,7 +471,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self.conn.commit()
 
         with self.assertRaises(AppError) as raised:
-            custody_gap_reviews.create_guided_bridge(
+            _apply_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -445,14 +492,14 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.conn.commit()
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
         )
 
-        created = custody_gap_reviews.create_guided_bridge(
+        created = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -473,7 +520,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_preview_then_create_authors_exact_active_bridge_without_fee_leakage(self):
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -494,7 +541,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             0,
         )
 
-        result = custody_gap_reviews.create_guided_bridge(
+        result = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -590,14 +637,14 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
 
         for preview_call in (
-            lambda: custody_gap_reviews.preview_residual_classification(
+            lambda: _preview_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
                 gap_id=candidate.gap_id,
                 classification="external_payment",
             ),
-            lambda: custody_gap_reviews.preview_reopen_guided_bridge(
+            lambda: _preview_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -645,7 +692,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         candidate = self._candidate()
 
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -668,7 +715,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             0,
         )
 
-        created = custody_gap_reviews.create_guided_bridge(
+        created = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -736,7 +783,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         candidate = self._candidate()
         snapshot = custody_gap_reviews._candidate_snapshot(self.conn, candidate)
 
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -765,7 +812,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             content_sha256="ab" * 32,
         )
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -779,7 +826,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             ),
             self.assertRaises(sqlite3.OperationalError),
         ):
-            custody_gap_reviews.create_guided_bridge(
+            _apply_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -810,7 +857,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         candidate = self._candidate()
         self.assertFalse(candidate.promotion_eligible)
         with self.assertRaises(AppError) as not_previewed:
-            custody_gap_reviews.create_guided_bridge(
+            _apply_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -821,7 +868,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             )
         self.assertEqual(not_previewed.exception.code, "custody_gap_stale")
 
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -835,7 +882,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             preview["candidate_fingerprint"],
             custody_gap_reviews.candidate_fingerprint(candidate),
         )
-        created = custody_gap_reviews.create_guided_bridge(
+        created = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -846,13 +893,13 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_ranking_changes_do_not_invalidate_authored_bridge_commitment(self):
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
         )
-        custody_gap_reviews.create_guided_bridge(
+        _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -891,7 +938,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.conn.commit()
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -902,7 +949,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self.assertIn("excess_return_unclassified", preview["warnings"])
         self.assertFalse(preview["activatable"])
         with self.assertRaises(AppError) as raised:
-            custody_gap_reviews.create_guided_bridge(
+            _apply_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -917,13 +964,13 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_resolved_history_stays_visible_and_conflicts_after_evidence_drift(self):
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
         )
-        custody_gap_reviews.create_guided_bridge(
+        _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -944,13 +991,13 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_resolved_history_stays_visible_when_component_is_superseded(self):
         candidate = self._candidate()
-        preview = custody_gap_reviews.preview_guided_bridge(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
         )
-        created = custody_gap_reviews.create_guided_bridge(
+        created = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1002,7 +1049,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         before = handlers.process_journals(self.conn, "Books", "Book")
         self.assertTrue(before["custody_quantity"]["blocked"])
 
-        preview = custody_gap_reviews.preview_residual_classification(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1010,7 +1057,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             classification="external_payment",
         )
         self.assertEqual(preview["custody_state"], "external_confirmed")
-        resolved = custody_gap_reviews.classify_residual(
+        resolved = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1067,7 +1114,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_retained_residual_is_internal_reviewed_without_fake_observation(self):
         candidate, _created = self._create_bridge()
-        preview = custody_gap_reviews.preview_residual_classification(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1075,7 +1122,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             classification="retained_custody",
         )
         self.assertEqual(preview["custody_state"], "internal_reviewed")
-        resolved = custody_gap_reviews.classify_residual(
+        resolved = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1115,7 +1162,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_suspense_continuation_remains_an_explicit_custody_blocker(self):
         candidate, _created = self._create_bridge()
-        preview = custody_gap_reviews.preview_residual_classification(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1123,7 +1170,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             classification="suspense_continuation",
         )
         self.assertEqual(preview["custody_state"], "custody_suspense")
-        resolved = custody_gap_reviews.classify_residual(
+        resolved = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1144,7 +1191,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
     def test_reopen_then_revise_preserves_every_revision_and_history_event(self):
         candidate, created = self._create_bridge()
         changes_before_preview = self.conn.total_changes
-        reopen_preview = custody_gap_reviews.preview_reopen_guided_bridge(
+        reopen_preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1152,7 +1199,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             reason="correct bridge",
         )
         self.assertEqual(self.conn.total_changes, changes_before_preview)
-        reopened = custody_gap_reviews.reopen_guided_bridge(
+        reopened = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1171,7 +1218,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
         current = self._candidate()
         changes_before_preview = self.conn.total_changes
-        revision_preview = custody_gap_reviews.preview_guided_revision(
+        revision_preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1179,7 +1226,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             reason="correct bridge",
         )
         self.assertEqual(self.conn.total_changes, changes_before_preview)
-        revised = custody_gap_reviews.revise_guided_bridge(
+        revised = _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1213,7 +1260,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_residual_confirmation_fails_closed_after_evidence_change(self):
         candidate, _created = self._create_bridge()
-        preview = custody_gap_reviews.preview_residual_classification(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1225,7 +1272,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.conn.commit()
         with self.assertRaises(AppError) as raised:
-            custody_gap_reviews.classify_residual(
+            _apply_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
@@ -1244,7 +1291,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_residual_write_can_join_an_outer_audit_transaction(self):
         candidate, created = self._create_bridge()
-        preview = custody_gap_reviews.preview_residual_classification(
+        preview = _preview_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1252,7 +1299,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             classification="external_payment",
         )
         self.conn.execute("BEGIN")
-        custody_gap_reviews.classify_residual(
+        _apply_review(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
@@ -1342,7 +1389,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
     def test_concurrent_latest_reviews_conflict_instead_of_silently_winning(self):
         candidate = self._candidate()
         fingerprint = custody_gap_reviews.candidate_fingerprint(candidate)
-        custody_gap_reviews.append_dismissal(
+        _append_dismissal(
             self.conn,
             workspace_id="ws",
             profile_id="profile",
