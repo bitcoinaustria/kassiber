@@ -157,6 +157,23 @@ same verification surface.
   and the 100k-1m benchmark prove useful candidates still surface while
   incomplete searches remain explicit.
 
+- [ ] **Simplify custody architecture after PR #439.** Follow the ordered,
+  invariant-preserving cutover in
+  [`docs/plan/15-custody-simplification.md`](docs/plan/15-custody-simplification.md).
+  - [x] Extract the production custody journal composition from CLI handlers,
+    expose the decision boundary separately from RP2, convert production gap
+    capacity state to an ordinary typed result, and add an unpatched builder
+    characterization plus a real 100k benchmark baseline.
+  - [ ] Centralize boundary-leg normalization and deterministic N:M allocation.
+  - [ ] Persist one versioned candidate projection and replace heuristic
+    transfer claims with independently scoped source/return holds.
+  - [ ] Add pure review planning and fingerprint/version-checked apply.
+  - [ ] Migrate pair/payout authored meaning into components with typed
+    replicated economic terms; freeze legacy writes and retain replay history.
+  - [ ] Cut every consumer to stored decisions/lineage, require gated report
+    contexts, delete compatibility interpretation and speculative scaffolding,
+    and demonstrate the final simplicity/LOC/performance stop state.
+
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an
   ancient-schema fixture and assert column/data parity after migration. This
