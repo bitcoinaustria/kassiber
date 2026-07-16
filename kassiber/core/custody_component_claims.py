@@ -90,7 +90,7 @@ def _direct_payout_record(
         "counterparty": term.get("counterparty"),
         "swap_fee_msat": term.get("swap_fee_msat"),
         "swap_fee_kind": term.get("swap_fee_kind"),
-        "notes": term.get("notes"),
+        "notes": term.get("review_notes"),
         "confidence_at_review": term.get("confidence_at_review"),
         "review_source": term.get("review_source"),
     }
@@ -486,7 +486,7 @@ def compile_component_quantity_claims(
                             ),
                             "swap_fee_msat": term.get("swap_fee_msat"),
                             "swap_fee_kind": term.get("swap_fee_kind"),
-                            "notes": term.get("notes"),
+                            "notes": term.get("review_notes"),
                             "confidence_at_review": term.get("confidence_at_review"),
                             "review_source": term.get("review_source"),
                         }

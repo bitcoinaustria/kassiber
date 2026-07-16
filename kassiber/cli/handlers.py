@@ -984,25 +984,11 @@ def create_direct_swap_payout(
 
 def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_deleted=False):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    extra_where = "" if include_deleted else "AND p.deleted_at IS NULL"
-    rows = conn.execute(
-        f"""
-        SELECT
-            p.*,
-            tout.external_id AS out_external_id,
-            tout.asset AS out_asset,
-            COALESCE(p.out_amount, tout.amount) AS reviewed_out_amount_msat,
-            tout.amount AS full_out_amount_msat,
-            tout.occurred_at AS out_occurred_at,
-            wout.label AS out_wallet
-        FROM direct_swap_payouts p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
-        JOIN wallets wout ON wout.id = tout.wallet_id
-        WHERE p.profile_id = ? {extra_where}
-        ORDER BY p.created_at DESC
-        """,
-        (profile["id"],),
-    ).fetchall()
+    rows = core_custody_authored_migration.list_payout_review_records(
+        conn,
+        profile_id=profile["id"],
+        include_deleted=include_deleted,
+    )
     output = []
     for row in rows:
         entry = _direct_payout_to_dict(row)
@@ -1053,37 +1039,11 @@ def delete_direct_swap_payout(conn, workspace_ref, profile_ref, payout_id):
 
 def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=False):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    extra_where = "" if include_deleted else "AND p.deleted_at IS NULL"
-    rows = conn.execute(
-        f"""
-        SELECT
-            p.*,
-            tout.external_id AS out_external_id,
-            tout.asset AS out_asset,
-            -- On a split cross-asset pair only `out_amount` crossed to the other
-            -- asset; swap_fee_msat was computed from that portion, so the pair's
-            -- out amount must match it. Same-asset / whole pairs keep tout.amount.
-            COALESCE(p.out_amount, tout.amount) AS out_amount_msat,
-            tout.amount AS out_full_amount_msat,
-            tout.occurred_at AS out_occurred_at,
-            wout.label AS out_wallet,
-            wout.kind AS out_wallet_kind,
-            tin.external_id AS in_external_id,
-            tin.asset AS in_asset,
-            tin.amount AS in_amount_msat,
-            tin.occurred_at AS in_occurred_at,
-            win.label AS in_wallet,
-            win.kind AS in_wallet_kind
-        FROM transaction_pairs p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
-        JOIN transactions tin ON tin.id = p.in_transaction_id
-        JOIN wallets wout ON wout.id = tout.wallet_id
-        JOIN wallets win ON win.id = tin.wallet_id
-        WHERE p.profile_id = ? {extra_where}
-        ORDER BY p.created_at DESC
-        """,
-        (profile["id"],),
-    ).fetchall()
+    rows = core_custody_authored_migration.list_pair_review_records(
+        conn,
+        profile_id=profile["id"],
+        include_deleted=include_deleted,
+    )
     output = []
     for row in rows:
         entry = _pair_to_dict(row)

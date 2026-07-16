@@ -178,7 +178,10 @@ binary.
    have no migrated economic-term row; only ineffective historical reviews are
    returned as explicit compatibility references. Compatibility pair/payout
    commands use the same references for duplicate and leg-reuse checks rather
-   than querying their projection tables independently.
+   than querying their projection tables independently. Active pair/payout list
+   views also materialize from effective terms, including immutable replicated
+   per-review notes; their only legacy inputs are ineffective partial-source
+   exceptions and the explicitly requested deleted-history compatibility view.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.

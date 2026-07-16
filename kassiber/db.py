@@ -2346,6 +2346,7 @@ CREATE TABLE IF NOT EXISTS custody_component_economic_terms (
     swap_fee_kind TEXT,
     confidence_at_review TEXT,
     review_source TEXT,
+    review_notes TEXT,
     payout_asset TEXT,
     payout_amount_msat INTEGER
         CHECK(payout_amount_msat IS NULL OR
@@ -3189,7 +3190,8 @@ def _rebuild_custody_leg_role_schema(conn):
         "id, component_id, workspace_id, profile_id, ordinal, source_leg_id, "
         "target_leg_id, term_kind, legacy_source_id, source_row_hash, "
         "review_kind, tax_policy, reviewed_source_amount_msat, swap_fee_msat, "
-        "swap_fee_kind, confidence_at_review, review_source, payout_asset, "
+        "swap_fee_kind, confidence_at_review, review_source, review_notes, "
+        "payout_asset, "
         "payout_amount_msat, payout_occurred_at, payout_fiat_value_exact, "
         "payout_external_id, counterparty, created_at"
     )
@@ -3344,6 +3346,7 @@ def _rebuild_custody_leg_role_schema(conn):
                 swap_fee_kind TEXT,
                 confidence_at_review TEXT,
                 review_source TEXT,
+                review_notes TEXT,
                 payout_asset TEXT,
                 payout_amount_msat INTEGER CHECK(
                     payout_amount_msat IS NULL OR
@@ -4462,6 +4465,8 @@ def ensure_schema_compat(conn):
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
     _ensure_direct_swap_payout_schema(conn)
+    if _ensure_custody_economic_term_review_notes(conn):
+        conn.commit()
     _ensure_legacy_custody_write_freeze_triggers(conn)
     legacy_leg_columns = {
         row["name"]
@@ -4598,6 +4603,54 @@ def ensure_schema_compat(conn):
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
     _ensure_transaction_graph_cache_schema(conn)
+
+
+def _ensure_custody_economic_term_review_notes(conn):
+    """Add immutable per-review notes and backfill them before reader cutover."""
+
+    columns = {
+        row["name"]
+        for row in conn.execute(
+            "PRAGMA table_info(custody_component_economic_terms)"
+        ).fetchall()
+    }
+    if "review_notes" in columns:
+        return False
+    conn.execute(
+        "ALTER TABLE custody_component_economic_terms ADD COLUMN review_notes TEXT"
+    )
+    # The only update to an authored term is this deterministic schema
+    # migration from the source row already committed by source_row_hash.
+    conn.execute("DROP TRIGGER IF EXISTS trg_custody_component_terms_immutable")
+    conn.execute(
+        """
+        UPDATE custody_component_economic_terms AS term
+        SET review_notes = CASE term.term_kind
+            WHEN 'transaction_pair' THEN (
+                SELECT pair.notes
+                FROM transaction_pairs pair
+                WHERE pair.profile_id = term.profile_id
+                  AND pair.id = term.legacy_source_id
+            )
+            WHEN 'direct_swap_payout' THEN (
+                SELECT payout.notes
+                FROM direct_swap_payouts payout
+                WHERE payout.profile_id = term.profile_id
+                  AND payout.id = term.legacy_source_id
+            )
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_terms_immutable
+        BEFORE UPDATE ON custody_component_economic_terms
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_terms_immutable');
+        END
+        """
+    )
+    return True
 
 
 def _ensure_custody_revision_immutability_triggers(conn):

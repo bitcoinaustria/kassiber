@@ -200,6 +200,10 @@ same verification surface.
     migrated pair/payout economic term. Pair/payout create and revision
     conflict checks also use those component-first references, so native
     reviewed bridges cannot be overwritten by a compatibility command.
+    Pair/payout list surfaces now materialize effective component terms plus
+    only bounded ineffective-history exceptions. Immutable replicated terms
+    gained deterministically backfilled per-review notes, closing the final
+    metadata dependency that had kept active lists on legacy projections.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state. The

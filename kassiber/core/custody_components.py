@@ -552,6 +552,7 @@ def normalize_economic_terms(
                     raw.get("confidence_at_review"), "confidence_at_review"
                 ),
                 "review_source": _optional_text(raw.get("review_source"), "review_source"),
+                "review_notes": _optional_text(raw.get("review_notes"), "review_notes"),
                 "payout_asset": _optional_text(raw.get("payout_asset"), "payout_asset"),
                 "payout_amount_msat": _exact_optional_signed_int(
                     raw.get("payout_amount_msat"), "payout_amount_msat"
@@ -2040,12 +2041,12 @@ def _insert_economic_terms(
             source_leg_id, target_leg_id, term_kind, legacy_source_id,
             source_row_hash, review_kind, tax_policy,
             reviewed_source_amount_msat, swap_fee_msat, swap_fee_kind,
-            confidence_at_review, review_source, payout_asset,
+            confidence_at_review, review_source, review_notes, payout_asset,
             payout_amount_msat, payout_occurred_at, payout_fiat_value_exact,
             payout_external_id, counterparty, created_at
         ) VALUES(
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """,
         [
@@ -2057,6 +2058,7 @@ def _insert_economic_terms(
                 term["tax_policy"], term["reviewed_source_amount_msat"],
                 term["swap_fee_msat"], term["swap_fee_kind"],
                 term["confidence_at_review"], term["review_source"],
+                term["review_notes"],
                 term["payout_asset"], term["payout_amount_msat"],
                 term["payout_occurred_at"], term["payout_fiat_value_exact"],
                 term["payout_external_id"], term["counterparty"], created_at,

@@ -488,6 +488,7 @@ def _insert_terms(
                 "swap_fee_kind": _field(row, "swap_fee_kind"),
                 "confidence_at_review": _field(row, "confidence_at_pair"),
                 "review_source": _field(row, "pair_source"),
+                "review_notes": _field(row, "notes"),
                 "payout_asset": _field(row, "payout_asset"),
                 "payout_amount_msat": (
                     None
@@ -852,6 +853,7 @@ def _pair_group_spec(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "swap_fee_kind": _field(row, "swap_fee_kind"),
                 "confidence_at_review": _field(row, "confidence_at_pair"),
                 "review_source": _field(row, "pair_source"),
+                "review_notes": _field(row, "notes"),
             }
         )
     partial_sources = {
@@ -1328,6 +1330,274 @@ def find_active_review_for_transaction(
                     "compatibility": True,
                 }
     return None
+
+
+def _review_transaction_contexts(
+    conn: sqlite3.Connection,
+    transaction_ids: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    if not transaction_ids:
+        return {}
+    placeholders = ",".join("?" for _ in transaction_ids)
+    return {
+        str(row["id"]): dict(row)
+        for row in conn.execute(
+            f"""
+            SELECT transaction_row.id,
+                   transaction_row.external_id,
+                   transaction_row.asset,
+                   transaction_row.amount,
+                   transaction_row.occurred_at,
+                   wallet.label AS wallet,
+                   wallet.kind AS wallet_kind
+            FROM transactions transaction_row
+            JOIN wallets wallet ON wallet.id = transaction_row.wallet_id
+            WHERE transaction_row.id IN ({placeholders})
+            """,
+            tuple(transaction_ids),
+        ).fetchall()
+    }
+
+
+def _active_component_term_rows(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    term_kind: str,
+) -> list[dict[str, Any]]:
+    effective_ids = effective_component_ids(conn, profile_id=profile_id)
+    if not effective_ids:
+        return []
+    placeholders = ",".join("?" for _ in effective_ids)
+    return [
+        dict(row)
+        for row in conn.execute(
+            f"""
+            SELECT term.*,
+                   COALESCE(source.anchor_transaction_id,
+                            source.transaction_id) AS out_transaction_id,
+                   COALESCE(target.anchor_transaction_id,
+                            target.transaction_id) AS in_transaction_id
+            FROM custody_component_economic_terms term
+            JOIN custody_component_legs source ON source.id = term.source_leg_id
+            JOIN custody_component_legs target ON target.id = term.target_leg_id
+            WHERE term.profile_id = ?
+              AND term.term_kind = ?
+              AND term.component_id IN ({placeholders})
+            ORDER BY term.created_at DESC, term.component_id, term.ordinal
+            """,
+            (profile_id, term_kind, *sorted(effective_ids)),
+        ).fetchall()
+    ]
+
+
+def list_pair_review_records(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    include_deleted: bool = False,
+) -> list[dict[str, Any]]:
+    """Materialize pair list rows from effective terms plus exceptions."""
+
+    effective_ids = effective_component_ids(conn, profile_id=profile_id)
+    legacy_pairs, _ = load_legacy_compatibility_records(
+        conn,
+        profile_id=profile_id,
+        effective_component_ids=effective_ids,
+    )
+    compatibility_rows = [dict(row) for row in legacy_pairs]
+    if include_deleted:
+        compatibility_rows.extend(
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM transaction_pairs "
+                "WHERE profile_id = ? AND deleted_at IS NOT NULL",
+                (profile_id,),
+            ).fetchall()
+        )
+    component_rows = _active_component_term_rows(
+        conn,
+        profile_id=profile_id,
+        term_kind="transaction_pair",
+    )
+    transaction_ids = sorted(
+        {
+            str(transaction_id)
+            for row in (*component_rows, *compatibility_rows)
+            for transaction_id in (
+                _field(row, "out_transaction_id"),
+                _field(row, "in_transaction_id"),
+            )
+            if transaction_id not in (None, "")
+        }
+    )
+    contexts = _review_transaction_contexts(conn, transaction_ids)
+    records: list[dict[str, Any]] = []
+    for row in component_rows:
+        out_id = str(row["out_transaction_id"])
+        in_id = str(row["in_transaction_id"])
+        out_context = contexts[out_id]
+        in_context = contexts[in_id]
+        reviewed_out = row["reviewed_source_amount_msat"]
+        records.append(
+            {
+                "id": row["legacy_source_id"],
+                "component_id": row["component_id"],
+                "workspace_id": row["workspace_id"],
+                "profile_id": row["profile_id"],
+                "out_transaction_id": out_id,
+                "in_transaction_id": in_id,
+                "kind": row["review_kind"],
+                "policy": row["tax_policy"],
+                "notes": row["review_notes"],
+                "swap_fee_msat": row["swap_fee_msat"],
+                "swap_fee_kind": row["swap_fee_kind"],
+                "confidence_at_pair": row["confidence_at_review"],
+                "pair_source": row["review_source"],
+                "out_amount": reviewed_out,
+                "deleted_at": None,
+                "created_at": row["created_at"],
+                "out_external_id": out_context["external_id"],
+                "out_asset": out_context["asset"],
+                "out_amount_msat": (
+                    int(reviewed_out)
+                    if reviewed_out is not None
+                    else int(out_context["amount"])
+                ),
+                "out_full_amount_msat": int(out_context["amount"]),
+                "out_occurred_at": out_context["occurred_at"],
+                "out_wallet": out_context["wallet"],
+                "out_wallet_kind": out_context["wallet_kind"],
+                "in_external_id": in_context["external_id"],
+                "in_asset": in_context["asset"],
+                "in_amount_msat": int(in_context["amount"]),
+                "in_occurred_at": in_context["occurred_at"],
+                "in_wallet": in_context["wallet"],
+                "in_wallet_kind": in_context["wallet_kind"],
+            }
+        )
+    for row in compatibility_rows:
+        out_context = contexts[str(row["out_transaction_id"])]
+        in_context = contexts[str(row["in_transaction_id"])]
+        reviewed_out = row.get("out_amount")
+        records.append(
+            {
+                **row,
+                "out_external_id": out_context["external_id"],
+                "out_asset": out_context["asset"],
+                "out_amount_msat": (
+                    int(reviewed_out)
+                    if reviewed_out is not None
+                    else int(out_context["amount"])
+                ),
+                "out_full_amount_msat": int(out_context["amount"]),
+                "out_occurred_at": out_context["occurred_at"],
+                "out_wallet": out_context["wallet"],
+                "out_wallet_kind": out_context["wallet_kind"],
+                "in_external_id": in_context["external_id"],
+                "in_asset": in_context["asset"],
+                "in_amount_msat": int(in_context["amount"]),
+                "in_occurred_at": in_context["occurred_at"],
+                "in_wallet": in_context["wallet"],
+                "in_wallet_kind": in_context["wallet_kind"],
+            }
+        )
+    return sorted(records, key=lambda row: (row["created_at"], row["id"]), reverse=True)
+
+
+def list_payout_review_records(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    include_deleted: bool = False,
+) -> list[dict[str, Any]]:
+    """Materialize payout list rows from effective terms plus exceptions."""
+
+    effective_ids = effective_component_ids(conn, profile_id=profile_id)
+    _, legacy_payouts = load_legacy_compatibility_records(
+        conn,
+        profile_id=profile_id,
+        effective_component_ids=effective_ids,
+    )
+    compatibility_rows = [dict(row) for row in legacy_payouts]
+    if include_deleted:
+        compatibility_rows.extend(
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM direct_swap_payouts "
+                "WHERE profile_id = ? AND deleted_at IS NOT NULL",
+                (profile_id,),
+            ).fetchall()
+        )
+    component_rows = _active_component_term_rows(
+        conn,
+        profile_id=profile_id,
+        term_kind="direct_swap_payout",
+    )
+    transaction_ids = sorted(
+        {
+            str(row["out_transaction_id"])
+            for row in (*component_rows, *compatibility_rows)
+        }
+    )
+    contexts = _review_transaction_contexts(conn, transaction_ids)
+    records: list[dict[str, Any]] = []
+    for row in component_rows:
+        out_id = str(row["out_transaction_id"])
+        out_context = contexts[out_id]
+        reviewed_out = row["reviewed_source_amount_msat"]
+        records.append(
+            {
+                "id": row["legacy_source_id"],
+                "component_id": row["component_id"],
+                "workspace_id": row["workspace_id"],
+                "profile_id": row["profile_id"],
+                "out_transaction_id": out_id,
+                "kind": row["review_kind"],
+                "policy": row["tax_policy"],
+                "payout_asset": row["payout_asset"],
+                "payout_amount": row["payout_amount_msat"],
+                "payout_occurred_at": row["payout_occurred_at"],
+                "payout_fiat_value": row["payout_fiat_value_exact"],
+                "payout_external_id": row["payout_external_id"],
+                "counterparty": row["counterparty"],
+                "notes": row["review_notes"],
+                "swap_fee_msat": row["swap_fee_msat"],
+                "swap_fee_kind": row["swap_fee_kind"],
+                "out_amount": reviewed_out,
+                "deleted_at": None,
+                "created_at": row["created_at"],
+                "out_external_id": out_context["external_id"],
+                "out_asset": out_context["asset"],
+                "reviewed_out_amount_msat": (
+                    int(reviewed_out)
+                    if reviewed_out is not None
+                    else int(out_context["amount"])
+                ),
+                "full_out_amount_msat": int(out_context["amount"]),
+                "out_occurred_at": out_context["occurred_at"],
+                "out_wallet": out_context["wallet"],
+            }
+        )
+    for row in compatibility_rows:
+        out_context = contexts[str(row["out_transaction_id"])]
+        reviewed_out = row.get("out_amount")
+        records.append(
+            {
+                **row,
+                "out_external_id": out_context["external_id"],
+                "out_asset": out_context["asset"],
+                "reviewed_out_amount_msat": (
+                    int(reviewed_out)
+                    if reviewed_out is not None
+                    else int(out_context["amount"])
+                ),
+                "full_out_amount_msat": int(out_context["amount"]),
+                "out_occurred_at": out_context["occurred_at"],
+                "out_wallet": out_context["wallet"],
+            }
+        )
+    return sorted(records, key=lambda row: (row["created_at"], row["id"]), reverse=True)
 
 
 def retire_linked_component(

@@ -755,7 +755,7 @@ def _replace_canonical_quantity_state(
             term.review_source,
             term.swap_fee_msat,
             term.swap_fee_kind,
-            component.notes
+            COALESCE(term.review_notes, component.notes) AS notes
         FROM custody_component_economic_terms term
         JOIN custody_component_legs source_leg ON source_leg.id = term.source_leg_id
         JOIN custody_component_legs target_leg ON target_leg.id = term.target_leg_id

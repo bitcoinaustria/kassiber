@@ -9,6 +9,8 @@ from kassiber import db as db_module
 from kassiber.cli.handlers import (
     create_direct_swap_payout,
     create_transaction_pair,
+    list_direct_swap_payouts,
+    list_transaction_pairs,
 )
 from kassiber.core.custody_authored_migration import (
     backfill_legacy_authored_components,
@@ -176,6 +178,7 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
         assert terms["swap_fee_kind"] == "service"
         assert terms["confidence_at_review"] == "strong"
         assert terms["review_source"] == "manual"
+        assert terms["review_notes"] == "reviewed pair"
 
         payout = get_component(migrated, payout_link)
         assert payout["state"] == "active"
@@ -192,6 +195,7 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
         assert terms["payout_external_id"] == "settlement-1"
         assert terms["counterparty"] == "swap desk"
         assert terms["swap_fee_msat"] == -50
+        assert terms["review_notes"] == "reviewed payout"
 
         safe_components = {
             component["id"]: component
@@ -219,6 +223,12 @@ def test_reopen_migrates_legacy_reviews_to_inert_exact_drafts(tmp_path):
             "payout"
         ]
         assert decisions.direct_payout_records[0]["component_id"] == payout["id"]
+
+        listed_payouts = list_direct_swap_payouts(migrated, "ws", "profile")
+        assert len(listed_payouts) == 1
+        assert listed_payouts[0]["id"] == "payout"
+        assert listed_payouts[0]["notes"] == "reviewed payout"
+        assert listed_payouts[0]["payout"]["amount_msat"] == 1950
 
         refs = list_active_review_refs(migrated, profile_id="profile")
         assert {
@@ -454,6 +464,11 @@ def test_connected_fanout_pairs_activate_as_one_atomic_component(tmp_path):
             "pair-in-2",
             "pair-out",
         ]
+        listed = list_transaction_pairs(migrated, "ws", "profile")
+        assert [(row["id"], row["notes"]) for row in listed] == [
+            ("pair-2", "fanout remainder"),
+            ("pair", "reviewed pair"),
+        ]
     finally:
         migrated.close()
 
@@ -621,4 +636,52 @@ def test_leg_role_rebuild_preserves_existing_economic_term_foreign_keys(tmp_path
             "PRAGMA foreign_key_list(custody_component_economic_terms)"
         )
     } >= {"custody_components", "custody_component_legs"}
+    conn.close()
+
+
+def test_review_notes_schema_migration_backfills_and_refreezes_terms():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(
+        """
+        CREATE TABLE transaction_pairs(
+            id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, notes TEXT
+        );
+        CREATE TABLE direct_swap_payouts(
+            id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, notes TEXT
+        );
+        CREATE TABLE custody_component_economic_terms(
+            id TEXT PRIMARY KEY,
+            profile_id TEXT NOT NULL,
+            term_kind TEXT NOT NULL,
+            legacy_source_id TEXT NOT NULL
+        );
+        CREATE TRIGGER trg_custody_component_terms_immutable
+        BEFORE UPDATE ON custody_component_economic_terms
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_terms_immutable');
+        END;
+        INSERT INTO transaction_pairs VALUES('pair', 'profile', 'pair note');
+        INSERT INTO direct_swap_payouts
+        VALUES('payout', 'profile', 'payout note');
+        INSERT INTO custody_component_economic_terms
+        VALUES('pair-term', 'profile', 'transaction_pair', 'pair');
+        INSERT INTO custody_component_economic_terms
+        VALUES('payout-term', 'profile', 'direct_swap_payout', 'payout');
+        """
+    )
+
+    assert db_module._ensure_custody_economic_term_review_notes(conn) is True
+    assert [
+        row["review_notes"]
+        for row in conn.execute(
+            "SELECT review_notes FROM custody_component_economic_terms ORDER BY id"
+        )
+    ] == ["pair note", "payout note"]
+    assert db_module._ensure_custody_economic_term_review_notes(conn) is False
+    with pytest.raises(sqlite3.IntegrityError, match="terms_immutable"):
+        conn.execute(
+            "UPDATE custody_component_economic_terms "
+            "SET review_notes = 'changed' WHERE id = 'pair-term'"
+        )
     conn.close()
