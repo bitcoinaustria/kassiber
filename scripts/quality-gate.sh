@@ -25,7 +25,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 py() {
-  uv run --frozen python "$@"
+  uv run --locked python "$@"
 }
 
 run py -m compileall -q kassiber tests scripts/python_test_shards.py

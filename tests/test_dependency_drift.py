@@ -11,6 +11,19 @@ from kassiber import __version__
 _ROOT = Path(__file__).resolve().parent.parent
 _RP2_PIN_RE = re.compile(r"bitcoinaustria/rp2\.git@(?P<rev>[0-9a-f]{40})")
 _VERSION_RE = re.compile(r'(?m)^version\s*=\s*"([^"]+)"')
+_LOCKED_UV_SURFACE_GLOBS = (
+    ".claude/**/*.json",
+    ".claude/**/*.md",
+    ".github/workflows/*.yml",
+    "dev/**/*.md",
+    "docs/**/*.md",
+    "kassiber/ai/skill_references/*.md",
+    "kassiber/data/rates/**/README.md",
+    "scripts/*.sh",
+    "skills/**/*.md",
+    "skills/**/*.sh",
+)
+_LOCKED_UV_ROOT_FILES = ("AGENTS.md", "CONTRIBUTING.md", "README.md", "TODO.md")
 
 
 def _toml_table_body(text: str, table: str) -> str:
@@ -68,6 +81,13 @@ def _rp2_pin_from_license_notes() -> str:
     raise AssertionError("THIRD_PARTY_LICENSES.md does not mention the pinned rp2 commit")
 
 
+def _locked_uv_surface_paths() -> list[Path]:
+    paths = {_ROOT / name for name in _LOCKED_UV_ROOT_FILES}
+    for pattern in _LOCKED_UV_SURFACE_GLOBS:
+        paths.update(_ROOT.glob(pattern))
+    return sorted(path for path in paths if path.is_file())
+
+
 class DependencyDriftTests(unittest.TestCase):
     def test_development_workflows_use_locked_uv_and_pnpm(self):
         bootstrap = (_ROOT / "scripts" / "bootstrap-dev-env.sh").read_text(
@@ -83,10 +103,11 @@ class DependencyDriftTests(unittest.TestCase):
             (_ROOT / "ui-tauri" / "package.json").read_text(encoding="utf-8")
         )
 
-        self.assertIn("uv sync --frozen", bootstrap)
+        self.assertIn('cd "$ROOT"', bootstrap)
+        self.assertIn("uv sync --locked", bootstrap)
         self.assertNotIn(" -m pip ", bootstrap)
-        self.assertIn("uv run --frozen python", quality_gate)
-        self.assertIn("uv run --frozen python", integration)
+        self.assertIn("uv run --locked python", quality_gate)
+        self.assertIn("uv run --locked python", integration)
         self.assertEqual(package_json["packageManager"], "pnpm@10.33.0")
         self.assertNotIn("npx ", "\n".join(package_json["scripts"].values()))
         self.assertTrue((_ROOT / "uv.lock").is_file())
@@ -95,6 +116,23 @@ class DependencyDriftTests(unittest.TestCase):
         self.assertFalse((_ROOT / "ui-tauri" / "package-lock.json").exists())
         self.assertFalse((_ROOT / "yarn.lock").exists())
         self.assertFalse((_ROOT / "ui-tauri" / "yarn.lock").exists())
+
+        unlocked_uv_commands: list[str] = []
+        for path in _locked_uv_surface_paths():
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                unlocked_run = re.search(r"\buv run(?!\s+--locked\b)", line)
+                unlocked_sync = re.search(r"\buv sync(?!\s+--locked\b)", line)
+                dependency_update_permission = (
+                    path == _ROOT / ".claude" / "settings.json"
+                    and '"Bash(uv sync*)"' in line
+                )
+                if unlocked_run or (unlocked_sync and not dependency_update_permission):
+                    unlocked_uv_commands.append(
+                        f"{path.relative_to(_ROOT)}:{line_number}: {line.strip()}"
+                    )
+        self.assertEqual([], unlocked_uv_commands)
 
     def test_rp2_country_at_exposes_validate_input_data(self):
         """``GenericRP2TaxEngine.build_ledger_state`` calls

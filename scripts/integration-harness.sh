@@ -24,7 +24,7 @@ py() {
     echo "integration harness requires uv; run ./scripts/bootstrap-dev-env.sh" >&2
     return 2
   fi
-  uv run --frozen python "$@"
+  uv run --locked python "$@"
 }
 
 ensure_python_runtime() {
@@ -1115,7 +1115,7 @@ fi)
 
 Next steps:
   cd ui-tauri && pnpm dev:demo                       # dev preview on the real demo book
-  uv run --frozen python -m kassiber --data-root "$DEMO_HOME/data" reports summary
+  uv run --locked python -m kassiber --data-root "$DEMO_HOME/data" reports summary
   ./dev/regtest/bitcoin-cli.sh getblockchaininfo    # poke the regtest node
   ./scripts/integration-harness.sh demo-down         # stop the node (book + chain kept)
   ./scripts/integration-harness.sh demo-down --purge # remove node, chain, and demo book
@@ -1169,7 +1169,7 @@ run_demo_tick() {
   echo
   echo "New business activity is confirmed on the demo node."
   echo "Refresh/sync in the app (or run it directly) to import it:"
-  echo "  uv run --frozen python -m kassiber --data-root \"$DEMO_HOME/data\" wallets sync --all"
+  echo "  uv run --locked python -m kassiber --data-root \"$DEMO_HOME/data\" wallets sync --all"
 }
 
 run_demo_down() {

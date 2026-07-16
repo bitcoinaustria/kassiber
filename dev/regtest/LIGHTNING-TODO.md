@@ -106,7 +106,7 @@ Useful paths/commands while preserved:
 ```bash
 KASSIBER_REGTEST_KEEP=1 ./scripts/integration-harness.sh lightning-business
 ./dev/regtest/lightning-cli-merchant.sh getinfo
-uv run python -m tests.integration.lightning_business_regtest
+uv run --locked python -m tests.integration.lightning_business_regtest
 ```
 
 The assertion module writes its book under

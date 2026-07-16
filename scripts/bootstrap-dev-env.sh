@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 PYTHON="${PYTHON:-python3}"
 VENV="${KASSIBER_VENV:-"$ROOT/.venv"}"
 
@@ -36,7 +37,7 @@ EOF
   fi
 fi
 
-UV_PROJECT_ENVIRONMENT="$VENV" uv sync --frozen --python "$PYTHON"
+UV_PROJECT_ENVIRONMENT="$VENV" uv sync --locked --python "$PYTHON"
 
 "$VENV/bin/python" - <<'PY'
 import platform
@@ -78,5 +79,5 @@ Kassiber dev environment is ready.
 
 Use:
   export KASSIBER_PYTHON="$VENV/bin/python"
-  UV_PROJECT_ENVIRONMENT="$VENV" uv run --frozen python -m pytest ...
+  UV_PROJECT_ENVIRONMENT="$VENV" uv run --locked python -m pytest ...
 EOF

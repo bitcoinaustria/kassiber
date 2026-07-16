@@ -75,13 +75,13 @@ detect_runner() {
     return 0
   fi
   if command -v uv >/dev/null 2>&1 && [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
-    if (cd "$REPO_ROOT" && uv run kassiber status >/dev/null 2>&1); then
-      RUNNER=(uv run kassiber)
+    if (cd "$REPO_ROOT" && uv run --locked kassiber status >/dev/null 2>&1); then
+      RUNNER=(uv run --locked kassiber)
       RUNNER_MODE="uv"
       return 0
     fi
-    if (cd "$REPO_ROOT" && uv run python -m kassiber status >/dev/null 2>&1); then
-      RUNNER=(uv run python -m kassiber)
+    if (cd "$REPO_ROOT" && uv run --locked python -m kassiber status >/dev/null 2>&1); then
+      RUNNER=(uv run --locked python -m kassiber)
       RUNNER_MODE="uv-python"
       return 0
     fi

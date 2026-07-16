@@ -12,11 +12,11 @@ development:
 ```bash
 ./scripts/bootstrap-dev-env.sh
 export KASSIBER_PYTHON="$PWD/.venv/bin/python"
-uv run --frozen python -m pytest tests/test_wallet_descriptors.py -q
+uv run --locked python -m pytest tests/test_wallet_descriptors.py -q
 ```
 
-The bootstrap script runs `uv sync --frozen` for the dependencies locked by
-`uv.lock` and declared in `pyproject.toml`, then
+The bootstrap script runs `uv sync --locked`, which fails if `uv.lock` no longer
+matches `pyproject.toml` and never rewrites the lock, then
 verifies imports for the packages that most often go missing in ad-hoc shells
 (`embit` and `sqlcipher3`). On Debian/Ubuntu it fails early with the required
 SQLCipher system package command if the development headers are not available.
@@ -617,7 +617,7 @@ From a fresh clone, install the project/runtime dependencies once:
 
 ```bash
 ./scripts/bootstrap-dev-env.sh
-pnpm --dir ui-tauri install
+pnpm --dir ui-tauri install --frozen-lockfile
 ```
 
 After that, the two commands above take you to a browser preview backed by the
@@ -699,7 +699,7 @@ Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 ```bash
 ./dev/regtest/bitcoin-cli.sh getblockchaininfo
 ./dev/regtest/bitcoin-cli.sh -generate 1
-uv run --frozen python -m kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
+uv run --locked python -m kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
 ```
 
 Tear-down is explicit: `demo-down` stops the node but keeps the chain volume
