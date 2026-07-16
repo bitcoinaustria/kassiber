@@ -128,8 +128,9 @@ SmartScreen first-launch handling lives in
 **From source** (CLI use or development, Python `>=3.10`):
 
 ```bash
-./scripts/bootstrap-dev-env.sh
+./scripts/bootstrap-dev-env.sh        # checks system deps; runs uv sync --frozen
 export KASSIBER_PYTHON="$PWD/.venv/bin/python"
+uv run --frozen python -m pytest tests/test_cli_smoke.py -q
 ```
 
 The Python install includes `keyring` so the opt-in CLI remembered-unlock flow

@@ -5,8 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 MODE="${1:-fast}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-RUNNER=()
+PYTHON_BIN="uv-managed project environment"
 STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
@@ -20,20 +19,12 @@ export TZ="${TZ:-UTC}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 export LANG="${LANG:-C.UTF-8}"
 
-if [ -n "${VIRTUAL_ENV:-}" ] && command -v python3 >/dev/null 2>&1; then
-  PYTHON_BIN="$(command -v python3)"
-elif command -v uv >/dev/null 2>&1; then
-  RUNNER=(uv run)
-elif [ -x "$ROOT/.venv/bin/python" ]; then
-  PYTHON_BIN="$ROOT/.venv/bin/python"
-fi
-
 py() {
-  if [ ${#RUNNER[@]} -gt 0 ]; then
-    "${RUNNER[@]}" python "$@"
-  else
-    "$PYTHON_BIN" "$@"
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "integration harness requires uv; run ./scripts/bootstrap-dev-env.sh" >&2
+    return 2
   fi
+  uv run --frozen python "$@"
 }
 
 ensure_python_runtime() {
@@ -54,7 +45,7 @@ PY
     return 0
   fi
   echo "Kassiber's Python dependencies are not available in this interpreter." >&2
-  echo "Run ./scripts/bootstrap-dev-env.sh, activate a prepared virtualenv, or install uv and rerun." >&2
+  echo "Run ./scripts/bootstrap-dev-env.sh and rerun." >&2
   echo "Current Python: $PYTHON_BIN" >&2
   exit 2
 }
@@ -1124,7 +1115,7 @@ fi)
 
 Next steps:
   cd ui-tauri && pnpm dev:demo                       # dev preview on the real demo book
-  uv run python -m kassiber --data-root "$DEMO_HOME/data" reports summary
+  uv run --frozen python -m kassiber --data-root "$DEMO_HOME/data" reports summary
   ./dev/regtest/bitcoin-cli.sh getblockchaininfo    # poke the regtest node
   ./scripts/integration-harness.sh demo-down         # stop the node (book + chain kept)
   ./scripts/integration-harness.sh demo-down --purge # remove node, chain, and demo book
@@ -1178,7 +1169,7 @@ run_demo_tick() {
   echo
   echo "New business activity is confirmed on the demo node."
   echo "Refresh/sync in the app (or run it directly) to import it:"
-  echo "  uv run python -m kassiber --data-root \"$DEMO_HOME/data\" wallets sync --all"
+  echo "  uv run --frozen python -m kassiber --data-root \"$DEMO_HOME/data\" wallets sync --all"
 }
 
 run_demo_down() {

@@ -69,6 +69,33 @@ def _rp2_pin_from_license_notes() -> str:
 
 
 class DependencyDriftTests(unittest.TestCase):
+    def test_development_workflows_use_locked_uv_and_pnpm(self):
+        bootstrap = (_ROOT / "scripts" / "bootstrap-dev-env.sh").read_text(
+            encoding="utf-8"
+        )
+        quality_gate = (_ROOT / "scripts" / "quality-gate.sh").read_text(
+            encoding="utf-8"
+        )
+        integration = (_ROOT / "scripts" / "integration-harness.sh").read_text(
+            encoding="utf-8"
+        )
+        package_json = json.loads(
+            (_ROOT / "ui-tauri" / "package.json").read_text(encoding="utf-8")
+        )
+
+        self.assertIn("uv sync --frozen", bootstrap)
+        self.assertNotIn(" -m pip ", bootstrap)
+        self.assertIn("uv run --frozen python", quality_gate)
+        self.assertIn("uv run --frozen python", integration)
+        self.assertEqual(package_json["packageManager"], "pnpm@10.33.0")
+        self.assertNotIn("npx ", "\n".join(package_json["scripts"].values()))
+        self.assertTrue((_ROOT / "uv.lock").is_file())
+        self.assertTrue((_ROOT / "ui-tauri" / "pnpm-lock.yaml").is_file())
+        self.assertFalse((_ROOT / "package-lock.json").exists())
+        self.assertFalse((_ROOT / "ui-tauri" / "package-lock.json").exists())
+        self.assertFalse((_ROOT / "yarn.lock").exists())
+        self.assertFalse((_ROOT / "ui-tauri" / "yarn.lock").exists())
+
     def test_rp2_country_at_exposes_validate_input_data(self):
         """``GenericRP2TaxEngine.build_ledger_state`` calls
         ``configuration.country.validate_input_data`` to run cross-asset

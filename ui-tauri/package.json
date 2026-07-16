@@ -18,7 +18,7 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test": "vitest",
-    "blocks:add:dashboard5": "sh -c 'set -a; [ -f .env ] && . ./.env; set +a; if [ -z \"${SHADCNBLOCKS_API_KEY:-}\" ] || [ \"$SHADCNBLOCKS_API_KEY\" = \"replace_with_your_shadcnblocks_api_key\" ]; then echo \"Set SHADCNBLOCKS_API_KEY in ui-tauri/.env first\" >&2; exit 1; fi; npx shadcn@latest add @shadcnblocks/dashboard5'"
+    "blocks:add:dashboard5": "sh -c 'set -a; [ -f .env ] && . ./.env; set +a; if [ -z \"${SHADCNBLOCKS_API_KEY:-}\" ] || [ \"$SHADCNBLOCKS_API_KEY\" = \"replace_with_your_shadcnblocks_api_key\" ]; then echo \"Set SHADCNBLOCKS_API_KEY in ui-tauri/.env first\" >&2; exit 1; fi; pnpm dlx shadcn@latest add @shadcnblocks/dashboard5'"
   },
   "dependencies": {
     "@fontsource/blinker": "^5.2.5",

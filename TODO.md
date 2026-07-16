@@ -48,6 +48,11 @@ same verification surface.
 
 ## Right now
 
+- [x] Standardize contributor dependency and test execution on the two locked
+  project managers: `uv sync --frozen` / `uv run --frozen` for Python and the
+  pinned `pnpm` for the desktop. Keep `pip` only as an end-user packaging
+  compatibility contract; reject npm/yarn lockfiles and direct `npx` scripts.
+
 - [x] **Replace manual Bitcoin/Liquid chain state with dependency-backed
   observers** in one phase-checkpointed PR. Current truth and the initial
   capability matrix live in
@@ -1451,15 +1456,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 Run these after any extraction or behavior change:
 
-- `PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py`
-- `uv run python -m unittest tests.test_cli_smoke -v`
-- `uv run python -m kassiber --help`
-- `uv run python -m kassiber --machine status`
-- `uv run python -m kassiber backends list`
-- `uv run python -m kassiber wallets kinds`
-- `uv run python -m kassiber profiles create --help`
-- `uv run python -m kassiber metadata records --help`
-- `uv run python -m kassiber attachments list --help`
-- `uv run python -m kassiber journals events --help`
-- `uv run python -m kassiber reports balance-history --help`
-- `uv run python -m kassiber rates --help`
+- `PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run --frozen python -m py_compile kassiber/*.py`
+- `uv run --frozen python -m unittest tests.test_cli_smoke -v`
+- `uv run --frozen python -m kassiber --help`
+- `uv run --frozen python -m kassiber --machine status`
+- `uv run --frozen python -m kassiber backends list`
+- `uv run --frozen python -m kassiber wallets kinds`
+- `uv run --frozen python -m kassiber profiles create --help`
+- `uv run --frozen python -m kassiber metadata records --help`
+- `uv run --frozen python -m kassiber attachments list --help`
+- `uv run --frozen python -m kassiber journals events --help`
+- `uv run --frozen python -m kassiber reports balance-history --help`
+- `uv run --frozen python -m kassiber rates --help`
