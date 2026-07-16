@@ -218,6 +218,10 @@ binary.
    on open and removed from new schemas, reset accounting, replication policy
    and workspace-split metadata; normalized candidate/projection rows are now
    the only persisted gap-discovery population.
+   Capacity-limited gap discovery now returns `CustodyGapSearchResult` with
+   explicit completeness, limit, partial-population and scoped-blocker fields;
+   `CustodyGapSearchLimitError` and all exception-carried partial results are
+   deleted.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

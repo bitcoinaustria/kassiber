@@ -77,46 +77,6 @@ _EXTERNAL_ORIGIN_KINDS = frozenset(
 )
 
 
-class CustodyGapSearchLimitError(ValueError):
-    """Advisory search stopped at a configured capacity ceiling.
-
-    Capacity alone says nothing about custody or tax classification. Consumers
-    may show an incomplete-search warning, but must never turn the exception
-    into a global report blocker. ``blocking_source_ids`` is narrower: typed
-    privacy-boundary evidence plus incomplete source discovery requires suspense
-    for those exact sources only.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        candidate_count: int | None = None,
-        promotion_eligible_count: int | None = None,
-        limit_kind: str = "capacity",
-        partial_candidates: Sequence[Any] = (),
-        accounting_candidates: Sequence[Any] = (),
-        normalized_legs: Sequence[Any] = (),
-        blocking_source_ids: Iterable[str] = (),
-    ) -> None:
-        super().__init__(message)
-        self.candidate_count = candidate_count
-        self.promotion_eligible_count = promotion_eligible_count
-        self.limit_kind = limit_kind
-        self.partial_candidates = tuple(partial_candidates)
-        # The UI prefix stays bounded by ``max_candidates``.  Canonical
-        # accounting must nevertheless retain every already-scored structured
-        # candidate: dropping one merely because the display queue is full
-        # would let its boundary rows fall back into RP2.
-        self.accounting_candidates = tuple(accounting_candidates)
-        self.normalized_legs = tuple(normalized_legs)
-        self.blocking_source_ids = tuple(
-            sorted({str(item) for item in blocking_source_ids if item})
-        )
-        self.blocking = False
-        self.search_complete = False
-
-
 @dataclass(frozen=True)
 class CustodyGapCandidate:
     """One non-authoritative missing-custody-history suggestion.
@@ -203,7 +163,7 @@ class _ReturnEra:
     total_msat: int
 
 
-def suggest_custody_gap_candidates(
+def _compute_custody_gap_search(
     rows: Sequence[Mapping[str, Any]],
     *,
     ignored_ids: Iterable[str] = (),
@@ -220,7 +180,7 @@ def suggest_custody_gap_candidates(
     max_candidates: int = DEFAULT_MAX_CANDIDATES,
     return_era_gap_seconds: int = DEFAULT_RETURN_ERA_GAP_SECONDS,
     promotion_score_margin: int = DEFAULT_PROMOTION_SCORE_MARGIN,
-) -> list[CustodyGapCandidate]:
+) -> CustodyGapSearchResult:
     """Suggest long-horizon custody bridges from transaction observations.
 
     The matcher assumes one profile represents one legal owner, but it does
@@ -232,8 +192,8 @@ def suggest_custody_gap_candidates(
     fee contributes to the wallet debit but never inflates the residual;
     ``amount_includes_fee`` prevents double counting net-delta imports.
 
-    ``max_candidates`` bounds the complete generated population. Exceeding it
-    raises :class:`CustodyGapSearchLimitError`; it never truncates the result.
+    ``max_candidates`` bounds the visible population. Completeness and any
+    already-scored accounting candidates are returned as ordinary metadata.
     """
 
     _validate_limits(
@@ -355,10 +315,8 @@ def suggest_custody_gap_candidates(
                 beam_width=beam_width,
                 result_limit=max_return_groups_per_source,
             )
-            aggregate_limited = False
-            try:
-                if worklist_limited:
-                    aggregate_groups = _matching_return_eras(
+            if worklist_limited:
+                aggregate_groups, aggregate_limited = _matching_return_eras(
                         return_eras,
                         boundary=boundary,
                         target=target,
@@ -366,9 +324,9 @@ def suggest_custody_gap_candidates(
                         max_excess_ppm=max_excess_ppm,
                         max_legs=max_aggregate_return_legs,
                         result_limit=max_return_groups_per_source,
-                    )
-                else:
-                    aggregate_groups = _wallet_era_return_groups(
+                )
+            else:
+                aggregate_groups, aggregate_limited = _wallet_era_return_groups(
                         eligible_returns,
                         target=target,
                         min_coverage_ppm=min_coverage_ppm,
@@ -376,17 +334,15 @@ def suggest_custody_gap_candidates(
                         max_legs=max_aggregate_return_legs,
                         era_gap_seconds=return_era_gap_seconds,
                         result_limit=max_return_groups_per_source,
-                    )
-            except CustodyGapSearchLimitError:
+                )
+            if aggregate_limited:
                 # One over-large wallet era must not erase candidates already
                 # proved for unrelated source boundaries. The resulting source
                 # stays explicitly capacity-limited and therefore review-only.
-                aggregate_limited = True
                 capacity_limited_search = True
                 blocking_source_ids.update(
                     leg.id for leg in source_group if leg.signal_codes
                 )
-                aggregate_groups = []
             return_groups = _dedupe_groups((*return_groups, *aggregate_groups))
             for return_group in return_groups:
                 candidate = _build_candidate(source_group, return_group)
@@ -404,9 +360,8 @@ def suggest_custody_gap_candidates(
                 break
 
     # Stamp conflicts and promotion eligibility before applying the display
-    # ceiling. The exception carries a fully scored deterministic prefix plus
-    # ``blocking=False`` / ``search_complete=False``. Candidate discovery is
-    # advisory and capacity alone is never accounting evidence.
+    # ceiling. Candidate discovery is advisory and capacity alone is never
+    # accounting evidence.
     stamped = _stamp_conflicts(list(generated.values()))
     stamped = [
         replace(
@@ -441,35 +396,50 @@ def suggest_custody_gap_candidates(
     stamped.sort(key=_candidate_sort_key)
     if len(stamped) > max_candidates:
         promotion_count = sum(candidate.promotion_eligible for candidate in stamped)
-        raise CustodyGapSearchLimitError(
-            "custody-gap search generated "
-            f"{len(stamped)} candidates, including {promotion_count} "
-            "promotion-eligible candidates; configured maximum is "
-            f"{max_candidates}",
-            candidate_count=len(stamped),
-            promotion_eligible_count=promotion_count,
-            limit_kind="candidate_population",
-            partial_candidates=stamped[:max_candidates],
+        return CustodyGapSearchResult(
+            candidates=tuple(stamped[:max_candidates]),
             accounting_candidates=tuple(
                 candidate for candidate in stamped if candidate.promotion_eligible
             ),
-            blocking_source_ids=blocking_source_ids,
+            search_complete=False,
+            limit_kind="candidate_population",
+            candidate_count=len(stamped),
+            promotion_eligible_count=promotion_count,
+            blocking_source_ids=tuple(sorted(blocking_source_ids)),
+            message=(
+                "custody-gap search generated "
+                f"{len(stamped)} candidates, including {promotion_count} "
+                "promotion-eligible candidates; configured maximum is "
+                f"{max_candidates}"
+            ),
         )
     if capacity_limited_search or capacity_limited_candidate_ids:
         promotion_count = sum(candidate.promotion_eligible for candidate in stamped)
-        raise CustodyGapSearchLimitError(
-            "custody-gap search used a bounded source/return worklist; "
-            "structured boundaries remain reviewable but discovery is incomplete",
-            candidate_count=len(stamped),
-            promotion_eligible_count=promotion_count,
-            limit_kind="boundary_worklist",
-            partial_candidates=stamped,
+        return CustodyGapSearchResult(
+            candidates=tuple(stamped),
             accounting_candidates=tuple(
                 candidate for candidate in stamped if candidate.promotion_eligible
             ),
-            blocking_source_ids=blocking_source_ids,
+            search_complete=False,
+            limit_kind="boundary_worklist",
+            candidate_count=len(stamped),
+            promotion_eligible_count=promotion_count,
+            blocking_source_ids=tuple(sorted(blocking_source_ids)),
+            message=(
+                "custody-gap search used a bounded source/return worklist; "
+                "structured boundaries remain reviewable but discovery is incomplete"
+            ),
         )
-    return stamped
+    candidates = tuple(stamped)
+    return CustodyGapSearchResult(
+        candidates=candidates,
+        accounting_candidates=tuple(
+            item for item in candidates if item.promotion_eligible
+        ),
+        search_complete=True,
+        candidate_count=len(candidates),
+        promotion_eligible_count=sum(item.promotion_eligible for item in candidates),
+    )
 
 
 def search_custody_gap_candidates(
@@ -478,52 +448,17 @@ def search_custody_gap_candidates(
 ) -> CustodyGapSearchResult:
     """Return advisory candidates and explicit search-completeness metadata.
 
-    This is the production boundary. The legacy list/exception API remains
-    temporarily available to callers outside the canonical journal seam.
+    This is the production boundary; capacity is ordinary result state.
     """
+    return _compute_custody_gap_search(rows, **kwargs)
 
-    try:
-        candidates = tuple(suggest_custody_gap_candidates(rows, **kwargs))
-    except CustodyGapSearchLimitError as exc:
-        visible = tuple(
-            item
-            for item in exc.partial_candidates
-            if isinstance(item, CustodyGapCandidate)
-        )
-        accounting = tuple(
-            item
-            for item in exc.accounting_candidates
-            if isinstance(item, CustodyGapCandidate)
-        )
-        return CustodyGapSearchResult(
-            candidates=visible,
-            accounting_candidates=accounting,
-            search_complete=False,
-            limit_kind=exc.limit_kind,
-            candidate_count=(
-                int(exc.candidate_count)
-                if exc.candidate_count is not None
-                else len(visible)
-            ),
-            promotion_eligible_count=(
-                int(exc.promotion_eligible_count)
-                if exc.promotion_eligible_count is not None
-                else sum(item.promotion_eligible for item in visible)
-            ),
-            blocking_source_ids=tuple(exc.blocking_source_ids),
-            message=str(exc),
-        )
-    return CustodyGapSearchResult(
-        candidates=candidates,
-        accounting_candidates=tuple(
-            item for item in candidates if item.promotion_eligible
-        ),
-        search_complete=True,
-        candidate_count=len(candidates),
-        promotion_eligible_count=sum(
-            item.promotion_eligible for item in candidates
-        ),
-    )
+
+def suggest_custody_gap_candidates(
+    rows: Sequence[Mapping[str, Any]], **kwargs: Any
+) -> list[CustodyGapCandidate]:
+    """Return the bounded visible suggestion population without control flow."""
+
+    return list(search_custody_gap_candidates(rows, **kwargs).candidates)
 
 
 def _read_projection_page(
@@ -1580,7 +1515,7 @@ def load_gap_candidates(
     limit: int = DEFAULT_MAX_CANDIDATES,
     include_journal_claims: bool | None = None,
 ) -> tuple[list[CustodyGapCandidate], list[_Leg]]:
-    """Compatibility wrapper for the former list/exception API."""
+    """Return the bounded visible candidates and their normalized legs."""
 
     result, normalized = load_gap_search_result(
         conn,
@@ -1588,17 +1523,6 @@ def load_gap_candidates(
         limit=limit,
         include_journal_claims=include_journal_claims,
     )
-    if not result.search_complete:
-        raise CustodyGapSearchLimitError(
-            result.message or "custody-gap search is incomplete",
-            candidate_count=result.candidate_count,
-            promotion_eligible_count=result.promotion_eligible_count,
-            limit_kind=result.limit_kind or "capacity",
-            partial_candidates=result.candidates,
-            accounting_candidates=result.accounting_candidates,
-            normalized_legs=normalized,
-            blocking_source_ids=result.blocking_source_ids,
-        )
     return list(result.candidates), normalized
 
 
@@ -1867,7 +1791,7 @@ def _matching_return_eras(
     max_excess_ppm: int,
     max_legs: int,
     result_limit: int,
-) -> list[tuple[_Leg, ...]]:
+) -> tuple[list[tuple[_Leg, ...]], bool]:
     minimum = target * min_coverage_ppm // 1_000_000
     maximum = target + (target * max_excess_ppm // 1_000_000)
 
@@ -1884,10 +1808,7 @@ def _matching_return_eras(
         if group[0].occurred_dt <= boundary:
             continue
         if len(group) > max_legs:
-            raise CustodyGapSearchLimitError(
-                "custody-gap wallet/era aggregation needs "
-                f"{len(group)} return legs; configured maximum is {max_legs}"
-            )
+            return [], True
         matches.append(era)
     matches.sort(
         key=lambda era: (
@@ -1896,7 +1817,7 @@ def _matching_return_eras(
             _group_ids(era.legs),
         )
     )
-    return [era.legs for era in matches[:result_limit]]
+    return [era.legs for era in matches[:result_limit]], False
 
 
 def _return_groups(
@@ -1950,7 +1871,7 @@ def _wallet_era_return_groups(
     max_legs: int,
     era_gap_seconds: int,
     result_limit: int,
-) -> list[tuple[_Leg, ...]]:
+) -> tuple[list[tuple[_Leg, ...]], bool]:
     """Aggregate realistic many-receipt returns by wallet and activity era.
 
     A Postmix exit may fan into dozens of receipts.  Enumerating that powerset
@@ -1979,10 +1900,7 @@ def _wallet_era_return_groups(
             if not minimum <= total <= max_total:
                 continue
             if len(era) > max_legs:
-                raise CustodyGapSearchLimitError(
-                    "custody-gap wallet/era aggregation needs "
-                    f"{len(era)} return legs; configured maximum is {max_legs}"
-                )
+                return [], True
             groups.append(tuple(era))
     groups.sort(
         key=lambda group: (
@@ -1991,7 +1909,7 @@ def _wallet_era_return_groups(
             _group_ids(group),
         )
     )
-    return groups[:result_limit]
+    return groups[:result_limit], False
 
 
 def _dedupe_groups(groups: Sequence[tuple[_Leg, ...]]) -> list[tuple[_Leg, ...]]:

@@ -13,9 +13,9 @@ from unittest.mock import patch
 
 from kassiber.core import custody_gap_reviews, custody_gaps
 from kassiber.core.custody_gaps import (
-    CustodyGapSearchLimitError,
     CustodyGapSearchResult,
     build_gap_snapshot,
+    search_custody_gap_candidates,
     suggest_custody_gap_candidates,
 )
 from kassiber.db import open_db
@@ -489,18 +489,20 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(6)
         )
 
-        with self.assertRaisesRegex(
-            CustodyGapSearchLimitError,
-            "generated 6 candidates.*configured maximum is 3",
-        ):
-            suggest_custody_gap_candidates(rows, max_candidates=3)
+        limited = search_custody_gap_candidates(rows, max_candidates=3)
+        self.assertFalse(limited.search_complete)
+        self.assertRegex(
+            limited.message or "", "generated 6 candidates.*configured maximum is 3"
+        )
+        self.assertEqual(len(limited.candidates), 3)
 
         candidates = suggest_custody_gap_candidates(rows, max_candidates=6)
         self.assertEqual(len(candidates), 6)
         self.assertTrue(all(candidate.conflict_size == 6 for candidate in candidates))
 
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows, max_input_rows=2)
+        self.assertFalse(
+            search_custody_gap_candidates(rows, max_input_rows=2).search_complete
+        )
 
     def test_candidate_ceiling_cannot_hide_a_promotion_eligible_gap(self):
         rows = [
@@ -541,11 +543,9 @@ class CustodyGapMatcherTests(unittest.TestCase):
         self.assertEqual(len(complete), 2)
         self.assertEqual(sum(candidate.promotion_eligible for candidate in complete), 1)
 
-        with self.assertRaisesRegex(
-            CustodyGapSearchLimitError,
-            "including 1 promotion-eligible candidates",
-        ):
-            suggest_custody_gap_candidates(rows, max_candidates=1)
+        limited = search_custody_gap_candidates(rows, max_candidates=1)
+        self.assertFalse(limited.search_complete)
+        self.assertIn("including 1 promotion-eligible candidates", limited.message or "")
 
     def test_candidate_ceiling_reports_zero_promotion_eligible_hints(self):
         rows = [
@@ -568,11 +568,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(3)
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError) as raised:
-            suggest_custody_gap_candidates(rows, max_candidates=2)
-
-        self.assertEqual(raised.exception.candidate_count, 3)
-        self.assertEqual(raised.exception.promotion_eligible_count, 0)
+        limited = search_custody_gap_candidates(rows, max_candidates=2)
+        self.assertFalse(limited.search_complete)
+        self.assertEqual(limited.candidate_count, 3)
+        self.assertEqual(limited.promotion_eligible_count, 0)
 
     def test_separate_profiles_and_assets_never_cross_match(self):
         rows = [
@@ -837,8 +836,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(5)
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows, max_aggregate_return_legs=4)
+        limited = search_custody_gap_candidates(
+            rows, max_aggregate_return_legs=4
+        )
+        self.assertFalse(limited.search_complete)
 
     def test_return_pool_ceiling_fails_instead_of_sampling_history(self):
         rows = [
@@ -861,8 +862,9 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(6)
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows, max_return_pool=5)
+        self.assertFalse(
+            search_custody_gap_candidates(rows, max_return_pool=5).search_complete
+        )
 
     def test_source_group_ceiling_marks_search_incomplete_instead_of_sampling(self):
         rows = [
@@ -885,12 +887,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
             )
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError) as raised:
-            suggest_custody_gap_candidates(rows, max_source_groups=2)
-
-        self.assertEqual(raised.exception.limit_kind, "boundary_worklist")
-        self.assertTrue(raised.exception.partial_candidates)
-        self.assertFalse(raised.exception.search_complete)
+        limited = search_custody_gap_candidates(rows, max_source_groups=2)
+        self.assertEqual(limited.limit_kind, "boundary_worklist")
+        self.assertTrue(limited.candidates)
+        self.assertFalse(limited.search_complete)
 
     def test_more_than_87_sources_preserve_seeded_structured_candidate(self):
         rows = [
@@ -926,20 +926,19 @@ class CustodyGapMatcherTests(unittest.TestCase):
             )
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError) as raised:
-            suggest_custody_gap_candidates(rows)
+        limited = search_custody_gap_candidates(rows)
 
         seeded = [
             candidate
-            for candidate in raised.exception.partial_candidates
+            for candidate in limited.candidates
             if candidate.source_ids == ("structured-out",)
             and candidate.return_ids == ("structured-return",)
         ]
         self.assertEqual(len(seeded), 1)
         self.assertFalse(seeded[0].promotion_eligible)
         self.assertIn("search_capacity_incomplete", seeded[0].reason_codes)
-        self.assertEqual(raised.exception.blocking_source_ids, ("structured-out",))
-        self.assertEqual(raised.exception.limit_kind, "boundary_worklist")
+        self.assertEqual(limited.blocking_source_ids, ("structured-out",))
+        self.assertEqual(limited.limit_kind, "boundary_worklist")
 
     def test_structured_source_scoring_is_bounded_without_losing_suspense_scope(self):
         rows = [
@@ -966,19 +965,16 @@ class CustodyGapMatcherTests(unittest.TestCase):
             )
         )
 
-        with (
-            patch(
-                "kassiber.core.custody_gaps._indexed_return_pool",
-                wraps=custody_gaps._indexed_return_pool,
-            ) as indexed_pool,
-            self.assertRaises(CustodyGapSearchLimitError) as raised,
-        ):
-            suggest_custody_gap_candidates(rows, max_input_rows=1)
+        with patch(
+            "kassiber.core.custody_gaps._indexed_return_pool",
+            wraps=custody_gaps._indexed_return_pool,
+        ) as indexed_pool:
+            limited = search_custody_gap_candidates(rows, max_input_rows=1)
 
         self.assertLessEqual(
             indexed_pool.call_count, custody_gaps.DEFAULT_MAX_SOURCE_GROUPS
         )
-        self.assertEqual(len(raised.exception.blocking_source_ids), 300)
+        self.assertEqual(len(limited.blocking_source_ids), 300)
 
     def test_wallet_era_result_group_cap_is_honored(self):
         raw_rows = [
@@ -996,7 +992,7 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for row in raw_rows
         ]
 
-        groups = custody_gaps._wallet_era_return_groups(
+        groups, limited = custody_gaps._wallet_era_return_groups(
             [leg for leg in legs if leg is not None],
             target=10 * BTC_MSAT,
             min_coverage_ppm=800_000,
@@ -1007,6 +1003,7 @@ class CustodyGapMatcherTests(unittest.TestCase):
         )
 
         self.assertEqual(len(groups), 2)
+        self.assertFalse(limited)
 
     def test_large_history_runtime_stays_bounded(self):
         rows = [
@@ -1031,10 +1028,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
         )
 
         started = time.monotonic()
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows)
+        limited = search_custody_gap_candidates(rows)
         elapsed = time.monotonic() - started
 
+        self.assertFalse(limited.search_complete)
         self.assertLess(elapsed, 5.0)
 
 
@@ -1779,7 +1776,6 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["summary"]["search_candidate_count"], 5_541)
         self.assertEqual(snapshot["gaps"][0]["gap_id"], candidate.gap_id)
         self.assertEqual(found, candidate)
-        self.assertFalse(CustodyGapSearchLimitError("capacity").blocking)
 
     def test_stale_journal_entries_do_not_suppress_candidates(self):
         self.conn.executemany(
