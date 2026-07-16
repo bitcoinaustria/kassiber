@@ -170,7 +170,7 @@ def _run(conn, state, *, replace_quantity=None):
     if replace_quantity is not None:
         patches.append(
             patch(
-                "kassiber.cli.handlers.core_custody_quantity_store."
+                "kassiber.core.custody_quantity_store."
                 "replace_canonical_quantity_state",
                 side_effect=replace_quantity,
             )

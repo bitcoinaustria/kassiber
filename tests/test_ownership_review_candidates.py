@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kassiber.cli import handlers
+from kassiber.core import custody_journal
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.ui_snapshot import _ownership_review_candidate_blocker
 from kassiber.db import open_db
@@ -229,7 +230,7 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
                 ("profile",),
             ).fetchall()
         ]
-        counts = handlers._ownership_review_counts_for_state(
+        counts = custody_journal.ownership_review_counts(
             rows,
             self.index,
             quarantines,

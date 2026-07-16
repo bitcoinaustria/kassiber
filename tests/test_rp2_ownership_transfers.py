@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.cli import handlers
+from kassiber.core import custody_journal
 from kassiber.core.engines import build_tax_engine
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.ownership_transfers import OwnershipReviewProof
@@ -1787,7 +1788,7 @@ class DuplicateWalletLabelGuardTest(unittest.TestCase):
             "w2": {"id": "w2", "label": "Hot"},
             "w3": {"id": "w3", "label": "Cold"},
         }
-        warnings = handlers._duplicate_label_warnings(refs)
+        warnings = custody_journal.duplicate_label_warnings(refs)
         self.assertEqual(len(warnings), 1)
         warning = warnings[0]
         self.assertEqual(warning["code"], "duplicate_wallet_label")
@@ -1799,7 +1800,7 @@ class DuplicateWalletLabelGuardTest(unittest.TestCase):
             "w1": {"id": "w1", "label": "Hot"},
             "w2": {"id": "w2", "label": "Cold"},
         }
-        self.assertEqual(handlers._duplicate_label_warnings(refs), [])
+        self.assertEqual(custody_journal.duplicate_label_warnings(refs), [])
 
 
 class RecordedFanoutEngineTest(unittest.TestCase):

@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from . import custody_filed_reports as core_custody_filed_reports
+from . import custody_journal as core_custody_journal
 from . import pricing
 from . import rates as core_rates
 from .austrian import (
@@ -1746,44 +1747,10 @@ def psbt_privacy_table_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def latest_transaction_rates_for_profile(conn, profile_id):
-    try:
-        rows = conn.execute(
-            """
-            SELECT asset, fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            ORDER BY occurred_at DESC, created_at DESC
-            """,
-            (profile_id,),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        rows = conn.execute(
-            """
-            SELECT asset, fiat_rate, fiat_value, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            ORDER BY occurred_at DESC, created_at DESC
-            """,
-            (profile_id,),
-        ).fetchall()
-    rates = {}
-    for row in rows:
-        asset = row["asset"]
-        if asset in rates:
-            continue
-        rate = row["fiat_rate_exact"] if "fiat_rate_exact" in row.keys() else None
-        value = row["fiat_value_exact"] if "fiat_value_exact" in row.keys() else None
-        rate_dec = dec(rate) if rate is not None else None
-        value_dec = dec(value) if value is not None else None
-        if rate_dec is None and row["fiat_rate"] is not None:
-            rate_dec = dec(row["fiat_rate"])
-        if value_dec is None and row["fiat_value"] is not None:
-            value_dec = dec(row["fiat_value"])
-        if rate_dec is not None:
-            rates[asset] = rate_dec
-        elif value_dec is not None and row["amount"]:
-            rates[asset] = value_dec / msat_to_btc(row["amount"])
-    return rates
+    return core_custody_journal.latest_transaction_rates_for_profile(
+        conn,
+        profile_id,
+    )
 
 
 def _profile_market_rate_assets(conn, profile_id):

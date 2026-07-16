@@ -20,6 +20,7 @@ from kassiber.core import (
     custody_components,
     custody_gap_reviews,
     custody_gaps,
+    custody_journal,
     reports as core_reports,
 )
 from kassiber.core.custody_quantity_store import component_native_support_status
@@ -361,6 +362,40 @@ class _FlagshipTreasury:
 
 
 class CustodyLineageFlagshipTests(unittest.TestCase):
+    def test_core_builder_runs_the_real_database_pipeline_without_handlers(self):
+        with tempfile.TemporaryDirectory() as root:
+            book = _FlagshipTreasury(root)
+            try:
+                history = _FlagshipTreasury.complete_history()
+                book.insert(history)
+                profile = book.conn.execute(
+                    "SELECT * FROM profiles WHERE id = 'profile'"
+                ).fetchone()
+
+                core_state = custody_journal.build_ledger_state(book.conn, profile)
+                self.assertEqual(
+                    len(core_state["custody_quantity"].projection.observations),
+                    len(history),
+                )
+                self.assertEqual(
+                    {
+                        entry["transaction_id"]
+                        for entry in core_state["entries"]
+                        if entry["entry_type"] == "transfer_out"
+                    },
+                    {
+                        "2018-a-to-b-out",
+                        "2020-b-to-deposit-out",
+                        "2020-tx0-out",
+                        "2020-mix-out",
+                        "2022-mixout-out",
+                        "2024-c-to-d-out",
+                    },
+                )
+                self.assertFalse(core_state["custody_quantity"].report_blocked)
+            finally:
+                book.close()
+
     def test_complete_policy_history_is_automatic_fee_exact_and_order_invariant(self):
         rows = _FlagshipTreasury.complete_history()
         signatures = []

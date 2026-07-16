@@ -38,22 +38,16 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_components as core_custody_components
-from ..core import custody_gap_reviews as core_custody_gap_reviews
-from ..core import custody_interpreters as core_custody_interpreters
-from ..core import custody_quantity_runtime as core_custody_quantity_runtime
+from ..core import custody_journal as core_custody_journal
 from ..core import custody_quantity_store as core_custody_quantity_store
-from ..core import custody_tax_projection as core_custody_tax_projection
 from ..core import custody_tax_migration as core_custody_tax_migration
 from ..core import custody_filed_reports as core_custody_filed_reports
 from ..core.custody_evidence import (
-    build_canonical_quantity_input,
-    enriched_quantity_rows,
     row_principal_msat,
 )
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
 from ..core import imports as core_imports
-from ..core.lightning import channel_lifecycle
 from ..core.lightning import cln as core_lightning_cln
 from ..core.lightning import lnd as core_lightning_lnd
 from ..core import loans as core_loans
@@ -73,7 +67,6 @@ from ..core import sync_backends as core_sync_backends
 from ..core import tax_events as core_tax_events
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
-from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
 from ..core.repo import current_context_snapshot, resolve_account
 from ..core.runtime import (
     build_status_payload,
@@ -5048,7 +5041,10 @@ def list_transactions(
 
 
 def latest_rates_for_profile(conn, profile_id):
-    return core_reports.latest_transaction_rates_for_profile(conn, profile_id)
+    return core_custody_journal.latest_transaction_rates_for_profile(
+        conn,
+        profile_id,
+    )
 
 
 def auto_price_transactions_from_rates_cache(conn, profile):
@@ -5148,456 +5144,10 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     return auto_priced
 
 
-def _duplicate_label_warnings(wallet_refs_by_id):
-    """Warn when two wallets in a profile share a label.
-
-    RP2 keys per-account holdings (and exchange identity) by the wallet *label*,
-    so two wallets sharing one label merge their balances, and a derived
-    self-transfer routed by label can land on the wrong account. The books'
-    totals stay correct; the per-wallet attribution does not. Surfaced as a
-    non-blocking warning so the user renames them.
-    """
-    ids_by_label: dict[str, list[str]] = {}
-    for ref in wallet_refs_by_id.values():
-        label = ref.get("label")
-        if not label:
-            continue
-        ids_by_label.setdefault(str(label), []).append(str(ref.get("id")))
-    warnings = []
-    for label, ids in sorted(ids_by_label.items()):
-        if len(ids) > 1:
-            warnings.append(
-                {
-                    "code": "duplicate_wallet_label",
-                    "label": label,
-                    "wallet_ids": sorted(ids),
-                    "message": (
-                        f"{len(ids)} wallets share the label '{label}'. Reports key "
-                        "holdings by wallet label, so their balances merge and a "
-                        "derived self-transfer can be attributed to the wrong "
-                        "wallet. Rename them to be unique."
-                    ),
-                }
-            )
-    return warnings
-
-
-def _custody_component_integrity_blockers(
-    conn,
-    profile_id,
-    *,
-    components=None,
-):
-    """Return compact report-blocking facts for authored active revisions."""
-
-    if components is None:
-        components = core_custody_components.iter_authored_active_components(
-            conn,
-            profile_id=profile_id,
-            include_local_evidence=False,
-        )
-    return [
-        {
-            "component_id": component["id"],
-            "lineage_id": component["lineage_id"],
-            "revision": component["revision"],
-            "issue_codes": sorted(
-                {
-                    str(issue.get("code") or "unknown")
-                    for issue in component["validation"]["issues"]
-                }
-            ),
-        }
-        for component in components
-        if component["effective_state"] != "active"
-    ]
-
-
 def build_ledger_state(conn, profile):
-    require_tax_processing_supported(profile)
-    rows = conn.execute(
-        """
-        SELECT
-            t.*,
-            w.label AS wallet_label,
-            w.kind AS wallet_kind,
-            w.account_id AS wallet_account_id,
-            w.config_json AS config_json,
-            observation.authority_version AS observation_authority_version,
-            observation.graph_hash AS observation_graph_hash,
-            observation.quantity_hash AS observation_quantity_hash,
-            observation.fee_attribution AS observation_fee_attribution,
-            observation.application_revision AS observation_application_revision,
-            COALESCE(a.code, 'treasury') AS account_code,
-            COALESCE(a.label, 'Treasury') AS account_label
-        FROM transactions t
-        JOIN wallets w ON w.id = t.wallet_id
-        LEFT JOIN accounts a ON a.id = w.account_id
-        LEFT JOIN chain_observation_provenance observation
-          ON observation.transaction_id = t.id
-        WHERE t.profile_id = ? AND t.excluded = 0
-        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
-        """,
-        (profile["id"],),
-    ).fetchall()
-    manual_pair_records = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
-        (profile["id"],),
-    ).fetchall()
-    direct_payout_records = conn.execute(
-        """
-        SELECT p.*, t.asset AS out_asset, t.amount AS out_amount_msat
-        FROM direct_swap_payouts p
-        JOIN transactions t ON t.id = p.out_transaction_id
-        WHERE p.profile_id = ? AND p.deleted_at IS NULL
-        """,
-        (profile["id"],),
-    ).fetchall()
-    tax_engine = build_tax_engine(profile)
-    rates = latest_rates_for_profile(conn, profile["id"])
-    # Build refs for EVERY profile wallet, not just wallets that have rows: the
-    # ownership deriver can route a self-transfer into a wallet that recorded no
-    # inbound row (sync gap), and the intra path resolves the destination ref by
-    # wallet_id — a rowless destination would otherwise KeyError.
-    wallet_refs_by_id = {}
-    for wallet in conn.execute(
-        """
-        SELECT
-            w.id AS id,
-            w.label AS label,
-            w.kind AS kind,
-            w.account_id AS wallet_account_id,
-            COALESCE(a.code, 'treasury') AS account_code,
-            COALESCE(a.label, 'Treasury') AS account_label
-        FROM wallets w
-        LEFT JOIN accounts a ON a.id = w.account_id
-        WHERE w.profile_id = ?
-        """,
-        (profile["id"],),
-    ).fetchall():
-        wallet_refs_by_id[wallet["id"]] = {
-            "id": wallet["id"],
-            "label": wallet["label"],
-            "kind": wallet["kind"],
-            "wallet_account_id": wallet["wallet_account_id"],
-            "account_code": wallet["account_code"],
-            "account_label": wallet["account_label"],
-        }
-    # The address-ownership index is only useful (and only worth its descriptor
-    # derivation cost) when some on-chain outbound carries full transaction JSON
-    # to read outputs from. Skip the build entirely for pure CSV / Lightning
-    # profiles.
-    warnings = _duplicate_label_warnings(wallet_refs_by_id)
-    owned_index = None
-    has_onchain_outbound = any(
-        row["direction"] == "outbound" and (row["raw_json"] or "").find('"vout"') != -1
-        for row in rows
-    )
-    if has_onchain_outbound:
-        index_wallets = core_ownership.load_profile_wallets(conn, profile["id"])
-        owned_index, ownership_warnings = core_ownership.build_owned_index(
-            conn, profile["id"], index_wallets
-        )
-        warnings.extend(
-            {"code": "ownership_index", "message": str(message)}
-            for message in ownership_warnings or ()
-        )
-    # Active loan marks classify a journal transaction by role. Collateral
-    # lock/release and borrowed-principal receive/repay roles are non-events for
-    # the tax engine; removing a mark reverts the transaction to its normal
-    # classification (a liquidated lock then books as the disposal it is).
-    loan_legs = conn.execute(
-        "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
-        (profile["id"],),
-    ).fetchall()
-    # Lightning channel-lifecycle roles: a channel funding tx that a separately
-    # synced on-chain wallet recorded is not a disposal (the coins stay owned in
-    # the channel), and a close is not an acquisition. Persisted channel records
-    # (record_type='channel') carry the funding/closing txids; match them to the
-    # on-chain rows so the engine suppresses them as non-events.
-    channel_records = conn.execute(
-        """
-        SELECT
-            r.txid,
-            r.outpoint,
-            r.tag,
-            r.wallet_id,
-            r.channel_id,
-            r.amount_msat,
-            r.raw_json AS raw_json,
-            w.config_json AS config_json,
-            b.chain AS chain,
-            b.network AS network
-        FROM lightning_node_records r
-        JOIN wallets w ON w.id = r.wallet_id
-        LEFT JOIN backends b ON b.name = r.backend_name
-        WHERE r.profile_id = ? AND r.record_type = 'channel'
-        """,
-        (profile["id"],),
-    ).fetchall()
-    channel_rows = []
-    for record in channel_records:
-        if not record["txid"]:
-            continue
-        if record["tag"] == "channel_close":
-            channel_rows.append(
-                {
-                    "closing_txid": record["txid"],
-                    "wallet_id": record["wallet_id"],
-                    "channel_id": record["channel_id"],
-                    "config_json": record["config_json"],
-                    "raw_json": record["raw_json"],
-                    "chain": record["chain"],
-                    "network": record["network"],
-                    # Our settled channel balance at close (bkpr debit); the
-                    # gap vs the on-chain receipt books as the close fee.
-                    "close_balance_msat": record["amount_msat"],
-                }
-            )
-        else:
-            channel_rows.append(
-                {
-                    "funding_txid": record["txid"],
-                    "funding_outpoint": record["outpoint"],
-                    "wallet_id": record["wallet_id"],
-                    "channel_id": record["channel_id"],
-                    "config_json": record["config_json"],
-                    "raw_json": record["raw_json"],
-                    "chain": record["chain"],
-                    "network": record["network"],
-                    # Our balance funded into the channel; a recorded outflow
-                    # clearly above it means the tx also paid someone external.
-                    "funding_amount_msat": record["amount_msat"],
-                }
-            )
-    channel_roles = channel_lifecycle.channel_role_map(channel_rows, rows)
-    channel_transfer_pairs = channel_lifecycle.channel_transfer_pairs(
-        channel_rows,
-        rows,
-        wallet_refs_by_id,
-    )
-    # Internal journal consumption is intentionally unbounded: a long history
-    # of migrations must not silently stop at a UI pagination limit. Load every
-    # *authored* active revision, including incomplete/conflicting revisions
-    # produced transiently by row-wise replication. Projection either emits a
-    # complete synthetic interpretation or fail-closes all known anchors into
-    # an actionable component quarantine.
-    authored_active_custody_components = list(
-        core_custody_components.iter_authored_active_components(
-            conn,
-            profile_id=profile["id"],
-            include_local_evidence=False,
-        )
-    )
-    # Materialization validates replicated author commitments against local
-    # canonical anchors. Raw activation snapshots remain author-local audit
-    # material and are not a journal input.
-    custody_component_blockers = _custody_component_integrity_blockers(
-        conn,
-        profile["id"],
-        components=authored_active_custody_components,
-    )
-    component_evidence_snapshots = (
-        core_custody_quantity_store.load_component_evidence_snapshots(
-            conn,
-            profile["id"],
-        )
-    )
-    dismissed_gap_fingerprints = (
-        core_custody_gap_reviews.latest_dismissed_fingerprints(
-            conn,
-            profile["id"],
-        )
-    )
-    ignored_gap_transaction_ids = {
-        str(record[key])
-        for record in manual_pair_records
-        for key in ("out_transaction_id", "in_transaction_id")
-        if record[key] not in (None, "")
-    }
-    ignored_gap_transaction_ids.update(
-        str(record["out_transaction_id"])
-        for record in direct_payout_records
-        if record["out_transaction_id"] not in (None, "")
-    )
-    ignored_gap_transaction_ids.update(
-        str(leg["transaction_id"])
-        for leg in loan_legs
-        if leg["transaction_id"] not in (None, "")
-    )
-    ignored_gap_transaction_ids.update(str(item) for item in channel_roles)
-    for pair in channel_transfer_pairs:
-        for side in ("out", "in"):
-            row = pair.get(side) or {}
-            transaction_id = row.get("journal_transaction_id") or row.get("id")
-            if transaction_id not in (None, ""):
-                ignored_gap_transaction_ids.add(str(transaction_id))
+    """Compatibility entrypoint for the canonical core journal builder."""
 
-    component_transaction_ids = tuple(
-        sorted(
-            {
-                str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
-                for component in authored_active_custody_components
-                for leg in component.get("legs", ())
-                if leg.get("anchor_transaction_id") or leg.get("transaction_id")
-            }
-        )
-    )
-    canonical_input = build_canonical_quantity_input(enriched_quantity_rows(rows))
-    interpreter_compilation = core_custody_interpreters.compile_custody_interpreters(
-        rows,
-        canonical_input,
-        wallet_refs_by_id=wallet_refs_by_id,
-        manual_pair_records=manual_pair_records,
-        owned_index=owned_index,
-        channel_transfer_pairs=channel_transfer_pairs,
-        channel_roles=channel_roles,
-        loan_legs=loan_legs,
-        direct_payout_records=direct_payout_records,
-        component_transaction_ids=component_transaction_ids,
-    )
-    custody_quantity = core_custody_quantity_runtime.build_canonical_quantity_state(
-        rows,
-        interpreter_claims=interpreter_compilation.claims,
-        effective_components=authored_active_custody_components,
-        native_evidence=interpreter_compilation.native_audits,
-        direct_payout_records=direct_payout_records,
-        interpreter_blockers=interpreter_compilation.blocking_quarantines,
-        ignored_gap_transaction_ids=(
-            *ignored_gap_transaction_ids,
-            *interpreter_compilation.blocked_transaction_ids,
-        ),
-        component_evidence_snapshots=component_evidence_snapshots,
-        dismissed_gap_fingerprints=dismissed_gap_fingerprints,
-    )
-    custody_transfers = core_custody_quantity_runtime.canonical_internal_transfer_rows(
-        custody_quantity,
-        wallet_refs_by_id,
-    )
-    channel_non_event_ids = {
-        str(transaction_id)
-        for transaction_id, role in channel_roles.items()
-        if str(role) in {core_loans.CHANNEL_OPEN, core_loans.CHANNEL_CLOSE}
-    }
-    finalized_tax_projection = (
-        core_custody_tax_projection.compile_finalized_tax_projection(
-            profile,
-            rows,
-            custody_quantity,
-            non_event_transaction_ids=(
-                *interpreter_compilation.non_event_transaction_ids,
-                *sorted(channel_non_event_ids),
-            ),
-            blocked_transaction_ids=interpreter_compilation.blocked_transaction_ids,
-            direct_payout_conflict_transaction_ids=(
-                interpreter_compilation.direct_payout_conflict_transaction_ids
-            ),
-            interpreter_quarantines=interpreter_compilation.quarantines,
-            direct_payout_records=direct_payout_records,
-            reviewed_cross_asset_pairs=(
-                interpreter_compilation.cross_asset_pairs
-            ),
-        )
-    )
-    engine_state = tax_engine.build_ledger_state(
-        TaxEngineLedgerInputs(
-            finalized_tax_projection=finalized_tax_projection,
-            wallet_refs_by_id=wallet_refs_by_id,
-            direct_payout_records=direct_payout_records,
-        )
-    )
-    current_wallet_balances = {
-        (str(wallet_id), str(asset)): btc_to_msat(value["quantity"])
-        for (wallet_id, _wallet_label, _account_code, asset), value
-        in engine_state.wallet_holdings.items()
-    }
-    known_non_event_reasons = {
-        str(leg["transaction_id"]): f"loan_{leg['role']}_non_event"
-        for leg in loan_legs
-        if leg["transaction_id"] is not None
-    }
-    known_non_event_reasons.update(
-        {
-            str(transaction_id): f"lightning_{role}_non_event"
-            for transaction_id, role in channel_roles.items()
-        }
-    )
-    for component in authored_active_custody_components:
-        validation = component.get("validation") or {}
-        if int(validation.get("suspense_msat") or 0) <= 0:
-            continue
-        for leg in component.get("legs", ()):
-            if leg.get("role") == "source" and leg.get("transaction_id"):
-                known_non_event_reasons[str(leg["transaction_id"])] = (
-                    "custody_component_residual_suspense"
-                )
-    quantity_differences = core_custody_quantity_runtime.compare_wallet_balances(
-        custody_quantity,
-        current_wallet_balances,
-        known_non_event_reasons=known_non_event_reasons,
-    )
-    ownership_review_counts = _ownership_review_counts_for_state(
-        rows,
-        owned_index,
-        engine_state.quarantines,
-        manual_pair_records,
-        direct_payout_records,
-    )
-    return {
-        "entries": engine_state.entries,
-        "quarantines": engine_state.quarantines,
-        "intra_audit": engine_state.intra_audit,
-        "cross_asset_pairs": engine_state.cross_asset_pairs,
-        "direct_swap_payouts": engine_state.direct_swap_payouts,
-        "tax_summary": engine_state.tax_summary,
-        "account_holdings": engine_state.account_holdings,
-        "wallet_holdings": engine_state.wallet_holdings,
-        "ownership_review_counts": ownership_review_counts,
-        "custody_component_blockers": custody_component_blockers,
-        "custody_quantity": custody_quantity,
-        "custody_transfers": custody_transfers,
-        "quantity_differences": quantity_differences,
-        "latest_rates": rates,
-        "warnings": warnings,
-    }
-
-
-def _ownership_review_counts_for_state(
-    rows,
-    owned_index,
-    quarantines,
-    manual_pair_records,
-    direct_payout_records,
-):
-    """Count real-row ownership proofs while the journal index is in memory."""
-
-    blocked_reasons = {
-        str(quarantine["transaction_id"]): str(quarantine["reason"])
-        for quarantine in quarantines
-    }
-    if not blocked_reasons:
-        return {"total": 0, "by_reason": {}}
-    active_review_records = [*manual_pair_records]
-    active_review_records.extend(
-        {
-            "out_transaction_id": record["out_transaction_id"],
-            "in_transaction_id": None,
-            "kind": record["kind"],
-            "policy": record["policy"],
-            "deleted_at": record["deleted_at"],
-        }
-        for record in direct_payout_records
-    )
-    proofs = core_ownership_transfers.derive_ownership_review_proofs(
-        rows,
-        index=owned_index or core_ownership.OwnedIndex(),
-        blocked_reasons_by_row_id=blocked_reasons,
-        active_pair_records=active_review_records,
-    )
-    by_reason = {}
-    for proof in proofs:
-        by_reason[proof.reason] = by_reason.get(proof.reason, 0) + 1
-    return {"total": len(proofs), "by_reason": dict(sorted(by_reason.items()))}
+    return core_custody_journal.build_ledger_state(conn, profile)
 
 
 def _unresolved_address_list_overlap_wallets(overlap):
@@ -6821,7 +6371,7 @@ def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
 
 
 def require_processed_journals(conn, profile):
-    custody_component_blockers = _custody_component_integrity_blockers(
+    custody_component_blockers = core_custody_journal.component_integrity_blockers(
         conn, profile["id"]
     )
     if custody_component_blockers:
