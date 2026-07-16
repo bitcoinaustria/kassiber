@@ -39,10 +39,10 @@ require_command pnpm
 require_command rustup
 require_command uv
 
-run uv sync --frozen --python "$PYTHON_VERSION"
+run uv sync --locked --python "$PYTHON_VERSION"
 
 APP_VERSION="$(
-  uv run --python "$PYTHON_VERSION" python -c \
+  uv run --locked --python "$PYTHON_VERSION" python -c \
     'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])'
 )"
 APP_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
@@ -64,7 +64,7 @@ echo "Bundled sidecar: $SIDECAR_NAME"
 echo "Bundles: $BUNDLES"
 echo "Python: $PYTHON_VERSION"
 
-run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
+run uv run --locked --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --clean \
   --noconfirm \
   --onefile \

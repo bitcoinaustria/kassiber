@@ -59,7 +59,7 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Derive artifact target
         id: target
@@ -87,10 +87,10 @@ jobs:
             --collect-data bdkpython
             --copy-metadata bdkpython
           )
-          if uv run python -c 'import lwk'; then
+          if uv run --locked python -c 'import lwk'; then
             observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
           fi
-          uv run --with pyinstaller==6.20.0 pyinstaller \
+          uv run --locked --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
             --onefile \
@@ -411,7 +411,7 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Build one-file CLI sidecar
         shell: bash
@@ -422,10 +422,10 @@ jobs:
             --collect-data bdkpython
             --copy-metadata bdkpython
           )
-          if uv run python -c 'import lwk'; then
+          if uv run --locked python -c 'import lwk'; then
             observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
           fi
-          uv run --with pyinstaller==6.20.0 pyinstaller \
+          uv run --locked --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
             --onefile \

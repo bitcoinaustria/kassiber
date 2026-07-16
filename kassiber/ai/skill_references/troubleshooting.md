@@ -101,7 +101,7 @@ reprocessed.
 If `kassiber` is missing from `PATH`, use:
 
 ```bash
-uv run kassiber status
+uv run --locked kassiber status
 ```
 
 or activate the local environment:

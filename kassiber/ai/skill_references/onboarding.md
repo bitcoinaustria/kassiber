@@ -22,8 +22,8 @@ error rather than waiting for a prompt.
 For repo-local development where `kassiber` is not on `PATH`, use:
 
 ```bash
-uv run kassiber init
-uv run kassiber status
+uv run --locked kassiber init
+uv run --locked kassiber status
 ```
 
 Common follow-up setup:

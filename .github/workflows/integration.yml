@@ -45,7 +45,7 @@ jobs:
         uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Fast replay lane (no Docker)
         run: ./scripts/integration-harness.sh fast
@@ -68,7 +68,7 @@ jobs:
         uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Generated-truth demo oracle
         run: ./scripts/integration-harness.sh demo-full
@@ -91,7 +91,7 @@ jobs:
         uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Integration lane (${{ github.event.inputs.lane }})
         run: ./scripts/integration-harness.sh "${{ github.event.inputs.lane }}"

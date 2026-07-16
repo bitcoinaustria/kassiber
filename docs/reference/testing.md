@@ -6,16 +6,17 @@ regtest infrastructure.
 
 ## Dev Environment
 
-Use the repo-managed virtualenv for local tests and daemon-backed desktop
+Use the locked `uv` environment for local tests and daemon-backed desktop
 development:
 
 ```bash
 ./scripts/bootstrap-dev-env.sh
 export KASSIBER_PYTHON="$PWD/.venv/bin/python"
-.venv/bin/python -m unittest tests.test_wallet_descriptors
+uv run --locked python -m pytest tests/test_wallet_descriptors.py -q
 ```
 
-The bootstrap script installs the dependencies declared in `pyproject.toml` and
+The bootstrap script runs `uv sync --locked`, which fails if `uv.lock` no longer
+matches `pyproject.toml` and never rewrites the lock, then
 verifies imports for the packages that most often go missing in ad-hoc shells
 (`embit` and `sqlcipher3`). On Debian/Ubuntu it fails early with the required
 SQLCipher system package command if the development headers are not available.
@@ -610,12 +611,13 @@ BTCPayServer's `docker-compose up dev` + launch-profile workflow:
 cd ui-tauri && pnpm dev:demo               # dev preview on that real book
 ```
 
-Prerequisites on any machine: Docker (Desktop or engine), Python 3, and `pnpm`.
+Prerequisites on any machine: Docker (Desktop or engine), Python 3, `uv`, and
+`pnpm`.
 From a fresh clone, install the project/runtime dependencies once:
 
 ```bash
 ./scripts/bootstrap-dev-env.sh
-pnpm --dir ui-tauri install
+pnpm --dir ui-tauri install --frozen-lockfile
 ```
 
 After that, the two commands above take you to a browser preview backed by the
@@ -697,7 +699,7 @@ Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 ```bash
 ./dev/regtest/bitcoin-cli.sh getblockchaininfo
 ./dev/regtest/bitcoin-cli.sh -generate 1
-uv run python -m kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
+uv run --locked python -m kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
 ```
 
 Tear-down is explicit: `demo-down` stops the node but keeps the chain volume

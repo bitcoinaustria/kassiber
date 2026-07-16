@@ -2,8 +2,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 PYTHON="${PYTHON:-python3}"
 VENV="${KASSIBER_VENV:-"$ROOT/.venv"}"
+
+if ! command -v uv >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+Kassiber development requires uv.
+
+Install it from https://docs.astral.sh/uv/getting-started/installation/ and rerun:
+  ./scripts/bootstrap-dev-env.sh
+EOF
+  exit 1
+fi
 
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
   echo "Python interpreter not found: $PYTHON" >&2
@@ -26,9 +37,7 @@ EOF
   fi
 fi
 
-"$PYTHON" -m venv "$VENV"
-"$VENV/bin/python" -m pip install -U pip setuptools wheel
-"$VENV/bin/python" -m pip install -e "$ROOT"
+UV_PROJECT_ENVIRONMENT="$VENV" uv sync --locked --python "$PYTHON"
 
 "$VENV/bin/python" - <<'PY'
 import platform
@@ -70,5 +79,5 @@ Kassiber dev environment is ready.
 
 Use:
   export KASSIBER_PYTHON="$VENV/bin/python"
-  $VENV/bin/python -m unittest ...
+  UV_PROJECT_ENVIRONMENT="$VENV" uv run --locked python -m pytest ...
 EOF
