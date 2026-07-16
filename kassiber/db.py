@@ -2257,6 +2257,91 @@ CREATE INDEX IF NOT EXISTS idx_custody_components_supersedes
     ON custody_components(supersedes_component_id)
     WHERE supersedes_component_id IS NOT NULL;
 
+-- Typed accounting/tax terms that are not physical quantity-leg facts. These
+-- immutable rows let reviewed pair and direct-payout meaning move into the
+-- component aggregate without hiding policy or fee semantics in evidence JSON.
+CREATE TABLE IF NOT EXISTS custody_component_economic_terms (
+    id TEXT PRIMARY KEY,
+    component_id TEXT NOT NULL
+        REFERENCES custody_components(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+    source_leg_id TEXT NOT NULL
+        REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+    target_leg_id TEXT NOT NULL
+        REFERENCES custody_component_legs(id) ON DELETE CASCADE,
+    term_kind TEXT NOT NULL
+        CHECK(term_kind IN ('transaction_pair', 'direct_swap_payout')),
+    legacy_source_id TEXT NOT NULL,
+    source_row_hash TEXT NOT NULL CHECK(length(source_row_hash) = 64),
+    review_kind TEXT NOT NULL,
+    tax_policy TEXT NOT NULL,
+    reviewed_source_amount_msat INTEGER
+        CHECK(reviewed_source_amount_msat IS NULL OR
+              typeof(reviewed_source_amount_msat) = 'integer'),
+    swap_fee_msat INTEGER,
+    swap_fee_kind TEXT,
+    confidence_at_review TEXT,
+    review_source TEXT,
+    payout_asset TEXT,
+    payout_amount_msat INTEGER
+        CHECK(payout_amount_msat IS NULL OR
+              typeof(payout_amount_msat) = 'integer'),
+    payout_occurred_at TEXT,
+    payout_fiat_value_exact TEXT,
+    payout_external_id TEXT,
+    counterparty TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(component_id, ordinal),
+    UNIQUE(component_id, term_kind, legacy_source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custody_component_terms_profile_kind
+    ON custody_component_economic_terms(profile_id, term_kind, created_at, component_id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_component_terms_component
+    ON custody_component_economic_terms(component_id, ordinal, id);
+
+CREATE INDEX IF NOT EXISTS idx_custody_component_terms_legacy_source
+    ON custody_component_economic_terms(profile_id, term_kind, legacy_source_id,
+                                        created_at, component_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_component_terms_scope_insert
+BEFORE INSERT ON custody_component_economic_terms
+BEGIN
+    SELECT CASE WHEN NOT EXISTS (
+        SELECT 1
+        FROM custody_components c
+        JOIN custody_component_legs source ON source.id = NEW.source_leg_id
+        JOIN custody_component_legs target ON target.id = NEW.target_leg_id
+        WHERE c.id = NEW.component_id
+          AND c.workspace_id = NEW.workspace_id
+          AND c.profile_id = NEW.profile_id
+          AND source.component_id = c.id
+          AND target.component_id = c.id
+          AND source.role = 'source'
+          AND target.role != 'source'
+    ) THEN RAISE(ABORT, 'custody_component_terms_scope_mismatch') END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_component_terms_immutable
+BEFORE UPDATE ON custody_component_economic_terms
+BEGIN
+    SELECT RAISE(ABORT, 'custody_component_terms_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_custody_component_terms_delete_immutable
+BEFORE DELETE ON custody_component_economic_terms
+WHEN EXISTS (SELECT 1 FROM profiles p WHERE p.id = OLD.profile_id)
+AND NOT EXISTS (
+    SELECT 1 FROM custody_component_purge_authorizations authorization
+    WHERE authorization.profile_id = OLD.profile_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'custody_component_terms_delete_immutable');
+END;
+
 -- Author-bound, payload-free commitments to the canonical evidence visible at
 -- activation.  Raw evidence payloads remain in the local-only
 -- custody_authored_evidence_snapshots table; these rows are safe to replicate.
@@ -4246,6 +4331,14 @@ def ensure_schema_compat(conn):
     if _backfill_legacy_componentless_review_transactions(conn):
         conn.commit()
     _ensure_custody_revision_immutability_triggers(conn)
+    # Converge legacy reviewed pairs/payouts into immutable draft component
+    # aggregates without changing which substrate currently drives journals.
+    # The import is local to keep the core module independent from schema
+    # bootstrap and to avoid a module-level db -> core -> db cycle.
+    from .core.custody_authored_migration import backfill_legacy_authored_components
+
+    if backfill_legacy_authored_components(conn).changed:
+        conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
     _ensure_transaction_graph_cache_schema(conn)

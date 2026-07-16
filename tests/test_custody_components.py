@@ -97,6 +97,7 @@ class CustodySchemaTests(unittest.TestCase):
                 self.assertIn("custody_components", tables)
                 self.assertIn("custody_component_legs", tables)
                 self.assertIn("custody_component_allocations", tables)
+                self.assertIn("custody_component_economic_terms", tables)
                 self.assertIn("custody_component_transaction_memberships", tables)
                 component_columns = {
                     row["name"]

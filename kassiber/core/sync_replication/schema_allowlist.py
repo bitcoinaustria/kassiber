@@ -348,6 +348,42 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
         ),
     ),
     TableSpec(
+        "custody_component_economic_terms",
+        (
+            "id", "component_id", "workspace_id", "profile_id", "ordinal",
+            "source_leg_id", "target_leg_id", "term_kind", "legacy_source_id",
+            "source_row_hash", "review_kind", "tax_policy",
+            "reviewed_source_amount_msat", "swap_fee_msat", "swap_fee_kind",
+            "confidence_at_review", "review_source", "payout_asset",
+            "payout_amount_msat", "payout_occurred_at",
+            "payout_fiat_value_exact", "payout_external_id", "counterparty",
+            "created_at",
+        ),
+        ("id",),
+        _profile_scope("custody_component_economic_terms"),
+        high_stakes_fields=frozenset(
+            {
+                "component_id", "source_leg_id", "target_leg_id", "term_kind",
+                "legacy_source_id", "source_row_hash", "review_kind",
+                "tax_policy", "reviewed_source_amount_msat", "swap_fee_msat",
+                "swap_fee_kind", "payout_asset", "payout_amount_msat",
+                "payout_occurred_at", "payout_fiat_value_exact",
+            }
+        ),
+        immutable_fields=frozenset(
+            {
+                "component_id", "workspace_id", "profile_id", "ordinal",
+                "source_leg_id", "target_leg_id", "term_kind",
+                "legacy_source_id", "source_row_hash", "review_kind",
+                "tax_policy", "reviewed_source_amount_msat", "swap_fee_msat",
+                "swap_fee_kind", "confidence_at_review", "review_source",
+                "payout_asset", "payout_amount_msat", "payout_occurred_at",
+                "payout_fiat_value_exact", "payout_external_id", "counterparty",
+                "created_at",
+            }
+        ),
+    ),
+    TableSpec(
         "custody_component_evidence_commitments",
         (
             "id", "component_id", "workspace_id", "profile_id", "ordinal",

@@ -1,0 +1,610 @@
+"""Crash-safe compatibility migration into the authored custody aggregate.
+
+The first convergence step intentionally creates *draft* components.  Legacy
+pair/payout rows remain the effective accounting input until the journal
+consumer is switched in a later, separately testable commit.  The nullable
+``component_id`` on each legacy row is the bounded compatibility link.
+
+Every migrated revision carries two kinds of immutable data:
+
+* physical boundary legs and exact source-to-sink allocations; and
+* a typed economic-terms row for policy, swap-fee, payout and review metadata
+  which cannot coherently be represented as physical quantity legs.
+
+Re-running the migration is a no-op.  If an unactivated legacy review changes
+during the compatibility window, a deterministic new draft revision is made
+and the old draft is retained as superseded history.
+"""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from dataclasses import dataclass
+from decimal import Decimal
+import hashlib
+import json
+import sqlite3
+from typing import Any, Iterator, Mapping, Sequence
+import uuid
+
+from ..errors import AppError
+from ..wallet_descriptors import normalize_asset_code
+from .custody_components import create_component, get_component, update_component
+from .custody_evidence import resolve_protocol_scope, row_boundary_amounts
+
+
+_MIGRATION_NAMESPACE = uuid.UUID("95ed148a-743a-4dcc-9b55-ca8cc203d547")
+_VALUATION_UNIT = "reviewed_source_msat"
+
+
+@dataclass(frozen=True)
+class MigrationResult:
+    created: int = 0
+    revised: int = 0
+    unchanged: int = 0
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.created or self.revised)
+
+
+@contextmanager
+def _savepoint(conn: sqlite3.Connection, name: str) -> Iterator[None]:
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        yield
+    except Exception:
+        conn.execute(f"ROLLBACK TO {name}")
+        conn.execute(f"RELEASE {name}")
+        raise
+    else:
+        conn.execute(f"RELEASE {name}")
+
+
+def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    return row[key] if key in row.keys() else default
+
+
+def _canonical_float(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, float):
+        # 17 significant digits round-trip the exact SQLite REAL value.  The
+        # legacy schema has already discarded any more precise source text.
+        return format(value, ".17g")
+    return str(Decimal(str(value)))
+
+
+def _canonical_payload(row: Mapping[str, Any], fields: Sequence[str]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for field in fields:
+        value = _field(row, field)
+        if field == "payout_fiat_value":
+            value = _canonical_float(value)
+        payload[field] = value
+    return payload
+
+
+def _hash_payload(payload: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _stable_id(*parts: str) -> str:
+    return str(uuid.uuid5(_MIGRATION_NAMESPACE, "\x1f".join(parts)))
+
+
+def _exposure(asset: str) -> str:
+    normalized = normalize_asset_code(asset)
+    if normalized in {"BTC", "LBTC"}:
+        return "bitcoin"
+    return f"asset:{normalized.lower()}"
+
+
+def _protocol_fields(row: Mapping[str, Any]) -> dict[str, str | None]:
+    try:
+        scope = resolve_protocol_scope(row)
+    except (TypeError, ValueError):
+        # Existing generic imports may carry assets/rails unknown to today's
+        # protocol adapters. Preserve them as explicit external observations;
+        # a later review can specialize the rail without migration guessing.
+        return {"rail": "external", "chain": None, "network": None}
+    return {
+        "rail": scope.rail,
+        "chain": scope.base_chain,
+        "network": scope.network,
+    }
+
+
+def _leg(
+    row: Mapping[str, Any] | None,
+    *,
+    leg_id: str,
+    role: str,
+    asset: str,
+    amount_msat: int,
+    occurred_at: str | None,
+    location_ref: str | None = None,
+    valuation_amount: int | None = None,
+) -> dict[str, Any]:
+    protocol = (
+        _protocol_fields(row)
+        if row is not None
+        else {"rail": "external", "chain": None, "network": None}
+    )
+    return {
+        "id": leg_id,
+        "role": role,
+        **protocol,
+        "asset": normalize_asset_code(asset),
+        "exposure": _exposure(asset),
+        "conservation_unit": "msat",
+        "amount_msat": amount_msat,
+        "valuation_unit": _VALUATION_UNIT if valuation_amount is not None else None,
+        "valuation_amount": valuation_amount,
+        "occurred_at": occurred_at,
+        "transaction_id": _field(row, "transaction_id") if row is not None else None,
+        "wallet_id": _field(row, "wallet_id") if row is not None else None,
+        "location_ref": location_ref,
+    }
+
+
+def _allocation(
+    *,
+    allocation_id: str,
+    source_leg_id: str,
+    sink_leg_id: str,
+    source_amount_msat: int,
+    sink_amount_msat: int,
+) -> dict[str, Any]:
+    return {
+        "id": allocation_id,
+        "source_leg_id": source_leg_id,
+        "sink_leg_id": sink_leg_id,
+        "source_amount_msat": source_amount_msat,
+        "sink_amount_msat": sink_amount_msat,
+    }
+
+
+_PAIR_HASH_FIELDS = (
+    "id", "workspace_id", "profile_id", "out_transaction_id",
+    "in_transaction_id", "kind", "policy", "notes", "swap_fee_msat",
+    "swap_fee_kind", "confidence_at_pair", "pair_source", "out_amount",
+    "deleted_at", "created_at",
+)
+_PAYOUT_HASH_FIELDS = (
+    "id", "workspace_id", "profile_id", "out_transaction_id", "kind",
+    "policy", "payout_asset", "payout_amount", "payout_occurred_at",
+    "payout_fiat_value", "payout_external_id", "counterparty", "notes",
+    "swap_fee_msat", "swap_fee_kind", "out_amount", "deleted_at",
+    "created_at",
+)
+
+
+def _pair_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
+    out_asset = normalize_asset_code(_field(row, "out_asset"))
+    in_asset = normalize_asset_code(_field(row, "in_asset"))
+    source_principal = row_boundary_amounts(
+        {
+            "direction": _field(row, "out_direction"),
+            "amount": _field(row, "out_tx_amount"),
+            "fee": _field(row, "out_fee"),
+            "amount_includes_fee": _field(row, "out_amount_includes_fee"),
+        }
+    ).principal_msat
+    target_principal = row_boundary_amounts(
+        {
+            "direction": _field(row, "in_direction"),
+            "amount": _field(row, "in_tx_amount"),
+            "fee": _field(row, "in_fee"),
+            "amount_includes_fee": _field(row, "in_amount_includes_fee"),
+        }
+    ).principal_msat
+    explicit_source = _field(row, "out_amount")
+    reviewed_source = (
+        source_principal if explicit_source in (None, "") else int(explicit_source)
+    )
+    conversion = out_asset != in_asset or str(_field(row, "policy")) != "carrying-value"
+    source_amount = max(0, reviewed_source)
+    target_amount = max(0, target_principal)
+    if not conversion:
+        # Existing same-asset review semantics carry only the common slice;
+        # the remainder keeps its independent classification.
+        source_amount = max(0, min(reviewed_source, target_principal))
+        target_amount = source_amount
+    component_id = _stable_id(
+        "transaction_pair", str(_field(row, "profile_id")), str(_field(row, "id")), source_hash
+    )
+    source_leg_id = _stable_id(component_id, "leg", "source")
+    target_leg_id = _stable_id(component_id, "leg", "target")
+    source_valuation = source_amount if conversion else None
+    target_valuation = source_amount if conversion else None
+    out_row = {
+        "transaction_id": _field(row, "out_transaction_id"),
+        "wallet_id": _field(row, "out_wallet_id"),
+        "wallet_kind": _field(row, "out_wallet_kind"),
+        "config_json": _field(row, "out_wallet_config_json"),
+        "raw_json": _field(row, "out_raw_json"),
+        "asset": out_asset,
+    }
+    in_row = {
+        "transaction_id": _field(row, "in_transaction_id"),
+        "wallet_id": _field(row, "in_wallet_id"),
+        "wallet_kind": _field(row, "in_wallet_kind"),
+        "config_json": _field(row, "in_wallet_config_json"),
+        "raw_json": _field(row, "in_raw_json"),
+        "asset": in_asset,
+    }
+    return {
+        "component_id": component_id,
+        "lineage_id": _stable_id(
+            "transaction_pair", str(_field(row, "profile_id")), str(_field(row, "id")), "lineage"
+        ),
+        "component_type": "swap" if conversion else "manual_bridge",
+        "conservation_mode": "conversion" if conversion else "quantity",
+        "conversion_policy": str(_field(row, "policy")) if conversion else None,
+        "conversion_reviewed": conversion,
+        "legs": [
+            _leg(
+                out_row,
+                leg_id=source_leg_id,
+                role="source",
+                asset=out_asset,
+                amount_msat=source_amount,
+                occurred_at=_field(row, "out_occurred_at"),
+                valuation_amount=source_valuation,
+            ),
+            _leg(
+                in_row,
+                leg_id=target_leg_id,
+                role="destination",
+                asset=in_asset,
+                amount_msat=target_amount,
+                occurred_at=_field(row, "in_occurred_at"),
+                valuation_amount=target_valuation,
+            ),
+        ],
+        "allocations": [
+            _allocation(
+                allocation_id=_stable_id(component_id, "allocation", "0"),
+                source_leg_id=source_leg_id,
+                sink_leg_id=target_leg_id,
+                source_amount_msat=source_amount,
+                sink_amount_msat=target_amount,
+            )
+        ],
+        "reviewed_source_amount_msat": reviewed_source,
+    }
+
+
+def _payout_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
+    out_asset = normalize_asset_code(_field(row, "out_asset"))
+    payout_asset = normalize_asset_code(_field(row, "payout_asset"))
+    source_principal = row_boundary_amounts(
+        {
+            "direction": _field(row, "out_direction"),
+            "amount": _field(row, "out_tx_amount"),
+            "fee": _field(row, "out_fee"),
+            "amount_includes_fee": _field(row, "out_amount_includes_fee"),
+        }
+    ).principal_msat
+    explicit_source = _field(row, "out_amount")
+    reviewed_source = (
+        source_principal if explicit_source in (None, "") else int(explicit_source)
+    )
+    payout_amount = int(_field(row, "payout_amount"))
+    physical_source_amount = max(0, reviewed_source)
+    physical_payout_amount = max(0, payout_amount)
+    component_id = _stable_id(
+        "direct_swap_payout", str(_field(row, "profile_id")), str(_field(row, "id")), source_hash
+    )
+    source_leg_id = _stable_id(component_id, "leg", "source")
+    target_leg_id = _stable_id(component_id, "leg", "target")
+    out_row = {
+        "transaction_id": _field(row, "out_transaction_id"),
+        "wallet_id": _field(row, "out_wallet_id"),
+        "wallet_kind": _field(row, "out_wallet_kind"),
+        "config_json": _field(row, "out_wallet_config_json"),
+        "raw_json": _field(row, "out_raw_json"),
+        "asset": out_asset,
+    }
+    return {
+        "component_id": component_id,
+        "lineage_id": _stable_id(
+            "direct_swap_payout", str(_field(row, "profile_id")), str(_field(row, "id")), "lineage"
+        ),
+        "component_type": "swap",
+        "conservation_mode": "conversion",
+        "conversion_policy": str(_field(row, "policy")),
+        "conversion_reviewed": True,
+        "legs": [
+            _leg(
+                out_row,
+                leg_id=source_leg_id,
+                role="source",
+                asset=out_asset,
+                amount_msat=physical_source_amount,
+                occurred_at=_field(row, "out_occurred_at"),
+                valuation_amount=physical_source_amount,
+            ),
+            _leg(
+                None,
+                leg_id=target_leg_id,
+                role="retained",
+                asset=payout_asset,
+                amount_msat=physical_payout_amount,
+                occurred_at=_field(row, "payout_occurred_at") or _field(row, "out_occurred_at"),
+                location_ref=f"legacy-payout:{_field(row, 'id')}",
+                valuation_amount=physical_source_amount,
+            ),
+        ],
+        "allocations": [
+            _allocation(
+                allocation_id=_stable_id(component_id, "allocation", "0"),
+                source_leg_id=source_leg_id,
+                sink_leg_id=target_leg_id,
+                source_amount_msat=physical_source_amount,
+                sink_amount_msat=physical_payout_amount,
+            )
+        ],
+        "reviewed_source_amount_msat": reviewed_source,
+    }
+
+
+def _component_kwargs(row: Mapping[str, Any], spec: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "component_type": spec["component_type"],
+        "conservation_mode": spec["conservation_mode"],
+        "conversion_policy": spec["conversion_policy"],
+        "conversion_reviewed": spec["conversion_reviewed"],
+        "legs": spec["legs"],
+        "allocations": spec["allocations"],
+        "evidence_kind": "legacy_review_migration",
+        "evidence_grade": "reviewed",
+        "evidence": {
+            "legacy_table": _field(row, "legacy_table"),
+            "legacy_source_id": _field(row, "id"),
+        },
+        "notes": _field(row, "notes"),
+        "change_reason": "migrate legacy authored custody review",
+        "created_at": _field(row, "created_at"),
+        "authored_source": "migration",
+    }
+
+
+def _link_legacy_row(
+    conn: sqlite3.Connection,
+    *,
+    legacy_table: str,
+    legacy_source_id: str,
+    component_id: str,
+) -> None:
+    if legacy_table == "transaction_pairs":
+        conn.execute(
+            "UPDATE transaction_pairs SET component_id = ? WHERE id = ?",
+            (component_id, legacy_source_id),
+        )
+        return
+    if legacy_table == "direct_swap_payouts":
+        conn.execute(
+            "UPDATE direct_swap_payouts SET component_id = ? WHERE id = ?",
+            (component_id, legacy_source_id),
+        )
+        return
+    raise AssertionError(f"unsupported legacy custody table: {legacy_table}")
+
+
+def _insert_terms(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    spec: Mapping[str, Any],
+    *,
+    term_kind: str,
+    source_hash: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO custody_component_economic_terms(
+            id, component_id, workspace_id, profile_id, ordinal,
+            source_leg_id, target_leg_id, term_kind, legacy_source_id,
+            source_row_hash, review_kind, tax_policy,
+            reviewed_source_amount_msat, swap_fee_msat, swap_fee_kind,
+            confidence_at_review, review_source, payout_asset,
+            payout_amount_msat, payout_occurred_at, payout_fiat_value_exact,
+            payout_external_id, counterparty, created_at
+        ) VALUES(
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """,
+        (
+            _stable_id(
+                spec["component_id"],
+                "term",
+                term_kind,
+                str(_field(row, "id")),
+            ),
+            spec["component_id"],
+            _field(row, "workspace_id"),
+            _field(row, "profile_id"),
+            0,
+            spec["legs"][0]["id"],
+            spec["legs"][1]["id"],
+            term_kind,
+            _field(row, "id"),
+            source_hash,
+            str(_field(row, "kind")),
+            str(_field(row, "policy")),
+            spec["reviewed_source_amount_msat"],
+            _field(row, "swap_fee_msat"),
+            _field(row, "swap_fee_kind"),
+            _field(row, "confidence_at_pair"),
+            _field(row, "pair_source"),
+            _field(row, "payout_asset"),
+            (
+                None
+                if _field(row, "payout_amount") is None
+                else int(_field(row, "payout_amount"))
+            ),
+            _field(row, "payout_occurred_at"),
+            _canonical_float(_field(row, "payout_fiat_value")),
+            _field(row, "payout_external_id"),
+            _field(row, "counterparty"),
+            _field(row, "created_at"),
+        ),
+    )
+
+
+def _migrate_row(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    *,
+    term_kind: str,
+    hash_fields: Sequence[str],
+    build_spec: Any,
+) -> str:
+    source_hash = _hash_payload(_canonical_payload(row, hash_fields))
+    spec = build_spec(row, source_hash)
+    linked_id = _field(row, "component_id")
+    if linked_id not in (None, ""):
+        existing_term = conn.execute(
+            "SELECT source_row_hash FROM custody_component_economic_terms "
+            "WHERE component_id = ? AND term_kind = ? "
+            "AND legacy_source_id = ? ORDER BY ordinal, id LIMIT 1",
+            (linked_id, term_kind, _field(row, "id")),
+        ).fetchone()
+        if existing_term is not None and existing_term["source_row_hash"] == source_hash:
+            return "unchanged"
+        linked = get_component(conn, str(linked_id))
+        if linked["state"] == "active":
+            raise AppError(
+                "an activated migrated custody review no longer matches its legacy source",
+                code="custody_legacy_review_changed_after_activation",
+                hint="Revise the custody component instead of editing compatibility rows.",
+                details={"legacy_source_id": _field(row, "id"), "component_id": linked_id},
+                retryable=False,
+            )
+        if existing_term is None and str(linked_id) == spec["component_id"]:
+            _insert_terms(
+                conn, row, spec, term_kind=term_kind, source_hash=source_hash
+            )
+            return "revised"
+        kwargs = _component_kwargs(row, spec)
+        revised = update_component(
+            conn,
+            str(linked_id),
+            new_component_id=spec["component_id"],
+            preserve_planned_row_ids=True,
+            **kwargs,
+        )
+        if revised["id"] != spec["component_id"]:
+            raise AssertionError("migrated custody revision id changed")
+        _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
+        _link_legacy_row(
+            conn,
+            legacy_table=str(_field(row, "legacy_table")),
+            legacy_source_id=str(_field(row, "id")),
+            component_id=spec["component_id"],
+        )
+        return "revised"
+
+    kwargs = _component_kwargs(row, spec)
+    created = create_component(
+        conn,
+        workspace_id=str(_field(row, "workspace_id")),
+        profile_id=str(_field(row, "profile_id")),
+        component_id=spec["component_id"],
+        lineage_id=spec["lineage_id"],
+        **kwargs,
+    )
+    if created["id"] != spec["component_id"]:
+        raise AssertionError("migrated custody component id changed")
+    _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
+    _link_legacy_row(
+        conn,
+        legacy_table=str(_field(row, "legacy_table")),
+        legacy_source_id=str(_field(row, "id")),
+        component_id=spec["component_id"],
+    )
+    return "created"
+
+
+def _pair_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT p.*, 'transaction_pairs' AS legacy_table,
+               out_tx.asset AS out_asset, out_tx.amount AS out_tx_amount,
+               out_tx.fee AS out_fee,
+               out_tx.amount_includes_fee AS out_amount_includes_fee,
+               out_tx.direction AS out_direction,
+               out_tx.occurred_at AS out_occurred_at,
+               out_tx.raw_json AS out_raw_json,
+               out_tx.wallet_id AS out_wallet_id,
+               out_wallet.kind AS out_wallet_kind,
+               out_wallet.config_json AS out_wallet_config_json,
+               in_tx.asset AS in_asset, in_tx.amount AS in_tx_amount,
+               in_tx.fee AS in_fee,
+               in_tx.amount_includes_fee AS in_amount_includes_fee,
+               in_tx.direction AS in_direction,
+               in_tx.occurred_at AS in_occurred_at,
+               in_tx.raw_json AS in_raw_json,
+               in_tx.wallet_id AS in_wallet_id,
+               in_wallet.kind AS in_wallet_kind,
+               in_wallet.config_json AS in_wallet_config_json
+        FROM transaction_pairs p
+        JOIN transactions out_tx ON out_tx.id = p.out_transaction_id
+        JOIN wallets out_wallet ON out_wallet.id = out_tx.wallet_id
+        JOIN transactions in_tx ON in_tx.id = p.in_transaction_id
+        JOIN wallets in_wallet ON in_wallet.id = in_tx.wallet_id
+        WHERE p.deleted_at IS NULL
+        ORDER BY p.profile_id, p.created_at, p.id
+        """
+    ).fetchall()
+
+
+def _payout_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT p.*, 'direct_swap_payouts' AS legacy_table,
+               out_tx.asset AS out_asset, out_tx.amount AS out_tx_amount,
+               out_tx.fee AS out_fee,
+               out_tx.amount_includes_fee AS out_amount_includes_fee,
+               out_tx.direction AS out_direction,
+               out_tx.occurred_at AS out_occurred_at,
+               out_tx.raw_json AS out_raw_json,
+               out_tx.wallet_id AS out_wallet_id,
+               out_wallet.kind AS out_wallet_kind,
+               out_wallet.config_json AS out_wallet_config_json
+        FROM direct_swap_payouts p
+        JOIN transactions out_tx ON out_tx.id = p.out_transaction_id
+        JOIN wallets out_wallet ON out_wallet.id = out_tx.wallet_id
+        WHERE p.deleted_at IS NULL
+        ORDER BY p.profile_id, p.created_at, p.id
+        """
+    ).fetchall()
+
+
+def backfill_legacy_authored_components(conn: sqlite3.Connection) -> MigrationResult:
+    """Create/link draft components for every active legacy authored review."""
+
+    counts = {"created": 0, "revised": 0, "unchanged": 0}
+    with _savepoint(conn, "custody_authored_backfill"):
+        for rows, term_kind, fields, builder in (
+            (_pair_rows(conn), "transaction_pair", _PAIR_HASH_FIELDS, _pair_spec),
+            (_payout_rows(conn), "direct_swap_payout", _PAYOUT_HASH_FIELDS, _payout_spec),
+        ):
+            for row in rows:
+                outcome = _migrate_row(
+                    conn,
+                    row,
+                    term_kind=term_kind,
+                    hash_fields=fields,
+                    build_spec=builder,
+                )
+                counts[outcome] += 1
+    return MigrationResult(**counts)

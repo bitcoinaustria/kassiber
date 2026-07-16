@@ -151,7 +151,15 @@ binary.
    drift before performing the reviewed mutation. Existing CLI/daemon kinds
    are redacted compatibility wrappers over those two operations.
 4. Add typed replicated component economic terms, migrate pair/payout authored
-   state deterministically, and freeze legacy writes.
+   state deterministically, and freeze legacy writes. The additive staging
+   half is complete: each active legacy row receives a deterministic inert
+   draft revision and compatibility link inside one savepoint; immutable,
+   replicated, leg-bound economic terms preserve policy, signed swap fee,
+   review provenance and direct-payout settlement fields. Reopening is
+   idempotent, a changed unactivated source creates a new retained revision,
+   and terms are one-to-many so the activation half can consolidate connected
+   1:N/N:M reviews into one atomic component. Journals still consume only the
+   legacy rows until that consolidation and write freeze land together.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.

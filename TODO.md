@@ -180,6 +180,9 @@ same verification surface.
     perform zero SQLite writes.
   - [ ] Migrate pair/payout authored meaning into components with typed
     replicated economic terms; freeze legacy writes and retain replay history.
+    Deterministic inert draft backfill, one-to-many leg-bound terms,
+    compatibility links, idempotence and atomic rollback coverage are complete;
+    connected 1:N/N:M consolidation, activation and the write freeze remain.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state.

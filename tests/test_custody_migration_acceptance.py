@@ -468,7 +468,10 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
                 migrated.execute(
                     "SELECT COUNT(*) FROM custody_component_legs "
                     "WHERE transaction_id IS NOT NULL "
-                    "AND anchor_transaction_id = transaction_id"
+                    "AND anchor_transaction_id = transaction_id "
+                    "AND component_id NOT IN ("
+                    "  SELECT component_id FROM custody_component_economic_terms"
+                    ")"
                 ).fetchone()[0]
             ),
             "payload_free_evidence_commitments": int(
@@ -491,7 +494,14 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
 
         assert before_tax == after_tax
-        assert before_rows == after_rows
+        # The authored-substrate convergence migration adds one inert draft
+        # component for each active legacy pair/payout. Legacy rows remain the
+        # journal input in this compatibility slice, proven by the unchanged
+        # tax snapshot above.
+        assert {
+            **before_rows,
+            "custody_components": before_rows["custody_components"] + 2,
+        } == after_rows
         assert migrated.execute(
             "SELECT COUNT(*) FROM custody_gap_review_transactions"
         ).fetchone()[0] == 2

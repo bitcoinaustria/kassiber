@@ -54,7 +54,7 @@ COMPONENT_TYPES = frozenset(
 )
 COMPONENT_STATES = frozenset({"draft", "active", "superseded"})
 CONSERVATION_MODES = frozenset({"quantity", "conversion"})
-AUTHORED_SOURCES = frozenset({"user", "cli", "gui", "ai_tool"})
+AUTHORED_SOURCES = frozenset({"user", "cli", "gui", "ai_tool", "migration"})
 # Block timestamps are not a strict sequence clock, and exchange/L2 records may
 # stamp completion after the receiving chain transaction. Custody components are
 # reviewed exact allocations, so tolerate bounded evidence-clock skew while
@@ -1943,6 +1943,18 @@ def _allocation_dict(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _economic_terms_dict(row: sqlite3.Row) -> dict[str, Any]:
+    result = dict(row)
+    for field in (
+        "reviewed_source_amount_msat",
+        "swap_fee_msat",
+        "payout_amount_msat",
+    ):
+        if result.get(field) is not None:
+            result[field] = int(result[field])
+    return result
+
+
 def _active_membership_conflicts(
     conn: sqlite3.Connection,
     *,
@@ -3075,6 +3087,14 @@ def _materialize_component(
             (row["id"],),
         ).fetchall()
     ]
+    economic_terms = [
+        _economic_terms_dict(term)
+        for term in conn.execute(
+            "SELECT * FROM custody_component_economic_terms "
+            "WHERE component_id = ? ORDER BY ordinal, id",
+            (row["id"],),
+        ).fetchall()
+    ]
     validation = validate_conservation(
         legs,
         allocations=allocations,
@@ -3281,6 +3301,7 @@ def _materialize_component(
         "created_at": row["created_at"],
         "legs": legs,
         "allocations": allocations,
+        "economic_terms": economic_terms,
         "validation": validation,
     }
     if include_local_evidence:
