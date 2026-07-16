@@ -789,38 +789,27 @@ def create_transaction_pair(
     else:
         swap_fee_msat, swap_fee_kind = None, None
     pair_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO transaction_pairs(
-            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-            kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-            pair_source, out_amount, deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-        """,
-        (
-            pair_id,
-            workspace["id"],
-            profile["id"],
-            out_row["id"],
-            in_row["id"],
-            kind,
-            policy,
-            notes,
-            swap_fee_msat,
-            swap_fee_kind,
-            confidence_at_pair,
-            pair_source,
-            out_amount_msat,
-            now_iso(),
-        ),
+    pair_row = core_custody_authored_migration.create_pair_review_projection(
+        conn,
+        review_id=pair_id,
+        workspace_id=workspace["id"],
+        profile_id=profile["id"],
+        out_transaction_id=out_row["id"],
+        in_transaction_id=in_row["id"],
+        kind=kind,
+        policy=policy,
+        notes=notes,
+        swap_fee_msat=swap_fee_msat,
+        swap_fee_kind=swap_fee_kind,
+        confidence_at_pair=confidence_at_pair,
+        pair_source=pair_source,
+        out_amount_msat=out_amount_msat,
+        created_at=now_iso(),
     )
-    core_custody_authored_migration.refresh_legacy_authored_components(conn)
     invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
-    return _pair_to_dict(
-        conn.execute("SELECT * FROM transaction_pairs WHERE id = ?", (pair_id,)).fetchone()
-    )
+    return _pair_to_dict(pair_row)
 
 
 def create_direct_swap_payout(
@@ -930,41 +919,31 @@ def create_direct_swap_payout(
         ),
     )
     payout_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO direct_swap_payouts(
-            id, workspace_id, profile_id, out_transaction_id, kind, policy,
-            payout_asset, payout_amount, payout_occurred_at, payout_fiat_value,
-            payout_external_id, counterparty, notes, swap_fee_msat, swap_fee_kind,
-            out_amount, deleted_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-        """,
-        (
-            payout_id,
-            workspace["id"],
-            profile["id"],
-            out_row["id"],
-            kind,
-            policy,
-            target_asset,
-            payout_amount_msat,
-            payout_occurred_at,
-            float(payout_value) if payout_value is not None else None,
-            payout_external_id,
-            counterparty,
-            notes,
-            swap_fee_msat,
-            swap_fee_kind,
-            out_amount_msat,
-            now_iso(),
+    payout_row = core_custody_authored_migration.create_payout_review_projection(
+        conn,
+        review_id=payout_id,
+        workspace_id=workspace["id"],
+        profile_id=profile["id"],
+        out_transaction_id=out_row["id"],
+        kind=kind,
+        policy=policy,
+        payout_asset=target_asset,
+        payout_amount_msat=payout_amount_msat,
+        payout_occurred_at=payout_occurred_at,
+        payout_fiat_value=(
+            float(payout_value) if payout_value is not None else None
         ),
+        payout_external_id=payout_external_id,
+        counterparty=counterparty,
+        notes=notes,
+        swap_fee_msat=swap_fee_msat,
+        swap_fee_kind=swap_fee_kind,
+        out_amount_msat=out_amount_msat,
+        created_at=now_iso(),
     )
-    core_custody_authored_migration.refresh_legacy_authored_components(conn)
     invalidate_journals(conn, profile["id"])
     conn.commit()
-    return _direct_payout_to_dict(
-        conn.execute("SELECT * FROM direct_swap_payouts WHERE id = ?", (payout_id,)).fetchone()
-    )
+    return _direct_payout_to_dict(payout_row)
 
 
 def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_deleted=False):
@@ -1025,20 +1004,15 @@ def delete_direct_swap_payout(conn, workspace_ref, profile_ref, payout_id):
     if row["deleted_at"]:
         return _direct_payout_to_dict(row)
     deleted_at = now_iso()
-    core_custody_authored_migration.retire_linked_component(
+    deleted = core_custody_authored_migration.delete_review_projection(
         conn,
-        row["component_id"],
-        reason="direct payout review deleted",
-    )
-    conn.execute(
-        "UPDATE direct_swap_payouts SET deleted_at = ? WHERE id = ?",
-        (deleted_at, payout_id),
+        table="direct_swap_payouts",
+        row=row,
+        deleted_at=deleted_at,
     )
     invalidate_journals(conn, profile["id"])
     conn.commit()
-    return _direct_payout_to_dict(
-        conn.execute("SELECT * FROM direct_swap_payouts WHERE id = ?", (payout_id,)).fetchone()
-    )
+    return _direct_payout_to_dict(deleted)
 
 
 def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=False):
@@ -2524,14 +2498,11 @@ def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
     if not row:
         raise AppError(f"Pair '{pair_id}' not found", code="not_found")
     if row["deleted_at"] is None:
-        core_custody_authored_migration.retire_linked_component(
+        core_custody_authored_migration.delete_review_projection(
             conn,
-            row["component_id"],
-            reason="transaction pair review deleted",
-        )
-        conn.execute(
-            "UPDATE transaction_pairs SET deleted_at = ? WHERE id = ?",
-            (now_iso(), pair_id),
+            table="transaction_pairs",
+            row=row,
+            deleted_at=now_iso(),
         )
         invalidate_journals(conn, profile["id"])
         conn.commit()
@@ -2552,15 +2523,12 @@ def update_transaction_pair(
     notes=_UNSET,
     commit=True,
 ):
-    """Edit the kind / policy / notes of an existing (active) pair in place.
+    """Append an authored revision and refresh its compatibility projection.
 
-    Pairs are the source of truth for transfer/swap accounting; journals are
-    re-derived from them. Changing kind/policy therefore only needs a row
-    update plus a journal invalidation — the legs, amounts, and swap fee are
-    untouched. ``kind`` / ``policy`` default to the stored value when omitted;
-    ``notes`` is only rewritten when explicitly passed. The same-asset /
-    cross-asset policy guards from :func:`create_transaction_pair` are
-    re-applied so an edit can't reach an unsupported combination.
+    ``kind`` / ``policy`` default to the stored value when omitted; ``notes``
+    is only revised when explicitly passed. The same-asset / cross-asset policy
+    guards from :func:`create_transaction_pair` are re-applied so an edit can't
+    reach an unsupported combination.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     row = conn.execute(
@@ -2658,34 +2626,22 @@ def update_transaction_pair(
                 )
             else:
                 new_fee_msat, new_fee_kind = None, None
-        core_custody_authored_migration.retire_linked_component(
-            conn,
-            row["component_id"],
-            reason="transaction pair review revised",
+        updated_row = (
+            core_custody_authored_migration.revise_pair_review_projection(
+                conn,
+                row,
+                kind=new_kind,
+                policy=new_policy,
+                notes=new_notes,
+                swap_fee_msat=new_fee_msat,
+                swap_fee_kind=new_fee_kind,
+            )
         )
-        conn.execute(
-            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ?, "
-            "swap_fee_msat = ?, swap_fee_kind = ? "
-            "WHERE id = ? AND profile_id = ?",
-            (
-                new_kind,
-                new_policy,
-                new_notes,
-                new_fee_msat,
-                new_fee_kind,
-                pair_id,
-                profile["id"],
-            ),
-        )
-        core_custody_authored_migration.refresh_legacy_authored_components(conn)
         invalidate_journals(conn, profile["id"])
         if commit:
             conn.commit()
-    return _pair_to_dict(
-        conn.execute(
-            "SELECT * FROM transaction_pairs WHERE id = ?", (pair_id,)
-        ).fetchone()
-    )
+        return _pair_to_dict(updated_row)
+    return _pair_to_dict(row)
 
 
 def init_app(conn):

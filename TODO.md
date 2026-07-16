@@ -187,8 +187,10 @@ same verification surface.
     skipped, ineffective, or partial-source historical rows; component-native
     residual decisions and writes remain. Linked active compatibility rows are
     database-write-frozen, and current mutation handlers retire/revise their
-    component atomically; removing new compatibility-row writes is the final
-    producer cutover.
+    component atomically through the core authored-review store. CLI handlers
+    no longer own pair/payout INSERT, UPDATE or tombstone SQL. Removing the
+    frozen compatibility projections from new writes is the final producer
+    cutover after all readers move to component terms.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
     and demonstrate the final simplicity/LOC/performance stop state.

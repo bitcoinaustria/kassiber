@@ -1047,3 +1047,177 @@ def retire_linked_component(
     component = get_component(conn, str(component_id))
     if component["state"] == "active":
         supersede_component(conn, component["id"], reason=reason)
+
+
+def create_pair_review_projection(
+    conn: sqlite3.Connection,
+    *,
+    review_id: str,
+    workspace_id: str,
+    profile_id: str,
+    out_transaction_id: str,
+    in_transaction_id: str,
+    kind: str,
+    policy: str,
+    notes: str | None,
+    swap_fee_msat: int | None,
+    swap_fee_kind: str | None,
+    confidence_at_pair: str | None,
+    pair_source: str,
+    out_amount_msat: int | None,
+    created_at: str,
+) -> sqlite3.Row:
+    """Author a pair and its frozen compatibility projection atomically."""
+
+    with _savepoint(conn, f"custody_pair_create_{uuid.uuid4().hex}"):
+        conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id,
+                in_transaction_id, kind, policy, notes, swap_fee_msat,
+                swap_fee_kind, confidence_at_pair, pair_source, out_amount,
+                deleted_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            """,
+            (
+                review_id,
+                workspace_id,
+                profile_id,
+                out_transaction_id,
+                in_transaction_id,
+                kind,
+                policy,
+                notes,
+                swap_fee_msat,
+                swap_fee_kind,
+                confidence_at_pair,
+                pair_source,
+                out_amount_msat,
+                created_at,
+            ),
+        )
+        refresh_legacy_authored_components(conn)
+    return conn.execute(
+        "SELECT * FROM transaction_pairs WHERE id = ?", (review_id,)
+    ).fetchone()
+
+
+def create_payout_review_projection(
+    conn: sqlite3.Connection,
+    *,
+    review_id: str,
+    workspace_id: str,
+    profile_id: str,
+    out_transaction_id: str,
+    kind: str,
+    policy: str,
+    payout_asset: str,
+    payout_amount_msat: int,
+    payout_occurred_at: str | None,
+    payout_fiat_value: float | None,
+    payout_external_id: str | None,
+    counterparty: str | None,
+    notes: str | None,
+    swap_fee_msat: int | None,
+    swap_fee_kind: str | None,
+    out_amount_msat: int | None,
+    created_at: str,
+) -> sqlite3.Row:
+    """Author a direct payout and its frozen projection atomically."""
+
+    with _savepoint(conn, f"custody_payout_create_{uuid.uuid4().hex}"):
+        conn.execute(
+            """
+            INSERT INTO direct_swap_payouts(
+                id, workspace_id, profile_id, out_transaction_id, kind,
+                policy, payout_asset, payout_amount, payout_occurred_at,
+                payout_fiat_value, payout_external_id, counterparty, notes,
+                swap_fee_msat, swap_fee_kind, out_amount, deleted_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            """,
+            (
+                review_id,
+                workspace_id,
+                profile_id,
+                out_transaction_id,
+                kind,
+                policy,
+                payout_asset,
+                payout_amount_msat,
+                payout_occurred_at,
+                payout_fiat_value,
+                payout_external_id,
+                counterparty,
+                notes,
+                swap_fee_msat,
+                swap_fee_kind,
+                out_amount_msat,
+                created_at,
+            ),
+        )
+        refresh_legacy_authored_components(conn)
+    return conn.execute(
+        "SELECT * FROM direct_swap_payouts WHERE id = ?", (review_id,)
+    ).fetchone()
+
+
+def revise_pair_review_projection(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    *,
+    kind: str,
+    policy: str,
+    notes: str | None,
+    swap_fee_msat: int | None,
+    swap_fee_kind: str | None,
+) -> sqlite3.Row:
+    """Append a component revision, then refresh the frozen pair projection."""
+
+    review_id = str(_field(row, "id"))
+    with _savepoint(conn, f"custody_pair_revise_{uuid.uuid4().hex}"):
+        retire_linked_component(
+            conn,
+            _field(row, "component_id"),
+            reason="transaction pair review revised",
+        )
+        conn.execute(
+            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ?, "
+            "swap_fee_msat = ?, swap_fee_kind = ? WHERE id = ?",
+            (kind, policy, notes, swap_fee_msat, swap_fee_kind, review_id),
+        )
+        refresh_legacy_authored_components(conn)
+    return conn.execute(
+        "SELECT * FROM transaction_pairs WHERE id = ?", (review_id,)
+    ).fetchone()
+
+
+def delete_review_projection(
+    conn: sqlite3.Connection,
+    *,
+    table: str,
+    row: Mapping[str, Any],
+    deleted_at: str,
+) -> sqlite3.Row:
+    """Retire the authored aggregate before tombstoning its projection."""
+
+    if table not in {"transaction_pairs", "direct_swap_payouts"}:
+        raise AssertionError(f"unsupported custody review projection: {table}")
+    review_id = str(_field(row, "id"))
+    reason = (
+        "transaction pair review deleted"
+        if table == "transaction_pairs"
+        else "direct payout review deleted"
+    )
+    with _savepoint(conn, f"custody_review_delete_{uuid.uuid4().hex}"):
+        retire_linked_component(
+            conn,
+            _field(row, "component_id"),
+            reason=reason,
+        )
+        conn.execute(
+            f"UPDATE {table} SET deleted_at = ? WHERE id = ?",
+            (deleted_at, review_id),
+        )
+    return conn.execute(
+        f"SELECT * FROM {table} WHERE id = ?", (review_id,)
+    ).fetchone()

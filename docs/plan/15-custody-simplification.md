@@ -164,9 +164,11 @@ binary.
    upgrades whose term foreign keys are rebuilt with their custody legs.
    Linked active legacy rows are write-frozen below the handlers; revision and
    deletion retire the active aggregate before changing compatibility history,
-   and bypass or replication writes fail closed. Component-native mutations
-   must still remove creation of new compatibility rows before physical legacy
-   deletion can be considered.
+   and bypass or replication writes fail closed. Pair/payout lifecycle SQL now
+   belongs to the core authored-review store, not CLI handlers. That store still
+   emits frozen compatibility projections for readers not yet cut over; those
+   projection writes disappear with the consumer migration before physical
+   legacy deletion can be considered.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.
