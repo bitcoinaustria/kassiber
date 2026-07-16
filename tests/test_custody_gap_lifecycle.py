@@ -971,12 +971,15 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             snapshot["gaps"][0]["status_reason"], "component_not_effective"
         )
 
-    def test_cli_list_review_and_bridge_preview_need_no_component_json(self):
+    def test_cli_list_review_and_review_plan_need_no_component_json(self):
         gap_id = self._gap_id()
         for command, expected_kind in (
             (["list"], "transfers.gaps.list"),
             (["review", "--gap-id", gap_id], "transfers.gaps.review"),
-            (["bridge", "--gap-id", gap_id, "--dry-run"], "transfers.gaps.bridge"),
+            (
+                ["plan", "--action", "create", "--gap-id", gap_id],
+                "transfers.gaps.plan",
+            ),
         ):
             args = build_parser().parse_args(
                 [
@@ -1278,9 +1281,9 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         candidate, _created = self._create_bridge()
         for command, expected_kind in (
             (
-                ["classify-residual", "--gap-id", candidate.gap_id,
-                 "--classification", "external_payment", "--dry-run"],
-                "transfers.gaps.classify-residual",
+                ["plan", "--action", "classify_residual", "--gap-id",
+                 candidate.gap_id, "--classification", "external_payment"],
+                "transfers.gaps.plan",
             ),
             (
                 ["history", "--gap-id", candidate.gap_id],

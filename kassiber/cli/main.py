@@ -2209,49 +2209,24 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workspace_profile_args(transfers_gaps_history)
     transfers_gaps_history.add_argument("--gap-id", required=True, dest="gap_id")
     transfers_gaps_history.add_argument("--limit", type=int, default=100)
-    transfers_gaps_bridge = transfers_gaps_sub.add_parser(
-        "bridge", help="Preview or create an exact reviewed bridge by gap id"
-    )
-    _add_workspace_profile_args(transfers_gaps_bridge)
-    transfers_gaps_bridge.add_argument("--gap-id", required=True, dest="gap_id")
-    transfers_gaps_bridge.add_argument("--expected-fingerprint", dest="expected_fingerprint")
-    transfers_gaps_bridge.add_argument(
-        "--dry-run", action="store_true",
-        help="Validate the exact component and print its confirmation fingerprint",
-    )
-    transfers_gaps_dismiss = transfers_gaps_sub.add_parser("dismiss")
-    _add_workspace_profile_args(transfers_gaps_dismiss)
-    transfers_gaps_dismiss.add_argument("--gap-id", required=True, dest="gap_id")
-    transfers_gaps_dismiss.add_argument(
-        "--expected-fingerprint", required=True, dest="expected_fingerprint"
-    )
-    transfers_gaps_dismiss.add_argument("--reason")
+    review_actions = ("create", "dismiss", "revise", "reopen", "classify_residual")
     for command_name, help_text in (
-        ("reopen", "Preview or reopen a reviewed bridge for correction"),
-        ("revise", "Preview or activate an exact replacement bridge revision"),
+        ("plan", "Build a pure custody review plan and confirmation fingerprint"),
+        ("apply", "Apply an unchanged custody review plan by fingerprint"),
     ):
-        correction = transfers_gaps_sub.add_parser(command_name, help=help_text)
-        _add_workspace_profile_args(correction)
-        correction.add_argument("--gap-id", required=True, dest="gap_id")
-        correction.add_argument("--expected-fingerprint", dest="expected_fingerprint")
-        correction.add_argument("--dry-run", action="store_true")
-        correction.add_argument("--reason")
-    transfers_gaps_residual = transfers_gaps_sub.add_parser(
-        "classify-residual",
-        help="Preview or classify an exact reviewed bridge residual",
-    )
-    _add_workspace_profile_args(transfers_gaps_residual)
-    transfers_gaps_residual.add_argument("--gap-id", required=True, dest="gap_id")
-    transfers_gaps_residual.add_argument(
-        "--classification",
-        required=True,
-        choices=sorted(core_custody_gap_reviews.RESIDUAL_CLASSIFICATIONS),
-    )
-    transfers_gaps_residual.add_argument(
-        "--expected-fingerprint", dest="expected_fingerprint"
-    )
-    transfers_gaps_residual.add_argument("--dry-run", action="store_true")
-    transfers_gaps_residual.add_argument("--reason")
+        review_command = transfers_gaps_sub.add_parser(command_name, help=help_text)
+        _add_workspace_profile_args(review_command)
+        review_command.add_argument("--action", required=True, choices=review_actions)
+        review_command.add_argument("--gap-id", required=True, dest="gap_id")
+        review_command.add_argument(
+            "--classification",
+            choices=sorted(core_custody_gap_reviews.RESIDUAL_CLASSIFICATIONS),
+        )
+        review_command.add_argument("--reason")
+        if command_name == "apply":
+            review_command.add_argument(
+                "--expected-fingerprint", required=True, dest="expected_fingerprint"
+            )
 
     transfers_components = transfers_sub.add_parser(
         "components",
@@ -4330,140 +4305,31 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         conn, profile["id"], args.gap_id, limit=args.limit
                     ),
                 )
-            if args.transfers_gaps_command == "reopen":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_reopen_guided_bridge(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            gap_id=args.gap_id,
-                            reason=args.reason,
-                        ),
+            if args.transfers_gaps_command in {"plan", "apply"}:
+                candidate = None
+                if args.action in {"create", "revise", "dismiss"}:
+                    candidate = core_custody_gaps.find_gap_candidate(
+                        conn, profile["id"], args.gap_id
                     )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "bridge reopen requires --expected-fingerprint from --dry-run",
-                        code="validation",
-                    )
+                kwargs = {
+                    "workspace_id": workspace["id"],
+                    "profile_id": profile["id"],
+                    "action": args.action,
+                    "candidate": candidate,
+                    "gap_id": args.gap_id,
+                    "classification": args.classification,
+                    "reason": args.reason,
+                    "authored_source": "cli",
+                }
+                if args.transfers_gaps_command == "plan":
+                    plan = core_custody_gap_reviews.plan_review(conn, **kwargs)
+                    return emit(args, core_custody_gap_reviews.public_review_plan(plan))
                 return emit(
                     args,
-                    core_custody_gap_reviews.reopen_guided_bridge(
+                    core_custody_gap_reviews.apply_review(
                         conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        gap_id=args.gap_id,
                         expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
-                    ),
-                )
-            if args.transfers_gaps_command == "classify-residual":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_residual_classification(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            gap_id=args.gap_id,
-                            classification=args.classification,
-                            reason=args.reason,
-                            authored_source="cli",
-                        ),
-                    )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "residual classification requires --expected-fingerprint "
-                        "from --dry-run",
-                        code="validation",
-                    )
-                return emit(
-                    args,
-                    core_custody_gap_reviews.classify_residual(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        gap_id=args.gap_id,
-                        classification=args.classification,
-                        expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
-                    ),
-                )
-            candidate = core_custody_gaps.find_gap_candidate(
-                conn, profile["id"], args.gap_id
-            )
-            if args.transfers_gaps_command == "bridge":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_guided_bridge(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            candidate=candidate,
-                            authored_source="cli",
-                        ),
-                    )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "bridge creation requires --expected-fingerprint from --dry-run",
-                        code="validation",
-                    )
-                return emit(
-                    args,
-                    core_custody_gap_reviews.create_guided_bridge(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        candidate=candidate,
-                        expected_fingerprint=args.expected_fingerprint,
-                        authored_source="cli",
-                    ),
-                )
-            if args.transfers_gaps_command == "revise":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_guided_revision(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            candidate=candidate,
-                            reason=args.reason,
-                            authored_source="cli",
-                        ),
-                    )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "bridge revision requires --expected-fingerprint from --dry-run",
-                        code="validation",
-                    )
-                return emit(
-                    args,
-                    core_custody_gap_reviews.revise_guided_bridge(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        candidate=candidate,
-                        expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
-                    ),
-                )
-            if args.transfers_gaps_command == "dismiss":
-                return emit(
-                    args,
-                    core_custody_gap_reviews.append_dismissal(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        candidate=candidate,
-                        expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
+                        **kwargs,
                     ),
                 )
         if args.transfers_command == "components":

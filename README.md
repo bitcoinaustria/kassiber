@@ -201,8 +201,8 @@ the guided custody-gap workflow instead of writing component JSON:
 ```bash
 kassiber transfers gaps list
 kassiber transfers gaps review --gap-id <gap-id>
-kassiber transfers gaps bridge --gap-id <gap-id> --dry-run
-kassiber transfers gaps bridge --gap-id <gap-id> \
+kassiber transfers gaps plan --action create --gap-id <gap-id>
+kassiber transfers gaps apply --action create --gap-id <gap-id> \
   --expected-fingerprint <fingerprint-from-preview>
 ```
 

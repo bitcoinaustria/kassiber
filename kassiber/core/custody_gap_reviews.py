@@ -600,6 +600,114 @@ def plan_review(
     }
 
 
+def public_review_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the serializable, privacy-safe review contract shared by all clients."""
+
+    component = plan.get("component_plan") or {}
+    public_component = None
+    if component:
+        validation = component.get("validation") or {}
+        public_component = {
+            "id": component.get("component_id"),
+            "component_type": component.get("component_type"),
+            "conservation_mode": component.get("conservation_mode"),
+            "legs": [
+                {
+                    key: leg.get(key)
+                    for key in (
+                        "id",
+                        "role",
+                        "rail",
+                        "asset",
+                        "exposure",
+                        "conservation_unit",
+                        "amount_msat",
+                        "valuation_unit",
+                        "valuation_amount",
+                    )
+                }
+                for leg in component.get("legs", ())
+            ],
+            "allocations": [
+                {
+                    key: allocation.get(key)
+                    for key in (
+                        "id",
+                        "source_leg_id",
+                        "sink_leg_id",
+                        "source_amount_msat",
+                        "sink_amount_msat",
+                    )
+                }
+                for allocation in component.get("allocations", ())
+            ],
+            "validation": {
+                "activatable": bool(validation.get("activatable")),
+                "issues": [
+                    {
+                        key: issue.get(key)
+                        for key in ("code", "message")
+                        if issue.get(key) is not None
+                    }
+                    for issue in validation.get("issues", ())
+                ],
+                "warnings": [
+                    {
+                        key: warning.get(key)
+                        for key in ("code", "message")
+                        if warning.get(key) is not None
+                    }
+                    for warning in validation.get("warnings", ())
+                ],
+            },
+        }
+    candidate = plan.get("candidate")
+    action = str(plan["action"])
+    return {
+        "action": action,
+        "gap_id": plan["gap_id"],
+        "fingerprint": plan["fingerprint"],
+        "input_version": plan["input_version"],
+        "dry_run": True,
+        "activatable": plan["activatable"],
+        "requires_explicit_confirmation": True,
+        "classification": plan.get("classification"),
+        "country_tax_meaning": (
+            "not_assigned" if action == "classify_residual" else None
+        ),
+        "custody_state": (
+            residual_custody_state(str(plan["classification"]))
+            if action == "classify_residual"
+            else None
+        ),
+        "new_component_revision": plan.get("new_component_revision"),
+        "current_component_revision": (
+            (plan.get("context") or {}).get("component", {}).get("revision")
+        ),
+        "review_mode": (
+            "structured_candidate"
+            if candidate is not None
+            and candidate.promotion_eligible
+            and candidate.conflict_size == 1
+            else ("manual_weak_hint" if candidate is not None else None)
+        ),
+        "retained_msat": candidate.retained_msat if candidate is not None else 0,
+        "residual_msat": (
+            candidate.residual_msat
+            if candidate is not None
+            else plan.get("residual_msat", 0)
+        ),
+        "fee_msat": candidate.source_fee_msat if candidate is not None else 0,
+        "source_count": len(candidate.source_ids) if candidate is not None else 0,
+        "destination_count": (
+            len(candidate.return_ids) if candidate is not None else 0
+        ),
+        "warnings": plan["warnings"],
+        "filed_report_impacts": plan["filed_report_impacts"],
+        "component_plan": public_component,
+    }
+
+
 def _persist_component_plan(
     conn: sqlite3.Connection, plan: Mapping[str, Any]
 ) -> dict[str, Any]:

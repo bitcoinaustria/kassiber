@@ -201,10 +201,11 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "gaps",
-            "bridge",
+            "plan",
+            "--action",
+            "create",
             "--gap-id",
             gap_id,
-            "--dry-run",
             *self._scope(),
         )
         preview = previewed["data"]
@@ -215,11 +216,13 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "gaps",
-            "bridge",
+            "apply",
+            "--action",
+            "create",
             "--gap-id",
             gap_id,
             "--expected-fingerprint",
-            preview["candidate_fingerprint"],
+            preview["fingerprint"],
             *self._scope(),
         )["data"]
         self.assertEqual(created["status"], "resolved")
@@ -261,15 +264,30 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
         gap = _run_cli(
             self.data_root, "transfers", "gaps", "list", *self._scope()
         )["data"]["gaps"][0]
+        plan = _run_cli(
+            self.data_root,
+            "transfers",
+            "gaps",
+            "plan",
+            "--action",
+            "dismiss",
+            "--gap-id",
+            gap["gap_id"],
+            "--reason",
+            "known external disposal",
+            *self._scope(),
+        )["data"]
         dismissed = _run_cli(
             self.data_root,
             "transfers",
             "gaps",
+            "apply",
+            "--action",
             "dismiss",
             "--gap-id",
             gap["gap_id"],
             "--expected-fingerprint",
-            gap["candidate_fingerprint"],
+            plan["fingerprint"],
             "--reason",
             "known external disposal",
             *self._scope(),

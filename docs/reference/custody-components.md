@@ -274,9 +274,10 @@ reopens review:
 ```bash
 kassiber transfers gaps list
 kassiber transfers gaps review --gap-id <gap-id>
-kassiber transfers gaps bridge --gap-id <gap-id> --dry-run
-kassiber transfers gaps bridge --gap-id <gap-id> --expected-fingerprint <sha256>
-kassiber transfers gaps dismiss --gap-id <gap-id> \
+kassiber transfers gaps plan --action create --gap-id <gap-id>
+kassiber transfers gaps apply --action create --gap-id <gap-id> \
+  --expected-fingerprint <sha256>
+kassiber transfers gaps apply --action dismiss --gap-id <gap-id> \
   --expected-fingerprint <sha256> --reason "reviewed explanation"
 ```
 

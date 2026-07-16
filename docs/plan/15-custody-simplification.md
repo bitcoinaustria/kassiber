@@ -206,7 +206,9 @@ binary.
    Gap review UI and AI now expose only `ui.custody.review.plan` and
    `ui.custody.review.apply` for create, dismiss, revise, reopen and residual
    actions; ten mutation-specific daemon/tool kinds and their duplicate routing,
-   consent and cache-invalidation branches are deleted.
+   consent and cache-invalidation branches are deleted. The CLI exposes the
+   same `transfers gaps plan/apply --action ...` contract, and all three clients
+   consume one privacy-safe plan serializer owned by the review core.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 
