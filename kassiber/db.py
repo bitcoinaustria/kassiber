@@ -2222,6 +2222,8 @@ CREATE TABLE IF NOT EXISTS custody_components (
     conversion_metadata_json TEXT NOT NULL DEFAULT '{}',
     expected_leg_count INTEGER CHECK (expected_leg_count >= 0),
     expected_allocation_count INTEGER CHECK (expected_allocation_count >= 0),
+    expected_economic_term_count INTEGER
+        CHECK (expected_economic_term_count >= 0),
     expected_evidence_count INTEGER CHECK (expected_evidence_count >= 0),
     authored_source TEXT DEFAULT 'user',
     notes TEXT,
@@ -4267,6 +4269,9 @@ def ensure_schema_compat(conn):
     added_allocation_commitment = _ensure_column_no_commit(
         conn, "custody_components", "expected_allocation_count", "INTEGER"
     )
+    added_economic_term_commitment = _ensure_column_no_commit(
+        conn, "custody_components", "expected_economic_term_count", "INTEGER"
+    )
     added_evidence_commitment = _ensure_column_no_commit(
         conn, "custody_components", "expected_evidence_count", "INTEGER"
     )
@@ -4286,6 +4291,13 @@ def ensure_schema_compat(conn):
             "(SELECT COUNT(*) FROM custody_component_allocations a "
             " WHERE a.component_id = custody_components.id) "
             "WHERE expected_allocation_count IS NULL"
+        )
+    if added_economic_term_commitment:
+        conn.execute(
+            "UPDATE custody_components SET expected_economic_term_count = "
+            "(SELECT COUNT(*) FROM custody_component_economic_terms terms "
+            " WHERE terms.component_id = custody_components.id) "
+            "WHERE expected_economic_term_count IS NULL"
         )
     if added_authored_source:
         conn.execute(
@@ -4318,6 +4330,7 @@ def ensure_schema_compat(conn):
         added_anchor_column
         or added_leg_commitment
         or added_allocation_commitment
+        or added_economic_term_commitment
         or added_evidence_commitment
         or added_authored_source
         or migrated_evidence_commitments
@@ -4364,6 +4377,7 @@ def _ensure_custody_revision_immutability_triggers(conn):
         "trg_custody_component_evidence_revision_delete_immutable",
         "trg_custody_component_leg_count_commitment",
         "trg_custody_component_allocation_count_commitment",
+        "trg_custody_component_economic_term_count_commitment",
         "trg_custody_component_evidence_count_commitment",
     ):
         conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
@@ -4386,6 +4400,19 @@ def _ensure_custody_revision_immutability_triggers(conn):
           OR OLD.conversion_metadata_json IS NOT NEW.conversion_metadata_json
           OR OLD.expected_leg_count IS NOT NEW.expected_leg_count
           OR OLD.expected_allocation_count IS NOT NEW.expected_allocation_count
+          OR (
+              OLD.expected_economic_term_count IS NOT NEW.expected_economic_term_count
+              AND NOT (
+                  OLD.state = 'draft'
+                  AND NEW.state = 'draft'
+                  AND COALESCE(OLD.expected_economic_term_count, 0) = 0
+                  AND NEW.expected_economic_term_count >= 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM custody_component_economic_terms terms
+                      WHERE terms.component_id = OLD.id
+                  )
+              )
+          )
           OR (
               OLD.expected_evidence_count IS NOT NEW.expected_evidence_count
               AND NOT (
@@ -4566,6 +4593,31 @@ def _ensure_custody_revision_immutability_triggers(conn):
         )
         BEGIN
             SELECT RAISE(ABORT, 'custody_component_allocation_count_commitment');
+        END
+        """
+    )
+    conn.execute(
+        """
+        CREATE TRIGGER trg_custody_component_economic_term_count_commitment
+        BEFORE INSERT ON custody_component_economic_terms
+        WHEN NOT EXISTS (
+            SELECT 1 FROM custody_component_economic_terms current
+            WHERE current.id = NEW.id
+        )
+        AND
+        (
+            SELECT c.expected_economic_term_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        ) IS NOT NULL
+        AND (
+            SELECT COUNT(*) FROM custody_component_economic_terms terms
+            WHERE terms.component_id = NEW.component_id
+        ) >= (
+            SELECT c.expected_economic_term_count FROM custody_components c
+            WHERE c.id = NEW.component_id
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'custody_component_economic_term_count_commitment');
         END
         """
     )

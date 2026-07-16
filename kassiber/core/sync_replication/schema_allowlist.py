@@ -259,7 +259,8 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "component_type", "conservation_mode", "state", "evidence_kind",
             "evidence_grade", "conversion_policy", "conversion_reviewed",
             "expected_leg_count", "expected_allocation_count",
-            "expected_evidence_count", "authored_source", "notes",
+            "expected_economic_term_count", "expected_evidence_count",
+            "authored_source", "notes",
             "change_reason", "supersedes_component_id",
             "superseded_by_component_id", "activated_at", "superseded_at",
             "created_at",
@@ -271,7 +272,8 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "revision", "component_type", "conservation_mode", "state",
                 "evidence_kind", "evidence_grade", "conversion_policy",
                 "conversion_reviewed", "expected_leg_count",
-                "expected_allocation_count", "expected_evidence_count",
+                "expected_allocation_count", "expected_economic_term_count",
+                "expected_evidence_count",
                 "authored_source", "supersedes_component_id",
                 "superseded_by_component_id",
             }
@@ -282,14 +284,16 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "component_type", "conservation_mode", "evidence_kind",
                 "evidence_grade", "conversion_policy", "conversion_reviewed",
                 "expected_leg_count", "expected_allocation_count",
-                "expected_evidence_count", "authored_source", "notes",
+                "expected_economic_term_count", "expected_evidence_count",
+                "authored_source", "notes",
                 "supersedes_component_id", "created_at",
             }
         ),
         optional_columns=frozenset(
             {
                 "expected_leg_count", "expected_allocation_count",
-                "expected_evidence_count", "authored_source",
+                "expected_economic_term_count", "expected_evidence_count",
+                "authored_source",
             }
         ),
     ),

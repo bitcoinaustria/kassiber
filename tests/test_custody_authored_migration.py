@@ -8,7 +8,11 @@ import pytest
 from kassiber.core.custody_authored_migration import (
     backfill_legacy_authored_components,
 )
-from kassiber.core.custody_components import get_component
+from kassiber.core.custody_components import (
+    create_component,
+    get_component,
+    seal_component_economic_terms,
+)
 from kassiber.db import open_db
 
 
@@ -254,34 +258,95 @@ def test_component_aggregate_accepts_multiple_leg_bound_economic_terms(tmp_path)
     component_id = conn.execute(
         "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
     ).fetchone()[0]
-    original = conn.execute(
-        "SELECT * FROM custody_component_economic_terms WHERE component_id = ?",
-        (component_id,),
-    ).fetchone()
-    conn.execute(
-        """
-        INSERT INTO custody_component_economic_terms(
-            id, component_id, workspace_id, profile_id, ordinal,
-            source_leg_id, target_leg_id, term_kind, legacy_source_id,
-            source_row_hash, review_kind, tax_policy,
-            reviewed_source_amount_msat, created_at
-        ) VALUES('second-term', ?, 'ws', 'profile', 1, ?, ?,
-                 'transaction_pair', 'pair-2', ?, 'manual',
-                 'carrying-value', 100, ?)
-        """,
-        (
-            component_id,
-            original["source_leg_id"],
-            original["target_leg_id"],
-            "ef" * 32,
-            NOW,
-        ),
+    staged = get_component(conn, component_id)
+    aggregate_legs = [
+        {
+            **{
+                key: value
+                for key, value in leg.items()
+                if key
+                in {
+                    "role", "rail", "chain", "network", "asset", "exposure",
+                    "conservation_unit", "amount_msat", "valuation_unit",
+                    "valuation_amount", "occurred_at", "transaction_id",
+                    "anchor_transaction_id", "wallet_id", "location_ref", "notes",
+                }
+            },
+            "id": f"multi-leg-{index}",
+        }
+        for index, leg in enumerate(staged["legs"])
+    ]
+    aggregate = create_component(
+        conn,
+        workspace_id="ws",
+        profile_id="profile",
+        component_id="multi-term-component",
+        component_type=staged["component_type"],
+        conservation_mode=staged["conservation_mode"],
+        legs=aggregate_legs,
+        allocations=[
+            {
+                "source_ordinal": 0,
+                "sink_ordinal": 1,
+                "source_amount_msat": staged["allocations"][0][
+                    "source_amount_msat"
+                ],
+                "sink_amount_msat": staged["allocations"][0]["sink_amount_msat"],
+            }
+        ],
+        created_at=NOW,
     )
-    terms = get_component(conn, component_id)["economic_terms"]
+    source_leg_id = aggregate["legs"][0]["id"]
+    target_leg_id = aggregate["legs"][1]["id"]
+    seal_component_economic_terms(
+        conn,
+        aggregate["id"],
+        [
+            {
+                "id": "first-term",
+                "source_leg_id": source_leg_id,
+                "target_leg_id": target_leg_id,
+                "term_kind": "transaction_pair",
+                "legacy_source_id": "pair",
+                "source_row_hash": "ab" * 32,
+                "review_kind": "manual",
+                "tax_policy": "carrying-value",
+                "reviewed_source_amount_msat": 800,
+            },
+            {
+                "id": "second-term",
+                "source_leg_id": source_leg_id,
+                "target_leg_id": target_leg_id,
+                "term_kind": "transaction_pair",
+                "legacy_source_id": "pair-2",
+                "source_row_hash": "ef" * 32,
+                "review_kind": "manual",
+                "tax_policy": "carrying-value",
+                "reviewed_source_amount_msat": 100,
+            },
+        ],
+    )
+    terms = get_component(conn, aggregate["id"])["economic_terms"]
     assert [term["legacy_source_id"] for term in terms] == ["pair", "pair-2"]
+    assert get_component(conn, aggregate["id"])["expected_economic_term_count"] == 2
     with pytest.raises(sqlite3.IntegrityError, match="terms_immutable"):
         conn.execute(
             "UPDATE custody_component_economic_terms SET tax_policy = 'sale' "
             "WHERE id = 'second-term'"
         )
+    conn.execute(
+        "INSERT INTO custody_component_purge_authorizations(profile_id) "
+        "VALUES('profile')"
+    )
+    conn.execute(
+        "DELETE FROM custody_component_economic_terms WHERE id = 'second-term'"
+    )
+    conn.execute(
+        "DELETE FROM custody_component_purge_authorizations WHERE profile_id = 'profile'"
+    )
+    partial = get_component(conn, aggregate["id"])
+    assert partial["effective_state"] == "draft"
+    assert "component_economic_term_count_mismatch" in {
+        issue["code"] for issue in partial["validation"]["issues"]
+    }
     conn.close()

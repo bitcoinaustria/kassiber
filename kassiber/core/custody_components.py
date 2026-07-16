@@ -203,6 +203,28 @@ def _exact_nonnegative_int(value: Any, field: str) -> int:
     return parsed
 
 
+def _exact_optional_signed_int(value: Any, field: str) -> int | None:
+    if value is None:
+        return None
+    if type(value) is int:
+        parsed = value
+    elif isinstance(value, str) and re.fullmatch(r"-?[0-9]+", value):
+        parsed = int(value, 10)
+    else:
+        raise _error(
+            f"{field} must be an exact integer",
+            "custody_component_validation",
+            details={"field": field, "value": value},
+        )
+    if not -_SQLITE_MAX_INTEGER <= parsed <= _SQLITE_MAX_INTEGER:
+        raise _error(
+            f"{field} must fit SQLite's signed integer range",
+            "custody_component_validation",
+            details={"field": field, "value": value},
+        )
+    return parsed
+
+
 def _json_object(value: Any, field: str) -> dict[str, Any]:
     if value in (None, ""):
         return {}
@@ -437,6 +459,122 @@ def normalize_allocations(
     if len(ids) != len(set(ids)) or len(edges) != len(set(edges)):
         raise _error(
             "custody allocation ids and source/sink edges must be unique",
+            "custody_component_validation",
+        )
+    return normalized
+
+
+def normalize_economic_terms(
+    terms: Iterable[Mapping[str, Any]] | None,
+    legs: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    if terms is None:
+        return []
+    try:
+        raw_terms = list(terms)
+    except TypeError as exc:
+        raise _error(
+            "economic_terms must be a sequence",
+            "custody_component_validation",
+        ) from exc
+    by_id = {str(leg["id"]): leg for leg in legs}
+    by_ordinal = {int(leg["ordinal"]): leg for leg in legs}
+
+    def resolve_leg(
+        raw: Mapping[str, Any], kind: str, term_ordinal: int
+    ) -> Mapping[str, Any]:
+        leg_id = _optional_text(raw.get(f"{kind}_leg_id"), f"{kind}_leg_id")
+        if leg_id is not None:
+            leg = by_id.get(leg_id)
+        else:
+            raw_ordinal = raw.get(f"{kind}_ordinal")
+            leg = by_ordinal.get(raw_ordinal) if type(raw_ordinal) is int else None
+        if leg is None:
+            raise _error(
+                f"economic term {kind} leg was not found",
+                "custody_component_validation",
+                details={"term_ordinal": term_ordinal},
+            )
+        return leg
+
+    normalized: list[dict[str, Any]] = []
+    for ordinal, raw in enumerate(raw_terms):
+        if not isinstance(raw, Mapping):
+            raise _error(
+                "each economic term must be an object",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        source = resolve_leg(raw, "source", ordinal)
+        target = resolve_leg(raw, "target", ordinal)
+        if source["role"] != "source" or target["role"] == "source":
+            raise _error(
+                "economic terms must bind a source leg to a non-source leg",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        term_kind = _required_text(raw.get("term_kind"), "term_kind", token=True)
+        if term_kind not in {"transaction_pair", "direct_swap_payout"}:
+            raise _error(
+                "economic term kind is not supported",
+                "custody_component_validation",
+                details={"ordinal": ordinal, "term_kind": term_kind},
+            )
+        source_row_hash = _required_text(raw.get("source_row_hash"), "source_row_hash")
+        if not re.fullmatch(r"[0-9a-f]{64}", source_row_hash):
+            raise _error(
+                "source_row_hash must be lowercase SHA-256 hex",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        normalized.append(
+            {
+                "id": _optional_text(raw.get("id"), "id") or str(uuid.uuid4()),
+                "ordinal": ordinal,
+                "source_leg_id": source["id"],
+                "target_leg_id": target["id"],
+                "term_kind": term_kind,
+                "legacy_source_id": _required_text(
+                    raw.get("legacy_source_id"), "legacy_source_id"
+                ),
+                "source_row_hash": source_row_hash,
+                "review_kind": _required_text(raw.get("review_kind"), "review_kind"),
+                "tax_policy": _required_text(raw.get("tax_policy"), "tax_policy"),
+                "reviewed_source_amount_msat": _exact_optional_signed_int(
+                    raw.get("reviewed_source_amount_msat"),
+                    "reviewed_source_amount_msat",
+                ),
+                "swap_fee_msat": _exact_optional_signed_int(
+                    raw.get("swap_fee_msat"), "swap_fee_msat"
+                ),
+                "swap_fee_kind": _optional_text(raw.get("swap_fee_kind"), "swap_fee_kind"),
+                "confidence_at_review": _optional_text(
+                    raw.get("confidence_at_review"), "confidence_at_review"
+                ),
+                "review_source": _optional_text(raw.get("review_source"), "review_source"),
+                "payout_asset": _optional_text(raw.get("payout_asset"), "payout_asset"),
+                "payout_amount_msat": _exact_optional_signed_int(
+                    raw.get("payout_amount_msat"), "payout_amount_msat"
+                ),
+                "payout_occurred_at": _optional_text(
+                    raw.get("payout_occurred_at"), "payout_occurred_at"
+                ),
+                "payout_fiat_value_exact": _optional_text(
+                    raw.get("payout_fiat_value_exact"), "payout_fiat_value_exact"
+                ),
+                "payout_external_id": _optional_text(
+                    raw.get("payout_external_id"), "payout_external_id"
+                ),
+                "counterparty": _optional_text(raw.get("counterparty"), "counterparty"),
+            }
+        )
+    ids = [term["id"] for term in normalized]
+    identities = [
+        (term["term_kind"], term["legacy_source_id"]) for term in normalized
+    ]
+    if len(ids) != len(set(ids)) or len(identities) != len(set(identities)):
+        raise _error(
+            "economic term ids and legacy source identities must be unique",
             "custody_component_validation",
         )
     return normalized
@@ -1886,6 +2024,115 @@ def _insert_allocations(
     )
 
 
+def _insert_economic_terms(
+    conn: sqlite3.Connection,
+    *,
+    component_id: str,
+    workspace_id: str,
+    profile_id: str,
+    terms: Sequence[Mapping[str, Any]],
+    created_at: str,
+) -> None:
+    conn.executemany(
+        """
+        INSERT INTO custody_component_economic_terms(
+            id, component_id, workspace_id, profile_id, ordinal,
+            source_leg_id, target_leg_id, term_kind, legacy_source_id,
+            source_row_hash, review_kind, tax_policy,
+            reviewed_source_amount_msat, swap_fee_msat, swap_fee_kind,
+            confidence_at_review, review_source, payout_asset,
+            payout_amount_msat, payout_occurred_at, payout_fiat_value_exact,
+            payout_external_id, counterparty, created_at
+        ) VALUES(
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """,
+        [
+            (
+                term["id"], component_id, workspace_id, profile_id,
+                term["ordinal"], term["source_leg_id"], term["target_leg_id"],
+                term["term_kind"], term["legacy_source_id"],
+                term["source_row_hash"], term["review_kind"],
+                term["tax_policy"], term["reviewed_source_amount_msat"],
+                term["swap_fee_msat"], term["swap_fee_kind"],
+                term["confidence_at_review"], term["review_source"],
+                term["payout_asset"], term["payout_amount_msat"],
+                term["payout_occurred_at"], term["payout_fiat_value_exact"],
+                term["payout_external_id"], term["counterparty"], created_at,
+            )
+            for term in terms
+        ],
+    )
+
+
+def seal_component_economic_terms(
+    conn: sqlite3.Connection,
+    component_id: str,
+    terms: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Atomically commit the complete typed terms of one draft revision.
+
+    Ordinary custody components are created with an explicit zero-term
+    commitment. A pair/payout aggregate may replace that zero exactly once,
+    before activation and before any term row exists. Replication therefore
+    sees a header count that fails closed until every immutable term arrives.
+    """
+
+    row = _row(conn, component_id)
+    if row["state"] != "draft":
+        raise _error(
+            "economic terms can only be sealed on a draft component",
+            "custody_component_state_conflict",
+            details={"component_id": component_id, "state": row["state"]},
+        )
+    legs = [
+        _leg_dict(leg)
+        for leg in conn.execute(
+            "SELECT * FROM custody_component_legs "
+            "WHERE component_id = ? ORDER BY ordinal, id",
+            (component_id,),
+        ).fetchall()
+    ]
+    normalized = normalize_economic_terms(terms, legs)
+    existing_count = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM custody_component_economic_terms "
+            "WHERE component_id = ?",
+            (component_id,),
+        ).fetchone()[0]
+    )
+    if existing_count:
+        raise _error(
+            "economic terms are already sealed for this revision",
+            "custody_component_state_conflict",
+            details={"component_id": component_id, "count": existing_count},
+        )
+    expected = row["expected_economic_term_count"]
+    if expected not in (None, 0):
+        raise _error(
+            "economic term commitment is already fixed",
+            "custody_component_state_conflict",
+            details={"component_id": component_id, "expected": int(expected)},
+        )
+    with _savepoint(conn):
+        conn.execute(
+            "UPDATE custody_components SET expected_economic_term_count = ? "
+            "WHERE id = ? AND state = 'draft' "
+            "AND COALESCE(expected_economic_term_count, 0) = 0",
+            (len(normalized), component_id),
+        )
+        _insert_economic_terms(
+            conn,
+            component_id=component_id,
+            workspace_id=row["workspace_id"],
+            profile_id=row["profile_id"],
+            terms=normalized,
+            created_at=row["created_at"],
+        )
+    return get_component(conn, component_id)
+
+
 def _row(conn: sqlite3.Connection, component_id: str) -> sqlite3.Row:
     row = conn.execute(
         "SELECT * FROM custody_components WHERE id = ?", (component_id,)
@@ -3107,8 +3354,13 @@ def _materialize_component(
     commitment_issues: list[dict[str, Any]] = []
     expected_leg_count = row["expected_leg_count"]
     expected_allocation_count = row["expected_allocation_count"]
+    expected_economic_term_count = row["expected_economic_term_count"]
     expected_evidence_count = row["expected_evidence_count"]
-    if expected_leg_count is None or expected_allocation_count is None:
+    if (
+        expected_leg_count is None
+        or expected_allocation_count is None
+        or expected_economic_term_count is None
+    ):
         commitment_issues.append(
             {
                 "code": "component_content_commitment_missing",
@@ -3133,6 +3385,14 @@ def _materialize_component(
                     "code": "component_allocation_count_mismatch",
                     "expected": int(expected_allocation_count),
                     "actual": len(allocations),
+                }
+            )
+        if int(expected_economic_term_count) != len(economic_terms):
+            commitment_issues.append(
+                {
+                    "code": "component_economic_term_count_mismatch",
+                    "expected": int(expected_economic_term_count),
+                    "actual": len(economic_terms),
                 }
             )
     if commitment_issues:
@@ -3284,6 +3544,11 @@ def _materialize_component(
             if expected_allocation_count is None
             else int(expected_allocation_count)
         ),
+        "expected_economic_term_count": (
+            None
+            if expected_economic_term_count is None
+            else int(expected_economic_term_count)
+        ),
         "expected_evidence_count": (
             None
             if expected_evidence_count is None
@@ -3399,9 +3664,10 @@ def create_component(
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, authored_source, notes,
+                expected_leg_count, expected_allocation_count,
+                expected_economic_term_count, authored_source, notes,
                 change_reason, created_at
-            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
             """,
             (
                 component_id, lineage_id, workspace_id, profile_id, component_type,
@@ -3618,9 +3884,10 @@ def update_component(
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, authored_source, notes,
+                expected_leg_count, expected_allocation_count,
+                expected_economic_term_count, authored_source, notes,
                 change_reason, supersedes_component_id, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
             """,
             (
                 new_id, old["lineage_id"], old["workspace_id"], old["profile_id"],

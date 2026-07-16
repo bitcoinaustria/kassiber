@@ -2692,9 +2692,10 @@ class CustodyComponentApiTests(unittest.TestCase):
             INSERT INTO custody_components(
                 id, lineage_id, workspace_id, profile_id, revision,
                 component_type, state, expected_leg_count,
-                expected_allocation_count, created_at
+                expected_allocation_count, expected_economic_term_count,
+                created_at
             ) VALUES('remote', 'remote', 'ws', 'profile', 1,
-                     'native_transfer', 'active', 2, 0, ?)
+                     'native_transfer', 'active', 2, 0, 0, ?)
             """,
             (NOW,),
         )

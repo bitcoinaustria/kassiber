@@ -29,7 +29,12 @@ import uuid
 
 from ..errors import AppError
 from ..wallet_descriptors import normalize_asset_code
-from .custody_components import create_component, get_component, update_component
+from .custody_components import (
+    create_component,
+    get_component,
+    seal_component_economic_terms,
+    update_component,
+)
 from .custody_evidence import resolve_protocol_scope, row_boundary_amounts
 
 
@@ -407,56 +412,45 @@ def _insert_terms(
     term_kind: str,
     source_hash: str,
 ) -> None:
-    conn.execute(
-        """
-        INSERT INTO custody_component_economic_terms(
-            id, component_id, workspace_id, profile_id, ordinal,
-            source_leg_id, target_leg_id, term_kind, legacy_source_id,
-            source_row_hash, review_kind, tax_policy,
-            reviewed_source_amount_msat, swap_fee_msat, swap_fee_kind,
-            confidence_at_review, review_source, payout_asset,
-            payout_amount_msat, payout_occurred_at, payout_fiat_value_exact,
-            payout_external_id, counterparty, created_at
-        ) VALUES(
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        """,
-        (
-            _stable_id(
-                spec["component_id"],
-                "term",
-                term_kind,
-                str(_field(row, "id")),
-            ),
-            spec["component_id"],
-            _field(row, "workspace_id"),
-            _field(row, "profile_id"),
-            0,
-            spec["legs"][0]["id"],
-            spec["legs"][1]["id"],
-            term_kind,
-            _field(row, "id"),
-            source_hash,
-            str(_field(row, "kind")),
-            str(_field(row, "policy")),
-            spec["reviewed_source_amount_msat"],
-            _field(row, "swap_fee_msat"),
-            _field(row, "swap_fee_kind"),
-            _field(row, "confidence_at_pair"),
-            _field(row, "pair_source"),
-            _field(row, "payout_asset"),
-            (
-                None
-                if _field(row, "payout_amount") is None
-                else int(_field(row, "payout_amount"))
-            ),
-            _field(row, "payout_occurred_at"),
-            _canonical_float(_field(row, "payout_fiat_value")),
-            _field(row, "payout_external_id"),
-            _field(row, "counterparty"),
-            _field(row, "created_at"),
-        ),
+    seal_component_economic_terms(
+        conn,
+        spec["component_id"],
+        [
+            {
+                "id": _stable_id(
+                    spec["component_id"],
+                    "term",
+                    term_kind,
+                    str(_field(row, "id")),
+                ),
+                "source_leg_id": spec["legs"][0]["id"],
+                "target_leg_id": spec["legs"][1]["id"],
+                "term_kind": term_kind,
+                "legacy_source_id": str(_field(row, "id")),
+                "source_row_hash": source_hash,
+                "review_kind": str(_field(row, "kind")),
+                "tax_policy": str(_field(row, "policy")),
+                "reviewed_source_amount_msat": spec[
+                    "reviewed_source_amount_msat"
+                ],
+                "swap_fee_msat": _field(row, "swap_fee_msat"),
+                "swap_fee_kind": _field(row, "swap_fee_kind"),
+                "confidence_at_review": _field(row, "confidence_at_pair"),
+                "review_source": _field(row, "pair_source"),
+                "payout_asset": _field(row, "payout_asset"),
+                "payout_amount_msat": (
+                    None
+                    if _field(row, "payout_amount") is None
+                    else int(_field(row, "payout_amount"))
+                ),
+                "payout_occurred_at": _field(row, "payout_occurred_at"),
+                "payout_fiat_value_exact": _canonical_float(
+                    _field(row, "payout_fiat_value")
+                ),
+                "payout_external_id": _field(row, "payout_external_id"),
+                "counterparty": _field(row, "counterparty"),
+            }
+        ],
     )
 
 
