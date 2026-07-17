@@ -383,7 +383,8 @@ class ElectrumClient:
                 # The Electrum server message is untrusted free text that can
                 # echo a txid/amount; pseudonymize at the source.
                 raise AppError(
-                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                    f"Electrum call {method} failed {redact_operational_text(detail)}",
+                    code="electrum_rpc_error",
                 )
             return message.get("result")
 
@@ -442,7 +443,8 @@ class ElectrumClient:
                 # The Electrum server message is untrusted free text that can
                 # echo a txid/amount; pseudonymize at the source.
                 raise AppError(
-                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                    f"Electrum call {method} failed {redact_operational_text(detail)}",
+                    code="electrum_rpc_error",
                 )
             results[index] = message.get("result")
             remaining -= 1
@@ -580,12 +582,17 @@ class _ElectrumBatchDispatcher:
                         combined_results = execute_requests(combined)
                     except Exception as combined_error:
                         discard_client()
-                        if len(pending_calls) == 1:
-                            pending_calls[0]["error"] = combined_error
-                        else:
+                        can_isolate_rpc_error = (
+                            len(pending_calls) > 1
+                            and isinstance(combined_error, AppError)
+                            and combined_error.code == "electrum_rpc_error"
+                        )
+                        if can_isolate_rpc_error:
                             # Read-only Electrum calls are safe to retry. Split a
-                            # failed coalesced batch back into its logical callers
-                            # so one RPC error cannot contaminate another wallet.
+                            # request-level RPC error back into its logical callers
+                            # so one rejected request cannot contaminate another
+                            # wallet. Transport/session failures affect the whole
+                            # connection and must not multiply timeouts per caller.
                             for pending in pending_calls:
                                 try:
                                     pending["result"] = execute_requests(
@@ -594,6 +601,9 @@ class _ElectrumBatchDispatcher:
                                 except Exception as exc:
                                     pending["error"] = exc
                                     discard_client()
+                        else:
+                            for pending in pending_calls:
+                                pending["error"] = combined_error
                     else:
                         offset = 0
                         for pending in pending_calls:
