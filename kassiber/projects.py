@@ -74,7 +74,6 @@ WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
         "custody_gap_candidate_projections",
         "custody_gap_candidates",
         "custody_gap_candidate_boundaries",
-        "custody_gap_projection_rows",
         "custody_components",
         "custody_component_legs",
         "custody_component_allocations",

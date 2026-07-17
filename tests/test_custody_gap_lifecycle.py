@@ -566,9 +566,11 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self.assertEqual(roles["destination"], 99 * BTC // 10)
         self.assertEqual(roles["suspense"], BTC // 10)
         self.assertEqual(roles["fee"], 10_000_000)
-        history = custody_gaps.build_gap_snapshot(self.conn, "profile")
+        history = custody_gaps.build_gap_snapshot(
+            self.conn, "profile", gap_id=candidate.gap_id
+        )
         self.assertEqual(history["gaps"][0]["status"], "resolved")
-        self.assertEqual(history["summary"]["resolved"], 1)
+        self.assertEqual(history["summary"]["resolved"], 0)
         self.assertEqual(
             history["gaps"][0]["correction"],
             {
@@ -982,9 +984,11 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.conn.commit()
 
-        snapshot = custody_gaps.build_gap_snapshot(self.conn, "profile")
+        snapshot = custody_gaps.build_gap_snapshot(
+            self.conn, "profile", gap_id=candidate.gap_id
+        )
 
-        self.assertEqual(snapshot["summary"]["total"], 1)
+        self.assertEqual(snapshot["summary"]["total"], 0)
         self.assertEqual(snapshot["gaps"][0]["gap_id"], candidate.gap_id)
         self.assertEqual(snapshot["gaps"][0]["status"], "conflicting")
         self.assertIn("status_reason", snapshot["gaps"][0])
@@ -1009,7 +1013,9 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.conn.commit()
 
-        snapshot = custody_gaps.build_gap_snapshot(self.conn, "profile")
+        snapshot = custody_gaps.build_gap_snapshot(
+            self.conn, "profile", gap_id=candidate.gap_id
+        )
 
         self.assertEqual(snapshot["summary"]["total"], 1)
         self.assertEqual(snapshot["gaps"][0]["gap_id"], candidate.gap_id)
@@ -1109,7 +1115,9 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.assertNotIn('"out"', json.dumps(history))
         self.assertNotIn('"return"', json.dumps(history))
-        snapshot = custody_gaps.build_gap_snapshot(self.conn, "profile")
+        snapshot = custody_gaps.build_gap_snapshot(
+            self.conn, "profile", gap_id=candidate.gap_id
+        )
         self.assertEqual(snapshot["gaps"][0]["status"], "resolved")
 
     def test_retained_residual_is_internal_reviewed_without_fake_observation(self):

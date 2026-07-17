@@ -743,7 +743,6 @@ NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset(
         "custody_gap_candidate_projections",
         "custody_gap_candidates",
         "custody_gap_candidate_boundaries",
-        "custody_gap_projection_rows",
         "journal_entries",
         "journal_quarantines",
         "journal_tax_summary",

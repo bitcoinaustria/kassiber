@@ -1364,6 +1364,8 @@ CREATE TABLE IF NOT EXISTS custody_gap_candidates (
     competitor_score_margin INTEGER,
     conflict_set_id TEXT NOT NULL,
     conflict_size INTEGER NOT NULL CHECK(conflict_size >= 1),
+    affected_disposals INTEGER NOT NULL DEFAULT 0 CHECK(affected_disposals >= 0),
+    affected_years_json TEXT NOT NULL DEFAULT '[]',
     PRIMARY KEY(projection_id, gap_id),
     UNIQUE(projection_id, ordinal)
 );
@@ -1386,26 +1388,6 @@ CREATE TABLE IF NOT EXISTS custody_gap_candidate_boundaries (
 
 CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_boundaries_transaction
     ON custody_gap_candidate_boundaries(transaction_id, projection_id, gap_id);
-
--- Privacy-safe presentation rows are materialized once from the normalized
--- candidate projection plus immutable review history. Keyset reads never
--- rerun matching or deserialize an entire page population.
-CREATE TABLE IF NOT EXISTS custody_gap_projection_rows (
-    projection_id TEXT NOT NULL
-        REFERENCES custody_gap_candidate_projections(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    sort_group INTEGER NOT NULL CHECK(sort_group IN (0, 1)),
-    ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
-    gap_id TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    PRIMARY KEY(projection_id, gap_id),
-    UNIQUE(projection_id, sort_group, ordinal, gap_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_custody_gap_projection_rows_page
-    ON custody_gap_projection_rows(
-        projection_id, sort_group, ordinal, gap_id
-    );
 
 CREATE TRIGGER IF NOT EXISTS trg_custody_gap_reviews_immutable
 BEFORE UPDATE ON custody_gap_reviews
@@ -4250,6 +4232,31 @@ def ensure_schema_compat(conn):
     # rows. They carry no authored evidence or rollback history and are safe to
     # remove atomically on open.
     conn.execute("DROP TABLE IF EXISTS custody_gap_candidate_snapshots")
+    conn.execute("DROP TABLE IF EXISTS custody_gap_projection_rows")
+    gap_candidate_columns = {
+        row["name"]
+        for row in conn.execute(
+            "PRAGMA table_info(custody_gap_candidates)"
+        ).fetchall()
+    }
+    gap_projection_rebuild = bool(gap_candidate_columns) and not {
+        "affected_disposals",
+        "affected_years_json",
+    }.issubset(gap_candidate_columns)
+    ensure_column(
+        conn,
+        "custody_gap_candidates",
+        "affected_disposals",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(
+        conn,
+        "custody_gap_candidates",
+        "affected_years_json",
+        "TEXT NOT NULL DEFAULT '[]'",
+    )
+    if gap_projection_rebuild:
+        conn.execute("DELETE FROM custody_gap_candidate_projections")
     ensure_column(
         conn,
         "chain_observer_instances",

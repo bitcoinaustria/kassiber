@@ -808,7 +808,7 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                 gap = next(
                     item
                     for item in custody_gaps.build_gap_snapshot(
-                        book.conn, "profile"
+                        book.conn, "profile", gap_id=candidate.gap_id
                     )["gaps"]
                     if item["gap_id"] == candidate.gap_id
                 )

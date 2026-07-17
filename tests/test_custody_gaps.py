@@ -43,6 +43,13 @@ class CustodyGapLegacySchemaMigrationTests(unittest.TestCase):
                 "INSERT INTO custody_gap_candidate_snapshots VALUES "
                 "('legacy', 'profile', '[]', '{}', '[]')"
             )
+            conn.execute(
+                "CREATE TABLE custody_gap_projection_rows ("
+                "projection_id TEXT, payload_json TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO custody_gap_projection_rows VALUES ('legacy', '{}')"
+            )
             conn.commit()
             conn.close()
 
@@ -55,6 +62,13 @@ class CustodyGapLegacySchemaMigrationTests(unittest.TestCase):
                         "AND name = 'custody_gap_candidate_snapshots'"
                     ).fetchone()
                 )
+                self.assertIsNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' "
+                        "AND name = 'custody_gap_projection_rows'"
+                    ).fetchone()
+                )
                 self.assertIsNotNone(
                     migrated.execute(
                         "SELECT 1 FROM sqlite_master "
@@ -62,6 +76,14 @@ class CustodyGapLegacySchemaMigrationTests(unittest.TestCase):
                         "AND name = 'custody_gap_candidates'"
                     ).fetchone()
                 )
+                candidate_columns = {
+                    row["name"]
+                    for row in migrated.execute(
+                        "PRAGMA table_info(custody_gap_candidates)"
+                    ).fetchall()
+                }
+                self.assertIn("affected_disposals", candidate_columns)
+                self.assertIn("affected_years_json", candidate_columns)
             finally:
                 migrated.close()
 
@@ -1133,24 +1155,18 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 confidence TEXT NOT NULL, reason_codes_json TEXT NOT NULL,
                 promotion_eligible INTEGER NOT NULL, competitor_score_margin INTEGER,
                 conflict_set_id TEXT NOT NULL, conflict_size INTEGER NOT NULL,
+                affected_disposals INTEGER NOT NULL DEFAULT 0,
+                affected_years_json TEXT NOT NULL DEFAULT '[]',
                 PRIMARY KEY(projection_id, gap_id), UNIQUE(projection_id, ordinal)
             );
+            CREATE INDEX idx_custody_gap_candidates_page
+                ON custody_gap_candidates(projection_id, visible, ordinal, gap_id);
             CREATE TABLE custody_gap_candidate_boundaries (
                 projection_id TEXT NOT NULL, profile_id TEXT NOT NULL,
                 gap_id TEXT NOT NULL, side TEXT NOT NULL, ordinal INTEGER NOT NULL,
                 transaction_id TEXT NOT NULL,
                 PRIMARY KEY(projection_id, gap_id, side, ordinal)
             );
-            CREATE TABLE custody_gap_projection_rows (
-                projection_id TEXT NOT NULL, profile_id TEXT NOT NULL,
-                sort_group INTEGER NOT NULL, ordinal INTEGER NOT NULL,
-                gap_id TEXT NOT NULL, payload_json TEXT NOT NULL,
-                PRIMARY KEY(projection_id, gap_id)
-            );
-            CREATE INDEX idx_custody_gap_projection_rows_page
-                ON custody_gap_projection_rows(
-                    projection_id, sort_group, ordinal, gap_id
-                );
             """
         )
         self.conn.execute("INSERT INTO profiles(id) VALUES ('profile-one')")
@@ -1218,7 +1234,7 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         self.assertNotIn("address", gap)
 
     def test_snapshot_persists_normalized_projection_not_serialized_page(self):
-        first = build_gap_snapshot(self.conn, "profile-one")
+        build_gap_snapshot(self.conn, "profile-one")
         projection = self.conn.execute(
             "SELECT id, search_complete, display_ready "
             "FROM custody_gap_candidate_projections WHERE profile_id = ?",
@@ -1243,13 +1259,18 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             ).fetchone()[0],
             2,
         )
-        self.assertEqual(
+        candidate = self.conn.execute(
+            "SELECT affected_disposals, affected_years_json "
+            "FROM custody_gap_candidates WHERE projection_id = ?",
+            (projection["id"],),
+        ).fetchone()
+        self.assertEqual(int(candidate["affected_disposals"]), 1)
+        self.assertEqual(json.loads(candidate["affected_years_json"]), [2022])
+        self.assertIsNone(
             self.conn.execute(
-                "SELECT COUNT(*) FROM custody_gap_projection_rows "
-                "WHERE projection_id = ?",
-                (projection["id"],),
-            ).fetchone()[0],
-            len(first["gaps"]),
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'custody_gap_projection_rows'"
+            ).fetchone()
         )
 
     def test_normalized_projection_persists_excess_return_candidate(self):
@@ -1471,19 +1492,16 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         plan = self.conn.execute(
             """
             EXPLAIN QUERY PLAN
-            SELECT sort_group, ordinal, gap_id, payload_json
-            FROM custody_gap_projection_rows
-            WHERE projection_id = ?
-              AND (sort_group > ?
-                   OR (sort_group = ? AND ordinal > ?)
-                   OR (sort_group = ? AND ordinal = ? AND gap_id > ?))
-            ORDER BY sort_group, ordinal, gap_id
+            SELECT * FROM custody_gap_candidates
+            WHERE projection_id = ? AND visible = 1
+              AND (ordinal > ? OR (ordinal = ? AND gap_id > ?))
+            ORDER BY ordinal, gap_id
             LIMIT ?
             """,
-            (projection_id, 0, 0, 0, 0, 0, "", 101),
+            (projection_id, 0, 0, "", 101),
         ).fetchall()
         detail = " ".join(str(row[3]) for row in plan)
-        self.assertIn("idx_custody_gap_projection_rows_page", detail)
+        self.assertIn("idx_custody_gap_candidates_page", detail)
 
     def test_book_above_50k_rows_still_surfaces_structured_boundary(self):
         self.conn.executemany(
@@ -1585,7 +1603,7 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         self.assertEqual(len(snapshot["gaps"]), 2)
         self.assertEqual({gap["status"] for gap in snapshot["gaps"]}, {"conflicting"})
 
-    def test_snapshot_pages_actionable_candidates_before_reviewed_rows(self):
+    def test_snapshot_pages_in_stable_normalized_projection_order(self):
         self.conn.execute(
             """
             INSERT INTO transactions(
@@ -1617,87 +1635,49 @@ class CustodyGapSnapshotTests(unittest.TestCase):
 
         self.assertEqual(snapshot["summary"]["needs_review"], 1)
         self.assertEqual(snapshot["summary"]["dismissed"], 1)
-        self.assertEqual(snapshot["gaps"][0]["gap_id"], actionable_id)
-        self.assertEqual(snapshot["gaps"][0]["status"], "needs_review")
+        self.assertEqual(snapshot["gaps"][0]["gap_id"], candidates[0].gap_id)
+        self.assertEqual(snapshot["gaps"][0]["status"], "dismissed")
 
-    def test_snapshot_cursor_reaches_every_actionable_gap_after_first_page(self):
-        actionable = [
-            {
-                "gap_id": f"gap-{index:03d}",
-                "status": "needs_review",
-                "asset": "BTC",
-                "residual_msat": BTC_MSAT,
-            }
-            for index in range(101)
-        ]
-        reviewed = [
-            {
-                "gap_id": f"reviewed-{index:03d}",
-                "status": "dismissed",
-                "asset": "BTC",
-                "residual_msat": 0,
-            }
-            for index in range(5)
-        ]
-        historical = [*reviewed, *actionable]
-        self.conn.execute("DELETE FROM transactions WHERE profile_id = 'profile-one'")
+    def test_snapshot_cursor_reaches_every_normalized_candidate(self):
         self.conn.execute(
-            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
-            "WHERE id = 'profile-one'"
-        )
-        with (
-            patch(
-                "kassiber.core.custody_gap_reviews.latest_reviews",
-                return_value={},
-            ),
-            patch(
-                "kassiber.core.custody_gap_reviews.historical_review_gaps",
-                return_value=historical,
-            ),
-        ):
-            self.conn.commit()
-            first = build_gap_snapshot(self.conn, "profile-one", limit=100)
-            self.assertFalse(self.conn.in_transaction)
-            second = build_gap_snapshot(
-                self.conn,
-                "profile-one",
-                limit=100,
-                cursor=first["next_cursor"],
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind
+            ) VALUES (
+                'competing-return', 'profile-one', 'new',
+                '2021-02-01T00:00:00Z', '2021-02-01T00:00:00Z', 'inbound',
+                'BTC', ?, 0, 0, 0, ''
             )
-
-        self.assertEqual(first["summary"]["total"], 106)
-        self.assertEqual(first["summary"]["needs_review"], 101)
-        self.assertRegex(first["next_cursor"], r"^cgp1\.[A-Za-z0-9_-]+$")
-        self.assertTrue(all(gap["status"] == "needs_review" for gap in first["gaps"]))
-        self.assertEqual(second["gaps"][0]["gap_id"], "gap-100")
-        self.assertEqual(
-            [gap["gap_id"] for gap in second["gaps"][1:]],
-            [f"reviewed-{index:03d}" for index in range(5)],
+            """,
+            (99 * BTC_MSAT // 10,),
         )
+        self.conn.commit()
+        first = build_gap_snapshot(self.conn, "profile-one", limit=1)
+        second = build_gap_snapshot(
+            self.conn, "profile-one", limit=1, cursor=first["next_cursor"]
+        )
+
+        self.assertEqual(first["summary"]["total"], 2)
+        self.assertRegex(first["next_cursor"], r"^cgp2\.[A-Za-z0-9_-]+$")
+        self.assertNotEqual(first["gaps"][0]["gap_id"], second["gaps"][0]["gap_id"])
         self.assertIsNone(second["next_cursor"])
 
     def test_snapshot_cursor_expires_when_journal_input_changes(self):
-        historical = [
-            {
-                "gap_id": f"gap-{index}",
-                "status": "needs_review",
-                "asset": "BTC",
-                "residual_msat": 0,
-            }
-            for index in range(2)
-        ]
-        self.conn.execute("DELETE FROM transactions WHERE profile_id = 'profile-one'")
-        with (
-            patch(
-                "kassiber.core.custody_gap_reviews.latest_reviews",
-                return_value={},
-            ),
-            patch(
-                "kassiber.core.custody_gap_reviews.historical_review_gaps",
-                return_value=historical,
-            ),
-        ):
-            first = build_gap_snapshot(self.conn, "profile-one", limit=1)
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind
+            ) VALUES (
+                'competing-return', 'profile-one', 'new',
+                '2021-02-01T00:00:00Z', '2021-02-01T00:00:00Z', 'inbound',
+                'BTC', ?, 0, 0, 0, ''
+            )
+            """,
+            (99 * BTC_MSAT // 10,),
+        )
+        first = build_gap_snapshot(self.conn, "profile-one", limit=1)
 
         self.conn.execute(
             "UPDATE profiles SET journal_input_version = journal_input_version + 1 "

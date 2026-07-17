@@ -379,8 +379,8 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                 proc,
                 {
                     "request_id": "gap-refresh",
-                    "kind": "ui.custody.gaps.list",
-                    "args": scope,
+                    "kind": "ui.custody.gaps.review_context",
+                    "args": {**scope, "gap_id": gap["gap_id"]},
                 },
             )["data"]
             self.assertEqual(refreshed["gaps"][0]["status"], "resolved")

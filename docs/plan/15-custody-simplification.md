@@ -152,8 +152,11 @@ binary.
    holds and typed issues, never a source-to-target claim. The normalized
    projection is also complete: accounting/review consumers share one
    input-version/ignored-boundary projection, completeness lives on its header,
-   boundary relations are normalized, and presentation pages use indexed
-   keyset rows without rerunning discovery. Planning is now one read-only
+   boundary relations and downstream impact are normalized, and list pages
+   keyset directly over those candidate rows without serialized page payloads
+   or rerunning discovery. Reviewed records that leave the current candidate
+   population remain available through point lookup and immutable history.
+   Planning is now one read-only
    `plan_review` seam for create/revise/reopen/residual actions; it commits the
    current journal input version, exact deterministic component rows and filed
    report impacts. One `apply_review` seam replans and rejects any fingerprint
@@ -214,10 +217,12 @@ binary.
    The unused specialized component-create CLI/daemon path is deleted as well;
    one-component authoring uses the same pure fingerprinted batch plan/apply
    path as N:M authoring.
-   The serialized `custody_gap_candidate_snapshots` cache is physically dropped
-   on open and removed from new schemas, reset accounting, replication policy
-   and workspace-split metadata; normalized candidate/projection rows are now
-   the only persisted gap-discovery population.
+   The serialized `custody_gap_candidate_snapshots` and
+   `custody_gap_projection_rows` caches are physically dropped on open and
+   removed from new schemas, reset accounting, replication policy and
+   workspace-split metadata. Normalized candidate/projection rows are now the
+   only persisted gap-discovery population, and every page uses the indexed
+   `(projection_id, visible, ordinal, gap_id)` keyset.
    Capacity-limited gap discovery now returns `CustodyGapSearchResult` with
    explicit completeness, limit, partial-population and scoped-blocker fields;
    `CustodyGapSearchLimitError` and all exception-carried partial results are
@@ -356,6 +361,16 @@ with no temporary page sort. The once-per-version gap projection completed in
 54ms, retained the structured 10 BTC out / 9.9 BTC return scenario, and reported
 ordinary `capacity_limited` completeness rather than throwing or implying a
 complete wallet universe.
+
+A complete measured 250k run produced 125k decisions with zero issues in
+**37.16s**, below the 40s budget. Peak RSS was 1,769,316 KiB; atomic arbitration
+was 0.241s, first/subsequent lineage pages were 12.5ms/7.7ms, transaction-scoped
+lineage was 0.41ms, and once-per-version gap discovery was 0.173s. Because the
+250k run already consumed about 1.7 GiB, 500k and 1m are documented rather than
+claimed as measured on this host: linear extrapolation from the measured 250k
+run is approximately 74.3s and 148.6s respectively, inside the time budgets,
+but those estimates are non-blocking until measured on a host with sufficient
+memory.
 
 ## Stop state
 

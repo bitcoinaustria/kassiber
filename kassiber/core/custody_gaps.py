@@ -468,7 +468,7 @@ def _read_projection_page(
     projection_id: str,
     *,
     limit: int,
-    after: tuple[int, int, str] | None = None,
+    after: tuple[int, str] | None = None,
     gap_id: str | None = None,
 ) -> dict[str, Any]:
     header = conn.execute(
@@ -489,84 +489,105 @@ def _read_projection_page(
     ):
         raise ValueError("cursor expired because journal readiness changed")
     params: list[Any] = [projection_id]
-    where = "projection_id = ?"
+    where = "projection_id = ? AND visible = 1"
     if gap_id is not None:
         where += " AND gap_id = ?"
         params.append(gap_id)
     elif after is not None:
-        sort_group, ordinal, last_gap_id = after
+        ordinal, last_gap_id = after
         where += (
-            " AND (sort_group > ? OR "
-            "(sort_group = ? AND ordinal > ?) OR "
-            "(sort_group = ? AND ordinal = ? AND gap_id > ?))"
+            " AND (ordinal > ? OR "
+            "(ordinal = ? AND gap_id > ?))"
         )
-        params.extend(
-            (sort_group, sort_group, ordinal, sort_group, ordinal, last_gap_id)
-        )
+        params.extend((ordinal, ordinal, last_gap_id))
     rows = conn.execute(
-        "SELECT sort_group, ordinal, gap_id, payload_json "
-        "FROM custody_gap_projection_rows WHERE "
+        "SELECT * FROM custody_gap_candidates WHERE "
         + where
-        + " ORDER BY sort_group, ordinal, gap_id LIMIT ?",
+        + " ORDER BY ordinal, gap_id LIMIT ?",
         (*params, limit + 1),
     ).fetchall()
     visible = rows[:limit]
+    boundaries: dict[tuple[str, str], list[str]] = {}
+    if visible:
+        gap_ids = [str(row["gap_id"]) for row in visible]
+        placeholders = ",".join("?" for _ in gap_ids)
+        for boundary in conn.execute(
+            "SELECT gap_id, side, transaction_id "
+            "FROM custody_gap_candidate_boundaries "
+            f"WHERE projection_id = ? AND gap_id IN ({placeholders}) "
+            "ORDER BY gap_id, side, ordinal",
+            (projection_id, *gap_ids),
+        ).fetchall():
+            boundaries.setdefault(
+                (str(boundary["gap_id"]), str(boundary["side"])), []
+            ).append(str(boundary["transaction_id"]))
+    frozen_boundaries = {
+        key: tuple(transaction_ids)
+        for key, transaction_ids in boundaries.items()
+    }
+    from . import custody_gap_reviews
+
+    reviews = custody_gap_reviews.latest_reviews(conn, profile_id)
+    gaps: list[dict[str, Any]] = []
+    for row in visible:
+        candidate = _candidate_from_row(row, frozen_boundaries)
+        gap = _snapshot_gap(candidate, ())
+        gap["downstream"] = {
+            "affected_disposals": int(row["affected_disposals"] or 0),
+            "affected_years": list(json.loads(row["affected_years_json"] or "[]")),
+        }
+        gap["candidate_fingerprint"] = custody_gap_reviews.candidate_fingerprint(
+            candidate
+        )
+        review = reviews.get(candidate.gap_id)
+        state = custody_gap_reviews.review_state(conn, candidate, review)
+        gap["status"] = state["status"]
+        if state["reason"]:
+            gap["status_reason"] = state["reason"]
+        if state.get("native_support_status"):
+            gap["native_support_status"] = state["native_support_status"]
+        if review and review.get("action") == "resolved":
+            gap["correction"] = {
+                "component_id": str(review.get("component_id") or ""),
+                "strategy": "create_revision_then_activate",
+            }
+        gaps.append(gap)
+    if gap_id is not None and not gaps:
+        # Current candidate pages contain only the normalized population. A
+        # point lookup may still need an immutable reviewed snapshot after an
+        # activated component removes that candidate from discovery.
+        gaps = [
+            gap
+            for gap in custody_gap_reviews.historical_review_gaps(conn, profile_id)
+            if gap.get("gap_id") == gap_id
+        ][:1]
     next_cursor = None
     if len(rows) > limit and visible:
         last = visible[-1]
         next_cursor = _encode_projection_cursor(
             projection_id,
-            int(last["sort_group"]),
             int(last["ordinal"]),
             str(last["gap_id"]),
         )
     return {
         "summary": dict(json.loads(header["summary_json"])),
-        "gaps": [dict(json.loads(row["payload_json"])) for row in visible],
+        "gaps": gaps,
         "next_cursor": next_cursor,
     }
 
 
-def _store_projection_display(
+def _store_projection_summary(
     conn: sqlite3.Connection,
     profile_id: str,
     projection_id: str,
     *,
     display_context: str,
     summary: Mapping[str, Any],
-    gaps: Sequence[Mapping[str, Any]],
 ) -> None:
     owns_transaction = not conn.in_transaction
-    savepoint = "custody_gap_display_write"
+    savepoint = "custody_gap_summary_write"
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
-        conn.execute(
-            "DELETE FROM custody_gap_projection_rows WHERE projection_id = ?",
-            (projection_id,),
-        )
-        group_ordinals = [0, 0]
-        for gap in gaps:
-            sort_group = (
-                0 if gap.get("status") in {"needs_review", "conflicting"} else 1
-            )
-            ordinal = group_ordinals[sort_group]
-            group_ordinals[sort_group] += 1
-            conn.execute(
-                """
-                INSERT INTO custody_gap_projection_rows(
-                    projection_id, profile_id, sort_group, ordinal,
-                    gap_id, payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    projection_id,
-                    profile_id,
-                    sort_group,
-                    ordinal,
-                    str(gap.get("gap_id") or ""),
-                    json.dumps(gap, sort_keys=True, separators=(",", ":")),
-                ),
-            )
         conn.execute(
             "UPDATE custody_gap_candidate_projections "
             "SET summary_json = ?, display_ready = 1, display_context = ? "
@@ -593,7 +614,7 @@ def _display_context(
     profile_id: str,
     journal_status: str,
 ) -> str:
-    """Version presentation rows without invalidating candidate evidence."""
+    """Version the derived summary without invalidating candidate evidence."""
 
     try:
         review_version = conn.execute(
@@ -626,10 +647,9 @@ def build_gap_snapshot(
 
     This adapter reads only imported transaction/wallet labels and existing
     authored claims.  It never exposes addresses, scripts, descriptors, xpubs,
-    raw transaction graphs, or wallet configuration. It reads the shared
-    normalized candidate projection and materializes privacy-safe rows so
-    subsequent keyset pages neither rerun nor reorder discovery; this cache is
-    replaceable and never authored evidence.
+    raw transaction graphs, or wallet configuration. It reads and pages the
+    shared normalized candidate projection directly, so subsequent keyset
+    pages neither rerun nor reorder discovery.
     ``summary.search_complete`` says whether the bounded population is complete;
     ``gaps`` is the requested page and ``next_cursor`` continues that
     deterministic order.
@@ -650,15 +670,13 @@ def build_gap_snapshot(
         raise ValueError("cursor is not supported when gap_id is provided")
 
     if cursor is not None:
-        projection_id, sort_group, ordinal, last_gap_id = (
-            _decode_projection_cursor(cursor)
-        )
+        projection_id, ordinal, last_gap_id = _decode_projection_cursor(cursor)
         return _read_projection_page(
             conn,
             profile_id,
             projection_id,
             limit=limit,
-            after=(sort_group, ordinal, last_gap_id),
+            after=(ordinal, last_gap_id),
         )
 
     journal_status = _journal_status(conn, profile_id)
@@ -715,24 +733,6 @@ def build_gap_snapshot(
                 "strategy": "create_revision_then_activate",
             }
         current_gaps.append(gap)
-    historical = custody_gap_reviews.historical_review_gaps(
-        conn,
-        profile_id,
-        exclude_gap_ids=[candidate.gap_id for candidate in candidates],
-    )
-    # Review state is known only after matching.  Page unresolved work first
-    # so high-scoring dismissed/resolved rows cannot starve lower-scoring
-    # needs-review or conflicting rows from a bounded desktop/AI response.
-    # Python's stable sort preserves deterministic matcher/history order
-    # within each group.
-    all_gaps = sorted(
-        [*current_gaps, *historical],
-        key=lambda gap: (
-            0
-            if gap.get("status") in {"needs_review", "conflicting"}
-            else 1
-        ),
-    )
     residual_by_cluster: dict[tuple[str, str], int] = {}
     for candidate, gap in zip(candidates, current_gaps):
         status = gap["status"]
@@ -768,11 +768,11 @@ def build_gap_snapshot(
     ]
     candidate_residual_msat = candidate_residual_by_asset_map.get("BTC", 0)
     counts = {
-        status: sum(gap.get("status") == status for gap in all_gaps)
+        status: sum(gap.get("status") == status for gap in current_gaps)
         for status in ("needs_review", "conflicting", "resolved", "dismissed")
     }
     summary = {
-        "total": len(candidates) + len(historical),
+        "total": len(candidates),
         **counts,
         "unresolved_msat": (
             canonical_unresolved_msat
@@ -802,13 +802,12 @@ def build_gap_snapshot(
             else search_result.candidate_count
         ),
     }
-    _store_projection_display(
+    _store_projection_summary(
         conn,
         profile_id,
         projection_id,
         display_context=display_context,
         summary=summary,
-        gaps=all_gaps,
     )
     return _read_projection_page(
         conn,
@@ -1045,6 +1044,7 @@ def _persist_candidate_projection(
     accounting_ignored_ids: Sequence[str],
     producer_kind: str,
     result: CustodyGapSearchResult,
+    normalized_rows: Sequence[_Leg] = (),
 ) -> CustodyGapSearchResult:
     visible_ids = {item.gap_id for item in result.candidates}
     accounting_ids = {item.gap_id for item in result.accounting_candidates}
@@ -1052,6 +1052,16 @@ def _persist_candidate_projection(
         item.gap_id: item
         for item in (*result.candidates, *result.accounting_candidates)
     }
+    downstream_by_gap: dict[str, tuple[int, str]] = {}
+    for candidate in candidates.values():
+        impact = _downstream_impact(candidate, normalized_rows)
+        downstream_by_gap[candidate.gap_id] = (
+            impact["affected_disposals"],
+            json.dumps(
+                impact["affected_years"],
+                separators=(",", ":"),
+            ),
+        )
     owns_transaction = not conn.in_transaction
     savepoint = "custody_gap_projection_write"
     conn.execute(f"SAVEPOINT {savepoint}")
@@ -1109,9 +1119,10 @@ def _persist_candidate_projection(
                     source_debit_msat, return_total_msat, retained_msat, residual_msat,
                     excess_msat, coverage_ppm, started_at, ended_at, elapsed_seconds,
                     score, confidence, reason_codes_json, promotion_eligible,
-                    competitor_score_margin, conflict_set_id, conflict_size
+                    competitor_score_margin, conflict_set_id, conflict_size,
+                    affected_disposals, affected_years_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     projection_id, profile_id, candidate.gap_id, ordinal,
@@ -1132,6 +1143,7 @@ def _persist_candidate_projection(
                     json.dumps(candidate.reason_codes, separators=(",", ":")),
                     int(candidate.promotion_eligible), candidate.competitor_score_margin,
                     candidate.conflict_set_id, candidate.conflict_size,
+                    *downstream_by_gap[candidate.gap_id],
                 ),
             )
             for side, transaction_ids in (
@@ -1193,17 +1205,15 @@ def _persist_candidate_projection(
     return loaded
 
 
-def _encode_projection_cursor(
-    projection_id: str, sort_group: int, ordinal: int, gap_id: str
-) -> str:
+def _encode_projection_cursor(projection_id: str, ordinal: int, gap_id: str) -> str:
     payload = json.dumps(
-        [projection_id, sort_group, ordinal, gap_id], separators=(",", ":")
+        [projection_id, ordinal, gap_id], separators=(",", ":")
     ).encode()
-    return "cgp1." + base64.urlsafe_b64encode(payload).decode().rstrip("=")
+    return "cgp2." + base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
-def _decode_projection_cursor(cursor: str) -> tuple[str, int, int, str]:
-    if not cursor.startswith("cgp1."):
+def _decode_projection_cursor(cursor: str) -> tuple[str, int, str]:
+    if not cursor.startswith("cgp2."):
         raise ValueError("cursor is malformed")
     encoded = cursor[5:]
     try:
@@ -1214,16 +1224,15 @@ def _decode_projection_cursor(cursor: str) -> tuple[str, int, int, str]:
         raise ValueError("cursor is malformed") from exc
     if (
         not isinstance(payload, list)
-        or len(payload) != 4
+        or len(payload) != 3
         or not isinstance(payload[0], str)
         or len(payload[0]) != 64
-        or payload[1] not in (0, 1)
-        or type(payload[2]) is not int
-        or payload[2] < 0
-        or not isinstance(payload[3], str)
+        or type(payload[1]) is not int
+        or payload[1] < 0
+        or not isinstance(payload[2], str)
     ):
         raise ValueError("cursor is malformed")
-    return payload[0], payload[1], payload[2], payload[3]
+    return payload[0], payload[1], payload[2]
 
 
 def load_gap_search_result(
@@ -1484,6 +1493,7 @@ def load_gap_search_result(
                 accounting_ignored_ids=accounting_ignored,
                 producer_kind=producer_kind,
                 result=cached,
+                normalized_rows=normalized,
             )
         return cached, normalized
     worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
@@ -1537,6 +1547,7 @@ def load_gap_search_result(
             accounting_ignored_ids=accounting_ignored,
             producer_kind=producer_kind,
             result=result,
+            normalized_rows=normalized,
         )
     return result, normalized
 
@@ -2179,7 +2190,9 @@ def _stamp_promotion_eligibility(
     return stamped
 
 
-def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[str, Any]:
+def _downstream_impact(
+    candidate: CustodyGapCandidate, rows: Sequence[_Leg]
+) -> dict[str, Any]:
     destination_wallets = set(candidate.destination_wallet_ids)
     ended = parse_iso_datetime_or_none(candidate.ended_at)
     affected = [
@@ -2190,6 +2203,13 @@ def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[
         and ended is not None
         and leg.occurred_dt > ended
     ]
+    return {
+        "affected_disposals": len(affected),
+        "affected_years": sorted({leg.occurred_dt.year for leg in affected}),
+    }
+
+
+def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[str, Any]:
     return {
         "gap_id": candidate.gap_id,
         # A conflict remains a review item, but must not look like a solo
@@ -2211,10 +2231,7 @@ def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[
         "reason_codes": list(candidate.reason_codes),
         "promotion_eligible": candidate.promotion_eligible,
         "competitor_score_margin": candidate.competitor_score_margin,
-        "downstream": {
-            "affected_disposals": len(affected),
-            "affected_years": sorted({leg.occurred_dt.year for leg in affected}),
-        },
+        "downstream": _downstream_impact(candidate, rows),
     }
 
 
