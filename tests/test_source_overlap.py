@@ -482,6 +482,87 @@ class SourceOverlapTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_profile_source_index_preserves_widened_candidate_descriptor_tail(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                descriptor = _wallet(
+                    conn,
+                    "descriptor",
+                    "Descriptor",
+                    "descriptor",
+                    config,
+                )
+                target = _descriptor_target(config, address_index=5)
+                target_payload = {
+                    "address": target.address,
+                    "script_pubkey": target.script_pubkey,
+                    "chain": "bitcoin",
+                    "network": "mainnet",
+                    "branch_index": target.branch_index,
+                    "branch_label": target.branch_label,
+                    "address_index": target.address_index,
+                }
+                sync_state = WalletSyncState(
+                    chain="bitcoin",
+                    network="mainnet",
+                    descriptor_plan=load_descriptor_plan(config),
+                    policy_asset_id="",
+                    targets=[target_payload],
+                    tracked_scripts={target.script_pubkey: target_payload},
+                    history_cache={},
+                )
+                candidates = source_overlap.scripts_from_sync_state(
+                    profile,
+                    descriptor,
+                    sync_state,
+                )
+                index = source_overlap.build_profile_source_index(conn, profile["id"])
+
+                indexed, _ = source_overlap._source_script_groups(
+                    conn,
+                    profile["id"],
+                    candidate_scripts=candidates,
+                    profile_index=index,
+                )
+                uncached, _ = source_overlap._source_script_groups(
+                    conn,
+                    profile["id"],
+                    candidate_scripts=candidates,
+                )
+
+                indexed_rows = {
+                    (
+                        source.wallet_id,
+                        source.source,
+                        source.branch_index,
+                        source.address_index,
+                        source.script_pubkey,
+                    )
+                    for group in indexed.values()
+                    for source in group
+                }
+                uncached_rows = {
+                    (
+                        source.wallet_id,
+                        source.source,
+                        source.branch_index,
+                        source.address_index,
+                        source.script_pubkey,
+                    )
+                    for group in uncached.values()
+                    for source in group
+                }
+                self.assertEqual(indexed_rows, uncached_rows)
+                self.assertIn(
+                    ("descriptor", "descriptor_config", 0, 7),
+                    {row[:4] for row in indexed_rows},
+                )
+            finally:
+                conn.close()
+
     def test_sync_skips_fully_overlapped_descriptor_before_backend_fetch(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
             conn = open_db(Path(tmp) / "data")

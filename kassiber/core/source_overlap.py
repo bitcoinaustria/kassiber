@@ -368,6 +368,102 @@ def _descriptor_config_scripts(
     return scripts
 
 
+def _candidate_descriptor_supplements(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    profile_index: ProfileSourceIndex,
+    candidate_scripts: Sequence[SourceScript],
+) -> list[SourceScript]:
+    """Extend only descriptor branches whose candidate horizon grew.
+
+    The operation-scoped index contains each descriptor's baseline finite
+    horizon. A widened candidate (for example a repair scan) can require the
+    same candidate-dependent gap tail that the uncached path derives. Rebuild
+    only that tail instead of re-deriving every indexed descriptor.
+    """
+
+    candidate_maxes = _candidate_branch_maxes(candidate_scripts)
+    if not candidate_maxes:
+        return []
+    baseline_ends: dict[tuple[str, int], int] = {}
+    active_counts: dict[str, int] = {}
+    for source in profile_index.sources:
+        active_counts[source.wallet_id] = max(
+            active_counts.get(source.wallet_id, 0),
+            int(source.active_transaction_count),
+        )
+        if (
+            source.source != "descriptor_config"
+            or source.branch_index is None
+            or source.address_index is None
+        ):
+            continue
+        key = (source.wallet_id, int(source.branch_index))
+        baseline_ends[key] = max(
+            baseline_ends.get(key, 0),
+            int(source.address_index) + 1,
+        )
+    supplements: list[SourceScript] = []
+    for wallet_id, branch_maxes in candidate_maxes.items():
+        wallet = conn.execute(
+            """
+            SELECT id, label, kind, config_json
+            FROM wallets
+            WHERE profile_id = ? AND id = ?
+            """,
+            (profile_id, wallet_id),
+        ).fetchone()
+        if wallet is None:
+            continue
+        config = _wallet_config(wallet)
+        if not has_descriptor_sync_material(config):
+            continue
+        try:
+            plan = load_wallet_descriptor_plan_from_config(config)
+        except (AppError, ValueError):
+            continue
+        if plan is None:
+            continue
+        deprecated = wallet_is_deprecated(config)
+        for branch in plan.branches:
+            candidate_max = branch_maxes.get(branch.branch_index)
+            if candidate_max is None:
+                continue
+            start = baseline_ends.get((wallet_id, branch.branch_index), 0)
+            end = max(start, int(candidate_max) + plan.gap_limit + 1)
+            end = min(end, MAX_STORED_DESCRIPTOR_TARGETS_PER_BRANCH)
+            if end <= start:
+                continue
+            try:
+                targets = derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=start,
+                    end=end,
+                )
+            except (AppError, ValueError):
+                continue
+            for target in targets:
+                supplements.append(
+                    SourceScript(
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        wallet_label=str(_row_get(wallet, "label") or wallet_id),
+                        wallet_kind=str(_row_get(wallet, "kind") or ""),
+                        chain=plan.chain,
+                        network=plan.network,
+                        script_pubkey=target.script_pubkey.lower(),
+                        source="descriptor_config",
+                        deprecated=deprecated,
+                        active_transaction_count=active_counts.get(wallet_id, 0),
+                        branch_index=target.branch_index,
+                        branch_label=target.branch_label,
+                        address_index=target.address_index,
+                    )
+                )
+    return supplements
+
+
 def scripts_from_sync_state(
     profile: Mapping[str, Any] | sqlite3.Row,
     wallet: Mapping[str, Any] | sqlite3.Row,
@@ -545,7 +641,16 @@ def _source_script_groups(
     candidate_scripts = list(candidate_scripts or [])
     candidate_wallet_ids = {source.wallet_id for source in candidate_scripts}
     if profile_index is not None and profile_index.profile_id == profile_id:
-        sources = [*profile_index.sources, *candidate_scripts]
+        sources = [
+            *profile_index.sources,
+            *candidate_scripts,
+            *_candidate_descriptor_supplements(
+                conn,
+                profile_id,
+                profile_index,
+                candidate_scripts,
+            ),
+        ]
     else:
         active_counts = _active_transaction_counts(conn, profile_id)
         sources = []
