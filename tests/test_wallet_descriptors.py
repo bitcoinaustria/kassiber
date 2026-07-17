@@ -125,6 +125,54 @@ def _branch_address(plan, branch_index: int) -> str:
     return targets[0].address
 
 
+class ExtendedPublicKeyNetworkTests(unittest.TestCase):
+    def setUp(self):
+        account = bip32.HDKey.from_seed(b"descriptor-network").derive(
+            "m/84h/0h/0h"
+        ).to_public()
+        self.xpub = account.to_base58()
+        self.tpub = account.to_base58(version=bytes.fromhex("043587cf"))
+
+    def test_tpub_without_network_defaults_to_testnet(self):
+        plan = load_descriptor_plan(
+            {"descriptor": f"wpkh({self.tpub}/0/*)", "chain": "bitcoin"}
+        )
+
+        self.assertEqual(plan.network, "test")
+        self.assertTrue(_branch_address(plan, 0).startswith("tb1"))
+
+    def test_extended_public_key_network_conflicts_are_rejected(self):
+        cases = [
+            (self.tpub, "main"),
+            (self.xpub, "test"),
+            (self.xpub, "signet"),
+            (self.xpub, "regtest"),
+        ]
+        for key, network in cases:
+            with self.subTest(prefix=key[:4], network=network):
+                with self.assertRaises(AppError) as raised:
+                    load_descriptor_plan(
+                        {
+                            "descriptor": f"wpkh({key}/0/*)",
+                            "chain": "bitcoin",
+                            "network": network,
+                        }
+                    )
+                self.assertEqual(raised.exception.code, "validation")
+
+    def test_tpub_accepts_explicit_test_family_networks(self):
+        for network in ("test", "signet", "regtest"):
+            with self.subTest(network=network):
+                plan = load_descriptor_plan(
+                    {
+                        "descriptor": f"wpkh({self.tpub}/0/*)",
+                        "chain": "bitcoin",
+                        "network": network,
+                    }
+                )
+                self.assertEqual(plan.network, network)
+
+
 class ChangeBranchSynthesisTests(unittest.TestCase):
     def test_receive_only_wpkh_synthesizes_change_branch(self):
         plan = load_descriptor_plan(

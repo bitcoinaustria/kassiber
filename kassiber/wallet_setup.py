@@ -16,10 +16,10 @@ _BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 _BASE58_INDEX = {char: index for index, char in enumerate(_BASE58_ALPHABET)}
 
 _SLIP132_VERSIONS = {
-    "ypub": ("xpub", "sh(wpkh({key}/{branch}/*))"),
-    "zpub": ("xpub", "wpkh({key}/{branch}/*)"),
-    "upub": ("tpub", "sh(wpkh({key}/{branch}/*))"),
-    "vpub": ("tpub", "wpkh({key}/{branch}/*)"),
+    "ypub": ("xpub", "sh(wpkh({key}/{branch}/*))", "main"),
+    "zpub": ("xpub", "wpkh({key}/{branch}/*)", "main"),
+    "upub": ("tpub", "sh(wpkh({key}/{branch}/*))", "test"),
+    "vpub": ("tpub", "wpkh({key}/{branch}/*)", "test"),
 }
 
 _XPUB_VERSION_BYTES = {
@@ -107,7 +107,11 @@ def normalize_wallet_material(
             # is deferred to load_descriptor_plan (single source of truth).
             _base58check_decode(material)
             return _validate_parsed_wallet_material(
-                {"xpub": material, "script_types": resolved_types}
+                {
+                    "xpub": material,
+                    "script_types": resolved_types,
+                    "network": _extended_public_key_network(prefix),
+                }
             )
         if script_type:
             return _descriptors_from_bare_xpub(material, script_type)
@@ -342,10 +346,13 @@ def _descriptors_from_bare_xpub(material: str, script_type: str) -> dict[str, st
         )
     # Reject a malformed key before we wrap it in a descriptor.
     _base58check_decode(material)
-    return _validate_parsed_wallet_material({
-        "descriptor": template.format(key=material, branch=0),
-        "change_descriptor": template.format(key=material, branch=1),
-    })
+    return _validate_parsed_wallet_material(
+        {
+            "descriptor": template.format(key=material, branch=0),
+            "change_descriptor": template.format(key=material, branch=1),
+            "network": _extended_public_key_network(material[:4]),
+        }
+    )
 
 
 def _descriptors_from_slip132(material: str) -> dict[str, str] | None:
@@ -353,12 +360,17 @@ def _descriptors_from_slip132(material: str) -> dict[str, str] | None:
     prefix = key[:4]
     if prefix not in _SLIP132_VERSIONS:
         return None
-    target_prefix, template = _SLIP132_VERSIONS[prefix]
+    target_prefix, template, network = _SLIP132_VERSIONS[prefix]
     converted = _convert_extended_key_prefix(key, target_prefix)
     return {
         "descriptor": template.format(key=converted, branch=0),
         "change_descriptor": template.format(key=converted, branch=1),
+        "network": network,
     }
+
+
+def _extended_public_key_network(prefix: str) -> str:
+    return "main" if prefix == "xpub" else "test"
 
 
 def _convert_extended_key_prefix(key: str, target_prefix: str) -> str:

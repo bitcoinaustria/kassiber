@@ -265,6 +265,7 @@ from .wallet_descriptors import (
     MAX_DESCRIPTOR_GAP_LIMIT,
     derive_descriptor_targets,
     load_descriptor_plan,
+    normalize_network,
 )
 from .wallet_setup import normalize_script_types, normalize_wallet_material
 from .wallet_security import (
@@ -9653,6 +9654,24 @@ def _apply_wallet_material_config(
     multi-script ``xpub`` + ``script_types`` form. The two are mutually
     exclusive, so the xpub shape clears any descriptor and vice versa.
     """
+    inferred_network = material_config.get("network")
+    if inferred_network:
+        configured_network = config.get("network")
+        if configured_network in (None, ""):
+            config["network"] = inferred_network
+        else:
+            normalized_network = normalize_network("bitcoin", configured_network)
+            configured_family = "main" if normalized_network == "main" else "test"
+            if configured_family != inferred_network:
+                raise AppError(
+                    "Wallet material does not match the configured Bitcoin network",
+                    code="validation",
+                    details={
+                        "configured_network": normalized_network,
+                        "key_network": inferred_network,
+                    },
+                    retryable=False,
+                )
     if "xpub" in material_config:
         config["xpub"] = material_config["xpub"]
         config["script_types"] = material_config["script_types"]
@@ -12826,6 +12845,8 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
             script_type=script_type,
             script_types=_script_types_arg(args),
         )
+        if "network" in material:
+            config["network"] = material["network"]
         if "xpub" in material:
             config["xpub"] = material["xpub"]
             config["script_types"] = material["script_types"]
@@ -12837,7 +12858,7 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
             if "synthesize_change" in material:
                 config["synthesize_change"] = material["synthesize_change"]
     chain = _optional_str_arg(args, "chain") or "bitcoin"
-    network = _optional_str_arg(args, "network")
+    network = _optional_str_arg(args, "network") or config.get("network")
     raw_count = args.get("count")
     count = 5
     if isinstance(raw_count, int) and raw_count > 0:

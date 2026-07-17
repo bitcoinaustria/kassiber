@@ -62,6 +62,15 @@ from kassiber.wallet_descriptors import (
 )
 
 
+def _test_tpub() -> str:
+    from embit import bip32
+
+    account = bip32.HDKey.from_seed(b"script-detection-network").derive(
+        "m/84h/0h/0h"
+    ).to_public()
+    return account.to_base58(version=bytes.fromhex("043587cf"))
+
+
 def _header_hex(timestamp):
     return ("00" * 68) + int(timestamp).to_bytes(4, "little").hex() + ("00" * 8)
 
@@ -75,6 +84,25 @@ class _DummySocket:
 
 
 class SyncBackendsTest(unittest.TestCase):
+    def test_script_type_detection_infers_test_network_from_tpub(self):
+        backend = {
+            "name": "test-esplora",
+            "kind": "esplora",
+            "chain": "bitcoin",
+            "network": "test",
+            "url": "https://example.invalid",
+        }
+        with patch.object(
+            sb,
+            "_probe_scripts_have_history",
+            return_value=[False] * len(sb.SCRIPT_TYPE_BRANCH_BASE),
+        ) as probe:
+            detected = sb.detect_active_script_types(backend, _test_tpub())
+
+        self.assertEqual(len(detected), len(sb.SCRIPT_TYPE_BRANCH_BASE))
+        script_pubkeys = probe.call_args.args[2]
+        self.assertEqual(len(script_pubkeys), len(sb.SCRIPT_TYPE_BRANCH_BASE))
+
     def test_sync_wallet_from_backend_raises_for_unknown_backend_kind(self):
         wallet = {"label": "Watch", "config_json": "{}"}
         target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}

@@ -45,6 +45,12 @@ def _xpub() -> str:
     return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_public().to_base58()
 
 
+def _tpub() -> str:
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
+    account = bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_public()
+    return account.to_base58(version=bytes.fromhex("043587cf"))
+
+
 def _xprv() -> str:
     seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
     return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_base58()
@@ -134,6 +140,19 @@ class ValidatedWalletConfigTests(unittest.TestCase):
 
         self.assertEqual(config["chain"], "bitcoin")
         self.assertEqual(config["script_types"], ["p2wpkh"])
+
+    def test_tpub_config_persists_inferred_test_network(self):
+        config = _validated_wallet_config(
+            "descriptor",
+            {
+                "xpub": _tpub(),
+                "script_types": ["p2wpkh"],
+                "chain": "bitcoin",
+            },
+        )
+
+        self.assertEqual(config["chain"], "bitcoin")
+        self.assertEqual(config["network"], "test")
 
     def test_descriptor_kind_without_material_is_rejected(self):
         with self.assertRaises(AppError):
