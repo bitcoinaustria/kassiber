@@ -6,13 +6,16 @@ import base64
 import hashlib
 import json
 import os
+import queue
 import socket
 import ssl
 import stat
+import threading
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
-from contextvars import copy_context
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar, copy_context
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -278,39 +281,42 @@ class ElectrumClient:
         self.server_version = None
         self._egress_host = None
         self._egress_port = None
+        self._io_lock = threading.RLock()
 
     def __enter__(self):
-        scheme, host, port = parse_socket_backend_url(
-            self.backend["url"],
-            default_scheme="ssl",
-            default_ports={"ssl": 50002, "tcp": 50001},
-        )
-        raw_socket = _connect_backend_socket(self.backend, host, port)
-        self._egress_host = host
-        self._egress_port = port
-        if scheme in {"ssl", "tls"}:
-            certificate = backend_value(self.backend, "certificate")
-            context = ssl.create_default_context(cafile=certificate)
-            if parse_bool(backend_value(self.backend, "insecure"), default=False):
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-            raw_socket = context.wrap_socket(raw_socket, server_hostname=host)
-        elif scheme != "tcp":
-            raise AppError(f"Unsupported Electrum transport '{scheme}'")
-        self.socket = raw_socket
-        self.reader = raw_socket.makefile("r", encoding="utf-8", newline="\n")
-        self.server_version = self.call("server.version", ["Kassiber", "1.6"])
-        return self
+        with self._io_lock:
+            scheme, host, port = parse_socket_backend_url(
+                self.backend["url"],
+                default_scheme="ssl",
+                default_ports={"ssl": 50002, "tcp": 50001},
+            )
+            raw_socket = _connect_backend_socket(self.backend, host, port)
+            self._egress_host = host
+            self._egress_port = port
+            if scheme in {"ssl", "tls"}:
+                certificate = backend_value(self.backend, "certificate")
+                context = ssl.create_default_context(cafile=certificate)
+                if parse_bool(backend_value(self.backend, "insecure"), default=False):
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                raw_socket = context.wrap_socket(raw_socket, server_hostname=host)
+            elif scheme != "tcp":
+                raise AppError(f"Unsupported Electrum transport '{scheme}'")
+            self.socket = raw_socket
+            self.reader = raw_socket.makefile("r", encoding="utf-8", newline="\n")
+            self.server_version = self.call("server.version", ["Kassiber", "1.6"])
+            return self
 
     def __exit__(self, exc_type, exc, tb):
-        if self.reader is not None:
-            self.reader.close()
-        if self.socket is not None:
-            self.socket.close()
-        self.reader = None
-        self.socket = None
-        self.server_version = None
-        return False
+        with self._io_lock:
+            if self.reader is not None:
+                self.reader.close()
+            if self.socket is not None:
+                self.socket.close()
+            self.reader = None
+            self.socket = None
+            self.server_version = None
+            return False
 
     def _decode_message(self, line):
         try:
@@ -335,6 +341,10 @@ class ElectrumClient:
         return message
 
     def call(self, method, params=None):
+        with self._io_lock:
+            return self._call_locked(method, params)
+
+    def _call_locked(self, method, params=None):
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         self.request_id += 1
@@ -377,6 +387,10 @@ class ElectrumClient:
             return message.get("result")
 
     def batch_call(self, requests):
+        with self._io_lock:
+            return self._batch_call_locked(requests)
+
+    def _batch_call_locked(self, requests):
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         if not requests:
@@ -432,6 +446,154 @@ class ElectrumClient:
             results[index] = message.get("result")
             remaining -= 1
         return results
+
+
+def _electrum_pool_key(backend):
+    return (
+        str(_mapping_get(backend, "name", "") or ""),
+        str(_mapping_get(backend, "url", "") or ""),
+        str(backend_value(backend, "tor_proxy") or ""),
+        str(backend_value(backend, "certificate") or ""),
+        str(backend_value(backend, "insecure") or ""),
+    )
+
+
+class _ElectrumClientPool:
+    def __init__(self):
+        self._dispatchers = {}
+        self._lock = threading.Lock()
+
+    def client(self, backend):
+        key = _electrum_pool_key(backend)
+        with self._lock:
+            dispatcher = self._dispatchers.get(key)
+            if dispatcher is None:
+                dispatcher = _ElectrumBatchDispatcher(backend)
+                self._dispatchers[key] = dispatcher
+            return dispatcher
+
+    def close(self):
+        with self._lock:
+            dispatchers = list(self._dispatchers.values())
+            self._dispatchers.clear()
+        for dispatcher in reversed(dispatchers):
+            dispatcher.close()
+
+
+class _ElectrumBatchDispatcher:
+    _COALESCE_SECONDS = 0.002
+
+    def __init__(self, backend):
+        self.backend = backend
+        self._queue = queue.Queue()
+        self._closed = False
+        self._thread = threading.Thread(
+            target=self._run,
+            name="kassiber-electrum-batch",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def call(self, method, params=None):
+        return self.batch_call([(method, params or [])])[0]
+
+    def batch_call(self, requests):
+        requests = list(requests)
+        if not requests:
+            return []
+        if self._closed:
+            raise AppError("Electrum client pool is closed")
+        pending = {
+            "requests": requests,
+            "event": threading.Event(),
+            "result": None,
+            "error": None,
+        }
+        self._queue.put(pending)
+        pending["event"].wait()
+        if pending["error"] is not None:
+            raise pending["error"]
+        return pending["result"]
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        self._queue.put(None)
+        self._thread.join()
+
+    def _run(self):
+        client = None
+        stop_after_batch = False
+        try:
+            while True:
+                first = self._queue.get()
+                if first is None:
+                    break
+                pending_calls = [first]
+                deadline = time.monotonic() + self._COALESCE_SECONDS
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    try:
+                        item = self._queue.get(timeout=remaining)
+                    except queue.Empty:
+                        break
+                    if item is None:
+                        stop_after_batch = True
+                        break
+                    pending_calls.append(item)
+                try:
+                    if client is None:
+                        candidate = ElectrumClient(self.backend)
+                        candidate.__enter__()
+                        client = candidate
+                    combined = [
+                        request
+                        for pending in pending_calls
+                        for request in pending["requests"]
+                    ]
+                    combined_results = client.batch_call(combined)
+                    offset = 0
+                    for pending in pending_calls:
+                        count = len(pending["requests"])
+                        pending["result"] = combined_results[offset : offset + count]
+                        offset += count
+                except BaseException as exc:
+                    for pending in pending_calls:
+                        pending["error"] = exc
+                finally:
+                    for pending in pending_calls:
+                        pending["event"].set()
+                if stop_after_batch:
+                    break
+        finally:
+            if client is not None:
+                client.__exit__(None, None, None)
+
+
+_active_electrum_client_pool = ContextVar("active_electrum_client_pool", default=None)
+
+
+@contextmanager
+def shared_electrum_client_pool():
+    active = _active_electrum_client_pool.get()
+    if active is not None:
+        yield active
+        return
+    pool = _ElectrumClientPool()
+    token = _active_electrum_client_pool.set(pool)
+    try:
+        yield pool
+    finally:
+        _active_electrum_client_pool.reset(token)
+        pool.close()
+
+
+def _electrum_client_context(backend):
+    pool = _active_electrum_client_pool.get()
+    return nullcontext(pool.client(backend)) if pool is not None else ElectrumClient(backend)
 
 
 def batched(items, batch_size):
@@ -750,7 +912,7 @@ def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
         return _map_bounded(script_pubkeys, probe, workers)
     if kind == "electrum":
         scripthashes = [scriptpubkey_scripthash(spk) for spk in script_pubkeys]
-        with ElectrumClient(backend) as client:
+        with _electrum_client_context(backend) as client:
             statuses = electrum_call_many(
                 client,
                 [("blockchain.scripthash.subscribe", [scripthash]) for scripthash in scripthashes],
@@ -835,7 +997,7 @@ def discover_compatibility_descriptor_targets(backend, plan, kind, checkpoint=No
     if kind == "electrum":
         electrum_batch_size = backend_batch_size(backend)
         cached_statuses = dict(checkpoint.get("electrum_scripthash_statuses") or {})
-        with ElectrumClient(backend) as client:
+        with _electrum_client_context(backend) as client:
 
             def target_used_batch(targets):
                 scripthashes = [
@@ -1483,7 +1645,7 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
         if client is not None:
             raw_hex = client.call("blockchain.transaction.get", [txid])
         else:
-            with ElectrumClient(backend) as owned_client:
+            with _electrum_client_context(backend) as owned_client:
                 raw_hex = owned_client.call("blockchain.transaction.get", [txid])
         if normalized_chain == "liquid":
             return _legs_from_liquid_tx(decode_liquid_transaction(raw_hex))
@@ -1530,7 +1692,7 @@ def verify_session(backend):
     """
     kind = normalize_backend_kind(backend.get("kind"))
     if kind == "electrum":
-        with ElectrumClient(backend) as client:
+        with _electrum_client_context(backend) as client:
             yield lambda txid, chain=None: fetch_transaction_legs(
                 backend, txid, chain, client=client
             )
@@ -3833,7 +3995,7 @@ def compatibility_electrum_utxos_for_wallet(backend, sync_state: WalletSyncState
     outputs = []
     batch_size = backend_batch_size(backend)
     header_timestamps = {}
-    with ElectrumClient(backend) as client:
+    with _electrum_client_context(backend) as client:
         tip_height = _electrum_tip_height(client)
         scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in sync_state.targets]
         target_by_scripthash = dict(zip(scripthashes, sync_state.targets))
@@ -3959,7 +4121,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     unchanged_scripts = 0
     changed_scripts = 0
     header_cache_hits = 0
-    with ElectrumClient(backend) as client:
+    with _electrum_client_context(backend) as client:
         histories = []
         target_by_scripthash = {}
         scripthashes = []

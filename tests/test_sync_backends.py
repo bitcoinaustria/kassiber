@@ -3,7 +3,9 @@ import json
 import random
 import sqlite3
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from email.message import Message
 from pathlib import Path
@@ -1334,6 +1336,88 @@ class SyncBackendsTest(unittest.TestCase):
             meta["freshness_checkpoint"]["electrum_history_entries"][scripthash],
             {old_txid: old_history, new_txid: new_history},
         )
+
+    def test_electrum_pool_reuses_one_connection_for_wallet_fetches(self):
+        target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
+        state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        backend = {
+            "name": "fulcrum",
+            "kind": "electrum",
+            "url": "tcp://electrum.example:50001",
+        }
+        counts = {"init": 0, "enter": 0, "exit": 0, "batch": 0}
+
+        class FakeElectrumClient:
+            def __init__(self, _backend):
+                counts["init"] += 1
+
+            def __enter__(self):
+                counts["enter"] += 1
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                counts["exit"] += 1
+                return False
+
+            def batch_call(self, requests):
+                counts["batch"] += 1
+                return [None for _request in requests]
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient):
+            with sb.shared_electrum_client_pool():
+                sb.compatibility_electrum_records_for_wallet(backend, state)
+                sb.compatibility_electrum_records_for_wallet(backend, state)
+
+        self.assertEqual(counts, {"init": 1, "enter": 1, "exit": 1, "batch": 2})
+
+    def test_electrum_pool_coalesces_concurrent_wallet_batches(self):
+        backend = {
+            "name": "fulcrum",
+            "kind": "electrum",
+            "url": "tcp://electrum.example:50001",
+        }
+        batch_sizes = []
+
+        class FakeElectrumClient:
+            def __init__(self, _backend):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                batch_sizes.append(len(requests))
+                return [params[0] for _method, params in requests]
+
+        barrier = threading.Barrier(2)
+
+        def fetch(client, marker):
+            barrier.wait()
+            return client.batch_call([("example", [marker])])
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient):
+            with sb.shared_electrum_client_pool() as pool:
+                client = pool.client(backend)
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = [
+                        executor.submit(fetch, client, marker)
+                        for marker in ("wallet-a", "wallet-b")
+                    ]
+                    results = [future.result() for future in futures]
+
+        self.assertEqual(batch_sizes, [2])
+        self.assertEqual(results, [["wallet-a"], ["wallet-b"]])
 
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})

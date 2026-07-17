@@ -2325,40 +2325,41 @@ def _prefetch_chain_wallets(
         }
         for wallet in backend_wallet_rows
     ]
-    prefetched = core_sync.prefetch_wallets_backend(
-        runtime_config,
-        profile,
-        backend_wallets,
-        hooks,
-        checkpoints=freshness_checkpoints,
-        force_full=force_full,
-        source_overlap_preflight=(
-            lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
-                conn,
-                profile,
-                wallet,
-                sync_state,
-            )
-        ),
-        observer_fetch_preflight=(
-            lambda candidate, discovery: hooks.prepare_observer_fetch(
-                conn,
-                profile,
-                candidate,
-                discovery,
-            )
-            if hooks.prepare_observer_fetch is not None
-            else None
-        ),
-    )
-    return _prepare_negative_balance_repairs(
-        conn,
-        runtime_config,
-        profile,
-        backend_wallets,
-        hooks,
-        prefetched,
-    )
+    with core_sync_backends.shared_electrum_client_pool():
+        prefetched = core_sync.prefetch_wallets_backend(
+            runtime_config,
+            profile,
+            backend_wallets,
+            hooks,
+            checkpoints=freshness_checkpoints,
+            force_full=force_full,
+            source_overlap_preflight=(
+                lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
+                    conn,
+                    profile,
+                    wallet,
+                    sync_state,
+                )
+            ),
+            observer_fetch_preflight=(
+                lambda candidate, discovery: hooks.prepare_observer_fetch(
+                    conn,
+                    profile,
+                    candidate,
+                    discovery,
+                )
+                if hooks.prepare_observer_fetch is not None
+                else None
+            ),
+        )
+        return _prepare_negative_balance_repairs(
+            conn,
+            runtime_config,
+            profile,
+            backend_wallets,
+            hooks,
+            prefetched,
+        )
 
 
 def _stored_wallet_chain_history(conn, profile_id, wallets):
