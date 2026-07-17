@@ -643,6 +643,35 @@ def _load_freshness_profile(
     return profile
 
 
+def _prefetched_onchain_fetches_for_job(
+    prefetched_onchain: Mapping[str, Any] | None,
+    job: Mapping[str, Any],
+    wallet_id: str,
+    checkpoint: Mapping[str, Any],
+    force_full: bool,
+) -> Mapping[str, Any] | None:
+    """Return a batch fetch only when it belongs to this exact job contract."""
+
+    if prefetched_onchain is None:
+        return None
+    entry = prefetched_onchain.get(str(job.get("id") or ""))
+    if not isinstance(entry, Mapping):
+        return None
+    if str(entry.get("wallet_id") or "") != wallet_id:
+        return None
+    if bool(entry.get("force_full")) is not force_full:
+        return None
+    entry_checkpoint = entry.get("checkpoint")
+    if not isinstance(entry_checkpoint, Mapping):
+        return None
+    if dict(entry_checkpoint) != dict(checkpoint):
+        return None
+    fetches = entry.get("fetches")
+    if not isinstance(fetches, Mapping) or wallet_id not in fetches:
+        return None
+    return fetches
+
+
 def _freshness_handlers(
     runtime_config: dict[str, object],
     *,
@@ -657,6 +686,13 @@ def _freshness_handlers(
         profile, wallet = _load_freshness_profile_wallet(conn, job)
         force_full = _job_force_full(job)
         checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)
+        prefetched_fetches = _prefetched_onchain_fetches_for_job(
+            prefetched_onchain,
+            job,
+            str(wallet["id"]),
+            checkpoint,
+            force_full,
+        )
         wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
         progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
         check_cancelled()
@@ -672,12 +708,7 @@ def _freshness_handlers(
                 checkpoint=checkpoint,
                 force_full=force_full,
                 check_cancelled=check_cancelled,
-                prefetched=(
-                    prefetched_onchain
-                    if prefetched_onchain is not None
-                    and str(wallet["id"]) in prefetched_onchain
-                    else None
-                ),
+                prefetched=prefetched_fetches,
             )
         finally:
             sync_progress_emitter.reset(token)
@@ -1120,7 +1151,7 @@ def _prefetch_onchain_freshness_jobs(
         )
         for wallet in wallets
     }
-    prefetched: dict[str, Any] = {}
+    prefetched_by_job: dict[str, Any] = {}
     for force_full in (False, True):
         grouped_wallets = [
             wallet
@@ -1141,11 +1172,18 @@ def _prefetch_onchain_freshness_jobs(
             },
             force_full=force_full,
         )
-        if not prefetched:
-            prefetched = group_results
-        else:
-            prefetched.update(group_results)
-    return prefetched
+        for wallet in grouped_wallets:
+            wallet_id = str(wallet["id"])
+            if wallet_id not in group_results:
+                continue
+            job = jobs_by_wallet_id[wallet_id]
+            prefetched_by_job[str(job["id"])] = {
+                "wallet_id": wallet_id,
+                "checkpoint": checkpoints[wallet_id],
+                "force_full": force_full,
+                "fetches": {wallet_id: group_results[wallet_id]},
+            }
+    return prefetched_by_job
 
 
 def _parse_freshness_timestamp(value: Any) -> datetime | None:

@@ -1098,7 +1098,11 @@ class FreshnessTest(unittest.TestCase):
 
         def sync(*args, **kwargs):
             events.append(f"sync:{args[4]['id']}")
-            self.assertIs(kwargs["prefetched"], prefetched)
+            self.assertEqual(set(kwargs["prefetched"]), {args[4]["id"]})
+            self.assertIs(
+                kwargs["prefetched"][args[4]["id"]],
+                prefetched[args[4]["id"]],
+            )
             return {"freshness_checkpoint": {"wallet": args[4]["id"]}}
 
         with patch(
@@ -1302,6 +1306,44 @@ class FreshnessTest(unittest.TestCase):
         call_args = sync_mock.call_args.args
         self.assertEqual(call_args[2], "ws")
         self.assertEqual(call_args[3], job_profile_id)
+
+    def test_prefetched_onchain_fetch_is_bound_to_exact_job_contract(self):
+        fetches = {"wallet-a": object()}
+        checkpoint = {"tip": 123}
+        job = {"id": "job-a"}
+        entry = {
+            "job-a": {
+                "wallet_id": "wallet-a",
+                "checkpoint": checkpoint,
+                "force_full": False,
+                "fetches": fetches,
+            }
+        }
+
+        self.assertIs(
+            daemon_freshness._prefetched_onchain_fetches_for_job(
+                entry,
+                job,
+                "wallet-a",
+                checkpoint,
+                False,
+            ),
+            fetches,
+        )
+        for mismatched_job, mismatched_checkpoint, force_full in (
+            ({"id": "job-b"}, checkpoint, False),
+            (job, {"tip": 124}, False),
+            (job, checkpoint, True),
+        ):
+            self.assertIsNone(
+                daemon_freshness._prefetched_onchain_fetches_for_job(
+                    entry,
+                    mismatched_job,
+                    "wallet-a",
+                    mismatched_checkpoint,
+                    force_full,
+                )
+            )
 
     def test_journal_freshness_handler_auto_pairs_before_processing(self):
         conn = self._db()
