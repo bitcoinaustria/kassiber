@@ -172,6 +172,54 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(prefetch.call_args.kwargs["freshness_checkpoints"], expected)
         self.assertEqual(apply.call_args.kwargs["freshness_checkpoints"], expected)
 
+    def test_cli_wallet_sync_force_full_ignores_persisted_checkpoint(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind,
+                config_json, created_at
+            ) VALUES(
+                'wallet', 'ws', ?, NULL, 'Wallet', 'address',
+                '{"addresses":["bc1qwallet"]}', '2026-06-04T00:00:00Z'
+            )
+            """,
+            (profile_id,),
+        )
+        freshness.upsert_source_state(
+            conn,
+            profile_id=profile_id,
+            source_key=freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet"),
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Wallet",
+            status=freshness.STATUS_FRESH,
+            checkpoint={"electrum_statuses": {"script": "history-hash"}},
+        )
+        conn.commit()
+
+        with patch(
+            "kassiber.cli.handlers._prefetch_chain_wallets",
+            return_value={"wallet": object()},
+        ) as prefetch, patch(
+            "kassiber.cli.handlers._apply_wallet_sync_atomically",
+            return_value=[{"wallet": "Wallet", "status": "synced"}],
+        ) as apply:
+            result = cli_handlers.sync_wallet(
+                conn,
+                {},
+                "ws",
+                profile_id,
+                wallet_ref="wallet",
+                force_full=True,
+            )
+
+        self.assertEqual(result[0]["status"], "synced")
+        self.assertEqual(prefetch.call_args.kwargs["freshness_checkpoints"], {})
+        self.assertIs(prefetch.call_args.kwargs["force_full"], True)
+        self.assertEqual(apply.call_args.kwargs["freshness_checkpoints"], {})
+        self.assertIs(apply.call_args.kwargs["force_full"], True)
+
     def test_electrum_prefetch_loads_only_trusted_current_stored_graphs(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

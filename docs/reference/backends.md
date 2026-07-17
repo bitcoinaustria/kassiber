@@ -161,6 +161,15 @@ dependency state in memory and replaces it only in the successful atomic apply;
 it does not pre-delete transactions, notes, attachments, review history, or
 custody interpretations.
 
+An ordinary `wallets sync` reuses the wallet's persisted freshness checkpoint:
+scripts whose backend status is unchanged since the last sync are skipped and
+their records are not re-emitted. That means a plain resync will not restore
+transaction rows that were removed locally while the chain view stayed
+unchanged. `wallets sync --force-full` ignores the stored checkpoint and
+replays the full backend history; it is the repair path whenever local rows
+may have diverged from an unchanged-chain checkpoint (the desktop app's
+forced-full refresh is the same path).
+
 Common fields:
 
 - `KIND`
