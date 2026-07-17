@@ -311,6 +311,10 @@ binary.
    and transaction-reference resolution for these commands; it no longer
    contains their custody mutation rules. Bulk/rule matching and CLI, daemon
    and AI entry points consequently invoke the same component-native service.
+   Complete economic term sets are now normalized and inserted atomically with
+   their draft component. The separate create-then-seal mutation path is
+   deleted, while the replicated expected-term-count commitment remains so a
+   partial child-row replay still fails closed.
    Balance sheet, current portfolio, tax summary and exit-tax reports now read
    only the gated stored journal projection. Their live-builder fallbacks and
    the `ReportHooks.build_ledger_state` injection seam are deleted. Exit tax

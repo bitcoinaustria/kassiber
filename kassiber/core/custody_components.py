@@ -2196,73 +2196,6 @@ def _insert_economic_terms(
     )
 
 
-def seal_component_economic_terms(
-    conn: sqlite3.Connection,
-    component_id: str,
-    terms: Iterable[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """Atomically commit the complete typed terms of one draft revision.
-
-    Ordinary custody components are created with an explicit zero-term
-    commitment. A pair/payout aggregate may replace that zero exactly once,
-    before activation and before any term row exists. Replication therefore
-    sees a header count that fails closed until every immutable term arrives.
-    """
-
-    row = _row(conn, component_id)
-    if row["state"] != "draft":
-        raise _error(
-            "economic terms can only be sealed on a draft component",
-            "custody_component_state_conflict",
-            details={"component_id": component_id, "state": row["state"]},
-        )
-    stored_legs = [
-        _leg_dict(leg)
-        for leg in conn.execute(
-            "SELECT * FROM custody_component_legs "
-            "WHERE component_id = ? ORDER BY ordinal, id",
-            (component_id,),
-        ).fetchall()
-    ]
-    normalized = normalize_economic_terms(terms, stored_legs)
-    existing_count = int(
-        conn.execute(
-            "SELECT COUNT(*) FROM custody_component_economic_terms "
-            "WHERE component_id = ?",
-            (component_id,),
-        ).fetchone()[0]
-    )
-    if existing_count:
-        raise _error(
-            "economic terms are already sealed for this revision",
-            "custody_component_state_conflict",
-            details={"component_id": component_id, "count": existing_count},
-        )
-    expected = row["expected_economic_term_count"]
-    if expected not in (None, 0):
-        raise _error(
-            "economic term commitment is already fixed",
-            "custody_component_state_conflict",
-            details={"component_id": component_id, "expected": int(expected)},
-        )
-    with _savepoint(conn):
-        conn.execute(
-            "UPDATE custody_components SET expected_economic_term_count = ? "
-            "WHERE id = ? AND state = 'draft' "
-            "AND COALESCE(expected_economic_term_count, 0) = 0",
-            (len(normalized), component_id),
-        )
-        _insert_economic_terms(
-            conn,
-            component_id=component_id,
-            workspace_id=row["workspace_id"],
-            profile_id=row["profile_id"],
-            terms=normalized,
-            created_at=row["created_at"],
-        )
-    return get_component(conn, component_id)
-
-
 def _row(conn: sqlite3.Connection, component_id: str) -> sqlite3.Row:
     row = conn.execute(
         "SELECT * FROM custody_components WHERE id = ?", (component_id,)
@@ -2374,6 +2307,7 @@ def validate_component_plan(
     component_type: str,
     legs: Iterable[Mapping[str, Any]],
     allocations: Iterable[Mapping[str, Any]] | None = None,
+    economic_terms: Iterable[Mapping[str, Any]] | None = None,
     conservation_mode: str = "quantity",
     conversion_policy: str | None = None,
     conversion_reviewed: bool = False,
@@ -2395,6 +2329,9 @@ def validate_component_plan(
     normalized_mode = _normalize_mode(conservation_mode)
     normalized_legs = normalize_legs(legs)
     normalized_allocations = normalize_allocations(allocations, normalized_legs)
+    normalized_economic_terms = normalize_economic_terms(
+        economic_terms, normalized_legs
+    )
     _scope(conn, workspace_id, profile_id)
     _validate_leg_anchors(
         conn,
@@ -3898,6 +3835,7 @@ def create_component(
     component_type: str,
     legs: Iterable[Mapping[str, Any]],
     allocations: Iterable[Mapping[str, Any]] | None = None,
+    economic_terms: Iterable[Mapping[str, Any]] | None = None,
     conservation_mode: str = "quantity",
     evidence_kind: str | None = None,
     evidence_grade: str | None = None,
@@ -3916,6 +3854,9 @@ def create_component(
     profile_id = _required_text(profile_id, "profile_id")
     normalized_legs = normalize_legs(legs)
     normalized_allocations = normalize_allocations(allocations, normalized_legs)
+    normalized_economic_terms = normalize_economic_terms(
+        economic_terms, normalized_legs
+    )
     component_id = _optional_text(component_id, "component_id") or str(uuid.uuid4())
     header = normalize_component_header(
         component_type=component_type,
@@ -3965,7 +3906,7 @@ def create_component(
                 expected_leg_count, expected_allocation_count,
                 expected_economic_term_count, authored_source, notes,
                 change_reason, created_at
-            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 component_id, lineage_id, workspace_id, profile_id, component_type,
@@ -3977,6 +3918,7 @@ def create_component(
                 int(header["conversion_reviewed"]),
                 _json_text(header["conversion_metadata"], "conversion_metadata"),
                 len(normalized_legs), len(normalized_allocations),
+                len(normalized_economic_terms),
                 header["authored_source"],
                 header["notes"],
                 header["change_reason"],
@@ -3997,6 +3939,14 @@ def create_component(
             workspace_id=workspace_id,
             profile_id=profile_id,
             allocations=normalized_allocations,
+            created_at=timestamp,
+        )
+        _insert_economic_terms(
+            conn,
+            component_id=component_id,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            terms=normalized_economic_terms,
             created_at=timestamp,
         )
     return get_component(conn, component_id)

@@ -282,18 +282,14 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
 
     def test_component_revision_preview_is_pure_and_preserves_economic_terms(self):
         component = self._create_draft_component()
-        source = next(leg for leg in component["legs"] if leg["role"] == "source")
-        target = next(
-            leg for leg in component["legs"] if leg["role"] == "destination"
-        )
-        custody_components.seal_component_economic_terms(
+        component = custody_components.update_component(
             self.conn,
             component["id"],
-            [
+            economic_terms=[
                 {
                     "id": "legacy-term",
-                    "source_leg_id": source["id"],
-                    "target_leg_id": target["id"],
+                    "source_ordinal": 0,
+                    "target_ordinal": 1,
                     "term_kind": "transaction_pair",
                     "legacy_source_id": "legacy-pair",
                     "source_row_hash": "a" * 64,
@@ -331,7 +327,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             {**args, "expected_input_version": preview["input_version"]},
         )
         revised = result["component"]
-        self.assertEqual(revised["revision"], 2)
+        self.assertEqual(revised["revision"], 3)
         self.assertEqual(len(revised["economic_terms"]), 1)
         self.assertEqual(revised["economic_terms"][0]["tax_policy"], "transfer")
         self.assertEqual(revised["economic_terms"][0]["swap_fee_msat"], 1_000)

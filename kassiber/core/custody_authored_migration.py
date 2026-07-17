@@ -35,7 +35,6 @@ from .custody_components import (
     activate_component,
     create_component,
     get_component,
-    seal_component_economic_terms,
     supersede_component,
     update_component,
 )
@@ -419,55 +418,48 @@ def _link_legacy_row(
     raise AssertionError(f"unsupported legacy custody table: {legacy_table}")
 
 
-def _insert_terms(
-    conn: sqlite3.Connection,
+def _legacy_terms(
     row: Mapping[str, Any],
     spec: Mapping[str, Any],
     *,
     term_kind: str,
     source_hash: str,
-) -> None:
-    seal_component_economic_terms(
-        conn,
-        spec["component_id"],
-        [
-            {
-                "id": _stable_id(
-                    spec["component_id"],
-                    "term",
-                    term_kind,
-                    str(_field(row, "id")),
-                ),
-                "source_leg_id": spec["legs"][0]["id"],
-                "target_leg_id": spec["legs"][1]["id"],
-                "term_kind": term_kind,
-                "legacy_source_id": str(_field(row, "id")),
-                "source_row_hash": source_hash,
-                "review_kind": str(_field(row, "kind")),
-                "tax_policy": str(_field(row, "policy")),
-                "reviewed_source_amount_msat": spec[
-                    "reviewed_source_amount_msat"
-                ],
-                "swap_fee_msat": _field(row, "swap_fee_msat"),
-                "swap_fee_kind": _field(row, "swap_fee_kind"),
-                "confidence_at_review": _field(row, "confidence_at_pair"),
-                "review_source": _field(row, "pair_source"),
-                "review_notes": _field(row, "notes"),
-                "payout_asset": _field(row, "payout_asset"),
-                "payout_amount_msat": (
-                    None
-                    if _field(row, "payout_amount") is None
-                    else int(_field(row, "payout_amount"))
-                ),
-                "payout_occurred_at": _field(row, "payout_occurred_at"),
-                "payout_fiat_value_exact": _canonical_float(
-                    _field(row, "payout_fiat_value")
-                ),
-                "payout_external_id": _field(row, "payout_external_id"),
-                "counterparty": _field(row, "counterparty"),
-            }
-        ],
-    )
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": _stable_id(
+                spec["component_id"],
+                "term",
+                term_kind,
+                str(_field(row, "id")),
+            ),
+            "source_leg_id": spec["legs"][0]["id"],
+            "target_leg_id": spec["legs"][1]["id"],
+            "term_kind": term_kind,
+            "legacy_source_id": str(_field(row, "id")),
+            "source_row_hash": source_hash,
+            "review_kind": str(_field(row, "kind")),
+            "tax_policy": str(_field(row, "policy")),
+            "reviewed_source_amount_msat": spec["reviewed_source_amount_msat"],
+            "swap_fee_msat": _field(row, "swap_fee_msat"),
+            "swap_fee_kind": _field(row, "swap_fee_kind"),
+            "confidence_at_review": _field(row, "confidence_at_pair"),
+            "review_source": _field(row, "pair_source"),
+            "review_notes": _field(row, "notes"),
+            "payout_asset": _field(row, "payout_asset"),
+            "payout_amount_msat": (
+                None
+                if _field(row, "payout_amount") is None
+                else int(_field(row, "payout_amount"))
+            ),
+            "payout_occurred_at": _field(row, "payout_occurred_at"),
+            "payout_fiat_value_exact": _canonical_float(
+                _field(row, "payout_fiat_value")
+            ),
+            "payout_external_id": _field(row, "payout_external_id"),
+            "counterparty": _field(row, "counterparty"),
+        }
+    ]
 
 
 def _pair_rows(
@@ -1760,6 +1752,16 @@ def _activate_native_review(
         "conversion_reviewed": bool(spec.get("conversion_reviewed")),
         "legs": spec["legs"],
         "allocations": spec["allocations"],
+        "economic_terms": (
+            spec["terms"]
+            if spec.get("terms")
+            else _legacy_terms(
+                row,
+                spec,
+                term_kind=term_kind,
+                source_hash=source_hash,
+            )
+        ),
         "evidence_kind": evidence_kind,
         "evidence_grade": "reviewed",
         "evidence": (
@@ -1789,10 +1791,6 @@ def _activate_native_review(
             change_reason=change_reason or f"{term_kind} review revised",
             **component_kwargs,
         )
-    if spec.get("terms"):
-        seal_component_economic_terms(conn, component["id"], spec["terms"])
-    else:
-        _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
     activate_component(conn, component["id"], activated_at=str(row["created_at"]))
     return {**dict(row), "component_id": component["id"]}
 

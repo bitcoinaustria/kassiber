@@ -294,6 +294,9 @@ class CustodySchemaTests(unittest.TestCase):
             legacy = sqlite3.connect(db_path)
             try:
                 legacy.execute("PRAGMA foreign_keys = OFF")
+                legacy.execute(
+                    "DROP VIEW IF EXISTS journal_custody_projection_relations"
+                )
                 trigger_names = [
                     row[0]
                     for row in legacy.execute(

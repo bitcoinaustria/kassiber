@@ -23,7 +23,6 @@ from kassiber.core.custody_components import (
     create_component,
     get_component,
     iter_authored_active_components,
-    seal_component_economic_terms,
 )
 from kassiber.core.custody_journal import CustodyJournalBuilder
 from kassiber.db import open_db
@@ -734,22 +733,22 @@ def test_single_phase_migration_rolls_back_components_terms_and_links_together(t
     conn = open_db(tmp_path)
     _legacy_rows(conn)
 
-    from kassiber.core import custody_authored_migration as migration
+    from kassiber.core import custody_components as components
 
-    real_seal = migration.seal_component_economic_terms
+    real_insert = components._insert_economic_terms
     calls = 0
 
-    def fail_second_seal(*args, **kwargs):
+    def fail_second_insert(*args, **kwargs):
         nonlocal calls
         calls += 1
         if calls == 2:
             raise RuntimeError("fault injection")
-        return real_seal(*args, **kwargs)
+        return real_insert(*args, **kwargs)
 
     with patch.object(
-        migration,
-        "seal_component_economic_terms",
-        side_effect=fail_second_seal,
+        components,
+        "_insert_economic_terms",
+        side_effect=fail_second_insert,
     ):
         with pytest.raises(RuntimeError, match="fault injection"):
             refresh_legacy_authored_components(conn)
@@ -810,18 +809,11 @@ def test_component_aggregate_accepts_multiple_leg_bound_economic_terms(tmp_path)
                 "sink_amount_msat": staged["allocations"][0]["sink_amount_msat"],
             }
         ],
-        created_at=NOW,
-    )
-    source_leg_id = aggregate["legs"][0]["id"]
-    target_leg_id = aggregate["legs"][1]["id"]
-    seal_component_economic_terms(
-        conn,
-        aggregate["id"],
-        [
+        economic_terms=[
             {
                 "id": "first-term",
-                "source_leg_id": source_leg_id,
-                "target_leg_id": target_leg_id,
+                "source_ordinal": 0,
+                "target_ordinal": 1,
                 "term_kind": "transaction_pair",
                 "legacy_source_id": "pair",
                 "source_row_hash": "ab" * 32,
@@ -831,8 +823,8 @@ def test_component_aggregate_accepts_multiple_leg_bound_economic_terms(tmp_path)
             },
             {
                 "id": "second-term",
-                "source_leg_id": source_leg_id,
-                "target_leg_id": target_leg_id,
+                "source_ordinal": 0,
+                "target_ordinal": 1,
                 "term_kind": "transaction_pair",
                 "legacy_source_id": "pair-2",
                 "source_row_hash": "ef" * 32,
@@ -841,6 +833,7 @@ def test_component_aggregate_accepts_multiple_leg_bound_economic_terms(tmp_path)
                 "reviewed_source_amount_msat": 100,
             },
         ],
+        created_at=NOW,
     )
     terms = get_component(conn, aggregate["id"])["economic_terms"]
     assert [term["legacy_source_id"] for term in terms] == ["pair", "pair-2"]
