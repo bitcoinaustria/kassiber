@@ -21,7 +21,6 @@ from ..tax_policy import require_tax_processing_supported
 from . import custody_authored_migration
 from . import custody_components
 from . import custody_gap_reviews
-from . import custody_gaps
 from . import custody_interpreters
 from . import custody_quantity_runtime
 from . import custody_quantity_store
@@ -37,6 +36,96 @@ from .custody_evidence import build_canonical_quantity_input, enriched_quantity_
 from .engines import TaxEngineLedgerInputs, build_tax_engine
 from .lightning import channel_lifecycle
 from .repo import resolve_scope
+
+
+def evaluate_projection_freshness(
+    profile: Mapping[str, Any],
+    active_transaction_count: int,
+) -> dict[str, Any]:
+    """Evaluate one journal projection against its persisted input markers."""
+
+    active_count = int(active_transaction_count or 0)
+    processed_at = profile["last_processed_at"]
+    processed_count = int(profile["last_processed_tx_count"] or 0)
+    input_version = int(profile["journal_input_version"] or 0)
+    processed_version = int(profile["last_processed_input_version"] or 0)
+    is_current = bool(
+        processed_at
+        and processed_count == active_count
+        and input_version == processed_version
+    )
+    if active_count == 0:
+        status = "no_transactions"
+        reason = "no active transactions"
+    elif not processed_at:
+        status = "not_processed"
+        reason = "journals have not been processed"
+    elif processed_count != active_count:
+        status = "stale"
+        reason = "active transaction count changed since last processing"
+    elif input_version != processed_version:
+        status = "stale"
+        reason = "journal inputs changed since last processing"
+    else:
+        status = "current"
+        reason = "journals match the active transaction count and input version"
+    return {
+        "status": status,
+        "is_current": is_current,
+        "needs_processing": status in {"not_processed", "stale"},
+        "reason": reason,
+        "last_processed_at": processed_at,
+        "last_processed_tx_count": processed_count,
+        "journal_input_version": input_version,
+        "last_processed_input_version": processed_version,
+        "active_transaction_count": active_count,
+    }
+
+
+def projection_freshness(
+    conn: sqlite3.Connection,
+    profile: str | Mapping[str, Any],
+) -> dict[str, Any]:
+    """Load and evaluate the canonical freshness markers for one profile."""
+
+    if isinstance(profile, str):
+        row = conn.execute(
+            """
+            SELECT p.last_processed_at, p.last_processed_tx_count,
+                   p.journal_input_version, p.last_processed_input_version,
+                   (SELECT COUNT(*) FROM transactions t
+                    WHERE t.profile_id = p.id AND t.excluded = 0)
+                       AS active_transaction_count
+            FROM profiles p
+            WHERE p.id = ?
+            """,
+            (profile,),
+        ).fetchone()
+        if row is None:
+            return {
+                "status": "no_profile",
+                "is_current": False,
+                "needs_processing": False,
+                "reason": "no active profile",
+                "last_processed_at": None,
+                "last_processed_tx_count": 0,
+                "journal_input_version": 0,
+                "last_processed_input_version": 0,
+                "active_transaction_count": 0,
+            }
+        return evaluate_projection_freshness(
+            row, int(row["active_transaction_count"] or 0)
+        )
+
+    active_count = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM transactions "
+            "WHERE profile_id = ? AND excluded = 0",
+            (profile["id"],),
+        ).fetchone()[0]
+        or 0
+    )
+    return evaluate_projection_freshness(profile, active_count)
 
 
 def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any]:
@@ -484,6 +573,8 @@ class CustodyJournalBuilder:
                 }
             )
         )
+        from . import custody_gaps
+
         gap_search_result, _gap_legs = custody_gaps.load_gap_search_result(
             self.conn,
             self.profile_id,

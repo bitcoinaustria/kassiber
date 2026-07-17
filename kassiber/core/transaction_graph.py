@@ -26,6 +26,7 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..time_utils import now_iso
+from . import custody_journal
 from . import ownership as core_ownership
 from .ownership_transfers import (
     _norm_chain_network,
@@ -416,21 +417,7 @@ def _stored_custody_semantics(
 ) -> dict[str, Any]:
     """Project graph annotations only from the current stored journal seam."""
 
-    profile = conn.execute(
-        "SELECT journal_input_version, last_processed_input_version, "
-        "last_processed_tx_count, "
-        "(SELECT COUNT(*) FROM transactions "
-        " WHERE profile_id = profiles.id AND excluded = 0) "
-        "AS transaction_count "
-        "FROM profiles WHERE id = ?",
-        (profile_id,),
-    ).fetchone()
-    if profile is None or (
-        int(profile["journal_input_version"] or 0)
-        != int(profile["last_processed_input_version"] or 0)
-        or int(profile["last_processed_tx_count"] or 0)
-        != int(profile["transaction_count"] or 0)
-    ):
+    if not custody_journal.projection_freshness(conn, profile_id)["is_current"]:
         return {
             "by_row": {},
             "linked_pairs": {},

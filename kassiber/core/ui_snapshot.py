@@ -39,6 +39,7 @@ from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
 from . import custody_components as core_custody_components
+from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
 from . import lightning as core_lightning
 from . import rates as core_rates
@@ -899,14 +900,7 @@ def _journal_freshness(
             "reason": "no active profile",
         }
 
-    active_transactions = conn.execute(
-        """
-        SELECT COUNT(*) AS count
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-        """,
-        (profile["id"],),
-    ).fetchone()["count"]
+    freshness = core_custody_journal.projection_freshness(conn, profile)
     journal_entries = conn.execute(
         "SELECT COUNT(*) AS count FROM journal_entries WHERE profile_id = ?",
         (profile["id"],),
@@ -915,37 +909,10 @@ def _journal_freshness(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
-    last_processed_at = profile["last_processed_at"]
-    last_processed_tx_count = _row_int(profile, "last_processed_tx_count")
-    journal_input_version = _row_int(profile, "journal_input_version")
-    last_processed_input_version = _row_int(profile, "last_processed_input_version")
-    active_count = int(active_transactions or 0)
-    if active_count == 0:
-        status = "no_transactions"
-        reason = "no active transactions"
-    elif not last_processed_at:
-        status = "not_processed"
-        reason = "journals have not been processed"
-    elif last_processed_tx_count != active_count:
-        status = "stale"
-        reason = "active transaction count changed since last processing"
-    elif journal_input_version != last_processed_input_version:
-        status = "stale"
-        reason = "journal inputs changed since last processing"
-    else:
-        status = "current"
-        reason = "journals match the active transaction count and input version"
     return {
-        "status": status,
-        "needs_processing": status in {"not_processed", "stale"},
-        "last_processed_at": last_processed_at,
-        "last_processed_tx_count": last_processed_tx_count,
-        "journal_input_version": journal_input_version,
-        "last_processed_input_version": last_processed_input_version,
-        "active_transaction_count": active_count,
+        **freshness,
         "journal_entry_count": int(journal_entries or 0),
         "quarantine_count": int(quarantines or 0),
-        "reason": reason,
     }
 
 

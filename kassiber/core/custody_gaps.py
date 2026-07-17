@@ -25,6 +25,7 @@ import json
 import sqlite3
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
 from .custody_evidence import normalize_boundary_amounts, resolve_protocol_scope
 
@@ -2281,36 +2282,10 @@ def _journal_status(conn, profile_id: str) -> str:
     """Return the same fail-closed freshness state used by report readiness."""
 
     try:
-        profile = conn.execute(
-            """
-            SELECT last_processed_at, last_processed_tx_count,
-                   journal_input_version, last_processed_input_version
-            FROM profiles WHERE id = ?
-            """,
-            (profile_id,),
-        ).fetchone()
-        active_count = int(
-            conn.execute(
-                "SELECT COUNT(*) FROM transactions "
-                "WHERE profile_id = ? AND excluded = 0",
-                (profile_id,),
-            ).fetchone()[0]
-        )
+        status = str(custody_journal.projection_freshness(conn, profile_id)["status"])
+        return "not_processed" if status == "no_profile" else status
     except sqlite3.OperationalError:
         return "not_processed"
-    if profile is None:
-        return "not_processed"
-    if active_count == 0:
-        return "no_transactions"
-    if not profile["last_processed_at"]:
-        return "not_processed"
-    if int(profile["last_processed_tx_count"] or 0) != active_count:
-        return "stale"
-    if int(profile["journal_input_version"] or 0) != int(
-        profile["last_processed_input_version"] or 0
-    ):
-        return "stale"
-    return "current"
 
 
 def _validate_limits(**limits: int) -> None:

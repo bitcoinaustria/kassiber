@@ -493,23 +493,12 @@ def _journal_freshness_fact(
     journal_entry_count: int,
     quarantine_count: int,
 ) -> dict[str, Any]:
-    last_processed_at = profile["last_processed_at"]
-    last_processed_tx_count = int(profile["last_processed_tx_count"] or 0)
-    journal_input_version = int(profile["journal_input_version"] or 0)
-    last_processed_input_version = int(profile["last_processed_input_version"] or 0)
-    if active_transaction_count == 0:
-        status = "no_transactions"
-    elif not last_processed_at:
-        status = "not_processed"
-    elif last_processed_tx_count != active_transaction_count:
-        status = "stale"
-    elif journal_input_version != last_processed_input_version:
-        status = "stale"
-    else:
-        status = "current"
+    freshness = core_custody_journal.evaluate_projection_freshness(
+        profile, active_transaction_count
+    )
     return {
-        "status": status,
-        "needs_processing": status in {"not_processed", "stale"},
+        "status": freshness["status"],
+        "needs_processing": freshness["needs_processing"],
         "active_transaction_count": active_transaction_count,
         "journal_entry_count": journal_entry_count,
         "quarantine_count": quarantine_count,
@@ -2624,23 +2613,9 @@ def _journals_current(conn, profile_id):
     rows in place, so a stale profile still has entries that must not be
     exported as current figures.
     """
-    row = conn.execute(
-        """
-        SELECT last_processed_at, last_processed_tx_count,
-               journal_input_version, last_processed_input_version
-        FROM profiles WHERE id = ?
-        """,
-        (profile_id,),
-    ).fetchone()
-    if row is None or not row["last_processed_at"]:
-        return False
-    current_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile_id,),
-    ).fetchone()["count"]
-    return int(current_count or 0) == int(row["last_processed_tx_count"] or 0) and int(
-        row["journal_input_version"] or 0
-    ) == int(row["last_processed_input_version"] or 0)
+    return bool(
+        core_custody_journal.projection_freshness(conn, str(profile_id))["is_current"]
+    )
 
 
 def _transaction_journal_values(conn, profile, wallet=None):
@@ -3749,18 +3724,11 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
         """,
         tx_params,
     ).fetchall()
-    current_tx_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile["id"],),
-    ).fetchone()["count"]
-    input_version = _summary_pdf_int(profile["journal_input_version"])
-    processed_version = _summary_pdf_int(profile["last_processed_input_version"])
-    last_processed_tx_count = _summary_pdf_int(profile["last_processed_tx_count"])
-    journals_current = bool(
-        profile["last_processed_at"]
-        and _summary_pdf_int(current_tx_count) == last_processed_tx_count
-        and input_version == processed_version
-    )
+    freshness = core_custody_journal.projection_freshness(conn, profile)
+    input_version = freshness["journal_input_version"]
+    processed_version = freshness["last_processed_input_version"]
+    last_processed_tx_count = freshness["last_processed_tx_count"]
+    journals_current = freshness["is_current"]
     total_transactions = _summary_pdf_int(tx_summary["total_transactions"])
     priced_transactions = _summary_pdf_int(tx_summary["priced_transactions"])
     priced_percentage = (
@@ -3780,13 +3748,13 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
         "quarantine_reasons": quarantine_reasons,
         "internal_transfers": internal_transfers,
         "journals": {
-            "status": "current" if journals_current else ("stale" if profile["last_processed_at"] else "not_processed"),
+            "status": freshness["status"],
             "current": journals_current,
             "last_processed_at": profile["last_processed_at"],
             "journal_input_version": input_version,
             "last_processed_input_version": processed_version,
             "last_processed_tx_count": last_processed_tx_count,
-            "current_tx_count": _summary_pdf_int(current_tx_count),
+            "current_tx_count": freshness["active_transaction_count"],
         },
     }
 

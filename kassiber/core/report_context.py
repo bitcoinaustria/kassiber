@@ -19,14 +19,6 @@ ScopeResolver = Callable[
 ProfileValidator = Callable[[Mapping[str, Any]], None]
 
 
-def _row_int(row: Mapping[str, Any], key: str) -> int:
-    try:
-        value = row[key]
-    except (IndexError, KeyError):
-        value = None
-    return int(value or 0)
-
-
 @dataclass(frozen=True)
 class ReportContext:
     """Proof that one profile's stored journal projection passed its gate."""
@@ -106,22 +98,8 @@ def require_report_context(
             retryable=False,
         )
 
-    active_count = int(
-        conn.execute(
-            "SELECT COUNT(*) FROM transactions "
-            "WHERE profile_id = ? AND excluded = 0",
-            (profile["id"],),
-        ).fetchone()[0]
-        or 0
-    )
-    input_version = _row_int(profile, "journal_input_version")
-    processed_version = _row_int(profile, "last_processed_input_version")
-    processed_at = str(profile["last_processed_at"] or "")
-    if not (
-        processed_at
-        and active_count == _row_int(profile, "last_processed_tx_count")
-        and input_version == processed_version
-    ):
+    freshness = custody_journal.projection_freshness(conn, profile)
+    if not freshness["is_current"]:
         raise AppError(
             "Reports require fresh journals. Run `kassiber journals process` first."
         )
@@ -129,8 +107,8 @@ def require_report_context(
     return ReportContext(
         workspace=workspace,
         profile=profile,
-        active_transaction_count=active_count,
-        journal_input_version=input_version,
-        last_processed_input_version=processed_version,
-        last_processed_at=processed_at,
+        active_transaction_count=freshness["active_transaction_count"],
+        journal_input_version=freshness["journal_input_version"],
+        last_processed_input_version=freshness["last_processed_input_version"],
+        last_processed_at=str(freshness["last_processed_at"]),
     )
