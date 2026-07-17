@@ -49,7 +49,6 @@ from ..core import loans as core_loans
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
 from ..core import ownership as core_ownership
-from ..core import ownership_transfers as core_ownership_transfers
 from ..core import chat_history as core_chat_history
 from ..core import pricing
 from ..core import rates as core_rates
@@ -701,89 +700,7 @@ def _load_active_transfer_review_refs(conn, profile_id):
     )
 
 
-def _ownership_review_candidates(conn, profile_id, rows, pair_records):
-    """Build actionable ownership candidates from current journal blocks.
-
-    The quarantine is the journal's declaration that automatic booking declined;
-    the graph helper then emits only real-row pairs that the existing pair store
-    can represent. No descriptor/script material is returned.
-    """
-
-    blocked_rows = conn.execute(
-        """
-        SELECT q.transaction_id, q.reason
-        FROM journal_quarantines q
-        JOIN transactions t ON t.id = q.transaction_id
-        WHERE q.profile_id = ?
-          AND t.direction = 'outbound'
-          AND q.reason IN (
-            'ownership_transfer_destination_ambiguous',
-            'ownership_transfer_source_ambiguous',
-            'owned_fanout_unresolved'
-          )
-        ORDER BY q.created_at, q.transaction_id
-        """,
-        (profile_id,),
-    ).fetchall()
-    if not blocked_rows:
-        return []
-    blocked_reasons = {
-        str(row["transaction_id"]): str(row["reason"]) for row in blocked_rows
-    }
-    wallets = core_ownership.load_profile_wallets(conn, profile_id)
-    owned_index, _warnings = core_ownership.build_owned_index(
-        conn, profile_id, wallets
-    )
-    proofs = core_ownership_transfers.derive_ownership_review_proofs(
-        rows,
-        index=owned_index,
-        blocked_reasons_by_row_id=blocked_reasons,
-        active_pair_records=pair_records,
-    )
-    candidates = []
-    for proof in proofs:
-        candidates.append(_ownership_review_candidate(proof))
-    return candidates
-
-
-def _ownership_review_candidate(proof):
-    """Convert one proof without upgrading its evidence confidence."""
-
-    out_row = proof.out_row
-    in_row = proof.in_row
-    in_amount_msat = int(in_row["amount"] or 0)
-    return core_transfer_matching.SwapCandidate(
-        out_id=str(out_row["id"]),
-        in_id=str(in_row["id"]),
-        out_asset=str(out_row["asset"]),
-        in_asset=str(in_row["asset"]),
-        out_amount_msat=int(proof.owned_amount_msat),
-        in_amount_msat=in_amount_msat,
-        out_wallet_id=str(out_row["wallet_id"]),
-        in_wallet_id=str(in_row["wallet_id"]),
-        out_wallet_label=str(out_row["wallet_label"]),
-        in_wallet_label=str(in_row["wallet_label"]),
-        out_wallet_kind=str(out_row["wallet_kind"] or ""),
-        in_wallet_kind=str(in_row["wallet_kind"] or ""),
-        out_occurred_at=str(out_row["occurred_at"]),
-        in_occurred_at=str(in_row["occurred_at"]),
-        confidence=proof.confidence,
-        method=core_transfer_matching.METHOD_OWNERSHIP_GRAPH,
-        swap_fee_msat=int(proof.owned_amount_msat) - in_amount_msat,
-        swap_fee_kind="ownership_graph_delta",
-        default_kind=core_transfer_matching.KIND_MANUAL,
-        default_policy=core_transfer_matching.POLICY_CARRYING_VALUE,
-        conflict_set_id=proof.conflict_set_id,
-        conflict_size=proof.conflict_size,
-        evidence_provider="ownership_graph",
-        evidence_id=proof.reason,
-        evidence_kind="owned_output",
-    )
-
-
-def _merge_ownership_review_candidates(
-    conn, profile_id, rows, pair_records, candidates
-):
+def _merge_ownership_review_candidates(conn, profile_id, candidates):
     """Merge ownership evidence before global conflict stamping.
 
     Ownership proofs originate from persisted journal blocks rather than the
@@ -792,8 +709,8 @@ def _merge_ownership_review_candidates(
     eligible even while ownership evidence pointed at another destination.
     """
 
-    ownership_candidates = _ownership_review_candidates(
-        conn, profile_id, rows, pair_records
+    ownership_candidates = core_custody_journal.stored_ownership_review_candidates(
+        conn, profile_id
     )
     ownership_pair_keys = {
         (candidate.out_id, candidate.in_id) for candidate in ownership_candidates
@@ -864,7 +781,7 @@ def suggest_transfer_candidates(
         fee_sats_min=int(fee_sats_min),
     )
     candidates = _merge_ownership_review_candidates(
-        conn, profile["id"], rows, pair_records, candidates
+        conn, profile["id"], candidates
     )
     # Detection above is deliberately country-neutral. Only after the complete
     # candidate set and its conflict clusters exist may tax policy recommend how
@@ -967,7 +884,7 @@ def bulk_pair_transfers(
         fee_sats_min=int(fee_sats_min),
     )
     candidates = _merge_ownership_review_candidates(
-        conn, profile["id"], rows, pair_records, candidates
+        conn, profile["id"], candidates
     )
     candidates = _apply_profile_candidate_policies(candidates, profile)
     if confidence not in ("exact", "strong"):
@@ -1063,7 +980,7 @@ def apply_transfer_rules(
         fee_sats_min=int(fee_sats_min),
     )
     candidates = _merge_ownership_review_candidates(
-        conn, profile["id"], rows, pair_records, candidates
+        conn, profile["id"], candidates
     )
     candidates = _apply_profile_candidate_policies(candidates, profile)
     candidates = _filter_transfer_candidates(

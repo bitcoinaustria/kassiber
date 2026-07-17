@@ -250,13 +250,13 @@ def suggest_swap_candidates(
         row
         for row in population_rows
         if row["direction"] == "outbound"
-        and _record_get(row, "id") not in deterministic_transfer_ids
+        and _record_get(row, "id") not in booked_move_ids
     ]
     population_in_rows = [
         row
         for row in population_rows
         if row["direction"] == "inbound"
-        and _record_get(row, "id") not in deterministic_transfer_ids
+        and _record_get(row, "id") not in booked_move_ids
     ]
     eligible_ids = {_record_get(row, "id") for row in eligible_rows}
 

@@ -8,7 +8,7 @@ reassembling custody interpretation themselves.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields, replace
+from dataclasses import asdict, dataclass, fields, replace
 import json
 import sqlite3
 import uuid
@@ -31,6 +31,7 @@ from . import ownership
 from . import ownership_transfers
 from . import pricing
 from . import tax_events
+from . import transfer_matching
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from .engines import TaxEngineLedgerInputs, build_tax_engine
 from .lightning import channel_lifecycle
@@ -258,7 +259,7 @@ def component_integrity_blockers(
     ]
 
 
-def ownership_review_counts(
+def ownership_review_projection(
     rows,
     owned_index,
     quarantines,
@@ -269,7 +270,7 @@ def ownership_review_counts(
         for quarantine in quarantines
     }
     if not blocked_reasons:
-        return {"total": 0, "by_reason": {}}
+        return {"counts": {"total": 0, "by_reason": {}}, "candidates": []}
     active_review_records: list[dict[str, Any]] = []
     for component in active_components:
         legs = {
@@ -305,9 +306,78 @@ def ownership_review_counts(
         active_pair_records=active_review_records,
     )
     by_reason: dict[str, int] = {}
+    candidates: list[dict[str, Any]] = []
     for proof in proofs:
         by_reason[proof.reason] = by_reason.get(proof.reason, 0) + 1
-    return {"total": len(proofs), "by_reason": dict(sorted(by_reason.items()))}
+        out_row = proof.out_row
+        in_row = proof.in_row
+        in_amount_msat = int(in_row["amount"] or 0)
+        candidates.append(
+            asdict(
+                transfer_matching.SwapCandidate(
+                    out_id=str(out_row["id"]),
+                    in_id=str(in_row["id"]),
+                    out_asset=str(out_row["asset"]),
+                    in_asset=str(in_row["asset"]),
+                    out_amount_msat=int(proof.owned_amount_msat),
+                    in_amount_msat=in_amount_msat,
+                    out_wallet_id=str(out_row["wallet_id"]),
+                    in_wallet_id=str(in_row["wallet_id"]),
+                    out_wallet_label=str(out_row["wallet_label"]),
+                    in_wallet_label=str(in_row["wallet_label"]),
+                    out_wallet_kind=str(out_row["wallet_kind"] or ""),
+                    in_wallet_kind=str(in_row["wallet_kind"] or ""),
+                    out_occurred_at=str(out_row["occurred_at"]),
+                    in_occurred_at=str(in_row["occurred_at"]),
+                    confidence=str(proof.confidence),
+                    method=transfer_matching.METHOD_OWNERSHIP_GRAPH,
+                    swap_fee_msat=int(proof.owned_amount_msat) - in_amount_msat,
+                    swap_fee_kind="ownership_graph_delta",
+                    default_kind=transfer_matching.KIND_MANUAL,
+                    default_policy=transfer_matching.POLICY_CARRYING_VALUE,
+                    conflict_set_id=str(proof.conflict_set_id),
+                    conflict_size=int(proof.conflict_size),
+                    evidence_provider="ownership_graph",
+                    evidence_id=str(proof.reason),
+                    evidence_kind="owned_output",
+                )
+            )
+        )
+    return {
+        "counts": {
+            "total": len(proofs),
+            "by_reason": dict(sorted(by_reason.items())),
+        },
+        "candidates": candidates,
+    }
+
+
+def stored_ownership_review_candidates(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[transfer_matching.SwapCandidate]:
+    """Load review cards only from a current journal projection."""
+
+    if not projection_freshness(conn, profile_id)["is_current"]:
+        return []
+    candidates: list[transfer_matching.SwapCandidate] = []
+    for row in conn.execute(
+        "SELECT detail_json FROM journal_quarantines WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchall():
+        try:
+            detail = json.loads(row["detail_json"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        stored = detail.get("ownership_review_candidates")
+        if not isinstance(stored, list):
+            continue
+        candidates.extend(
+            transfer_matching.SwapCandidate(**dict(item))
+            for item in stored
+            if isinstance(item, Mapping)
+        )
+    return candidates
 
 
 @dataclass(frozen=True)
@@ -717,6 +787,12 @@ class CustodyJournalBuilder:
             current_wallet_balances,
             known_non_event_reasons=known_non_event_reasons,
         )
+        ownership_reviews = ownership_review_projection(
+            custody.rows,
+            custody.owned_index,
+            engine_state.quarantines,
+            custody.active_components,
+        )
 
         return {
             "entries": engine_state.entries,
@@ -726,12 +802,8 @@ class CustodyJournalBuilder:
             "tax_summary": engine_state.tax_summary,
             "account_holdings": engine_state.account_holdings,
             "wallet_holdings": engine_state.wallet_holdings,
-            "ownership_review_counts": ownership_review_counts(
-                custody.rows,
-                custody.owned_index,
-                engine_state.quarantines,
-                custody.active_components,
-            ),
+            "ownership_review_counts": ownership_reviews["counts"],
+            "ownership_review_candidates": ownership_reviews["candidates"],
             "custody_component_blockers": custody.component_blockers,
             "custody_quantity": custody.quantity_state,
             "custody_transfers": custody.custody_transfers,
@@ -751,6 +823,23 @@ def build_ledger_state(conn, profile: Mapping[str, Any]) -> dict[str, Any]:
     """Build canonical journal state through the single custody service seam."""
 
     return CustodyJournalBuilder(conn, profile).build()
+
+
+def _quarantine_detail_with_ownership_candidates(
+    detail_json: Any,
+    candidates: list[Mapping[str, Any]],
+) -> str:
+    try:
+        detail = json.loads(detail_json or "{}")
+    except (TypeError, ValueError):
+        detail = {}
+    if not isinstance(detail, dict):
+        detail = {}
+    if candidates:
+        detail["ownership_review_candidates"] = [
+            dict(candidate) for candidate in candidates
+        ]
+    return json.dumps(detail, sort_keys=True, separators=(",", ":"))
 
 
 def store_ledger_state(
@@ -891,6 +980,11 @@ def store_ledger_state(
         for quarantine in deduped_quarantines
         if str(quarantine["transaction_id"]) in live_transaction_ids
     ]
+    ownership_candidates_by_source: dict[str, list[Mapping[str, Any]]] = {}
+    for candidate in state.get("ownership_review_candidates", ()):
+        source_id = str(candidate.get("out_id") or "")
+        if source_id:
+            ownership_candidates_by_source.setdefault(source_id, []).append(candidate)
     conn.executemany(
         """
         INSERT INTO journal_quarantines(
@@ -903,7 +997,12 @@ def store_ledger_state(
                 quarantine["workspace_id"],
                 quarantine["profile_id"],
                 quarantine["reason"],
-                quarantine["detail_json"],
+                _quarantine_detail_with_ownership_candidates(
+                    quarantine["detail_json"],
+                    ownership_candidates_by_source.get(
+                        str(quarantine["transaction_id"]), []
+                    ),
+                ),
                 stored_at,
             )
             for quarantine in deduped_quarantines
@@ -1343,6 +1442,8 @@ __all__ = [
     "latest_transaction_rates_for_profile",
     "load_stored_ledger_state",
     "load_stored_transfer_audit",
-    "ownership_review_counts",
+    "ownership_review_projection",
     "process_journals",
+    "stored_move_transaction_ids",
+    "stored_ownership_review_candidates",
 ]

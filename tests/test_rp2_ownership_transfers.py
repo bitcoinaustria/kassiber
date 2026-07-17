@@ -23,7 +23,6 @@ from kassiber.cli import handlers
 from kassiber.core import custody_journal
 from kassiber.core.engines import build_tax_engine
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
-from kassiber.core.ownership_transfers import OwnershipReviewProof
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import open_db
 from tests.custody_tax_helpers import (
@@ -1600,7 +1599,7 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
         ):
             persist_authoritative_chain_observation(conn, tx_id)
 
-    def test_matcher_rows_include_wallet_scope_and_handler_preserves_proof_confidence(self):
+    def test_matcher_rows_include_wallet_scope(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-owned-review-wire-") as tmp:
             conn = open_db(Path(tmp) / "data")
             self._seed(conn)
@@ -1621,33 +1620,6 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
             rows = handlers._load_matcher_rows(conn, "profile-1")
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["config_json"], config_json)
-
-            out_row = dict(rows[0])
-            out_row.update(
-                {
-                    "wallet_label": "Cold",
-                    "wallet_kind": "custom",
-                    "occurred_at": NOW,
-                    "asset": "BTC",
-                }
-            )
-            in_row = {
-                **out_row,
-                "id": "wire-in",
-                "wallet_id": "wallet-b",
-                "wallet_label": "Hot",
-                "direction": "inbound",
-            }
-            proof = OwnershipReviewProof(
-                out_row=out_row,
-                in_row=in_row,
-                owned_amount_msat=50_000_000,
-                reason="ownership_transfer_destination_ambiguous",
-                conflict_set_id="ownership-review:wire",
-                confidence="strong",
-            )
-            candidate = handlers._ownership_review_candidate(proof)
-            self.assertEqual(candidate.confidence, "strong")
             conn.close()
 
     def test_handler_derives_sync_gap_move_and_does_not_persist_pairs(self):
