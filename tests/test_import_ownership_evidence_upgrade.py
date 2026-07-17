@@ -94,6 +94,54 @@ def test_normalization_does_not_type_bare_64_hex_provider_id_as_txid():
     assert normalized["external_id_kind"] is None
 
 
+def test_resync_preserves_existing_native_txid_type_without_spurious_update():
+    with tempfile.TemporaryDirectory() as root:
+        conn = open_db(root)
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'ws', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO profiles(id, workspace_id, label, created_at) "
+            "VALUES('profile', 'ws', 'profile', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at) "
+            "VALUES('wallet', 'ws', 'profile', 'wallet', 'address', '{}', '2026-01-01T00:00:00Z')"
+        )
+        txid = "ab" * 32
+        normalized = normalize_import_record(
+            {
+                "txid": txid,
+                "occurred_at": "2026-01-01T00:00:00Z",
+                "confirmed_at": "2026-01-01T00:00:00Z",
+                "direction": "inbound",
+                "amount": "0.00000001",
+                "raw_json": "{}",
+            }
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id,
+                external_id_kind, fingerprint, occurred_at, confirmed_at,
+                direction, asset, amount, fee, raw_json, created_at
+            ) VALUES(
+                'tx', 'ws', 'profile', 'wallet', ?, 'txid', 'fp',
+                '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
+                'inbound', 'BTC', 1000, 0, '{}', '2026-01-01T00:00:00Z'
+            )
+            """,
+            (txid,),
+        )
+
+        existing = _find_existing_transaction(conn, "wallet", normalized, "fp")
+        updates = _transaction_merge_updates(existing, normalized, "fp")
+
+        assert existing["external_id_kind"] == "txid"
+        assert updates == {}
+        conn.close()
+
+
 def test_resync_does_not_replace_same_or_older_ownership_evidence_by_itself():
     existing, normalized = _records(
         {"txid": "ab" * 32, "ownership_graph_version": 2, "marker": "kept"},
