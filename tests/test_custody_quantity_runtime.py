@@ -108,7 +108,7 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             source=QuantitySlice(source.quantity_hash, 0, amount),
             target=QuantitySlice(target.quantity_hash, 0, amount),
             state=INTERNAL_REVIEWED,
-            priority=ClaimPriority.REVIEWED_PAIR,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
             reason="reviewed_transfer_pair",
             supporting_evidence_hashes=tuple(
                 sorted(
@@ -1970,7 +1970,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                     observations["target-reviewed"].quantity_hash, 0, 40
                 ),
                 state=INTERNAL_REVIEWED,
-                priority=ClaimPriority.REVIEWED_PAIR,
+                priority=ClaimPriority.REVIEWED_COMPONENT,
                 reason="reviewed_gap_bridge",
                 atomic_bundle_id="bridge:reviewed",
                 component_id="component-reviewed",

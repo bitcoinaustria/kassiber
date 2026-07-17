@@ -119,27 +119,24 @@ class ClaimPriority(IntEnum):
 
     REVIEWED_COMPONENT = 10
     EXACT_NATIVE_EVENT = 20
-    REVIEWED_PAIR = 30
     ACCOUNTING_CONVENTION = 40
 
 
 STATE_PRIORITIES = {
     INTERNAL_VERIFIED: frozenset({ClaimPriority.EXACT_NATIVE_EVENT}),
     INTERNAL_REVIEWED: frozenset(
-        {ClaimPriority.REVIEWED_COMPONENT, ClaimPriority.REVIEWED_PAIR}
+        {ClaimPriority.REVIEWED_COMPONENT}
     ),
     EXTERNAL_CONFIRMED: frozenset(
         {
             ClaimPriority.REVIEWED_COMPONENT,
             ClaimPriority.EXACT_NATIVE_EVENT,
-            ClaimPriority.REVIEWED_PAIR,
         }
     ),
     CUSTODY_SUSPENSE: frozenset(
         {
             ClaimPriority.REVIEWED_COMPONENT,
             ClaimPriority.EXACT_NATIVE_EVENT,
-            ClaimPriority.REVIEWED_PAIR,
             ClaimPriority.ACCOUNTING_CONVENTION,
         }
     ),
@@ -271,7 +268,6 @@ class QuantityClaim:
             return self.atomic_bundle_id
         if self.priority in {
             ClaimPriority.REVIEWED_COMPONENT,
-            ClaimPriority.REVIEWED_PAIR,
         }:
             return f"single:{self.claim_id}"
         return None
@@ -544,7 +540,7 @@ def _source_decisions(
             authoritative = [
                 claim
                 for claim in contenders
-                if claim.priority <= ClaimPriority.REVIEWED_PAIR
+                if claim.priority <= ClaimPriority.EXACT_NATIVE_EVENT
             ]
             if authoritative:
                 def semantic_key(claim: QuantityClaim) -> tuple[object, ...]:

@@ -36,7 +36,6 @@ from .custody_quantity import (
     CUSTODY_SUSPENSE,
     EXTERNAL_CONFIRMED,
     ClaimPriority,
-    INTERNAL_REVIEWED,
     INTERNAL_VERIFIED,
     QuantityClaim,
     QuantityDomain,
@@ -95,29 +94,6 @@ def _observations_by_transaction(
 
 def _pair_source(pair: Mapping[str, Any]) -> str:
     return str(_field(pair, "source") or _field(pair, "pair_source") or "")
-
-
-def _pair_is_reviewed(pair: Mapping[str, Any]) -> bool:
-    source = _pair_source(pair)
-    return bool(
-        _field(pair, "pair_id")
-        or source in {"manual", "bulk_exact", "bulk_selected", "rule_auto"}
-    )
-
-
-def _pair_priority(pair: Mapping[str, Any]) -> tuple[str, ClaimPriority, str]:
-    source = _pair_source(pair)
-    if _pair_is_reviewed(pair):
-        return (
-            INTERNAL_REVIEWED,
-            ClaimPriority.REVIEWED_PAIR,
-            source or "reviewed_transfer_pair",
-        )
-    return (
-        INTERNAL_VERIFIED,
-        ClaimPriority.EXACT_NATIVE_EVENT,
-        source or "row_matched",
-    )
 
 
 def _is_exact_recorded_pair(
@@ -504,7 +480,6 @@ def _pair_claims(
     ordered_pairs = sorted(
         pairs,
         key=lambda item: (
-            1 if _pair_is_reviewed(item) else 0,
             str(_field(_field(item, "out", {}) or {}, "occurred_at") or ""),
             _row_id(_field(item, "out", {}) or {}),
             _row_id(_field(item, "in", {}) or {}),
@@ -525,41 +500,6 @@ def _pair_claims(
             continue
         source, target = observations.get(out_id), observations.get(in_id)
         # Rowless owned destinations are compiled by custody_native_audit below.
-        invalid_reviewed_pair = _pair_is_reviewed(pair) and (
-            source is None
-            or target is None
-            or source.direction != "outbound"
-            or target.direction != "inbound"
-        )
-        if invalid_reviewed_pair:
-            detail = {
-                "required_for": "valid_reviewed_transfer_legs",
-                "out_direction": source.direction if source is not None else None,
-                "in_direction": target.direction if target is not None else None,
-            }
-            for transaction_id, row, paired_leg in (
-                (out_id, out_row, False),
-                (in_id, in_row, True),
-            ):
-                if not transaction_id:
-                    continue
-                quarantines.append(
-                    {
-                        "transaction_id": transaction_id,
-                        "workspace_id": _field(row, "workspace_id"),
-                        "profile_id": _field(row, "profile_id"),
-                        "reason": "transfer_pair_leg_invalid",
-                        "detail_json": json.dumps(
-                            {
-                                **detail,
-                                **({"paired_leg": True} if paired_leg else {}),
-                            },
-                            sort_keys=True,
-                        ),
-                    }
-                )
-            blocked_transaction_ids.update((out_id, in_id))
-            continue
         if source is None or target is None:
             continue
         if source.direction != "outbound" or target.direction != "inbound":
@@ -587,8 +527,7 @@ def _pair_claims(
             and source.event_key.chain in {"bitcoin", "liquid"}
         )
         if (
-            not _pair_is_reviewed(pair)
-            and recorded_chain_candidate
+            recorded_chain_candidate
             and source.authoritative_chain_observation
             != target.authoritative_chain_observation
         ):
@@ -631,8 +570,7 @@ def _pair_claims(
             blocked_transaction_ids.add(untrusted_id)
             continue
         if (
-            not _pair_is_reviewed(pair)
-            and source_name != "channel_lifecycle"
+            source_name != "channel_lifecycle"
             and not exact_recorded_pair
             and not exact_recorded_fanout
             and not exact_native_pair
@@ -713,7 +651,9 @@ def _pair_claims(
         )
         if amount_msat <= 0:
             continue
-        state, priority, reason = _pair_priority(pair)
+        state = INTERNAL_VERIFIED
+        priority = ClaimPriority.EXACT_NATIVE_EVENT
+        reason = source_name or "row_matched"
         pair_id = str(_field(pair, "pair_id") or f"{out_id}:{in_id}:{ordinal}")
         pair_group_id = str(_field(pair, "group_id") or "")
         atomic_bundle_id = (
@@ -768,8 +708,7 @@ def _pair_claims(
         unclaimed_after_pair = available_source - amount_msat - inferred_fee_msat
         fee_tolerance_msat = max(source.principal_msat // 100, 2_500_000)
         if (
-            not _pair_is_reviewed(pair)
-            and not bool(_field(pair, "allow_unclaimed_residual", False))
+            not bool(_field(pair, "allow_unclaimed_residual", False))
             and source_last_ordinal.get(out_id) == ordinal
             and unclaimed_after_pair > fee_tolerance_msat
         ):
@@ -856,9 +795,7 @@ def _pair_claims(
         target_cursor[target.quantity_hash] = target_start + amount_msat
         if source.fee_attribution == "implicit_wallet_delta":
             implicit_sources[source.quantity_hash] = source
-        if inferred_fee_msat and (
-            transition_kind or not _pair_is_reviewed(pair)
-        ) and source.fee_attribution != "implicit_wallet_delta":
+        if inferred_fee_msat and source.fee_attribution != "implicit_wallet_delta":
             fee_start = source_start + amount_msat
             claims.append(
                 QuantityClaim(
@@ -870,7 +807,7 @@ def _pair_claims(
                     ),
                     state=EXTERNAL_CONFIRMED,
                     priority=priority,
-                    reason="reviewed_transfer_fee",
+                    reason="verified_transfer_fee",
                     supporting_evidence_hashes=tuple(
                         sorted(
                             {
@@ -1241,8 +1178,7 @@ def compile_custody_interpreters(
     same_asset_pairs = [
         pair
         for pair in same_asset_pairs
-        if _pair_is_reviewed(pair)
-        or not {
+        if not {
             _anchor_id(_field(pair, "out", {}) or {}),
             _anchor_id(_field(pair, "in", {}) or {}),
         }
