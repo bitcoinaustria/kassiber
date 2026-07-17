@@ -1687,6 +1687,9 @@ class SyncBackendsTest(unittest.TestCase):
             def get(self, *args, **kwargs):
                 return self.inner.get(*args, **kwargs)
 
+            def get_nowait(self):
+                return self.inner.get_nowait()
+
             def put(self, item, *args, **kwargs):
                 if item is not None and not self.paused:
                     self.paused = True
@@ -1755,7 +1758,14 @@ class SyncBackendsTest(unittest.TestCase):
             def put(self, item, *args, **kwargs):
                 self.inner.put(item, *args, **kwargs)
 
-        with patch("kassiber.core.sync_backends.queue.Queue", CrashingQueue):
+        thread_errors = []
+        with (
+            patch("kassiber.core.sync_backends.queue.Queue", CrashingQueue),
+            patch(
+                "threading.excepthook",
+                side_effect=lambda args: thread_errors.append(args.exc_value),
+            ),
+        ):
             dispatcher = sb._ElectrumBatchDispatcher(backend)
             try:
                 with self.assertRaises(AppError) as raised:
@@ -1768,6 +1778,9 @@ class SyncBackendsTest(unittest.TestCase):
                 self.assertIn("closed", str(rejected.exception))
             finally:
                 dispatcher.close()
+
+        self.assertEqual(len(thread_errors), 1)
+        self.assertIsInstance(thread_errors[0], RuntimeError)
 
     def test_electrum_pool_reconnects_after_transport_failure(self):
         backend = {
