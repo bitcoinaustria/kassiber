@@ -272,6 +272,14 @@ _PAYOUT_HASH_FIELDS = (
 )
 
 
+def _pair_residual_classification(row: Mapping[str, Any]) -> str:
+    return (
+        "network_fee"
+        if str(_field(row, "kind")) == "swap-refund"
+        else "suspense_continuation"
+    )
+
+
 def _pair_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
     out_asset = normalize_asset_code(_field(row, "out_asset"))
     in_asset = normalize_asset_code(_field(row, "in_asset"))
@@ -1016,7 +1024,7 @@ def _pair_group_spec(
                 spec,
                 source_rows[0],
                 reviewed_source_msat=int(amounts["reviewed_msat"]),
-                classification="suspense_continuation",
+                classification=_pair_residual_classification(source_rows[0]),
                 source_leg_id=source_leg_ids[source_id],
             )
     return spec
@@ -2073,7 +2081,7 @@ def create_pair_review_component(
                 spec,
                 row,
                 reviewed_source_msat=reviewed,
-                classification="suspense_continuation",
+                classification=_pair_residual_classification(row),
             )
     return _activate_native_review(
         conn,
@@ -2201,7 +2209,7 @@ def revise_pair_review_component(
                 spec,
                 boundary,
                 reviewed_source_msat=reviewed,
-                classification="suspense_continuation",
+                classification=_pair_residual_classification(boundary),
             )
     spec["lineage_id"] = str(active["lineage_id"])
     return _activate_native_review(

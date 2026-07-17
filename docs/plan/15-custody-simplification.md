@@ -308,6 +308,11 @@ binary.
    path. Mixed components carry unlike-asset economics and exact native
    retention on separate allocations, and native corroboration verifies the
    retained allocation without comparing it to the unsplit outbound total.
+   Same-wallet failed-swap refunds remain one reviewed MOVE: the observed
+   principal shortfall is an explicit reviewed fee allocation, while the
+   source transaction's separately observed network fee remains independent.
+   Journal processing counts transfers from that canonical projection rather
+   than the engine's older native-match audit list.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

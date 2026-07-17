@@ -1139,7 +1139,7 @@ def process_journals(
         "profile": profile["label"],
         "entries_created": len(state["entries"]),
         "quarantined": len(stored["quarantines"]),
-        "transfers_detected": len(state.get("intra_audit", [])),
+        "transfers_detected": len(state.get("custody_transfers", [])),
         "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
         "auto_priced": auto_priced,
         "processed_transactions": stored["processed_transactions"],

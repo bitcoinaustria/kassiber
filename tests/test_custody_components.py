@@ -1816,6 +1816,46 @@ class CustodyComponentApiTests(unittest.TestCase):
             {issue["code"] for issue in report["issues"]},
         )
 
+    def test_same_wallet_round_trip_does_not_require_future_return_as_funding(self):
+        report = validate_conservation(
+            [
+                {
+                    **_leg(
+                        "source",
+                        100,
+                        tx="out",
+                        wallet="btc",
+                        occurred_at="2026-01-01T00:00:00Z",
+                    ),
+                    "id": "lockup",
+                },
+                {
+                    **_leg(
+                        "destination",
+                        100,
+                        tx="in",
+                        wallet="btc",
+                        occurred_at="2026-01-01T02:00:00Z",
+                    ),
+                    "id": "refund",
+                },
+            ],
+            allocations=[
+                {
+                    "source_leg_id": "lockup",
+                    "sink_leg_id": "refund",
+                    "source_amount_msat": 100,
+                    "sink_amount_msat": 100,
+                }
+            ],
+        )
+
+        self.assertTrue(report["activatable"])
+        self.assertNotIn(
+            "custody_location_continuity_mismatch",
+            {issue["code"] for issue in report["issues"]},
+        )
+
     def test_future_bitcoin_layer_can_declare_a_known_network_domain(self):
         report = validate_conservation(
             [

@@ -1480,20 +1480,25 @@ def _location_continuity_issues(
             assert source_when is not None
             has_prior_credit = any(
                 sink_when is not None
-                and sink_when != source_when
-                and sink_when
-                <= source_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
+                and sink_when < source_when
                 for sink_when, _sink in parsed_sinks
             )
             if source.get("transaction_id") is None or has_prior_credit:
-                intermediate_sources.append((source_when, source))
+                # Transactionless missing-wallet hops have bounded timestamp
+                # uncertainty, so let a nearby reviewed credit arrive within
+                # the chronology tolerance. An anchored source has an exact
+                # observation time and may consume only an actual prior credit.
+                event_when = (
+                    source_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
+                    if source.get("transaction_id") is None
+                    else source_when
+                )
+                intermediate_sources.append((event_when, source))
         if not intermediate_sources:
             continue
 
         events = [
-            (when - CUSTODY_CHRONOLOGY_SKEW_TOLERANCE, 0, leg)
-            for when, leg in parsed_sinks
-            if when is not None
+            (when, 0, leg) for when, leg in parsed_sinks if when is not None
         ] + [
             (when, 1, leg) for when, leg in intermediate_sources
         ]

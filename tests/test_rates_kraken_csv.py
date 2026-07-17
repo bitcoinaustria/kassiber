@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kassiber.backends import create_db_backend
+from kassiber.core import custody_journal as core_custody_journal
 from kassiber.core import freshness
 from kassiber.core import rates as core_rates
 from kassiber.core import pricing
@@ -2193,7 +2194,7 @@ class KrakenCsvRatesTest(unittest.TestCase):
         conn.commit()
 
         with patch.object(
-            handlers,
+            core_custody_journal,
             "build_ledger_state",
             side_effect=AppError("negative balance", code="app_error"),
         ):

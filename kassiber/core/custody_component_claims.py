@@ -413,9 +413,17 @@ def compile_component_quantity_claims(
             )
         if conservation_mode != "conversion" and sink.get("role") == "fee":
             # The observation projector emits network fees independently of
-            # principal. The authored fee allocation proves exact boundary
-            # coverage but must not consume the principal slice cursor.
-            if source_amount != source_observation.fee_msat:
+            # principal. A plain authored fee allocation therefore proves
+            # exact boundary coverage without consuming the principal cursor.
+            # A reviewed residual fee is different: it classifies an observed
+            # principal shortfall (for example the refund-spend fee in a
+            # failed swap) and must consume that exact principal slice.
+            reviewed_residual_fee = str(sink.get("notes") or "") == (
+                "reviewed_residual:network_fee"
+            )
+            if not reviewed_residual_fee and (
+                source_amount != source_observation.fee_msat
+            ):
                 raise _error(
                     "component fee allocation does not match the observed fee",
                     component_id=component_id,
@@ -423,7 +431,8 @@ def compile_component_quantity_claims(
                     claimed_fee_msat=source_amount,
                     observed_fee_msat=source_observation.fee_msat,
                 )
-            continue
+            if not reviewed_residual_fee:
+                continue
         source_start = source_cursors.get(source_observation.quantity_hash, 0)
         source_end = source_start + source_amount
         if source_end > source_observation.principal_msat:
@@ -556,15 +565,19 @@ def compile_component_quantity_claims(
                     source_observation.evidence_detail_hash,
                     target_observation.evidence_detail_hash,
                 )
-        elif sink_role == "fee" and conservation_mode == "conversion":
+        elif sink_role == "fee":
             if source_amount != sink_amount:
                 raise _error(
-                    "conversion fee allocation must conserve its source quantity",
+                    "fee allocation must conserve its source quantity",
                     component_id=component_id,
                     allocation_id=allocation.get("id"),
                 )
             state = EXTERNAL_CONFIRMED
-            reason = "reviewed_conversion_fee"
+            reason = (
+                "reviewed_conversion_fee"
+                if conservation_mode == "conversion"
+                else "reviewed_network_fee"
+            )
         elif sink_role == "suspense":
             state = CUSTODY_SUSPENSE
             reason = "reviewed_residual_suspense"
@@ -617,7 +630,7 @@ def compile_component_quantity_claims(
                 component_id=component_id,
                 destination_kind=(
                     "fee"
-                    if conservation_mode == "conversion" and sink_role == "fee"
+                    if sink_role == "fee"
                     else (
                         "external"
                         if sink_role == "external"
