@@ -646,7 +646,7 @@ def _load_freshness_profile(
 def _prefetched_onchain_fetches_for_job(
     prefetched_onchain: Mapping[str, Any] | None,
     job: Mapping[str, Any],
-    wallet_id: str,
+    wallet: Mapping[str, Any],
     checkpoint: Mapping[str, Any],
     force_full: bool,
 ) -> Mapping[str, Any] | None:
@@ -657,7 +657,10 @@ def _prefetched_onchain_fetches_for_job(
     entry = prefetched_onchain.get(str(job.get("id") or ""))
     if not isinstance(entry, Mapping):
         return None
+    wallet_id = str(wallet["id"])
     if str(entry.get("wallet_id") or "") != wallet_id:
+        return None
+    if entry.get("wallet_signature") != _wallet_sync_config_signature(wallet):
         return None
     if bool(entry.get("force_full")) is not force_full:
         return None
@@ -670,6 +673,15 @@ def _prefetched_onchain_fetches_for_job(
     if not isinstance(fetches, Mapping) or wallet_id not in fetches:
         return None
     return fetches
+
+
+def _wallet_sync_config_signature(wallet: Mapping[str, Any]) -> dict[str, str]:
+    """Identify the persisted wallet inputs that determine an on-chain fetch."""
+
+    return {
+        "kind": str(wallet["kind"]),
+        "config_json": str(wallet["config_json"] or "{}"),
+    }
 
 
 def _freshness_handlers(
@@ -689,7 +701,7 @@ def _freshness_handlers(
         prefetched_fetches = _prefetched_onchain_fetches_for_job(
             prefetched_onchain,
             job,
-            str(wallet["id"]),
+            wallet,
             checkpoint,
             force_full,
         )
@@ -1179,6 +1191,7 @@ def _prefetch_onchain_freshness_jobs(
             job = jobs_by_wallet_id[wallet_id]
             prefetched_by_job[str(job["id"])] = {
                 "wallet_id": wallet_id,
+                "wallet_signature": _wallet_sync_config_signature(wallet),
                 "checkpoint": checkpoints[wallet_id],
                 "force_full": force_full,
                 "fetches": {wallet_id: group_results[wallet_id]},

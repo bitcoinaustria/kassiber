@@ -1358,9 +1358,15 @@ class FreshnessTest(unittest.TestCase):
         fetches = {"wallet-a": object()}
         checkpoint = {"tip": 123}
         job = {"id": "job-a"}
+        wallet = {
+            "id": "wallet-a",
+            "kind": "descriptor",
+            "config_json": '{"backend":"fulcrum"}',
+        }
         entry = {
             "job-a": {
                 "wallet_id": "wallet-a",
+                "wallet_signature": daemon_freshness._wallet_sync_config_signature(wallet),
                 "checkpoint": checkpoint,
                 "force_full": False,
                 "fetches": fetches,
@@ -1371,7 +1377,7 @@ class FreshnessTest(unittest.TestCase):
             daemon_freshness._prefetched_onchain_fetches_for_job(
                 entry,
                 job,
-                "wallet-a",
+                wallet,
                 checkpoint,
                 False,
             ),
@@ -1386,11 +1392,22 @@ class FreshnessTest(unittest.TestCase):
                 daemon_freshness._prefetched_onchain_fetches_for_job(
                     entry,
                     mismatched_job,
-                    "wallet-a",
+                    wallet,
                     mismatched_checkpoint,
                     force_full,
                 )
             )
+
+        changed_wallet = dict(wallet, config_json='{"backend":"core"}')
+        self.assertIsNone(
+            daemon_freshness._prefetched_onchain_fetches_for_job(
+                entry,
+                job,
+                changed_wallet,
+                checkpoint,
+                False,
+            )
+        )
 
     def test_journal_freshness_handler_auto_pairs_before_processing(self):
         conn = self._db()
