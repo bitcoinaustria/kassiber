@@ -16,6 +16,7 @@ import json
 import hashlib
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 from kassiber.cli import handlers
@@ -638,7 +639,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         # Source fully spent (0.5 moved + 0.2 sold + 0.0001 fee == 0.7001 acquired).
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
-    def test_partial_direct_payout_leaves_unreviewed_remainder_in_suspense(self):
+    def test_partial_direct_payout_leaves_unmatched_remainder_presumed_external(self):
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
@@ -672,14 +673,19 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
             )
         )
 
-        self.assertIn(
-            "custody_quantity_unresolved",
-            {item["reason"] for item in state.quarantines},
-        )
+        self.assertEqual(state.quarantines, [])
         entry_types = [entry["entry_type"] for entry in state.entries]
         self.assertNotIn("transfer_in", entry_types)
         self.assertNotIn("transfer_out", entry_types)
-        self.assertNotIn("disposal", entry_types)
+        self.assertEqual(entry_types.count("disposal"), 2)
+        self.assertEqual(
+            sorted(
+                -entry["quantity"]
+                for entry in state.entries
+                if entry["entry_type"] == "disposal"
+            ),
+            [Decimal("0.2"), Decimal("0.5001")],
+        )
 
     def test_fee_inclusive_direct_payout_uses_principal_at_every_stage(self):
         principal_msat = 50 * BTC // 100
