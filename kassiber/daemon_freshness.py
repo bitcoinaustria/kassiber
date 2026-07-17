@@ -1136,6 +1136,17 @@ def _prefetch_onchain_freshness_jobs(
     profile: Mapping[str, Any],
     jobs: list[Mapping[str, Any]],
 ) -> Mapping[str, Any]:
+    """Batch the backend I/O for due on-chain jobs before they run.
+
+    This runs before any selected job is marked running, so adapter-side
+    effects the prefetch performs (for example Bitcoin Core descriptor or
+    address import during observer preparation) can land for a job that is
+    later cancelled or superseded. Those side effects must stay idempotent;
+    the fetched network snapshots themselves are only applied when a job
+    matches its full prefetch contract (job id, wallet config signature,
+    checkpoint, and force-full flag) at execution time.
+    """
+
     onchain_jobs = [
         job for job in jobs if job.get("job_type") == core_freshness.JOB_ONCHAIN_WALLET
     ]
