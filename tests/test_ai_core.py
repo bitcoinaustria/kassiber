@@ -363,7 +363,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("suspense", leg_properties["role"]["enum"])
         self.assertIn("incomplete draft", leg_properties["role"]["description"])
         self.assertIn(
-            "Pass its fingerprint unchanged",
+            "Pass its input_version unchanged as expected_input_version",
             get_tool("ui_transfers_components_plan").description,
         )
         valid_component_arguments = {
