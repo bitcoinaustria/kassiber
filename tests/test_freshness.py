@@ -13,6 +13,7 @@ from kassiber import daemon as daemon_runtime
 from kassiber import daemon_freshness
 from kassiber.cli import handlers as cli_handlers
 from kassiber.core import freshness, rates as core_rates
+from kassiber.core.chain_observer.provenance import canonical_graph_hash
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import require_sqlcipher, sqlcipher_available
@@ -171,7 +172,7 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(prefetch.call_args.kwargs["freshness_checkpoints"], expected)
         self.assertEqual(apply.call_args.kwargs["freshness_checkpoints"], expected)
 
-    def test_electrum_prefetch_loads_stored_graphs_without_parsing_them(self):
+    def test_electrum_prefetch_loads_only_trusted_current_stored_graphs(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
         conn.execute(
@@ -195,7 +196,18 @@ class FreshnessTest(unittest.TestCase):
             (profile_id,),
         )
         txid = "ab" * 32
-        raw_graph = json.dumps({"vin": [], "vout": [{"value": 1}]})
+        raw_graph = json.dumps(
+            {
+                "txid": txid,
+                "_kassiber_electrum_graph": {
+                    "kind": "bitcoin_electrum",
+                    "version": 1,
+                },
+                "vin": [],
+                "vout": [{"value": 1}],
+            },
+            sort_keys=True,
+        )
         conn.execute(
             """
             INSERT INTO transactions(
@@ -210,13 +222,48 @@ class FreshnessTest(unittest.TestCase):
             """,
             (profile_id, txid, raw_graph),
         )
+        conn.execute(
+            """
+            INSERT INTO chain_observation_provenance(
+                transaction_id, workspace_id, profile_id, wallet_id,
+                authority_version, observer_ids_json, observer_kinds_json,
+                chain, network, application_revision, graph_hash, quantity_hash,
+                fee_attribution, observed_at, updated_at
+            ) VALUES(
+                'tx', 'ws', ?, 'wallet', 1, '["adapter:electrum:wallet"]',
+                '["electrum"]', 'bitcoin', 'mainnet', 'revision', ?, 'quantity',
+                'exact', '2026-06-04T00:00:00Z', '2026-06-04T00:00:00Z'
+            )
+            """,
+            (profile_id, canonical_graph_hash(raw_graph)),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id,
+                external_id_kind, fingerprint, occurred_at, direction, asset,
+                amount, fee, raw_json, created_at
+            ) VALUES(
+                'tx-untrusted', 'ws', ?, 'wallet', ?, 'txid', 'fp-untrusted',
+                '2026-06-04T00:00:00Z', 'inbound', 'BTC', 1000, 0, ?,
+                '2026-06-04T00:00:00Z'
+            )
+            """,
+            (profile_id, "cd" * 32, raw_graph),
+        )
         wallet = conn.execute("SELECT * FROM wallets WHERE id = 'wallet'").fetchone()
 
         selected = cli_handlers._electrum_stored_graph_wallets(conn, [wallet])
+        traces = []
+        conn.set_trace_callback(traces.append)
         history = cli_handlers._stored_wallet_chain_history(conn, profile_id, selected)
+        conn.set_trace_callback(None)
 
         self.assertEqual([row["id"] for row in selected], ["wallet"])
         self.assertEqual(history, {"wallet": {txid: raw_graph}})
+        self.assertTrue(
+            any("transactions.wallet_id IN (" in statement for statement in traces)
+        )
 
     def test_rate_limited_source_keeps_other_jobs_moving_and_redacts(self):
         conn = self._db()

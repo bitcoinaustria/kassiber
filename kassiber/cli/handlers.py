@@ -60,6 +60,7 @@ from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
+from ..core.chain_observer.provenance import canonical_graph_hash
 from ..core.repo import current_context_snapshot, resolve_account
 from ..core.runtime import (
     build_status_payload,
@@ -2372,24 +2373,41 @@ def _prefetch_chain_wallets(
 
 
 def _stored_wallet_chain_history(conn, profile_id, wallets):
-    wallet_ids = {str(wallet["id"]) for wallet in wallets}
+    wallet_ids = sorted({str(wallet["id"]) for wallet in wallets})
     if not wallet_ids:
         return {}
+    placeholders = ",".join("?" for _wallet_id in wallet_ids)
     rows = conn.execute(
-        """
-        SELECT wallet_id, external_id, raw_json
+        f"""
+        SELECT
+            transactions.wallet_id,
+            transactions.external_id,
+            transactions.raw_json,
+            chain_observation_provenance.graph_hash,
+            chain_observation_provenance.observer_kinds_json
         FROM transactions
-        WHERE profile_id = ? AND external_id_kind = 'txid' AND raw_json IS NOT NULL
+        JOIN chain_observation_provenance
+          ON chain_observation_provenance.transaction_id = transactions.id
+        WHERE transactions.profile_id = ?
+          AND transactions.wallet_id IN ({placeholders})
+          AND transactions.external_id_kind = 'txid'
+          AND transactions.raw_json IS NOT NULL
         """,
-        (profile_id,),
+        (profile_id, *wallet_ids),
     ).fetchall()
     history_by_wallet = {}
     for row in rows:
         wallet_id = str(row["wallet_id"])
-        if wallet_id not in wallet_ids:
+        try:
+            observer_kinds = json.loads(row["observer_kinds_json"] or "[]")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(observer_kinds, list) or "electrum" not in observer_kinds:
             continue
         raw_json = row["raw_json"]
         if not isinstance(raw_json, str) or not raw_json:
+            continue
+        if str(row["graph_hash"] or "") != canonical_graph_hash(raw_json):
             continue
         history_by_wallet.setdefault(wallet_id, {})[str(row["external_id"])] = raw_json
     return history_by_wallet
