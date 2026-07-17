@@ -76,7 +76,6 @@ BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
 BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
 BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
 WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
-OWNERSHIP_HISTORY_CONFIG_KEY = "ownership_history"
 OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
 MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
 WALLET_SAFE_CONFIG_FIELDS = (
@@ -663,7 +662,6 @@ def _validated_wallet_config(normalized_kind, config):
 def _sync_material_config_json(config):
     sync_config = dict(config or {})
     sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
-    sync_config.pop(OWNERSHIP_HISTORY_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY, None)
     return json.dumps(
         canonical_wallet_config_identity(sync_config),
@@ -1104,7 +1102,6 @@ __all__ = [
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
     "has_silent_payment_sync_material",
-    "OWNERSHIP_HISTORY_CONFIG_KEY",
     "OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY",
     "normalize_addresses",
     "wallet_is_deprecated",

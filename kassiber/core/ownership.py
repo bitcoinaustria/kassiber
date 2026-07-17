@@ -42,7 +42,6 @@ from .address_scripts import address_to_scriptpubkey
 from .onchain import parse_identification_legs
 from .ownership_policy_epochs import retired_policy_materials
 from .wallets import (
-    OWNERSHIP_HISTORY_CONFIG_KEY,
     OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
     has_descriptor_sync_material,
     load_wallet_descriptor_plan_from_config,
@@ -673,14 +672,6 @@ def build_owned_index(
         ownership_configs.extend(
             (historic, True)
             for historic in retired_policy_materials(conn, str(wallet["id"]))
-        )
-        # Legacy encrypted wallet-config history remains readable during the
-        # migration window. New rollovers use durable policy epochs instead of
-        # a capped inline list.
-        ownership_configs.extend(
-            (historic, True)
-            for historic in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
-            if isinstance(historic, Mapping)
         )
         for ownership_config, is_history in ownership_configs:
             addresses = normalize_addresses(ownership_config.get("addresses"))

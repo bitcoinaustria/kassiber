@@ -28,7 +28,6 @@ from kassiber.core.sync import classify_wallet_sync
 from kassiber.core.sync_backends import resolve_wallet_sync_targets
 from kassiber.core.ui_snapshot import _wallet_backend_summary
 from kassiber.core.wallets import (
-    OWNERSHIP_HISTORY_CONFIG_KEY,
     _validated_wallet_config,
     create_wallet,
     has_descriptor_sync_material,
@@ -581,12 +580,12 @@ class WalletConfigFreshnessTests(unittest.TestCase):
         )
 
         # The private history is not part of ordinary wallet payloads.
-        self.assertNotIn(OWNERSHIP_HISTORY_CONFIG_KEY, returned["config"])
+        self.assertNotIn("ownership_history", returned["config"])
         migrated_row = conn.execute(
             "SELECT * FROM wallets WHERE id = ?", (wallet["id"],)
         ).fetchone()
         stored = json.loads(migrated_row["config_json"])
-        self.assertNotIn(OWNERSHIP_HISTORY_CONFIG_KEY, stored)
+        self.assertNotIn("ownership_history", stored)
         self.assertEqual(
             retired_policy_materials(conn, wallet["id"])[0]["script_types"],
             ["p2wpkh"],

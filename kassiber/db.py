@@ -25,6 +25,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import uuid
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
@@ -4051,12 +4052,118 @@ def _record_custody_durable_evidence_migration(
     )
 
 
+_LEGACY_OWNERSHIP_HISTORY_KEY = "ownership_history"
+_POLICY_EPOCH_PRIVATE_FIELDS = frozenset(
+    {
+        "descriptor",
+        "change_descriptor",
+        "xpub",
+        "script_types",
+        "addresses",
+        "blinding_key",
+        "chain",
+        "network",
+        "samourai",
+        "ownership_scan_to_index",
+        "gap_limit",
+        "synthesize_change",
+    }
+)
+
+
+def _migrate_inline_ownership_history(conn) -> int:
+    """Move retired private policies out of wallet config exactly once."""
+
+    rows = conn.execute(
+        "SELECT * FROM wallets WHERE config_json LIKE ?",
+        (f'%"{_LEGACY_OWNERSHIP_HISTORY_KEY}"%',),
+    ).fetchall()
+    migrated = 0
+    for wallet in rows:
+        try:
+            config = json.loads(wallet["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(config, dict):
+            continue
+        history = config.pop(_LEGACY_OWNERSHIP_HISTORY_KEY, None)
+        if not isinstance(history, list):
+            continue
+        existing = {
+            str(row["private_material_json"])
+            for row in conn.execute(
+                "SELECT private_material_json FROM wallet_policy_epochs "
+                "WHERE wallet_id = ? AND status = 'retired'",
+                (wallet["id"],),
+            ).fetchall()
+        }
+        for item in history:
+            if not isinstance(item, dict):
+                continue
+            material = {
+                key: item[key]
+                for key in sorted(_POLICY_EPOCH_PRIVATE_FIELDS)
+                if item.get(key) not in (None, "", [])
+            }
+            legacy_scan_to = item.get("scan_to_index")
+            if legacy_scan_to not in (None, ""):
+                try:
+                    material["ownership_scan_to_index"] = max(
+                        int(material.get("ownership_scan_to_index") or 0),
+                        int(legacy_scan_to),
+                    )
+                except (TypeError, ValueError):
+                    pass
+            if not material:
+                continue
+            material_json = json.dumps(material, sort_keys=True)
+            if material_json in existing:
+                continue
+            try:
+                chain = normalize_chain(material.get("chain") or config.get("chain"))
+                network = normalize_network(
+                    chain,
+                    material.get("network") or config.get("network"),
+                )
+            except ValueError:
+                chain = "bitcoin"
+                network = "main"
+            conn.execute(
+                """
+                INSERT INTO wallet_policy_epochs(
+                    id, workspace_id, profile_id, wallet_id, chain, network,
+                    status, private_material_json, created_at, retired_at
+                ) VALUES(?, ?, ?, ?, ?, ?, 'retired', ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    wallet["workspace_id"],
+                    wallet["profile_id"],
+                    wallet["id"],
+                    chain,
+                    network,
+                    material_json,
+                    wallet["created_at"],
+                    wallet["created_at"],
+                ),
+            )
+            existing.add(material_json)
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config, sort_keys=True), wallet["id"]),
+        )
+        migrated += 1
+    return migrated
+
+
 def ensure_schema_compat(conn):
     """Apply one-shot backfills not covered by `CREATE TABLE IF NOT EXISTS`.
 
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
+    if _migrate_inline_ownership_history(conn):
+        conn.commit()
     # Derived gap pages and normalized candidate caches carry no authored
     # evidence or rollback history. Preserve only the latest journal builder's
     # ignored-boundary inputs, then remove every cached candidate table.
