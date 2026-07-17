@@ -2469,11 +2469,6 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
             "tx_count": tx_count,
             "mempool_tx_count": mempool_tx_count,
             "mempool_dirty": mempool_tx_count > 0,
-            "known_txids": (
-                sorted(previous.get("known_txids") or [])
-                if isinstance(previous, dict)
-                else []
-            ),
         }
         highest_used = _merge_highest_used(highest_used, target, tx_count > 0)
         if unchanged:
@@ -2491,7 +2486,6 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     transactions_by_txid = {}
     def fetch_target_transactions(item):
         target, scripthash = item
-        known_txids = set()
         target_txs = []
         for tx in fetch_esplora_scripthash_transactions(
             backend["url"],
@@ -2502,10 +2496,9 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 proxy_url=proxy_url,
                 max_pages=max_pages,
             ),
-        ):
+            ):
             target_txs.append(tx)
-            known_txids.add(tx["txid"])
-        return scripthash, sorted(known_txids), target_txs
+        return scripthash, target_txs
 
     def history_fetch_progress(index, _result, total):
         if index % max(1, worker_count) == 0 or index == total:
@@ -2515,7 +2508,7 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 targets_checked=index,
             )
 
-    for history_index, (scripthash, known_txids, target_txs) in enumerate(
+    for history_index, (_scripthash, target_txs) in enumerate(
         _map_bounded(
             changed_targets,
             fetch_target_transactions,
@@ -2526,7 +2519,6 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     ):
         for tx in target_txs:
             transactions_by_txid[tx["txid"]] = tx
-        next_stats[scripthash]["known_txids"] = sorted(known_txids)
         if history_index % max(1, worker_count) == 0 or history_index == len(changed_targets):
             _emit_backend_progress(
                 "backend_fetch",
@@ -3964,7 +3956,6 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     checkpoint = _checkpoint_mapping(sync_state)
     previous_statuses = checkpoint.get("electrum_scripthash_statuses") or {}
     previous_dirty = set(checkpoint.get("electrum_dirty_scripthashes") or [])
-    previous_known_txids = checkpoint.get("electrum_known_txids") or {}
     stored_graph_current = (
         int(checkpoint.get("electrum_stored_graph_version") or 0)
         >= ELECTRUM_STORED_GRAPH_VERSION
@@ -3976,7 +3967,6 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         if str(height).isdigit()
     }
     next_statuses = {}
-    next_known_txids = {}
     dirty_scripthashes = set()
     unchanged_scripts = 0
     changed_scripts = 0
@@ -4004,7 +3994,6 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             target = target_by_scripthash[scripthash]
             highest_used = _merge_highest_used(highest_used, target, status is not None)
             if status is None and previous_statuses.get(scripthash) is None:
-                next_known_txids[scripthash] = []
                 unchanged_scripts += 1
                 if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
                     _emit_backend_progress(
@@ -4020,7 +4009,6 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 and status == previous_statuses.get(scripthash)
                 and scripthash not in previous_dirty
             ):
-                next_known_txids[scripthash] = sorted(previous_known_txids.get(scripthash) or [])
                 unchanged_scripts += 1
                 if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
                     _emit_backend_progress(
@@ -4056,13 +4044,6 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             ):
                 normalized_history = history or []
                 histories.extend(normalized_history)
-                next_known_txids[scripthash] = sorted(
-                    {
-                        item.get("tx_hash")
-                        for item in normalized_history
-                        if isinstance(item, dict) and item.get("tx_hash")
-                    }
-                )
                 if any(_history_needs_recheck(item) for item in normalized_history):
                     dirty_scripthashes.add(scripthash)
                 if history_index % max(1, batch_size) == 0 or history_index == changed_scripts:
@@ -4219,7 +4200,6 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 str(height): header_timestamps[height] for height in sorted(header_timestamps)
             },
             "electrum_stored_graph_version": ELECTRUM_STORED_GRAPH_VERSION,
-            "electrum_known_txids": dict(sorted(next_known_txids.items())),
             "electrum_scripthash_statuses": dict(sorted(next_statuses.items())),
             "highest_used": dict(sorted(highest_used.items())),
         }
@@ -4228,7 +4208,6 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         "freshness_checkpoint": checkpoint,
         "scripts_changed": changed_scripts,
         "scripts_unchanged": unchanged_scripts,
-        "known_txids": len({txid for txids in next_known_txids.values() for txid in txids}),
         "header_cache_hits": header_cache_hits,
     }
 
