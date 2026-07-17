@@ -315,6 +315,29 @@ def enabled_script_branches(xpub, script_types, descriptor_class):
     return branches
 
 
+def _plan_fingerprint(
+    *,
+    chain: str,
+    network: str,
+    gap_limit: int,
+    branches: list[DescriptorBranch],
+) -> str:
+    payload = {
+        "chain": chain,
+        "network": network,
+        "gap_limit": gap_limit,
+        "branches": [
+            {
+                "branch_index": branch.branch_index,
+                "selector": branch.selector,
+                "descriptor": str(branch.descriptor),
+            }
+            for branch in branches
+        ],
+    }
+    return sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def load_descriptor_plan(config):
     descriptor_text = str(config.get("descriptor") or "").strip()
     xpub = str(config.get("xpub") or "").strip()
@@ -364,18 +387,12 @@ def load_descriptor_plan(config):
         branches = enabled_script_branches(xpub, script_types, descriptor_class)
         for branch in branches:
             assert_descriptor_is_watch_only(branch.descriptor)
-        fingerprint = sha256(
-            json.dumps(
-                {
-                    "chain": chain,
-                    "network": network,
-                    "xpub": xpub,
-                    "script_types": script_types,
-                    "gap_limit": gap_limit,
-                },
-                sort_keys=True,
-            ).encode("utf-8")
-        ).hexdigest()
+        fingerprint = _plan_fingerprint(
+            chain=chain,
+            network=network,
+            gap_limit=gap_limit,
+            branches=branches,
+        )
         return DescriptorPlan(
             chain=chain,
             network=network,
@@ -406,18 +423,12 @@ def load_descriptor_plan(config):
         branches.append(DescriptorBranch(1, "change", primary, 1))
     else:
         branches.append(DescriptorBranch(0, "receive", primary, None))
-    fingerprint = sha256(
-        json.dumps(
-            {
-                "chain": chain,
-                "network": network,
-                "descriptor": descriptor_text,
-                "change_descriptor": change_text,
-                "gap_limit": gap_limit,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
+    fingerprint = _plan_fingerprint(
+        chain=chain,
+        network=network,
+        gap_limit=gap_limit,
+        branches=branches,
+    )
     return DescriptorPlan(
         chain=chain,
         network=network,

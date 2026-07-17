@@ -184,6 +184,30 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         self.assertEqual(_branch_address(plan, 0), BIP84_RECEIVE_0)
         self.assertEqual(_branch_address(plan, 1), BIP84_CHANGE_0)
 
+    def test_synthesized_change_branch_changes_descriptor_fingerprint(self):
+        descriptor = _account_descriptor(84, "wpkh(", ")")
+        receive_only = load_descriptor_plan(
+            {
+                "descriptor": descriptor,
+                "chain": "bitcoin",
+                "synthesize_change": False,
+            }
+        )
+        receive_and_change = load_descriptor_plan(
+            {
+                "descriptor": descriptor,
+                "chain": "bitcoin",
+                "synthesize_change": True,
+            }
+        )
+
+        self.assertEqual(len(receive_only.branches), 1)
+        self.assertEqual(len(receive_and_change.branches), 2)
+        self.assertNotEqual(
+            receive_only.descriptor_fingerprint,
+            receive_and_change.descriptor_fingerprint,
+        )
+
     def test_receive_only_taproot_synthesizes_change_branch(self):
         plan = load_descriptor_plan(
             {"descriptor": _account_descriptor(86, "tr(", ")"), "chain": "bitcoin"}
