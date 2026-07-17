@@ -76,10 +76,13 @@ projection tables:
   `custody_gap_review_relation_sets`, and `custody_gap_review_transactions`;
 - `journal_custody_decisions`, `custody_authored_evidence_snapshots`,
   `custody_ai_assistance_audits`, `custody_filed_report_impacts`, and
-  `custody_filed_report_impact_resolutions`;
-- `custody_tax_migration_baselines`,
-  `custody_tax_migration_baseline_events`, and
-  `custody_tax_migration_reports`.
+  `custody_filed_report_impact_resolutions`.
+
+The follow-up removed the three local-only custody-tax cutover tables before
+merge. Their journal hook could not distinguish pre-custody journal output
+from the current builder's output, so a fresh book created a meaningless
+self-comparison on its second rebuild. Filed-report impact history remains the
+authoritative amendment record.
 
 The daemon exposed 14 custody review/read kinds: coverage and lineage
 snapshots; gap list, history and review context; bridge create/preview;

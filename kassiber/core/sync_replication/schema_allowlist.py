@@ -731,9 +731,6 @@ NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset(
     {
         "settings",
         "schema_migration_audits",
-        "custody_tax_migration_baselines",
-        "custody_tax_migration_baseline_events",
-        "custody_tax_migration_reports",
         "backends",
         "ai_providers",
         "ai_provider_secret_refs",

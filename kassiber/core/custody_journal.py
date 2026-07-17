@@ -25,7 +25,6 @@ from . import custody_interpreters
 from . import custody_quantity_runtime
 from . import custody_quantity_store
 from . import custody_tax_projection
-from . import custody_tax_migration
 from . import custody_filed_reports
 from . import loans
 from . import ownership
@@ -978,12 +977,6 @@ def store_ledger_state(
             profile_id,
         ),
     )
-    custody_tax_migration.finalize_first_rebuild(
-        conn,
-        workspace_id=workspace_id,
-        profile_id=profile_id,
-        rebuilt_at=stored_at,
-    )
     filed_impact_resolutions = []
     if (
         not state.get("custody_component_blockers")
@@ -1261,11 +1254,6 @@ def process_journals(
         )
     conn.execute("SAVEPOINT journals_process")
     try:
-        custody_tax_migration.capture_legacy_baseline(
-            conn,
-            workspace_id=profile["workspace_id"],
-            profile_id=profile["id"],
-        )
         overlap_repair = repair_source_overlaps(conn, profile)
         overlap_warning = source_overlap_warning(conn, profile, overlap_repair)
         auto_priced = auto_price(conn, profile)

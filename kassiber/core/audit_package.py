@@ -19,7 +19,6 @@ from . import custody_gap_reviews as core_custody_gap_reviews
 from . import custody_ai_audit as core_custody_ai_audit
 from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
-from . import custody_tax_migration as core_custody_tax_migration
 from .attachments import attachment_display_label
 from . import transaction_history
 
@@ -1113,11 +1112,6 @@ def build_evidence_summary(
         profile["id"],
         transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
     )
-    custody_tax_migration_audits = core_custody_tax_migration.list_redacted_reports(
-        conn,
-        profile["id"],
-        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
-    )
     schema_migration_audits = _schema_migration_audits(conn)
     result = {
         "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
@@ -1134,7 +1128,6 @@ def build_evidence_summary(
         ),
         "custody_gap_review_history": custody_gap_review_history,
         "custody_ai_assistance": custody_ai_assistance,
-        "custody_tax_migration_audits": custody_tax_migration_audits,
         "schema_migration_audits": schema_migration_audits,
         "transactions": transactions,
         "summary": {
@@ -1154,9 +1147,6 @@ def build_evidence_summary(
                 "returned"
             ],
             "custody_ai_assistance_count": custody_ai_assistance["count"],
-            "custody_tax_migration_audit_count": len(
-                custody_tax_migration_audits
-            ),
             "schema_migration_audit_count": len(schema_migration_audits),
         },
         "excluded_sensitive_material": SENSITIVE_MATERIAL_EXCLUSIONS,

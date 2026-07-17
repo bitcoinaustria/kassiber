@@ -63,6 +63,17 @@ def test_fresh_database_does_not_emit_a_fake_schema_migration_audit(tmp_path):
         assert conn.execute(
             "SELECT COUNT(*) FROM schema_migration_audits"
         ).fetchone()[0] == 0
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        assert not {
+            "custody_tax_migration_baselines",
+            "custody_tax_migration_baseline_events",
+            "custody_tax_migration_reports",
+        } & tables
     finally:
         conn.close()
 
