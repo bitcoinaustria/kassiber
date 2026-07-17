@@ -579,6 +579,9 @@ class _ElectrumBatchDispatcher:
                 try:
                     current.__exit__(None, None, None)
                 except Exception:
+                    # Best-effort teardown of an already-failed connection:
+                    # close errors carry no signal beyond the original failure
+                    # and must not mask the error being reported to callers.
                     pass
 
         def execute_requests(requests):
