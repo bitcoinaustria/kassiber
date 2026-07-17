@@ -171,6 +171,53 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(prefetch.call_args.kwargs["freshness_checkpoints"], expected)
         self.assertEqual(apply.call_args.kwargs["freshness_checkpoints"], expected)
 
+    def test_electrum_prefetch_loads_stored_graphs_without_parsing_them(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute(
+            """
+            INSERT INTO backends(name, kind, url, config_json, created_at, updated_at)
+            VALUES('fulcrum', 'electrum', 'tcp://127.0.0.1:50001', '{}',
+                   '2026-06-04T00:00:00Z', '2026-06-04T00:00:00Z')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind,
+                config_json, created_at
+            ) VALUES(
+                'wallet', 'ws', ?, NULL, 'Wallet', 'address',
+                '{"addresses":["bc1qwallet"],"backend":"fulcrum"}',
+                '2026-06-04T00:00:00Z'
+            )
+            """,
+            (profile_id,),
+        )
+        txid = "ab" * 32
+        raw_graph = json.dumps({"vin": [], "vout": [{"value": 1}]})
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id,
+                external_id_kind, fingerprint, occurred_at, direction, asset,
+                amount, fee, raw_json, created_at
+            ) VALUES(
+                'tx', 'ws', ?, 'wallet', ?, 'txid', 'fp',
+                '2026-06-04T00:00:00Z', 'inbound', 'BTC', 1000, 0, ?,
+                '2026-06-04T00:00:00Z'
+            )
+            """,
+            (profile_id, txid, raw_graph),
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = 'wallet'").fetchone()
+
+        selected = cli_handlers._electrum_stored_graph_wallets(conn, [wallet])
+        history = cli_handlers._stored_wallet_chain_history(conn, profile_id, selected)
+
+        self.assertEqual([row["id"] for row in selected], ["wallet"])
+        self.assertEqual(history, {"wallet": {txid: raw_graph}})
+
     def test_rate_limited_source_keeps_other_jobs_moving_and_redacts(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

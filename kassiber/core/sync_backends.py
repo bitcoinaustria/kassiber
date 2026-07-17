@@ -913,6 +913,7 @@ def _offline_descriptor_targets(plan, checkpoint=None):
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
+    stored_history_cache = _mapping_get(wallet, "_history_cache", {}) or {}
     if silent_payments.has_silent_payment_sync_material(config):
         plan = silent_payments.build_plan(config)
         kind = validate_backend_for_wallet(backend, plan.chain, plan.network, has_descriptor=False)
@@ -933,7 +934,7 @@ def resolve_wallet_sync_targets(backend, wallet):
         if (config.get("descriptor") or config.get("xpub"))
         else None
     )
-    history_cache = {}
+    history_cache = dict(stored_history_cache)
     if descriptor_plan:
         chain = descriptor_plan.chain
         network = descriptor_plan.network
@@ -952,7 +953,7 @@ def resolve_wallet_sync_targets(backend, wallet):
         else:
             discovery = discover_bitcoinrpc_descriptor_targets(descriptor_plan, checkpoint)
         targets = discovery["targets"]
-        history_cache = discovery.get("history_cache") or {}
+        history_cache.update(discovery.get("history_cache") or {})
     else:
         addresses = normalize_addresses(config.get("addresses"))
         if not addresses:
@@ -1083,7 +1084,10 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                     for target in online_targets
                     if target.get("script_pubkey")
                 },
-                history_cache=online_discovery.get("history_cache") or {},
+                history_cache={
+                    **dict(state.history_cache),
+                    **(online_discovery.get("history_cache") or {}),
+                },
             )
             # The finite local horizon was filtered before any connection.
             # Reapply ownership to every online result so deeper targets cannot
@@ -3913,6 +3917,21 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
 
 def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncState):
     transactions = {}
+    stored_transactions = (
+        dict(sync_state.history_cache or {}) if sync_state.chain == "bitcoin" else {}
+    )
+
+    def stored_transaction(txid):
+        stored = stored_transactions.get(str(txid))
+        if isinstance(stored, dict):
+            return stored
+        if not isinstance(stored, str):
+            return None
+        try:
+            decoded = json.loads(stored)
+        except ValueError:
+            return None
+        return decoded if isinstance(decoded, dict) else None
     records = []
     batch_size = backend_batch_size(backend)
     tracked_scripts = (
@@ -3923,6 +3942,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     checkpoint = _checkpoint_mapping(sync_state)
     previous_statuses = checkpoint.get("electrum_scripthash_statuses") or {}
     previous_dirty = set(checkpoint.get("electrum_dirty_scripthashes") or [])
+    previous_history_entries = checkpoint.get("electrum_history_entries") or {}
     stored_graph_current = (
         int(checkpoint.get("electrum_stored_graph_version") or 0)
         >= ELECTRUM_STORED_GRAPH_VERSION
@@ -3934,6 +3954,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         if str(height).isdigit()
     }
     next_statuses = {}
+    next_history_entries = {}
     dirty_scripthashes = set()
     unchanged_scripts = 0
     changed_scripts = 0
@@ -3961,6 +3982,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             target = target_by_scripthash[scripthash]
             highest_used = _merge_highest_used(highest_used, target, status is not None)
             if status is None and previous_statuses.get(scripthash) is None:
+                next_history_entries[scripthash] = {}
                 unchanged_scripts += 1
                 if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
                     _emit_backend_progress(
@@ -3976,6 +3998,9 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 and status == previous_statuses.get(scripthash)
                 and scripthash not in previous_dirty
             ):
+                next_history_entries[scripthash] = dict(
+                    previous_history_entries.get(scripthash) or {}
+                )
                 unchanged_scripts += 1
                 if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
                     _emit_backend_progress(
@@ -4010,7 +4035,20 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 start=1,
             ):
                 normalized_history = history or []
-                histories.extend(normalized_history)
+                current_entries = {
+                    str(item["tx_hash"]): json_ready(item)
+                    for item in normalized_history
+                    if isinstance(item, dict) and item.get("tx_hash")
+                }
+                prior_entries = previous_history_entries.get(scripthash) or {}
+                histories.extend(
+                    item
+                    for item in normalized_history
+                    if isinstance(item, dict)
+                    and item.get("tx_hash")
+                    and prior_entries.get(str(item["tx_hash"])) != json_ready(item)
+                )
+                next_history_entries[scripthash] = current_entries
                 if any(_history_needs_recheck(item) for item in normalized_history):
                     dirty_scripthashes.add(scripthash)
                 if history_index % max(1, batch_size) == 0 or history_index == changed_scripts:
@@ -4029,14 +4067,18 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
 
         def lookup(txid):
             if txid not in transactions:
-                raw_tx = client.call("blockchain.transaction.get", [txid])
-                if sync_state.chain == "liquid":
-                    transactions[txid] = {
-                        "raw_hex": raw_tx,
-                        "decoded": decode_liquid_transaction(raw_tx),
-                    }
+                cached = stored_transaction(txid)
+                if cached is not None:
+                    transactions[txid] = cached
                 else:
-                    transactions[txid] = decode_raw_transaction(raw_tx)
+                    raw_tx = client.call("blockchain.transaction.get", [txid])
+                    if sync_state.chain == "liquid":
+                        transactions[txid] = {
+                            "raw_hex": raw_tx,
+                            "decoded": decode_liquid_transaction(raw_tx),
+                        }
+                    else:
+                        transactions[txid] = decode_raw_transaction(raw_tx)
             return transactions[txid]
 
         def height_to_timestamp(height):
@@ -4056,13 +4098,19 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             key=lambda item: _history_sort_key(item[0], item[1]),
         )
         ordered_txids = [txid for txid, _ in ordered_histories]
-        if ordered_txids:
+        for txid in ordered_txids:
+            cached = stored_transaction(txid)
+            if cached is not None:
+                transactions[txid] = cached
+        missing_ordered_txids = [txid for txid in ordered_txids if txid not in transactions]
+        fetched_transaction_count = len(missing_ordered_txids)
+        if missing_ordered_txids:
             raw_transactions = electrum_call_many(
                 client,
-                [("blockchain.transaction.get", [txid]) for txid in ordered_txids],
+                [("blockchain.transaction.get", [txid]) for txid in missing_ordered_txids],
                 batch_size=batch_size,
             )
-            for txid, raw_tx in zip(ordered_txids, raw_transactions):
+            for txid, raw_tx in zip(missing_ordered_txids, raw_transactions):
                 if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
@@ -4079,9 +4127,15 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 prev_txid = liquid_input_txid(vin) if sync_state.chain == "liquid" else vin.get("txid")
                 if not prev_txid or prev_txid in seen_txids:
                     continue
+                cached = stored_transaction(prev_txid)
+                if cached is not None:
+                    transactions[prev_txid] = cached
+                    seen_txids.add(prev_txid)
+                    continue
                 seen_txids.add(prev_txid)
                 prev_txids.append(prev_txid)
         if prev_txids:
+            fetched_transaction_count += len(prev_txids)
             raw_prev_transactions = electrum_call_many(
                 client,
                 [("blockchain.transaction.get", [txid]) for txid in prev_txids],
@@ -4170,6 +4224,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 str(height): header_timestamps[height] for height in sorted(header_timestamps)
             },
             "electrum_stored_graph_version": ELECTRUM_STORED_GRAPH_VERSION,
+            "electrum_history_entries": dict(sorted(next_history_entries.items())),
             "electrum_scripthash_statuses": dict(sorted(next_statuses.items())),
             "highest_used": dict(sorted(highest_used.items())),
         }
@@ -4179,6 +4234,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         "scripts_changed": changed_scripts,
         "scripts_unchanged": unchanged_scripts,
         "header_cache_hits": header_cache_hits,
+        "transactions_fetched": fetched_transaction_count,
     }
 
 

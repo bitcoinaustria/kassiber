@@ -2307,10 +2307,23 @@ def _prefetch_chain_wallets(
 ):
     """Finish chain discovery and backend I/O before any write savepoint."""
 
-    backend_wallets = [
+    backend_wallet_rows = [
         wallet
         for wallet in wallets
         if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses) == "backend"
+    ]
+    stored_graph_wallets = _electrum_stored_graph_wallets(conn, backend_wallet_rows)
+    history_cache_by_wallet = (
+        {}
+        if force_full
+        else _stored_wallet_chain_history(conn, profile["id"], stored_graph_wallets)
+    )
+    backend_wallets = [
+        {
+            **dict(wallet),
+            "_history_cache": history_cache_by_wallet.get(str(wallet["id"]), {}),
+        }
+        for wallet in backend_wallet_rows
     ]
     prefetched = core_sync.prefetch_wallets_backend(
         runtime_config,
@@ -2346,6 +2359,46 @@ def _prefetch_chain_wallets(
         hooks,
         prefetched,
     )
+
+
+def _stored_wallet_chain_history(conn, profile_id, wallets):
+    wallet_ids = {str(wallet["id"]) for wallet in wallets}
+    if not wallet_ids:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT wallet_id, external_id, raw_json
+        FROM transactions
+        WHERE profile_id = ? AND external_id_kind = 'txid' AND raw_json IS NOT NULL
+        """,
+        (profile_id,),
+    ).fetchall()
+    history_by_wallet = {}
+    for row in rows:
+        wallet_id = str(row["wallet_id"])
+        if wallet_id not in wallet_ids:
+            continue
+        raw_json = row["raw_json"]
+        if not isinstance(raw_json, str) or not raw_json:
+            continue
+        history_by_wallet.setdefault(wallet_id, {})[str(row["external_id"])] = raw_json
+    return history_by_wallet
+
+
+def _electrum_stored_graph_wallets(conn, wallets):
+    backend_kinds = {
+        str(row["name"]): core_sync.normalize_backend_kind(row["kind"])
+        for row in conn.execute("SELECT name, kind FROM backends").fetchall()
+    }
+    selected = []
+    for wallet in wallets:
+        try:
+            config = json.loads(wallet["config_json"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        if backend_kinds.get(str(config.get("backend") or "")) == "electrum":
+            selected.append(wallet)
+    return selected
 
 
 def _apply_wallet_sync_atomically(

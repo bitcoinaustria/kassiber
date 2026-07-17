@@ -1244,6 +1244,97 @@ class SyncBackendsTest(unittest.TestCase):
             [("blockchain.scripthash.subscribe", (scripthash,))],
         )
 
+    def test_electrum_changed_history_fetches_only_new_transaction_graphs(self):
+        target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
+        old_txid = "22" * 32
+        new_txid = "33" * 32
+        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+        old_history = {"tx_hash": old_txid, "height": 123}
+        new_history = {"tx_hash": new_txid, "height": 124}
+        calls = []
+
+        class FakeElectrumClient:
+            def __init__(self, backend):
+                self.backend = backend
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                responses = []
+                for method, params in requests:
+                    key = (method, tuple(params or ()))
+                    calls.append(key)
+                    if key == ("blockchain.scripthash.subscribe", (scripthash,)):
+                        responses.append("status-2")
+                    elif key == ("blockchain.scripthash.get_history", (scripthash,)):
+                        responses.append([old_history, new_history])
+                    elif key == ("blockchain.transaction.get", (new_txid,)):
+                        responses.append("new-raw")
+                    elif key == ("blockchain.block.header", (124,)):
+                        responses.append(_header_hex(1_700_000_100))
+                    else:
+                        raise AssertionError(f"Unexpected Electrum call: {key!r}")
+                return responses
+
+        old_graph = {
+            "txid": old_txid,
+            "vin": [],
+            "vout": [
+                {
+                    "n": 0,
+                    "script_hex": target["script_pubkey"],
+                    "scriptpubkey": target["script_pubkey"],
+                    "value_sats": 12_345,
+                    "value": 12_345,
+                }
+            ],
+            "total_output_sats": 12_345,
+        }
+        new_graph = {
+            "txid": new_txid,
+            "vin": [],
+            "vout": [{"n": 0, "script_hex": target["script_pubkey"], "value_sats": 50_000}],
+            "total_output_sats": 50_000,
+        }
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={old_txid: old_graph},
+            checkpoint={
+                "electrum_stored_graph_version": 1,
+                "electrum_known_txids": {scripthash: [old_txid]},
+                "electrum_history_entries": {scripthash: {old_txid: old_history}},
+                "electrum_scripthash_statuses": {scripthash: "status-1"},
+                "electrum_headers": {"123": 1_700_000_000},
+            },
+        )
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.decode_raw_transaction",
+            return_value=new_graph,
+        ):
+            records, meta = sb.compatibility_electrum_records_for_wallet(
+                {"name": "fulcrum", "kind": "electrum", "url": "tcp://electrum.example:50001"},
+                sync_state,
+            )
+
+        self.assertEqual([record["txid"] for record in records], [new_txid])
+        self.assertEqual(meta["transactions_fetched"], 1)
+        self.assertIn(("blockchain.transaction.get", (new_txid,)), calls)
+        self.assertNotIn(("blockchain.transaction.get", (old_txid,)), calls)
+        self.assertEqual(
+            meta["freshness_checkpoint"]["electrum_history_entries"][scripthash],
+            {old_txid: old_history, new_txid: new_history},
+        )
+
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
         client.socket = _DummySocket()
