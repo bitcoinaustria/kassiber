@@ -167,8 +167,8 @@ wallet files, and no production descriptors. The Compose stack publishes only
 loopback ports: Core RPC, Elements RPC, the optional Frigate Electrum endpoint,
 and the four protocol endpoints used by the UI/backend health and graph paths:
 
-- `core-regtest` -> Bitcoin Core RPC, authoritative sync backend explicitly
-  assigned to ordinary Bitcoin wallets
+- `core-regtest` -> Bitcoin Core RPC, assigned to the ordinary Bitcoin wallets
+  that do not opt into the Fulcrum coverage slice
 - Elements Core runs as `elementsd` on `elementsregtest` to provision a local
   Liquid daemon. The demo includes a descriptor-backed Liquid wallet with
   private blinding material stored inside the disposable test book; it receives
@@ -651,18 +651,21 @@ What `demo-up` does:
   syncs from the app keep seeing new activity.
 
 The `fulcrum` container is provisioned and exposed as the
-`bitcoin-electrum-regtest` backend row. The slow Bitcoin lane now includes a
-dedicated Fulcrum/Electrum parity slice that syncs the same real address wallet
+`bitcoin-electrum-regtest` backend row. The full-accounting demo assigns the
+active `treasury_2020`, `merchant_2022`, and `cold_2024` wallets to Fulcrum while
+the remaining ordinary Bitcoin wallets stay on Core RPC. The slow Bitcoin lane
+also includes a dedicated Fulcrum/Electrum parity slice that syncs the same real
+address wallet
 through Core RPC and Electrum, then compares the persisted transaction and UTXO
 views after receipts, a spend, an incremental receipt, and a no-op sync. The
-demo book itself still pins ordinary Bitcoin wallet sync to Core RPC
-(`core-regtest`). The Liquid Electrum and Liquid mempool rows are local services
+Liquid Electrum and Liquid mempool rows are local services
 backed by `elementsd`; every Liquid wallet in the demo is descriptor-backed and
 syncs real elementsregtest LBTC transactions. The preview stays repeatable
 without inventing Liquid transaction ids or contacting public mainnet explorers.
 The stored default backend is `bitcoin-mempool-regtest`: wallet configs still
-pin their sync source (`core-regtest` for ordinary Bitcoin, `bitcoin-frigate-regtest`
-for the Silent Payments wallet), while graph-capable UI paths prefer the local
+pin their sync source (`core-regtest` or `bitcoin-electrum-regtest` for ordinary
+Bitcoin, `bitcoin-frigate-regtest` for the Silent Payments wallet), while
+graph-capable UI paths prefer the local
 HTTP mempool/esplora endpoint.
 Remaining backend-parity work is demo-wallet sync through Bitcoin explorer HTTP,
 plus broader Liquid Electrum/explorer/Elements comparisons across the historical

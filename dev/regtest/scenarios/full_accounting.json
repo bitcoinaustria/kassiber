@@ -427,6 +427,7 @@
       "key": "treasury_2020",
       "label": "Regtest Treasury 2020 Rotation",
       "account": "treasury",
+      "backend": "bitcoin-electrum-regtest",
       "addresses": 12,
       "address_type": "bech32",
       "initial_btc": "0.00000000"
@@ -435,6 +436,7 @@
       "key": "merchant_2022",
       "label": "Regtest Merchant 2022 Rotation",
       "account": "merchant",
+      "backend": "bitcoin-electrum-regtest",
       "addresses": 12,
       "address_type": "bech32",
       "initial_btc": "0.00000000"
@@ -443,6 +445,7 @@
       "key": "cold_2024",
       "label": "Regtest Cold Storage 2024 Rotation",
       "account": "cold",
+      "backend": "bitcoin-electrum-regtest",
       "addresses": 12,
       "address_type": "bech32m",
       "initial_btc": "0.00000000"
