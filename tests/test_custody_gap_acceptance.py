@@ -160,6 +160,20 @@ def _request(proc: subprocess.Popen[str], payload: dict, timeout: float = 10.0) 
     )
 
 
+def _stop_daemon(proc: subprocess.Popen[str]) -> None:
+    if proc.stdin is not None:
+        proc.stdin.close()
+    try:
+        proc.wait(timeout=5.0)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5.0)
+    if proc.stdout is not None:
+        proc.stdout.close()
+    if proc.stderr is not None:
+        proc.stderr.close()
+
+
 class CustodyGapCliAcceptanceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-gap-cli-")
@@ -337,6 +351,58 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
         self.data_root = Path(self.tmp.name) / "data"
         _seed_gap(self.data_root)
 
+    def test_real_jsonl_protocol_accepts_opaque_candidate_cursor(self) -> None:
+        conn = open_db(str(self.data_root))
+        try:
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id,
+                    fingerprint, occurred_at, direction, asset, amount, fee,
+                    raw_json, created_at
+                ) VALUES(
+                    'return-two', 'ws', 'profile', 'new', 'return-two',
+                    'fingerprint-return-two', '2021-02-01T00:00:00Z',
+                    'inbound', 'BTC', ?, 0, '{}', '2021-02-01T00:00:00Z'
+                )
+                """,
+                (99 * BTC // 10,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        proc = _start_daemon(self.data_root)
+        try:
+            scope = {"workspace": "Books", "profile": "Book"}
+            first = _request(
+                proc,
+                {
+                    "request_id": "gap-page-one",
+                    "kind": "ui.custody.gaps.list",
+                    "args": {**scope, "limit": 1},
+                },
+            )["data"]
+            self.assertRegex(first["next_cursor"], r"^cgp2\.")
+            second = _request(
+                proc,
+                {
+                    "request_id": "gap-page-two",
+                    "kind": "ui.custody.gaps.list",
+                    "args": {
+                        **scope,
+                        "limit": 1,
+                        "cursor": first["next_cursor"],
+                    },
+                },
+            )["data"]
+            self.assertNotEqual(
+                first["gaps"][0]["gap_id"], second["gaps"][0]["gap_id"]
+            )
+            self.assertIsNone(second["next_cursor"])
+        finally:
+            _stop_daemon(proc)
+
     def test_real_jsonl_protocol_previews_confirms_and_refreshes_gap(self) -> None:
         proc = _start_daemon(self.data_root)
         try:
@@ -402,17 +468,7 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                 },
             )
         finally:
-            if proc.stdin is not None:
-                proc.stdin.close()
-            try:
-                proc.wait(timeout=5.0)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5.0)
-            if proc.stdout is not None:
-                proc.stdout.close()
-            if proc.stderr is not None:
-                proc.stderr.close()
+            _stop_daemon(proc)
 
 
 if __name__ == "__main__":

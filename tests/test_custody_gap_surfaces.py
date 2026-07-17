@@ -471,12 +471,12 @@ class CustodyGapSurfaceTest(unittest.TestCase):
                 {"gap_id": ""},
             )
 
-    def test_gap_list_rejects_invalid_cursor(self):
+    def test_gap_list_rejects_non_text_cursor(self):
         with self.assertRaises(AppError) as raised:
             _ui_custody_gap_payload_from_conn(
                 sqlite3.connect(":memory:"),
                 "ui.custody.gaps.list",
-                {"cursor": "not-an-offset"},
+                {"cursor": 50},
             )
         self.assertEqual(raised.exception.code, "validation")
 

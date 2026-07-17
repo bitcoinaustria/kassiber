@@ -2188,17 +2188,9 @@ def _ui_custody_gap_payload_from_conn(
             retryable=False,
         )
     raw_cursor = args.get("cursor")
-    if raw_cursor is not None and (
-        not isinstance(raw_cursor, str) or not raw_cursor.isdigit()
-    ):
+    if raw_cursor is not None and not isinstance(raw_cursor, str):
         raise AppError(
             f"{kind} cursor is invalid",
-            code="validation",
-            retryable=False,
-        )
-    if raw_cursor is not None and int(raw_cursor) > 2**31 - 1:
-        raise AppError(
-            f"{kind} cursor is out of range",
             code="validation",
             retryable=False,
         )

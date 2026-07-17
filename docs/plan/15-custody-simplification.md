@@ -227,6 +227,12 @@ binary.
    explicit completeness, limit, partial-population and scoped-blocker fields;
    `CustodyGapSearchLimitError` and all exception-carried partial results are
    deleted.
+   The custody-gap screen now mirrors that contract as one pending-plan state:
+   create, reopen, revise and residual previews are mutually exclusive and all
+   confirm through the same apply mutation. The obsolete reviewed-row branch
+   is deleted from the current-candidate list; immutable review events remain
+   on the point history endpoint. A real JSONL daemon regression follows the
+   opaque normalized-candidate keyset cursor across pages.
    Component authoring now exposes distinct `components plan/apply` CLI,
    desktop and AI operations; the overloaded `bulk_resolve(dry_run=...)`
    command/kind is deleted, and apply requires the exact pure-plan fingerprint.
