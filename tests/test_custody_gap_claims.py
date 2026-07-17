@@ -242,6 +242,48 @@ class CustodyGapHoldCompilerTests(unittest.TestCase):
         with self.assertRaises(CustodyGapHoldCompileError):
             compile_gap_candidate_holds(candidate, _observations(rows))
 
+    def test_candidate_rejects_cross_profile_and_empty_profile_observations(self):
+        rows = [
+            _row(
+                "out",
+                "wallet-a",
+                "outbound",
+                BTC_MSAT,
+                "2020-01-01T00:00:00Z",
+                privacy_boundary="coinjoin",
+            ),
+            _row(
+                "return",
+                "wallet-c",
+                "inbound",
+                BTC_MSAT,
+                "2021-01-01T00:00:00Z",
+            ),
+        ]
+        candidate = _candidate(rows, ["out"], ["return"])
+        original = _observations(rows)
+
+        for profile_id in ("other-profile", ""):
+            with self.subTest(profile_id=profile_id):
+                observations = {
+                    transaction_id: replace(observation, profile_id=profile_id)
+                    for transaction_id, observation in original.items()
+                }
+                with self.assertRaises(CustodyGapHoldCompileError) as raised:
+                    compile_gap_candidate_holds(candidate, observations)
+                self.assertEqual(raised.exception.code, "custody_gap_hold_compile")
+                self.assertEqual(
+                    raised.exception.details["candidate_profile_id"],
+                    "profile",
+                )
+
+        with self.assertRaises(CustodyGapHoldCompileError) as raised:
+            compile_gap_candidate_holds(
+                replace(candidate, profile_id=""),
+                original,
+            )
+        self.assertEqual(raised.exception.code, "custody_gap_hold_compile")
+
 
 if __name__ == "__main__":
     unittest.main()
