@@ -438,6 +438,16 @@ at **83.9ms**. Both runs retained the structured 10 BTC / 9.9 BTC candidate,
 reported capacity limitation explicitly, used the profile-time and source/
 target lineage indexes, and avoided a temporary page sort.
 
+After the final residue/dead-path pass, the same 100k workload measured the
+real builder at **9.966s** with **754,404 KiB** peak RSS, 50k decisions, zero
+issues and exact conservation. Atomic arbitration took 55.3ms. The first and
+second 100-row lineage pages took 3.39ms and 2.66ms; a transaction-scoped read
+took 0.26ms. SQLite again selected the profile-time covering index and a
+multi-index OR over the source/target indexes without a temporary sort. The
+complete derived gap read took 48.7ms and reported ordinary
+`capacity_limited` completeness. Every declared 100k budget and structural
+query-plan invariant therefore remains satisfied after the deletions.
+
 ## Stop state
 
 The series stops when one authored reviewed-custody aggregate remains, only the
@@ -473,6 +483,22 @@ The completed series is grouped below by coherent slice:
 - post-review correctness and simplicity pass: `abce8e2d`, `cb5f578e`,
   `6f15448d`, `31d2d3c4`, `f33503c0`, `b4c64246`, `dbb60817`,
   `7b0bb442`.
+- post-model-audit residue pass: `24b8a3ed`, `548527aa`, `7c82b7a4`,
+  `35eae9d7`, `fb696f8b`, `ab9ef6f1`, `5e7fc62c`, `bb25df1d`, `a0ca6e2f`,
+  `51b4b2c2`, `07465429`, `fa871eae`, `4b4d295d`, `03126298`, `695254ab`.
+
+The last pass removed the spent tax-cutover baseline entirely. It had no
+legacy-engine marker and therefore sealed the current engine's first journal
+run as a meaningless immutable "migration" baseline on the second run. The
+same pass made exact same-event observer evidence bypass import-time and
+heuristic fee plausibility, surfaced compatibility observer routing to the
+desktop, removed producer-less quantity and lineage vocabulary, persisted
+ownership-review cards with the journal projection, and made swap review
+consume current stored MOVE anchors instead of mirroring the interpreter over
+raw rows. Stored graph parsing and Bitcoin record normalization now share the
+canonical on-chain helpers. Component authoring reuses already validated local
+materializations and builds the profile observation index once per active
+batch; replicated/read paths retain full revalidation.
 
 The final production flow is the target flow above. Static call-site audit
 finds `detect_intra_transfers` only in the custody interpreter and
@@ -524,25 +550,32 @@ observers reserved for protocol physics:
 
 Exact validation on the final code:
 
-- repository quality gate: 2,968 Python tests passed, 8 skipped; TypeScript
-  compilation passed; ESLint had zero errors (49 pre-existing warnings);
-  744 Vitest tests passed; shard and compile checks passed;
+- the quality-gate-equivalent isolated manifest completed with **2,938 Python
+  tests passed and 8 opt-in live tests skipped**; compile and shard-manifest
+  checks passed. The host did not provide the gate script's `uv` binary, so the
+  eight harness-safety tests were also rerun through a temporary
+  `uv run --locked python` shim targeting the existing locked virtualenv and
+  all eight passed;
+- TypeScript compilation passed; ESLint had zero errors (49 pre-existing
+  warnings); **745 Vitest tests passed**;
 - fast integration harness: 39 passed; custody desktop harness: 22 Python and
   49 focused UI tests passed;
-- live Bitcoin Core journal/export and Fulcrum parity lanes passed;
-- the live all-observer lane passed independent Core/Elements truth manifests,
-  BDK Esplora/Electrum restart parity, and LWK multi-asset restart/no-op/reorg;
+- the final live Bitcoin Core journal/export test passed in 49.9s and Fulcrum
+  parity passed in 64.9s;
+- the final live all-observer lane passed independent Core/Elements truth
+  manifests (132.6s), BDK Esplora/Electrum restart parity (137.5s), and LWK
+  multi-asset restart/no-op/reorg (98.3s);
 - migration, delayed signed-replay, component replication, focused custody and
   swap-refund regressions all passed. Performance and query-plan results are
   recorded in the preceding section and meet every declared blocking budget.
 
 ### Migration window and rollback risk
 
-The live schema contains 23 custody-related tables. The net increase from the
-baseline 20 is component economic terms, durable migration-issue state, the
-narrow targetless-economic relation projection, and the builder's local gap
-input row, offset by deleting the serialized gap snapshot table. All three
-normalized gap-candidate cache tables are also gone.
+The live schema contains 20 custody-related tables after deleting the three
+spent tax-cutover audit tables and their immutability triggers. Component
+economic terms, durable migration-issue state, the narrow targetless-economic
+relation projection, and the builder's local gap input row remain; serialized
+and normalized gap-candidate cache tables are gone.
 Legacy pair/payout rows remain physically present only until every signed
 replica has acknowledged the component-native epoch or a tombstone protocol is
 available. Applying an older binary after component-native writes is unsafe;
@@ -553,11 +586,13 @@ chains or filed-report history could break audit and amendment evidence.
 ### Code-volume result and retained exceptions
 
 At the merge, the 17 `kassiber/core/custody*.py` modules contained 18,733
-lines. PR #447 reached 25,707 lines before this follow-up audit; the current 20
-modules contain **24,868 lines**, 839 fewer than that reviewed state. Across the
-follow-up commits, production Python deleted 1,162 more lines than it added.
-The branch therefore finishes with materially less code than the starting PR,
-but it remains 6,135 custody-core lines above the pre-PR #439 baseline.
+lines. PR #447 reached 25,707 lines before this follow-up audit; the current 19
+modules contain **24,153 lines**, 1,554 fewer than that reviewed state. The
+final residue pass alone removed a net **1,844 production-Python lines**; all
+files in that pass are a net **3,271 lines** smaller than the previous audit
+commit. The branch therefore finishes with materially less code than the
+starting PR, but it remains 5,420 custody-core lines above the pre-PR #439
+baseline.
 
 The earlier claim that no safe deletion remained was wrong. This pass removed
 the gap cache and its three tables, full-book identity hashing, retention and
@@ -583,7 +618,16 @@ The remaining proposed cuts were evaluated rather than silently waived:
   projection view;
 - canonical observation revalidation in gap-hold compilation remains because
   the derived transaction matcher and authoritative observation substrate are
-  distinct trust boundaries.
+  distinct trust boundaries;
+- historical leg-role/schema rebuilds remain because supported pre-suspense
+  databases are exercised by migration tests; deleting them would silently
+  narrow upgrade safety. `confidence_at_review` remains only for delayed
+  signed legacy replay, and the `satbooks` root fallback remains user-data
+  compatibility;
+- splitting `sync_backends.py`, moving interpreter-only modules, or moving
+  component evidence into another file was rejected as cosmetic: those edits
+  change file ownership but remove no competing truth. The shared parser and
+  normalizer seams were extracted in place instead.
 
 Removing those narrow pieces would weaken exact-plan review, replication
 completeness, immutable audit identity, targetless economic classification or
