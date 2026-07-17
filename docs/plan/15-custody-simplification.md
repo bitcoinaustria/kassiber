@@ -418,7 +418,7 @@ versioned and genuinely paginated, compatibility interpretation is deleted,
 production code volume is materially lower, and all functional, replication,
 regtest, migration, performance-invariant, and repository quality gates pass.
 
-## Final hard-stop audit (2026-07-16)
+## Final hard-stop audit (updated 2026-07-17)
 
 The initiative remains justified after the merged-code inspection. Every
 reported competing accounting path was either reproduced and removed or shown
@@ -440,7 +440,7 @@ The completed series is grouped below by coherent slice:
 - stored-projection consumers, report gate and surface consolidation:
   `3c41deea`, `f149357e`, `fa4621de`, `c13015fe`, `ddbdea8d`, `04d50951`;
 - speculative-scaffold deletion, performance and final correctness repairs:
-  `a8131a8a`, `5c12439a`, `9e75efd3`.
+  `a8131a8a`, `5c12439a`, `9e75efd3`, `9ec629ed`, `1dc8bae1`.
 
 The final production flow is the target flow above. Static call-site audit
 finds `detect_intra_transfers` only in the custody interpreter and
@@ -449,6 +449,12 @@ has no discovery fallback. No `CUSTODY_CANDIDATE`, `HEURISTIC_CANDIDATE`,
 `CustodyGapSearchLimitError`, preview savepoint or manufactured fallback claim
 remains. Seven custody daemon operations replace the baseline fourteen:
 coverage, lineage, gap list/context/history, and shared review plan/apply.
+The final reachability pass also removed test-only effective-component, gap,
+native-audit, evidence-baseline and filed-impact compatibility APIs. Tests now
+enter through the same production seams. `REVIEWED_PAIR` claim priority and its
+interpreter branches are deleted: reviewed pair/payout meaning can enter
+arbitration only through an effective `REVIEWED_COMPONENT`; interpreter pairs
+are strictly authoritative native evidence.
 
 ### Acceptance evidence
 
@@ -513,8 +519,8 @@ chains or filed-report history could break audit and amendment evidence.
 
 The final audit cannot truthfully claim lower raw code volume. At the merge,
 the 17 `kassiber/core/custody*.py` modules contained 18,733 lines; the final 20
-modules contain 25,943 lines. Across the audited production surface, the series
-deleted 7,298 lines and added 11,775 (net +4,477). Custody references in
+modules contain 25,707 lines. Across the audited production surface, the series
+deleted 7,523 lines and added 11,764 (net +4,241). Custody references in
 `cli/handlers.py` fell from 116 to 32, and the competing interpreter, consumer,
 preview, command and serialized-snapshot paths were deleted, but the
 crash-safe authored migration, immutable replication terms, pure planners and

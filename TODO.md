@@ -221,7 +221,7 @@ same verification surface.
     and demonstrate the final simplicity/LOC/performance stop state. Consumer,
     report-gate, compatibility-interpreter, performance and quality work is
     complete. The one remaining hard stop is raw code volume: custody core is
-    25,943 LOC versus 18,733 at the merge. The final audit in the plan records
+    25,707 LOC versus 18,733 at the merge. The final audit in the plan records
     why deleting the remaining migration, signed-replay, immutable audit or
     pure planner/projection code would weaken protected invariants. The
     transaction graph, report/export transfer and swap rows, source-of-funds
