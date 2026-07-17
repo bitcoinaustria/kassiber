@@ -57,6 +57,12 @@ class SourceScript:
     address_index: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ProfileSourceIndex:
+    profile_id: str
+    sources: tuple[SourceScript, ...]
+
+
 def _row_get(row: Mapping[str, Any] | sqlite3.Row, key: str, default: Any = None) -> Any:
     try:
         return row[key]
@@ -534,17 +540,23 @@ def _source_script_groups(
     *,
     candidate_scripts: Sequence[SourceScript] | None = None,
     include_deprecated: bool = False,
+    profile_index: ProfileSourceIndex | None = None,
 ) -> tuple[dict[tuple[str, str, str, str], list[SourceScript]], list[SourceScript]]:
-    active_counts = _active_transaction_counts(conn, profile_id)
     candidate_scripts = list(candidate_scripts or [])
     candidate_wallet_ids = {source.wallet_id for source in candidate_scripts}
-    sources: list[SourceScript] = []
-    for wallet in _wallets_for_profile(conn, profile_id):
-        config = _wallet_config(wallet)
-        sources.extend(_address_list_scripts(profile_id, wallet, config, active_counts))
-    sources.extend(_inventory_scripts(conn, profile_id, active_counts))
-    sources.extend(candidate_scripts)
-    sources.extend(_descriptor_config_scripts(conn, profile_id, active_counts, candidate_scripts))
+    if profile_index is not None and profile_index.profile_id == profile_id:
+        sources = [*profile_index.sources, *candidate_scripts]
+    else:
+        active_counts = _active_transaction_counts(conn, profile_id)
+        sources = []
+        for wallet in _wallets_for_profile(conn, profile_id):
+            config = _wallet_config(wallet)
+            sources.extend(_address_list_scripts(profile_id, wallet, config, active_counts))
+        sources.extend(_inventory_scripts(conn, profile_id, active_counts))
+        sources.extend(candidate_scripts)
+        sources.extend(
+            _descriptor_config_scripts(conn, profile_id, active_counts, candidate_scripts)
+        )
     filtered = [
         source
         for source in sources
@@ -564,6 +576,27 @@ def _source_script_groups(
         key = (source.profile_id, chain, network, source.script_pubkey)
         grouped.setdefault(key, []).append(source)
     return grouped, filtered
+
+
+def build_profile_source_index(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> ProfileSourceIndex:
+    """Build one immutable ownership index for a wallet-prefetch operation.
+
+    Callers deliberately rebuild this index for the next sync operation, so a
+    wallet config, output inventory, or freshness-checkpoint mutation cannot
+    leave a stale cross-operation cache behind.
+    """
+
+    active_counts = _active_transaction_counts(conn, profile_id)
+    sources: list[SourceScript] = []
+    for wallet in _wallets_for_profile(conn, profile_id):
+        config = _wallet_config(wallet)
+        sources.extend(_address_list_scripts(profile_id, wallet, config, active_counts))
+    sources.extend(_inventory_scripts(conn, profile_id, active_counts))
+    sources.extend(_descriptor_config_scripts(conn, profile_id, active_counts, ()))
+    return ProfileSourceIndex(profile_id=profile_id, sources=tuple(sources))
 
 
 def detect_profile_source_overlaps(
@@ -808,6 +841,8 @@ def filter_sync_state_for_canonical_owner(
     profile: Mapping[str, Any] | sqlite3.Row,
     wallet: Mapping[str, Any] | sqlite3.Row,
     sync_state: Any,
+    *,
+    profile_index: ProfileSourceIndex | None = None,
 ) -> Any:
     """Remove sync targets whose script is already owned by a better source.
 
@@ -825,6 +860,7 @@ def filter_sync_state_for_canonical_owner(
             conn,
             profile_id,
             candidate_scripts=candidate_scripts,
+            profile_index=profile_index,
         )
     except sqlite3.OperationalError as exc:
         if "no such table" in str(exc).lower():
@@ -995,8 +1031,10 @@ def raise_for_sync_source_overlap(
 
 
 __all__ = [
+    "ProfileSourceIndex",
     "SourceScript",
     "apply_address_list_overlap_repairs",
+    "build_profile_source_index",
     "detect_profile_source_overlaps",
     "duplicate_transaction_preview",
     "filter_sync_state_for_canonical_owner",

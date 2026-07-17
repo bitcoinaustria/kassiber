@@ -3727,7 +3727,7 @@ class AtomicWalletRefreshTest(unittest.TestCase):
             patch("kassiber.cli.handlers._wallet_sync_hooks", return_value=hooks),
             patch(
                 "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
-                side_effect=lambda conn, profile, wallet, state: state,
+                side_effect=lambda conn, profile, wallet, state, **_kwargs: state,
             ),
         ):
             results = cli_handlers.sync_wallet(
@@ -3860,7 +3860,7 @@ class AtomicWalletRefreshTest(unittest.TestCase):
         )
         with patch(
             "kassiber.core.source_overlap.filter_sync_state_for_canonical_owner",
-            side_effect=lambda conn, profile, wallet, state: state,
+            side_effect=lambda conn, profile, wallet, state, **_kwargs: state,
         ):
             prefetched = cli_handlers._prefetch_chain_wallets(
                 self.conn,

@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from embit import bip32, bip39
 
@@ -402,6 +403,82 @@ class SourceOverlapTests(unittest.TestCase):
 
                 self.assertEqual([target["address"] for target in filtered.targets], [ADDR_C])
                 self.assertEqual(set(filtered.tracked_scripts), {_script(ADDR_C)})
+            finally:
+                conn.close()
+
+    def test_sync_reuses_profile_source_index_and_rebuilds_after_config_change(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                descriptor = _wallet(
+                    conn,
+                    "desc",
+                    "Descriptor",
+                    "descriptor",
+                    _descriptor_config(gap_limit=1),
+                )
+                address_wallet = _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {
+                        "addresses": [ADDR_A],
+                        "chain": "bitcoin",
+                        "network": "mainnet",
+                    },
+                )
+                target = {
+                    "address": ADDR_A,
+                    "script_pubkey": _script(ADDR_A),
+                    "chain": "bitcoin",
+                    "network": "mainnet",
+                    "branch_label": "address",
+                    "address_index": 0,
+                }
+                sync_state = WalletSyncState(
+                    chain="bitcoin",
+                    network="mainnet",
+                    descriptor_plan=None,
+                    policy_asset_id="",
+                    targets=[target],
+                    tracked_scripts={target["script_pubkey"]: target},
+                    history_cache={},
+                )
+
+                with patch(
+                    "kassiber.core.source_overlap.derive_descriptor_targets",
+                    wraps=source_overlap.derive_descriptor_targets,
+                ) as derive:
+                    index = source_overlap.build_profile_source_index(conn, profile["id"])
+                    build_calls = derive.call_count
+                    source_overlap.filter_sync_state_for_canonical_owner(
+                        conn,
+                        profile,
+                        address_wallet,
+                        sync_state,
+                        profile_index=index,
+                    )
+                    source_overlap.filter_sync_state_for_canonical_owner(
+                        conn,
+                        profile,
+                        address_wallet,
+                        sync_state,
+                        profile_index=index,
+                    )
+                    self.assertGreater(build_calls, 0)
+                    self.assertEqual(derive.call_count, build_calls)
+
+                    config = _descriptor_config(gap_limit=3)
+                    conn.execute(
+                        "UPDATE wallets SET config_json = ? WHERE id = ?",
+                        (json.dumps(config, sort_keys=True), descriptor["id"]),
+                    )
+                    rebuilt = source_overlap.build_profile_source_index(conn, profile["id"])
+
+                self.assertGreater(derive.call_count, build_calls)
+                self.assertGreater(len(rebuilt.sources), len(index.sources))
             finally:
                 conn.close()
 

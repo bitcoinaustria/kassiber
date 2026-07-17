@@ -2220,6 +2220,8 @@ def _prepare_negative_balance_repairs(
     wallets,
     hooks,
     prefetched,
+    *,
+    source_overlap_index=None,
 ):
     """Fetch any widened descriptor repair before opening the apply savepoint."""
 
@@ -2262,6 +2264,7 @@ def _prepare_negative_balance_repairs(
                         profile,
                         candidate,
                         state,
+                        profile_index=source_overlap_index,
                     )
                 ),
                 observer_fetch_preflight=(
@@ -2325,6 +2328,10 @@ def _prefetch_chain_wallets(
         }
         for wallet in backend_wallet_rows
     ]
+    source_overlap_index = core_source_overlap.build_profile_source_index(
+        conn,
+        str(profile["id"]),
+    )
     with core_sync_backends.shared_electrum_client_pool():
         prefetched = core_sync.prefetch_wallets_backend(
             runtime_config,
@@ -2339,6 +2346,7 @@ def _prefetch_chain_wallets(
                     profile,
                     wallet,
                     sync_state,
+                    profile_index=source_overlap_index,
                 )
             ),
             observer_fetch_preflight=(
@@ -2359,6 +2367,7 @@ def _prefetch_chain_wallets(
             backend_wallets,
             hooks,
             prefetched,
+            source_overlap_index=source_overlap_index,
         )
 
 
