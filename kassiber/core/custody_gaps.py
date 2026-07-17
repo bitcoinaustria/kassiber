@@ -43,6 +43,7 @@ DEFAULT_MAX_SOURCE_LEGS = 3
 DEFAULT_MAX_RETURN_LEGS = 16
 DEFAULT_MAX_AGGREGATE_RETURN_LEGS = 256
 DEFAULT_MAX_SOURCE_GROUPS = 256
+DEFAULT_MAX_UNTYPED_SOURCE_ROWS = 64
 DEFAULT_MAX_RETURN_POOL = 512
 DEFAULT_BEAM_WIDTH = 48
 DEFAULT_MAX_RETURN_GROUPS_PER_SOURCE = 24
@@ -1315,26 +1316,58 @@ def load_gap_search_result(
                 ),
             ).fetchall()
         )
-        ordinary_budget = DEFAULT_MAX_SOURCE_GROUPS - len(source_rows)
+        ordinary_budget = min(
+            DEFAULT_MAX_UNTYPED_SOURCE_ROWS,
+            DEFAULT_MAX_SOURCE_GROUPS - len(source_rows),
+        )
         if ordinary_budget:
             # A missing intermediary often leaves no typed marker on the old
             # wallet's payment. Preserve a bounded high-value lane for that
             # 10 BTC out / 9.9 BTC back shape. These remain review-only because
             # the large-book search is explicitly incomplete.
-            source_rows.extend(
-                mapped_rows(
-                    conn.execute(
-                        row_select
-                        + f"""
-                        WHERE t.profile_id = ? AND t.excluded = 0
-                          AND t.direction = 'outbound'
-                          AND NOT ({structured_sql})
-                        ORDER BY t.amount DESC, t.occurred_at, t.created_at, t.id
-                        LIMIT ?
-                        """,
-                        (profile_id, *structured_params, ordinary_budget),
-                    ).fetchall()
+            ordinary_rows: list[dict[str, Any]] = []
+            assets = conn.execute(
+                """
+                SELECT DISTINCT t.asset
+                FROM transactions t
+                WHERE t.profile_id = ? AND t.excluded = 0
+                  AND t.direction = 'outbound'
+                ORDER BY t.asset
+                """,
+                (profile_id,),
+            ).fetchall()
+            for asset_row in assets:
+                ordinary_rows.extend(
+                    mapped_rows(
+                        conn.execute(
+                            row_select
+                            + f"""
+                            WHERE t.profile_id = ? AND t.excluded = 0
+                              AND t.direction = 'outbound'
+                              AND t.asset = ?
+                              AND NOT ({structured_sql})
+                            ORDER BY t.amount DESC, t.occurred_at DESC,
+                                     t.created_at DESC, t.id DESC
+                            LIMIT ?
+                            """,
+                            (
+                                profile_id,
+                                asset_row["asset"],
+                                *structured_params,
+                                ordinary_budget,
+                            ),
+                        ).fetchall()
+                    )
                 )
+            source_rows.extend(
+                sorted(
+                    ordinary_rows,
+                    key=lambda row: (
+                        -int(row.get("amount") or 0),
+                        str(row.get("occurred_at") or ""),
+                        str(row.get("id") or ""),
+                    ),
+                )[:ordinary_budget]
             )
         source_legs = [
             leg
@@ -1383,7 +1416,7 @@ def load_gap_search_result(
                     ORDER BY t.occurred_at, t.created_at, t.id
                     LIMIT ?
                     """,
-                    (profile_id, *range_params, DEFAULT_MAX_INPUT_ROWS),
+                    (profile_id, *range_params, DEFAULT_MAX_RETURN_POOL),
                 ).fetchall()
             )
         rows = [*source_rows, *return_rows]
@@ -1644,6 +1677,8 @@ def _structured_evidence_codes(
 def _json_mapping(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
+    if value in (None, "", "{}", b"{}"):
+        return {}
     if not isinstance(value, str) or not value.strip():
         return {}
     try:

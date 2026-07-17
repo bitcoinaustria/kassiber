@@ -338,6 +338,25 @@ for custody decisions, with 100k observations, 50k decisions, zero issues, and
 exact conservation. This intentionally fails the target and establishes the
 optimization debt rather than weakening the budget.
 
+After indexing target slices once, reusing the canonical observation input,
+bounding the large-book discovery worklists, and avoiding irrelevant protocol
+interpreters, the same host measured a three-run median of **13.60s** and
+**755,284 KiB (737.6 MiB)** maximum RSS at 100k. The runs were 13.57s, 13.60s,
+and 18.13s; the slower sample reflects host scheduling variance, while the
+declared median remains below both blocking budgets. Every run projected 100k
+observations into 50k outbound decisions with exact conservation and no
+quantity issues.
+
+The complete 100k scalability run measured atomic arbitration at 0.086s,
+first/subsequent 100-row lineage pages at 5.3ms/3.9ms, and a transaction-scoped
+lineage read at 0.45ms. SQLite selected
+`idx_journal_custody_decisions_profile_time` for ordered pages and a
+multi-index OR over the source and target transaction indexes for scoped reads,
+with no temporary page sort. The once-per-version gap projection completed in
+54ms, retained the structured 10 BTC out / 9.9 BTC return scenario, and reported
+ordinary `capacity_limited` completeness rather than throwing or implying a
+complete wallet universe.
+
 ## Stop state
 
 The series stops when one authored reviewed-custody aggregate remains, only the

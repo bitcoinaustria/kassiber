@@ -98,7 +98,7 @@ def canonical_payment_hash(value):
 def _json_mapping(value):
     if isinstance(value, Mapping):
         return value
-    if value in (None, ""):
+    if value in (None, "", "{}", b"{}"):
         return {}
     try:
         parsed = json.loads(str(value))
@@ -119,7 +119,7 @@ def _json_mapping_sequence(value):
 
     if isinstance(value, list):
         parsed = value
-    elif value in (None, ""):
+    elif value in (None, "", "{}", b"{}"):
         return []
     else:
         try:
@@ -490,11 +490,15 @@ def normalize_group_txid(external_id):
 
 def _row_field(row, key):
     """Read ``key`` from a sqlite3.Row-like or dict row, ``None`` if absent."""
-    try:
-        keys = row.keys()
-    except AttributeError:
+    if type(row) is dict:
         return row.get(key)
-    return row[key] if key in keys else None
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
 
 
 _LIGHTNING_PAYMENT_HASH_SOURCES = frozenset({"core_lightning", "lnd"})

@@ -42,16 +42,24 @@ from .custody_quantity import (
     QuantityDomain,
     QuantitySlice,
 )
-from .ownership_transfers import derive_profile_transfers
+from .ownership_transfers import (
+    OwnershipDeriveResult,
+    ProfileTransferDerivation,
+    derive_profile_transfers,
+)
 from .privacy_hops import privacy_hop_evidence_from_row
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
-    if hasattr(row, "keys") and key not in row.keys():
-        return default
-    if hasattr(row, "get"):
+    if type(row) is dict:
         return row.get(key, default)
-    return row[key]
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
 
 
 @dataclass(frozen=True)
@@ -1012,6 +1020,23 @@ def compile_custody_interpreters(
 
     excluded = {str(item) for item in component_transaction_ids if item}
     observations = _observations_by_transaction(canonical)
+    has_chain_events = any(
+        event.event_key.native_namespace == "chain"
+        for event in canonical.events
+    )
+    has_lightning_hashes = False
+    has_samourai_config = False
+    has_privacy_boundaries = False
+    for row in rows:
+        has_lightning_hashes = has_lightning_hashes or (
+            _field(row, "payment_hash") not in (None, "")
+        )
+        has_samourai_config = has_samourai_config or (
+            "samourai" in str(_field(row, "config_json") or "").lower()
+        )
+        has_privacy_boundaries = has_privacy_boundaries or (
+            _field(row, "privacy_boundary") not in (None, "")
+        )
     (
         samourai_pairs,
         samourai_fee_claims,
@@ -1019,8 +1044,14 @@ def compile_custody_interpreters(
         samourai_touched_ids,
     ) = (
         _samourai_privacy_pairs(rows, observations)
+        if has_samourai_config
+        else ([], [], set(), set())
     )
-    auto_pairs, _ = detect_intra_transfers(rows)
+    auto_pairs = (
+        detect_intra_transfers(rows)[0]
+        if has_chain_events or has_lightning_hashes
+        else []
+    )
     rows_by_id = {str(_field(row, "id") or ""): row for row in rows}
     resolved_privacy_ids: set[str] = set()
     # Structured Samourai groups get their own exact quarantine below. Avoid a
@@ -1033,31 +1064,35 @@ def compile_custody_interpreters(
     # resolve to the same protocol-qualified txid above.
     resolved_privacy_ids.update(_exact_native_pair_ids(auto_pairs, observations))
     resolved_privacy_ids.update(excluded)
-    privacy_quarantines = tuple(
-        {
-            "transaction_id": str(_field(row, "id") or ""),
-            "workspace_id": _field(row, "workspace_id"),
-            "profile_id": _field(row, "profile_id"),
-            "reason": "privacy_hop_unresolved",
-            "detail_json": json.dumps(
-                {
-                    "wallet": _field(
-                        wallet_refs_by_id.get(
-                            str(_field(row, "wallet_id") or ""), {}
+    privacy_quarantines = (
+        tuple(
+            {
+                "transaction_id": str(_field(row, "id") or ""),
+                "workspace_id": _field(row, "workspace_id"),
+                "profile_id": _field(row, "profile_id"),
+                "reason": "privacy_hop_unresolved",
+                "detail_json": json.dumps(
+                    {
+                        "wallet": _field(
+                            wallet_refs_by_id.get(
+                                str(_field(row, "wallet_id") or ""), {}
+                            ),
+                            "label",
+                            _field(row, "wallet_id"),
                         ),
-                        "label",
-                        _field(row, "wallet_id"),
-                    ),
-                    "asset": str(_field(row, "asset") or "").upper(),
-                    "direction": _field(row, "direction"),
-                    **(privacy_hop_evidence_from_row(row) or {}),
-                },
-                sort_keys=True,
-            ),
-        }
-        for row in rows
-        if str(_field(row, "id") or "") not in resolved_privacy_ids
-        and privacy_hop_evidence_from_row(row) is not None
+                        "asset": str(_field(row, "asset") or "").upper(),
+                        "direction": _field(row, "direction"),
+                        **(privacy_hop_evidence_from_row(row) or {}),
+                    },
+                    sort_keys=True,
+                ),
+            }
+            for row in rows
+            if str(_field(row, "id") or "") not in resolved_privacy_ids
+            and privacy_hop_evidence_from_row(row) is not None
+        )
+        if has_privacy_boundaries
+        else ()
     )
     privacy_blocked_ids = {
         str(_field(item, "transaction_id") or "")
@@ -1115,12 +1150,24 @@ def compile_custody_interpreters(
     paired_ids: set[str] = set()
     paired_ids.update(samourai_touched_ids)
     paired_ids.update(_complete_recorded_pair_ids(auto_pairs, observations))
-    derivation = derive_profile_transfers(
-        rows,
-        index=owned_index,
-        wallet_refs_by_id=wallet_refs_by_id,
-        already_paired_ids=paired_ids,
-    )
+    if has_chain_events or owned_index is not None:
+        derivation = derive_profile_transfers(
+            rows,
+            index=owned_index,
+            wallet_refs_by_id=wallet_refs_by_id,
+            already_paired_ids=paired_ids,
+        )
+    else:
+        unchanged_rows = list(rows)
+        derivation = ProfileTransferDerivation(
+            rows_after_consolidation=unchanged_rows,
+            rows_after_recorded_fanout=unchanged_rows,
+            rows_after_ownership=unchanged_rows,
+            rows=unchanged_rows,
+            consolidation=OwnershipDeriveResult(),
+            ownership=OwnershipDeriveResult(),
+            fanout=OwnershipDeriveResult(),
+        )
     ownership_pairs = []
     for pair in derivation.ownership.derived_pairs:
         item = dict(pair)
@@ -1201,20 +1248,25 @@ def compile_custody_interpreters(
         }
         & derivation_touched_ids
     ]
+    pair_inputs = [
+        *same_asset_pairs,
+        *samourai_pairs,
+        *derived_pairs,
+    ]
     claims, blocked_transaction_ids, pair_quarantines = _pair_claims(
-        [
-            *same_asset_pairs,
-            *samourai_pairs,
-            *derived_pairs,
-        ],
+        pair_inputs,
         observations,
         excluded_transaction_ids=excluded,
         wallet_refs_by_id=wallet_refs_by_id,
-        physical_scopes_by_anchor={
-            _anchor_id(row): scope
-            for row in rows
-            if (scope := onchain_transfer_scope(row)) is not None
-        },
+        physical_scopes_by_anchor=(
+            {
+                _anchor_id(row): scope
+                for row in rows
+                if (scope := onchain_transfer_scope(row)) is not None
+            }
+            if pair_inputs
+            else {}
+        ),
     )
     claims = tuple(
         (

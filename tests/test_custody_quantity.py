@@ -26,6 +26,7 @@ from kassiber.core.custody_quantity import (
     QuantityClaim,
     QuantityObservation,
     QuantitySlice,
+    _build_postings,
     _claim_fully_selected,
     _fail_closed_atomic_bundles,
     _selected_claim_totals,
@@ -74,6 +75,41 @@ def _observation(*args, **kwargs):
 
 
 class CustodyQuantityTests(unittest.TestCase):
+    def test_posting_projection_indexes_targets_in_one_decision_pass(self):
+        sources = [
+            _observation(f"indexed-out-{index}", "source", "outbound", 1)
+            for index in range(1_000)
+        ]
+        targets = [
+            _observation(f"indexed-in-{index}", "target", "inbound", 1)
+            for index in range(1_000)
+        ]
+        decisions = [
+            ArbitratedSlice(
+                source=QuantitySlice(source.quantity_hash, 0, 1),
+                target=QuantitySlice(target.quantity_hash, 0, 1),
+                state=INTERNAL_VERIFIED,
+                reason="indexed",
+            )
+            for source, target in zip(sources, targets)
+        ]
+
+        class CountingDecisions:
+            def __init__(self, values):
+                self.values = values
+                self.yield_count = 0
+
+            def __iter__(self):
+                for value in self.values:
+                    self.yield_count += 1
+                    yield value
+
+        counted = CountingDecisions(decisions)
+        postings = _build_postings([*sources, *targets], counted)
+
+        self.assertEqual(counted.yield_count, len(decisions))
+        self.assertEqual(len(postings), len(sources) + len(targets))
+
     def test_boundary_amount_normalization_covers_fee_conventions(self):
         separate = normalize_boundary_amounts(
             direction="outbound",

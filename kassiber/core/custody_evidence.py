@@ -20,6 +20,44 @@ _LIGHTNING_WALLET_KINDS = frozenset(
     {"lnd", "coreln", "cln", "lightning", "nwc", "phoenix"}
 )
 _VERIFIED_AUTHORITY_KEY = "_kassiber_verified_chain_observation"
+_EVIDENCE_ROW_FIELDS = frozenset(
+    {
+        "id",
+        "journal_transaction_id",
+        "profile_id",
+        "wallet_id",
+        "wallet_kind",
+        "fingerprint",
+        "external_id",
+        "external_id_kind",
+        "native_event_id",
+        "native_namespace",
+        "source_ref",
+        "backend_name",
+        "occurred_at",
+        "confirmed_at",
+        "direction",
+        "asset",
+        "amount",
+        "fee",
+        "amount_includes_fee",
+        "kind",
+        "payment_hash",
+        "payment_hash_source",
+        "swap_refund_funding_txid",
+        "swap_refund_funding_vout",
+        "raw_json",
+        "config_json",
+        "wallet_config_json",
+        "chain",
+        "network",
+        "observation_authority_version",
+        "observation_graph_hash",
+        "observation_quantity_hash",
+        "observation_fee_attribution",
+        "observation_application_revision",
+    }
+)
 
 
 @dataclass(frozen=True, order=True)
@@ -107,18 +145,24 @@ def row_boundary_amounts(row: Mapping[str, Any]) -> BoundaryAmounts:
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
-    if hasattr(row, "keys") and key not in row.keys():
-        return default
-    if hasattr(row, "get"):
+    if type(row) is dict:
         return row.get(key, default)
-    return row[key]
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
 
 
 def _json_object(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
+    if value in (None, "", "{}", b"{}"):
+        return {}
     try:
-        payload = json.loads(value or "{}")
+        payload = json.loads(value)
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return dict(payload) if isinstance(payload, Mapping) else {}
@@ -137,12 +181,22 @@ def row_principal_msat(row: Mapping[str, Any]) -> int:
 
 def enriched_quantity_rows(
     rows: Sequence[Mapping[str, Any]],
+    *,
+    evidence_only: bool = False,
 ) -> tuple[dict[str, Any], ...]:
     """Attach canonical event scope without copying wallet config to evidence."""
 
     enriched = []
     for row in rows:
-        item = dict(row)
+        if evidence_only:
+            row_keys = set(row.keys())
+            item = {
+                key: row[key]
+                for key in _EVIDENCE_ROW_FIELDS
+                if key in row_keys
+            }
+        else:
+            item = dict(row)
         # Verify the persisted observer commitment before applying any
         # deterministic, multi-row accounting normalization below. The value
         # is a frozen Python object, never serialized input, so raw imports
@@ -198,7 +252,7 @@ def enriched_quantity_rows(
 
 
 def _canonical_raw_json(value: Any) -> Any:
-    if value in (None, ""):
+    if value in (None, "", "{}", b"{}"):
         return {}
     if isinstance(value, (bytes, bytearray)):
         value = value.decode("utf-8", errors="replace")
@@ -657,10 +711,14 @@ class QuantityObservation:
             ("quantity_hash", self.quantity_hash),
             ("evidence_detail_hash", self.evidence_detail_hash),
         ):
-            if len(value) != 64 or any(
-                char not in "0123456789abcdef" for char in value
-            ):
+            if len(value) != 64 or value != value.lower():
                 raise ValueError(f"quantity observation {label} must be lowercase SHA-256")
+            try:
+                int(value, 16)
+            except ValueError as exc:
+                raise ValueError(
+                    f"quantity observation {label} must be lowercase SHA-256"
+                ) from exc
         if self.direction not in {"inbound", "outbound"}:
             raise ValueError("quantity observation direction must be inbound or outbound")
         if not self.asset:

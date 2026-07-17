@@ -47,11 +47,15 @@ from .custody_quantity import (
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
-    if hasattr(row, "keys") and key not in row.keys():
-        return default
-    if hasattr(row, "get"):
+    if type(row) is dict:
         return row.get(key, default)
-    return row[key]
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
 
 
 @dataclass(frozen=True)
@@ -876,6 +880,7 @@ def _tax_eligibility(
 def build_canonical_quantity_state(
     rows: Sequence[Mapping[str, Any]],
     *,
+    canonical_input: CanonicalQuantityInput | None = None,
     interpreter_claims: Iterable[QuantityClaim] = (),
     effective_components: Sequence[Mapping[str, Any]] = (),
     native_evidence: Sequence[Mapping[str, Any]] = (),
@@ -890,8 +895,15 @@ def build_canonical_quantity_state(
     """Build the canonical quantity projection and tax-eligibility boundary."""
 
     interpreter_claims = tuple(interpreter_claims)
-    safe_rows = enriched_quantity_rows(rows)
-    canonical = build_canonical_quantity_input(safe_rows)
+    if canonical_input is None:
+        safe_rows = enriched_quantity_rows(rows)
+        canonical = build_canonical_quantity_input(safe_rows)
+    else:
+        # The core journal builder already enriched these exact rows to create
+        # this immutable input. Reuse both together instead of hashing and
+        # validating every observation a second time.
+        safe_rows = tuple(rows)
+        canonical = canonical_input
     (
         component_claims,
         component_issues,

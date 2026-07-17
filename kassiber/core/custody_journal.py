@@ -298,6 +298,8 @@ class CustodyJournalBuilder:
             """,
             (self.profile_id,),
         ).fetchall()
+        if not records:
+            return {}, []
         channel_rows: list[dict[str, Any]] = []
         for record in records:
             if not record["txid"]:
@@ -420,7 +422,8 @@ class CustodyJournalBuilder:
                 }
             )
         )
-        canonical_input = build_canonical_quantity_input(enriched_quantity_rows(rows))
+        enriched_rows = enriched_quantity_rows(rows, evidence_only=True)
+        canonical_input = build_canonical_quantity_input(enriched_rows)
         interpretation = custody_interpreters.compile_custody_interpreters(
             rows,
             canonical_input,
@@ -489,7 +492,8 @@ class CustodyJournalBuilder:
             producer_kind="journal",
         )
         quantity_state = custody_quantity_runtime.build_canonical_quantity_state(
-            rows,
+            enriched_rows,
+            canonical_input=canonical_input,
             interpreter_claims=interpretation.claims,
             effective_components=active_components,
             native_evidence=interpretation.native_audits,

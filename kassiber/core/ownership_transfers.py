@@ -2364,12 +2364,12 @@ def _clone_row(
 
 
 def _get(row: Any, key: str, default: Any = None) -> Any:
-    if isinstance(row, dict):
+    if type(row) is dict:
         return row.get(key, default)
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key, default)
     try:
-        keys = row.keys()
-    except AttributeError:
-        return getattr(row, key, default)
-    if key in keys:
         return row[key]
-    return default
+    except (KeyError, IndexError, TypeError):
+        return getattr(row, key, default)

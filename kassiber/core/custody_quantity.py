@@ -788,17 +788,8 @@ def _fail_closed_atomic_bundles(
 
 def _uncovered_inbound_slices(
     observation: QuantityObservation,
-    decisions: Sequence[ArbitratedSlice],
+    consumed: Sequence[QuantitySlice],
 ) -> list[QuantitySlice]:
-    consumed = sorted(
-        (
-            decision.target
-            for decision in decisions
-            if decision.target is not None
-            and decision.target.observation_hash == observation.quantity_hash
-        ),
-        key=lambda item: (item.start_msat, item.end_msat),
-    )
     uncovered: list[QuantitySlice] = []
     cursor = 0
     for item in consumed:
@@ -823,6 +814,7 @@ def _build_postings(
     decisions: Sequence[ArbitratedSlice],
 ) -> tuple[QuantityPosting, ...]:
     by_hash = {item.quantity_hash: item for item in observations}
+    targets_by_observation: dict[str, list[QuantitySlice]] = {}
     postings: list[QuantityPosting] = []
     for observation in sorted(observations, key=lambda item: item.quantity_hash):
         postings.append(
@@ -853,6 +845,9 @@ def _build_postings(
 
     for decision in decisions:
         if decision.target is not None:
+            targets_by_observation.setdefault(
+                decision.target.observation_hash, []
+            ).append(decision.target)
             continue
         source = by_hash[decision.source.observation_hash]
         location_kind = decision.destination_kind or {
@@ -881,10 +876,16 @@ def _build_postings(
             )
         )
 
+    for targets in targets_by_observation.values():
+        targets.sort(key=lambda item: (item.start_msat, item.end_msat))
+
     for observation in observations:
         if observation.direction != "inbound":
             continue
-        for item in _uncovered_inbound_slices(observation, decisions):
+        for item in _uncovered_inbound_slices(
+            observation,
+            targets_by_observation.get(observation.quantity_hash, ()),
+        ):
             postings.append(
                 QuantityPosting(
                     posting_id=(
