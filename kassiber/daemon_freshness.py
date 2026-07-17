@@ -1120,16 +1120,32 @@ def _prefetch_onchain_freshness_jobs(
         )
         for wallet in wallets
     }
-    force_full = any(_job_force_full(job) for job in onchain_jobs)
-    return prefetch_wallets_from_backend(
-        conn,
-        runtime_config,
-        profile["workspace_id"],
-        profile["id"],
-        wallets,
-        freshness_checkpoints=checkpoints,
-        force_full=force_full,
-    )
+    prefetched: dict[str, Any] = {}
+    for force_full in (False, True):
+        grouped_wallets = [
+            wallet
+            for wallet in wallets
+            if _job_force_full(jobs_by_wallet_id[str(wallet["id"])]) is force_full
+        ]
+        if not grouped_wallets:
+            continue
+        group_results = prefetch_wallets_from_backend(
+            conn,
+            runtime_config,
+            profile["workspace_id"],
+            profile["id"],
+            grouped_wallets,
+            freshness_checkpoints={
+                str(wallet["id"]): checkpoints[str(wallet["id"])]
+                for wallet in grouped_wallets
+            },
+            force_full=force_full,
+        )
+        if not prefetched:
+            prefetched = group_results
+        else:
+            prefetched.update(group_results)
+    return prefetched
 
 
 def _parse_freshness_timestamp(value: Any) -> datetime | None:
@@ -1537,12 +1553,24 @@ def _freshness_run_payload(
             else None
         )
         try:
-            prefetched_onchain = _prefetch_onchain_freshness_jobs(
+            selected_jobs = core_freshness.list_due_jobs(
                 conn,
-                runtime_config,
-                profile,
-                enqueued,
+                profile_id=profile["id"],
+                limit=run_limit,
             )
+            try:
+                prefetched_onchain = _prefetch_onchain_freshness_jobs(
+                    conn,
+                    runtime_config,
+                    profile,
+                    selected_jobs,
+                )
+            except Exception as exc:
+                _LOGGER.warning(
+                    "Freshness batch prefetch fell back to isolated jobs (%s)",
+                    f"{exc.__class__.__module__}.{exc.__class__.__qualname__}",
+                )
+                prefetched_onchain = {}
         finally:
             if token is not None:
                 sync_progress_emitter.reset(token)

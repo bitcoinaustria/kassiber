@@ -3472,6 +3472,29 @@ class CrossWalletPrefetchTest(unittest.TestCase):
         self.assertIsInstance(prefetched["w-bad"], AppError)
         self.assertEqual(prefetched["w-bad"].code, "discovery")
 
+    def test_prefetch_captures_non_app_error_per_wallet(self):
+        wallets = [
+            _backend_sync_wallet("w-good", "Good", "bc1qgood"),
+            _backend_sync_wallet("w-bad", "Bad", "bc1qbad"),
+        ]
+        hooks = self._hooks()
+
+        def preflight(wallet, sync_state):
+            if wallet["id"] == "w-bad":
+                raise RuntimeError("backend library failed")
+            return sync_state
+
+        prefetched = prefetch_wallets_backend(
+            {},
+            {},
+            wallets,
+            hooks,
+            source_overlap_preflight=preflight,
+        )
+
+        self.assertIsInstance(prefetched["w-good"], WalletBackendFetch)
+        self.assertIsInstance(prefetched["w-bad"], RuntimeError)
+
     def test_prefetch_runs_preflight_before_backend_adapter(self):
         wallets = [
             _backend_sync_wallet("w-good", "Good", "bc1qgood"),
