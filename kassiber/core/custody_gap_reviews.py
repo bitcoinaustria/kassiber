@@ -2254,7 +2254,6 @@ def _require_current_candidate(
             conn,
             candidate.profile_id,
             candidate.gap_id,
-            persist_projection=False,
         )
     except (AppError, TypeError, ValueError) as exc:
         raise AppError(

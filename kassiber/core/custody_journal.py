@@ -300,6 +300,8 @@ class CustodyJournalDecisions:
     quantity_state: Any
     custody_transfers: Any
     channel_non_event_ids: tuple[str, ...]
+    gap_ignored_transaction_ids: tuple[str, ...]
+    gap_accounting_ignored_transaction_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -580,7 +582,6 @@ class CustodyJournalBuilder:
             self.profile_id,
             ignored_transaction_ids=projection_ignored_transaction_ids,
             accounting_ignored_transaction_ids=runtime_ignored_transaction_ids,
-            producer_kind="journal",
         )
         quantity_state = custody_quantity_runtime.build_canonical_quantity_state(
             enriched_rows,
@@ -621,6 +622,8 @@ class CustodyJournalBuilder:
             quantity_state=quantity_state,
             custody_transfers=custody_transfers,
             channel_non_event_ids=channel_non_event_ids,
+            gap_ignored_transaction_ids=projection_ignored_transaction_ids,
+            gap_accounting_ignored_transaction_ids=runtime_ignored_transaction_ids,
         )
 
     def build_custody_projection(self) -> CustodyJournalProjection:
@@ -708,6 +711,12 @@ class CustodyJournalBuilder:
             "quantity_differences": quantity_differences,
             "latest_rates": custody.rates,
             "warnings": custody.warnings,
+            "custody_gap_ignored_transaction_ids": (
+                custody.gap_ignored_transaction_ids
+            ),
+            "custody_gap_accounting_ignored_transaction_ids": (
+                custody.gap_accounting_ignored_transaction_ids
+            ),
         }
 
 
@@ -729,6 +738,39 @@ def store_ledger_state(
     profile_id = str(profile["id"])
     workspace_id = str(profile["workspace_id"])
     stored_at = created_at or now_iso()
+    if "custody_gap_ignored_transaction_ids" in state:
+        conn.execute(
+            """
+            INSERT INTO journal_custody_gap_inputs(
+                workspace_id, profile_id, input_version, ignored_ids_json,
+                accounting_ignored_ids_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            ON CONFLICT(profile_id) DO UPDATE SET
+                workspace_id = excluded.workspace_id,
+                input_version = excluded.input_version,
+                ignored_ids_json = excluded.ignored_ids_json,
+                accounting_ignored_ids_json = excluded.accounting_ignored_ids_json,
+                created_at = excluded.created_at
+            """,
+            (
+                workspace_id,
+                profile_id,
+                int(profile["journal_input_version"] or 0),
+                json.dumps(
+                    list(state["custody_gap_ignored_transaction_ids"]),
+                    separators=(",", ":"),
+                ),
+                json.dumps(
+                    list(
+                        state[
+                            "custody_gap_accounting_ignored_transaction_ids"
+                        ]
+                    ),
+                    separators=(",", ":"),
+                ),
+                stored_at,
+            ),
+        )
     conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile_id,))
     conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile_id,))
     conn.execute("DELETE FROM journal_tax_summary WHERE profile_id = ?", (profile_id,))

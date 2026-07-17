@@ -221,20 +221,14 @@ def reset_current_profile_data(
         "journal_custody_economic_relations": _count_profile_rows(
             conn, "journal_custody_economic_relations", profile_id
         ),
+        "journal_custody_gap_inputs": _count_profile_rows(
+            conn, "journal_custody_gap_inputs", profile_id
+        ),
         "custody_authored_evidence_snapshots": _count_profile_rows(
             conn, "custody_authored_evidence_snapshots", profile_id
         ),
         "custody_gap_reviews": _count_profile_rows(
             conn, "custody_gap_reviews", profile_id
-        ),
-        "custody_gap_candidate_projections": _count_profile_rows(
-            conn, "custody_gap_candidate_projections", profile_id
-        ),
-        "custody_gap_candidates": _count_profile_rows(
-            conn, "custody_gap_candidates", profile_id
-        ),
-        "custody_gap_candidate_boundaries": _count_profile_rows(
-            conn, "custody_gap_candidate_boundaries", profile_id
         ),
         "custody_gap_review_relation_sets": _count_profile_rows(
             conn, "custody_gap_review_relation_sets", profile_id
@@ -441,6 +435,7 @@ def reset_current_profile_data(
             "journal_quantity_balances",
             "journal_custody_decisions",
             "journal_custody_economic_relations",
+            "journal_custody_gap_inputs",
             "journal_quantity_issues",
             "journal_quantity_postings",
             "custody_gap_review_transactions",
@@ -450,9 +445,6 @@ def reset_current_profile_data(
             "custody_filed_report_impacts",
             "filed_report_snapshots",
             "custody_authored_evidence_snapshots",
-            "custody_gap_candidate_boundaries",
-            "custody_gap_candidates",
-            "custody_gap_candidate_projections",
             "journal_account_holdings",
             "journal_tax_summary",
             "journal_quarantines",

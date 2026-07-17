@@ -423,6 +423,7 @@ def _downgrade_to_pre_durable_anchor(conn: sqlite3.Connection) -> None:
         ]
         for trigger_name in trigger_names:
             legacy.execute(f'DROP TRIGGER "{trigger_name}"')
+        legacy.execute("DROP VIEW IF EXISTS journal_custody_projection_relations")
         legacy.execute("DROP TABLE custody_component_evidence_commitments")
         legacy.execute(
             "ALTER TABLE custody_components DROP COLUMN expected_evidence_count"

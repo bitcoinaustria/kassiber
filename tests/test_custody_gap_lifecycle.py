@@ -582,7 +582,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
 
     def test_review_plans_are_read_only_and_apply_exact_component_rows(self):
         candidate = self._candidate()
-        self.conn.execute("DELETE FROM custody_gap_candidate_projections")
         self.conn.commit()
         before = self.conn.total_changes
         plan = custody_gap_reviews.plan_review(
@@ -596,7 +595,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self.assertEqual(self.conn.total_changes, before)
         self.assertEqual(
             self.conn.execute(
-                "SELECT COUNT(*) FROM custody_gap_candidate_projections"
+                "SELECT COUNT(*) FROM journal_custody_gap_inputs"
             ).fetchone()[0],
             0,
         )

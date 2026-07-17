@@ -383,7 +383,7 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                     "args": {**scope, "limit": 1},
                 },
             )["data"]
-            self.assertRegex(first["next_cursor"], r"^cgp2\.")
+            self.assertRegex(first["next_cursor"], r"^cgr3\.")
             second = _request(
                 proc,
                 {

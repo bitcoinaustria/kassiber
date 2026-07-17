@@ -1285,92 +1285,17 @@ CREATE TABLE IF NOT EXISTS custody_gap_reviews (
 CREATE INDEX IF NOT EXISTS idx_custody_gap_reviews_latest
     ON custody_gap_reviews(profile_id, gap_id, revision DESC);
 
--- Replaceable local projection of one bounded gap-discovery run. Candidate
--- rows are normalized below and shared by accounting/review consumers.
-CREATE TABLE IF NOT EXISTS custody_gap_candidate_projections (
-    id TEXT PRIMARY KEY CHECK(length(id) = 64),
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    producer_kind TEXT NOT NULL DEFAULT 'review'
-        CHECK(producer_kind IN ('journal', 'review')),
-    version_json TEXT NOT NULL,
-    input_hash TEXT NOT NULL CHECK(length(input_hash) = 64),
+-- The journal builder persists only the exact boundary exclusions used by its
+-- arbitration run. The bounded advisory candidate population is recomputed on
+-- read and never becomes a second stored custody truth.
+CREATE TABLE IF NOT EXISTS journal_custody_gap_inputs (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    input_version INTEGER NOT NULL CHECK(input_version >= 0),
     ignored_ids_json TEXT NOT NULL DEFAULT '[]',
     accounting_ignored_ids_json TEXT NOT NULL DEFAULT '[]',
-    search_complete INTEGER NOT NULL CHECK(search_complete IN (0, 1)),
-    limit_kind TEXT,
-    candidate_count INTEGER NOT NULL CHECK(candidate_count >= 0),
-    promotion_eligible_count INTEGER NOT NULL CHECK(promotion_eligible_count >= 0),
-    blocking_source_ids_json TEXT NOT NULL DEFAULT '[]',
-    message TEXT,
-    summary_json TEXT NOT NULL DEFAULT '{}',
-    display_ready INTEGER NOT NULL DEFAULT 0 CHECK(display_ready IN (0, 1)),
-    display_context TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL,
-    UNIQUE(profile_id, version_json, input_hash)
+    created_at TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_projections_profile
-    ON custody_gap_candidate_projections(profile_id, created_at, id);
-
-CREATE TABLE IF NOT EXISTS custody_gap_candidates (
-    projection_id TEXT NOT NULL
-        REFERENCES custody_gap_candidate_projections(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    gap_id TEXT NOT NULL,
-    ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
-    source_count INTEGER NOT NULL CHECK(source_count >= 1),
-    return_count INTEGER NOT NULL CHECK(return_count >= 1),
-    visible INTEGER NOT NULL CHECK(visible IN (0, 1)),
-    accounting INTEGER NOT NULL CHECK(accounting IN (0, 1)),
-    asset TEXT NOT NULL,
-    protocol_chain TEXT NOT NULL,
-    network TEXT NOT NULL,
-    source_wallet_ids_json TEXT NOT NULL,
-    destination_wallet_ids_json TEXT NOT NULL,
-    source_wallet_labels_json TEXT NOT NULL,
-    destination_wallet_labels_json TEXT NOT NULL,
-    source_total_msat INTEGER NOT NULL CHECK(source_total_msat > 0),
-    source_fee_msat INTEGER NOT NULL CHECK(source_fee_msat >= 0),
-    source_debit_msat INTEGER NOT NULL CHECK(source_debit_msat > 0),
-    return_total_msat INTEGER NOT NULL CHECK(return_total_msat > 0),
-    retained_msat INTEGER NOT NULL CHECK(retained_msat > 0),
-    residual_msat INTEGER NOT NULL CHECK(residual_msat >= 0),
-    excess_msat INTEGER NOT NULL CHECK(excess_msat >= 0),
-    coverage_ppm INTEGER NOT NULL CHECK(coverage_ppm >= 0),
-    started_at TEXT NOT NULL,
-    ended_at TEXT NOT NULL,
-    elapsed_seconds INTEGER NOT NULL CHECK(elapsed_seconds >= 0),
-    score INTEGER NOT NULL,
-    confidence TEXT NOT NULL,
-    reason_codes_json TEXT NOT NULL,
-    promotion_eligible INTEGER NOT NULL CHECK(promotion_eligible IN (0, 1)),
-    competitor_score_margin INTEGER,
-    conflict_set_id TEXT NOT NULL,
-    conflict_size INTEGER NOT NULL CHECK(conflict_size >= 1),
-    affected_disposals INTEGER NOT NULL DEFAULT 0 CHECK(affected_disposals >= 0),
-    affected_years_json TEXT NOT NULL DEFAULT '[]',
-    PRIMARY KEY(projection_id, gap_id),
-    UNIQUE(projection_id, ordinal)
-);
-
-CREATE INDEX IF NOT EXISTS idx_custody_gap_candidates_page
-    ON custody_gap_candidates(projection_id, visible, ordinal, gap_id);
-
-CREATE TABLE IF NOT EXISTS custody_gap_candidate_boundaries (
-    projection_id TEXT NOT NULL,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    gap_id TEXT NOT NULL,
-    side TEXT NOT NULL CHECK(side IN ('source', 'return')),
-    ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
-    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-    PRIMARY KEY(projection_id, gap_id, side, ordinal),
-    UNIQUE(projection_id, gap_id, side, transaction_id),
-    FOREIGN KEY(projection_id, gap_id)
-        REFERENCES custody_gap_candidates(projection_id, gap_id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_custody_gap_candidate_boundaries_transaction
-    ON custody_gap_candidate_boundaries(transaction_id, projection_id, gap_id);
 
 CREATE TRIGGER IF NOT EXISTS trg_custody_gap_reviews_immutable
 BEFORE UPDATE ON custody_gap_reviews
@@ -4211,35 +4136,58 @@ def ensure_schema_compat(conn):
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
-    # Derived serialized pages were replaced by normalized, versioned candidate
-    # rows. They carry no authored evidence or rollback history and are safe to
-    # remove atomically on open.
+    # Derived gap pages and normalized candidate caches carry no authored
+    # evidence or rollback history. Preserve only the latest journal builder's
+    # ignored-boundary inputs, then remove every cached candidate table.
     conn.execute("DROP TABLE IF EXISTS custody_gap_candidate_snapshots")
     conn.execute("DROP TABLE IF EXISTS custody_gap_projection_rows")
-    gap_candidate_columns = {
-        row["name"]
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'custody_gap_candidate_projections'"
+    ).fetchone():
         for row in conn.execute(
-            "PRAGMA table_info(custody_gap_candidates)"
-        ).fetchall()
-    }
-    gap_projection_rebuild = bool(gap_candidate_columns) and not {
-        "affected_disposals",
-        "affected_years_json",
-    }.issubset(gap_candidate_columns)
-    ensure_column(
-        conn,
+            """
+            SELECT projection.profile_id, profile.workspace_id,
+                   projection.version_json, projection.ignored_ids_json,
+                   projection.accounting_ignored_ids_json, projection.created_at
+            FROM custody_gap_candidate_projections projection
+            JOIN profiles profile ON profile.id = projection.profile_id
+            WHERE projection.producer_kind = 'journal'
+              AND projection.rowid = (
+                  SELECT MAX(candidate.rowid)
+                  FROM custody_gap_candidate_projections candidate
+                  WHERE candidate.profile_id = projection.profile_id
+                    AND candidate.producer_kind = 'journal'
+              )
+            """
+        ).fetchall():
+            try:
+                version = json.loads(row["version_json"])
+                input_version = int(version[-1]) if version else 0
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO journal_custody_gap_inputs(
+                    workspace_id, profile_id, input_version, ignored_ids_json,
+                    accounting_ignored_ids_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["workspace_id"],
+                    row["profile_id"],
+                    input_version,
+                    row["ignored_ids_json"],
+                    row["accounting_ignored_ids_json"],
+                    row["created_at"],
+                ),
+            )
+    for table in (
+        "custody_gap_candidate_boundaries",
         "custody_gap_candidates",
-        "affected_disposals",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(
-        conn,
-        "custody_gap_candidates",
-        "affected_years_json",
-        "TEXT NOT NULL DEFAULT '[]'",
-    )
-    if gap_projection_rebuild:
-        conn.execute("DELETE FROM custody_gap_candidate_projections")
+        "custody_gap_candidate_projections",
+    ):
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
     ensure_column(
         conn,
         "chain_observer_instances",

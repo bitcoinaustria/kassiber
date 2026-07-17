@@ -29,7 +29,7 @@ from . import custody_quantity_store as core_custody_quantity_store
 from .custody_evidence import normalize_boundary_amounts, resolve_protocol_scope
 
 from ..errors import AppError
-from ..time_utils import now_iso, parse_iso_datetime_or_none
+from ..time_utils import parse_iso_datetime_or_none
 
 
 DEFAULT_MIN_COVERAGE_PPM = 800_000
@@ -53,7 +53,6 @@ DEFAULT_MAX_RETURN_GROUPS_PER_SOURCE = 24
 DEFAULT_MAX_CANDIDATES = 250
 DEFAULT_RETURN_ERA_GAP_SECONDS = 180 * 86_400
 DEFAULT_PROMOTION_SCORE_MARGIN = 75
-MAX_RETAINED_GAP_PROJECTIONS = 8
 
 _PRIVACY_BOUNDARIES = frozenset({"coinjoin", "payjoin", "whirlpool"})
 _SAMOURAI_WALLET_KINDS = frozenset({"samourai", "samourai-whirlpool", "whirlpool"})
@@ -136,7 +135,6 @@ class CustodyGapSearchResult:
     promotion_eligible_count: int = 0
     blocking_source_ids: tuple[str, ...] = ()
     message: str | None = None
-    projection_id: str | None = None
 
 
 EMPTY_GAP_SEARCH_RESULT = CustodyGapSearchResult(
@@ -461,179 +459,6 @@ def search_custody_gap_candidates(
     return _compute_custody_gap_search(rows, **kwargs)
 
 
-def _read_projection_page(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    projection_id: str,
-    *,
-    limit: int,
-    after: tuple[int, str] | None = None,
-    gap_id: str | None = None,
-) -> dict[str, Any]:
-    header = conn.execute(
-        "SELECT version_json, summary_json, display_ready, display_context "
-        "FROM custody_gap_candidate_projections "
-        "WHERE id = ? AND profile_id = ?",
-        (projection_id, profile_id),
-    ).fetchone()
-    if header is None or not bool(header["display_ready"]):
-        raise ValueError("cursor is unknown or expired; reload the first page")
-    if tuple(json.loads(header["version_json"])) != _gap_snapshot_version(
-        conn, profile_id
-    ):
-        raise ValueError("cursor expired because custody evidence changed")
-    journal_status = _journal_status(conn, profile_id)
-    if str(header["display_context"]) != _display_context(
-        conn, profile_id, journal_status
-    ):
-        raise ValueError("cursor expired because journal readiness changed")
-    params: list[Any] = [projection_id]
-    where = "projection_id = ? AND visible = 1"
-    if gap_id is not None:
-        where += " AND gap_id = ?"
-        params.append(gap_id)
-    elif after is not None:
-        ordinal, last_gap_id = after
-        where += (
-            " AND (ordinal > ? OR "
-            "(ordinal = ? AND gap_id > ?))"
-        )
-        params.extend((ordinal, ordinal, last_gap_id))
-    rows = conn.execute(
-        "SELECT * FROM custody_gap_candidates WHERE "
-        + where
-        + " ORDER BY ordinal, gap_id LIMIT ?",
-        (*params, limit + 1),
-    ).fetchall()
-    visible = rows[:limit]
-    boundaries: dict[tuple[str, str], list[str]] = {}
-    if visible:
-        gap_ids = [str(row["gap_id"]) for row in visible]
-        placeholders = ",".join("?" for _ in gap_ids)
-        for boundary in conn.execute(
-            "SELECT gap_id, side, transaction_id "
-            "FROM custody_gap_candidate_boundaries "
-            f"WHERE projection_id = ? AND gap_id IN ({placeholders}) "
-            "ORDER BY gap_id, side, ordinal",
-            (projection_id, *gap_ids),
-        ).fetchall():
-            boundaries.setdefault(
-                (str(boundary["gap_id"]), str(boundary["side"])), []
-            ).append(str(boundary["transaction_id"]))
-    frozen_boundaries = {
-        key: tuple(transaction_ids)
-        for key, transaction_ids in boundaries.items()
-    }
-    from . import custody_gap_reviews
-
-    reviews = custody_gap_reviews.latest_reviews(conn, profile_id)
-    gaps: list[dict[str, Any]] = []
-    for row in visible:
-        candidate = _candidate_from_row(row, frozen_boundaries)
-        gap = _snapshot_gap(candidate, ())
-        gap["downstream"] = {
-            "affected_disposals": int(row["affected_disposals"] or 0),
-            "affected_years": list(json.loads(row["affected_years_json"] or "[]")),
-        }
-        gap["candidate_fingerprint"] = custody_gap_reviews.candidate_fingerprint(
-            candidate
-        )
-        review = reviews.get(candidate.gap_id)
-        state = custody_gap_reviews.review_state(conn, candidate, review)
-        gap["status"] = state["status"]
-        if state["reason"]:
-            gap["status_reason"] = state["reason"]
-        if state.get("native_support_status"):
-            gap["native_support_status"] = state["native_support_status"]
-        if review and review.get("action") == "resolved":
-            gap["correction"] = {
-                "component_id": str(review.get("component_id") or ""),
-                "strategy": "create_revision_then_activate",
-            }
-        gaps.append(gap)
-    if gap_id is not None and not gaps:
-        # Current candidate pages contain only the normalized population. A
-        # point lookup may still need an immutable reviewed snapshot after an
-        # activated component removes that candidate from discovery.
-        gaps = [
-            gap
-            for gap in custody_gap_reviews.historical_review_gaps(conn, profile_id)
-            if gap.get("gap_id") == gap_id
-        ][:1]
-    next_cursor = None
-    if len(rows) > limit and visible:
-        last = visible[-1]
-        next_cursor = _encode_projection_cursor(
-            projection_id,
-            int(last["ordinal"]),
-            str(last["gap_id"]),
-        )
-    return {
-        "summary": dict(json.loads(header["summary_json"])),
-        "gaps": gaps,
-        "next_cursor": next_cursor,
-    }
-
-
-def _store_projection_summary(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    projection_id: str,
-    *,
-    display_context: str,
-    summary: Mapping[str, Any],
-) -> None:
-    owns_transaction = not conn.in_transaction
-    savepoint = "custody_gap_summary_write"
-    conn.execute(f"SAVEPOINT {savepoint}")
-    try:
-        conn.execute(
-            "UPDATE custody_gap_candidate_projections "
-            "SET summary_json = ?, display_ready = 1, display_context = ? "
-            "WHERE id = ?",
-            (
-                json.dumps(summary, sort_keys=True, separators=(",", ":")),
-                display_context,
-                projection_id,
-            ),
-        )
-        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-        if owns_transaction:
-            conn.commit()
-    except Exception:
-        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-        if owns_transaction:
-            conn.rollback()
-        raise
-
-
-def _display_context(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    journal_status: str,
-) -> str:
-    """Version the derived summary without invalidating candidate evidence."""
-
-    try:
-        review_version = conn.execute(
-            """
-            SELECT COUNT(*), COALESCE(MAX(revision), 0),
-                   COALESCE(MAX(created_at), '')
-            FROM custody_gap_reviews WHERE profile_id = ?
-            """,
-            (profile_id,),
-        ).fetchone()
-        review_parts = (
-            int(review_version[0]),
-            int(review_version[1]),
-            str(review_version[2]),
-        )
-    except sqlite3.OperationalError:
-        review_parts = (0, 0, "")
-    return json.dumps([journal_status, *review_parts], separators=(",", ":"))
-
-
 def build_gap_snapshot(
     conn,
     profile_id: str,
@@ -647,8 +472,8 @@ def build_gap_snapshot(
     This adapter reads only imported transaction/wallet labels and existing
     authored claims.  It never exposes addresses, scripts, descriptors, xpubs,
     raw transaction graphs, or wallet configuration. It reads and pages the
-    shared normalized candidate projection directly, so subsequent keyset
-    pages neither rerun nor reorder discovery.
+    current bounded candidate population directly. Opaque cursors bind the
+    deterministic in-memory keyset to the current journal input version.
     ``summary.search_complete`` says whether the bounded population is complete;
     ``gaps`` is the requested page and ``next_cursor`` continues that
     deterministic order.
@@ -668,15 +493,13 @@ def build_gap_snapshot(
     if gap_id is not None and cursor is not None:
         raise ValueError("cursor is not supported when gap_id is provided")
 
+    version = _gap_snapshot_version(conn, profile_id)
+    after: tuple[int, str] | None = None
     if cursor is not None:
-        projection_id, ordinal, last_gap_id = _decode_projection_cursor(cursor)
-        return _read_projection_page(
-            conn,
-            profile_id,
-            projection_id,
-            limit=limit,
-            after=(ordinal, last_gap_id),
-        )
+        cursor_version, ordinal, last_gap_id = _decode_projection_cursor(cursor)
+        if cursor_version != version:
+            raise ValueError("cursor expired because custody evidence changed")
+        after = (ordinal, last_gap_id)
 
     journal_status = _journal_status(conn, profile_id)
     # Page size must not change matcher semantics. Every page is cut from the
@@ -688,27 +511,6 @@ def build_gap_snapshot(
         limit=DEFAULT_MAX_CANDIDATES,
         include_journal_claims=journal_status == "current",
     )
-    projection_id = search_result.projection_id
-    if projection_id is None:
-        raise RuntimeError("custody gap search did not return a projection id")
-    display_context = _display_context(conn, profile_id, journal_status)
-    display = conn.execute(
-        "SELECT display_ready, display_context "
-        "FROM custody_gap_candidate_projections WHERE id = ?",
-        (projection_id,),
-    ).fetchone()
-    if (
-        display is not None
-        and bool(display["display_ready"])
-        and str(display["display_context"]) == display_context
-    ):
-        return _read_projection_page(
-            conn,
-            profile_id,
-            projection_id,
-            limit=limit,
-            gap_id=gap_id,
-        )
     candidates = list(search_result.candidates)
     from . import custody_gap_reviews
 
@@ -801,20 +603,37 @@ def build_gap_snapshot(
             else search_result.candidate_count
         ),
     }
-    _store_projection_summary(
-        conn,
-        profile_id,
-        projection_id,
-        display_context=display_context,
-        summary=summary,
-    )
-    return _read_projection_page(
-        conn,
-        profile_id,
-        projection_id,
-        limit=limit,
-        gap_id=gap_id,
-    )
+    if gap_id is not None:
+        gaps = [gap for gap in current_gaps if gap.get("gap_id") == gap_id][:1]
+        if not gaps:
+            gaps = [
+                gap
+                for gap in custody_gap_reviews.historical_review_gaps(
+                    conn, profile_id
+                )
+                if gap.get("gap_id") == gap_id
+            ][:1]
+        return {"summary": summary, "gaps": gaps, "next_cursor": None}
+
+    start = 0
+    if after is not None:
+        ordinal, last_gap_id = after
+        if (
+            ordinal >= len(candidates)
+            or candidates[ordinal].gap_id != last_gap_id
+        ):
+            raise ValueError("cursor expired because custody candidates changed")
+        start = ordinal + 1
+    page = current_gaps[start : start + limit]
+    next_cursor = None
+    if start + limit < len(current_gaps) and page:
+        last_ordinal = start + len(page) - 1
+        next_cursor = _encode_projection_cursor(
+            version,
+            last_ordinal,
+            candidates[last_ordinal].gap_id,
+        )
+    return {"summary": summary, "gaps": page, "next_cursor": next_cursor}
 
 
 def _gap_snapshot_version(conn, profile_id: str) -> tuple[Any, ...]:
@@ -840,379 +659,17 @@ def _gap_snapshot_version(conn, profile_id: str) -> tuple[Any, ...]:
     )
 
 
-def _projection_identity(
-    profile_id: str,
-    version: tuple[Any, ...],
-    ignored_ids: Sequence[str],
-    accounting_ignored_ids: Sequence[str],
-    rows: Sequence[Mapping[str, Any]],
-) -> tuple[str, str, str]:
-    version_json = json.dumps(version, separators=(",", ":"))
-    evidence_rows = []
-    for row in rows:
-        raw_json = _get(row, "raw_json", "")
-        if isinstance(raw_json, Mapping):
-            raw_json = json.dumps(raw_json, sort_keys=True, separators=(",", ":"))
-        evidence_rows.append(
-            (
-                str(_get(row, "id") or ""),
-                str(_get(row, "wallet_id") or ""),
-                str(_get(row, "occurred_at") or ""),
-                str(_get(row, "direction") or ""),
-                str(_get(row, "asset") or ""),
-                _get(row, "amount_msat", _get(row, "amount")),
-                _get(row, "fee", 0),
-                bool(_get(row, "amount_includes_fee", False)),
-                bool(_get(row, "excluded", False)),
-                str(_get(row, "kind") or ""),
-                str(_get(row, "privacy_boundary") or ""),
-                str(_get(row, "chain") or ""),
-                str(_get(row, "network") or ""),
-                str(
-                    _get(
-                        row,
-                        "wallet_config_json",
-                        _get(row, "config_json", "{}"),
-                    )
-                    or "{}"
-                ),
-                str(raw_json or ""),
-            )
-        )
-    input_json = json.dumps(
-        [tuple(ignored_ids), tuple(accounting_ignored_ids), evidence_rows],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    input_hash = hashlib.sha256(input_json.encode()).hexdigest()
-    material = json.dumps(
-        ["custody-gap-projection-v1", profile_id, version_json, input_hash],
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(material.encode()).hexdigest(), version_json, input_hash
-
-
-def _load_matching_journal_projection(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    version: tuple[Any, ...],
-    rows: Sequence[Mapping[str, Any]],
-) -> CustodyGapSearchResult | None:
-    """Reuse the builder's authoritative ignored-boundary population."""
-
-    version_json = json.dumps(version, separators=(",", ":"))
-    try:
-        headers = conn.execute(
-            """
-            SELECT id, ignored_ids_json, accounting_ignored_ids_json
-            FROM custody_gap_candidate_projections
-            WHERE profile_id = ? AND version_json = ?
-              AND producer_kind = 'journal'
-            ORDER BY rowid DESC
-            LIMIT 1
-            """,
-            (profile_id, version_json),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return None
-    for header in headers:
-        ignored = tuple(sorted(str(item) for item in json.loads(header[1])))
-        accounting_ignored = tuple(
-            sorted(str(item) for item in json.loads(header[2]))
-        )
-        projection_id, _version_json, _input_hash = _projection_identity(
-            profile_id,
-            version,
-            ignored,
-            accounting_ignored,
-            rows,
-        )
-        if projection_id == str(header[0]):
-            return _load_candidate_projection(conn, projection_id)
-    return None
-
-
-def _candidate_from_row(
-    row: Mapping[str, Any],
-    boundaries: Mapping[tuple[str, str], tuple[str, ...]],
-) -> CustodyGapCandidate:
-    gap_id = str(_get(row, "gap_id") or "")
-    return CustodyGapCandidate(
-        gap_id=gap_id,
-        profile_id=str(_get(row, "profile_id") or ""),
-        asset=str(_get(row, "asset") or ""),
-        protocol_chain=str(_get(row, "protocol_chain") or ""),
-        network=str(_get(row, "network") or ""),
-        source_ids=boundaries.get((gap_id, "source"), ()),
-        return_ids=boundaries.get((gap_id, "return"), ()),
-        source_wallet_ids=tuple(json.loads(_get(row, "source_wallet_ids_json"))),
-        destination_wallet_ids=tuple(
-            json.loads(_get(row, "destination_wallet_ids_json"))
-        ),
-        source_wallet_labels=tuple(
-            json.loads(_get(row, "source_wallet_labels_json"))
-        ),
-        destination_wallet_labels=tuple(
-            json.loads(_get(row, "destination_wallet_labels_json"))
-        ),
-        source_total_msat=int(_get(row, "source_total_msat")),
-        source_fee_msat=int(_get(row, "source_fee_msat")),
-        source_debit_msat=int(_get(row, "source_debit_msat")),
-        return_total_msat=int(_get(row, "return_total_msat")),
-        retained_msat=int(_get(row, "retained_msat")),
-        residual_msat=int(_get(row, "residual_msat")),
-        excess_msat=int(_get(row, "excess_msat")),
-        coverage_ppm=int(_get(row, "coverage_ppm")),
-        started_at=str(_get(row, "started_at")),
-        ended_at=str(_get(row, "ended_at")),
-        elapsed_seconds=int(_get(row, "elapsed_seconds")),
-        score=int(_get(row, "score")),
-        confidence=str(_get(row, "confidence")),
-        reason_codes=tuple(json.loads(_get(row, "reason_codes_json"))),
-        promotion_eligible=bool(_get(row, "promotion_eligible")),
-        competitor_score_margin=_get(row, "competitor_score_margin"),
-        conflict_set_id=str(_get(row, "conflict_set_id") or ""),
-        conflict_size=int(_get(row, "conflict_size")),
-    )
-
-
-def _load_candidate_projection(
-    conn: sqlite3.Connection,
-    projection_id: str,
-) -> CustodyGapSearchResult | None:
-    try:
-        header = conn.execute(
-            "SELECT * FROM custody_gap_candidate_projections WHERE id = ?",
-            (projection_id,),
-        ).fetchone()
-    except sqlite3.OperationalError:
-        return None
-    if header is None:
-        return None
-    rows = conn.execute(
-        "SELECT * FROM custody_gap_candidates WHERE projection_id = ? "
-        "ORDER BY ordinal, gap_id",
-        (projection_id,),
-    ).fetchall()
-    boundary_rows = conn.execute(
-        "SELECT gap_id, side, transaction_id FROM custody_gap_candidate_boundaries "
-        "WHERE projection_id = ? ORDER BY gap_id, side, ordinal",
-        (projection_id,),
-    ).fetchall()
-    boundaries: dict[tuple[str, str], list[str]] = {}
-    for boundary in boundary_rows:
-        boundaries.setdefault((str(boundary[0]), str(boundary[1])), []).append(
-            str(boundary[2])
-        )
-    frozen = {key: tuple(values) for key, values in boundaries.items()}
-    if any(
-        len(frozen.get((str(row["gap_id"]), "source"), ()))
-        != int(row["source_count"])
-        or len(frozen.get((str(row["gap_id"]), "return"), ()))
-        != int(row["return_count"])
-        for row in rows
-    ):
-        # Transaction retraction cascades normalized boundary relations. A
-        # header without its committed cardinality is an invalid derived
-        # projection, never permission to reconstruct a partial candidate.
-        return None
-    candidates = tuple(_candidate_from_row(row, frozen) for row in rows)
-    return CustodyGapSearchResult(
-        candidates=tuple(item for row, item in zip(rows, candidates) if bool(row["visible"])),
-        accounting_candidates=tuple(
-            item for row, item in zip(rows, candidates) if bool(row["accounting"])
-        ),
-        search_complete=bool(header["search_complete"]),
-        limit_kind=header["limit_kind"],
-        candidate_count=int(header["candidate_count"]),
-        promotion_eligible_count=int(header["promotion_eligible_count"]),
-        blocking_source_ids=tuple(json.loads(header["blocking_source_ids_json"])),
-        message=header["message"],
-        projection_id=projection_id,
-    )
-
-
-def _persist_candidate_projection(
-    conn: sqlite3.Connection,
-    *,
-    profile_id: str,
-    projection_id: str,
-    version_json: str,
-    input_hash: str,
-    ignored_ids: Sequence[str],
-    accounting_ignored_ids: Sequence[str],
-    producer_kind: str,
-    result: CustodyGapSearchResult,
-    normalized_rows: Sequence[_Leg] = (),
-) -> CustodyGapSearchResult:
-    visible_ids = {item.gap_id for item in result.candidates}
-    accounting_ids = {item.gap_id for item in result.accounting_candidates}
-    candidates = {
-        item.gap_id: item
-        for item in (*result.candidates, *result.accounting_candidates)
-    }
-    downstream_by_gap: dict[str, tuple[int, str]] = {}
-    for candidate in candidates.values():
-        impact = _downstream_impact(candidate, normalized_rows)
-        downstream_by_gap[candidate.gap_id] = (
-            impact["affected_disposals"],
-            json.dumps(
-                impact["affected_years"],
-                separators=(",", ":"),
-            ),
-        )
-    owns_transaction = not conn.in_transaction
-    savepoint = "custody_gap_projection_write"
-    conn.execute(f"SAVEPOINT {savepoint}")
-    try:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO custody_gap_candidate_projections(
-                id, profile_id, producer_kind, version_json, input_hash,
-                ignored_ids_json, accounting_ignored_ids_json, search_complete,
-                limit_kind, candidate_count, promotion_eligible_count,
-                blocking_source_ids_json, message, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                projection_id,
-                profile_id,
-                producer_kind,
-                version_json,
-                input_hash,
-                json.dumps(ignored_ids, separators=(",", ":")),
-                json.dumps(accounting_ignored_ids, separators=(",", ":")),
-                int(result.search_complete),
-                result.limit_kind,
-                result.candidate_count,
-                result.promotion_eligible_count,
-                json.dumps(result.blocking_source_ids, separators=(",", ":")),
-                result.message,
-                now_iso(),
-            ),
-        )
-        if producer_kind == "journal":
-            # A review search may have reached the same population first. The
-            # builder upgrades that derived header so current UI/AI reads can
-            # consume its exact ignored-boundary authority.
-            conn.execute(
-                "UPDATE custody_gap_candidate_projections "
-                "SET producer_kind = 'journal', ignored_ids_json = ?, "
-                "accounting_ignored_ids_json = ? "
-                "WHERE id = ?",
-                (
-                    json.dumps(ignored_ids, separators=(",", ":")),
-                    json.dumps(accounting_ignored_ids, separators=(",", ":")),
-                    projection_id,
-                ),
-            )
-        for ordinal, candidate in enumerate(candidates.values()):
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO custody_gap_candidates(
-                    projection_id, profile_id, gap_id, ordinal,
-                    source_count, return_count, visible, accounting,
-                    asset, protocol_chain, network, source_wallet_ids_json,
-                    destination_wallet_ids_json, source_wallet_labels_json,
-                    destination_wallet_labels_json, source_total_msat, source_fee_msat,
-                    source_debit_msat, return_total_msat, retained_msat, residual_msat,
-                    excess_msat, coverage_ppm, started_at, ended_at, elapsed_seconds,
-                    score, confidence, reason_codes_json, promotion_eligible,
-                    competitor_score_margin, conflict_set_id, conflict_size,
-                    affected_disposals, affected_years_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    projection_id, profile_id, candidate.gap_id, ordinal,
-                    len(candidate.source_ids), len(candidate.return_ids),
-                    int(candidate.gap_id in visible_ids),
-                    int(candidate.gap_id in accounting_ids), candidate.asset,
-                    candidate.protocol_chain, candidate.network,
-                    json.dumps(candidate.source_wallet_ids, separators=(",", ":")),
-                    json.dumps(candidate.destination_wallet_ids, separators=(",", ":")),
-                    json.dumps(candidate.source_wallet_labels, separators=(",", ":")),
-                    json.dumps(candidate.destination_wallet_labels, separators=(",", ":")),
-                    candidate.source_total_msat, candidate.source_fee_msat,
-                    candidate.source_debit_msat, candidate.return_total_msat,
-                    candidate.retained_msat, candidate.residual_msat,
-                    candidate.excess_msat, candidate.coverage_ppm,
-                    candidate.started_at, candidate.ended_at, candidate.elapsed_seconds,
-                    candidate.score, candidate.confidence,
-                    json.dumps(candidate.reason_codes, separators=(",", ":")),
-                    int(candidate.promotion_eligible), candidate.competitor_score_margin,
-                    candidate.conflict_set_id, candidate.conflict_size,
-                    *downstream_by_gap[candidate.gap_id],
-                ),
-            )
-            for side, transaction_ids in (
-                ("source", candidate.source_ids),
-                ("return", candidate.return_ids),
-            ):
-                conn.executemany(
-                    "INSERT OR IGNORE INTO custody_gap_candidate_boundaries("
-                    "projection_id, profile_id, gap_id, side, ordinal, transaction_id) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    [
-                        (
-                            projection_id,
-                            profile_id,
-                            candidate.gap_id,
-                            side,
-                            index,
-                            transaction_id,
-                        )
-                        for index, transaction_id in enumerate(transaction_ids)
-                    ],
-                )
-        conn.execute(
-            """
-            DELETE FROM custody_gap_candidate_projections
-            WHERE profile_id = ?
-              AND id NOT IN (
-                  SELECT id FROM custody_gap_candidate_projections
-                  WHERE profile_id = ?
-                  ORDER BY rowid DESC
-                  LIMIT ?
-              )
-              AND id NOT IN (
-                  SELECT id FROM custody_gap_candidate_projections
-                  WHERE profile_id = ? AND producer_kind = 'journal'
-                  ORDER BY rowid DESC
-                  LIMIT 1
-              )
-            """,
-            (
-                profile_id,
-                profile_id,
-                MAX_RETAINED_GAP_PROJECTIONS,
-                profile_id,
-            ),
-        )
-        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-        if owns_transaction:
-            conn.commit()
-    except Exception:
-        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
-        if owns_transaction:
-            conn.rollback()
-        raise
-    loaded = _load_candidate_projection(conn, projection_id)
-    if loaded is None:
-        raise RuntimeError("custody gap projection did not persist")
-    return loaded
-
-
-def _encode_projection_cursor(projection_id: str, ordinal: int, gap_id: str) -> str:
+def _encode_projection_cursor(
+    version: tuple[Any, ...], ordinal: int, gap_id: str
+) -> str:
     payload = json.dumps(
-        [projection_id, ordinal, gap_id], separators=(",", ":")
+        [list(version), ordinal, gap_id], separators=(",", ":")
     ).encode()
-    return "cgp2." + base64.urlsafe_b64encode(payload).decode().rstrip("=")
+    return "cgr3." + base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
-def _decode_projection_cursor(cursor: str) -> tuple[str, int, str]:
-    if not cursor.startswith("cgp2."):
+def _decode_projection_cursor(cursor: str) -> tuple[tuple[Any, ...], int, str]:
+    if not cursor.startswith("cgr3."):
         raise ValueError("cursor is malformed")
     encoded = cursor[5:]
     try:
@@ -1224,14 +681,47 @@ def _decode_projection_cursor(cursor: str) -> tuple[str, int, str]:
     if (
         not isinstance(payload, list)
         or len(payload) != 3
-        or not isinstance(payload[0], str)
-        or len(payload[0]) != 64
+        or not isinstance(payload[0], list)
+        or len(payload[0]) != 2
+        or any(type(value) is not int or value < 0 for value in payload[0])
         or type(payload[1]) is not int
         or payload[1] < 0
         or not isinstance(payload[2], str)
     ):
         raise ValueError("cursor is malformed")
-    return payload[0], payload[1], payload[2]
+    return tuple(payload[0]), payload[1], payload[2]
+
+
+def _stored_journal_gap_inputs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    version: tuple[Any, ...],
+) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    try:
+        row = conn.execute(
+            """
+            SELECT input_version, ignored_ids_json,
+                   accounting_ignored_ids_json
+            FROM journal_custody_gap_inputs
+            WHERE profile_id = ?
+            """,
+            (profile_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if row is None or int(row["input_version"]) != int(version[-1]):
+        return None
+    try:
+        ignored = json.loads(row["ignored_ids_json"])
+        accounting_ignored = json.loads(row["accounting_ignored_ids_json"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(ignored, list) or not isinstance(accounting_ignored, list):
+        return None
+    return (
+        tuple(sorted(str(item) for item in ignored if item)),
+        tuple(sorted(str(item) for item in accounting_ignored if item)),
+    )
 
 
 def load_gap_search_result(
@@ -1242,13 +732,8 @@ def load_gap_search_result(
     include_journal_claims: bool | None = None,
     ignored_transaction_ids: Iterable[str] | None = None,
     accounting_ignored_transaction_ids: Iterable[str] | None = None,
-    producer_kind: str = "review",
-    persist_projection: bool = True,
 ) -> tuple[CustodyGapSearchResult, list[_Leg]]:
     """Load candidates with ordinary search-completeness metadata."""
-
-    if producer_kind not in {"journal", "review"}:
-        raise ValueError("producer_kind must be journal or review")
 
     row_count = conn.execute(
         "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0",
@@ -1440,18 +925,14 @@ def load_gap_search_result(
     if include_journal_claims is None:
         include_journal_claims = _journal_status(conn, profile_id) == "current"
     version = _gap_snapshot_version(conn, profile_id)
+    stored_inputs = None
     if ignored_transaction_ids is None and include_journal_claims:
-        journal_projection = _load_matching_journal_projection(
-            conn,
-            profile_id,
-            version,
-            rows,
-        )
-        if journal_projection is not None:
-            return journal_projection, normalized
+        stored_inputs = _stored_journal_gap_inputs(conn, profile_id, version)
     claimed_ids = (
         {str(item) for item in ignored_transaction_ids if item}
         if ignored_transaction_ids is not None
+        else set(stored_inputs[0])
+        if stored_inputs is not None
         else _claimed_transaction_ids(
             conn,
             profile_id,
@@ -1460,7 +941,9 @@ def load_gap_search_result(
     )
     ignored = tuple(sorted(claimed_ids))
     accounting_ignored = (
-        ignored
+        tuple(stored_inputs[1])
+        if accounting_ignored_transaction_ids is None and stored_inputs is not None
+        else ignored
         if accounting_ignored_transaction_ids is None
         else tuple(
             sorted(
@@ -1472,29 +955,6 @@ def load_gap_search_result(
             )
         )
     )
-    projection_id, version_json, input_hash = _projection_identity(
-        profile_id,
-        version,
-        ignored,
-        accounting_ignored,
-        rows,
-    )
-    cached = _load_candidate_projection(conn, projection_id)
-    if cached is not None:
-        if producer_kind == "journal" and persist_projection:
-            cached = _persist_candidate_projection(
-                conn,
-                profile_id=profile_id,
-                projection_id=projection_id,
-                version_json=version_json,
-                input_hash=input_hash,
-                ignored_ids=ignored,
-                accounting_ignored_ids=accounting_ignored,
-                producer_kind=producer_kind,
-                result=cached,
-                normalized_rows=normalized,
-            )
-        return cached, normalized
     worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
     result = search_custody_gap_candidates(
         rows,
@@ -1535,19 +995,6 @@ def load_gap_search_result(
             ),
             blocking_source_ids=accounting_result.blocking_source_ids,
         )
-    if persist_projection:
-        result = _persist_candidate_projection(
-            conn,
-            profile_id=profile_id,
-            projection_id=projection_id,
-            version_json=version_json,
-            input_hash=input_hash,
-            ignored_ids=ignored,
-            accounting_ignored_ids=accounting_ignored,
-            producer_kind=producer_kind,
-            result=result,
-            normalized_rows=normalized,
-        )
     return result, normalized
 
 
@@ -1555,12 +1002,8 @@ def find_gap_candidate(
     conn: sqlite3.Connection,
     profile_id: str,
     gap_id: str,
-    *,
-    persist_projection: bool = True,
 ) -> CustodyGapCandidate:
-    result, _normalized = load_gap_search_result(
-        conn, profile_id, persist_projection=persist_projection
-    )
+    result, _normalized = load_gap_search_result(conn, profile_id)
     # A fully scored prefix remains safe to review even though the advisory
     # queue is incomplete. The action still re-derives and fingerprints the
     # exact candidate; this does not imply anything about omitted hints.
