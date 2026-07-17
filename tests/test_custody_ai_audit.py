@@ -126,6 +126,47 @@ class CustodyAiAuditTest(unittest.TestCase):
         self.assertNotIn("custody_ai_assistance_audits", SYNC_TABLE_MAP)
         self.assertIn("custody_ai_assistance_audits", NEVER_SYNC_TABLES)
 
+    def test_explicitly_empty_final_proposal_is_preserved_as_a_user_edit(self):
+        record = custody_ai_audit.append_assistance_record(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            tool_name="ui.custody.review.apply",
+            daemon_kind="ui.custody.review.apply",
+            call_id="call-cleared",
+            provider_kind="local",
+            model="local-model",
+            model_proposal={
+                "gap_id": "gap:cleared",
+                "expected_input_version": 10,
+            },
+            final_proposal={},
+            consent_decision="allow_once",
+            consent_requested_at=NOW,
+            consent_decided_at=NOW,
+            execution_status="executed",
+        )
+
+        stored = self.conn.execute(
+            "SELECT final_proposal_json, user_edited, facts_sha256 "
+            "FROM custody_ai_assistance_audits WHERE id = ?",
+            (record["id"],),
+        ).fetchone()
+        self.assertEqual(stored["final_proposal_json"], "{}")
+        self.assertEqual(stored["user_edited"], 1)
+        self.assertEqual(
+            stored["facts_sha256"],
+            custody_ai_audit._sha256_json(
+                {
+                    "daemon_kind": "ui.custody.review.apply",
+                    "gap_id": None,
+                    "candidate_fingerprint": None,
+                    "input_version": None,
+                    "proposal": {},
+                }
+            ),
+        )
+
     def test_transaction_scoped_summary_excludes_unrelated_assistance(self):
         for component_id, anchor in (
             ("component-selected", "tx-selected"),
