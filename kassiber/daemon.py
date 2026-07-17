@@ -1879,19 +1879,16 @@ def _ui_swap_matching_payload_from_conn(
             "authored_source": authored_source,
         }
         if kind == "ui.transfers.components.apply":
-            expected_fingerprint = args.get("expected_fingerprint")
-            if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
+            expected_input_version = args.get("expected_input_version")
+            if type(expected_input_version) is not int or expected_input_version < 0:
                 raise AppError(
-                    f"{kind} requires the fingerprint returned by plan",
+                    f"{kind} requires the input version returned by plan",
                     code="validation",
                 )
-            resolved_workspace, resolved_profile = resolve_scope(
-                conn, workspace, profile
-            )
             return _ui_exact_integer_payload(
                 core_custody_component_planner.apply_component_review(
                     conn,
-                    expected_fingerprint=expected_fingerprint,
+                    expected_input_version=expected_input_version,
                     include_local_evidence=False,
                     **review_args,
                 )
@@ -2157,7 +2154,7 @@ def _ui_custody_gap_payload_from_conn(
             "gap_id",
             "classification",
             "reason",
-            "expected_fingerprint",
+            "expected_input_version",
         }
     elif kind == "ui.custody.gaps.list":
         allowed = scope_fields | {"limit", "cursor"}
@@ -2253,10 +2250,10 @@ def _ui_custody_gap_payload_from_conn(
             return _ui_exact_integer_payload(
                 core_custody_gap_reviews.public_review_plan(plan)
             )
-        expected = args.get("expected_fingerprint")
-        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+        expected = args.get("expected_input_version")
+        if type(expected) is not int or expected < 0:
             raise AppError(
-                f"{kind} requires a 64-character expected_fingerprint",
+                f"{kind} requires a non-negative expected_input_version",
                 code="validation",
             )
         return _ui_exact_integer_payload(
@@ -2265,7 +2262,7 @@ def _ui_custody_gap_payload_from_conn(
                 workspace_id=_workspace["id"],
                 profile_id=profile["id"],
                 action=action,
-                expected_fingerprint=expected,
+                expected_input_version=expected,
                 candidate=candidate,
                 gap_id=str(gap_id),
                 classification=classification,

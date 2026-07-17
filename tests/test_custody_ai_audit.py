@@ -39,7 +39,7 @@ class CustodyAiAuditTest(unittest.TestCase):
     def test_append_only_record_is_independent_of_chat_history_and_redacted_for_export(self):
         proposal = {
             "gap_id": "gap:whirlpool",
-            "expected_fingerprint": "a" * 64,
+            "expected_input_version": 7,
             "reason": "private board context",
             "descriptor": "must-not-be-stored",
         }
@@ -107,7 +107,7 @@ class CustodyAiAuditTest(unittest.TestCase):
             model="local-model",
             model_proposal={
                 "gap_id": "gap:1",
-                "expected_fingerprint": "b" * 64,
+                "expected_input_version": 8,
             },
             final_proposal=None,
             consent_decision="deny",
@@ -165,7 +165,7 @@ class CustodyAiAuditTest(unittest.TestCase):
                 model="local-model",
                 model_proposal={
                     "gap_id": f"gap-{component_id}",
-                    "expected_fingerprint": "c" * 64,
+                    "expected_input_version": 9,
                 },
                 final_proposal=None,
                 consent_decision="allow_once",

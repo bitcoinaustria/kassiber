@@ -10617,7 +10617,8 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.execute(
             """
             UPDATE profiles
-            SET last_processed_at = ?, last_processed_tx_count = 1
+            SET last_processed_at = ?, last_processed_tx_count = 1,
+                last_processed_input_version = journal_input_version
             WHERE id = ?
             """,
             ("2024-01-01T00:00:00Z", profile["id"]),
@@ -12981,7 +12982,9 @@ class ReviewRegressionTest(unittest.TestCase):
                 5000, 10000, 5000, 'sell', '2024-02-10T00:00:00Z'
             );
             UPDATE profiles
-            SET last_processed_at = '2024-02-10T00:00:00Z', last_processed_tx_count = 2
+            SET last_processed_at = '2024-02-10T00:00:00Z',
+                last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
             WHERE id = '{profile["id"]}';
             """
         )

@@ -624,7 +624,7 @@ describe("previewCustodyComponentBatch", () => {
     });
     const commit = buildCustodyBulkRequest(preview, {
       activate: false,
-      expectedFingerprint: "a".repeat(64),
+      expectedInputVersion: 7,
     });
 
     expect(plan).toEqual({
@@ -634,7 +634,7 @@ describe("previewCustodyComponentBatch", () => {
     expect(commit).toEqual({
       components: plan.components,
       activate: false,
-      expected_fingerprint: "a".repeat(64),
+      expected_input_version: 7,
     });
   });
 });

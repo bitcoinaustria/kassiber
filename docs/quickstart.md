@@ -135,7 +135,7 @@ python3 -m kassiber transfers components plan --action create \
   --file migrations.json
 python3 -m kassiber transfers components apply --action create \
   --file migrations.json \
-  --expected-fingerprint <fingerprint-from-preview>
+  --expected-input-version <input-version-from-preview>
 ```
 
 The same workflow is available under **Swap Matching → Close gaps**. See

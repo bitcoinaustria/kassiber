@@ -47,7 +47,7 @@ def _review_candidate(conn, candidate, *, authored_source="gui"):
         profile_id="profile",
         action="create",
         candidate=candidate,
-        expected_fingerprint=plan["fingerprint"],
+        expected_input_version=plan["input_version"],
         authored_source=authored_source,
     )
 

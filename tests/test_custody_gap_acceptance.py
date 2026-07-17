@@ -235,8 +235,8 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             "create",
             "--gap-id",
             gap_id,
-            "--expected-fingerprint",
-            preview["fingerprint"],
+            "--expected-input-version",
+            str(preview["input_version"]),
             *self._scope(),
         )["data"]
         self.assertEqual(created["status"], "resolved")
@@ -265,8 +265,8 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             created["component_id"],
             "--reason",
             "review correction",
-            "--expected-fingerprint",
-            supersede_plan["fingerprint"],
+            "--expected-input-version",
+            str(supersede_plan["input_version"]),
             *self._scope(),
         )["data"]["component"]
         self.assertEqual(superseded["state"], "superseded")
@@ -295,8 +295,8 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             created["component_id"],
             "--reason",
             "restore for revision",
-            "--expected-fingerprint",
-            undo_plan["fingerprint"],
+            "--expected-input-version",
+            str(undo_plan["input_version"]),
             *self._scope(),
         )["data"]["component"]
         self.assertEqual(revised["state"], "draft")
@@ -334,8 +334,8 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             "dismiss",
             "--gap-id",
             gap["gap_id"],
-            "--expected-fingerprint",
-            plan["fingerprint"],
+            "--expected-input-version",
+            str(plan["input_version"]),
             "--reason",
             "known external disposal",
             *self._scope(),
@@ -429,7 +429,7 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
 
             create_args = {
                 **preview_args,
-                "expected_fingerprint": preview["fingerprint"],
+                "expected_input_version": preview["input_version"],
             }
             created = _request(
                 proc,
@@ -464,7 +464,7 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                     "profile",
                     "action",
                     "gap_id",
-                    "expected_fingerprint",
+                    "expected_input_version",
                 },
             )
         finally:

@@ -901,13 +901,13 @@ export const fixtures: Record<string, unknown> = {
   },
   "ui.transfers.components.list": { components: [MOCK_CUSTODY_COMPONENT] },
   "ui.transfers.components.plan": {
-    fingerprint: "a".repeat(64),
+    input_version: 7,
     components: [MOCK_CUSTODY_COMPONENT],
     summary: { count: 1, active: 1, draft: 0 },
     dry_run: true,
   },
   "ui.transfers.components.apply": {
-    fingerprint: "a".repeat(64),
+    input_version: 7,
     components: [MOCK_CUSTODY_COMPONENT],
     summary: { count: 1, active: 1, draft: 0 },
   },
@@ -1139,7 +1139,7 @@ export const fixtures: Record<string, unknown> = {
   "ui.custody.review.plan": {
     action: "create",
     gap_id: "custody-gap:og-treasury",
-    fingerprint: "mock-custody-review-fingerprint",
+    input_version: 7,
     dry_run: true,
     activatable: true,
     retained_msat: "990000000000",

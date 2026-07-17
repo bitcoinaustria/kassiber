@@ -45,28 +45,36 @@ def _preview_review(conn, *, action=None, **kwargs):
     action = action or _review_action(conn, kwargs)
     plan = custody_gap_reviews.plan_review(conn, action=action, **kwargs)
     public = custody_gap_reviews.public_review_plan(plan)
-    public["candidate_fingerprint"] = plan["fingerprint"]
-    public["authored_claim_fingerprint"] = plan["fingerprint"]
-    public["expected_fingerprint"] = plan["fingerprint"]
+    candidate = plan.get("candidate")
+    public["candidate_fingerprint"] = (
+        custody_gap_reviews.candidate_fingerprint(candidate) if candidate else None
+    )
+    public["authored_claim_fingerprint"] = plan.get("authored_claim_fingerprint")
+    public["expected_input_version"] = plan["input_version"]
     return public
 
 
 def _apply_review(conn, *, action=None, **kwargs):
     action = action or _review_action(conn, kwargs)
+    if "expected_input_version" not in kwargs:
+        plan_args = {
+            key: value
+            for key, value in kwargs.items()
+            if key != "commit"
+        }
+        kwargs["expected_input_version"] = custody_gap_reviews.plan_review(
+            conn, action=action, **plan_args
+        )["input_version"]
     return custody_gap_reviews.apply_review(conn, action=action, **kwargs)
 
 
-def _append_dismissal(conn, *, expected_fingerprint, **kwargs):
+def _append_dismissal(conn, **kwargs):
     commit = kwargs.pop("commit", True)
     plan = custody_gap_reviews.plan_review(conn, action="dismiss", **kwargs)
-    if expected_fingerprint == custody_gap_reviews.candidate_fingerprint(
-        plan["candidate"]
-    ):
-        expected_fingerprint = plan["fingerprint"]
     return custody_gap_reviews.apply_review(
         conn,
         action="dismiss",
-        expected_fingerprint=expected_fingerprint,
+        expected_input_version=plan["input_version"],
         commit=commit,
         **kwargs,
     )
@@ -172,7 +180,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         return candidate, created
 
@@ -203,7 +211,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             profile_id="profile",
             gap_id=candidate.gap_id,
             classification=classification,
-            expected_fingerprint=preview["expected_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         self.conn.execute(
             "UPDATE transactions SET fiat_currency = 'EUR', fiat_rate = 10000, "
@@ -244,7 +252,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=fingerprint,
             reason="not ours",
         )
 
@@ -291,7 +298,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                     workspace_id="ws",
                     profile_id="profile",
                     candidate=candidate,
-                    expected_fingerprint=fingerprint,
                 )
         self.assertEqual(
             self.conn.execute("SELECT COUNT(*) FROM custody_gap_reviews").fetchone()[0],
@@ -309,7 +315,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=fingerprint,
         )
         review_id = self.conn.execute(
             "SELECT id FROM custody_gap_reviews WHERE profile_id = 'profile' AND gap_id = ?",
@@ -383,7 +388,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 workspace_id="ws",
                 profile_id="profile",
                 candidate=candidate,
-                expected_fingerprint=fingerprint,
             )
 
         self.assertEqual(
@@ -419,7 +423,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 workspace_id="ws",
                 profile_id="profile",
                 candidate=candidate,
-                expected_fingerprint=fingerprint,
             )
         self.assertEqual(raised.exception.code, "custody_gap_stale")
 
@@ -440,7 +443,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                         workspace_id="ws",
                         profile_id="profile",
                         candidate=candidate,
-                        expected_fingerprint=fingerprint,
                     )
                 else:
                     _apply_review(
@@ -448,7 +450,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                         workspace_id="ws",
                         profile_id="profile",
                         candidate=candidate,
-                        expected_fingerprint=fingerprint,
                     )
             self.assertEqual(raised.exception.code, "custody_gap_stale")
 
@@ -477,7 +478,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 workspace_id="ws",
                 profile_id="profile",
                 candidate=candidate,
-                expected_fingerprint=fingerprint,
             )
 
         self.assertEqual(raised.exception.code, "custody_gap_stale")
@@ -505,7 +505,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
 
         self.assertEqual(candidate.protocol_chain, "lightning")
@@ -530,7 +530,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(preview["dry_run"])
         self.assertTrue(preview["activatable"])
-        self.assertEqual(
+        self.assertNotEqual(
             preview["authored_claim_fingerprint"],
             preview["candidate_fingerprint"],
         )
@@ -547,7 +547,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
             authored_source="cli",
         )
         self.assertEqual(result["status"], "resolved")
@@ -609,7 +609,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             candidate=candidate,
             authored_source="cli",
         )
-        self.assertEqual(repeated["fingerprint"], plan["fingerprint"])
+        self.assertEqual(repeated["input_version"], plan["input_version"])
         self.assertEqual(repeated["component_plan"], plan["component_plan"])
 
         created = custody_gap_reviews.apply_review(
@@ -618,7 +618,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             profile_id="profile",
             action="create",
             candidate=candidate,
-            expected_fingerprint=plan["fingerprint"],
+            expected_input_version=plan["input_version"],
             authored_source="cli",
         )
         self.assertTrue(created["review_id"])
@@ -723,7 +723,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
 
         self.assertEqual(len(created["filed_report_impacts"]), 1)
@@ -834,7 +834,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 workspace_id="ws",
                 profile_id="profile",
                 candidate=candidate,
-                expected_fingerprint=preview["candidate_fingerprint"],
+                expected_input_version=preview["expected_input_version"],
             )
 
         self.assertEqual(
@@ -860,16 +860,19 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         candidate = self._candidate()
         self.assertFalse(candidate.promotion_eligible)
         with self.assertRaises(AppError) as not_previewed:
-            _apply_review(
+            custody_gap_reviews.apply_review(
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
+                action="create",
                 candidate=candidate,
-                expected_fingerprint=custody_gap_reviews.candidate_fingerprint(
+                expected_input_version=custody_gap_reviews.candidate_fingerprint(
                     candidate
                 ),
             )
-        self.assertEqual(not_previewed.exception.code, "custody_gap_stale")
+        self.assertEqual(
+            not_previewed.exception.code, "custody_review_plan_invalid"
+        )
 
         preview = _preview_review(
             self.conn,
@@ -881,7 +884,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         self.assertEqual(preview["review_mode"], "manual_weak_hint")
         self.assertTrue(preview["requires_explicit_confirmation"])
         self.assertIn("weak_advisory_evidence", preview["warnings"])
-        self.assertNotEqual(
+        self.assertEqual(
             preview["candidate_fingerprint"],
             custody_gap_reviews.candidate_fingerprint(candidate),
         )
@@ -890,7 +893,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         self.assertEqual(created["status"], "resolved")
 
@@ -907,7 +910,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         review = custody_gap_reviews.latest_reviews(self.conn, "profile")[
             candidate.gap_id
@@ -957,7 +960,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 workspace_id="ws",
                 profile_id="profile",
                 candidate=candidate,
-                expected_fingerprint=preview["candidate_fingerprint"],
+                expected_input_version=preview["expected_input_version"],
             )
         self.assertEqual(raised.exception.code, "custody_gap_bridge_excess_return")
         self.assertEqual(
@@ -978,7 +981,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         self.conn.execute(
             "UPDATE transactions SET kind = 'evidence-changed' WHERE id = 'return'"
@@ -1007,7 +1010,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=preview["candidate_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         custody_components.supersede_component(
             self.conn, created["component_id"], reason="review correction"
@@ -1070,7 +1073,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             profile_id="profile",
             gap_id=candidate.gap_id,
             classification="external_payment",
-            expected_fingerprint=preview["expected_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
 
         self.assertEqual(resolved["component_revision"], 2)
@@ -1137,7 +1140,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             profile_id="profile",
             gap_id=candidate.gap_id,
             classification="retained_custody",
-            expected_fingerprint=preview["expected_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         component = custody_components.get_component(
             self.conn, resolved["component_id"]
@@ -1185,7 +1188,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             profile_id="profile",
             gap_id=candidate.gap_id,
             classification="suspense_continuation",
-            expected_fingerprint=preview["expected_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
         )
         self.assertEqual(resolved["custody_state"], "custody_suspense")
         processed = handlers.process_journals(self.conn, "Books", "Book")
@@ -1213,7 +1216,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             gap_id=candidate.gap_id,
-            expected_fingerprint=reopen_preview["expected_fingerprint"],
+            expected_input_version=reopen_preview["expected_input_version"],
             reason="correct bridge",
         )
         self.assertEqual(reopened["status"], "needs_review")
@@ -1240,7 +1243,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=current,
-            expected_fingerprint=revision_preview["expected_fingerprint"],
+            expected_input_version=revision_preview["expected_input_version"],
             reason="correct bridge",
         )
         self.assertEqual(
@@ -1287,7 +1290,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 profile_id="profile",
                 gap_id=candidate.gap_id,
                 classification="external_disposal",
-                expected_fingerprint=preview["expected_fingerprint"],
+                expected_input_version=preview["expected_input_version"],
             )
         self.assertEqual(raised.exception.code, "custody_gap_stale")
         self.assertEqual(
@@ -1314,7 +1317,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             profile_id="profile",
             gap_id=candidate.gap_id,
             classification="external_payment",
-            expected_fingerprint=preview["expected_fingerprint"],
+            expected_input_version=preview["expected_input_version"],
             commit=False,
         )
         self.assertTrue(self.conn.in_transaction)
@@ -1389,7 +1392,7 @@ class CustodyGapLifecycleTests(unittest.TestCase):
                 "profile": "Book",
                 "action": "create",
                 "gap_id": gap["gap_id"],
-                "expected_fingerprint": preview["fingerprint"],
+                "expected_input_version": preview["input_version"],
             },
         )
         self.assertEqual(created["status"], "resolved")
@@ -1403,7 +1406,6 @@ class CustodyGapLifecycleTests(unittest.TestCase):
             workspace_id="ws",
             profile_id="profile",
             candidate=candidate,
-            expected_fingerprint=fingerprint,
         )
         row = self.conn.execute(
             "SELECT * FROM custody_gap_reviews WHERE gap_id = ?", (candidate.gap_id,)

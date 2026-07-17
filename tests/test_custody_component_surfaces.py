@@ -14,7 +14,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from kassiber.cli.main import build_parser, dispatch
-from kassiber.core import custody_components
+from kassiber.core import custody_components, wallets
 from kassiber.daemon import SUPPORTED_KINDS, _ui_swap_matching_payload_from_conn
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -190,7 +190,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             authored_source="ai_tool",
         )
         args.update(
-            expected_fingerprint=preview["fingerprint"],
+            expected_input_version=preview["input_version"],
         )
         result = _ui_swap_matching_payload_from_conn(
             self.conn,
@@ -220,7 +220,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         result = _ui_swap_matching_payload_from_conn(
             self.conn,
             "ui.transfers.components.apply",
-            {**args, "expected_fingerprint": preview["fingerprint"]},
+            {**args, "expected_input_version": preview["input_version"]},
         )
         return result["components"][0]
 
@@ -246,7 +246,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         result = _ui_swap_matching_payload_from_conn(
             self.conn,
             "ui.transfers.components.apply",
-            {**args, "expected_fingerprint": preview["fingerprint"]},
+            {**args, "expected_input_version": preview["input_version"]},
         )
         self.assertEqual(result["component"]["effective_state"], "active")
 
@@ -271,7 +271,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             _ui_swap_matching_payload_from_conn(
                 self.conn,
                 "ui.transfers.components.apply",
-                {**args, "expected_fingerprint": preview["fingerprint"]},
+                {**args, "expected_input_version": preview["input_version"]},
             )
 
         self.assertEqual(caught.exception.code, "custody_review_plan_stale")
@@ -328,7 +328,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         result = _ui_swap_matching_payload_from_conn(
             self.conn,
             "ui.transfers.components.apply",
-            {**args, "expected_fingerprint": preview["fingerprint"]},
+            {**args, "expected_input_version": preview["input_version"]},
         )
         revised = result["component"]
         self.assertEqual(revised["revision"], 2)
@@ -352,7 +352,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         preview = _ui_swap_matching_payload_from_conn(
             self.conn, "ui.transfers.components.plan", args
         )
-        apply_args = {**args, "expected_fingerprint": preview["fingerprint"]}
+        apply_args = {**args, "expected_input_version": preview["input_version"]}
         _ui_swap_matching_payload_from_conn(
             self.conn, "ui.transfers.components.apply", apply_args
         )
@@ -390,7 +390,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         preview = _ui_swap_matching_payload_from_conn(
             self.conn, "ui.transfers.components.plan", args
         )
-        args.update(expected_fingerprint=preview["fingerprint"])
+        args.update(expected_input_version=preview["input_version"])
         first = _ui_swap_matching_payload_from_conn(
             self.conn, "ui.transfers.components.apply", args
         )
@@ -405,6 +405,29 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
             1,
         )
+
+    def test_wallet_creation_invalidates_a_component_plan(self):
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "components": [_component_spec()],
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+
+        wallets.create_wallet(
+            self.conn, "Main", "Book", "Imported after preview", "untracked"
+        )
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.apply",
+                {**args, "expected_input_version": preview["input_version"]},
+            )
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
 
     def test_bulk_resolution_bounds_legs_per_component(self):
         spec = _component_spec()
@@ -481,7 +504,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "WHERE id = 'profile'"
         )
         self.conn.commit()
-        args.update(expected_fingerprint=preview["fingerprint"])
+        args.update(expected_input_version=preview["input_version"])
 
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
@@ -594,8 +617,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "Book",
             "--json",
             spec_json,
-            "--expected-fingerprint",
-            preview["data"]["fingerprint"],
+            "--expected-input-version",
+            str(preview["data"]["input_version"]),
         )
         self.assertEqual(created["kind"], "transfers.components.apply")
         created_component = created["data"]["components"][0]
@@ -638,8 +661,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--json",
             revision_json,
             "--activate",
-            "--expected-fingerprint",
-            revision_plan["data"]["fingerprint"],
+            "--expected-input-version",
+            str(revision_plan["data"]["input_version"]),
         )
         self.assertEqual(revised["kind"], "transfers.components.apply")
         self.assertEqual(revised["data"]["component"]["revision"], 2)
@@ -679,8 +702,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             second_id,
             "--reason",
             "replace evidence",
-            "--expected-fingerprint",
-            supersede_plan["data"]["fingerprint"],
+            "--expected-input-version",
+            str(supersede_plan["data"]["input_version"]),
         )
         self.assertEqual(superseded["kind"], "transfers.components.apply")
         self.assertEqual(superseded["data"]["component"]["state"], "superseded")
@@ -714,8 +737,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "Book",
             "--component-id",
             second_id,
-            "--expected-fingerprint",
-            undo_plan["data"]["fingerprint"],
+            "--expected-input-version",
+            str(undo_plan["data"]["input_version"]),
         )
         self.assertEqual(restored["kind"], "transfers.components.apply")
         self.assertEqual(restored["data"]["component"]["state"], "draft")
@@ -750,8 +773,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "Book",
             "--component-id",
             third_id,
-            "--expected-fingerprint",
-            activate_plan["data"]["fingerprint"],
+            "--expected-input-version",
+            str(activate_plan["data"]["input_version"]),
         )
         self.assertEqual(activated["kind"], "transfers.components.apply")
         self.assertEqual(activated["data"]["component"]["effective_state"], "active")
@@ -863,8 +886,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--file",
             str(spec_path),
             "--draft",
-            "--expected-fingerprint",
-            _dispatch_json(
+            "--expected-input-version",
+            str(_dispatch_json(
                 self.conn,
                 self.data_root,
                 "transfers",
@@ -879,7 +902,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 "--file",
                 str(spec_path),
                 "--draft",
-            )["data"]["fingerprint"],
+            )["data"]["input_version"]),
         )
 
         self.assertEqual(created["data"]["summary"], {"count": 1, "active": 0, "draft": 1})
@@ -943,8 +966,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "Book",
             "--file",
             str(spec_path),
-            "--expected-fingerprint",
-            preview["data"]["fingerprint"],
+            "--expected-input-version",
+            str(preview["data"]["input_version"]),
         )
         self.assertEqual(created["data"]["summary"]["active"], 1)
         wallet = self.conn.execute(
@@ -1041,8 +1064,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "Book",
             "--file",
             str(initial_path),
-            "--expected-fingerprint",
-            preview["fingerprint"],
+            "--expected-input-version",
+            str(preview["input_version"]),
             "--draft",
         )["data"]["components"][0]
 
@@ -1144,7 +1167,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                         "profile": "Book",
                         "components": [component_spec],
                         "activate": True,
-                        "expected_fingerprint": preview["data"]["fingerprint"],
+                        "expected_input_version": preview["data"]["input_version"],
                     },
                 },
             )
@@ -1186,7 +1209,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     "request_id": "component-revision-apply",
                     "args": {
                         **revision_args,
-                        "expected_fingerprint": revision_plan["data"]["fingerprint"],
+                        "expected_input_version": revision_plan["data"]["input_version"],
                     },
                 },
             )
@@ -1215,7 +1238,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     "request_id": "component-supersede-apply",
                     "args": {
                         **supersede_args,
-                        "expected_fingerprint": supersede_plan["data"]["fingerprint"],
+                        "expected_input_version": supersede_plan["data"]["input_version"],
                     },
                 },
             )
@@ -1243,7 +1266,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     "request_id": "component-undo-apply",
                     "args": {
                         **undo_args,
-                        "expected_fingerprint": undo_plan["data"]["fingerprint"],
+                        "expected_input_version": undo_plan["data"]["input_version"],
                     },
                 },
             )
@@ -1271,7 +1294,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     "request_id": "component-activate-apply",
                     "args": {
                         **activate_args,
-                        "expected_fingerprint": activate_plan["data"]["fingerprint"],
+                        "expected_input_version": activate_plan["data"]["input_version"],
                     },
                 },
             )
@@ -1437,7 +1460,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                         "profile": "Book",
                         "components": [spec],
                         "activate": False,
-                        "expected_fingerprint": preview["data"]["fingerprint"],
+                        "expected_input_version": preview["data"]["input_version"],
                     },
                 },
             )
@@ -1477,7 +1500,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     "request_id": "unsafe-integer-revision-apply",
                     "args": {
                         **revision_args,
-                        "expected_fingerprint": revision_plan["data"]["fingerprint"],
+                        "expected_input_version": revision_plan["data"]["input_version"],
                     },
                 },
             )

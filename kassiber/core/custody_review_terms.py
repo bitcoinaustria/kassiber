@@ -821,7 +821,10 @@ def update_pair_review(
     new_fee_kind = row["swap_fee_kind"]
     if new_kind != row["kind"]:
         if out_row and in_row and _pair_stores_swap_fee(out_row, in_row, new_kind):
-            split_pair = row["out_amount"] is not None
+            split_pair = (
+                row["out_asset"] != row["in_asset"]
+                and row["out_amount"] is not None
+            )
             fee_source = (
                 int(row["out_amount"])
                 if split_pair

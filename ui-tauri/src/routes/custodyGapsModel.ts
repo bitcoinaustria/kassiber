@@ -147,7 +147,7 @@ export interface FiledReportImpactPreview {
 
 export interface BridgePreview {
   gap_id: string;
-  fingerprint: string;
+  input_version: number;
   dry_run: true;
   activatable: boolean;
   review_mode?: "structured_candidate" | "manual_weak_hint";
@@ -163,7 +163,7 @@ export interface BridgePreview {
 
 export interface GuidedCorrectionPreview {
   gap_id: string;
-  fingerprint: string;
+  input_version: number;
   dry_run: true;
   requires_explicit_confirmation: true;
   activatable?: boolean;
@@ -194,7 +194,7 @@ export function bridgeCreateArgs(preview: BridgePreview) {
   return {
     gap_id: preview.gap_id,
     action: "create",
-    expected_fingerprint: preview.fingerprint,
+    expected_input_version: preview.input_version,
   };
 }
 
@@ -214,7 +214,7 @@ export function reopenConfirmArgs(
   return {
     gap_id: preview.gap_id,
     action: "reopen",
-    expected_fingerprint: preview.fingerprint,
+    expected_input_version: preview.input_version,
     ...reasonArg(reason),
   };
 }
@@ -230,7 +230,7 @@ export function reviseConfirmArgs(
   return {
     gap_id: preview.gap_id,
     action: "revise",
-    expected_fingerprint: preview.fingerprint,
+    expected_input_version: preview.input_version,
     ...reasonArg(reason),
   };
 }
@@ -256,7 +256,7 @@ export function residualConfirmArgs(
     gap_id: preview.gap_id,
     action: "classify_residual",
     classification: preview.classification,
-    expected_fingerprint: preview.fingerprint,
+    expected_input_version: preview.input_version,
     ...reasonArg(reason),
   };
 }

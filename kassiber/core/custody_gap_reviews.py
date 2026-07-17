@@ -202,12 +202,12 @@ def review_state(
         return {"status": "conflicting", "reason": "concurrent_review_conflict"}
     if _event_kind(review) == "bridge_reopened":
         return {"status": "needs_review", "reason": "bridge_reopened"}
-    expected_fingerprint = (
+    expected_candidate_fingerprint = (
         authored_claim_fingerprint(candidate)
         if review.get("action") == "resolved"
         else candidate_fingerprint(candidate)
     )
-    if review.get("candidate_fingerprint") != expected_fingerprint:
+    if review.get("candidate_fingerprint") != expected_candidate_fingerprint:
         # A stale dismissal simply reopens. A formerly resolved bridge is a
         # stronger historical claim: evidence drift must stay conspicuous as
         # a conflict until the bridge is reviewed again. Exact recovered
@@ -330,11 +330,6 @@ def _stable_plan_rows(
     planned["legs"] = raw_legs
     planned["allocations"] = raw_allocations
     return planned
-
-
-def _plan_hash(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _component_plan(
@@ -528,10 +523,8 @@ def plan_review(
         "component_plan": component_plan,
         "filed_report_impacts": impacts,
     }
-    fingerprint = _plan_hash(commitment)
     return {
         **commitment,
-        "fingerprint": fingerprint,
         "candidate": candidate,
         "context": context,
         "authored_claim_fingerprint": authored_fingerprint,
@@ -608,7 +601,6 @@ def public_review_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "action": action,
         "gap_id": plan["gap_id"],
-        "fingerprint": plan["fingerprint"],
         "input_version": plan["input_version"],
         "dry_run": True,
         "activatable": plan["activatable"],
@@ -722,7 +714,7 @@ def apply_review(
     workspace_id: str,
     profile_id: str,
     action: str,
-    expected_fingerprint: str,
+    expected_input_version: int,
     candidate: CustodyGapCandidate | None = None,
     gap_id: str | None = None,
     classification: str | None = None,
@@ -734,6 +726,12 @@ def apply_review(
 
     conn.execute("SAVEPOINT custody_gap_review_apply")
     try:
+        custody_components.require_review_input_version(
+            conn,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            expected_input_version=expected_input_version,
+        )
         plan = plan_review(
             conn,
             workspace_id=workspace_id,
@@ -745,7 +743,6 @@ def apply_review(
             reason=reason,
             authored_source=authored_source,
         )
-        _require_expected_correction(expected_fingerprint, plan["fingerprint"])
         context = plan.get("context")
         if action == "dismiss":
             current_candidate = plan["candidate"]
@@ -825,7 +822,7 @@ def apply_review(
             snapshot["correction"] = {
                 "strategy": "create_revision_then_activate",
                 "event_kind": "bridge_reopened",
-                "plan_fingerprint": plan["fingerprint"],
+                "plan_input_version": plan["input_version"],
                 "correction_fingerprint": plan["base_fingerprint"],
             }
             review = _append_review_snapshot(
@@ -866,7 +863,7 @@ def apply_review(
             normalized = str(plan["classification"])
             residual_msat = int(plan["residual_msat"])
             snapshot = dict(context["snapshot"])
-            snapshot["plan_fingerprint"] = plan["fingerprint"]
+            snapshot["plan_input_version"] = plan["input_version"]
             snapshot["correction_fingerprint"] = plan["base_fingerprint"]
             snapshot["residual_classification"] = {
                 "classification": normalized,
@@ -919,6 +916,7 @@ def apply_review(
     conn.execute("RELEASE SAVEPOINT custody_gap_review_apply")
     if commit:
         conn.commit()
+    result["input_version"] = plan["input_version"]
     return result
 
 
@@ -1526,15 +1524,6 @@ def _next_component_revision(
             (component["profile_id"], component["lineage_id"]),
         ).fetchone()[0]
     )
-
-
-def _require_expected_correction(expected: str, actual: str) -> None:
-    if not isinstance(expected, str) or expected != actual:
-        raise AppError(
-            "Custody bridge evidence changed after preview",
-            code="custody_gap_stale",
-            hint="Run the exact preview again before confirming this correction.",
-        )
 
 
 def _component_revision_inputs(

@@ -1,9 +1,7 @@
-"""Pure planning and fingerprint-checked apply for custody component batches."""
+"""Pure planning and input-version-checked apply for custody components."""
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import sqlite3
 import uuid
@@ -245,16 +243,6 @@ def _prepare_allocations(
     return prepared
 
 
-def _batch_fingerprint(payload: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
 def plan_component_batch(
     conn: sqlite3.Connection,
     *,
@@ -442,7 +430,7 @@ def plan_component_batch(
                 code="custody_component_not_activatable",
                 issues=batch_issues,
             )
-    fingerprint_input = {
+    plan = {
         "schema_version": 1,
         "workspace_id": workspace_id,
         "profile_id": profile_id,
@@ -452,11 +440,9 @@ def plan_component_batch(
         "planned_wallets": list(planned_wallets.values()),
         "components": planned_components,
     }
-    fingerprint = _batch_fingerprint(fingerprint_input)
     components = [item["component"] for item in planned_components]
     return {
-        **fingerprint_input,
-        "fingerprint": fingerprint,
+        **plan,
         "components": components,
         "prepared_components": planned_components,
         "summary": {
@@ -475,24 +461,18 @@ def apply_component_batch(
     specs: Sequence[Mapping[str, Any]],
     activate: bool,
     authored_source: str,
-    expected_fingerprint: str,
+    expected_input_version: int,
     include_local_evidence: bool = False,
     commit: bool = True,
 ) -> dict[str, Any]:
-    """Persist exactly the current plan after fingerprint revalidation."""
+    """Persist a freshly rebuilt plan while its accounting inputs are current."""
 
-    if (
-        not isinstance(expected_fingerprint, str)
-        or len(expected_fingerprint) != 64
-        or any(
-            character not in "0123456789abcdef"
-            for character in expected_fingerprint
-        )
-    ):
-        raise _error(
-            "Custody component plan fingerprint is invalid",
-            expected_fingerprint=expected_fingerprint,
-        )
+    custody_components.require_review_input_version(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        expected_input_version=expected_input_version,
+    )
     plan = plan_component_batch(
         conn,
         workspace_id=workspace_id,
@@ -501,12 +481,16 @@ def apply_component_batch(
         activate=activate,
         authored_source=authored_source,
     )
-    if not hmac.compare_digest(plan["fingerprint"], expected_fingerprint):
+    already_persisted = [
+        item["component"]["id"]
+        for item in plan["prepared_components"]
+        if item["existing"]
+    ]
+    if already_persisted:
         raise _error(
-            "Custody component plan is stale",
+            "Custody component plan was already applied",
             code="custody_review_plan_stale",
-            expected_fingerprint=expected_fingerprint,
-            current_fingerprint=plan["fingerprint"],
+            component_ids=already_persisted,
         )
     savepoint = f"custody_component_apply_{uuid.uuid4().hex}"
     conn.execute(f"SAVEPOINT {savepoint}")
@@ -563,7 +547,7 @@ def apply_component_batch(
     if commit:
         conn.commit()
     return {
-        "fingerprint": plan["fingerprint"],
+        "input_version": plan["input_version"],
         "components": created,
         "summary": {
             "count": len(created),
@@ -866,7 +850,6 @@ def plan_component_revision(
         "input_version": int(profile["journal_input_version"] or 0),
         "action": action,
         "source_component_id": component_id,
-        "source_component_commitment": _batch_fingerprint(old),
         "activate": activate,
         "authored_source": authored_source,
         "reason": reason or "",
@@ -876,7 +859,6 @@ def plan_component_revision(
     }
     return {
         **commitment,
-        "fingerprint": _batch_fingerprint(commitment),
         "dry_run": True,
         "requires_explicit_confirmation": True,
     }
@@ -902,7 +884,7 @@ def apply_component_revision(
     profile_id: str,
     action: str,
     component_id: str,
-    expected_fingerprint: str,
+    expected_input_version: int,
     spec: Mapping[str, Any] | None = None,
     activate: bool = False,
     reason: str | None = None,
@@ -912,6 +894,12 @@ def apply_component_revision(
 ) -> dict[str, Any]:
     """Persist exactly a current immutable revision plan."""
 
+    custody_components.require_review_input_version(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        expected_input_version=expected_input_version,
+    )
     plan = plan_component_revision(
         conn,
         workspace_id=workspace_id,
@@ -923,15 +911,6 @@ def apply_component_revision(
         reason=reason,
         authored_source=authored_source,
     )
-    if not isinstance(expected_fingerprint, str) or not hmac.compare_digest(
-        plan["fingerprint"], expected_fingerprint
-    ):
-        raise _error(
-            "Custody component plan is stale",
-            code="custody_review_plan_stale",
-            expected_fingerprint=expected_fingerprint,
-            current_fingerprint=plan["fingerprint"],
-        )
     savepoint = f"custody_component_revision_apply_{uuid.uuid4().hex}"
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
@@ -973,7 +952,7 @@ def apply_component_revision(
     conn.execute(f"RELEASE SAVEPOINT {savepoint}")
     if commit:
         conn.commit()
-    return {"fingerprint": plan["fingerprint"], "component": component}
+    return {"input_version": plan["input_version"], "component": component}
 
 
 def plan_component_state_change(
@@ -1003,7 +982,6 @@ def plan_component_state_change(
         resulting_state = "active"
     else:
         resulting_state = "superseded"
-    component_commitment = _batch_fingerprint(component)
     commitment = {
         "schema_version": 1,
         "workspace_id": workspace_id,
@@ -1011,7 +989,6 @@ def plan_component_state_change(
         "input_version": int(profile["journal_input_version"] or 0),
         "action": action,
         "component_id": component_id,
-        "component_commitment": component_commitment,
         "current_state": component["state"],
         "resulting_state": resulting_state,
         "reason": reason or "",
@@ -1024,7 +1001,6 @@ def plan_component_state_change(
     )
     return {
         **commitment,
-        "fingerprint": _batch_fingerprint(commitment),
         "component": public_component,
         "dry_run": True,
         "requires_explicit_confirmation": True,
@@ -1038,13 +1014,19 @@ def apply_component_state_change(
     profile_id: str,
     action: str,
     component_id: str,
-    expected_fingerprint: str,
+    expected_input_version: int,
     reason: str | None = None,
     include_local_evidence: bool = False,
     commit: bool = True,
 ) -> dict[str, Any]:
-    """Persist the current state-change plan after exact fingerprint checking."""
+    """Persist a current state-change plan after input-version checking."""
 
+    custody_components.require_review_input_version(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        expected_input_version=expected_input_version,
+    )
     plan = plan_component_state_change(
         conn,
         workspace_id=workspace_id,
@@ -1053,15 +1035,6 @@ def apply_component_state_change(
         component_id=component_id,
         reason=reason,
     )
-    if not isinstance(expected_fingerprint, str) or not hmac.compare_digest(
-        plan["fingerprint"], expected_fingerprint
-    ):
-        raise _error(
-            "Custody component plan is stale",
-            code="custody_review_plan_stale",
-            expected_fingerprint=expected_fingerprint,
-            current_fingerprint=plan["fingerprint"],
-        )
     savepoint = f"custody_component_state_apply_{uuid.uuid4().hex}"
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
@@ -1085,7 +1058,7 @@ def apply_component_state_change(
     conn.execute(f"RELEASE SAVEPOINT {savepoint}")
     if commit:
         conn.commit()
-    return {"fingerprint": plan["fingerprint"], "component": component}
+    return {"input_version": plan["input_version"], "component": component}
 
 
 COMPONENT_REVIEW_ACTIONS = frozenset(
@@ -1212,7 +1185,7 @@ def apply_component_review(
     workspace_id: str,
     profile_id: str,
     action: str,
-    expected_fingerprint: str,
+    expected_input_version: int,
     components: Sequence[Mapping[str, Any]] | None = None,
     component_id: str | None = None,
     spec: Mapping[str, Any] | None = None,
@@ -1236,7 +1209,7 @@ def apply_component_review(
         "conn": conn,
         "workspace_id": workspace_id,
         "profile_id": profile_id,
-        "expected_fingerprint": expected_fingerprint,
+        "expected_input_version": expected_input_version,
         "include_local_evidence": include_local_evidence,
         "commit": commit,
     }

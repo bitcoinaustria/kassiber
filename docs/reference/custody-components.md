@@ -267,18 +267,19 @@ different projector interpretation.
 ## CLI and desktop
 
 For a deterministic missing-wallet candidate, the guided workflow does not
-require raw component JSON. The preview returns a content fingerprint; creation
-or dismissal must repeat that fingerprint, so changed evidence fails closed and
-reopens review:
+require raw component JSON. The preview returns the current journal input
+version; creation or dismissal must repeat that version, so changed inputs fail
+closed. Dismissal records still bind to the exact candidate evidence fingerprint
+so materially changed evidence reopens review:
 
 ```bash
 kassiber transfers gaps list
 kassiber transfers gaps review --gap-id <gap-id>
 kassiber transfers gaps plan --action create --gap-id <gap-id>
 kassiber transfers gaps apply --action create --gap-id <gap-id> \
-  --expected-fingerprint <sha256>
+  --expected-input-version <version>
 kassiber transfers gaps apply --action dismiss --gap-id <gap-id> \
-  --expected-fingerprint <sha256> --reason "reviewed explanation"
+  --expected-input-version <version> --reason "reviewed explanation"
 ```
 
 Review decisions are immutable revisions. Concurrent latest decisions remain a
@@ -297,24 +298,24 @@ kassiber transfers components plan --action create --file migrations.json
 
 # Activate exactly that reviewed batch atomically.
 kassiber transfers components apply --action create --file migrations.json \
-  --expected-fingerprint <fingerprint-from-preview>
+  --expected-input-version <input-version-from-preview>
 
 # Save incomplete work without affecting accounting.
 kassiber transfers components plan --action create --file migrations.json --draft
 kassiber transfers components apply --action create --file migrations.json --draft \
-  --expected-fingerprint <fingerprint-from-draft-preview>
+  --expected-input-version <input-version-from-draft-preview>
 
 kassiber transfers components list
 kassiber transfers components show --component-id <id>
 kassiber transfers components plan --action revise --component-id <id> \
   --file revision.json --activate
 kassiber transfers components apply --action revise --component-id <id> \
-  --file revision.json --activate --expected-fingerprint <fingerprint>
+  --file revision.json --activate --expected-input-version <version>
 kassiber transfers components plan --action activate --component-id <id>
 kassiber transfers components plan --action supersede --component-id <id> \
   --reason "bad evidence"
 kassiber transfers components plan --action undo --component-id <id>
-# Every state plan is followed by the matching apply with its fingerprint.
+# Every state plan is followed by apply with its returned input version.
 ```
 
 The operation flag is authoritative: embedded JSON cannot override `--draft`

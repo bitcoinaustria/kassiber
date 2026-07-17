@@ -131,6 +131,41 @@ def _error(message: str, code: str, *, details: Mapping[str, Any] | None = None)
     return AppError(message, code=code, details=dict(details or {}), retryable=False)
 
 
+def require_review_input_version(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    expected_input_version: int,
+) -> int:
+    """Fail closed unless a reviewed plan still targets current book inputs."""
+
+    if type(expected_input_version) is not int or expected_input_version < 0:
+        raise _error(
+            "Custody review plan input version is invalid",
+            "custody_review_plan_invalid",
+            details={"expected_input_version": expected_input_version},
+        )
+    row = conn.execute(
+        "SELECT journal_input_version FROM profiles "
+        "WHERE id = ? AND workspace_id = ?",
+        (profile_id, workspace_id),
+    ).fetchone()
+    if row is None:
+        raise _error("Custody review profile was not found", "not_found")
+    current = int(row["journal_input_version"] or 0)
+    if current != expected_input_version:
+        raise _error(
+            "Custody review plan is stale",
+            "custody_review_plan_stale",
+            details={
+                "expected_input_version": expected_input_version,
+                "current_input_version": current,
+            },
+        )
+    return current
+
+
 def _required_text(value: Any, field: str, *, token: bool = False) -> str:
     if not isinstance(value, str) or not value.strip():
         raise _error(

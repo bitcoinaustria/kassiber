@@ -772,7 +772,7 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
       await reviewApply.mutateAsync({
         action: "dismiss",
         gap_id: gap.gap_id,
-        expected_fingerprint: (planned.data as BridgePreview).fingerprint,
+        expected_input_version: (planned.data as BridgePreview).input_version,
       });
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : t("actions.failed"));
@@ -981,7 +981,7 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
           {pendingPlan?.action === "reopen" ||
           pendingPlan?.action === "revise" ? (
             <CorrectionPreviewPanel
-              key={pendingPlan.preview.fingerprint}
+              key={`${pendingPlan.preview.gap_id}:${pendingPlan.preview.input_version}`}
               preview={pendingPlan.preview}
               mode={pendingPlan.action}
               asset={gap.asset}
@@ -1076,7 +1076,7 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
           </Button>
           {pendingPlan?.action === "classify_residual" ? (
             <ResidualPreviewPanel
-              key={pendingPlan.preview.fingerprint}
+              key={`${pendingPlan.preview.gap_id}:${pendingPlan.preview.input_version}`}
               preview={pendingPlan.preview}
               asset={gap.asset}
               isPending={reviewApply.isPending}

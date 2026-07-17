@@ -846,7 +846,7 @@ class SourceOverlapTests(unittest.TestCase):
                 plan = plan_component_review(conn, **review_args)
                 apply_component_review(
                     conn,
-                    expected_fingerprint=plan["fingerprint"],
+                    expected_input_version=plan["input_version"],
                     **review_args,
                 )
 

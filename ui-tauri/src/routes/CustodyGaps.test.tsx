@@ -38,7 +38,7 @@ import {
 
 const reviewedBridgePreview: BridgePreview = {
   gap_id: "gap-og",
-  fingerprint: "review-plan-fingerprint-og",
+  input_version: 7,
   dry_run: true,
   activatable: true,
   review_mode: "manual_weak_hint",
@@ -91,12 +91,12 @@ describe("CustodyGaps guided desktop bridge", () => {
     expect(html).not.toContain("component JSON");
   });
 
-  it("sends only the guided gap identity and preview fingerprint", () => {
+  it("sends only the guided gap identity and preview input version", () => {
     expect(bridgePreviewArgs("gap-og")).toEqual({ action: "create", gap_id: "gap-og" });
     expect(bridgeCreateArgs(reviewedBridgePreview)).toEqual({
       action: "create",
       gap_id: "gap-og",
-      expected_fingerprint: "review-plan-fingerprint-og",
+      expected_input_version: 7,
     });
   });
 });
@@ -104,7 +104,7 @@ describe("CustodyGaps guided desktop bridge", () => {
 describe("CustodyGaps immutable correction workflow", () => {
   const reopenPreview: GuidedCorrectionPreview = {
     gap_id: "gap-og",
-    fingerprint: "reopen-fingerprint",
+    input_version: 8,
     dry_run: true,
     requires_explicit_confirmation: true,
     resulting_status: "needs_review",
@@ -113,7 +113,7 @@ describe("CustodyGaps immutable correction workflow", () => {
   };
   const revisePreview: GuidedCorrectionPreview = {
     gap_id: "gap-og",
-    fingerprint: "revise-fingerprint",
+    input_version: 9,
     dry_run: true,
     requires_explicit_confirmation: true,
     activatable: true,
@@ -163,7 +163,7 @@ describe("CustodyGaps immutable correction workflow", () => {
     expect(html).toContain("0.1 BTC");
   });
 
-  it("binds confirmation to the preview fingerprint and identical normalized note", () => {
+  it("binds confirmation to the preview input version and normalized note", () => {
     expect(reopenPreviewArgs("gap-og", "  Wrong return group  ")).toEqual({
       action: "reopen",
       gap_id: "gap-og",
@@ -172,7 +172,7 @@ describe("CustodyGaps immutable correction workflow", () => {
     expect(reopenConfirmArgs(reopenPreview, "Wrong return group")).toEqual({
       action: "reopen",
       gap_id: "gap-og",
-      expected_fingerprint: "reopen-fingerprint",
+      expected_input_version: 8,
       reason: "Wrong return group",
     });
     expect(revisePreviewArgs("gap-og", "")).toEqual({
@@ -182,7 +182,7 @@ describe("CustodyGaps immutable correction workflow", () => {
     expect(reviseConfirmArgs(revisePreview, "")).toEqual({
       action: "revise",
       gap_id: "gap-og",
-      expected_fingerprint: "revise-fingerprint",
+      expected_input_version: 9,
     });
   });
 
@@ -224,7 +224,7 @@ describe("CustodyGaps immutable correction workflow", () => {
 describe("CustodyGaps guided residual workflow", () => {
   const residualPreview: ResidualClassificationPreview = {
     gap_id: "gap-og",
-    fingerprint: "residual-fingerprint",
+    input_version: 10,
     dry_run: true,
     requires_explicit_confirmation: true,
     activatable: true,
@@ -270,7 +270,7 @@ describe("CustodyGaps guided residual workflow", () => {
       action: "classify_residual",
       gap_id: "gap-og",
       classification: "external_gift",
-      expected_fingerprint: "residual-fingerprint",
+      expected_input_version: 10,
       reason: "Family transfer",
     });
   });

@@ -656,14 +656,14 @@ type CustodyComponentListEnvelope = {
 };
 
 interface CustodyBulkResolveResult {
-  fingerprint: string;
+  input_version: number;
   components: CustodyComponent[];
   summary: { count: number; active: number; draft: number };
   dry_run?: boolean;
 }
 
 interface CustodyComponentMutationResult {
-  fingerprint: string;
+  input_version: number;
   component: CustodyComponent;
   dry_run?: boolean;
 }
@@ -1027,7 +1027,7 @@ function CustodyComponentResolver() {
       const response = await bulkMutation.mutateAsync(
         buildCustodyBulkRequest(nextPreview, {
           activate,
-          expectedFingerprint: verified.fingerprint,
+          expectedInputVersion: verified.input_version,
         }),
       );
       if (response.data) setResult(response.data.summary);
@@ -1082,12 +1082,12 @@ function CustodyComponentResolver() {
         activate,
       };
       const previewResponse = await componentPlanMutation.mutateAsync(planArgs);
-      if (!previewResponse.data?.fingerprint) {
+      if (previewResponse.data?.input_version === undefined) {
         throw new Error(t("swap.components.backendError.unexpected"));
       }
       await componentApplyMutation.mutateAsync({
         ...planArgs,
-        expected_fingerprint: previewResponse.data.fingerprint,
+        expected_input_version: previewResponse.data.input_version,
       });
       closeRevisionEditor();
     } catch (error) {
@@ -1114,12 +1114,12 @@ function CustodyComponentResolver() {
                 : undefined,
         };
         const previewResponse = await componentPlanMutation.mutateAsync(planArgs);
-        if (!previewResponse.data?.fingerprint) {
+        if (previewResponse.data?.input_version === undefined) {
           throw new Error(t("swap.components.backendError.unexpected"));
         }
         await componentApplyMutation.mutateAsync({
           ...planArgs,
-          expected_fingerprint: previewResponse.data.fingerprint,
+          expected_input_version: previewResponse.data.input_version,
         });
       } else {
         const planArgs = {
@@ -1128,12 +1128,12 @@ function CustodyComponentResolver() {
           reason: "desktop_custody_review_undo",
         };
         const previewResponse = await componentPlanMutation.mutateAsync(planArgs);
-        if (!previewResponse.data?.fingerprint) {
+        if (previewResponse.data?.input_version === undefined) {
           throw new Error(t("swap.components.backendError.unexpected"));
         }
         const response = await componentApplyMutation.mutateAsync({
           ...planArgs,
-          expected_fingerprint: previewResponse.data.fingerprint,
+          expected_input_version: previewResponse.data.input_version,
         });
         if (response.data) openRevisionEditor(response.data.component);
       }

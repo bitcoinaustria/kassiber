@@ -121,7 +121,7 @@ Activate only after exact anchor coverage and conservation pass atomically.
 In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
 then `ui.transfers.components.plan` before asking
 for consent to write the final component set with the returned
-`expected_fingerprint`.
+`expected_input_version`.
 
 If `kassiber --machine journals transfers list` reports
 `summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.

@@ -793,7 +793,7 @@ export interface CustodyBulkRequest {
   [key: string]: unknown;
   components: JsonRecord[];
   activate: boolean;
-  expected_fingerprint?: string;
+  expected_input_version?: number;
 }
 
 interface CustodyRevisionLegInput {
@@ -905,7 +905,7 @@ export function formatCustodyExactInteger(
  */
 export function buildCustodyBulkRequest(
   preview: CustodyBatchPreview,
-  options: { activate: boolean; expectedFingerprint?: string },
+  options: { activate: boolean; expectedInputVersion?: number },
 ): CustodyBulkRequest {
   const components = preview.components.map((raw) => {
     const component = { ...raw };
@@ -915,8 +915,8 @@ export function buildCustodyBulkRequest(
   return {
     components,
     activate: options.activate,
-    ...(options.expectedFingerprint
-      ? { expected_fingerprint: options.expectedFingerprint }
+    ...(options.expectedInputVersion !== undefined
+      ? { expected_input_version: options.expectedInputVersion }
       : {}),
   };
 }

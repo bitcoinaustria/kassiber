@@ -567,6 +567,7 @@ def create_wallet(
             code="conflict",
             hint="Choose a different wallet label or update the existing wallet.",
         ) from exc
+    invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     created = fetch_wallet_with_account(conn, wallet_id)

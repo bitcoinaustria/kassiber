@@ -113,8 +113,8 @@ source-to-target allocation. Dismissal removes the holds; an unmatched outbound
 then becomes an explicit `external_presumed` decision without manufacturing an
 input fallback claim.
 
-Review preview is a pure `plan_review` operation. Apply persists exactly that
-plan only after verifying its input version and deterministic fingerprint.
+Review preview is a pure `plan_review` operation. Apply rebuilds the requested
+plan and persists it only while the previewed journal input version is current.
 
 ## Authored substrate and replication
 
@@ -175,8 +175,8 @@ binary.
    Planning is now one read-only
    `plan_review` seam for create/revise/reopen/residual actions; it commits the
    current journal input version, exact deterministic component rows and filed
-   report impacts. One `apply_review` seam replans and rejects any fingerprint
-   drift before performing the reviewed mutation. Existing CLI/daemon kinds
+   report impacts. One `apply_review` seam replans and rejects stale journal
+   input versions before performing the reviewed mutation. Existing CLI/daemon kinds
    are redacted compatibility wrappers over those two operations.
 4. Add typed replicated component economic terms, migrate pair/payout authored
    state deterministically, and freeze legacy writes. Complete: active and
@@ -224,8 +224,8 @@ binary.
    coverage, and the final performance/quality audit. Component batch preview
    no longer creates rows inside a rollback savepoint: one core read-only planner
    resolves and normalizes exact rows, validates database anchors and batch-wide
-   conflicts, and fingerprints the journal input version. CLI, GUI and AI apply
-   all require that fingerprint and persist the revalidated plan atomically.
+   conflicts, and returns the journal input version. CLI, GUI and AI apply all
+   require that version and persist the revalidated plan atomically.
    Gap review UI and AI now expose only `ui.custody.review.plan` and
    `ui.custody.review.apply` for create, dismiss, revise, reopen and residual
    actions; ten mutation-specific daemon/tool kinds and their duplicate routing,
@@ -235,7 +235,7 @@ binary.
    Python preview/create/reopen/revise/residual/dismiss compatibility wrappers
    are deleted; every mutation now enters through `apply_review`.
    The unused specialized component-create CLI/daemon path is deleted as well;
-   one-component authoring uses the same pure fingerprinted batch plan/apply
+   one-component authoring uses the same pure version-gated batch plan/apply
    path as N:M authoring.
    The serialized `custody_gap_candidate_snapshots` and
    `custody_gap_projection_rows` caches are physically dropped on open and
@@ -255,10 +255,10 @@ binary.
    opaque normalized-candidate keyset cursor across pages.
    Component authoring now exposes distinct `components plan/apply` CLI,
    desktop and AI operations; the overloaded `bulk_resolve(dry_run=...)`
-   command/kind is deleted, and apply requires the exact pure-plan fingerprint.
+   command/kind is deleted, and apply requires the previewed input version.
    Component activation and supersession now use those same operations. Their
-   plans are read-only, bind the immutable component contents and current
-   journal input version, and share the activation validator used by apply.
+   plans are read-only, expose the current journal input version, and share the
+   activation validator used by apply.
    The direct CLI commands, desktop daemon kinds and CLI-handler mutation
    wrappers are deleted; desktop create and lifecycle changes consequently
    share one consent, cache invalidation and stale-plan boundary.

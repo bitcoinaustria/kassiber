@@ -1733,7 +1733,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description=(
             "Purely plan one custody-gap create, dismiss, revise, reopen, or residual "
             "classification action. Returns exact quantities, allocations, warnings, filed-"
-            "report impact, input version, and a fingerprint for a separately consented apply."
+            "report impact and the input version for a separately consented apply."
         ),
         parameters={
             "type": "object",
@@ -1761,12 +1761,12 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.custody.review.apply",
         description=(
             "After explicit consent, atomically apply exactly the current custody review "
-            "plan. Action inputs and reason must match the preview; stale evidence fails closed."
+            "plan. Action inputs and reason must match the preview; stale inputs fail closed."
         ),
         parameters={
             "type": "object",
             "additionalProperties": False,
-            "required": ["action", "gap_id", "expected_fingerprint"],
+            "required": ["action", "gap_id", "expected_input_version"],
             "properties": {
                 "action": {
                     "type": "string",
@@ -1777,9 +1777,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "string",
                     "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS),
                 },
-                "expected_fingerprint": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{64}$",
+                "expected_input_version": {
+                    "type": "integer",
+                    "minimum": 0,
                 },
                 "reason": {"type": "string", "maxLength": 500},
             },
@@ -1933,13 +1933,13 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description=(
             "Atomically persist the exact custody component plan previously returned by "
             "ui.transfers.components.plan. Requires explicit consent and rejects changed "
-            "journal inputs or a mismatched fingerprint. Conversion components must remain "
+            "journal inputs. Conversion components must remain "
             "drafts until separately reviewed by a human."
         ),
         parameters={
             "type": "object",
             "additionalProperties": False,
-            "required": ["components", "expected_fingerprint"],
+            "required": ["components", "expected_input_version"],
             "properties": {
                 "components": {
                     "type": "array",
@@ -1948,9 +1948,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
                 },
                 "activate": {"type": "boolean"},
-                "expected_fingerprint": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{64}$",
+                "expected_input_version": {
+                    "type": "integer",
+                    "minimum": 0,
                 },
             },
         },

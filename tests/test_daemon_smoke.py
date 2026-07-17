@@ -6542,7 +6542,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     arguments={
                         "action": "create",
                         "gap_id": "gap:whirlpool",
-                        "expected_fingerprint": "a" * 64,
+                        "expected_input_version": 7,
                     },
                 )
 
@@ -6625,7 +6625,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     arguments={
                         "action": "create",
                         "gap_id": "gap:whirlpool",
-                        "expected_fingerprint": "b" * 64,
+                        "expected_input_version": 8,
                     },
                 )
 
@@ -6711,7 +6711,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     arguments={
                         "action": "dismiss",
                         "gap_id": "gap:whirlpool",
-                        "expected_fingerprint": "c" * 64,
+                        "expected_input_version": 9,
                     },
                 )
 

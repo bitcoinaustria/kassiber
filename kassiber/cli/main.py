@@ -2203,8 +2203,8 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_gaps_history.add_argument("--limit", type=int, default=100)
     review_actions = ("create", "dismiss", "revise", "reopen", "classify_residual")
     for command_name, help_text in (
-        ("plan", "Build a pure custody review plan and confirmation fingerprint"),
-        ("apply", "Apply an unchanged custody review plan by fingerprint"),
+        ("plan", "Build a pure custody review plan at the current input version"),
+        ("apply", "Apply a custody review plan while its input version is current"),
     ):
         review_command = transfers_gaps_sub.add_parser(command_name, help=help_text)
         _add_workspace_profile_args(review_command)
@@ -2217,7 +2217,10 @@ def build_parser() -> argparse.ArgumentParser:
         review_command.add_argument("--reason")
         if command_name == "apply":
             review_command.add_argument(
-                "--expected-fingerprint", required=True, dest="expected_fingerprint"
+                "--expected-input-version",
+                required=True,
+                type=int,
+                dest="expected_input_version",
             )
 
     transfers_components = transfers_sub.add_parser(
@@ -2296,9 +2299,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if command_name == "apply":
             component_review.add_argument(
-                "--expected-fingerprint",
+                "--expected-input-version",
                 required=True,
-                help="Copy the fingerprint from the matching plan",
+                type=int,
+                help="Copy the input_version from the matching plan",
             )
 
     transfers_payouts = transfers_sub.add_parser("payouts")
@@ -4286,7 +4290,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args,
                     core_custody_gap_reviews.apply_review(
                         conn,
-                        expected_fingerprint=args.expected_fingerprint,
+                        expected_input_version=args.expected_input_version,
                         **kwargs,
                     ),
                 )
@@ -4380,7 +4384,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args,
                     core_custody_component_planner.apply_component_review(
                         conn,
-                        expected_fingerprint=args.expected_fingerprint,
+                        expected_input_version=args.expected_input_version,
                         **review_args,
                     ),
                 )

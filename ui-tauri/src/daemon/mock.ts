@@ -4521,7 +4521,7 @@ export const mockDaemon: DaemonTransport = {
         schema_version: 1,
         request_id: req.request_id,
         data: {
-          fingerprint: "a".repeat(64),
+          input_version: 7,
           components,
           summary: {
             count: components.length,

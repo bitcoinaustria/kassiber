@@ -707,7 +707,7 @@ def _pair_group_spec(
                 "source_row_hash": source_hash,
                 "review_kind": str(_field(row, "kind")),
                 "tax_policy": str(_field(row, "policy")),
-                "reviewed_source_amount_msat": requested,
+                "reviewed_source_amount_msat": source_amount,
                 "swap_fee_msat": _field(row, "swap_fee_msat"),
                 "swap_fee_kind": _field(row, "swap_fee_kind"),
                 "confidence_at_review": _field(row, "confidence_at_pair"),

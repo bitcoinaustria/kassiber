@@ -152,7 +152,7 @@ multi-hop migrations, or missing intermediate wallets. Represent missing owned
 custody with `untracked_wallet`; genuine N:M requires explicit allocations.
 The equivalent chat workflow is `ui.transfers.components.list`, followed by a
 `ui.transfers.components.plan` call and a separately
-consented final write carrying that preview's `expected_fingerprint`.
+consented final write carrying that preview's `expected_input_version`.
 Activate the complete component only after every imported anchor is covered and
 quantity/conversion conservation passes atomically. An unknown intermediate
 wallet is missing evidence, not a network reset: known main/test/regtest/signet

@@ -193,8 +193,8 @@ same values under `data.page`. High-impact automatic reviews support previews:
 including missing historical wallets, use the versioned custody-component
 workflow documented in
 [docs/reference/custody-components.md](docs/reference/custody-components.md).
-Custody-component preview is read-only; apply requires the exact fingerprint
-returned by the matching preview and rejects stale journal inputs.
+Custody-component preview is read-only; apply requires the journal input version
+returned by the matching preview and rejects stale inputs.
 
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:
@@ -204,7 +204,7 @@ kassiber transfers gaps list
 kassiber transfers gaps review --gap-id <gap-id>
 kassiber transfers gaps plan --action create --gap-id <gap-id>
 kassiber transfers gaps apply --action create --gap-id <gap-id> \
-  --expected-fingerprint <fingerprint-from-preview>
+  --expected-input-version <input-version-from-preview>
 ```
 
 Kassiber can suggest a 1:N/N:1/N:M bridge across a long time interval, but it
