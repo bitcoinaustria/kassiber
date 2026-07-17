@@ -2445,6 +2445,37 @@ def sync_wallet_from_backend(
     }
 
 
+def _stored_wallet_freshness_checkpoints(conn, profile_id, wallets):
+    wallet_ids_by_source_key = {
+        core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, str(wallet["id"])): str(
+            wallet["id"]
+        )
+        for wallet in wallets
+    }
+    if not wallet_ids_by_source_key:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT source_key, checkpoint_json
+        FROM freshness_source_states
+        WHERE profile_id = ? AND source_type = ?
+        """,
+        (profile_id, core_freshness.SOURCE_ONCHAIN),
+    ).fetchall()
+    checkpoints = {}
+    for row in rows:
+        wallet_id = wallet_ids_by_source_key.get(str(row["source_key"]))
+        if wallet_id is None:
+            continue
+        try:
+            checkpoint = json.loads(row["checkpoint_json"] or "{}")
+        except (TypeError, ValueError):
+            checkpoint = {}
+        if isinstance(checkpoint, dict):
+            checkpoints[wallet_id] = checkpoint
+    return checkpoints
+
+
 def sync_wallet(
     conn,
     runtime_config,
@@ -2475,6 +2506,12 @@ def sync_wallet(
         if not wallet_ref:
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
+    if freshness_checkpoints is None:
+        freshness_checkpoints = (
+            {}
+            if force_full
+            else _stored_wallet_freshness_checkpoints(conn, profile["id"], wallets)
+        )
     hooks = _wallet_sync_hooks(commit=False)
     prefetched = _prefetch_chain_wallets(
         conn,
