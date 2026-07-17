@@ -2468,18 +2468,21 @@ def sync_wallet_from_backend(
     checkpoint=None,
     force_full=False,
     check_cancelled=None,
+    prefetched=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     hooks = _wallet_sync_hooks(commit=False)
-    prefetched = _prefetch_chain_wallets(
-        conn,
-        runtime_config,
-        profile,
-        [wallet],
-        hooks,
-        freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
-        force_full=force_full,
-    )
+    prefetched_fetches = prefetched
+    if prefetched_fetches is None:
+        prefetched_fetches = _prefetch_chain_wallets(
+            conn,
+            runtime_config,
+            profile,
+            [wallet],
+            hooks,
+            freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
+            force_full=force_full,
+        )
     results = _apply_wallet_sync_atomically(
         conn,
         runtime_config,
@@ -2488,7 +2491,7 @@ def sync_wallet_from_backend(
         hooks,
         freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
         force_full=force_full,
-        prefetched=prefetched,
+        prefetched=prefetched_fetches,
         check_cancelled=check_cancelled,
     )
     result = results[0]
@@ -2497,6 +2500,28 @@ def sync_wallet_from_backend(
         for key, value in result.items()
         if key != "wallet"
     }
+
+
+def prefetch_wallets_from_backend(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    wallets,
+    *,
+    freshness_checkpoints=None,
+    force_full=False,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return _prefetch_chain_wallets(
+        conn,
+        runtime_config,
+        profile,
+        wallets,
+        _wallet_sync_hooks(commit=False),
+        freshness_checkpoints=freshness_checkpoints,
+        force_full=force_full,
+    )
 
 
 def _stored_wallet_freshness_checkpoints(conn, profile_id, wallets):

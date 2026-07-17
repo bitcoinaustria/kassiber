@@ -19,6 +19,7 @@ from .cli.handlers import (
     cache_swap_candidate_count,
     enrich_wallet_from_btcpay_provenance,
     process_journals,
+    prefetch_wallets_from_backend,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
     sync_configured_btcpay_wallet,
@@ -642,7 +643,11 @@ def _load_freshness_profile(
     return profile
 
 
-def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_freshness.JobHandler]:
+def _freshness_handlers(
+    runtime_config: dict[str, object],
+    *,
+    prefetched_onchain: Mapping[str, Any] | None = None,
+) -> Mapping[str, core_freshness.JobHandler]:
     def onchain_wallet(
         conn: sqlite3.Connection,
         job: Mapping[str, Any],
@@ -667,6 +672,12 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
                 checkpoint=checkpoint,
                 force_full=force_full,
                 check_cancelled=check_cancelled,
+                prefetched=(
+                    prefetched_onchain
+                    if prefetched_onchain is not None
+                    and str(wallet["id"]) in prefetched_onchain
+                    else None
+                ),
             )
         finally:
             sync_progress_emitter.reset(token)
@@ -1075,6 +1086,52 @@ def _filter_freshness_specs_by_policy(
     ]
 
 
+def _prefetch_onchain_freshness_jobs(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    profile: Mapping[str, Any],
+    jobs: list[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    onchain_jobs = [
+        job for job in jobs if job.get("job_type") == core_freshness.JOB_ONCHAIN_WALLET
+    ]
+    if not onchain_jobs:
+        return {}
+    wallet_ids = {
+        str((job.get("payload") or {}).get("wallet_id") or "")
+        for job in onchain_jobs
+    }
+    wallet_ids.discard("")
+    wallet_rows = conn.execute(
+        "SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC",
+        (profile["id"],),
+    ).fetchall()
+    wallets = [wallet for wallet in wallet_rows if str(wallet["id"]) in wallet_ids]
+    jobs_by_wallet_id = {
+        str((job.get("payload") or {}).get("wallet_id") or ""): job
+        for job in onchain_jobs
+    }
+    checkpoints = {
+        str(wallet["id"]): _source_checkpoint_for_job(
+            conn,
+            str(profile["id"]),
+            str(jobs_by_wallet_id[str(wallet["id"])]["source_key"]),
+            jobs_by_wallet_id[str(wallet["id"])],
+        )
+        for wallet in wallets
+    }
+    force_full = any(_job_force_full(job) for job in onchain_jobs)
+    return prefetch_wallets_from_backend(
+        conn,
+        runtime_config,
+        profile["workspace_id"],
+        profile["id"],
+        wallets,
+        freshness_checkpoints=checkpoints,
+        force_full=force_full,
+    )
+
+
 def _parse_freshness_timestamp(value: Any) -> datetime | None:
     return parse_iso_datetime_or_none(value)
 
@@ -1474,9 +1531,27 @@ def _freshness_run_payload(
                 }
             )
 
+        token = (
+            sync_progress_emitter.set(_progress_with_run_context)
+            if progress_observer is not None
+            else None
+        )
+        try:
+            prefetched_onchain = _prefetch_onchain_freshness_jobs(
+                conn,
+                runtime_config,
+                profile,
+                enqueued,
+            )
+        finally:
+            if token is not None:
+                sync_progress_emitter.reset(token)
         completed = core_freshness.run_due_jobs(
             conn,
-            _freshness_handlers(runtime_config),
+            _freshness_handlers(
+                runtime_config,
+                prefetched_onchain=prefetched_onchain,
+            ),
             profile_id=profile["id"],
             limit=run_limit,
             progress_observer=(

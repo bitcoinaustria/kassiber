@@ -1067,6 +1067,60 @@ class FreshnessTest(unittest.TestCase):
             {job["source_type"] for job in payload["enqueued"]},
         )
 
+    def test_desktop_sync_prefetches_wallets_together_before_serial_job_apply(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+        for wallet_id, label in (("wallet-a", "Alpha"), ("wallet-b", "Beta")):
+            conn.execute(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, account_id, label, kind,
+                    config_json, created_at
+                ) VALUES(?, 'ws', ?, NULL, ?, 'address', ?, '2026-06-04T00:00:00Z')
+                """,
+                (
+                    wallet_id,
+                    profile_id,
+                    label,
+                    json.dumps({"addresses": [f"bc1q{wallet_id}"]}),
+                ),
+            )
+        conn.commit()
+        prefetched = {"wallet-a": object(), "wallet-b": object()}
+        events = []
+
+        def prefetch(*args, **kwargs):
+            events.append("prefetch")
+            self.assertEqual([wallet["id"] for wallet in args[4]], ["wallet-a", "wallet-b"])
+            return prefetched
+
+        def sync(*args, **kwargs):
+            events.append(f"sync:{args[4]['id']}")
+            self.assertIs(kwargs["prefetched"], prefetched)
+            return {"freshness_checkpoint": {"wallet": args[4]["id"]}}
+
+        with patch(
+            "kassiber.daemon_freshness.prefetch_wallets_from_backend",
+            side_effect=prefetch,
+        ), patch(
+            "kassiber.daemon_freshness.sync_wallet_from_backend",
+            side_effect=sync,
+        ):
+            payload = daemon_freshness._freshness_run_payload(
+                conn,
+                {},
+                {"all": True, "rates": False, "journals": False, "run": True},
+            )
+
+        self.assertEqual(events[0], "prefetch")
+        self.assertEqual(set(events[1:]), {"sync:wallet-a", "sync:wallet-b"})
+        self.assertEqual(len(payload["completed"]), 2)
+        self.assertTrue(
+            all(job["status"] == freshness.JOB_DONE for job in payload["completed"])
+        )
+
     def test_freshness_run_can_request_auto_pair_before_journals(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
