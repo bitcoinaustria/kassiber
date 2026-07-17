@@ -15,9 +15,7 @@ from kassiber.core.custody_components import (
     create_component,
     get_component,
     iter_authored_active_components,
-    iter_effective_components,
     list_components,
-    list_effective_components,
     reconcile_active_memberships,
     supersede_component,
     update_component,
@@ -2746,16 +2744,21 @@ class CustodyComponentApiTests(unittest.TestCase):
             "component_leg_count_mismatch",
             {issue["code"] for issue in remote["validation"]["issues"]},
         )
-        self.assertEqual([], list_effective_components(self.conn, profile_id="profile"))
+        self.assertEqual(
+            [],
+            list_components(
+                self.conn,
+                profile_id="profile",
+                state="active",
+                effective_only=True,
+            ),
+        )
         authored_active = list(
             iter_authored_active_components(self.conn, profile_id="profile")
         )
         self.assertEqual(["remote"], [item["id"] for item in authored_active])
         self.assertEqual("active", authored_active[0]["state"])
         self.assertEqual("draft", authored_active[0]["effective_state"])
-        self.assertEqual(
-            [], list(iter_effective_components(self.conn, profile_id="profile"))
-        )
         result = reconcile_active_memberships(self.conn, profile_id="profile")
         self.assertEqual([], result["effective_component_ids"])
         self.assertEqual("remote", result["incomplete"][0]["component_id"])

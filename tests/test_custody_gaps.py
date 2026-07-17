@@ -16,12 +16,15 @@ from kassiber.core.custody_gaps import (
     CustodyGapSearchResult,
     build_gap_snapshot,
     search_custody_gap_candidates,
-    suggest_custody_gap_candidates,
 )
 from kassiber.db import open_db
 
 
 BTC_MSAT = 100_000_000_000
+
+
+def suggest_custody_gap_candidates(rows, **kwargs):
+    return list(search_custody_gap_candidates(rows, **kwargs).candidates)
 
 
 class CustodyGapLegacySchemaMigrationTests(unittest.TestCase):
@@ -1617,9 +1620,10 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             """,
             (99 * BTC_MSAT // 10,),
         )
-        candidates, _normalized = custody_gaps.load_gap_candidates(
+        result, _normalized = custody_gaps.load_gap_search_result(
             self.conn, "profile-one"
         )
+        candidates = list(result.candidates)
         actionable_id = candidates[-1].gap_id
 
         def review_state(_conn, candidate, _review):
@@ -1723,9 +1727,10 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             )
 
     def test_snapshot_reports_capacity_limit_as_advisory_incomplete_search(self):
-        candidate = custody_gaps.load_gap_candidates(
+        result, _normalized = custody_gaps.load_gap_search_result(
             self.conn, "profile-one"
-        )[0][0]
+        )
+        candidate = result.candidates[0]
         limited = CustodyGapSearchResult(
             candidates=(candidate,),
             accounting_candidates=(),

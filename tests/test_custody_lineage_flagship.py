@@ -490,9 +490,9 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                 before = book.process()
                 candidate = next(
                     item
-                    for item in custody_gaps.load_gap_candidates(
+                    for item in custody_gaps.load_gap_search_result(
                         book.conn, "profile"
-                    )[0]
+                    )[0].candidates
                     if item.source_ids == ("2020-whirlpool-out",)
                     and item.return_ids
                     == ("2021-return-1", "2021-return-2")
@@ -639,9 +639,9 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
 
                 candidate = next(
                     item
-                    for item in custody_gaps.load_gap_candidates(
+                    for item in custody_gaps.load_gap_search_result(
                         book.conn, "profile"
-                    )[0]
+                    )[0].candidates
                     if item.source_ids == ("2020-whirlpool-out",)
                     and item.return_ids == ("2021-return-1", "2021-return-2")
                 )
@@ -682,9 +682,9 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                 book.process()
                 candidate = next(
                     item
-                    for item in custody_gaps.load_gap_candidates(
+                    for item in custody_gaps.load_gap_search_result(
                         book.conn, "profile"
-                    )[0]
+                    )[0].candidates
                     if item.source_ids == ("2020-whirlpool-out",)
                     and len(item.return_ids) == 2
                 )
@@ -902,9 +902,10 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
             try:
                 book.insert(rows)
                 result = book.process()
-                candidates, _ = custody_gaps.load_gap_candidates(
+                gap_result, _ = custody_gaps.load_gap_search_result(
                     book.conn, "profile"
                 )
+                candidates = list(gap_result.candidates)
                 source_candidates = [
                     item
                     for item in candidates

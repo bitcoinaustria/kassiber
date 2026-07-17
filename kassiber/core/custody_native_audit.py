@@ -746,28 +746,9 @@ def compile_verified_native_claims(
     )
 
 
-# Kept as a narrow compatibility import while callers migrate.  It is not used
-# by journal production: the input records are interpreter evidence, never an
-# RP2-rendered ``intra_audit`` result.
-def compile_verified_native_audit(
-    canonical: CanonicalQuantityInput,
-    intra_audit: Sequence[Mapping[str, Any]],
-    *,
-    component_transaction_ids: Iterable[str] = (),
-    reserved_source_msat: Mapping[str, int] | None = None,
-) -> NativeAuditCompilation:
-    return compile_verified_native_claims(
-        canonical,
-        intra_audit,
-        component_transaction_ids=component_transaction_ids,
-        reserved_source_msat=reserved_source_msat,
-    )
-
-
 __all__ = [
     "NativeAuditCompilation",
     "NativeAuditIssue",
     "VERIFIED_NATIVE_PAIRING_SOURCES",
     "compile_verified_native_claims",
-    "compile_verified_native_audit",
 ]

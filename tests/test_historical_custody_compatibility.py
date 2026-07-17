@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.core.custody_components import list_components
-from kassiber.core.custody_gaps import load_gap_candidates
+from kassiber.core.custody_gaps import load_gap_search_result
 from kassiber.db import open_db
 
 
@@ -96,7 +96,8 @@ class HistoricalCustodyCompatibilityTests(unittest.TestCase):
             0,
         )
 
-        candidates, _rows = load_gap_candidates(conn, "pf")
+        result, _rows = load_gap_search_result(conn, "pf")
+        candidates = list(result.candidates)
         missing_whirlpool = next(
             candidate
             for candidate in candidates

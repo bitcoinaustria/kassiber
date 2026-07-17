@@ -943,26 +943,6 @@ def _allocations_with_component_inference(
     return complete
 
 
-def complete_component_allocations(
-    legs: Sequence[Mapping[str, Any]],
-    allocations: Sequence[Mapping[str, Any]],
-    *,
-    conservation_mode: str,
-) -> list[dict[str, Any]]:
-    """Return explicit or unambiguous inferred allocation edges.
-
-    Effective-component consumers should use this seam instead of rebuilding
-    the 1:N/N:1 inference rules independently. N:M components have already
-    been required to carry explicit edges before they can become effective.
-    """
-
-    return _allocations_with_component_inference(
-        legs,
-        allocations,
-        conservation_mode=conservation_mode,
-    )
-
-
 def _allocation_chronology_issues(
     legs: Sequence[Mapping[str, Any]],
     allocations: Sequence[Mapping[str, Any]],
@@ -4489,51 +4469,6 @@ def list_components(
     return result
 
 
-def list_effective_components(
-    conn: sqlite3.Connection,
-    *,
-    profile_id: str,
-    transaction_id: str | None = None,
-    include_local_evidence: bool = False,
-    limit: int = 1000,
-) -> list[dict[str, Any]]:
-    return list_components(
-        conn,
-        profile_id=profile_id,
-        state="active",
-        transaction_id=transaction_id,
-        effective_only=True,
-        include_local_evidence=include_local_evidence,
-        limit=limit,
-    )
-
-
-def iter_effective_components(
-    conn: sqlite3.Connection,
-    *,
-    profile_id: str,
-    transaction_id: str | None = None,
-    include_local_evidence: bool = False,
-) -> Iterator[dict[str, Any]]:
-    """Yield every effective component for effective-only consumers.
-
-    Unlike the user-facing list API this iterator is deliberately unbounded;
-    callers process one materialized component at a time and therefore cannot
-    silently truncate long wallet-migration histories at a page limit. Journal
-    assembly must use ``iter_authored_active_components`` instead, because it
-    must also fail-close incomplete or conflicting active revisions.
-    """
-
-    for component in iter_authored_active_components(
-        conn,
-        profile_id=profile_id,
-        transaction_id=transaction_id,
-        include_local_evidence=include_local_evidence,
-    ):
-        if component["effective_state"] == "active":
-            yield component
-
-
 def iter_authored_active_components(
     conn: sqlite3.Connection,
     *,
@@ -4543,9 +4478,9 @@ def iter_authored_active_components(
 ) -> Iterator[dict[str, Any]]:
     """Yield every authored-active component for fail-closed journal input.
 
-    ``iter_effective_components`` is appropriate for views that only want
-    usable interpretations.  Journal materialization has a stricter contract:
-    an authored ``active`` header must still claim every transaction anchor
+    Journal materialization must inspect every authored-active header, not only
+    usable interpretations. An authored ``active`` header must still claim every
+    transaction anchor
     that has arrived locally when its remaining legs are incomplete, invalid,
     or overlap another active component.  Otherwise row-wise replication can
     temporarily turn the raw anchors back into ordinary acquisitions or
@@ -4553,7 +4488,7 @@ def iter_authored_active_components(
     or must produce a component-wide quarantine.
 
     This internal iterator is deliberately unbounded for long migration
-    histories, just like ``iter_effective_components``.
+    histories.
     """
 
     params: list[Any] = [profile_id]
@@ -4664,13 +4599,10 @@ __all__ = [
     "CONSERVATION_MODES",
     "LEG_ROLES",
     "activate_component",
-    "complete_component_allocations",
     "create_component",
     "get_component",
     "iter_authored_active_components",
-    "iter_effective_components",
     "list_components",
-    "list_effective_components",
     "normalize_legs",
     "normalize_allocations",
     "normalize_component_header",

@@ -564,44 +564,6 @@ def component_native_support_status(
     }
 
 
-def baseline_missing_component_evidence(
-    conn: sqlite3.Connection,
-    components: Sequence[Mapping[str, Any]],
-    *,
-    created_at: str,
-) -> dict[str, Any]:
-    """Legacy compatibility check that never blesses receiver-local evidence.
-
-    Old local activation snapshots are migrated by ``open_db``.  Keeping this
-    helper as a read-only status adapter avoids silently changing older callers
-    while ensuring a replicated/current row can never become an author
-    commitment source.
-    """
-
-    existing: list[str] = []
-    blocked: list[dict[str, str]] = []
-    for component in sorted(components, key=lambda item: str(item.get("id") or "")):
-        component_id = str(component.get("id") or "")
-        if not component_id:
-            blocked.append({"component_id": "", "reason": "component_id_missing"})
-            continue
-        if component.get("effective_state") != "active":
-            blocked.append(
-                {"component_id": component_id, "reason": "component_not_effective"}
-            )
-            continue
-        status = component_evidence_status(conn, component)
-        if status["valid"]:
-            existing.append(component_id)
-            continue
-        blocked.append({"component_id": component_id, "reason": status["status"]})
-    return {
-        "baselined_component_ids": [],
-        "existing_component_ids": existing,
-        "blocked": blocked,
-    }
-
-
 def load_component_evidence_snapshots(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1506,7 +1468,6 @@ def authored_evidence_hash_summary(
 
 __all__ = [
     "authored_evidence_hash_summary",
-    "baseline_missing_component_evidence",
     "blocking_quantity_issues",
     "capture_component_evidence",
     "component_evidence_status",

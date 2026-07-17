@@ -646,11 +646,12 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                     occurred_at,
                 ),
             )
-        candidates, _ = custody_gaps.load_gap_candidates(
+        gap_result, _ = custody_gaps.load_gap_search_result(
             self.owner,
             self.profile["id"],
             include_journal_claims=False,
         )
+        candidates = list(gap_result.candidates)
         candidate = next(
             item
             for item in candidates

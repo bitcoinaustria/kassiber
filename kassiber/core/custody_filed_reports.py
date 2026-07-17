@@ -826,21 +826,6 @@ def _public_impact_resolution(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def list_custody_impact_resolutions(
-    conn: sqlite3.Connection,
-    profile_id: str,
-) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        """
-        SELECT * FROM custody_filed_report_impact_resolutions
-        WHERE profile_id = ?
-        ORDER BY rebuilt_at, created_at, id
-        """,
-        (profile_id,),
-    ).fetchall()
-    return [_public_impact_resolution(row) for row in rows]
-
-
 def resolve_pending_custody_impacts(
     conn: sqlite3.Connection,
     *,
@@ -946,7 +931,6 @@ __all__ = [
     "create_filed_report_snapshot",
     "current_report_summaries",
     "get_filed_report_snapshot",
-    "list_custody_impact_resolutions",
     "list_custody_impacts",
     "list_filed_report_snapshots",
     "preview_custody_impacts",

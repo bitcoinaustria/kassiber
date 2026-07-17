@@ -9,7 +9,6 @@ from kassiber.core.custody_gaps import (
     CustodyGapSearchResult,
     EMPTY_GAP_SEARCH_RESULT,
     search_custody_gap_candidates,
-    suggest_custody_gap_candidates,
 )
 from kassiber.core.custody_quantity import (
     CUSTODY_SUSPENSE,
@@ -28,7 +27,6 @@ from kassiber.core.custody_quantity_runtime import (
 )
 from kassiber.core.custody_tax_projection import compile_finalized_tax_projection
 from kassiber.core.custody_quantity_store import (
-    baseline_missing_component_evidence,
     blocking_quantity_issues,
     capture_component_evidence,
     custody_decision_rows,
@@ -40,6 +38,10 @@ from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.db import SCHEMA
 from kassiber.errors import AppError
 from tests.custody_tax_helpers import authoritative_chain_observation
+
+
+def suggest_custody_gap_candidates(rows, **kwargs):
+    return list(search_custody_gap_candidates(rows, **kwargs).candidates)
 
 
 def build_canonical_quantity_state(rows, **kwargs):
@@ -2319,25 +2321,16 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             ],
         }
 
-        result = baseline_missing_component_evidence(
-            self.conn, [component], created_at="migration"
-        )
         state = build_canonical_quantity_state(
             [source, target],
             effective_components=[component],
         )
-        repeated = baseline_missing_component_evidence(
-            self.conn, [component], created_at="later"
-        )
 
-        self.assertEqual(result["baselined_component_ids"], [])
-        self.assertEqual(result["blocked"][0]["reason"], "component_not_effective")
         self.assertTrue(state.report_blocked)
         self.assertIn(
             "custody_component_authored_active_invalid",
             {issue.reason for issue in state.issues},
         )
-        self.assertEqual(repeated["existing_component_ids"], [])
         self.assertEqual(
             self.conn.execute(
                 "SELECT COUNT(*) FROM custody_authored_evidence_snapshots"
@@ -2376,9 +2369,6 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 }
             ],
         }
-        baseline_missing_component_evidence(
-            self.conn, [component], created_at="reconciliation"
-        )
         original_snapshot_count = self.conn.execute(
             "SELECT COUNT(*) FROM custody_authored_evidence_snapshots"
         ).fetchone()[0]
@@ -2391,16 +2381,11 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             (changed_source["raw_json"],),
         )
 
-        repeated = baseline_missing_component_evidence(
-            self.conn, [component], created_at="after-change"
-        )
         state = build_canonical_quantity_state(
             [changed_source, target],
             effective_components=[component],
         )
 
-        self.assertEqual(repeated["existing_component_ids"], [])
-        self.assertEqual(repeated["blocked"][0]["reason"], "component_not_effective")
         self.assertEqual(
             original_snapshot_count,
             self.conn.execute(
@@ -2435,10 +2420,6 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             "allocations": [],
         }
 
-        blocked = baseline_missing_component_evidence(
-            self.conn, [incomplete], created_at="partial-replay"
-        )
-        self.assertEqual(blocked["blocked"][0]["reason"], "component_not_effective")
         self.assertEqual(
             self.conn.execute(
                 "SELECT COUNT(*) FROM custody_authored_evidence_snapshots"
@@ -2461,16 +2442,11 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 }
             ],
         }
-        result = baseline_missing_component_evidence(
-            self.conn, [complete], created_at="dependencies-arrived"
-        )
         state = build_canonical_quantity_state(
             [source, target],
             effective_components=[complete],
         )
 
-        self.assertEqual(result["baselined_component_ids"], [])
-        self.assertEqual(result["blocked"][0]["reason"], "component_not_effective")
         self.assertTrue(state.report_blocked)
 
     def test_component_evidence_capture_is_not_rewritten_by_journal_refresh(self):

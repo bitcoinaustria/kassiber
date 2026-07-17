@@ -461,14 +461,6 @@ def search_custody_gap_candidates(
     return _compute_custody_gap_search(rows, **kwargs)
 
 
-def suggest_custody_gap_candidates(
-    rows: Sequence[Mapping[str, Any]], **kwargs: Any
-) -> list[CustodyGapCandidate]:
-    """Return the bounded visible suggestion population without control flow."""
-
-    return list(search_custody_gap_candidates(rows, **kwargs).candidates)
-
-
 def _read_projection_page(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1557,24 +1549,6 @@ def load_gap_search_result(
             normalized_rows=normalized,
         )
     return result, normalized
-
-
-def load_gap_candidates(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    *,
-    limit: int = DEFAULT_MAX_CANDIDATES,
-    include_journal_claims: bool | None = None,
-) -> tuple[list[CustodyGapCandidate], list[_Leg]]:
-    """Return the bounded visible candidates and their normalized legs."""
-
-    result, normalized = load_gap_search_result(
-        conn,
-        profile_id,
-        limit=limit,
-        include_journal_claims=include_journal_claims,
-    )
-    return list(result.candidates), normalized
 
 
 def find_gap_candidate(

@@ -135,7 +135,8 @@ class CustodyGapLifecycleTests(unittest.TestCase):
         return custody_gaps.find_gap_candidate(self.conn, "profile", self._gap_id())
 
     def _gap_id(self):
-        candidates, _ = custody_gaps.load_gap_candidates(self.conn, "profile")
+        result, _ = custody_gaps.load_gap_search_result(self.conn, "profile")
+        candidates = list(result.candidates)
         self.assertEqual(len(candidates), 1)
         return candidates[0].gap_id
 

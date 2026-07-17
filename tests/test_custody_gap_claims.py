@@ -11,7 +11,6 @@ from kassiber.core.custody_gap_holds import (
 )
 from kassiber.core.custody_gaps import (
     search_custody_gap_candidates,
-    suggest_custody_gap_candidates,
 )
 from kassiber.core.custody_quantity import CUSTODY_SUSPENSE
 from kassiber.core.custody_quantity_runtime import (
@@ -21,6 +20,10 @@ from kassiber.core.custody_tax_projection import compile_finalized_tax_projectio
 
 
 BTC_MSAT = 100_000_000_000
+
+
+def suggest_custody_gap_candidates(rows, **kwargs):
+    return list(search_custody_gap_candidates(rows, **kwargs).candidates)
 
 
 def build_canonical_quantity_state(rows, **kwargs):
