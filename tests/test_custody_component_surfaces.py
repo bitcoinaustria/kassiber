@@ -362,7 +362,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.conn, "ui.transfers.components.apply", apply_args
             )
 
-        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+        self.assertEqual(caught.exception.code, "custody_component_draft_exists")
 
     def test_daemon_bulk_resolution_rejects_unbounded_batches(self):
         with self.assertRaises(AppError) as caught:

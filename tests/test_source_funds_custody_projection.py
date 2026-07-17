@@ -189,3 +189,93 @@ def test_effective_nm_bridge_becomes_reviewed_source_funds_lineage() -> None:
             assert "stale_custody_component_lineage" in blocker_codes
         finally:
             conn.close()
+
+
+def test_report_revalidates_all_custody_links_with_one_projection_read() -> None:
+    with tempfile.TemporaryDirectory(prefix="kassiber-sof-custody-query-") as root:
+        conn = open_db(root)
+        try:
+            _setup(conn)
+            conn.execute("UPDATE transactions SET amount = 60 WHERE id = 'out-a'")
+            conn.execute("UPDATE transactions SET amount = 100 WHERE id = 'in-c'")
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, fingerprint,
+                    occurred_at, direction, asset, amount, fee, fiat_currency,
+                    fiat_rate, fiat_value, created_at
+                ) VALUES(
+                    'out-b', 'ws', 'profile', 'b', 'fp:out-b', ?, 'outbound',
+                    'BTC', 40, 0, 'EUR', 1, 1, ?
+                )
+                """,
+                (NOW, NOW),
+            )
+            component = custody_components.create_component(
+                conn,
+                workspace_id="ws",
+                profile_id="profile",
+                component_type="manual_bridge",
+                evidence_kind="manual_reconstruction",
+                evidence_grade="reviewed",
+                legs=[
+                    _leg("source", 60, "out-a", "a", "source-a"),
+                    _leg("source", 40, "out-b", "b", "source-b"),
+                    _leg("destination", 100, "in-c", "c", "destination"),
+                ],
+                allocations=[
+                    {
+                        "source_leg_id": "source-a",
+                        "sink_leg_id": "destination",
+                        "source_amount_msat": 60,
+                        "sink_amount_msat": 60,
+                    },
+                    {
+                        "source_leg_id": "source-b",
+                        "sink_leg_id": "destination",
+                        "source_amount_msat": 40,
+                        "sink_amount_msat": 40,
+                    },
+                ],
+            )
+            custody_components.activate_component(conn, component["id"])
+            process_journals(conn, "ws", "profile")
+            set_setting(conn, "context_workspace", "ws")
+            set_setting(conn, "context_profile", "profile")
+            conn.commit()
+            assembled = source_funds.assemble_history(
+                conn,
+                None,
+                None,
+                _hooks(),
+                target_transaction_ref="in-c",
+            )
+            assert assembled["methods"] == {"custody_component": 2}
+
+            statements: list[str] = []
+            conn.set_trace_callback(statements.append)
+            try:
+                report = source_funds.build_report(
+                    conn,
+                    None,
+                    None,
+                    _hooks(),
+                    target_transaction_ref="in-c",
+                )
+            finally:
+                conn.set_trace_callback(None)
+
+            blocker_codes = {
+                finding["code"]
+                for finding in report["findings"]
+                if finding["severity"] == "blocker"
+            }
+            assert "stale_custody_component_lineage" not in blocker_codes
+            projection_reads = [
+                statement
+                for statement in statements
+                if "FROM journal_custody_decisions" in statement
+            ]
+            assert len(projection_reads) == 1
+        finally:
+            conn.close()

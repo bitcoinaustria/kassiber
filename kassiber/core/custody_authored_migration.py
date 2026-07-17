@@ -664,10 +664,7 @@ def _migrate_row(
     )
     if created["id"] != spec["component_id"]:
         raise AssertionError("migrated custody component id changed")
-    if spec.get("terms"):
-        seal_component_economic_terms(conn, component["id"], spec["terms"])
-    else:
-        _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
+    _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
     _link_legacy_row(
         conn,
         legacy_table=str(_field(row, "legacy_table")),
@@ -1807,11 +1804,6 @@ def _append_source_residual(
         )
     source_id = str(source["id"])
     source["amount_msat"] = int(source["amount_msat"]) + residual
-    if spec.get("conservation_mode") == "conversion" and any(
-        classification == "retained_custody"
-        for classification, _amount in residual_parts
-    ):
-        source["valuation_amount"] = int(source.get("valuation_amount") or 0) + residual
     for residual_classification, residual_amount in residual_parts:
         sink_id = _stable_id(
             component_id,
@@ -1824,37 +1816,21 @@ def _append_source_residual(
             **source,
             "id": sink_id,
             "amount_msat": residual_amount,
-            "valuation_unit": (
-                source.get("valuation_unit")
-                if spec.get("conservation_mode") == "conversion"
-                and residual_classification == "retained_custody"
-                else None
+            "valuation_unit": None,
+            "valuation_amount": None,
+            "role": (
+                "fee" if residual_classification == "network_fee" else "suspense"
             ),
-            "valuation_amount": (
-                residual_amount
-                if spec.get("conservation_mode") == "conversion"
-                and residual_classification == "retained_custody"
-                else None
-            ),
-            "role": {
-                "retained_custody": "retained",
-                "network_fee": "fee",
-            }.get(residual_classification, "suspense"),
             "transaction_id": None,
             "anchor_transaction_id": None,
             "location_ref": (
-                f"reviewed-retained-custody:{row['id']}"
-                if residual_classification == "retained_custody"
-                else (
-                    f"network-fee:{row['id']}"
-                    if residual_classification == "network_fee"
-                    else f"reviewed-custody-suspense:{row['id']}"
-                )
+                f"network-fee:{row['id']}"
+                if residual_classification == "network_fee"
+                else f"reviewed-custody-suspense:{row['id']}"
             ),
             "notes": f"reviewed_residual:{residual_classification}",
         }
-        if residual_classification != "retained_custody":
-            sink["wallet_id"] = None
+        sink["wallet_id"] = None
         spec["legs"].append(sink)
         spec["allocations"].append(
             _allocation(

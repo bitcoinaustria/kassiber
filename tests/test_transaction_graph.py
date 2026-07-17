@@ -2332,6 +2332,51 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["accounting"]["custodyProjection"], "current")
         self.assertTrue(payload["accounting"]["transferGroupIds"])
 
+    def test_excluded_transaction_does_not_stale_current_custody_projection(self):
+        txid = "dcba" + "4" * 60
+        self._tx(
+            "current-out",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            txid,
+            {"txid": txid},
+        )
+        self._tx(
+            "current-in",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            txid,
+            {"txid": txid},
+        )
+        self._tx(
+            "excluded-unrelated",
+            "wallet-c",
+            "inbound",
+            1_000,
+            "excluded-unrelated",
+            {},
+        )
+        self.conn.execute(
+            "UPDATE transactions SET excluded = 1 WHERE id = 'excluded-unrelated'"
+        )
+        self.conn.commit()
+        create_transaction_pair(
+            self.conn,
+            "ws-1",
+            "profile-1",
+            "current-out",
+            "current-in",
+        )
+        process_journals(self.conn, "ws-1", "profile-1")
+
+        payload = self._graph("current-out")
+
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertIn("booked_custody_move", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "current")
+
     def test_excluded_rows_are_ignored_for_graph_semantics(self):
         txid = "cdef" + "3" * 60
         typed = {"Tx Hash": txid}

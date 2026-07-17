@@ -912,31 +912,17 @@ def apply_component_revision(
 ) -> dict[str, Any]:
     """Persist exactly a current immutable revision plan."""
 
-    try:
-        plan = plan_component_revision(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            action=action,
-            component_id=component_id,
-            spec=spec,
-            activate=activate,
-            reason=reason,
-            authored_source=authored_source,
-        )
-    except AppError as error:
-        if error.code not in {
-            "conflict",
-            "custody_component_draft_exists",
-            "custody_component_not_superseded",
-        }:
-            raise
-        raise _error(
-            "Custody component plan is stale",
-            code="custody_review_plan_stale",
-            expected_fingerprint=expected_fingerprint,
-            current_error=error.code,
-        ) from error
+    plan = plan_component_revision(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        action=action,
+        component_id=component_id,
+        spec=spec,
+        activate=activate,
+        reason=reason,
+        authored_source=authored_source,
+    )
     if not isinstance(expected_fingerprint, str) or not hmac.compare_digest(
         plan["fingerprint"], expected_fingerprint
     ):

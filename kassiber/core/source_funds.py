@@ -1304,21 +1304,14 @@ def _stored_custody_allocation_map(
 
 
 def _stored_custody_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
+    allocations: Mapping[tuple[str, str, str], _StoredCustodyAllocation],
     row: Mapping[str, Any],
     from_tx: Mapping[str, Any] | None,
     to_tx: Mapping[str, Any],
 ) -> bool:
     if from_tx is None:
         return False
-    rows = _active_transaction_rows(conn, profile_id)
-    rows_by_id = {str(tx["id"]): tx for tx in rows}
-    allocation = _stored_custody_allocation_map(
-        conn,
-        profile_id,
-        rows_by_id,
-    ).get(
+    allocation = allocations.get(
         (
             str(from_tx["id"]),
             str(to_tx["id"]),
@@ -1339,8 +1332,9 @@ def _stored_custody_still_deterministic(
 
 
 def _suggestion_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
+    custody_allocations: Mapping[
+        tuple[str, str, str], _StoredCustodyAllocation
+    ],
     row: Mapping[str, Any],
     from_tx: Mapping[str, Any] | None,
     to_tx: Mapping[str, Any],
@@ -1348,8 +1342,7 @@ def _suggestion_still_deterministic(
     method = str(row["method"] or "")
     if method == "custody_component":
         return _stored_custody_still_deterministic(
-            conn,
-            profile_id,
+            custody_allocations,
             row,
             from_tx,
             to_tx,
@@ -1415,6 +1408,14 @@ def _validated_bulk_review_candidates(
     rows: Sequence[Mapping[str, Any]],
 ) -> list[Mapping[str, Any]]:
     candidates: list[Mapping[str, Any]] = []
+    rows_by_id = {
+        str(tx["id"]): tx for tx in _active_transaction_rows(conn, profile_id)
+    }
+    custody_allocations = _stored_custody_allocation_map(
+        conn,
+        profile_id,
+        rows_by_id,
+    )
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
             continue
@@ -1423,15 +1424,20 @@ def _validated_bulk_review_candidates(
         # the re-suggestion stays a manual review item.
         if _pair_has_rejected_link(conn, profile_id, row["from_transaction_id"], row["to_transaction_id"]):
             continue
-        to_tx = _transaction_by_id(conn, profile_id, row["to_transaction_id"])
+        to_tx = rows_by_id.get(str(row["to_transaction_id"]))
         if not to_tx:
             continue
         from_tx = (
-            _transaction_by_id(conn, profile_id, row["from_transaction_id"])
+            rows_by_id.get(str(row["from_transaction_id"]))
             if row["from_transaction_id"]
             else None
         )
-        if not _suggestion_still_deterministic(conn, profile_id, row, from_tx, to_tx):
+        if not _suggestion_still_deterministic(
+            custody_allocations,
+            row,
+            from_tx,
+            to_tx,
+        ):
             continue
         try:
             _validate_transaction_link_for_review(
@@ -2636,6 +2642,15 @@ def build_report(
         max_depth = _MAX_BUILD_REPORT_DEPTH
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
+    active_rows_by_id = {
+        str(tx["id"]): tx
+        for tx in _active_transaction_rows(conn, str(profile["id"]))
+    }
+    custody_allocations = _stored_custody_allocation_map(
+        conn,
+        str(profile["id"]),
+        active_rows_by_id,
+    )
     from .source_funds_recipients import effective_reveal_mode
     resolved_mode, recipient = effective_reveal_mode(
         conn,
@@ -2799,14 +2814,11 @@ def build_report(
                 _emit_size_truncation()
                 break
             if link["method"] in _CUSTODY_LINEAGE_METHODS:
-                component_parent = _transaction_by_id(
-                    conn,
-                    profile["id"],
-                    link["from_transaction_id"],
+                component_parent = active_rows_by_id.get(
+                    str(link["from_transaction_id"])
                 )
                 if not _stored_custody_still_deterministic(
-                    conn,
-                    profile["id"],
+                    custody_allocations,
                     link,
                     component_parent,
                     tx,

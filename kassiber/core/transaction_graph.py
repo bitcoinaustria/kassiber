@@ -419,7 +419,8 @@ def _stored_custody_semantics(
     profile = conn.execute(
         "SELECT journal_input_version, last_processed_input_version, "
         "last_processed_tx_count, "
-        "(SELECT COUNT(*) FROM transactions WHERE profile_id = profiles.id) "
+        "(SELECT COUNT(*) FROM transactions "
+        " WHERE profile_id = profiles.id AND excluded = 0) "
         "AS transaction_count "
         "FROM profiles WHERE id = ?",
         (profile_id,),
