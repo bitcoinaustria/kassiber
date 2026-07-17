@@ -1083,7 +1083,6 @@ class SyncBackendsTest(unittest.TestCase):
             tracked_scripts={target["script_pubkey"]: target},
             history_cache={},
             checkpoint={
-                "electrum_known_txids": {scripthash: [txid]},
                 "electrum_scripthash_statuses": {scripthash: "status-1"},
             },
         )
@@ -1320,7 +1319,6 @@ class SyncBackendsTest(unittest.TestCase):
             history_cache={old_txid: old_graph},
             checkpoint={
                 "electrum_stored_graph_version": 1,
-                "electrum_known_txids": {scripthash: [old_txid]},
                 "electrum_history_entries": {scripthash: {old_txid: old_history}},
                 "electrum_scripthash_statuses": {scripthash: "status-1"},
                 "electrum_headers": {"123": 1_700_000_000},

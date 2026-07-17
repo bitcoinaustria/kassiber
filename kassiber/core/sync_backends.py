@@ -4456,8 +4456,9 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     transactions_total=len(ordered_histories),
                     records=len(records),
                 )
-    # The write-only per-wallet txid ledger is retired; purge it from
-    # checkpoints written by earlier versions.
+    # The known-txid set is fully derivable from the persisted history
+    # entries, so drop the redundant legacy key instead of storing the same
+    # txids twice per scripthash (including any copy left by older syncs).
     checkpoint.pop("electrum_known_txids", None)
     checkpoint.update(
         {
@@ -4476,6 +4477,9 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         "freshness_checkpoint": checkpoint,
         "scripts_changed": changed_scripts,
         "scripts_unchanged": unchanged_scripts,
+        "known_txids": len(
+            {txid for entries in next_history_entries.values() for txid in entries}
+        ),
         "header_cache_hits": header_cache_hits,
         "transactions_fetched": fetched_transaction_count,
     }
