@@ -52,7 +52,13 @@ from ..wallet_descriptors import (
 from . import htlc_parser
 from . import silent_payments
 from .address_scripts import address_to_scriptpubkey
-from .onchain import normalized_script_hex, output_script, output_value_sats
+from .onchain import (
+    input_script,
+    input_value_sats,
+    normalized_script_hex,
+    output_script,
+    output_value_sats,
+)
 from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
@@ -2106,20 +2112,45 @@ def _liquid_witness_items(vin):
     return [bytes(item) for item in items]
 
 
-def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
+def _record_from_bitcoin_graph(
+    tx,
+    tracked_scripts,
+    backend_name,
+    *,
+    txid,
+    occurred_at,
+    confirmed_at,
+    explicit_fee_sats=None,
+):
+    tracked = {str(value).strip().lower() for value in tracked_scripts if value}
     received_sats = sum(
-        dec(vout.get("value", 0))
+        Decimal(output_value_sats(vout) or 0)
         for vout in tx.get("vout", [])
-        if vout.get("scriptpubkey") in tracked_scripts
+        if isinstance(vout, dict)
+        and str(output_script(vout) or "").strip().lower() in tracked
     )
     sent_sats = Decimal("0")
+    total_input_sats = Decimal("0")
     for vin in tx.get("vin", []):
-        prevout = vin.get("prevout") or {}
-        if prevout.get("scriptpubkey") in tracked_scripts:
-            sent_sats += dec(prevout.get("value", 0))
+        if not isinstance(vin, dict):
+            continue
+        value_sats = input_value_sats(vin)
+        if value_sats is None:
+            continue
+        total_input_sats += value_sats
+        if str(input_script(vin) or "").strip().lower() in tracked:
+            sent_sats += value_sats
     if received_sats == 0 and sent_sats == 0:
         return None
-    fee_sats = dec(tx.get("fee"), "0")
+    if explicit_fee_sats is None:
+        total_output_sats = sum(
+            Decimal(output_value_sats(vout) or 0)
+            for vout in tx.get("vout", [])
+            if isinstance(vout, dict)
+        )
+        fee_sats = max(total_input_sats - total_output_sats, Decimal("0"))
+    else:
+        fee_sats = max(dec(explicit_fee_sats, "0"), Decimal("0"))
     if received_sats > sent_sats:
         direction = "inbound"
         amount = sats_to_btc(received_sats - sent_sats)
@@ -2134,14 +2165,6 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         amount = sats_to_btc(amount_sats)
         fee = sats_to_btc(fee_sats)
         kind = "withdrawal" if amount > 0 else "fee"
-    status = tx.get("status") or {}
-    block_time = status.get("block_time")
-    occurred_at = timestamp_to_iso(block_time or tx.get("observed_at"))
-    confirmed_at = (
-        timestamp_to_iso(block_time, default=None)
-        if status.get("confirmed") is True or block_time is not None
-        else None
-    )
     claim_evidence = _extract_unique_claim_payment_hash_outpoint(
         tx.get("vin", []), _esplora_witness_items
     )
@@ -2149,7 +2172,7 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         tx.get("vin", []), _esplora_witness_items
     )
     return {
-        "txid": tx.get("txid"),
+        "txid": txid,
         "occurred_at": occurred_at,
         "confirmed_at": confirmed_at,
         "direction": direction,
@@ -2165,6 +2188,26 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         **_payment_hash_fields(claim_evidence),
         **_swap_refund_fields(*(swap_refund_funding_outpoint or (None, None))),
     }
+
+
+def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
+    status = tx.get("status") or {}
+    block_time = status.get("block_time")
+    occurred_at = timestamp_to_iso(block_time or tx.get("observed_at"))
+    confirmed_at = (
+        timestamp_to_iso(block_time, default=None)
+        if status.get("confirmed") is True or block_time is not None
+        else None
+    )
+    return _record_from_bitcoin_graph(
+        tx,
+        tracked_scripts,
+        backend_name,
+        txid=tx.get("txid"),
+        occurred_at=occurred_at,
+        confirmed_at=confirmed_at,
+        explicit_fee_sats=tx.get("fee"),
+    )
 
 
 def liquid_asset_id_from_bytes(asset_bytes):
@@ -3853,79 +3896,19 @@ def compatibility_electrum_utxos_for_wallet(backend, sync_state: WalletSyncState
 
 
 def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_lookup):
-    received_sats = Decimal("0")
-    sent_sats = Decimal("0")
-    total_input_sats = Decimal("0")
-    total_output_sats = dec(tx.get("total_output_sats"), "0")
-    if total_output_sats == 0:
-        total_output_sats = sum(
-            (_electrum_output_value_sats(vout) or Decimal("0")) for vout in tx.get("vout", [])
-        )
-    for vout in tx.get("vout", []):
-        value_sats = _electrum_output_value_sats(vout)
-        if value_sats is not None and vout.get("script_hex") in tracked_scripts:
-            received_sats += value_sats
-    for vin in tx.get("vin", []):
-        prev_txid = vin.get("txid")
-        prev_index = vin.get("vout")
-        if prev_txid is None or prev_index is None:
-            continue
-        prev_tx = tx_lookup(prev_txid)
-        prevout = electrum_output_at_index(prev_tx, prev_index)
-        if not prevout:
-            continue
-        value_sats = _electrum_output_value_sats(prevout)
-        if value_sats is None:
-            continue
-        total_input_sats += value_sats
-        if prevout.get("script_hex") in tracked_scripts:
-            sent_sats += value_sats
-    if received_sats == 0 and sent_sats == 0:
-        return None
-    fee_sats = total_input_sats - total_output_sats if total_input_sats > 0 else Decimal("0")
-    if fee_sats < 0:
-        fee_sats = Decimal("0")
-    if received_sats > sent_sats:
-        direction = "inbound"
-        amount = sats_to_btc(received_sats - sent_sats)
-        fee = Decimal("0")
-        kind = "deposit"
-    else:
-        direction = "outbound"
-        gross_out_sats = sent_sats - received_sats
-        amount_sats = gross_out_sats - fee_sats
-        if amount_sats < 0:
-            amount_sats = Decimal("0")
-        amount = sats_to_btc(amount_sats)
-        fee = sats_to_btc(fee_sats)
-        kind = "withdrawal" if amount > 0 else "fee"
+    stored_graph = json_ready(tx)
+    _normalize_electrum_bitcoin_graph_for_storage(stored_graph, tx_lookup)
     occurred_at = _backend_time_to_iso(height)
     confirmed_at = None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at
-    claim_evidence = _extract_unique_claim_payment_hash_outpoint(
-        tx.get("vin", []), _esplora_witness_items
-    )
-    swap_refund_funding_outpoint = _extract_refund_funding_outpoint(
-        tx.get("vin", []), _esplora_witness_items
-    )
-    stored_graph = json_ready(tx)
     stored_graph["status"] = {"confirmed": confirmed_at is not None}
-    return {
-        "txid": txid,
-        "occurred_at": occurred_at,
-        "confirmed_at": confirmed_at,
-        "direction": direction,
-        "asset": "BTC",
-        "amount": amount,
-        "fee": fee,
-        "fiat_rate": None,
-        "fiat_value": None,
-        "kind": kind,
-        "description": f"Synced from {backend_name}",
-        "counterparty": None,
-        "raw_json": json.dumps(stored_graph, sort_keys=True),
-        **_payment_hash_fields(claim_evidence),
-        **_swap_refund_fields(*(swap_refund_funding_outpoint or (None, None))),
-    }
+    return _record_from_bitcoin_graph(
+        stored_graph,
+        tracked_scripts,
+        backend_name,
+        txid=txid,
+        occurred_at=occurred_at,
+        confirmed_at=confirmed_at,
+    )
 
 
 def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncState):
