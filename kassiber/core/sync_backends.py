@@ -663,10 +663,15 @@ class _ElectrumBatchDispatcher:
                             pending["result"] = combined_results[offset : offset + count]
                             offset += count
                 except BaseException as exc:
+                    # Catch BaseException only to unblock waiting callers and
+                    # release the connection; control-flow exceptions re-raise
+                    # so the dispatcher thread still terminates through them.
                     discard_client()
                     for pending in pending_calls:
                         if pending["error"] is None and pending["result"] is None:
                             pending["error"] = exc
+                    if isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                        raise
                 finally:
                     for pending in pending_calls:
                         pending["event"].set()
