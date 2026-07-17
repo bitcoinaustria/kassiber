@@ -539,7 +539,7 @@ class CustodyJournalBuilder:
         owned_index = None
         if any(
             row["direction"] == "outbound"
-            and (row["raw_json"] or "").find('"vout"') != -1
+            and row["observation_authority_version"] is not None
             for row in rows
         ):
             index_wallets = ownership.load_profile_wallets(self.conn, self.profile_id)
