@@ -272,7 +272,11 @@ def benchmark_builder(transaction_count: int, batch_size: int) -> dict[str, Any]
                     "all_observations_projected": observation_count
                     == transaction_count,
                     "quantity_projection_conserves": (
-                        quantity_state.projection.totals_by_asset().get("BTC", 0)
+                        sum(
+                            posting.amount_msat
+                            for posting in quantity_state.projection.postings
+                            if posting.asset == "BTC"
+                        )
                         == 0
                     ),
                     "all_outbounds_decided": len(
