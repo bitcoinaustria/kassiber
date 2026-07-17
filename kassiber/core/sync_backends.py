@@ -484,6 +484,16 @@ class _ElectrumClientPool:
 
 
 class _ElectrumBatchDispatcher:
+    """Serialize one backend's Electrum traffic through a single connection.
+
+    Wallet prefetch parallelism deliberately funnels into one socket per
+    backend: concurrent callers are coalesced into shared wire batches, which
+    keeps the server-side connection count flat no matter how many wallets
+    sync at once. Do not "fix" throughput by opening one connection per
+    caller; the pipelining here is the intended design and per-backend
+    throughput is bounded by the server, not this dispatcher.
+    """
+
     _COALESCE_SECONDS = 0.002
 
     def __init__(self, backend):

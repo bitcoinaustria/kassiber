@@ -29,6 +29,7 @@ from .cli.handlers import (
 from .core import commercial as core_commercial
 from .core import freshness as core_freshness
 from .core import rates as core_rates
+from .core import sync_backends as core_sync_backends
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.sync import sync_progress_emitter
@@ -1172,38 +1173,43 @@ def _prefetch_onchain_freshness_jobs(
         for wallet in wallets
     }
     prefetched_by_job: dict[str, Any] = {}
-    for force_full in (False, True):
-        grouped_wallets = [
-            wallet
-            for wallet in wallets
-            if _job_force_full(eligible_job_by_wallet_id[str(wallet["id"])]) is force_full
-        ]
-        if not grouped_wallets:
-            continue
-        group_results = prefetch_wallets_from_backend(
-            conn,
-            runtime_config,
-            profile["workspace_id"],
-            profile["id"],
-            grouped_wallets,
-            freshness_checkpoints={
-                str(wallet["id"]): checkpoints[str(wallet["id"])]
-                for wallet in grouped_wallets
-            },
-            force_full=force_full,
-        )
-        for wallet in grouped_wallets:
-            wallet_id = str(wallet["id"])
-            if wallet_id not in group_results:
+    # Both force-full groups reuse one shared Electrum pool so the incremental
+    # and forced-full prefetches do not tear down and re-establish the same
+    # backend connection between groups.
+    with core_sync_backends.shared_electrum_client_pool():
+        for force_full in (False, True):
+            grouped_wallets = [
+                wallet
+                for wallet in wallets
+                if _job_force_full(eligible_job_by_wallet_id[str(wallet["id"])])
+                is force_full
+            ]
+            if not grouped_wallets:
                 continue
-            job = eligible_job_by_wallet_id[wallet_id]
-            prefetched_by_job[str(job["id"])] = {
-                "wallet_id": wallet_id,
-                "wallet_signature": _wallet_sync_config_signature(wallet),
-                "checkpoint": checkpoints[wallet_id],
-                "force_full": force_full,
-                "fetches": {wallet_id: group_results[wallet_id]},
-            }
+            group_results = prefetch_wallets_from_backend(
+                conn,
+                runtime_config,
+                profile["workspace_id"],
+                profile["id"],
+                grouped_wallets,
+                freshness_checkpoints={
+                    str(wallet["id"]): checkpoints[str(wallet["id"])]
+                    for wallet in grouped_wallets
+                },
+                force_full=force_full,
+            )
+            for wallet in grouped_wallets:
+                wallet_id = str(wallet["id"])
+                if wallet_id not in group_results:
+                    continue
+                job = eligible_job_by_wallet_id[wallet_id]
+                prefetched_by_job[str(job["id"])] = {
+                    "wallet_id": wallet_id,
+                    "wallet_signature": _wallet_sync_config_signature(wallet),
+                    "checkpoint": checkpoints[wallet_id],
+                    "force_full": force_full,
+                    "fetches": {wallet_id: group_results[wallet_id]},
+                }
     return prefetched_by_job
 
 
