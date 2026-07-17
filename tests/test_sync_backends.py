@@ -1625,6 +1625,52 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(len(wire_batches), 1)
         self.assertEqual(set(wire_batches[0]), {"wallet-a", "wallet-b"})
 
+    def test_electrum_pool_stops_isolation_retries_after_transport_error(self):
+        backend = {
+            "name": "fulcrum",
+            "kind": "electrum",
+            "url": "tcp://electrum.example:50001",
+        }
+        wire_batches = []
+
+        class FakeElectrumClient:
+            def __init__(self, _backend):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                wire_batches.append([params[0] for _method, params in requests])
+                if len(requests) > 1:
+                    raise AppError("rejected request", code="electrum_rpc_error")
+                raise OSError("connection closed")
+
+        barrier = threading.Barrier(2)
+
+        def fetch(client, marker):
+            barrier.wait()
+            return client.batch_call([("example", [marker])])
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient):
+            with sb.shared_electrum_client_pool() as pool:
+                client = pool.client(backend)
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = [
+                        executor.submit(fetch, client, marker)
+                        for marker in ("wallet-a", "wallet-b")
+                    ]
+                    for future in futures:
+                        with self.assertRaises(OSError):
+                            future.result()
+
+        self.assertEqual(len(wire_batches), 2)
+        self.assertEqual(set(wire_batches[0]), {"wallet-a", "wallet-b"})
+        self.assertEqual(len(wire_batches[1]), 1)
+
     def test_electrum_dispatcher_close_cannot_overtake_enqueue(self):
         backend = {
             "name": "fulcrum",

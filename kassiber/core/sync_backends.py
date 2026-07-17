@@ -596,7 +596,7 @@ class _ElectrumBatchDispatcher:
                             # so one rejected request cannot contaminate another
                             # wallet. Transport/session failures affect the whole
                             # connection and must not multiply timeouts per caller.
-                            for pending in pending_calls:
+                            for index, pending in enumerate(pending_calls):
                                 try:
                                     pending["result"] = execute_requests(
                                         pending["requests"]
@@ -604,6 +604,13 @@ class _ElectrumBatchDispatcher:
                                 except Exception as exc:
                                     pending["error"] = exc
                                     discard_client()
+                                    if not (
+                                        isinstance(exc, AppError)
+                                        and exc.code == "electrum_rpc_error"
+                                    ):
+                                        for remaining in pending_calls[index + 1 :]:
+                                            remaining["error"] = exc
+                                        break
                         else:
                             for pending in pending_calls:
                                 pending["error"] = combined_error
