@@ -611,9 +611,6 @@ def _gap_candidate_holds_and_issues(
                     state=CUSTODY_SUSPENSE,
                     priority=ClaimPriority.ACCOUNTING_CONVENTION,
                     reason=error_code,
-                    supporting_evidence_hashes=(
-                        observation.evidence_detail_hash,
-                    ),
                     atomic_bundle_id=bundle_id,
                 )
                 for observation in source_observations.values()
@@ -703,7 +700,6 @@ def _source_hold_claim(hold: CustodyGapHold, reason: str) -> QuantityClaim:
         state=CUSTODY_SUSPENSE,
         priority=ClaimPriority.ACCOUNTING_CONVENTION,
         reason=reason,
-        supporting_evidence_hashes=(hold.evidence_detail_hash,),
     )
 
 

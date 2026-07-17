@@ -262,7 +262,6 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
         state = {
             "entries": [],
             "quarantines": [],
-            "intra_audit": [],
             "cross_asset_pairs": [],
             "direct_swap_payouts": [],
             "tax_summary": [],

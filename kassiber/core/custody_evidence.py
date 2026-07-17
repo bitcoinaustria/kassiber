@@ -490,12 +490,6 @@ def canonical_evidence_payload(
     }
 
 
-def observation_hash(row: Mapping[str, Any]) -> str:
-    """Compatibility name for the stable quantity-core hash."""
-
-    return _hash_payload(canonical_quantity_payload(row))[0]
-
-
 @dataclass(frozen=True)
 class EvidenceSnapshot:
     quantity_hash: str
@@ -981,7 +975,6 @@ __all__ = [
     "canonical_evidence_payload",
     "canonical_quantity_payload",
     "enriched_quantity_rows",
-    "observation_hash",
     "normalize_boundary_amounts",
     "row_boundary_amounts",
     "row_principal_msat",

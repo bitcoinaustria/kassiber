@@ -453,7 +453,6 @@ def compile_component_quantity_claims(
         state: str
         reason: str
         target_observation: QuantityObservation | None = None
-        supporting_hashes = (source_observation.evidence_detail_hash,)
         if sink_role in {"destination", "retained"}:
             sink_transaction_id = _transaction_id(sink)
             if not sink_transaction_id:
@@ -561,10 +560,6 @@ def compile_component_quantity_claims(
                     )
                     state = INTERNAL_REVIEWED
                     reason = "reviewed_custody_component"
-                supporting_hashes = (
-                    source_observation.evidence_detail_hash,
-                    target_observation.evidence_detail_hash,
-                )
         elif sink_role == "fee":
             if source_amount != sink_amount:
                 raise _error(
@@ -625,7 +620,6 @@ def compile_component_quantity_claims(
                 state=state,
                 priority=ClaimPriority.REVIEWED_COMPONENT,
                 reason=reason,
-                supporting_evidence_hashes=tuple(sorted(supporting_hashes)),
                 atomic_bundle_id=bundle_id,
                 component_id=component_id,
                 destination_kind=(

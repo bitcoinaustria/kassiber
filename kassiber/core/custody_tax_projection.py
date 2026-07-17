@@ -79,13 +79,6 @@ class FinalizedTaxProjection:
     cross_asset_pairs: tuple[Mapping[str, Any], ...]
     quarantines: tuple[Mapping[str, Any], ...]
     selected_move_ids: tuple[str, ...]
-    # Earliest barrier retained for backwards-compatible summaries.
-    basis_barrier: tuple[str, str, str, str, str] | None
-    # Authoritative scoped barriers used by projection. Each key is
-    # (profile_id, network, exposure, unit).
-    basis_barriers: tuple[
-        tuple[tuple[str, str, str, str], tuple[str, str, str, str, str]], ...
-    ] = ()
 
     def __post_init__(self) -> None:
         row_ids: set[str] = set()
@@ -844,19 +837,6 @@ def compile_finalized_tax_projection(
             )
         ),
         selected_move_ids=tuple(sorted(selected_moves)),
-        basis_barrier=state.tax_eligibility.barrier_event_key,
-        basis_barriers=tuple(
-            (
-                (
-                    pool.profile_id,
-                    pool.network,
-                    pool.exposure,
-                    pool.unit,
-                ),
-                barrier,
-            )
-            for pool, barrier in state.tax_eligibility.pool_barriers
-        ),
     )
 
 

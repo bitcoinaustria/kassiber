@@ -693,7 +693,6 @@ def compile_verified_native_claims(
         members = sorted(members, key=lambda item: item.evidence_id)
         source = observations[source_hash]
         bundle_id = f"engine-native:{source_hash}"
-        evidence_hashes = {source.evidence_detail_hash}
         for leg in members:
             target_hash = target_by_evidence[leg.evidence_id]
             target = observations[target_hash]
@@ -701,7 +700,6 @@ def compile_verified_native_claims(
             target_start = target_cursors.get(target_hash, 0)
             source_end = source_start + leg.received_msat
             target_end = target_start + leg.received_msat
-            evidence_hashes.add(target.evidence_detail_hash)
             claims.append(
                 QuantityClaim(
                     claim_id=f"engine-native:{leg.evidence_id}:retained",
@@ -710,7 +708,6 @@ def compile_verified_native_claims(
                     state=INTERNAL_VERIFIED,
                     priority=ClaimPriority.EXACT_NATIVE_EVENT,
                     reason=leg.pairing_source,
-                    supporting_evidence_hashes=tuple(sorted(evidence_hashes)),
                     atomic_bundle_id=bundle_id,
                 )
             )
@@ -734,7 +731,6 @@ def compile_verified_native_claims(
                     # rank so the atomic bundle can fail closed as a unit.
                     priority=ClaimPriority.EXACT_NATIVE_EVENT,
                     reason="implicit_wallet_delta_unallocated",
-                    supporting_evidence_hashes=tuple(sorted(evidence_hashes)),
                     atomic_bundle_id=bundle_id,
                 )
             )

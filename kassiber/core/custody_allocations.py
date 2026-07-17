@@ -7,8 +7,6 @@ from typing import Any, Mapping
 
 
 OWNED_SINK_ROLES = frozenset({"destination", "retained"})
-ATTRIBUTED_SINK_ROLES = frozenset({"fee", "external"})
-SUSPENSE_SINK_ROLES = frozenset({"suspense"})
 
 
 class CustodyAllocationError(Exception):
@@ -246,12 +244,10 @@ def infer_component_allocations(
 
 
 __all__ = [
-    "ATTRIBUTED_SINK_ROLES",
     "CustodyAllocationError",
     "DeterministicAllocationCell",
     "DeterministicAllocationResult",
     "OWNED_SINK_ROLES",
-    "SUSPENSE_SINK_ROLES",
     "allocate_msat_fifo",
     "infer_component_allocations",
 ]

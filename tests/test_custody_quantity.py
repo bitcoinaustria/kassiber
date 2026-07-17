@@ -26,12 +26,12 @@ from kassiber.core.custody_quantity import (
     QuantityClaim,
     QuantityObservation,
     QuantitySlice,
+    UNRESOLVED_STATES,
     _build_postings,
     _claim_fully_selected,
     _fail_closed_atomic_bundles,
     _selected_claim_totals,
     build_canonical_quantity_input,
-    observation_hash,
     project_quantities,
 )
 
@@ -40,6 +40,24 @@ _TXID_A = "ab" * 32
 _TXID_B = "cd" * 32
 _TXID_C = "ef" * 32
 _TXID_D = "12" * 32
+
+
+def _totals_by_asset(projection):
+    totals = {}
+    for posting in projection.postings:
+        totals[posting.asset] = totals.get(posting.asset, 0) + posting.amount_msat
+    return totals
+
+
+def _unresolved_msat_by_asset(projection):
+    totals = {}
+    observations = {item.quantity_hash: item for item in projection.observations}
+    for decision in projection.decisions:
+        if decision.state not in UNRESOLVED_STATES:
+            continue
+        asset = observations[decision.source.observation_hash].asset
+        totals[asset] = totals.get(asset, 0) + decision.source.amount_msat
+    return totals
 
 
 def _row(
@@ -433,15 +451,24 @@ class CustodyQuantityTests(unittest.TestCase):
         )
         right = dict(left)
         right["raw_json"] = '{"txid":"abc","vout":[{"value":10,"n":1}]}'
-        self.assertEqual(observation_hash(left), observation_hash(right))
+        self.assertEqual(
+            EvidenceSnapshot.from_transaction(left).quantity_hash,
+            EvidenceSnapshot.from_transaction(right).quantity_hash,
+        )
 
         changed = dict(right)
         changed["amount"] = 9_999
-        self.assertNotEqual(observation_hash(left), observation_hash(changed))
+        self.assertNotEqual(
+            EvidenceSnapshot.from_transaction(left).quantity_hash,
+            EvidenceSnapshot.from_transaction(changed).quantity_hash,
+        )
 
         enriched = dict(right)
         enriched["raw_json"] = {"txid": "abc", "vout": [], "vin": []}
-        self.assertEqual(observation_hash(left), observation_hash(enriched))
+        self.assertEqual(
+            EvidenceSnapshot.from_transaction(left).quantity_hash,
+            EvidenceSnapshot.from_transaction(enriched).quantity_hash,
+        )
         self.assertNotEqual(
             EvidenceSnapshot.from_transaction(left).detail_hash,
             EvidenceSnapshot.from_transaction(enriched).detail_hash,
@@ -585,7 +612,7 @@ class CustodyQuantityTests(unittest.TestCase):
         self.assertEqual(len(canonical.events), 1)
         projection = project_quantities(canonical.observations, [])
         self.assertEqual(projection.decisions, ())
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
         self.assertEqual(
             {
                 item.location_kind: item.amount_msat
@@ -637,7 +664,7 @@ class CustodyQuantityTests(unittest.TestCase):
             projection.decisions[0].selected_claim_id,
             "explicit-suspense",
         )
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_malformed_bundle_suspends_its_source_without_aborting_other_wallets(self):
         bad_source = _observation("bad-out", "wallet-a", "outbound", 100)
@@ -681,7 +708,7 @@ class CustodyQuantityTests(unittest.TestCase):
             [(item.bundle_id, item.reasons) for item in projection.claim_errors],
             [("component:bad", ("claim_target_invalid",))],
         )
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_reviewed_target_and_residual_suspense_activate_as_one_bundle(self):
         source = _observation("out", "wallet-a", "outbound", 1_000)
@@ -710,8 +737,8 @@ class CustodyQuantityTests(unittest.TestCase):
             [(item.state, item.source.amount_msat) for item in projection.decisions],
             [(INTERNAL_REVIEWED, 900), (CUSTODY_SUSPENSE, 100)],
         )
-        self.assertEqual(projection.unresolved_msat_by_asset(), {"BTC": 100})
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_unresolved_msat_by_asset(projection), {"BTC": 100})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_cross_network_claim_isolated_as_source_suspense(self):
         source = _observation(
@@ -747,7 +774,7 @@ class CustodyQuantityTests(unittest.TestCase):
             },
             {"wallet": 500, "external_origin": -500},
         )
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_transitive_destination_overlap_fails_closed_as_one_cluster(self):
         sources = [
@@ -777,7 +804,7 @@ class CustodyQuantityTests(unittest.TestCase):
                 for item in projection.decisions
             )
         )
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_network_fee_is_separate_and_conserved(self):
         source = _observation(
@@ -790,7 +817,7 @@ class CustodyQuantityTests(unittest.TestCase):
         self.assertEqual(by_kind["wallet"], -102_000)
         self.assertEqual(by_kind["external"], 100_000)
         self.assertEqual(by_kind["fee"], 2_000)
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_fee_inclusive_observation_does_not_double_debit_the_fee(self):
         row = _row("out", "wallet-a", "outbound", 100_000, fee_msat=2_000)
@@ -803,7 +830,7 @@ class CustodyQuantityTests(unittest.TestCase):
         self.assertEqual(by_kind["wallet"], -100_000)
         self.assertEqual(by_kind["external"], 98_000)
         self.assertEqual(by_kind["fee"], 2_000)
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_stronger_claim_wins_and_equal_priority_overlap_conflicts(self):
         source = _observation("out", "wallet-a", "outbound", 1_000)
@@ -834,7 +861,7 @@ class CustodyQuantityTests(unittest.TestCase):
             projection.decisions[0].contender_claim_ids,
             ("reviewed", "reviewed-again"),
         )
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_two_sources_cannot_consume_one_destination_slice(self):
         source_one = _observation("out-1", "wallet-a", "outbound", 1_000)
@@ -859,7 +886,7 @@ class CustodyQuantityTests(unittest.TestCase):
             [item.state for item in projection.decisions],
             [CONFLICTING, CONFLICTING],
         )
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_one_destination_collision_invalidates_an_atomic_nm_bundle(self):
         source_one = _observation("out-a", "wallet-a", "outbound", 600)
@@ -917,7 +944,7 @@ class CustodyQuantityTests(unittest.TestCase):
             ("bundle-a-c", "bundle-b-d"),
             decisions_by_contender,
         )
-        self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+        self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
         reversed_projection = project_quantities(
             list(reversed(observations)),
@@ -938,7 +965,7 @@ class CustodyQuantityTests(unittest.TestCase):
                 sum(item.source.amount_msat for item in projection.decisions),
                 total,
             )
-            self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+            self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
     def test_adversarial_random_overlap_priority_and_targets_conserve(self):
         rng = random.Random(0xA4B17)
@@ -1024,7 +1051,7 @@ class CustodyQuantityTests(unittest.TestCase):
             for left, right in zip(selected_targets, selected_targets[1:]):
                 if left.observation_hash == right.observation_hash:
                     self.assertLessEqual(left.end_msat, right.start_msat)
-            self.assertEqual(projection.totals_by_asset(), {"BTC": 0})
+            self.assertEqual(_totals_by_asset(projection), {"BTC": 0})
 
             reversed_projection = project_quantities(
                 [*reversed(targets), *reversed(sources)],

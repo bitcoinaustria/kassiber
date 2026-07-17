@@ -219,7 +219,6 @@ def _samourai_privacy_pairs(
         }
         candidate_ids.update(group_candidate_ids)
         allocated = 0
-        allocated_targets: list[QuantityObservation] = []
         group_touched_ids: set[str] = set()
         authoritative_native_group = source.authoritative_chain_observation
         for in_row in sorted(ins, key=_row_id):
@@ -247,7 +246,6 @@ def _samourai_privacy_pairs(
                 }
             )
             allocated += amount_msat
-            allocated_targets.append(target)
             group_touched_ids.update((_anchor_id(out_row), _anchor_id(in_row)))
         residual_msat = source.principal_msat - allocated
         if allocated and residual_msat > 0:
@@ -255,10 +253,6 @@ def _samourai_privacy_pairs(
                 is_tx0
                 and authoritative_native_group
                 and source.fee_attribution == "exact"
-            )
-            supporting_evidence_hashes = {source.evidence_detail_hash}
-            supporting_evidence_hashes.update(
-                target.evidence_detail_hash for target in allocated_targets
             )
             fee_claims.append(
                 QuantityClaim(
@@ -282,9 +276,6 @@ def _samourai_privacy_pairs(
                         "samourai_coordinator_fee"
                         if exact_coordinator_fee
                         else "implicit_wallet_delta_unallocated"
-                    ),
-                    supporting_evidence_hashes=tuple(
-                        sorted(supporting_evidence_hashes)
                     ),
                     atomic_bundle_id=f"pair-group:{group_id}",
                     # A targetless fee is a finalized external classification.
@@ -762,14 +753,6 @@ def _pair_claims(
                     state=CUSTODY_SUSPENSE,
                     priority=ClaimPriority.EXACT_NATIVE_EVENT,
                     reason="transfer_fee_implausible",
-                    supporting_evidence_hashes=tuple(
-                        sorted(
-                            {
-                                source.evidence_detail_hash,
-                                target.evidence_detail_hash,
-                            }
-                        )
-                    ),
                     atomic_bundle_id=atomic_bundle_id,
                 )
             )
@@ -784,9 +767,6 @@ def _pair_claims(
                 state=state,
                 priority=priority,
                 reason=reason,
-                supporting_evidence_hashes=tuple(
-                    sorted({source.evidence_detail_hash, target.evidence_detail_hash})
-                ),
                 atomic_bundle_id=atomic_bundle_id,
                 allow_cross_rail=allow_cross_rail,
                 transfer_kind=str(_field(pair, "kind") or "") or None,
@@ -811,14 +791,6 @@ def _pair_claims(
                     state=EXTERNAL_CONFIRMED,
                     priority=priority,
                     reason="verified_transfer_fee",
-                    supporting_evidence_hashes=tuple(
-                        sorted(
-                            {
-                                source.evidence_detail_hash,
-                                target.evidence_detail_hash,
-                            }
-                        )
-                    ),
                     atomic_bundle_id=atomic_bundle_id,
                     destination_kind="fee",
                 )
@@ -839,7 +811,6 @@ def _pair_claims(
                 state=CUSTODY_SUSPENSE,
                 priority=ClaimPriority.ACCOUNTING_CONVENTION,
                 reason="implicit_wallet_delta_unallocated",
-                supporting_evidence_hashes=(source.evidence_detail_hash,),
             )
         )
     return (
@@ -1098,12 +1069,7 @@ def compile_custody_interpreters(
             already_paired_ids=paired_ids,
         )
     else:
-        unchanged_rows = list(rows)
         derivation = ProfileTransferDerivation(
-            rows_after_consolidation=unchanged_rows,
-            rows_after_recorded_fanout=unchanged_rows,
-            rows_after_ownership=unchanged_rows,
-            rows=unchanged_rows,
             consolidation=OwnershipDeriveResult(),
             ownership=OwnershipDeriveResult(),
             fanout=OwnershipDeriveResult(),

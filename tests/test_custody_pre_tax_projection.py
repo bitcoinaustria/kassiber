@@ -190,7 +190,7 @@ def test_basis_barrier_does_not_suppress_unrelated_asset_projection():
     assert {"btc-acquisition", "usdt-acquisition", "usdt-later"} <= projected_ids
     assert "btc-gap" not in projected_ids
     assert "btc-later" not in projected_ids
-    assert len(projection.basis_barriers) == 1
+    assert len(state.tax_eligibility.pool_barriers) == 1
     assert any(
         item["transaction_id"] == "btc-later"
         and item["reason"] == "custody_basis_barrier"

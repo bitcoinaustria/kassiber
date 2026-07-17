@@ -110,14 +110,6 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             state=INTERNAL_REVIEWED,
             priority=ClaimPriority.REVIEWED_COMPONENT,
             reason="reviewed_transfer_pair",
-            supporting_evidence_hashes=tuple(
-                sorted(
-                    {
-                        source.evidence_detail_hash,
-                        target.evidence_detail_hash,
-                    }
-                )
-            ),
         )
 
     @staticmethod

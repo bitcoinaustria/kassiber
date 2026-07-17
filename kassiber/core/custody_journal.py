@@ -692,7 +692,6 @@ class CustodyJournalBuilder:
         return {
             "entries": engine_state.entries,
             "quarantines": engine_state.quarantines,
-            "intra_audit": engine_state.intra_audit,
             "cross_asset_pairs": engine_state.cross_asset_pairs,
             "direct_swap_payouts": engine_state.direct_swap_payouts,
             "tax_summary": engine_state.tax_summary,

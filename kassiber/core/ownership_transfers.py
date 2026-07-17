@@ -92,10 +92,6 @@ class OwnershipReviewProof:
 class ProfileTransferDerivation:
     """Shared ownership pipeline result for journal and graph preview."""
 
-    rows_after_consolidation: list[Mapping[str, Any]]
-    rows_after_recorded_fanout: list[Mapping[str, Any]]
-    rows_after_ownership: list[Mapping[str, Any]]
-    rows: list[Mapping[str, Any]]
     consolidation: OwnershipDeriveResult
     ownership: OwnershipDeriveResult
     fanout: OwnershipDeriveResult
@@ -164,14 +160,7 @@ def derive_profile_transfers(
         wallet_refs_by_id=wallet_refs_by_id,
         already_paired_ids=handled,
     )
-    rows_after_ownership = _rows_after_derivation(
-        rows_after_recorded_fanout, ownership, sort_key=sort_key
-    )
     return ProfileTransferDerivation(
-        rows_after_consolidation=rows_after_consolidation,
-        rows_after_recorded_fanout=rows_after_recorded_fanout,
-        rows_after_ownership=rows_after_ownership,
-        rows=rows_after_ownership,
         consolidation=consolidation,
         ownership=ownership,
         fanout=fanout,
@@ -206,9 +195,7 @@ def derive_ownership_review_proofs(
 
     if index is None:
         return []
-    active_records = [
-        record for record in active_pair_records if not _get(record, "deleted_at")
-    ]
+    active_records = list(active_pair_records)
     active_pairs = {
         (
             str(_get(record, "out_transaction_id") or ""),

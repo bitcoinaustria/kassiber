@@ -37,7 +37,6 @@ from .custody_evidence import (
     canonical_event_key,
     canonical_evidence_payload,
     canonical_quantity_payload,
-    observation_hash,
 )
 
 
@@ -175,7 +174,6 @@ class QuantityClaim:
     priority: ClaimPriority
     reason: str
     target: QuantitySlice | None = None
-    supporting_evidence_hashes: tuple[str, ...] = ()
     atomic_bundle_id: str | None = None
     destination_kind: str | None = None
     # Country-neutral economic meaning attached to an exact reviewed external
@@ -189,9 +187,6 @@ class QuantityClaim:
     # interpreter that has reviewed/native rail evidence.  Generic claims stay
     # rail-local even where the numerical amount happens to match.
     allow_cross_rail: bool = False
-    # Reviewed evidence is not silently priority-overridden.  A new claim may
-    # replace another active interpretation only by naming it explicitly.
-    supersedes_claim_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.claim_id or not self.reason:
@@ -259,8 +254,6 @@ class QuantityClaim:
             )
         if self.allow_cross_rail and self.target is None:
             raise ValueError("only target claims can bridge custody rails")
-        if any(not item for item in self.supersedes_claim_ids):
-            raise ValueError("superseded claim ids cannot be empty")
 
     @property
     def effective_bundle_id(self) -> str | None:
@@ -314,12 +307,6 @@ class QuantityProjection:
     postings: tuple[QuantityPosting, ...]
     claim_errors: tuple["QuantityClaimError", ...] = ()
 
-    def totals_by_asset(self) -> dict[str, int]:
-        totals: dict[str, int] = {}
-        for posting in self.postings:
-            totals[posting.asset] = totals.get(posting.asset, 0) + posting.amount_msat
-        return totals
-
     def totals_by_domain(self) -> dict[tuple[str, str, str], int]:
         """Return conservation totals independent of custody rail.
 
@@ -339,18 +326,6 @@ class QuantityProjection:
             )
             totals[key] = totals.get(key, 0) + posting.amount_msat
         return totals
-
-    def unresolved_msat_by_asset(self) -> dict[str, int]:
-        totals: dict[str, int] = {}
-        by_hash = {item.quantity_hash: item for item in self.observations}
-        for decision in self.decisions:
-            if decision.state in UNRESOLVED_STATES:
-                observation = by_hash[decision.source.observation_hash]
-                totals[observation.asset] = (
-                    totals.get(observation.asset, 0) + decision.source.amount_msat
-                )
-        return totals
-
 
 @dataclass(frozen=True)
 class QuantityClaimError:
@@ -471,7 +446,6 @@ def _validated_inputs(
                 state=CUSTODY_SUSPENSE,
                 priority=priority,
                 reason="malformed_claim_bundle",
-                supporting_evidence_hashes=(source.evidence_detail_hash,),
             )
         )
     return (
@@ -535,8 +509,8 @@ def _source_decisions(
             # Any active reviewed/verified interpretations of the same source
             # slice must agree.  Evidence priority is an ordering aid, not a
             # permission to overwrite a different reviewed conclusion.  Exact
-            # semantic duplicates coalesce; a newer interpretation has to name
-            # the prior claim in ``supersedes_claim_ids``.
+            # semantic duplicates coalesce; incompatible reviewed/native
+            # interpretations always fail closed.
             authoritative = [
                 claim
                 for claim in contenders
@@ -567,23 +541,15 @@ def _source_decisions(
                     by_semantics.setdefault(semantic_key(claim), []).append(claim)
                 if len(by_semantics) > 1:
                     active_ids = {claim.claim_id for claim in authoritative}
-                    superseders = [
-                        claim
-                        for claim in authoritative
-                        if active_ids - {claim.claim_id}
-                        <= set(claim.supersedes_claim_ids)
-                    ]
-                    if len(superseders) != 1:
-                        decisions.append(
-                            ArbitratedSlice(
-                                source=segment,
-                                state=CONFLICTING,
-                                reason="incompatible_reviewed_claims",
-                                contender_claim_ids=tuple(sorted(active_ids)),
-                            )
+                    decisions.append(
+                        ArbitratedSlice(
+                            source=segment,
+                            state=CONFLICTING,
+                            reason="incompatible_reviewed_claims",
+                            contender_claim_ids=tuple(sorted(active_ids)),
                         )
-                        continue
-                    contenders = [superseders[0]]
+                    )
+                    continue
             strongest = min(claim.priority for claim in contenders)
             winners = [claim for claim in contenders if claim.priority == strongest]
             if len(winners) != 1:
@@ -970,6 +936,5 @@ __all__ = [
     "canonical_event_key",
     "canonical_evidence_payload",
     "canonical_quantity_payload",
-    "observation_hash",
     "project_quantities",
 ]
