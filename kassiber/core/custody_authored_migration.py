@@ -944,6 +944,9 @@ def _migrate_deleted_legacy_rows(conn: sqlite3.Connection) -> ConsolidationResul
                         unchanged += 1
                         continue
                 except AppError:
+                    # Delayed signed replay may name a component that is not
+                    # present locally. Fall through so the canonical migration
+                    # path records the precise durable issue below.
                     pass
             try:
                 with _savepoint(conn, f"custody_deleted_{uuid.uuid4().hex}"):
