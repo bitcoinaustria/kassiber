@@ -1096,20 +1096,31 @@ def load_stored_transfer_audit(
 
     relation_rows = conn.execute(
         """
-        SELECT r.*, source.external_id AS source_external_id,
+        SELECT r.id AS relation_id, r.relation_kind,
+               r.kind AS review_kind, r.policy, r.swap_fee_msat,
+               r.swap_fee_kind,
+               r.out_transaction_id AS source_transaction_id,
+               r.in_transaction_id AS target_transaction_id,
+               r.out_asset AS source_asset, r.in_asset AS target_asset,
+               r.out_amount AS source_amount_msat,
+               r.in_amount AS target_amount_msat, r.basis_state,
+               r.component_id, r.occurred_at, r.target_occurred_at,
+               r.counterparty,
+               source.external_id AS source_external_id,
                source.occurred_at AS source_occurred_at,
                source_wallet.label AS source_wallet_label,
-               target.external_id AS target_external_id,
+               COALESCE(target.external_id, r.target_external_id)
+                   AS target_external_id,
                target.occurred_at AS target_transaction_occurred_at,
                target_wallet.label AS target_wallet_label
-        FROM journal_custody_economic_relations r
-        JOIN transactions source ON source.id = r.source_transaction_id
+        FROM journal_custody_projection_relations r
+        JOIN transactions source ON source.id = r.out_transaction_id
         LEFT JOIN wallets source_wallet ON source_wallet.id = source.wallet_id
-        LEFT JOIN transactions target ON target.id = r.target_transaction_id
+        LEFT JOIN transactions target ON target.id = r.in_transaction_id
         LEFT JOIN wallets target_wallet ON target_wallet.id = target.wallet_id
         WHERE r.profile_id = ?
         ORDER BY COALESCE(r.target_occurred_at, r.occurred_at) ASC,
-                 r.relation_id ASC
+                 r.id ASC
         """,
         (profile_id,),
     ).fetchall()

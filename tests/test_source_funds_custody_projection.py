@@ -274,7 +274,7 @@ def test_report_revalidates_all_custody_links_with_one_projection_read() -> None
             projection_reads = [
                 statement
                 for statement in statements
-                if "FROM journal_custody_decisions" in statement
+                if "FROM journal_custody_projection_relations" in statement
             ]
             assert len(projection_reads) == 1
         finally:

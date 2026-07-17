@@ -1093,13 +1093,6 @@ CREATE TABLE IF NOT EXISTS journal_custody_decisions (
     )),
     basis_barrier_at TEXT,
     reason TEXT NOT NULL,
-    review_kind TEXT NOT NULL DEFAULT 'custody_move',
-    policy TEXT NOT NULL DEFAULT 'carrying-value',
-    confidence_at_review TEXT,
-    review_source TEXT,
-    notes TEXT,
-    swap_fee_msat INTEGER,
-    swap_fee_kind TEXT,
     atomic_group_id TEXT,
     component_id TEXT,
     occurred_at TEXT,
@@ -1131,16 +1124,6 @@ CREATE TABLE IF NOT EXISTS journal_custody_economic_relations (
     target_asset TEXT NOT NULL,
     source_amount_msat INTEGER NOT NULL CHECK(source_amount_msat > 0),
     target_amount_msat INTEGER NOT NULL CHECK(target_amount_msat > 0),
-    review_kind TEXT NOT NULL,
-    policy TEXT NOT NULL,
-    swap_fee_msat INTEGER,
-    swap_fee_kind TEXT,
-    notes TEXT,
-    confidence_at_review TEXT,
-    review_source TEXT,
-    target_external_id TEXT,
-    counterparty TEXT,
-    target_fiat_value_exact TEXT,
     basis_state TEXT NOT NULL CHECK(basis_state IN (
         'eligible', 'blocked_by_prior_custody_basis'
     )),
@@ -4448,31 +4431,9 @@ def ensure_schema_compat(conn):
         "target_rail",
         "TEXT NOT NULL DEFAULT 'unknown'",
     )
-    ensure_column(
-        conn,
-        "journal_custody_decisions",
-        "review_kind",
-        "TEXT NOT NULL DEFAULT 'custody_move'",
-    )
-    ensure_column(
-        conn,
-        "journal_custody_decisions",
-        "policy",
-        "TEXT NOT NULL DEFAULT 'carrying-value'",
-    )
-    ensure_column(conn, "journal_custody_decisions", "confidence_at_review", "TEXT")
-    ensure_column(conn, "journal_custody_decisions", "review_source", "TEXT")
-    ensure_column(conn, "journal_custody_decisions", "notes", "TEXT")
-    ensure_column(conn, "journal_custody_decisions", "swap_fee_msat", "INTEGER")
-    ensure_column(conn, "journal_custody_decisions", "swap_fee_kind", "TEXT")
-    ensure_column(conn, "journal_custody_economic_relations", "swap_fee_msat", "INTEGER")
-    ensure_column(conn, "journal_custody_economic_relations", "swap_fee_kind", "TEXT")
-    ensure_column(conn, "journal_custody_economic_relations", "notes", "TEXT")
-    ensure_column(conn, "journal_custody_economic_relations", "confidence_at_review", "TEXT")
-    ensure_column(conn, "journal_custody_economic_relations", "review_source", "TEXT")
-    ensure_column(conn, "journal_custody_economic_relations", "target_external_id", "TEXT")
-    ensure_column(conn, "journal_custody_economic_relations", "counterparty", "TEXT")
-    ensure_column(conn, "journal_custody_economic_relations", "target_fiat_value_exact", "TEXT")
+    if _ensure_custody_projection_table_shapes(conn):
+        conn.commit()
+    _ensure_custody_projection_relation_view(conn)
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
@@ -4664,6 +4625,182 @@ def _ensure_custody_economic_term_review_notes(conn):
         END
         """
     )
+    return True
+
+
+def _ensure_custody_projection_relation_view(conn):
+    """Expose one normalized read seam over the two derived custody row shapes."""
+
+    conn.execute("DROP VIEW IF EXISTS journal_custody_projection_relations")
+    conn.execute(
+        """
+        CREATE VIEW journal_custody_projection_relations AS
+        SELECT
+            decision.profile_id,
+            decision.decision_id AS id,
+            'move' AS relation_kind,
+            COALESCE(term.review_kind, component.component_type,
+                     decision.reason) AS kind,
+            COALESCE(term.tax_policy, component.conversion_policy,
+                     'carrying-value') AS policy,
+            term.swap_fee_msat,
+            term.swap_fee_kind,
+            term.confidence_at_review AS confidence_at_pair,
+            COALESCE(term.review_source, component.authored_source,
+                     'journal_builder') AS pair_source,
+            COALESCE(term.review_notes, component.notes) AS notes,
+            NULL AS target_external_id,
+            NULL AS counterparty,
+            NULL AS target_fiat_value_exact,
+            decision.source_transaction_id AS out_transaction_id,
+            decision.target_transaction_id AS in_transaction_id,
+            decision.source_end_msat - decision.source_start_msat AS out_amount,
+            decision.target_end_msat - decision.target_start_msat AS in_amount,
+            decision.source_asset AS out_asset,
+            decision.target_asset AS in_asset,
+            decision.source_rail,
+            decision.target_rail,
+            decision.basis_state,
+            decision.component_id,
+            decision.occurred_at,
+            decision.target_occurred_at,
+            decision.created_at
+        FROM journal_custody_decisions decision
+        LEFT JOIN custody_components component
+          ON component.id = decision.component_id
+        LEFT JOIN custody_component_economic_terms term
+          ON term.id = (
+            SELECT candidate.id
+            FROM custody_component_economic_terms candidate
+            JOIN custody_component_legs source_leg
+              ON source_leg.id = candidate.source_leg_id
+            JOIN custody_component_legs target_leg
+              ON target_leg.id = candidate.target_leg_id
+            WHERE candidate.component_id = decision.component_id
+              AND COALESCE(source_leg.anchor_transaction_id,
+                           source_leg.transaction_id) =
+                    decision.source_transaction_id
+              AND COALESCE(target_leg.anchor_transaction_id,
+                           target_leg.transaction_id) =
+                    decision.target_transaction_id
+            ORDER BY candidate.ordinal, candidate.id
+            LIMIT 1
+          )
+        UNION ALL
+        SELECT
+            relation.profile_id,
+            relation.relation_id AS id,
+            relation.relation_kind,
+            COALESCE(term.review_kind, component.component_type,
+                     relation.relation_kind) AS kind,
+            COALESCE(term.tax_policy, component.conversion_policy,
+                     'taxable') AS policy,
+            term.swap_fee_msat,
+            term.swap_fee_kind,
+            term.confidence_at_review AS confidence_at_pair,
+            COALESCE(term.review_source, component.authored_source,
+                     'journal_builder') AS pair_source,
+            COALESCE(term.review_notes, component.notes) AS notes,
+            term.payout_external_id AS target_external_id,
+            term.counterparty,
+            term.payout_fiat_value_exact AS target_fiat_value_exact,
+            relation.source_transaction_id AS out_transaction_id,
+            relation.target_transaction_id AS in_transaction_id,
+            relation.source_amount_msat AS out_amount,
+            relation.target_amount_msat AS in_amount,
+            relation.source_asset AS out_asset,
+            relation.target_asset AS in_asset,
+            NULL AS source_rail,
+            NULL AS target_rail,
+            relation.basis_state,
+            relation.component_id,
+            relation.occurred_at,
+            relation.target_occurred_at,
+            relation.created_at
+        FROM journal_custody_economic_relations relation
+        LEFT JOIN custody_components component
+          ON component.id = relation.component_id
+        LEFT JOIN custody_component_economic_terms term
+          ON term.id = (
+            SELECT candidate.id
+            FROM custody_component_economic_terms candidate
+            JOIN custody_component_legs source_leg
+              ON source_leg.id = candidate.source_leg_id
+            JOIN custody_component_legs target_leg
+              ON target_leg.id = candidate.target_leg_id
+            WHERE candidate.component_id = relation.component_id
+              AND COALESCE(source_leg.anchor_transaction_id,
+                           source_leg.transaction_id) =
+                    relation.source_transaction_id
+              AND (
+                relation.target_transaction_id IS NULL
+                OR COALESCE(target_leg.anchor_transaction_id,
+                            target_leg.transaction_id) =
+                     relation.target_transaction_id
+              )
+              AND candidate.term_kind = CASE relation.relation_kind
+                    WHEN 'direct_payout' THEN 'direct_swap_payout'
+                    ELSE 'transaction_pair'
+                  END
+            ORDER BY candidate.ordinal, candidate.id
+            LIMIT 1
+          )
+        """
+    )
+
+
+def _ensure_custody_projection_table_shapes(conn):
+    """Drop copied review semantics from rebuildable local journal tables."""
+
+    semantic_columns = {
+        "journal_custody_decisions": (
+            "review_kind",
+            "policy",
+            "confidence_at_review",
+            "review_source",
+            "notes",
+            "swap_fee_msat",
+            "swap_fee_kind",
+        ),
+        "journal_custody_economic_relations": (
+            "review_kind",
+            "policy",
+            "swap_fee_msat",
+            "swap_fee_kind",
+            "notes",
+            "confidence_at_review",
+            "review_source",
+            "target_external_id",
+            "counterparty",
+            "target_fiat_value_exact",
+        ),
+    }
+    existing_columns = {
+        table: {
+            row["name"]
+            for row in conn.execute(f"PRAGMA table_info({table})")
+        }
+        for table in semantic_columns
+    }
+    pending = [
+        (table, column)
+        for table, candidates in semantic_columns.items()
+        for column in candidates
+        if column in existing_columns[table]
+    ]
+    if not pending:
+        return False
+
+    conn.execute("SAVEPOINT custody_projection_table_shapes")
+    try:
+        conn.execute("DROP VIEW IF EXISTS journal_custody_projection_relations")
+        for table, column in pending:
+            conn.execute(f'ALTER TABLE "{table}" DROP COLUMN "{column}"')
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT custody_projection_table_shapes")
+        conn.execute("RELEASE SAVEPOINT custody_projection_table_shapes")
+        raise
+    conn.execute("RELEASE SAVEPOINT custody_projection_table_shapes")
     return True
 
 

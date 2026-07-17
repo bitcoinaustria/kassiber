@@ -2721,8 +2721,9 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         # canonical journal projection is rebuilt.
         return {}
     conversion_records = conn.execute(
-        "SELECT source_transaction_id, target_transaction_id "
-        "FROM journal_custody_economic_relations "
+        "SELECT out_transaction_id AS source_transaction_id, "
+        "in_transaction_id AS target_transaction_id "
+        "FROM journal_custody_projection_relations "
         "WHERE profile_id = ? AND relation_kind = 'conversion' "
         "AND policy = 'carrying-value' AND basis_state = 'eligible'",
         (profile["id"],),
@@ -3067,44 +3068,14 @@ def _report_query_rows(conn, profile, wallet=None):
             tin.asset AS in_asset,
             p.in_amount,
             tin.fee AS in_fee
-        FROM (
-            SELECT
-                decision.profile_id,
-                decision.decision_id AS id,
-                decision.review_kind AS kind,
-                decision.policy,
-                decision.swap_fee_msat,
-                decision.swap_fee_kind,
-                COALESCE(decision.notes, '') AS notes,
-                decision.created_at,
-                decision.source_transaction_id AS out_transaction_id,
-                decision.target_transaction_id AS in_transaction_id,
-                decision.source_end_msat - decision.source_start_msat AS out_amount,
-                decision.target_end_msat - decision.target_start_msat AS in_amount
-            FROM journal_custody_decisions decision
-            UNION ALL
-            SELECT
-                relation.profile_id,
-                relation.relation_id AS id,
-                relation.review_kind AS kind,
-                relation.policy,
-                relation.swap_fee_msat,
-                relation.swap_fee_kind,
-                COALESCE(relation.notes, '') AS notes,
-                relation.created_at,
-                relation.source_transaction_id AS out_transaction_id,
-                relation.target_transaction_id AS in_transaction_id,
-                relation.source_amount_msat AS out_amount,
-                relation.target_amount_msat AS in_amount
-            FROM journal_custody_economic_relations relation
-            WHERE relation.relation_kind = 'conversion'
-              AND relation.target_transaction_id IS NOT NULL
-        ) p
+        FROM journal_custody_projection_relations p
         JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN transactions tin ON tin.id = p.in_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
         JOIN wallets win ON win.id = tin.wallet_id
-        WHERE {pair_where}
+        WHERE p.relation_kind IN ('move', 'conversion')
+          AND p.in_transaction_id IS NOT NULL
+          AND {pair_where}
         ORDER BY
             MIN(tout.occurred_at, tin.occurred_at) ASC,
             p.created_at ASC,
@@ -3122,11 +3093,11 @@ def _report_query_rows(conn, profile, wallet=None):
     direct_swap_payouts = conn.execute(
         f"""
         SELECT
-            p.relation_id AS id,
-            p.review_kind AS kind,
+            p.id,
+            p.kind,
             p.policy,
-            p.target_asset AS payout_asset,
-            p.target_amount_msat AS payout_amount,
+            p.in_asset AS payout_asset,
+            p.in_amount AS payout_amount,
             p.target_occurred_at AS payout_occurred_at,
             p.target_external_id AS payout_external_id,
             p.counterparty,
@@ -3138,17 +3109,17 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            p.source_amount_msat AS out_amount,
+            p.out_amount,
             tout.fee AS out_fee
-        FROM journal_custody_economic_relations p
-        JOIN transactions tout ON tout.id = p.source_transaction_id
+        FROM journal_custody_projection_relations p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
         WHERE p.relation_kind = 'direct_payout'
           AND {direct_payout_where}
         ORDER BY
             COALESCE(p.target_occurred_at, tout.occurred_at) ASC,
             p.created_at ASC,
-            p.relation_id ASC
+            p.id ASC
         """,
         direct_payout_params,
     ).fetchall()
@@ -4583,29 +4554,18 @@ def _swap_fee_summary_rows(conn, profile_id, *, use_vienna_year=False):
     """
     rows = conn.execute(
         """
-        SELECT p.review_kind AS kind,
+        SELECT p.kind,
                p.policy,
                p.swap_fee_msat,
-               t_out.asset AS out_asset,
-               p.target_asset AS in_asset,
+               p.out_asset,
+               p.in_asset,
                COALESCE(p.target_occurred_at, t_out.occurred_at) AS occurred_at
-        FROM journal_custody_economic_relations p
-        JOIN transactions t_out ON t_out.id = p.source_transaction_id
+        FROM journal_custody_projection_relations p
+        JOIN transactions t_out ON t_out.id = p.out_transaction_id
         WHERE p.profile_id = ?
           AND p.swap_fee_msat IS NOT NULL
-        UNION ALL
-        SELECT decision.review_kind AS kind,
-               decision.policy,
-               decision.swap_fee_msat,
-               decision.source_asset AS out_asset,
-               decision.target_asset AS in_asset,
-               COALESCE(decision.target_occurred_at,
-                        decision.occurred_at) AS occurred_at
-        FROM journal_custody_decisions decision
-        WHERE decision.profile_id = ?
-          AND decision.swap_fee_msat IS NOT NULL
         """,
-        (profile_id, profile_id),
+        (profile_id,),
     ).fetchall()
     if not rows:
         return []

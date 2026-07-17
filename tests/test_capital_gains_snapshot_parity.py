@@ -39,13 +39,13 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             );
             CREATE TABLE journal_quarantines (profile_id TEXT);
             CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
-            CREATE TABLE journal_custody_economic_relations (
-              relation_id TEXT, profile_id TEXT, relation_kind TEXT,
-              source_transaction_id TEXT, target_transaction_id TEXT,
-              review_kind TEXT, policy TEXT, swap_fee_msat INTEGER,
-              swap_fee_kind TEXT, source_asset TEXT,
-              source_amount_msat INTEGER, target_asset TEXT,
-              target_amount_msat INTEGER, target_occurred_at TEXT
+            CREATE TABLE journal_custody_projection_relations (
+              id TEXT, profile_id TEXT, relation_kind TEXT,
+              out_transaction_id TEXT, in_transaction_id TEXT,
+              kind TEXT, policy TEXT, swap_fee_msat INTEGER,
+              swap_fee_kind TEXT, out_asset TEXT,
+              out_amount INTEGER, in_asset TEXT,
+              in_amount INTEGER, target_occurred_at TEXT
             );
             """
         )
@@ -224,7 +224,7 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ],
         )
         conn.execute(
-            "INSERT INTO journal_custody_economic_relations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO journal_custody_projection_relations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 "pair-1",
                 "p1",

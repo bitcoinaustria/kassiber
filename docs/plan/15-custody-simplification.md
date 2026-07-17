@@ -206,8 +206,16 @@ binary.
    rollback previews, speculative layer scaffolding, and obsolete commands.
    Behavioral cutover complete: MOVE decisions and non-quantity
    conversion/payout relations are
-   stored together by the canonical projection replacement, including reviewed
-   kind/policy/source, notes, fees and payout presentation metadata. Reports,
+   stored together by the canonical projection replacement. The rebuildable
+   rows retain only quantity/provenance coordinates and their processed
+   `basis_state`; reviewed kind/policy/source, notes, fees and payout metadata
+   remain authored once in immutable component terms. One normalized SQL view
+   joins those facts for every consumer. The small economic-relation table is
+   a deliberate narrow exception to full derivation from authored terms:
+   targetless conversions and direct payouts have no target-bearing MOVE row,
+   and their processed basis eligibility cannot be reconstructed from authored
+   economics without rerunning arbitration. Removing that row would weaken the
+   report barrier, so only its duplicated semantic columns were deleted. Reports,
    exports, transaction graphs, source-of-funds, transaction/journal UI and AI
    snapshots read that projection; stale books do not render old custody
    grouping as current booked truth. Source-of-funds no longer has private pair,

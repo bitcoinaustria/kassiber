@@ -10,6 +10,7 @@ from kassiber.cli.handlers import create_transaction_pair, process_journals
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
 from kassiber.errors import AppError
+from tests.custody_projection_fixtures import insert_reviewed_projection
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -2525,37 +2526,23 @@ class TransactionGraphTest(unittest.TestCase):
             description="Bitcoin receive from swap",
             counterparty="Swap LBTC -> BTC",
         )
-        self.conn.execute(
-            """
-            INSERT INTO journal_custody_economic_relations(
-                relation_id, workspace_id, profile_id, relation_kind,
-                source_transaction_id, target_transaction_id, source_asset,
-                target_asset, source_amount_msat, target_amount_msat,
-                review_kind, policy, swap_fee_msat, swap_fee_kind, notes,
-                basis_state, occurred_at, target_occurred_at, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "a" * 64,
-                "ws-1",
-                "profile-1",
-                "conversion",
-                "swap-out",
-                "swap-in",
-                "LBTC",
-                "BTC",
-                124_262_750_000,
-                124_132_980_000,
-                "swap",
-                "carrying-value",
-                129_770_000,
-                "network_or_provider_fee",
-                "reviewed cross-chain swap",
-                "eligible",
-                NOW,
-                NOW,
-                NOW,
-            ),
+        insert_reviewed_projection(
+            self.conn,
+            projection_id="a" * 64,
+            workspace_id="ws-1",
+            profile_id="profile-1",
+            source_transaction_id="swap-out",
+            target_transaction_id="swap-in",
+            source_asset="LBTC",
+            target_asset="BTC",
+            source_amount_msat=124_262_750_000,
+            target_amount_msat=124_132_980_000,
+            review_kind="swap",
+            swap_fee_msat=129_770_000,
+            swap_fee_kind="network_or_provider_fee",
+            notes="reviewed cross-chain swap",
+            occurred_at=NOW,
+            target_occurred_at=NOW,
         )
         self.conn.execute(
             """
@@ -2620,52 +2607,22 @@ class TransactionGraphTest(unittest.TestCase):
             kind="deposit",
             counterparty="Manual privacy wallet",
         )
-        self.conn.execute(
-            """
-            INSERT INTO journal_custody_decisions(
-                decision_id, workspace_id, profile_id,
-                source_transaction_id, target_transaction_id,
-                source_observation_hash, source_start_msat, source_end_msat,
-                target_observation_hash, target_start_msat, target_end_msat,
-                source_wallet_id, target_wallet_id,
-                source_network, target_network, source_rail, target_rail,
-                source_asset, target_asset, state, basis_state, reason,
-                review_kind, policy, confidence_at_review, review_source, notes,
-                occurred_at, target_occurred_at, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "b" * 64,
-                "ws-1",
-                "profile-1",
-                "coinjoin-out",
-                "coinjoin-in",
-                "1" * 64,
-                0,
-                99_500_000_000,
-                "2" * 64,
-                0,
-                99_500_000_000,
-                "wallet-a",
-                "wallet-b",
-                "main",
-                "main",
-                "bitcoin",
-                "bitcoin",
-                "BTC",
-                "BTC",
-                "internal_reviewed",
-                "eligible",
-                "reviewed_custody_component",
-                "coinjoin",
-                "carrying-value",
-                "manual",
-                "manual",
-                "reviewed generic Coinjoin hop",
-                NOW,
-                NOW,
-                NOW,
-            ),
+        insert_reviewed_projection(
+            self.conn,
+            projection_id="b" * 64,
+            workspace_id="ws-1",
+            profile_id="profile-1",
+            source_transaction_id="coinjoin-out",
+            target_transaction_id="coinjoin-in",
+            source_asset="BTC",
+            target_asset="BTC",
+            source_amount_msat=99_500_000_000,
+            target_amount_msat=99_500_000_000,
+            review_kind="coinjoin",
+            notes="reviewed generic Coinjoin hop",
+            occurred_at=NOW,
+            target_occurred_at=NOW,
+            relation_kind="move",
         )
         self.conn.execute(
             """

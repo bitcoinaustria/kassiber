@@ -35,7 +35,7 @@ from kassiber.core.custody_quantity_store import (
     replace_canonical_quantity_state,
 )
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
-from kassiber.db import SCHEMA
+from kassiber.db import SCHEMA, _ensure_custody_projection_relation_view
 from kassiber.errors import AppError
 from tests.custody_tax_helpers import authoritative_chain_observation
 
@@ -1609,6 +1609,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        _ensure_custody_projection_relation_view(self.conn)
         self.conn.execute(
             "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Books', 'now')"
         )
@@ -1784,21 +1785,18 @@ class CustodyQuantityStoreTests(unittest.TestCase):
 
         self.assertEqual(counts["economic_relations"], 1)
         relation = self.conn.execute(
-            "SELECT * FROM journal_custody_economic_relations"
+            "SELECT * FROM journal_custody_projection_relations "
+            "WHERE relation_kind = 'conversion'"
         ).fetchone()
         self.assertEqual(relation["relation_kind"], "conversion")
-        self.assertEqual(relation["source_transaction_id"], source["id"])
-        self.assertEqual(relation["target_transaction_id"], target["id"])
-        self.assertEqual(relation["source_amount_msat"], 1_000)
-        self.assertEqual(relation["target_amount_msat"], 900)
+        self.assertEqual(relation["out_transaction_id"], source["id"])
+        self.assertEqual(relation["in_transaction_id"], target["id"])
+        self.assertEqual(relation["out_amount"], 1_000)
+        self.assertEqual(relation["in_amount"], 900)
         self.assertEqual(relation["basis_state"], "eligible")
         self.assertEqual(relation["component_id"], component["id"])
-        self.assertEqual(relation["swap_fee_msat"], 25)
-        self.assertEqual(relation["swap_fee_kind"], "network")
-        self.assertEqual(relation["confidence_at_review"], "manual")
-        self.assertEqual(relation["review_source"], "migration")
 
-    def test_reviewed_move_metadata_is_stored_on_decision(self):
+    def test_reviewed_move_metadata_is_joined_from_authored_terms(self):
         self.conn.execute(
             "INSERT INTO wallets(id, workspace_id, profile_id, label, kind, created_at) "
             "VALUES('wallet-b', 'ws', 'profile', 'B', 'descriptor', 'now')"
@@ -1909,10 +1907,10 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         )
 
         decision = self.conn.execute(
-            "SELECT review_kind, policy, swap_fee_msat, swap_fee_kind "
-            "FROM journal_custody_decisions"
+            "SELECT kind, policy, swap_fee_msat, swap_fee_kind "
+            "FROM journal_custody_projection_relations"
         ).fetchone()
-        self.assertEqual(decision["review_kind"], "coinjoin")
+        self.assertEqual(decision["kind"], "coinjoin")
         self.assertEqual(decision["policy"], "carrying-value")
         self.assertEqual(decision["swap_fee_msat"], 5)
         self.assertEqual(decision["swap_fee_kind"], "provider")

@@ -721,64 +721,6 @@ def _replace_canonical_quantity_state(
             if amount_msat != 0
         ],
     )
-    component_review_defaults = {
-        str(row["id"]): {
-            "review_kind": row["component_type"],
-            "policy": "carrying-value",
-            "confidence_at_review": None,
-            "review_source": row["authored_source"],
-            "notes": row["notes"],
-            "swap_fee_msat": None,
-            "swap_fee_kind": None,
-        }
-        for row in conn.execute(
-            "SELECT id, component_type, authored_source, notes "
-            "FROM custody_components WHERE profile_id = ?",
-            (profile_id,),
-        ).fetchall()
-    }
-    component_review_by_edge: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for row in conn.execute(
-        """
-        SELECT
-            term.component_id,
-            COALESCE(source_leg.anchor_transaction_id,
-                     source_leg.transaction_id) AS source_transaction_id,
-            COALESCE(target_leg.anchor_transaction_id,
-                     target_leg.transaction_id) AS target_transaction_id,
-            term.review_kind,
-            term.tax_policy AS policy,
-            term.confidence_at_review,
-            term.review_source,
-            term.swap_fee_msat,
-            term.swap_fee_kind,
-            COALESCE(term.review_notes, component.notes) AS notes
-        FROM custody_component_economic_terms term
-        JOIN custody_component_legs source_leg ON source_leg.id = term.source_leg_id
-        JOIN custody_component_legs target_leg ON target_leg.id = term.target_leg_id
-        JOIN custody_components component ON component.id = term.component_id
-        WHERE term.profile_id = ?
-        ORDER BY term.component_id, term.ordinal, term.id
-        """,
-        (profile_id,),
-    ).fetchall():
-        source_transaction_id = str(row["source_transaction_id"] or "")
-        target_transaction_id = str(row["target_transaction_id"] or "")
-        if not source_transaction_id or not target_transaction_id:
-            continue
-        component_review_by_edge.setdefault(
-            (str(row["component_id"]), source_transaction_id, target_transaction_id),
-            {
-                "review_kind": row["review_kind"],
-                "policy": row["policy"],
-                "confidence_at_review": row["confidence_at_review"],
-                "review_source": row["review_source"],
-                "notes": row["notes"],
-                "swap_fee_msat": row["swap_fee_msat"],
-                "swap_fee_kind": row["swap_fee_kind"],
-            },
-        )
-
     decision_rows = []
     eligible_decisions = set(state.tax_eligibility.eligible_decisions)
     for decision in state.projection.decisions:
@@ -812,13 +754,6 @@ def _replace_canonical_quantity_state(
             ).encode("utf-8")
         ).hexdigest()
         basis_barrier = state.tax_eligibility.barrier_for(source)
-        review_meta = component_review_by_edge.get(
-            (
-                str(decision.component_id or ""),
-                source.anchor_transaction_id,
-                target.anchor_transaction_id,
-            )
-        ) or component_review_defaults.get(str(decision.component_id or ""), {})
         decision_rows.append(
             (
                 decision_id,
@@ -850,13 +785,6 @@ def _replace_canonical_quantity_state(
                     basis_barrier[0] if basis_barrier is not None else None
                 ),
                 decision.reason,
-                str(review_meta.get("review_kind") or decision.reason),
-                str(review_meta.get("policy") or "carrying-value"),
-                review_meta.get("confidence_at_review"),
-                review_meta.get("review_source") or "journal_builder",
-                review_meta.get("notes"),
-                review_meta.get("swap_fee_msat"),
-                review_meta.get("swap_fee_kind"),
                 decision.atomic_bundle_id,
                 decision.component_id,
                 source.occurred_at or None,
@@ -874,12 +802,10 @@ def _replace_canonical_quantity_state(
             source_wallet_id, target_wallet_id,
             source_network, target_network, source_rail, target_rail,
             source_asset, target_asset,
-                state, basis_state, basis_barrier_at, reason,
-                review_kind, policy, confidence_at_review, review_source, notes,
-                swap_fee_msat, swap_fee_kind,
-                atomic_group_id, component_id, occurred_at,
-                target_occurred_at, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            state, basis_state, basis_barrier_at, reason,
+            atomic_group_id, component_id, occurred_at,
+            target_occurred_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         decision_rows,
     )
@@ -887,13 +813,6 @@ def _replace_canonical_quantity_state(
         item.anchor_transaction_id: item
         for item in state.projection.observations
         if item.anchor_transaction_id
-    }
-    external_ids_by_transaction = {
-        str(row["id"]): row["external_id"]
-        for row in conn.execute(
-            "SELECT id, external_id FROM transactions WHERE profile_id = ?",
-            (profile_id,),
-        ).fetchall()
     }
     eligible_source_slices = {
         (
@@ -951,22 +870,8 @@ def _replace_canonical_quantity_state(
         )
         if source_amount <= 0 or target_amount <= 0:
             continue
-        target_external_id = (
-            external_ids_by_transaction.get(target_transaction_id)
-            if target_transaction_id is not None
-            else relation.get("payout_external_id")
-        )
-        component_meta = component_review_defaults.get(
-            str(relation.get("component_id") or ""), {}
-        )
-        relation_notes = relation.get("notes") or component_meta.get("notes")
-        relation_review_source = (
-            relation.get("review_source")
-            or component_meta.get("review_source")
-            or "journal_builder"
-        )
         payload = [
-            "canonical-custody-economic-relation-v2",
+            "canonical-custody-economic-relation-v3",
             relation_kind,
             source_transaction_id,
             target_transaction_id,
@@ -975,16 +880,6 @@ def _replace_canonical_quantity_state(
             (target.asset if target is not None else relation.get("payout_asset")),
             source_amount,
             target_amount,
-            relation.get("kind"),
-            relation.get("policy"),
-            relation.get("swap_fee_msat"),
-            relation.get("swap_fee_kind"),
-            relation_notes,
-            relation.get("confidence_at_review"),
-            relation_review_source,
-            target_external_id,
-            relation.get("counterparty"),
-            relation.get("payout_fiat_value"),
         ]
         relation_id = hashlib.sha256(
             json.dumps(
@@ -1006,16 +901,6 @@ def _replace_canonical_quantity_state(
                 target.asset if target is not None else relation.get("payout_asset"),
                 source_amount,
                 target_amount,
-                str(relation.get("kind") or relation_kind),
-                str(relation.get("policy") or "taxable"),
-                relation.get("swap_fee_msat"),
-                relation.get("swap_fee_kind"),
-                relation_notes,
-                relation.get("confidence_at_review"),
-                relation_review_source,
-                target_external_id,
-                relation.get("counterparty"),
-                relation.get("payout_fiat_value"),
                 (
                     "eligible"
                     if (
@@ -1041,12 +926,9 @@ def _replace_canonical_quantity_state(
             relation_id, workspace_id, profile_id, relation_kind,
             source_transaction_id, target_transaction_id, component_id,
             source_asset, target_asset, source_amount_msat,
-            target_amount_msat, review_kind, policy, swap_fee_msat,
-            swap_fee_kind, notes, confidence_at_review, review_source,
-            target_external_id, counterparty,
-            target_fiat_value_exact, basis_state,
+            target_amount_msat, basis_state,
             occurred_at, target_occurred_at, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         relation_rows,
     )

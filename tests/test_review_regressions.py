@@ -74,6 +74,7 @@ from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
 from tests.custody_tax_helpers import finalized_tax_inputs
+from tests.custody_projection_fixtures import insert_reviewed_projection
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -3316,35 +3317,21 @@ class ReviewRegressionTest(unittest.TestCase):
                 ),
             ],
         )
-        conn.execute(
-            """
-            INSERT INTO journal_custody_economic_relations(
-                relation_id, workspace_id, profile_id, relation_kind,
-                source_transaction_id, target_transaction_id,
-                source_asset, target_asset, source_amount_msat,
-                target_amount_msat, review_kind, policy, swap_fee_msat,
-                basis_state, occurred_at, target_occurred_at, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "a" * 64,
-                "ws-pair-chain",
-                "pf-pair-chain",
-                "conversion",
-                "tx-chain-a",
-                "tx-chain-middle",
-                "LBTC",
-                "BTC",
-                btc_to_msat("0.5"),
-                btc_to_msat("0.49"),
-                "peg-out",
-                "carrying-value",
-                btc_to_msat("0.01"),
-                "eligible",
-                "2026-01-01T00:00:00Z",
-                "2026-01-01T00:02:00Z",
-                now,
-            ),
+        insert_reviewed_projection(
+            conn,
+            projection_id="a" * 64,
+            workspace_id="ws-pair-chain",
+            profile_id="pf-pair-chain",
+            source_transaction_id="tx-chain-a",
+            target_transaction_id="tx-chain-middle",
+            source_asset="LBTC",
+            target_asset="BTC",
+            source_amount_msat=btc_to_msat("0.5"),
+            target_amount_msat=btc_to_msat("0.49"),
+            review_kind="peg-out",
+            swap_fee_msat=btc_to_msat("0.01"),
+            occurred_at="2026-01-01T00:00:00Z",
+            target_occurred_at="2026-01-01T00:02:00Z",
         )
         conn.execute(
             """
@@ -3569,37 +3556,22 @@ class ReviewRegressionTest(unittest.TestCase):
                 ),
             ],
         )
-        conn.execute(
-            """
-            INSERT INTO journal_custody_economic_relations(
-                relation_id, workspace_id, profile_id, relation_kind,
-                source_transaction_id, target_transaction_id,
-                source_asset, target_asset, source_amount_msat,
-                target_amount_msat, review_kind, policy, swap_fee_msat,
-                swap_fee_kind, basis_state, occurred_at, target_occurred_at,
-                created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "c" * 64,
-                "ws-swap-ui",
-                "pf-swap-ui",
-                "conversion",
-                "swap-out-leg",
-                "swap-in-leg",
-                "BTC",
-                "LBTC",
-                btc_to_msat("0.10000000"),
-                btc_to_msat("0.09990000"),
-                "manual",
-                "carrying-value",
-                btc_to_msat("0.00010000"),
-                "deducted",
-                "eligible",
-                "2026-03-01T10:00:00Z",
-                "2026-03-01T10:05:00Z",
-                now,
-            ),
+        insert_reviewed_projection(
+            conn,
+            projection_id="c" * 64,
+            workspace_id="ws-swap-ui",
+            profile_id="pf-swap-ui",
+            source_transaction_id="swap-out-leg",
+            target_transaction_id="swap-in-leg",
+            source_asset="BTC",
+            target_asset="LBTC",
+            source_amount_msat=btc_to_msat("0.10000000"),
+            target_amount_msat=btc_to_msat("0.09990000"),
+            review_kind="manual",
+            swap_fee_msat=btc_to_msat("0.00010000"),
+            swap_fee_kind="deducted",
+            occurred_at="2026-03-01T10:00:00Z",
+            target_occurred_at="2026-03-01T10:05:00Z",
         )
         conn.execute(
             """
@@ -4407,37 +4379,22 @@ class ReviewRegressionTest(unittest.TestCase):
                 ),
             ],
         )
-        conn.execute(
-            """
-            INSERT INTO journal_custody_economic_relations(
-                relation_id, workspace_id, profile_id, relation_kind,
-                source_transaction_id, target_transaction_id,
-                source_asset, target_asset, source_amount_msat,
-                target_amount_msat, review_kind, policy, swap_fee_msat,
-                swap_fee_kind, basis_state, occurred_at, target_occurred_at,
-                created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "d" * 64,
-                "ws-neutral-swap",
-                "pf-neutral-swap",
-                "conversion",
-                "tx-neutral-out",
-                "tx-neutral-in",
-                "LBTC",
-                "BTC",
-                btc_to_msat("0.12426275"),
-                btc_to_msat("0.12413298"),
-                "peg-out",
-                "carrying-value",
-                btc_to_msat("0.00012977"),
-                "combined",
-                "eligible",
-                "2026-03-14T17:30:10Z",
-                "2026-03-14T17:32:32Z",
-                now,
-            ),
+        insert_reviewed_projection(
+            conn,
+            projection_id="d" * 64,
+            workspace_id="ws-neutral-swap",
+            profile_id="pf-neutral-swap",
+            source_transaction_id="tx-neutral-out",
+            target_transaction_id="tx-neutral-in",
+            source_asset="LBTC",
+            target_asset="BTC",
+            source_amount_msat=btc_to_msat("0.12426275"),
+            target_amount_msat=btc_to_msat("0.12413298"),
+            review_kind="peg-out",
+            swap_fee_msat=btc_to_msat("0.00012977"),
+            swap_fee_kind="combined",
+            occurred_at="2026-03-14T17:30:10Z",
+            target_occurred_at="2026-03-14T17:32:32Z",
         )
         conn.executemany(
             """

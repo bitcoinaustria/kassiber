@@ -37,7 +37,12 @@ from kassiber.cli.handlers import (
 )
 from kassiber.core import custody_review_terms
 from kassiber.core.reports import _swap_fee_summary_rows
-from kassiber.db import ensure_schema_compat, open_db
+from kassiber.db import (
+    _ensure_custody_projection_table_shapes,
+    ensure_schema_compat,
+    open_db,
+)
+from tests.custody_projection_fixtures import insert_reviewed_projection
 
 
 def _now():
@@ -92,6 +97,149 @@ def _insert_tx(conn, *, tx_id, workspace_id, profile_id, wallet_id, asset, direc
 
 
 class FreshSchemaTests(unittest.TestCase):
+    def test_projection_shape_migration_preserves_rows_and_joins_authored_terms(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                for tx_id, direction, asset, amount in (
+                    ("conversion-out", "outbound", "BTC", 1_000),
+                    ("conversion-in", "inbound", "LBTC", 900),
+                    ("move-out", "outbound", "BTC", 500),
+                    ("move-in", "inbound", "BTC", 500),
+                ):
+                    _insert_tx(
+                        conn,
+                        tx_id=tx_id,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        asset=asset,
+                        direction=direction,
+                        amount_msat=amount,
+                    )
+                insert_reviewed_projection(
+                    conn,
+                    projection_id="a" * 64,
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    source_transaction_id="conversion-out",
+                    target_transaction_id="conversion-in",
+                    source_asset="BTC",
+                    target_asset="LBTC",
+                    source_amount_msat=1_000,
+                    target_amount_msat=900,
+                    review_kind="peg-out",
+                    swap_fee_msat=100,
+                    swap_fee_kind="provider",
+                    occurred_at=_now(),
+                    target_occurred_at=_now(),
+                )
+                insert_reviewed_projection(
+                    conn,
+                    projection_id="b" * 64,
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    source_transaction_id="move-out",
+                    target_transaction_id="move-in",
+                    source_asset="BTC",
+                    target_asset="BTC",
+                    source_amount_msat=500,
+                    target_amount_msat=500,
+                    review_kind="coinjoin",
+                    occurred_at=_now(),
+                    target_occurred_at=_now(),
+                    relation_kind="move",
+                )
+                for table, columns in (
+                    (
+                        "journal_custody_decisions",
+                        ("review_kind", "policy", "swap_fee_msat"),
+                    ),
+                    (
+                        "journal_custody_economic_relations",
+                        ("review_kind", "policy", "swap_fee_msat"),
+                    ),
+                ):
+                    for column in columns:
+                        column_type = "INTEGER" if column == "swap_fee_msat" else "TEXT"
+                        conn.execute(
+                            f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"
+                        )
+                    conn.execute(
+                        f"UPDATE {table} SET review_kind = 'copied-stale', "
+                        "policy = 'taxable', swap_fee_msat = 999"
+                    )
+                conn.commit()
+
+                conn.execute(
+                    """
+                    CREATE TRIGGER test_projection_policy_dependency
+                    AFTER INSERT ON journal_custody_decisions
+                    BEGIN
+                        SELECT NEW.policy;
+                    END
+                    """
+                )
+                with self.assertRaises(sqlite3.DatabaseError):
+                    _ensure_custody_projection_table_shapes(conn)
+                self.assertIn(
+                    "review_kind",
+                    {
+                        row["name"]
+                        for row in conn.execute(
+                            "PRAGMA table_info(journal_custody_decisions)"
+                        )
+                    },
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM journal_custody_projection_relations"
+                    ).fetchone()[0],
+                    2,
+                )
+                conn.execute("DROP TRIGGER test_projection_policy_dependency")
+
+                ensure_schema_compat(conn)
+
+                decision_columns = {
+                    row["name"]
+                    for row in conn.execute(
+                        "PRAGMA table_info(journal_custody_decisions)"
+                    )
+                }
+                relation_columns = {
+                    row["name"]
+                    for row in conn.execute(
+                        "PRAGMA table_info(journal_custody_economic_relations)"
+                    )
+                }
+                for columns in (decision_columns, relation_columns):
+                    self.assertNotIn("review_kind", columns)
+                    self.assertNotIn("policy", columns)
+                    self.assertNotIn("swap_fee_msat", columns)
+                rows = {
+                    row["relation_kind"]: row
+                    for row in conn.execute(
+                        "SELECT * FROM journal_custody_projection_relations"
+                    )
+                }
+                self.assertEqual(rows["conversion"]["kind"], "peg-out")
+                self.assertEqual(rows["conversion"]["policy"], "carrying-value")
+                self.assertEqual(rows["conversion"]["swap_fee_msat"], 100)
+                self.assertEqual(rows["move"]["kind"], "coinjoin")
+                self.assertEqual(rows["move"]["out_amount"], 500)
+
+                ensure_schema_compat(conn)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM journal_custody_projection_relations"
+                    ).fetchone()[0],
+                    2,
+                )
+            finally:
+                conn.close()
+
     def test_carrying_value_pair_rejects_cross_network_rows(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)
@@ -922,37 +1070,22 @@ class FreshSchemaTests(unittest.TestCase):
                         _now(),
                     ),
                 )
-                conn.execute(
-                    """
-                    INSERT INTO journal_custody_economic_relations(
-                        relation_id, workspace_id, profile_id, relation_kind,
-                        source_transaction_id, target_transaction_id,
-                        source_asset, target_asset, source_amount_msat,
-                        target_amount_msat, review_kind, policy,
-                        swap_fee_msat, swap_fee_kind, basis_state,
-                        occurred_at, target_occurred_at, created_at
-                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        "e" * 64,
-                        workspace_id,
-                        profile_id,
-                        "conversion",
-                        "cross-out",
-                        "cross-in",
-                        "BTC",
-                        "LBTC",
-                        1_000,
-                        900,
-                        "manual",
-                        "carrying-value",
-                        456,
-                        "loss",
-                        "eligible",
-                        _now(),
-                        _now(),
-                        _now(),
-                    ),
+                insert_reviewed_projection(
+                    conn,
+                    projection_id="e" * 64,
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    source_transaction_id="cross-out",
+                    target_transaction_id="cross-in",
+                    source_asset="BTC",
+                    target_asset="LBTC",
+                    source_amount_msat=1_000,
+                    target_amount_msat=900,
+                    review_kind="manual",
+                    swap_fee_msat=456,
+                    swap_fee_kind="loss",
+                    occurred_at=_now(),
+                    target_occurred_at=_now(),
                 )
                 conn.commit()
 

@@ -41,9 +41,9 @@ def _conn_with_two_blank_description_transfers():
           profile_id TEXT, out_transaction_id TEXT, out_amount INTEGER,
           deleted_at TEXT
         );
-        CREATE TABLE journal_custody_economic_relations (
-          profile_id TEXT, relation_kind TEXT, source_transaction_id TEXT,
-          target_transaction_id TEXT, policy TEXT, basis_state TEXT
+        CREATE TABLE journal_custody_projection_relations (
+          profile_id TEXT, relation_kind TEXT, out_transaction_id TEXT,
+          in_transaction_id TEXT, policy TEXT, basis_state TEXT
         );
         """
     )

@@ -1209,34 +1209,20 @@ def _stored_custody_allocation_map(
         return {}
 
     grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
-    projection_rows = [
-        *conn.execute(
-            """
-            SELECT decision_id AS projection_id, 'move' AS relation_kind,
-                   source_transaction_id, target_transaction_id, component_id,
-                   source_asset, target_asset, source_rail, target_rail,
-                   source_end_msat - source_start_msat AS source_amount_msat,
-                   target_end_msat - target_start_msat AS target_amount_msat,
-                   NULL AS review_kind
-            FROM journal_custody_decisions
-            WHERE profile_id = ?
-            """,
-            (profile_id,),
-        ).fetchall(),
-        *conn.execute(
-            """
-            SELECT relation_id AS projection_id, relation_kind,
-                   source_transaction_id, target_transaction_id, component_id,
-                   source_asset, target_asset, NULL AS source_rail,
-                   NULL AS target_rail, source_amount_msat, target_amount_msat,
-                   review_kind
-            FROM journal_custody_economic_relations
-            WHERE profile_id = ? AND relation_kind = 'conversion'
-              AND target_transaction_id IS NOT NULL
-            """,
-            (profile_id,),
-        ).fetchall(),
-    ]
+    projection_rows = conn.execute(
+        """
+        SELECT id AS projection_id, relation_kind,
+               out_transaction_id AS source_transaction_id,
+               in_transaction_id AS target_transaction_id, component_id,
+               out_asset AS source_asset, in_asset AS target_asset,
+               source_rail, target_rail, out_amount AS source_amount_msat,
+               in_amount AS target_amount_msat, kind AS review_kind
+        FROM journal_custody_projection_relations
+        WHERE profile_id = ? AND relation_kind IN ('move', 'conversion')
+          AND in_transaction_id IS NOT NULL
+        """,
+        (profile_id,),
+    ).fetchall()
     for projection in projection_rows:
         from_id = str(projection["source_transaction_id"] or "")
         to_id = str(projection["target_transaction_id"] or "")
