@@ -45,8 +45,9 @@ The current path has one accounting authority. `CustodyJournalBuilder`:
 5. invoke RP2 and persist journal projections.
 
 Reports, transaction graphs, source-of-funds, UI and AI consume the stored
-projection. Gap discovery is versioned once and all presentation pages read its
-normalized keyset rows.
+projection. Gap discovery recomputes the same hard-capped derived population
+for accounting and review reads; only the builder's ignored-boundary inputs are
+stored, and presentation cursors are bound to the journal input version.
 
 The legacy pair and payout tables are no longer accounting truths: they are
 write-frozen migration and delayed signed-replay inputs. That narrow physical
@@ -357,8 +358,9 @@ Consumer cutover and physical legacy-table deletion are separate decisions.
 - reviewed N:M lineage is identical in reports, graphs and source-of-funds;
 - reports and exit tax block until the rebuilt projection is current;
 - reorg or stale observer authority invalidates a false internal move;
-- every candidate and lineage row is reachable with indexed keyset pagination;
-- fetching another page never regenerates discovery.
+- every lineage row is reachable with indexed keyset pagination;
+- every capped candidate is reachable with a version-guarded cursor, and a
+  stale cursor fails closed after evidence changes.
 
 End-to-end custody tests use real temporary databases and do not patch builder,
 discovery, projection, or report-gate internals. Mocks are reserved for actual
@@ -379,8 +381,8 @@ Reference-host budgets, median of three cold runs:
 | custody decisions, 250k | 40s |
 | custody decisions, 500k | 85s |
 | custody decisions, 1m | 180s when practical |
-| candidate projection, 100k | 5s once per input version |
-| first lineage/candidate page at 1m | p95 100ms |
+| complete gap-discovery read, 100k | 5s |
+| first lineage page at 1m | p95 100ms |
 | subsequent keyset page at 1m | p95 50ms |
 | transaction-scoped lineage | p95 25ms |
 
@@ -423,6 +425,16 @@ run is approximately 74.3s and 148.6s respectively, inside the time budgets,
 but those estimates are non-blocking until measured on a host with sufficient
 memory.
 
+After deleting the persisted gap cache, a post-change 100k validation on
+Python 3.13.5 / SQLite 3.46.1 measured the real builder at **9.357s** with
+755,196 KiB peak RSS, atomic arbitration at 58.1ms, lineage pages at
+2.60ms/2.17ms, transaction-scoped lineage at 0.21ms, and a complete derived
+gap read at **33.6ms**. A focused 250k validation measured lineage pages at
+4.39ms/3.98ms, transaction-scoped lineage at 0.21ms, and the recomputed gap read
+at **83.9ms**. Both runs retained the structured 10 BTC / 9.9 BTC candidate,
+reported capacity limitation explicitly, used the profile-time and source/
+target lineage indexes, and avoided a temporary page sort.
+
 ## Stop state
 
 The series stops when one authored reviewed-custody aggregate remains, only the
@@ -455,6 +467,9 @@ The completed series is grouped below by coherent slice:
   `3c41deea`, `f149357e`, `fa4621de`, `c13015fe`, `ddbdea8d`, `04d50951`;
 - speculative-scaffold deletion, performance and final correctness repairs:
   `a8131a8a`, `5c12439a`, `9e75efd3`, `9ec629ed`, `1dc8bae1`.
+- post-review correctness and simplicity pass: `abce8e2d`, `cb5f578e`,
+  `6f15448d`, `31d2d3c4`, `f33503c0`, `b4c64246`, `dbb60817`,
+  `7b0bb442`.
 
 The final production flow is the target flow above. Static call-site audit
 finds `detect_intra_transfers` only in the custody interpreter and
@@ -499,13 +514,14 @@ observers reserved for protocol physics:
   `test_rp2_boundary_spy_never_receives_residual_or_later_basis_consumer`,
   `test_unresolved_quantity_never_enters_finalized_projection_and_blocks_later`
   and `test_quantity_issue_blocks_reports_and_appears_in_blocker_snapshot`;
-- genuine candidate/lineage pagination without rediscovery:
-  `test_projection_page_query_uses_keyset_index`, the real JSONL opaque-cursor
-  test and the 100k/250k scalability runs.
+- genuine candidate/lineage pagination with bounded recomputation:
+  `test_snapshot_cursor_reaches_every_normalized_candidate`,
+  `test_snapshot_cursor_expires_when_journal_input_changes`, the real JSONL
+  opaque-cursor test and the 100k/250k scalability runs.
 
 Exact validation on the final code:
 
-- repository quality gate: 2,960 Python tests passed, 8 skipped; TypeScript
+- repository quality gate: 2,968 Python tests passed, 8 skipped; TypeScript
   compilation passed; ESLint had zero errors (49 pre-existing warnings);
   744 Vitest tests passed; shard and compile checks passed;
 - fast integration harness: 39 passed; custody desktop harness: 22 Python and
@@ -519,9 +535,11 @@ Exact validation on the final code:
 
 ### Migration window and rollback risk
 
-The live schema contains 25 custody-related tables. The increase from the
-baseline 20 is the normalized candidate projection, component economic terms
-and durable migration-issue state; the serialized snapshot tables are dropped.
+The live schema contains 23 custody-related tables. The net increase from the
+baseline 20 is component economic terms, durable migration-issue state, the
+narrow targetless-economic relation projection, and the builder's local gap
+input row, offset by deleting the serialized gap snapshot table. All three
+normalized gap-candidate cache tables are also gone.
 Legacy pair/payout rows remain physically present only until every signed
 replica has acknowledged the component-native epoch or a tombstone protocol is
 available. Applying an older binary after component-native writes is unsafe;
@@ -529,35 +547,43 @@ rollback requires the pre-migration backup. Removing those tables sooner could
 lose delayed signed events. Removing immutable migration snapshots, revision
 chains or filed-report history could break audit and amendment evidence.
 
-### Unmet code-volume hard stop
+### Code-volume result and retained exceptions
 
-The final audit cannot truthfully claim lower raw code volume. At the merge,
-the 17 `kassiber/core/custody*.py` modules contained 18,733 lines; the final 20
-modules contain 25,707 lines. Across the audited production surface, the series
-deleted 7,523 lines and added 11,764 (net +4,241). Custody references in
-`cli/handlers.py` fell from 116 to 32, and the competing interpreter, consumer,
-preview, command and serialized-snapshot paths were deleted, but the
-crash-safe authored migration, immutable replication terms, pure planners and
-normalized projection add more code than those paths contained.
+At the merge, the 17 `kassiber/core/custody*.py` modules contained 18,733
+lines. PR #447 reached 25,707 lines before this follow-up audit; the current 20
+modules contain **24,868 lines**, 839 fewer than that reviewed state. Across the
+follow-up commits, production Python deleted 1,162 more lines than it added.
+The branch therefore finishes with materially less code than the starting PR,
+but it remains 6,135 custody-core lines above the pre-PR #439 baseline.
 
-Reaching a lower raw total now would require removing the bounded legacy replay
-window, migration/audit history, or required planner/projection behavior, or
-would merely hide it behind a facade. Those choices would weaken replication
-safety, audit history or the requested invariants. The mandated stop-and-report
-rule therefore applies: all behavioral, acceptance, performance and quality
-conditions are demonstrated, but the initiative remains open on this one
-literal hard stop until the code-volume criterion or compatibility-window
-requirement is changed.
+The earlier claim that no safe deletion remained was wrong. This pass removed
+the gap cache and its three tables, full-book identity hashing, retention and
+display-cache machinery, two-phase legacy staging, duplicated projection
+semantics, divergent freshness readers, the plan fingerprint protocol, the
+economic-term seal mutation and constant compatibility output. A fresh
+top-level reachability scan found no unreferenced custody definition after
+those removals.
 
-The third independent reachability audit confirms this is not residual dead
-surface. It found zero unreferenced top-level definitions in
-`kassiber/core/custody*.py`. The six wholly new custody modules total 6,054
-lines: the crash-safe authored migration, pure component planner, canonical
-journal owner, component-native review terms, typed gap holds and shared exact
-allocator. Deleting all six would discard required behavior and would still
-leave 19,653 custody-core lines, 920 above the 18,733-line baseline. The
-remaining growth inside pre-existing modules is the normalized projection,
-component validation/economic terms, evidence commitments and versioned gap
-population. Closing the numerical gap therefore requires a changed requirement
-or authorization to remove a protected invariant; no further safe deletion
-path remains.
+The remaining proposed cuts were evaluated rather than silently waived:
+
+- deterministic planned row IDs remain because apply replans from the reviewed
+  action and must persist the same exact leg/allocation identities previewed;
+- `expected_economic_term_count` remains because replicated child rows need a
+  fail-closed completeness commitment, although terms now insert atomically for
+  local authors;
+- `legacy_source_id`/`source_row_hash` remain the immutable authored-review
+  identity and audit commitment for both migrated and component-native pair or
+  payout terms;
+- `journal_custody_economic_relations` remains only for targetless reviewed
+  conversions/payouts whose processed basis state cannot be reconstructed by
+  joining authored terms; all target-bearing semantics come from the shared
+  projection view;
+- canonical observation revalidation in gap-hold compilation remains because
+  the derived transaction matcher and authoritative observation substrate are
+  distinct trust boundaries.
+
+Removing those narrow pieces would weaken exact-plan review, replication
+completeness, immutable audit identity, targetless economic classification or
+authoritative provenance. The numerical pre-PR baseline is therefore still an
+explicit unmet criterion, but the final state no longer contains the cache,
+fingerprint or quadruplicated projection machinery identified by the review.
