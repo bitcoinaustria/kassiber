@@ -1625,6 +1625,67 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(len(wire_batches), 1)
         self.assertEqual(set(wire_batches[0]), {"wallet-a", "wallet-b"})
 
+    def test_electrum_dispatcher_close_cannot_overtake_enqueue(self):
+        backend = {
+            "name": "fulcrum",
+            "kind": "electrum",
+            "url": "tcp://electrum.example:50001",
+        }
+        real_queue_type = sb.queue.Queue
+        enqueue_entered = threading.Event()
+        release_enqueue = threading.Event()
+
+        class ControlledQueue:
+            def __init__(self):
+                self.inner = real_queue_type()
+                self.paused = False
+
+            def get(self, *args, **kwargs):
+                return self.inner.get(*args, **kwargs)
+
+            def put(self, item, *args, **kwargs):
+                if item is not None and not self.paused:
+                    self.paused = True
+                    enqueue_entered.set()
+                    release_enqueue.wait()
+                self.inner.put(item, *args, **kwargs)
+
+        class FakeElectrumClient:
+            def __init__(self, _backend):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                return [params[0] for _method, params in requests]
+
+        result = {}
+
+        def call(dispatcher):
+            result["value"] = dispatcher.call("example", ["wallet-a"])
+
+        with (
+            patch("kassiber.core.sync_backends.queue.Queue", ControlledQueue),
+            patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient),
+        ):
+            dispatcher = sb._ElectrumBatchDispatcher(backend)
+            call_thread = threading.Thread(target=call, args=(dispatcher,), daemon=True)
+            close_thread = threading.Thread(target=dispatcher.close, daemon=True)
+            call_thread.start()
+            self.assertTrue(enqueue_entered.wait(timeout=1))
+            close_thread.start()
+            release_enqueue.set()
+            call_thread.join(timeout=2)
+            close_thread.join(timeout=2)
+
+        self.assertFalse(call_thread.is_alive())
+        self.assertFalse(close_thread.is_alive())
+        self.assertEqual(result, {"value": "wallet-a"})
+
     def test_electrum_pool_reconnects_after_transport_failure(self):
         backend = {
             "name": "fulcrum",

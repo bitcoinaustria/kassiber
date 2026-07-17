@@ -491,6 +491,7 @@ class _ElectrumBatchDispatcher:
         self.batch_size = backend_batch_size(backend)
         self._queue = queue.Queue()
         self._closed = False
+        self._state_lock = threading.Lock()
         self._thread = threading.Thread(
             target=self._run,
             name="kassiber-electrum-batch",
@@ -505,25 +506,27 @@ class _ElectrumBatchDispatcher:
         requests = list(requests)
         if not requests:
             return []
-        if self._closed:
-            raise AppError("Electrum client pool is closed")
         pending = {
             "requests": requests,
             "event": threading.Event(),
             "result": None,
             "error": None,
         }
-        self._queue.put(pending)
+        with self._state_lock:
+            if self._closed:
+                raise AppError("Electrum client pool is closed")
+            self._queue.put(pending)
         pending["event"].wait()
         if pending["error"] is not None:
             raise pending["error"]
         return pending["result"]
 
     def close(self):
-        if self._closed:
-            return
-        self._closed = True
-        self._queue.put(None)
+        with self._state_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._queue.put(None)
         self._thread.join()
 
     def _run(self):
