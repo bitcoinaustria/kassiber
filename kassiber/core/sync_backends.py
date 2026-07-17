@@ -71,6 +71,7 @@ from .wallets import (
 
 
 ELECTRUM_STORED_GRAPH_VERSION = 1
+ELECTRUM_STORED_GRAPH_MARKER = "_kassiber_electrum_graph"
 
 
 def _emit_backend_progress(phase: str, **payload):
@@ -3914,6 +3915,10 @@ def _normalize_electrum_bitcoin_graph_for_storage(tx, tx_lookup):
     """
     if not isinstance(tx, dict):
         return tx
+    tx[ELECTRUM_STORED_GRAPH_MARKER] = {
+        "kind": "bitcoin_electrum",
+        "version": ELECTRUM_STORED_GRAPH_VERSION,
+    }
     vout = tx.get("vout")
     if isinstance(vout, list):
         for entry in vout:
@@ -4085,15 +4090,31 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
 
     def stored_transaction(txid):
         stored = stored_transactions.get(str(txid))
-        if isinstance(stored, dict):
-            return stored
-        if not isinstance(stored, str):
+        if isinstance(stored, str):
+            try:
+                stored = json.loads(stored)
+            except ValueError:
+                return None
+        if not isinstance(stored, dict):
+            return None
+        marker = stored.get(ELECTRUM_STORED_GRAPH_MARKER)
+        if not isinstance(marker, dict):
+            return None
+        if marker.get("kind") != "bitcoin_electrum":
             return None
         try:
-            decoded = json.loads(stored)
-        except ValueError:
+            marker_version = int(marker.get("version") or 0)
+        except (TypeError, ValueError):
             return None
-        return decoded if isinstance(decoded, dict) else None
+        if marker_version != ELECTRUM_STORED_GRAPH_VERSION:
+            return None
+        if str(stored.get("txid") or "").lower() != str(txid).lower():
+            return None
+        if not isinstance(stored.get("vin"), list) or not isinstance(
+            stored.get("vout"), list
+        ):
+            return None
+        return stored
     records = []
     batch_size = backend_batch_size(backend)
     tracked_scripts = (

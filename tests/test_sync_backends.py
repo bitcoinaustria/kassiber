@@ -1155,6 +1155,10 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(raw["vout"][1]["scriptpubkey"], target["script_pubkey"])
         self.assertEqual(raw["vout"][1]["value"], 29_000)
         self.assertEqual(raw["vout"][0]["script_hex"], "0014" + "aa" * 20)
+        self.assertEqual(
+            raw["_kassiber_electrum_graph"],
+            {"kind": "bitcoin_electrum", "version": 1},
+        )
 
     def test_electrum_checkpoint_skips_unchanged_history_on_second_sync(self):
         target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
@@ -1284,6 +1288,10 @@ class SyncBackendsTest(unittest.TestCase):
 
         old_graph = {
             "txid": old_txid,
+            "_kassiber_electrum_graph": {
+                "kind": "bitcoin_electrum",
+                "version": 1,
+            },
             "vin": [],
             "vout": [
                 {
@@ -1336,6 +1344,72 @@ class SyncBackendsTest(unittest.TestCase):
             meta["freshness_checkpoint"]["electrum_history_entries"][scripthash],
             {old_txid: old_history, new_txid: new_history},
         )
+
+    def test_electrum_rejects_unproven_stored_transaction_graph(self):
+        target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
+        txid = "66" * 32
+        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+        raw_graph = {
+            "txid": txid,
+            "vin": [],
+            "vout": [{"script_hex": target["script_pubkey"], "value_sats": 12_345}],
+            "total_output_sats": 12_345,
+        }
+        calls = []
+
+        class FakeElectrumClient:
+            def __init__(self, backend):
+                self.backend = backend
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                responses = []
+                for method, params in requests:
+                    key = (method, tuple(params or ()))
+                    calls.append(key)
+                    if key == ("blockchain.scripthash.subscribe", (scripthash,)):
+                        responses.append("status-2")
+                    elif key == ("blockchain.scripthash.get_history", (scripthash,)):
+                        responses.append([{"tx_hash": txid, "height": 123}])
+                    elif key == ("blockchain.transaction.get", (txid,)):
+                        responses.append("current-raw")
+                    elif key == ("blockchain.block.header", (123,)):
+                        responses.append(_header_hex(1_700_000_000))
+                    else:
+                        raise AssertionError(f"Unexpected Electrum call: {key!r}")
+                return responses
+
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={txid: {}},
+            checkpoint={
+                "electrum_stored_graph_version": 1,
+                "electrum_scripthash_statuses": {scripthash: "status-1"},
+            },
+        )
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.decode_raw_transaction",
+            return_value=raw_graph,
+        ):
+            records, meta = sb.compatibility_electrum_records_for_wallet(
+                {"name": "fulcrum", "kind": "electrum", "url": "tcp://electrum.example:50001"},
+                sync_state,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(meta["transactions_fetched"], 1)
+        self.assertIn(("blockchain.transaction.get", (txid,)), calls)
 
     def test_electrum_pool_reuses_one_connection_for_wallet_fetches(self):
         target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
