@@ -25,7 +25,6 @@ import json
 import sqlite3
 from typing import Any, Iterable, Mapping, Sequence
 
-from . import custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
 from .custody_evidence import normalize_boundary_amounts, resolve_protocol_scope
 
@@ -2282,6 +2281,8 @@ def _journal_status(conn, profile_id: str) -> str:
     """Return the same fail-closed freshness state used by report readiness."""
 
     try:
+        from . import custody_journal
+
         status = str(custody_journal.projection_freshness(conn, profile_id)["status"])
         return "not_processed" if status == "no_profile" else status
     except sqlite3.OperationalError:

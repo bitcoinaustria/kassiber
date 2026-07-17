@@ -4611,8 +4611,8 @@ def ensure_schema_compat(conn):
         refresh_legacy_authored_components,
     )
 
-    staged, pairs, payouts = refresh_legacy_authored_components(conn)
-    if staged.changed or pairs.changed or payouts.changed:
+    migration = refresh_legacy_authored_components(conn)
+    if migration.changed:
         conn.commit()
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
@@ -5665,6 +5665,10 @@ def _ensure_swap_matching_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_component "
         "ON transaction_pairs(component_id) WHERE component_id IS NOT NULL"
     )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_component_pending "
+        "ON transaction_pairs(id) WHERE component_id IS NULL"
+    )
     _clear_stale_same_asset_swap_fees(conn)
     conn.commit()
     _backfill_payment_hash_from_raw_json(conn)
@@ -5748,6 +5752,10 @@ def _ensure_direct_swap_payout_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_component "
         "ON direct_swap_payouts(component_id) WHERE component_id IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_component_pending "
+        "ON direct_swap_payouts(id) WHERE component_id IS NULL"
     )
     conn.commit()
 

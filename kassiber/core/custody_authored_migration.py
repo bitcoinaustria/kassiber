@@ -1,9 +1,10 @@
 """Crash-safe compatibility migration into the authored custody aggregate.
 
-Legacy rows are first staged as exact draft revisions, then valid payout
-revisions and connected pair groups are activated atomically.  The nullable
-``component_id`` on each legacy row is the bounded compatibility link; only an
-effective active component replaces that row at the journal boundary.
+Pending legacy rows become final component aggregates in one transaction:
+connected pairs migrate as one atomic group and each payout migrates as one
+active conversion. The nullable ``component_id`` on each legacy row is the
+bounded compatibility link; only an effective active component replaces that
+row at the journal boundary.
 
 Every migrated revision carries two kinds of immutable data:
 
@@ -11,8 +12,9 @@ Every migrated revision carries two kinds of immutable data:
 * a typed economic-terms row for policy, swap-fee, payout and review metadata
   which cannot coherently be represented as physical quantity legs.
 
-Re-running the migration is a no-op.  Compatibility-row edits after activation
-fail closed because reviewed economics must be revised on the component.
+Reopening an already migrated book performs only an indexed pending-row check.
+Compatibility-row edits after activation fail closed because reviewed
+economics must be revised on the component.
 """
 
 from __future__ import annotations
@@ -45,17 +47,6 @@ _VALUATION_UNIT = "reviewed_source_msat"
 
 
 @dataclass(frozen=True)
-class MigrationResult:
-    created: int = 0
-    revised: int = 0
-    unchanged: int = 0
-
-    @property
-    def changed(self) -> bool:
-        return bool(self.created or self.revised)
-
-
-@dataclass(frozen=True)
 class ConsolidationResult:
     activated: int = 0
     unchanged: int = 0
@@ -63,7 +54,7 @@ class ConsolidationResult:
 
     @property
     def changed(self) -> bool:
-        return bool(self.activated)
+        return bool(self.activated or self.skipped)
 
 
 def _record_migration_issue(
@@ -280,100 +271,8 @@ def _pair_residual_classification(row: Mapping[str, Any]) -> str:
     )
 
 
-def _pair_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
-    out_asset = normalize_asset_code(_field(row, "out_asset"))
-    in_asset = normalize_asset_code(_field(row, "in_asset"))
-    source_principal = row_boundary_amounts(
-        {
-            "direction": _field(row, "out_direction"),
-            "amount": _field(row, "out_tx_amount"),
-            "fee": _field(row, "out_fee"),
-            "amount_includes_fee": _field(row, "out_amount_includes_fee"),
-        }
-    ).principal_msat
-    target_principal = row_boundary_amounts(
-        {
-            "direction": _field(row, "in_direction"),
-            "amount": _field(row, "in_tx_amount"),
-            "fee": _field(row, "in_fee"),
-            "amount_includes_fee": _field(row, "in_amount_includes_fee"),
-        }
-    ).principal_msat
-    explicit_source = _field(row, "out_amount")
-    reviewed_source = (
-        source_principal if explicit_source in (None, "") else int(explicit_source)
-    )
-    conversion = out_asset != in_asset or str(_field(row, "policy")) != "carrying-value"
-    source_amount = max(0, reviewed_source)
-    target_amount = max(0, target_principal)
-    if not conversion:
-        # Existing same-asset review semantics carry only the common slice;
-        # the remainder keeps its independent classification.
-        source_amount = max(0, min(reviewed_source, target_principal))
-        target_amount = source_amount
-    component_id = _stable_id(
-        "transaction_pair", str(_field(row, "profile_id")), str(_field(row, "id")), source_hash
-    )
-    source_leg_id = _stable_id(component_id, "leg", "source")
-    target_leg_id = _stable_id(component_id, "leg", "target")
-    source_valuation = source_amount if conversion else None
-    target_valuation = source_amount if conversion else None
-    out_row = {
-        "transaction_id": _field(row, "out_transaction_id"),
-        "wallet_id": _field(row, "out_wallet_id"),
-        "wallet_kind": _field(row, "out_wallet_kind"),
-        "config_json": _field(row, "out_wallet_config_json"),
-        "raw_json": _field(row, "out_raw_json"),
-        "asset": out_asset,
-    }
-    in_row = {
-        "transaction_id": _field(row, "in_transaction_id"),
-        "wallet_id": _field(row, "in_wallet_id"),
-        "wallet_kind": _field(row, "in_wallet_kind"),
-        "config_json": _field(row, "in_wallet_config_json"),
-        "raw_json": _field(row, "in_raw_json"),
-        "asset": in_asset,
-    }
-    return {
-        "component_id": component_id,
-        "lineage_id": _stable_id(
-            "transaction_pair", str(_field(row, "profile_id")), str(_field(row, "id")), "lineage"
-        ),
-        "component_type": "swap" if conversion else "manual_bridge",
-        "conservation_mode": "conversion" if conversion else "quantity",
-        "conversion_policy": str(_field(row, "policy")) if conversion else None,
-        "conversion_reviewed": conversion,
-        "legs": [
-            _leg(
-                out_row,
-                leg_id=source_leg_id,
-                role="source",
-                asset=out_asset,
-                amount_msat=source_amount,
-                occurred_at=_field(row, "out_occurred_at"),
-                valuation_amount=source_valuation,
-            ),
-            _leg(
-                in_row,
-                leg_id=target_leg_id,
-                role="destination",
-                asset=in_asset,
-                amount_msat=target_amount,
-                occurred_at=_field(row, "in_occurred_at"),
-                valuation_amount=target_valuation,
-            ),
-        ],
-        "allocations": [
-            _allocation(
-                allocation_id=_stable_id(component_id, "allocation", "0"),
-                source_leg_id=source_leg_id,
-                sink_leg_id=target_leg_id,
-                source_amount_msat=source_amount,
-                sink_amount_msat=target_amount,
-            )
-        ],
-        "reviewed_source_amount_msat": reviewed_source,
-    }
+def _pair_spec(row: Mapping[str, Any], _source_hash: str) -> dict[str, Any]:
+    return _pair_group_spec([row], require_full_source=False)
 
 
 def _payout_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
@@ -451,27 +350,6 @@ def _payout_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
             )
         ],
         "reviewed_source_amount_msat": reviewed_source,
-    }
-
-
-def _component_kwargs(row: Mapping[str, Any], spec: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        "component_type": spec["component_type"],
-        "conservation_mode": spec["conservation_mode"],
-        "conversion_policy": spec["conversion_policy"],
-        "conversion_reviewed": spec["conversion_reviewed"],
-        "legs": spec["legs"],
-        "allocations": spec["allocations"],
-        "evidence_kind": "legacy_review_migration",
-        "evidence_grade": "reviewed",
-        "evidence": {
-            "legacy_table": _field(row, "legacy_table"),
-            "legacy_source_id": _field(row, "id"),
-        },
-        "notes": _field(row, "notes"),
-        "change_reason": "migrate legacy authored custody review",
-        "created_at": _field(row, "created_at"),
-        "authored_source": "migration",
     }
 
 
@@ -592,88 +470,6 @@ def _insert_terms(
     )
 
 
-def _migrate_row(
-    conn: sqlite3.Connection,
-    row: Mapping[str, Any],
-    *,
-    term_kind: str,
-    hash_fields: Sequence[str],
-    build_spec: Any,
-) -> str:
-    source_hash = _hash_payload(_canonical_payload(row, hash_fields))
-    spec = build_spec(row, source_hash)
-    linked_id = _field(row, "component_id")
-    if linked_id not in (None, ""):
-        existing_term = conn.execute(
-            "SELECT source_row_hash FROM custody_component_economic_terms "
-            "WHERE component_id = ? AND term_kind = ? "
-            "AND legacy_source_id = ? ORDER BY ordinal, id LIMIT 1",
-            (linked_id, term_kind, _field(row, "id")),
-        ).fetchone()
-        if existing_term is not None and existing_term["source_row_hash"] == source_hash:
-            return "unchanged"
-        linked = get_component(conn, str(linked_id))
-        if linked["state"] == "active":
-            raise AppError(
-                "an activated migrated custody review no longer matches its legacy source",
-                code="custody_legacy_review_changed_after_activation",
-                hint="Revise the custody component instead of editing compatibility rows.",
-                details={"legacy_source_id": _field(row, "id"), "component_id": linked_id},
-                retryable=False,
-            )
-        if existing_term is None and str(linked_id) == spec["component_id"]:
-            _insert_terms(
-                conn, row, spec, term_kind=term_kind, source_hash=source_hash
-            )
-            return "revised"
-        if conn.execute(
-            "SELECT 1 FROM custody_components WHERE id = ?",
-            (spec["component_id"],),
-        ).fetchone() is not None:
-            spec = _retarget_revision_spec(
-                spec,
-                supersedes_component_id=str(linked_id),
-            )
-        kwargs = _component_kwargs(row, spec)
-        revised = update_component(
-            conn,
-            str(linked_id),
-            new_component_id=spec["component_id"],
-            preserve_planned_row_ids=True,
-            **kwargs,
-        )
-        if revised["id"] != spec["component_id"]:
-            raise AssertionError("migrated custody revision id changed")
-        _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
-        _link_legacy_row(
-            conn,
-            legacy_table=str(_field(row, "legacy_table")),
-            legacy_source_id=str(_field(row, "id")),
-            component_id=spec["component_id"],
-        )
-        return "revised"
-
-    kwargs = _component_kwargs(row, spec)
-    created = create_component(
-        conn,
-        workspace_id=str(_field(row, "workspace_id")),
-        profile_id=str(_field(row, "profile_id")),
-        component_id=spec["component_id"],
-        lineage_id=spec["lineage_id"],
-        **kwargs,
-    )
-    if created["id"] != spec["component_id"]:
-        raise AssertionError("migrated custody component id changed")
-    _insert_terms(conn, row, spec, term_kind=term_kind, source_hash=source_hash)
-    _link_legacy_row(
-        conn,
-        legacy_table=str(_field(row, "legacy_table")),
-        legacy_source_id=str(_field(row, "id")),
-        component_id=spec["component_id"],
-    )
-    return "created"
-
-
 def _pair_rows(
     conn: sqlite3.Connection,
     *,
@@ -739,57 +535,6 @@ def _payout_rows(
     ).fetchall()
 
 
-def backfill_legacy_authored_components(conn: sqlite3.Connection) -> MigrationResult:
-    """Create/link draft components for every active legacy authored review."""
-
-    counts = {"created": 0, "revised": 0, "unchanged": 0}
-    with _savepoint(conn, "custody_authored_backfill"):
-        for rows, term_kind, fields, builder in (
-            (
-                _pair_rows(conn, include_deleted=True),
-                "transaction_pair",
-                _PAIR_HASH_FIELDS,
-                _pair_spec,
-            ),
-            (
-                _payout_rows(conn, include_deleted=True),
-                "direct_swap_payout",
-                _PAYOUT_HASH_FIELDS,
-                _payout_spec,
-            ),
-        ):
-            for row in rows:
-                try:
-                    outcome = _migrate_row(
-                        conn,
-                        row,
-                        term_kind=term_kind,
-                        hash_fields=fields,
-                        build_spec=builder,
-                    )
-                except AppError as error:
-                    _record_migration_issue(conn, [row], error)
-                    continue
-                if _field(row, "deleted_at") not in (None, ""):
-                    component_id = str(
-                        conn.execute(
-                            f"SELECT component_id FROM {_field(row, 'legacy_table')} "
-                            "WHERE id = ?",
-                            (_field(row, "id"),),
-                        ).fetchone()["component_id"]
-                        or ""
-                    )
-                    if component_id:
-                        supersede_component(
-                            conn,
-                            component_id,
-                            reason="migrate deleted legacy custody review",
-                            superseded_at=str(_field(row, "deleted_at")),
-                        )
-                counts[outcome] += 1
-    return MigrationResult(**counts)
-
-
 def _connected_pair_groups(rows: Sequence[Mapping[str, Any]]) -> list[list[Mapping[str, Any]]]:
     by_transaction: dict[str, set[int]] = {}
     for index, row in enumerate(rows):
@@ -813,33 +558,6 @@ def _connected_pair_groups(rows: Sequence[Mapping[str, Any]]) -> list[list[Mappi
             pending.extend(sorted(neighbors - indexes, reverse=True))
         groups.append([rows[index] for index in sorted(indexes)])
     return groups
-
-
-def _allocation_signature(
-    legs: Sequence[Mapping[str, Any]],
-    allocations: Sequence[Mapping[str, Any]],
-) -> tuple[tuple[str, str, int, int], ...]:
-    legs_by_id = {str(_field(leg, "id")): leg for leg in legs}
-
-    def transaction_id(leg_id: Any) -> str:
-        leg = legs_by_id[str(leg_id)]
-        return str(
-            _field(leg, "anchor_transaction_id")
-            or _field(leg, "transaction_id")
-            or ""
-        )
-
-    return tuple(
-        sorted(
-            (
-                transaction_id(_field(allocation, "source_leg_id")),
-                transaction_id(_field(allocation, "sink_leg_id")),
-                int(_field(allocation, "source_amount_msat") or 0),
-                int(_field(allocation, "sink_amount_msat") or 0),
-            )
-            for allocation in allocations
-        )
-    )
 
 
 def _pair_group_spec(
@@ -900,6 +618,17 @@ def _pair_group_spec(
         available_target = target_principal - target_used.get(target_id, 0)
         explicit = _field(row, "out_amount")
         requested = available_source if explicit in (None, "") else int(explicit)
+        if requested > available_source:
+            raise AppError(
+                "a reviewed pair exceeds its available source quantity",
+                code="custody_legacy_group_invalid",
+                details={
+                    "pair_id": _field(row, "id"),
+                    "requested_msat": requested,
+                    "available_msat": available_source,
+                },
+                retryable=False,
+            )
         if conversion:
             source_amount = min(requested, available_source)
             target_amount = available_target
@@ -1027,7 +756,7 @@ def _pair_group_spec(
     return spec
 
 
-def consolidate_legacy_pair_components(
+def _migrate_legacy_pair_groups(
     conn: sqlite3.Connection,
 ) -> ConsolidationResult:
     """Activate one atomic component for each connected active pair group."""
@@ -1054,37 +783,22 @@ def consolidate_legacy_pair_components(
     )
 
 
-def consolidate_legacy_payout_components(
+def _migrate_legacy_payouts(
     conn: sqlite3.Connection,
 ) -> ConsolidationResult:
-    """Activate staged one-source direct-payout component aggregates."""
+    """Create and activate each legacy payout atomically in one pass."""
 
     activated = 0
     unchanged = 0
     skipped = 0
     with _savepoint(conn, "custody_payout_consolidation"):
         for row in _payout_rows(conn):
-            component_id = str(_field(row, "component_id") or "")
-            if not component_id:
-                skipped += 1
-                continue
             try:
-                component = get_component(conn, component_id)
-                if component["effective_state"] == "active":
+                linked_id = str(_field(row, "component_id") or "")
+                if linked_id and get_component(conn, linked_id)["effective_state"] == "active":
                     unchanged += 1
                     continue
-                source_principal = row_boundary_amounts(
-                    {
-                        "direction": _field(row, "out_direction"),
-                        "amount": _field(row, "out_tx_amount"),
-                        "fee": _field(row, "out_fee"),
-                        "amount_includes_fee": _field(
-                            row, "out_amount_includes_fee"
-                        ),
-                    }
-                ).principal_msat
-                reviewed_source = _field(row, "out_amount")
-                if reviewed_source not in (None, "") and int(reviewed_source) < source_principal:
+                with _savepoint(conn, f"custody_payout_{uuid.uuid4().hex}"):
                     source_hash = _hash_payload(
                         _canonical_payload(row, _PAYOUT_HASH_FIELDS)
                     )
@@ -1099,40 +813,35 @@ def consolidate_legacy_payout_components(
                             reviewed_source_msat=reviewed,
                             classification="suspense_continuation",
                         )
-                    spec = _retarget_revision_spec(
-                        spec, supersedes_component_id=component["id"]
-                    )
-                    component = update_component(
-                        conn,
-                        component["id"],
-                        new_component_id=spec["component_id"],
-                        preserve_planned_row_ids=True,
-                        **_component_kwargs(row, spec),
-                    )
-                    _insert_terms(
+                    if linked_id:
+                        spec = _retarget_revision_spec(
+                            spec, supersedes_component_id=linked_id
+                        )
+                        supersede_component(
+                            conn,
+                            linked_id,
+                            reason="replace staged legacy direct payout",
+                        )
+                    migrated = _activate_native_review(
                         conn,
                         row,
                         spec,
                         term_kind="direct_swap_payout",
                         source_hash=source_hash,
+                        authored_source="migration",
+                        change_reason="migrate legacy direct payout",
+                        evidence_kind="legacy_review_migration",
+                        evidence={
+                            "legacy_table": "direct_swap_payouts",
+                            "legacy_source_id": str(_field(row, "id")),
+                        },
                     )
                     _link_legacy_row(
                         conn,
                         legacy_table="direct_swap_payouts",
                         legacy_source_id=str(_field(row, "id")),
-                        component_id=component["id"],
+                        component_id=str(migrated["component_id"]),
                     )
-                if not component["validation"]["activatable"]:
-                    raise AppError(
-                        "a migrated direct payout cannot activate",
-                        code="custody_legacy_group_invalid",
-                        details={
-                            "payout_id": _field(row, "id"),
-                            "issues": component["validation"]["issues"],
-                        },
-                        retryable=False,
-                    )
-                activate_component(conn, component["id"])
             except AppError as error:
                 _record_migration_issue(conn, [row], error)
                 skipped += 1
@@ -1161,83 +870,175 @@ def _consolidate_pair_group(
                 current["economic_terms"]
             ) == len(group):
                 return "unchanged"
-            if (
-                len(group) == 1
-                and current["state"] == "draft"
-                and current["validation"]["activatable"]
-                and _allocation_signature(
-                    current["legs"], current["allocations"]
-                )
-                == _allocation_signature(spec["legs"], spec["allocations"])
-            ):
-                activate_component(conn, current["id"])
-                return "activated"
-        existing = conn.execute(
-            "SELECT state FROM custody_components WHERE id = ?",
+        exact = conn.execute(
+            "SELECT id FROM custody_components WHERE id = ?",
             (spec["component_id"],),
         ).fetchone()
-        if existing is None:
-            component = create_component(
-                conn,
-                workspace_id=str(_field(group[0], "workspace_id")),
-                profile_id=str(_field(group[0], "profile_id")),
-                component_id=spec["component_id"],
-                lineage_id=spec["lineage_id"],
-                component_type=spec["component_type"],
-                conservation_mode=spec["conservation_mode"],
-                conversion_policy=spec["conversion_policy"],
-                conversion_reviewed=spec["conversion_reviewed"],
-                evidence_kind="legacy_review_migration",
-                evidence_grade="reviewed",
-                evidence={
-                    "legacy_table": "transaction_pairs",
-                    "legacy_source_ids": sorted(
-                        str(_field(row, "id")) for row in group
-                    ),
-                },
-                legs=spec["legs"],
-                allocations=spec["allocations"],
-                authored_source="migration",
-                change_reason="consolidate legacy reviewed pair group",
-                created_at=spec["created_at"],
+        if exact is not None:
+            exact_component = get_component(conn, str(exact["id"]))
+            if exact_component["effective_state"] == "active" and len(
+                exact_component["economic_terms"]
+            ) == len(group):
+                for row in group:
+                    _link_legacy_row(
+                        conn,
+                        legacy_table="transaction_pairs",
+                        legacy_source_id=str(_field(row, "id")),
+                        component_id=str(exact["id"]),
+                    )
+                return "activated"
+            linked.add(str(exact["id"]))
+            spec = _retarget_revision_spec(
+                spec, supersedes_component_id=str(exact["id"])
             )
-            seal_component_economic_terms(conn, component["id"], spec["terms"])
-        component = get_component(conn, spec["component_id"])
-        if not component["validation"]["activatable"]:
-            raise AppError(
-                "a migrated reviewed pair group cannot activate",
-                code="custody_legacy_group_invalid",
-                details={
-                    "pair_ids": sorted(str(_field(row, "id")) for row in group),
-                    "issues": component["validation"]["issues"],
-                },
-                retryable=False,
-            )
-        for old_id in sorted(linked - {component["id"]}):
+        for old_id in sorted(linked):
             supersede_component(
                 conn, old_id, reason="consolidated into authored pair group"
             )
-        if component["state"] != "active":
-            activate_component(conn, component["id"])
+        source_hash = _hash_payload(
+            _canonical_payload(group[0], _PAIR_HASH_FIELDS)
+        )
+        migrated = _activate_native_review(
+            conn,
+            group[0],
+            spec,
+            term_kind="transaction_pair",
+            source_hash=source_hash,
+            authored_source="migration",
+            change_reason="consolidate legacy reviewed pair group",
+            evidence_kind="legacy_review_migration",
+            evidence={
+                "legacy_table": "transaction_pairs",
+                "legacy_source_ids": sorted(
+                    str(_field(row, "id")) for row in group
+                ),
+            },
+        )
         for row in group:
             _link_legacy_row(
                 conn,
                 legacy_table="transaction_pairs",
                 legacy_source_id=str(_field(row, "id")),
-                component_id=component["id"],
+                component_id=str(migrated["component_id"]),
             )
     return "activated"
 
 
+def _migrate_deleted_legacy_rows(conn: sqlite3.Connection) -> ConsolidationResult:
+    migrated = 0
+    unchanged = 0
+    skipped = 0
+    for rows, term_kind, fields, builder in (
+        (
+            _pair_rows(conn, include_deleted=True),
+            "transaction_pair",
+            _PAIR_HASH_FIELDS,
+            _pair_spec,
+        ),
+        (
+            _payout_rows(conn, include_deleted=True),
+            "direct_swap_payout",
+            _PAYOUT_HASH_FIELDS,
+            _payout_spec,
+        ),
+    ):
+        for row in rows:
+            if _field(row, "deleted_at") in (None, ""):
+                continue
+            linked_id = str(_field(row, "component_id") or "")
+            if linked_id:
+                try:
+                    if get_component(conn, linked_id)["state"] == "superseded":
+                        unchanged += 1
+                        continue
+                except AppError:
+                    pass
+            try:
+                with _savepoint(conn, f"custody_deleted_{uuid.uuid4().hex}"):
+                    source_hash = _hash_payload(_canonical_payload(row, fields))
+                    spec = builder(row, source_hash)
+                    if linked_id:
+                        spec = _retarget_revision_spec(
+                            spec, supersedes_component_id=linked_id
+                        )
+                        supersede_component(
+                            conn,
+                            linked_id,
+                            reason="replace staged deleted legacy review",
+                        )
+                    migrated_review = _activate_native_review(
+                        conn,
+                        row,
+                        spec,
+                        term_kind=term_kind,
+                        source_hash=source_hash,
+                        authored_source="migration",
+                        change_reason="migrate deleted legacy custody review",
+                        evidence_kind="legacy_review_migration",
+                        evidence={
+                            "legacy_table": str(_field(row, "legacy_table")),
+                            "legacy_source_id": str(_field(row, "id")),
+                        },
+                    )
+                    component_id = str(migrated_review["component_id"])
+                    supersede_component(
+                        conn,
+                        component_id,
+                        reason="migrate deleted legacy custody review",
+                        superseded_at=str(_field(row, "deleted_at")),
+                    )
+                    _link_legacy_row(
+                        conn,
+                        legacy_table=str(_field(row, "legacy_table")),
+                        legacy_source_id=str(_field(row, "id")),
+                        component_id=component_id,
+                    )
+            except AppError as error:
+                _record_migration_issue(conn, [row], error)
+                skipped += 1
+                continue
+            _resolve_migration_issues(conn, [row])
+            migrated += 1
+    return ConsolidationResult(
+        activated=migrated,
+        unchanged=unchanged,
+        skipped=skipped,
+    )
+
+
 def refresh_legacy_authored_components(
     conn: sqlite3.Connection,
-) -> tuple[MigrationResult, ConsolidationResult, ConsolidationResult]:
-    """Synchronize the bounded compatibility rows inside the caller's txn."""
+) -> ConsolidationResult:
+    """Migrate pending legacy rows atomically without a draft staging phase."""
 
-    staged = backfill_legacy_authored_components(conn)
-    pairs = consolidate_legacy_pair_components(conn)
-    payouts = consolidate_legacy_payout_components(conn)
-    return staged, pairs, payouts
+    pending = int(
+        conn.execute(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM transaction_pairs
+               WHERE component_id IS NULL)
+              +
+              (SELECT COUNT(*) FROM direct_swap_payouts
+               WHERE component_id IS NULL)
+              +
+              (SELECT COUNT(*) FROM custody_authored_migration_issues
+               WHERE resolved_at IS NULL)
+            """
+        ).fetchone()[0]
+        or 0
+    )
+    if pending == 0:
+        return ConsolidationResult(unchanged=1)
+
+    with _savepoint(conn, "custody_authored_migration"):
+        deleted = _migrate_deleted_legacy_rows(conn)
+        pairs = _migrate_legacy_pair_groups(conn)
+        payouts = _migrate_legacy_payouts(conn)
+    return ConsolidationResult(
+        activated=deleted.activated + pairs.activated + payouts.activated,
+        unchanged=deleted.unchanged + pairs.unchanged + payouts.unchanged,
+        skipped=deleted.skipped + pairs.skipped + payouts.skipped,
+    )
 
 
 def load_migration_quarantines(
@@ -1937,6 +1738,8 @@ def _activate_native_review(
     source_hash: str,
     authored_source: str,
     change_reason: str | None = None,
+    evidence_kind: str = "reviewed_custody",
+    evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     prior = conn.execute(
         "SELECT id FROM custody_components "
@@ -1957,9 +1760,13 @@ def _activate_native_review(
         "conversion_reviewed": bool(spec.get("conversion_reviewed")),
         "legs": spec["legs"],
         "allocations": spec["allocations"],
-        "evidence_kind": "reviewed_custody",
+        "evidence_kind": evidence_kind,
         "evidence_grade": "reviewed",
-        "evidence": {"review_id": row["id"], "term_kind": term_kind},
+        "evidence": (
+            dict(evidence)
+            if evidence is not None
+            else {"review_id": row["id"], "term_kind": term_kind}
+        ),
         "notes": _field(row, "notes"),
         "authored_source": authored_source,
         "created_at": str(row["created_at"]),

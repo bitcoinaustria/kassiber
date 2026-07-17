@@ -14,9 +14,9 @@ from kassiber.cli.handlers import (
     list_transactions,
 )
 from kassiber.core.custody_authored_migration import (
-    backfill_legacy_authored_components,
     find_active_review_for_transaction,
     list_active_review_refs,
+    refresh_legacy_authored_components,
 )
 from kassiber.core.custody_components import (
     activate_component,
@@ -283,7 +283,7 @@ def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
     try:
         assert reopened.execute(
             "SELECT COUNT(*) FROM custody_components"
-        ).fetchone()[0] == 3
+        ).fetchone()[0] == 2
         assert reopened.execute(
             "SELECT COUNT(*) FROM custody_components WHERE state = 'active'"
         ).fetchone()[0] == 2
@@ -514,11 +514,11 @@ def test_transaction_flow_filters_use_only_current_custody_projection(tmp_path):
     conn.close()
 
 
-def test_backfill_is_idempotent_and_legacy_edits_create_a_revision(tmp_path):
+def test_single_phase_migration_is_idempotent_and_freezes_legacy_edits(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)
-    first = backfill_legacy_authored_components(conn)
-    assert first.created == 2
+    first = refresh_legacy_authored_components(conn)
+    assert first.activated == 2
     first_ids = {
         row["id"]: row["component_id"]
         for row in conn.execute(
@@ -526,26 +526,38 @@ def test_backfill_is_idempotent_and_legacy_edits_create_a_revision(tmp_path):
             "UNION ALL SELECT id, component_id FROM direct_swap_payouts"
         )
     }
-    assert backfill_legacy_authored_components(conn).unchanged == 2
+    statements: list[str] = []
+    conn.set_trace_callback(statements.append)
+    try:
+        assert refresh_legacy_authored_components(conn).changed is False
+    finally:
+        conn.set_trace_callback(None)
+    assert not [
+        statement
+        for statement in statements
+        if "JOIN transactions out_tx" in statement
+    ]
+    for table in ("transaction_pairs", "direct_swap_payouts"):
+        plan = conn.execute(
+            f"EXPLAIN QUERY PLAN SELECT COUNT(*) FROM {table} "
+            "WHERE component_id IS NULL"
+        ).fetchall()
+        assert any("component_pending" in row["detail"] for row in plan)
     assert conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0] == 2
-
-    conn.execute("UPDATE transaction_pairs SET notes = 'revised review' WHERE id = 'pair'")
-    revised = backfill_legacy_authored_components(conn)
-    assert revised.revised == 1
-    new_id = conn.execute(
-        "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
-    ).fetchone()[0]
-    assert new_id != first_ids["pair"]
-    old = get_component(conn, first_ids["pair"])
-    new = get_component(conn, new_id)
-    assert old["state"] == "superseded"
-    assert new["state"] == "draft"
-    assert old["lineage_id"] == new["lineage_id"]
-    assert new["revision"] == 2
     assert conn.execute(
-        "SELECT COUNT(*) FROM custody_component_economic_terms "
-        "WHERE legacy_source_id = 'pair'"
-    ).fetchone()[0] == 2
+        "SELECT COUNT(*) FROM custody_components WHERE state = 'draft'"
+    ).fetchone()[0] == 0
+    with pytest.raises(sqlite3.IntegrityError, match="legacy_custody_review_write_frozen"):
+        conn.execute(
+            "UPDATE transaction_pairs SET notes = 'revised review' WHERE id = 'pair'"
+        )
+    assert {
+        row["id"]: row["component_id"]
+        for row in conn.execute(
+            "SELECT id, component_id FROM transaction_pairs "
+            "UNION ALL SELECT id, component_id FROM direct_swap_payouts"
+        )
+    } == first_ids
     conn.close()
 
 
@@ -615,6 +627,58 @@ def test_connected_fanout_pairs_activate_as_one_atomic_component(tmp_path):
         migrated.close()
 
 
+def test_delayed_legacy_pair_replay_rebuilds_one_atomic_group(tmp_path):
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    refresh_legacy_authored_components(conn)
+    first_component_id = conn.execute(
+        "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
+    ).fetchone()[0]
+    _tx(
+        conn,
+        "pair-in-late",
+        "btc2",
+        "inbound",
+        "BTC",
+        100,
+        "2026-01-02T02:00:00Z",
+    )
+    conn.execute(
+        """
+        INSERT INTO transaction_pairs(
+            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+            kind, policy, notes, pair_source, out_amount, created_at
+        ) VALUES(
+            'pair-late', 'ws', 'profile', 'pair-out', 'pair-in-late',
+            'manual', 'carrying-value', 'delayed signed replay', 'sync', 100, ?
+        )
+        """,
+        (NOW,),
+    )
+
+    replay = refresh_legacy_authored_components(conn)
+
+    assert replay.activated == 1
+    links = {
+        row["component_id"]
+        for row in conn.execute(
+            "SELECT component_id FROM transaction_pairs "
+            "WHERE id IN ('pair', 'pair-late')"
+        )
+    }
+    assert len(links) == 1
+    active_id = links.pop()
+    assert active_id != first_component_id
+    assert get_component(conn, first_component_id)["state"] == "superseded"
+    active = get_component(conn, active_id)
+    assert active["effective_state"] == "active"
+    assert len(active["economic_terms"]) == 2
+    assert conn.execute(
+        "SELECT COUNT(*) FROM custody_components WHERE state = 'draft'"
+    ).fetchone()[0] == 0
+    conn.close()
+
+
 def test_component_native_pair_creation_grows_one_atomic_fanin(tmp_path):
     conn = open_db(tmp_path)
     _scope(conn)
@@ -666,25 +730,29 @@ def test_component_native_pair_creation_grows_one_atomic_fanin(tmp_path):
     conn.close()
 
 
-def test_backfill_rolls_back_component_terms_and_links_together(tmp_path):
+def test_single_phase_migration_rolls_back_components_terms_and_links_together(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)
 
     from kassiber.core import custody_authored_migration as migration
 
-    real_insert = migration._insert_terms
+    real_seal = migration.seal_component_economic_terms
     calls = 0
 
-    def fail_second_insert(*args, **kwargs):
+    def fail_second_seal(*args, **kwargs):
         nonlocal calls
         calls += 1
         if calls == 2:
             raise RuntimeError("fault injection")
-        return real_insert(*args, **kwargs)
+        return real_seal(*args, **kwargs)
 
-    with patch.object(migration, "_insert_terms", side_effect=fail_second_insert):
+    with patch.object(
+        migration,
+        "seal_component_economic_terms",
+        side_effect=fail_second_seal,
+    ):
         with pytest.raises(RuntimeError, match="fault injection"):
-            backfill_legacy_authored_components(conn)
+            refresh_legacy_authored_components(conn)
 
     assert conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0] == 0
     assert conn.execute(
@@ -702,7 +770,7 @@ def test_backfill_rolls_back_component_terms_and_links_together(tmp_path):
 def test_component_aggregate_accepts_multiple_leg_bound_economic_terms(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)
-    backfill_legacy_authored_components(conn)
+    refresh_legacy_authored_components(conn)
     component_id = conn.execute(
         "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
     ).fetchone()[0]
@@ -803,7 +871,7 @@ def test_component_aggregate_accepts_multiple_leg_bound_economic_terms(tmp_path)
 def test_leg_role_rebuild_preserves_existing_economic_term_foreign_keys(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)
-    assert backfill_legacy_authored_components(conn).created == 2
+    assert refresh_legacy_authored_components(conn).activated == 2
     before = [
         tuple(row)
         for row in conn.execute(
