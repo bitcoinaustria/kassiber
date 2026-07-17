@@ -276,6 +276,14 @@ binary.
    adapters and chunked transaction-ref loader are deleted. Consequently the
    core journal-processing service is the only production caller of
    `build_ledger_state`.
+   Partial conversion and direct-payout reviews now claim only their reviewed
+   source slice. If the same reviewed action has exactly one same-asset inbound
+   row with the same canonical event and exact residual amount, that residual
+   is stored as an equal retained allocation in the same component; otherwise
+   it remains outside the conversion and follows the ordinary external-presumed
+   path. Mixed components carry unlike-asset economics and exact native
+   retention on separate allocations, and native corroboration verifies the
+   retained allocation without comparing it to the unsplit outbound total.
 
 Consumer cutover and physical legacy-table deletion are separate decisions.
 

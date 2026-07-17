@@ -341,6 +341,42 @@ def compile_component_quantity_claims(
         (str(term.get("source_leg_id")), str(term.get("target_leg_id"))): term
         for term in component.get("economic_terms", ())
     }
+    if conservation_mode == "conversion":
+        # A partial conversion owns the high-end slice of each observed source.
+        # The untouched prefix remains available for authoritative same-asset
+        # matching (or the ordinary external-presumed outcome). This makes the
+        # authored conversion and a native return disjoint without inventing a
+        # residual component claim.
+        conversion_totals: dict[str, int] = {}
+        for allocation in allocations:
+            source = legs.get(str(allocation.get("source_leg_id")))
+            if source is None or source.get("role") != "source":
+                continue
+            source_transaction_id = _transaction_id(source)
+            if not source_transaction_id:
+                continue
+            source_observation = observation(source_transaction_id)
+            conversion_totals[source_observation.quantity_hash] = (
+                conversion_totals.get(source_observation.quantity_hash, 0)
+                + int(allocation.get("source_amount_msat") or 0)
+            )
+        for quantity_hash, claimed_msat in conversion_totals.items():
+            source_observation = next(
+                item
+                for item in observations_by_transaction.values()
+                if item.quantity_hash == quantity_hash
+            )
+            if claimed_msat > source_observation.principal_msat:
+                raise _error(
+                    "component claims exceed observed source principal",
+                    component_id=component_id,
+                    transaction_id=source_observation.transaction_id,
+                    claimed_msat=claimed_msat,
+                    principal_msat=source_observation.principal_msat,
+                )
+            source_cursors[quantity_hash] = (
+                source_observation.principal_msat - claimed_msat
+            )
 
     for index, allocation in enumerate(allocations):
         source = legs.get(str(allocation.get("source_leg_id")))
@@ -460,45 +496,56 @@ def compile_component_quantity_claims(
                     )
                 target_cursors[target_observation.quantity_hash] = target_end
                 if conservation_mode == "conversion":
-                    # The inbound quantity remains an independent acquisition.
-                    # Recording it as a target slice would assert that unlike
-                    # quantities are the same conserved object and suppress the
-                    # acquisition from tax projection.
-                    state = EXTERNAL_CONFIRMED
-                    reason = "reviewed_taxable_conversion_source"
-                    allocation_key = str(allocation.get("id") or index)
-                    term = terms_by_edge.get(
-                        (str(source.get("id")), str(sink.get("id"))), {}
-                    )
-                    reviewed_conversion_pairs.append(
-                        {
-                            "pair_id": str(term.get("legacy_source_id") or (
-                                f"component:{component_id}:conversion:{allocation_key}"
-                            )),
-                            "component_id": component_id,
-                            "out_id": source_observation.anchor_transaction_id,
-                            "in_id": target_observation.anchor_transaction_id,
-                            "out_amount": source_amount,
-                            "in_amount": sink_amount,
-                            "out_asset": source_observation.asset,
-                            "in_asset": target_observation.asset,
-                            "policy": str(
-                                term.get("tax_policy")
-                                or component.get("conversion_policy")
-                                or "taxable"
-                            ),
-                            "kind": str(
-                                term.get("review_kind")
-                                or component.get("component_type")
-                                or "swap"
-                            ),
-                            "swap_fee_msat": term.get("swap_fee_msat"),
-                            "swap_fee_kind": term.get("swap_fee_kind"),
-                            "notes": term.get("review_notes"),
-                            "confidence_at_review": term.get("confidence_at_review"),
-                            "review_source": term.get("review_source"),
-                        }
-                    )
+                    if (
+                        source_observation.asset == target_observation.asset
+                        and source_amount == sink_amount
+                    ):
+                        target_slice = QuantitySlice(
+                            target_observation.quantity_hash,
+                            target_start,
+                            target_end,
+                        )
+                        state = INTERNAL_REVIEWED
+                        reason = "reviewed_native_conversion_residual"
+                    else:
+                        # Unlike inbound quantity remains an independent
+                        # acquisition; a target slice would falsely assert
+                        # native quantity identity across assets.
+                        state = EXTERNAL_CONFIRMED
+                        reason = "reviewed_taxable_conversion_source"
+                        allocation_key = str(allocation.get("id") or index)
+                        term = terms_by_edge.get(
+                            (str(source.get("id")), str(sink.get("id"))), {}
+                        )
+                        reviewed_conversion_pairs.append(
+                            {
+                                "pair_id": str(term.get("legacy_source_id") or (
+                                    f"component:{component_id}:conversion:{allocation_key}"
+                                )),
+                                "component_id": component_id,
+                                "out_id": source_observation.anchor_transaction_id,
+                                "in_id": target_observation.anchor_transaction_id,
+                                "out_amount": source_amount,
+                                "in_amount": sink_amount,
+                                "out_asset": source_observation.asset,
+                                "in_asset": target_observation.asset,
+                                "policy": str(
+                                    term.get("tax_policy")
+                                    or component.get("conversion_policy")
+                                    or "taxable"
+                                ),
+                                "kind": str(
+                                    term.get("review_kind")
+                                    or component.get("component_type")
+                                    or "swap"
+                                ),
+                                "swap_fee_msat": term.get("swap_fee_msat"),
+                                "swap_fee_kind": term.get("swap_fee_kind"),
+                                "notes": term.get("review_notes"),
+                                "confidence_at_review": term.get("confidence_at_review"),
+                                "review_source": term.get("review_source"),
+                            }
+                        )
                 else:
                     target_slice = QuantitySlice(
                         target_observation.quantity_hash, target_start, target_end
@@ -577,6 +624,7 @@ def compile_component_quantity_claims(
                         or (
                             conservation_mode == "conversion"
                             and sink_role in {"destination", "retained"}
+                            and target_slice is None
                         )
                         else (
                             "retained_custody"
@@ -617,26 +665,28 @@ def compile_component_quantity_claims(
             )
         )
 
-    # An active component must describe every principal slice itself. This is
-    # stronger than letting the arbitrator manufacture a residual fallback.
-    for transaction_id, source_observation in observations_by_transaction.items():
-        if source_observation.direction != "outbound":
-            continue
-        if not any(
-            _transaction_id(leg) == transaction_id
-            and leg.get("role") == "source"
-            for leg in legs.values()
-        ):
-            continue
-        claimed = source_cursors.get(source_observation.quantity_hash, 0)
-        if claimed != source_observation.principal_msat:
-            raise _error(
-                "component did not claim the complete observed source principal",
-                component_id=component_id,
-                transaction_id=transaction_id,
-                claimed_msat=claimed,
-                principal_msat=source_observation.principal_msat,
-            )
+    if conservation_mode != "conversion":
+        # A quantity-conserving component must describe every principal slice
+        # itself. This is stronger than letting the arbitrator manufacture a
+        # residual fallback. Conversions are deliberately slice-scoped above.
+        for transaction_id, source_observation in observations_by_transaction.items():
+            if source_observation.direction != "outbound":
+                continue
+            if not any(
+                _transaction_id(leg) == transaction_id
+                and leg.get("role") == "source"
+                for leg in legs.values()
+            ):
+                continue
+            claimed = source_cursors.get(source_observation.quantity_hash, 0)
+            if claimed != source_observation.principal_msat:
+                raise _error(
+                    "component did not claim the complete observed source principal",
+                    component_id=component_id,
+                    transaction_id=transaction_id,
+                    claimed_msat=claimed,
+                    principal_msat=source_observation.principal_msat,
+                )
 
     return ComponentClaimCompilation(
         component_id=component_id,

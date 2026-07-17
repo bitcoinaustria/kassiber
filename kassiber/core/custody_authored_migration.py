@@ -1084,12 +1084,16 @@ def consolidate_legacy_payout_components(
                         _canonical_payload(row, _PAYOUT_HASH_FIELDS)
                     )
                     spec = _payout_spec(row, source_hash)
-                    _append_source_residual(
-                        spec,
-                        row,
-                        reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
-                        classification="suspense_continuation",
-                    )
+                    reviewed = int(spec["legs"][0]["amount_msat"])
+                    if not _append_exact_native_residual(
+                        conn, spec, row, reviewed_source_msat=reviewed
+                    ):
+                        _append_source_residual(
+                            spec,
+                            row,
+                            reviewed_source_msat=reviewed,
+                            classification="suspense_continuation",
+                        )
                     spec = _retarget_revision_spec(
                         spec, supersedes_component_id=component["id"]
                     )
@@ -1719,6 +1723,7 @@ def _review_boundary_row(
         f"""
         SELECT out_tx.asset AS out_asset, out_tx.amount AS out_tx_amount,
                out_tx.fee AS out_fee,
+               out_tx.external_id AS out_external_id,
                out_tx.amount_includes_fee AS out_amount_includes_fee,
                out_tx.direction AS out_direction,
                out_tx.occurred_at AS out_occurred_at,
@@ -1747,6 +1752,11 @@ def _append_source_residual(
     classification: str,
     source_leg_id: str | None = None,
 ) -> None:
+    if spec.get("conservation_mode") == "conversion":
+        # Conversion residuals are handled by the exact-native helper or fall
+        # through to the ordinary external-presumed interpretation. Adding a
+        # quantity-suspense leg would conflate unlike assets.
+        return
     boundary = row_boundary_amounts(
         {
             "direction": _field(row, "out_direction"),
@@ -1853,6 +1863,85 @@ def _append_source_residual(
                 sink_amount_msat=residual_amount,
             )
         )
+
+
+def _append_exact_native_residual(
+    conn: sqlite3.Connection,
+    spec: dict[str, Any],
+    row: Mapping[str, Any],
+    *,
+    reviewed_source_msat: int,
+) -> bool:
+    """Bind a reviewed split remainder only when one exact native return exists."""
+
+    if spec.get("conservation_mode") != "conversion":
+        return False
+    boundary = row_boundary_amounts(
+        {
+            "direction": _field(row, "out_direction"),
+            "amount": _field(row, "out_tx_amount"),
+            "fee": _field(row, "out_fee"),
+            "amount_includes_fee": _field(row, "out_amount_includes_fee"),
+        }
+    )
+    residual = boundary.principal_msat - reviewed_source_msat
+    external_id = str(_field(row, "out_external_id") or "").strip()
+    if residual <= 0 or not external_id:
+        return False
+    targets = conn.execute(
+        """
+        SELECT t.id AS transaction_id, t.wallet_id, t.asset, t.occurred_at,
+               t.raw_json, w.kind AS wallet_kind, w.config_json
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.excluded = 0
+          AND t.direction = 'inbound' AND upper(t.asset) = upper(?)
+          AND lower(t.external_id) = lower(?) AND t.amount = ?
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        LIMIT 2
+        """,
+        (
+            _field(row, "profile_id"),
+            _field(row, "out_asset"),
+            external_id,
+            residual,
+        ),
+    ).fetchall()
+    if len(targets) != 1:
+        return False
+    source = next(
+        (leg for leg in spec["legs"] if leg.get("role") == "source"),
+        None,
+    )
+    if source is None:
+        return False
+    source["amount_msat"] = int(source["amount_msat"]) + residual
+    source["valuation_amount"] = int(source.get("valuation_amount") or 0) + residual
+    component_id = str(spec["component_id"])
+    sink_id = _stable_id(component_id, "leg", "exact-native-residual")
+    target = dict(targets[0])
+    sink = _leg(
+        target,
+        leg_id=sink_id,
+        role="retained",
+        asset=str(target["asset"]),
+        amount_msat=residual,
+        occurred_at=target["occurred_at"],
+        valuation_amount=residual,
+    )
+    spec["legs"].append(sink)
+    spec["allocations"].append(
+        _allocation(
+            allocation_id=_stable_id(
+                component_id, "allocation", "exact-native-residual"
+            ),
+            source_leg_id=str(source["id"]),
+            sink_leg_id=sink_id,
+            source_amount_msat=residual,
+            sink_amount_msat=residual,
+        )
+    )
+    return True
 
 
 def _activate_native_review(
@@ -1972,12 +2061,15 @@ def create_pair_review_component(
         spec = _pair_spec(row, source_hash)
     reviewed = int(spec["legs"][0]["amount_msat"])
     if not related:
-        _append_source_residual(
-            spec,
-            row,
-            reviewed_source_msat=reviewed,
-            classification="suspense_continuation",
-        )
+        if not _append_exact_native_residual(
+            conn, spec, row, reviewed_source_msat=reviewed
+        ):
+            _append_source_residual(
+                spec,
+                row,
+                reviewed_source_msat=reviewed,
+                classification="suspense_continuation",
+            )
     return _activate_native_review(
         conn,
         row,
@@ -2026,12 +2118,16 @@ def create_payout_review_component(
     row = _review_boundary_row(conn, base, include_target=False)
     source_hash = _hash_payload(_canonical_payload(row, _PAYOUT_HASH_FIELDS))
     spec = _payout_spec(row, source_hash)
-    _append_source_residual(
-        spec,
-        row,
-        reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
-        classification="suspense_continuation",
-    )
+    reviewed = int(spec["legs"][0]["amount_msat"])
+    if not _append_exact_native_residual(
+        conn, spec, row, reviewed_source_msat=reviewed
+    ):
+        _append_source_residual(
+            spec,
+            row,
+            reviewed_source_msat=reviewed,
+            classification="suspense_continuation",
+        )
     return _activate_native_review(
         conn,
         row,
@@ -2092,12 +2188,16 @@ def revise_pair_review_component(
         spec = _pair_group_spec(group_rows)
     else:
         spec = _pair_spec(boundary, source_hash)
-        _append_source_residual(
-            spec,
-            boundary,
-            reviewed_source_msat=int(spec["legs"][0]["amount_msat"]),
-            classification="suspense_continuation",
-        )
+        reviewed = int(spec["legs"][0]["amount_msat"])
+        if not _append_exact_native_residual(
+            conn, spec, boundary, reviewed_source_msat=reviewed
+        ):
+            _append_source_residual(
+                spec,
+                boundary,
+                reviewed_source_msat=reviewed,
+                classification="suspense_continuation",
+            )
     spec["lineage_id"] = str(active["lineage_id"])
     return _activate_native_review(
         conn,

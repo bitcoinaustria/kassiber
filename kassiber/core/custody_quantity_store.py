@@ -460,6 +460,33 @@ def component_native_support_status(
         except (TypeError, ValueError):
             continue
 
+    legs_by_id = {
+        str(leg.get("id") or ""): leg for leg in (component.get("legs") or ())
+    }
+    exact_native_sink_ids: set[str] = set()
+    for allocation in component.get("allocations") or ():
+        source = legs_by_id.get(str(allocation.get("source_leg_id") or ""))
+        sink = legs_by_id.get(str(allocation.get("sink_leg_id") or ""))
+        if source is None or sink is None:
+            continue
+        source_anchor = str(
+            source.get("anchor_transaction_id") or source.get("transaction_id") or ""
+        )
+        sink_anchor = str(
+            sink.get("anchor_transaction_id") or sink.get("transaction_id") or ""
+        )
+        if (
+            source_anchor in keys
+            and sink_anchor in keys
+            and keys[source_anchor] == keys[sink_anchor]
+            and observations[source_anchor].direction == "outbound"
+            and observations[sink_anchor].direction == "inbound"
+            and source.get("asset") == sink.get("asset")
+            and int(allocation.get("source_amount_msat") or 0)
+            == int(allocation.get("sink_amount_msat") or 0)
+        ):
+            exact_native_sink_ids.add(str(sink.get("id") or ""))
+
     supported = 0
     partially_supported = 0
     contradicted = 0
@@ -468,6 +495,14 @@ def component_native_support_status(
             leg.get("anchor_transaction_id") or leg.get("transaction_id") or ""
         )
         anchor = observations.get(anchor_id)
+        if str(leg.get("id") or "") in exact_native_sink_ids:
+            # A mixed conversion component may retain an exact same-event
+            # source slice while another slice has different economics. The
+            # protocol-qualified event key and equal explicit allocation are
+            # direct corroboration; comparing the sink against the full
+            # outbound row would misclassify that reviewed split as excess.
+            supported += 1
+            continue
         if (
             anchor is None
             or anchor.event_key.native_namespace != "chain"
