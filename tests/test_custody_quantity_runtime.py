@@ -1,12 +1,14 @@
+import inspect
 import json
 import sqlite3
 import unittest
-from unittest.mock import patch
 
 from kassiber.core.custody_evidence import EvidenceSnapshot
 from kassiber.core.custody_gap_reviews import candidate_fingerprint
 from kassiber.core.custody_gaps import (
     CustodyGapSearchResult,
+    EMPTY_GAP_SEARCH_RESULT,
+    search_custody_gap_candidates,
     suggest_custody_gap_candidates,
 )
 from kassiber.core.custody_quantity import (
@@ -19,7 +21,7 @@ from kassiber.core.custody_quantity import (
     QuantitySlice,
 )
 from kassiber.core.custody_quantity_runtime import (
-    build_canonical_quantity_state,
+    build_canonical_quantity_state as _build_canonical_quantity_state,
     canonical_internal_transfer_rows,
     compare_wallet_balances,
     enriched_quantity_rows,
@@ -38,6 +40,11 @@ from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.db import SCHEMA
 from kassiber.errors import AppError
 from tests.custody_tax_helpers import authoritative_chain_observation
+
+
+def build_canonical_quantity_state(rows, **kwargs):
+    kwargs.setdefault("gap_search_result", EMPTY_GAP_SEARCH_RESULT)
+    return _build_canonical_quantity_state(rows, **kwargs)
 
 
 def _row(
@@ -77,6 +84,14 @@ def _row(
 
 
 class CustodyQuantityRuntimeTests(unittest.TestCase):
+    def test_gap_search_projection_is_a_required_runtime_input(self):
+        parameter = inspect.signature(
+            _build_canonical_quantity_state
+        ).parameters["gap_search_result"]
+
+        self.assertEqual(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(parameter.default, inspect.Parameter.empty)
+
     @staticmethod
     def _reviewed_claim(rows, *, out_id, in_id, amount):
         preliminary = build_canonical_quantity_state(rows)
@@ -727,7 +742,10 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             ),
         ]
 
-        state = build_canonical_quantity_state(rows)
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=search_custody_gap_candidates(rows),
+        )
 
         self.assertEqual(
             [(item.state, item.source.amount_msat) for item in state.projection.decisions],
@@ -771,12 +789,14 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
 
         current = build_canonical_quantity_state(
             rows,
+            gap_search_result=search_custody_gap_candidates(rows),
             dismissed_gap_fingerprints={
                 candidate.gap_id: candidate_fingerprint(candidate)
             },
         )
         stale = build_canonical_quantity_state(
             rows,
+            gap_search_result=search_custody_gap_candidates(rows),
             dismissed_gap_fingerprints={candidate.gap_id: "0" * 64},
         )
 
@@ -806,17 +826,16 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             ),
         ]
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
-            return_value=CustodyGapSearchResult(
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
                 candidates=(),
                 accounting_candidates=(),
                 search_complete=False,
                 limit_kind="candidate_population",
                 message="candidate population exceeds its hard ceiling",
             ),
-        ):
-            state = build_canonical_quantity_state(rows)
+        )
 
         self.assertFalse(state.report_blocked)
         self.assertIsNone(state.tax_eligibility.barrier_event_key)
@@ -840,9 +859,9 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             ),
         ]
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
-            return_value=CustodyGapSearchResult(
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
                 candidates=(),
                 accounting_candidates=(),
                 search_complete=False,
@@ -851,8 +870,7 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
                 promotion_eligible_count=0,
                 message="weak candidate population exceeds its display ceiling",
             ),
-        ):
-            state = build_canonical_quantity_state(rows)
+        )
 
         self.assertFalse(state.report_blocked)
         self.assertIsNone(state.tax_eligibility.barrier_event_key)
@@ -926,9 +944,9 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             if candidate.promotion_eligible
         )
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
-            return_value=CustodyGapSearchResult(
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
                 candidates=(sampled_candidate,),
                 accounting_candidates=(),
                 search_complete=False,
@@ -938,15 +956,10 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
                 promotion_eligible_count=1,
                 message="structured boundary return worklist is incomplete",
             ),
-        ):
-            state = build_canonical_quantity_state(
-                rows,
-                dismissed_gap_fingerprints={
-                    sampled_candidate.gap_id: candidate_fingerprint(
-                        sampled_candidate
-                    )
-                },
-            )
+            dismissed_gap_fingerprints={
+                sampled_candidate.gap_id: candidate_fingerprint(sampled_candidate)
+            },
+        )
 
         decisions_by_transaction = {
             next(
@@ -1003,9 +1016,9 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             if item.promotion_eligible
         )
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.search_custody_gap_candidates",
-            return_value=CustodyGapSearchResult(
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
                 candidates=(),
                 accounting_candidates=(candidate,),
                 search_complete=False,
@@ -1014,8 +1027,7 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
                 promotion_eligible_count=1,
                 message="candidate population exceeds its display ceiling",
             ),
-        ):
-            state = build_canonical_quantity_state(rows)
+        )
 
         self.assertTrue(state.report_blocked)
         self.assertEqual(state.tax_eligibility.blocked_from, "2020-01-01T00:00:00Z")

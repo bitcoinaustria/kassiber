@@ -6,7 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
-from kassiber.core.custody_quantity_runtime import build_canonical_quantity_state
+from kassiber.core.custody_gaps import EMPTY_GAP_SEARCH_RESULT
+from kassiber.core.custody_quantity_runtime import (
+    build_canonical_quantity_state as _build_canonical_quantity_state,
+)
 from kassiber.core.custody_tax_projection import compile_finalized_tax_projection
 from kassiber.core.custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from kassiber.core.custody_quantity import (
@@ -19,6 +22,11 @@ from kassiber.core.custody_interpreters import compile_custody_interpreters
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine, _GenericRailCarryResult
 from tests.custody_tax_helpers import authoritative_chain_observation
+
+
+def build_canonical_quantity_state(rows, **kwargs):
+    kwargs.setdefault("gap_search_result", EMPTY_GAP_SEARCH_RESULT)
+    return _build_canonical_quantity_state(rows, **kwargs)
 
 
 def _row(

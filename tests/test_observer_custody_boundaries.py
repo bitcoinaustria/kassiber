@@ -20,7 +20,13 @@ from kassiber.core.custody_quantity import (
     EXTERNAL_PRESUMED,
     INTERNAL_VERIFIED,
 )
-from kassiber.core.custody_quantity_runtime import build_canonical_quantity_state
+from kassiber.core.custody_gaps import (
+    EMPTY_GAP_SEARCH_RESULT,
+    search_custody_gap_candidates,
+)
+from kassiber.core.custody_quantity_runtime import (
+    build_canonical_quantity_state as _build_canonical_quantity_state,
+)
 from kassiber.core.ownership_policy_epochs import (
     record_observer_policy_coverage,
     technical_coverage_snapshot,
@@ -30,6 +36,11 @@ from kassiber.time_utils import now_iso
 
 
 BTC_MSAT = 100_000_000_000
+
+
+def build_canonical_quantity_state(rows, **kwargs):
+    kwargs.setdefault("gap_search_result", EMPTY_GAP_SEARCH_RESULT)
+    return _build_canonical_quantity_state(rows, **kwargs)
 
 
 class ObserverCustodyBoundaryTest(unittest.TestCase):
@@ -413,8 +424,10 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
                 network="main",
             )
 
+        rows = [self._row("whirlpool-out"), self._row("whirlpool-return")]
         state = build_canonical_quantity_state(
-            [self._row("whirlpool-out"), self._row("whirlpool-return")]
+            rows,
+            gap_search_result=search_custody_gap_candidates(rows),
         )
 
         states = {decision.state for decision in state.projection.decisions}

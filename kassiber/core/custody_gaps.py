@@ -139,6 +139,13 @@ class CustodyGapSearchResult:
     projection_id: str | None = None
 
 
+EMPTY_GAP_SEARCH_RESULT = CustodyGapSearchResult(
+    candidates=(),
+    accounting_candidates=(),
+    search_complete=True,
+)
+
+
 @dataclass(frozen=True)
 class _Leg:
     id: str

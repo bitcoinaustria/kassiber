@@ -9,13 +9,25 @@ from kassiber.core.custody_gap_holds import (
     CustodyGapHoldCompileError,
     compile_gap_candidate_holds,
 )
-from kassiber.core.custody_gaps import suggest_custody_gap_candidates
+from kassiber.core.custody_gaps import (
+    search_custody_gap_candidates,
+    suggest_custody_gap_candidates,
+)
 from kassiber.core.custody_quantity import CUSTODY_SUSPENSE
-from kassiber.core.custody_quantity_runtime import build_canonical_quantity_state
+from kassiber.core.custody_quantity_runtime import (
+    build_canonical_quantity_state as _build_canonical_quantity_state,
+)
 from kassiber.core.custody_tax_projection import compile_finalized_tax_projection
 
 
 BTC_MSAT = 100_000_000_000
+
+
+def build_canonical_quantity_state(rows, **kwargs):
+    kwargs.setdefault(
+        "gap_search_result", search_custody_gap_candidates(rows)
+    )
+    return _build_canonical_quantity_state(rows, **kwargs)
 
 
 def _row(

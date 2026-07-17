@@ -156,6 +156,10 @@ binary.
    keyset directly over those candidate rows without serialized page payloads
    or rerunning discovery. Reviewed records that leave the current candidate
    population remain available through point lookup and immutable history.
+   The canonical quantity runtime now requires that projected search result as
+   an explicit input. It has no matcher fallback: only `CustodyJournalBuilder`
+   computes or loads the once-per-version population before compiling holds and
+   decisions.
    Planning is now one read-only
    `plan_review` seam for create/revise/reopen/residual actions; it commits the
    current journal input version, exact deterministic component rows and filed

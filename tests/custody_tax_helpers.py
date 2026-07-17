@@ -24,10 +24,18 @@ from kassiber.core.custody_authored_migration import (
     _pair_group_spec,
     _payout_spec,
 )
-from kassiber.core.custody_quantity_runtime import build_canonical_quantity_state
+from kassiber.core.custody_gaps import EMPTY_GAP_SEARCH_RESULT
+from kassiber.core.custody_quantity_runtime import (
+    build_canonical_quantity_state as _build_canonical_quantity_state,
+)
 from kassiber.core.custody_tax_projection import compile_finalized_tax_projection
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.loans import CHANNEL_CLOSE, CHANNEL_OPEN
+
+
+def build_canonical_quantity_state(rows, **kwargs):
+    kwargs.setdefault("gap_search_result", EMPTY_GAP_SEARCH_RESULT)
+    return _build_canonical_quantity_state(rows, **kwargs)
 
 
 @dataclass(frozen=True)

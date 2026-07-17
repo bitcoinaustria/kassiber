@@ -24,10 +24,7 @@ from .custody_evidence import (
 )
 from .custody_gap_holds import CustodyGapHold, compile_gap_candidate_holds
 from .custody_gap_reviews import candidate_fingerprint
-from .custody_gaps import (
-    CustodyGapSearchResult,
-    search_custody_gap_candidates,
-)
+from .custody_gaps import CustodyGapSearchResult
 from .custody_native_audit import compile_verified_native_claims
 from .custody_quantity import (
     CONFLICTING,
@@ -500,12 +497,11 @@ def _observations_by_transaction(
 
 
 def _gap_candidate_holds_and_issues(
-    rows: Sequence[Mapping[str, Any]],
     canonical: CanonicalQuantityInput,
     *,
     ignored_transaction_ids: Iterable[str],
     dismissed_fingerprints: Mapping[str, str],
-    search_result: CustodyGapSearchResult | None = None,
+    search_result: CustodyGapSearchResult,
 ) -> tuple[
     tuple[QuantityClaim, ...],
     tuple[QuantityIssue, ...],
@@ -516,8 +512,6 @@ def _gap_candidate_holds_and_issues(
 
     ignored = tuple(sorted({str(item) for item in ignored_transaction_ids if item}))
     capacity_blocking_source_ids: set[str] = set()
-    if search_result is None:
-        search_result = search_custody_gap_candidates(rows, ignored_ids=ignored)
     candidates = search_result.accounting_candidates
     if not search_result.search_complete:
         # Candidate search is advisory. Capacity says only that suggestions are
@@ -880,6 +874,7 @@ def _tax_eligibility(
 def build_canonical_quantity_state(
     rows: Sequence[Mapping[str, Any]],
     *,
+    gap_search_result: CustodyGapSearchResult,
     canonical_input: CanonicalQuantityInput | None = None,
     interpreter_claims: Iterable[QuantityClaim] = (),
     effective_components: Sequence[Mapping[str, Any]] = (),
@@ -890,7 +885,6 @@ def build_canonical_quantity_state(
         Mapping[str, Sequence[Mapping[str, Any]]] | None
     ) = None,
     dismissed_gap_fingerprints: Mapping[str, str] | None = None,
-    gap_search_result: CustodyGapSearchResult | None = None,
 ) -> CanonicalQuantityState:
     """Build the canonical quantity projection and tax-eligibility boundary."""
 
@@ -940,7 +934,6 @@ def build_canonical_quantity_state(
                 ignored_transaction_ids.add(target.transaction_id)
     gap_hold_claims, gap_issues, gap_candidate_transaction_ids, gap_holds = (
         _gap_candidate_holds_and_issues(
-            safe_rows,
             canonical,
             ignored_transaction_ids=ignored_transaction_ids,
             dismissed_fingerprints=dismissed_gap_fingerprints or {},
