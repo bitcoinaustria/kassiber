@@ -534,3 +534,16 @@ rule therefore applies: all behavioral, acceptance, performance and quality
 conditions are demonstrated, but the initiative remains open on this one
 literal hard stop until the code-volume criterion or compatibility-window
 requirement is changed.
+
+The third independent reachability audit confirms this is not residual dead
+surface. It found zero unreferenced top-level definitions in
+`kassiber/core/custody*.py`. The six wholly new custody modules total 6,054
+lines: the crash-safe authored migration, pure component planner, canonical
+journal owner, component-native review terms, typed gap holds and shared exact
+allocator. Deleting all six would discard required behavior and would still
+leave 19,653 custody-core lines, 920 above the 18,733-line baseline. The
+remaining growth inside pre-existing modules is the normalized projection,
+component validation/economic terms, evidence commitments and versioned gap
+population. Closing the numerical gap therefore requires a changed requirement
+or authorization to remove a protected invariant; no further safe deletion
+path remains.
