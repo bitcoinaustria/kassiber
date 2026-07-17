@@ -521,6 +521,161 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             )
         )
 
+    def test_rowless_native_alias_contradiction_does_not_create_target(self):
+        occurred_at = "2025-01-01T00:00:00Z"
+        source = _row(
+            "source",
+            "wallet-a",
+            "outbound",
+            500,
+            occurred_at,
+            txid="ef" * 32,
+        )
+        audit = self._native_audit(
+            source_id="source",
+            out_id="owned-derive:out:0",
+            # This canonical alias already names the outbound observation and
+            # cannot also name a synthesized inbound destination.
+            in_id="source",
+            from_wallet="wallet-a",
+            to_wallet="wallet-b",
+            received=500,
+            fee=0,
+            occurred_at=occurred_at,
+        )
+
+        state = build_canonical_quantity_state([source], native_evidence=[audit])
+
+        self.assertIn(
+            "native_audit_alias_contradiction",
+            {item.reason for item in state.issues},
+        )
+        self.assertFalse(
+            any(
+                item.transaction_id.startswith("native-owned-in:")
+                for item in state.canonical_input.observations
+            )
+        )
+        self.assertFalse(
+            any(
+                posting.location_kind == "wallet"
+                and posting.location_id == "wallet-b"
+                for posting in state.projection.postings
+            )
+        )
+        self.assertFalse(
+            any(
+                posting.location_kind == "external_origin"
+                for posting in state.projection.postings
+            )
+        )
+
+    def test_partial_alias_contradiction_rejects_entire_aggregate_target(self):
+        occurred_at = "2025-01-01T00:00:00Z"
+        txid = "fa" * 32
+        rows = [
+            _row("source-a", "wallet-a", "outbound", 300, occurred_at, txid=txid),
+            _row("source-b", "wallet-b", "outbound", 200, occurred_at, txid=txid),
+        ]
+        audits = [
+            self._native_audit(
+                source_id="source-a",
+                out_id="multi:out:a",
+                in_id="source-a",
+                from_wallet="wallet-a",
+                to_wallet="wallet-c",
+                received=300,
+                fee=0,
+                occurred_at=occurred_at,
+                pairing_source="multi_source_consolidation",
+            ),
+            self._native_audit(
+                source_id="source-b",
+                out_id="multi:out:b",
+                in_id="multi:in:b",
+                from_wallet="wallet-b",
+                to_wallet="wallet-c",
+                received=200,
+                fee=0,
+                occurred_at=occurred_at,
+                pairing_source="multi_source_consolidation",
+            ),
+        ]
+
+        state = build_canonical_quantity_state(rows, native_evidence=audits)
+
+        contradictions = [
+            item
+            for item in state.issues
+            if item.reason == "native_audit_alias_contradiction"
+        ]
+        self.assertEqual(len(contradictions), 1)
+        self.assertFalse(
+            any(
+                observation.wallet_id == "wallet-c"
+                for observation in state.canonical_input.observations
+            )
+        )
+        self.assertFalse(
+            any(
+                posting.location_kind == "wallet"
+                and posting.location_id == "wallet-c"
+                for posting in state.projection.postings
+            )
+        )
+
+    def test_alias_contradiction_removes_sibling_target_from_same_source(self):
+        occurred_at = "2025-01-01T00:00:00Z"
+        source = _row(
+            "source",
+            "wallet-a",
+            "outbound",
+            500,
+            occurred_at,
+            txid="fb" * 32,
+        )
+        audits = [
+            self._native_audit(
+                source_id="source",
+                out_id="fanout:out:a",
+                in_id="fanout:in:a",
+                from_wallet="wallet-a",
+                to_wallet="wallet-b",
+                received=300,
+                fee=0,
+                occurred_at=occurred_at,
+            ),
+            self._native_audit(
+                source_id="source",
+                out_id="fanout:out:b",
+                in_id="source",
+                from_wallet="wallet-a",
+                to_wallet="wallet-c",
+                received=200,
+                fee=0,
+                occurred_at=occurred_at,
+            ),
+        ]
+
+        state = build_canonical_quantity_state([source], native_evidence=audits)
+
+        self.assertIn(
+            "native_audit_alias_contradiction",
+            {item.reason for item in state.issues},
+        )
+        self.assertFalse(
+            any(
+                observation.transaction_id.startswith("native-owned-in:")
+                for observation in state.canonical_input.observations
+            )
+        )
+        self.assertFalse(
+            any(
+                posting.location_kind == "external_origin"
+                for posting in state.projection.postings
+            )
+        )
+
     def test_reviewed_transfer_delta_is_an_atomic_fee_not_suspense(self):
         rows = [
             _row(
