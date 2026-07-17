@@ -529,6 +529,34 @@ class _ElectrumBatchDispatcher:
             self._queue.put(None)
         self._thread.join()
 
+    def _fail_unsignaled(self, pending_calls):
+        """Never strand a waiting caller when the dispatcher thread exits.
+
+        Callers block on their pending event without a timeout, so an
+        unexpected thread exit must reject new work, then fail and signal
+        every collected or still-queued pending. On a clean close this is a
+        no-op: the queue only holds the consumed sentinel and no pending is
+        left unsignaled.
+        """
+        with self._state_lock:
+            self._closed = True
+        stranded = list(pending_calls)
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            if item is not None:
+                stranded.append(item)
+        for pending in stranded:
+            if pending["event"].is_set():
+                continue
+            if pending["error"] is None and pending["result"] is None:
+                pending["error"] = AppError(
+                    "Electrum batch dispatcher exited unexpectedly"
+                )
+            pending["event"].set()
+
     def _run(self):
         client = None
         stop_after_batch = False
@@ -556,6 +584,7 @@ class _ElectrumBatchDispatcher:
                 )
             return results
 
+        pending_calls = []
         try:
             while True:
                 first = self._queue.get()
@@ -628,10 +657,12 @@ class _ElectrumBatchDispatcher:
                 finally:
                     for pending in pending_calls:
                         pending["event"].set()
+                    pending_calls = []
                 if stop_after_batch:
                     break
         finally:
             discard_client()
+            self._fail_unsignaled(pending_calls)
 
 
 _active_electrum_client_pool = ContextVar("active_electrum_client_pool", default=None)

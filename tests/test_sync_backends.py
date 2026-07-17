@@ -1730,6 +1730,45 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertFalse(close_thread.is_alive())
         self.assertEqual(result, {"value": "wallet-a"})
 
+    def test_electrum_dispatcher_thread_death_fails_waiting_callers(self):
+        backend = {
+            "name": "fulcrum",
+            "kind": "electrum",
+            "url": "tcp://electrum.example:50001",
+        }
+        real_queue_type = sb.queue.Queue
+
+        class CrashingQueue:
+            """Crash the coalesce-window get, outside the per-batch guard."""
+
+            def __init__(self):
+                self.inner = real_queue_type()
+
+            def get(self, *args, **kwargs):
+                if "timeout" in kwargs or args:
+                    raise RuntimeError("simulated dispatcher thread death")
+                return self.inner.get()
+
+            def get_nowait(self):
+                return self.inner.get_nowait()
+
+            def put(self, item, *args, **kwargs):
+                self.inner.put(item, *args, **kwargs)
+
+        with patch("kassiber.core.sync_backends.queue.Queue", CrashingQueue):
+            dispatcher = sb._ElectrumBatchDispatcher(backend)
+            try:
+                with self.assertRaises(AppError) as raised:
+                    dispatcher.call("blockchain.scripthash.subscribe", ["aa"])
+                self.assertIn("exited unexpectedly", str(raised.exception))
+                dispatcher._thread.join(timeout=2)
+                self.assertFalse(dispatcher._thread.is_alive())
+                with self.assertRaises(AppError) as rejected:
+                    dispatcher.call("blockchain.scripthash.subscribe", ["bb"])
+                self.assertIn("closed", str(rejected.exception))
+            finally:
+                dispatcher.close()
+
     def test_electrum_pool_reconnects_after_transport_failure(self):
         backend = {
             "name": "fulcrum",
