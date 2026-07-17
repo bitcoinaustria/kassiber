@@ -179,6 +179,12 @@ def _items(value: Any, *, field: str, keys: frozenset[str]) -> list[dict[str, An
     ]
 
 
+def _boolean(value: Any, *, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise _invalid("Stored BDK observer state has an invalid boolean", field=field)
+    return value
+
+
 def deserialize_changeset(payload: Mapping[str, Any]) -> Any:
     """Rebuild a BDK aggregate, rejecting missing or unknown components."""
 
@@ -285,13 +291,16 @@ def deserialize_changeset(payload: Mapping[str, Any]) -> Any:
                 )
             }
         )
+        locked_items = _items(
+            root["locked_outpoints"],
+            field="locked_outpoints",
+            keys=frozenset({"txid", "vout", "locked"}),
+        )
         locked = {
-            bdk.HashableOutPoint(outpoint(item)): bool(item["locked"])
-            for item in _items(
-                root["locked_outpoints"],
-                field="locked_outpoints",
-                keys=frozenset({"txid", "vout", "locked"}),
+            bdk.HashableOutPoint(outpoint(item)): _boolean(
+                item["locked"], field=f"locked_outpoints[{index}].locked"
             )
+            for index, item in enumerate(locked_items)
         }
     except AppError:
         raise

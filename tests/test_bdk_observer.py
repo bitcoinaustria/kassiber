@@ -763,6 +763,21 @@ class BdkDependencyContractTest(TestCase):
         with self.assertRaises(AppError):
             deserialize_changeset(nested_invalid)
 
+        for invalid_flag in ("false", 0, None, {}):
+            with self.subTest(locked=invalid_flag):
+                malformed = json.loads(json.dumps(payload))
+                malformed["locked_outpoints"][0]["locked"] = invalid_flag
+                with self.assertRaises(AppError) as malformed_error:
+                    deserialize_changeset(malformed)
+                self.assertEqual(
+                    malformed_error.exception.code,
+                    "observer_state_rebuild_required",
+                )
+                self.assertEqual(
+                    malformed_error.exception.details["field"],
+                    "locked_outpoints[0].locked",
+                )
+
     def test_route_capabilities_are_explicit(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
