@@ -52,6 +52,7 @@ from ..wallet_descriptors import (
 from . import htlc_parser
 from . import silent_payments
 from .address_scripts import address_to_scriptpubkey
+from .onchain import normalized_script_hex, output_script, output_value_sats
 from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
@@ -3079,29 +3080,12 @@ def record_from_bitcoinrpc_details(
     return record
 
 
-def _bitcoinrpc_script_hex_from_vout(vout):
-    script = vout.get("scriptpubkey") or vout.get("script_hex")
-    script_pubkey = vout.get("scriptPubKey")
-    if not script and isinstance(script_pubkey, dict):
-        script = script_pubkey.get("hex") or script_pubkey.get("scriptpubkey")
-    return str(script).lower() if script else None
-
-
-def _bitcoinrpc_value_sats_from_vout(vout):
-    if vout.get("value_sats") is not None:
-        return int(vout["value_sats"])
-    value = vout.get("value")
-    if value is None:
-        return None
-    return int((dec(value, "0") * SATS_PER_BTC).to_integral_value())
-
-
 def _bitcoinrpc_prevout_from_vin(vin):
     prevout = vin.get("prevout")
     if not isinstance(prevout, dict):
         return {}
-    script = _bitcoinrpc_script_hex_from_vout(prevout)
-    value_sats = _bitcoinrpc_value_sats_from_vout(prevout)
+    script = normalized_script_hex(output_script(prevout))
+    value_sats = output_value_sats(prevout)
     result = {}
     if script:
         result["scriptpubkey"] = script
@@ -3216,8 +3200,8 @@ def _bitcoinrpc_normalized_graph(txid, payload):
     for position, entry in enumerate(vout):
         if not isinstance(entry, dict):
             continue
-        value_sats = _bitcoinrpc_value_sats_from_vout(entry)
-        script = _bitcoinrpc_script_hex_from_vout(entry)
+        value_sats = output_value_sats(entry)
+        script = normalized_script_hex(output_script(entry))
         if value_sats is None or not script:
             continue
         try:

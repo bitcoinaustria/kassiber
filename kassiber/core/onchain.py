@@ -62,7 +62,7 @@ def input_outpoint(entry: Mapping[str, Any]) -> tuple[str, int] | None:
 
 def input_script(entry: Mapping[str, Any]) -> Any:
     prevout = entry.get("prevout")
-    return prevout.get("scriptpubkey") if isinstance(prevout, Mapping) else None
+    return output_script(prevout) if isinstance(prevout, Mapping) else None
 
 
 def input_value_sats(entry: Mapping[str, Any]) -> int | None:
@@ -78,7 +78,42 @@ def input_value_sats(entry: Mapping[str, Any]) -> int | None:
 
 def output_script(entry: Mapping[str, Any]) -> Any:
     script = entry.get("scriptpubkey")
-    return entry.get("script_hex") if script is None else script
+    if script is None:
+        script = entry.get("script_hex")
+    nested = entry.get("scriptPubKey")
+    if script is None and isinstance(nested, Mapping):
+        script = nested.get("hex") or nested.get("scriptpubkey")
+    if script is None and isinstance(nested, str):
+        script = nested
+    return script
+
+
+def output_address(entry: Mapping[str, Any]) -> str | None:
+    address = entry.get("scriptpubkey_address") or entry.get("address")
+    nested = entry.get("scriptPubKey")
+    if address in (None, "") and isinstance(nested, Mapping):
+        address = nested.get("address")
+        if address in (None, ""):
+            addresses = nested.get("addresses")
+            if isinstance(addresses, list) and addresses:
+                address = addresses[0]
+    text = str(address).strip() if address not in (None, "") else ""
+    return text or None
+
+
+def normalized_script_hex(value: Any) -> str | None:
+    """Return one canonical lowercase script hex string."""
+
+    if value in (None, ""):
+        return None
+    text = str(value).strip().lower()
+    if len(text) % 2:
+        return None
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return None
+    return text
 
 
 def output_value_sats(entry: Mapping[str, Any]) -> int | None:

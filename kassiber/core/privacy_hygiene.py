@@ -6,6 +6,16 @@ from collections import Counter, defaultdict
 from typing import Any, Mapping
 
 from ..errors import AppError
+from .onchain import (
+    input_outpoint,
+    input_script,
+    input_value_sats,
+    normalized_script_hex,
+    output_address,
+    output_script,
+    output_value_sats,
+    stored_tx_mapping,
+)
 from .repo import current_context_snapshot
 
 
@@ -602,14 +612,9 @@ def _parse_local_transaction(
     raw: Mapping[str, Any],
     inventory_index: Mapping[str, Any],
 ) -> dict[str, Any]:
+    raw = stored_tx_mapping(raw, allow_nested=True) or {}
     vin = raw.get("vin")
     vout = raw.get("vout")
-    if not isinstance(vin, list) or not isinstance(vout, list):
-        nested = raw.get("tx")
-        if isinstance(nested, Mapping):
-            vin = nested.get("vin")
-            vout = nested.get("vout")
-            raw = nested
     if not isinstance(vin, list) or not isinstance(vout, list):
         return _empty_parsed("none", "missing_vin_vout")
 
@@ -618,22 +623,17 @@ def _parse_local_transaction(
     for index, entry in enumerate(vin):
         if not isinstance(entry, Mapping):
             continue
-        txid = _txid_or_none(entry.get("txid"))
-        vout_index = _int_or_none(entry.get("vout"))
-        outpoint = (txid, vout_index) if txid is not None and vout_index is not None else None
+        outpoint = input_outpoint(entry)
+        txid, vout_index = outpoint if outpoint is not None else (None, None)
         owner = (
             inventory_index["outpoints"].get(outpoint)
             if outpoint is not None
             else None
         )
         prevout = entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {}
-        script = _hex_or_none(prevout.get("scriptpubkey") or prevout.get("script_hex"))
-        address = _string_or_none(
-            prevout.get("scriptpubkey_address") or prevout.get("address")
-        )
-        value_sats = _value_sats_or_none(prevout.get("value_sats"))
-        if value_sats is None:
-            value_sats = _value_sats_or_none(prevout.get("value"))
+        script = normalized_script_hex(input_script(entry))
+        address = output_address(prevout)
+        value_sats = input_value_sats(entry)
         if value_sats is None and owner is not None:
             value_sats = owner["amount_sats"]
         script_type = _script_type(address, script)
@@ -660,11 +660,9 @@ def _parse_local_transaction(
         n = _int_or_none(entry.get("n"))
         if n is None:
             n = index
-        script = _hex_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
-        address = _string_or_none(entry.get("scriptpubkey_address") or entry.get("address"))
-        value_sats = _value_sats_or_none(entry.get("value_sats"))
-        if value_sats is None:
-            value_sats = _value_sats_or_none(entry.get("value"))
+        script = normalized_script_hex(output_script(entry))
+        address = output_address(entry)
+        value_sats = output_value_sats(entry)
         owner = None
         if current_txid is not None:
             owner = inventory_index["outpoints"].get((current_txid, n))

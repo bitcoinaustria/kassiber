@@ -32,6 +32,7 @@ from .ownership_transfers import (
     _norm_chain_network,
     _parse_onchain_tx,
 )
+from .onchain import output_address, output_script, output_value_sats
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .sync_backends import (
@@ -690,11 +691,11 @@ def _parse_graph(
             if local_value_sats is not None
             else None
             if value_hidden
-            else _value_sats_or_none(prevout.get("value"))
+            else output_value_sats(prevout)
         )
         if value_sats is None:
             input_value_complete = False
-        script = _script_from_prevout(prevout)
+        script = _string_or_none(output_script(prevout))
         inputs.append(
             {
                 "id": f"in-{index}",
@@ -702,7 +703,7 @@ def _parse_graph(
                 "outpoint": outpoint,
                 "txid": str(entry.get("txid") or "") or None,
                 "vout": _int_or_none(entry.get("vout")),
-                "address": _string_or_none(prevout.get("scriptpubkey_address")),
+                "address": output_address(prevout),
                 "scriptType": _script_type(prevout, script),
                 "valueSats": value_sats,
                 "valueBtc": _sats_to_btc(value_sats),
@@ -726,11 +727,11 @@ def _parse_graph(
             # is the fee, not an OP_RETURN/non-address output, and its amount is
             # public even when every other leg is confidential — so route its
             # value to the fee node and keep it out of the output strands.
-            fee_value = _value_sats_or_none(entry.get("value"))
+            fee_value = output_value_sats(entry)
             if fee_value is not None and fee_value >= 0:
                 liquid_fee_sats = (liquid_fee_sats or 0) + fee_value
             continue
-        script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+        script = _string_or_none(output_script(entry))
         n = _int_or_none(entry.get("n"))
         if n is None:
             n = index
@@ -742,7 +743,7 @@ def _parse_graph(
             if local_value_sats is not None
             else None
             if value_hidden
-            else _value_sats_or_none(entry.get("value"))
+            else output_value_sats(entry)
         )
         if value_sats is None:
             output_value_complete = False
@@ -751,7 +752,7 @@ def _parse_graph(
                 "id": f"out-{n}",
                 "index": n,
                 "outpoint": outpoint,
-                "address": _string_or_none(entry.get("scriptpubkey_address")),
+                "address": output_address(entry),
                 "scriptType": _script_type(entry, script),
                 "valueSats": value_sats,
                 "valueBtc": _sats_to_btc(value_sats),
@@ -1288,10 +1289,11 @@ def _can_lookup_public_bitcoin_prevouts(row: Mapping[str, Any], raw: Mapping[str
     return any(
         isinstance(entry, Mapping)
         and not _confidential_leg(entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {})
-        and _value_sats_or_none(
-            (entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {}).get("value")
-        )
-        is None
+        and output_value_sats(
+            entry.get("prevout")
+            if isinstance(entry.get("prevout"), Mapping)
+            else {}
+        ) is None
         for entry in vin
     )
 
@@ -1759,7 +1761,7 @@ def _attach_bitcoin_prevouts_from_cache_or_electrum(
             continue
         if isinstance(entry.get("prevout"), Mapping):
             prevout = entry["prevout"]
-            if _value_sats_or_none(prevout.get("value")) is not None or _confidential_leg(prevout):
+            if output_value_sats(prevout) is not None or _confidential_leg(prevout):
                 continue
         cached = _load_graph_lookup_cache(conn, chain, network, prev_txid)
         if cached is not None:
@@ -1868,12 +1870,10 @@ def _bitcoin_current_graph_has_required_prevouts(raw: Mapping[str, Any]) -> bool
         prevout = entry.get("prevout")
         if not isinstance(prevout, Mapping):
             return False
-        value_sats = _int_or_none(prevout.get("value_sats"))
-        if value_sats is None:
-            value_sats = _value_sats_or_none(prevout.get("value"))
+        value_sats = output_value_sats(prevout)
         if value_sats is None:
             return False
-        if _string_or_none(prevout.get("scriptpubkey") or prevout.get("script_hex")) is None:
+        if _string_or_none(output_script(prevout)) is None:
             return False
     return True
 
@@ -1913,12 +1913,10 @@ def _bitcoin_electrum_decoded_to_graph_raw(
         if n is None:
             n = index
         output: dict[str, Any] = {"n": n}
-        script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+        script = _string_or_none(output_script(entry))
         if script is not None:
             output["scriptpubkey"] = script
-        value_sats = _int_or_none(entry.get("value_sats"))
-        if value_sats is None:
-            value_sats = _value_sats_or_none(entry.get("value"))
+        value_sats = output_value_sats(entry)
         if value_sats is not None:
             output["value"] = value_sats
         raw["vout"].append(output)
@@ -2044,19 +2042,17 @@ def _sanitize_graph_value_script(
         n = _int_or_none(entry.get("n"))
         if n is not None:
             sanitized["n"] = n
-    script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+    script = _string_or_none(output_script(entry))
     if script is not None:
         sanitized["scriptpubkey"] = script
     script_type = _string_or_none(entry.get("scriptpubkey_type") or entry.get("type"))
     if script_type is not None:
         sanitized["scriptpubkey_type"] = script_type
-    address = _string_or_none(entry.get("scriptpubkey_address") or entry.get("address"))
+    address = output_address(entry)
     if address is not None:
         sanitized["scriptpubkey_address"] = address
     confidential = _confidential_leg(entry)
-    value_sats = _int_or_none(entry.get("value_sats"))
-    if value_sats is None:
-        value_sats = _value_sats_or_none(entry.get("value"))
+    value_sats = output_value_sats(entry)
     if confidential:
         sanitized["value_state"] = "confidential"
     elif chain == "liquid" and not _is_liquid_fee_output(sanitized | {"value": value_sats}):
@@ -2626,10 +2622,6 @@ def _outpoint(entry: Mapping[str, Any]) -> str | None:
         return None
 
 
-def _script_from_prevout(prevout: Mapping[str, Any]) -> str | None:
-    return _string_or_none(prevout.get("scriptpubkey") or prevout.get("script_hex"))
-
-
 def _script_type(source: Mapping[str, Any], script: Any) -> str:
     explicit = _string_or_none(source.get("scriptpubkey_type") or source.get("type"))
     if explicit:
@@ -2835,34 +2827,6 @@ def _json_obj(value: Any) -> dict[str, Any]:
 def _int_or_none(value: Any) -> int | None:
     if value is None or value == "":
         return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _value_sats_or_none(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        # On-chain JSON encodes integer sats as ints; a float (e.g. 0.005 or a
-        # round 1.0) always denotes a decimal-BTC amount, so scale to sats. Note
-        # `1.0` is BTC, not 1 sat — never short-circuit whole-number floats.
-        return int(round(value * 100_000_000))
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            if "." in text:
-                return int(round(float(text) * 100_000_000))
-            return int(text)
-        except ValueError:
-            return None
     try:
         return int(value)
     except (TypeError, ValueError):
