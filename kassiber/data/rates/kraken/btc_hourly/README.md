@@ -48,7 +48,7 @@ script will include it automatically.
 Import with:
 
 ```bash
-uv run python -m kassiber rates sync --source kraken-csv --path kassiber/data/rates/kraken/btc_hourly
+uv run --locked python -m kassiber rates sync --source kraken-csv --path kassiber/data/rates/kraken/btc_hourly
 ```
 
 Kassiber stores Kraken candles at their close timestamp. For hourly values, a

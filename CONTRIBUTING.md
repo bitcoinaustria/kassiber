@@ -5,10 +5,13 @@ Kassiber is a local-first Bitcoin accounting project. Keep changes small, explic
 ## Setup
 
 ```bash
-uv sync
+uv sync --locked
 ```
 
-Or use a virtualenv and `pip install -e .`, but the repo examples and lockfile assume `uv`.
+`uv` owns the repository environment, locked dependency installation, and
+Python command execution. `--locked` fails when `uv.lock` is stale instead of
+rewriting it. `pip install kassiber` remains a supported packaging
+contract for end users, not a parallel development workflow.
 
 ## Workflow
 
@@ -24,6 +27,12 @@ Run this before push or PR:
 
 ```bash
 ./scripts/quality-gate.sh
+```
+
+For a focused Python test during development:
+
+```bash
+uv run --locked python -m pytest tests/test_cli_smoke.py -q
 ```
 
 That covers:

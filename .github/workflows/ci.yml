@@ -30,20 +30,20 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Sync Python dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Compile Python
-        run: uv run python -m compileall -q kassiber tests scripts/python_test_shards.py
+        run: uv run --locked python -m compileall -q kassiber tests scripts/python_test_shards.py
 
       - name: Validate disjoint Python shards
-        run: uv run python scripts/python_test_shards.py validate
+        run: uv run --locked python scripts/python_test_shards.py validate
 
       - name: Contract preflight
         shell: bash
         run: |
           mkdir -p test-results
           set -o pipefail
-          uv run python scripts/python_test_shards.py run preflight --ci -- \
+          uv run --locked python scripts/python_test_shards.py run preflight --ci -- \
             --junitxml=test-results/preflight.xml \
             --durations=50 \
             -q 2>&1 | tee test-results/preflight.log
@@ -90,14 +90,14 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Run Python shard
         shell: bash
         run: |
           mkdir -p test-results
           set -o pipefail
-          uv run python scripts/python_test_shards.py run "${{ matrix.shard }}" --ci -- \
+          uv run --locked python scripts/python_test_shards.py run "${{ matrix.shard }}" --ci -- \
             --junitxml="test-results/${{ matrix.shard }}.xml" \
             --durations=50 \
             -q 2>&1 | tee "test-results/${{ matrix.shard }}.log"
@@ -190,14 +190,14 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Run CLI smoke
         shell: bash
         run: |
           mkdir -p test-results
           set -o pipefail
-          uv run python scripts/python_test_shards.py run cli-smoke --ci -- \
+          uv run --locked python scripts/python_test_shards.py run cli-smoke --ci -- \
             --junitxml=test-results/cli-smoke.xml \
             --durations=50 \
             -q 2>&1 | tee test-results/cli-smoke.log
@@ -272,7 +272,7 @@ jobs:
 
       - name: Sync dependencies
         if: steps.observer_paths.outputs.run == 'true'
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Dependency-backed chain-observer oracle
         if: steps.observer_paths.outputs.run == 'true'

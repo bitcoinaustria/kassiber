@@ -29,7 +29,7 @@ day.
 Import with:
 
 ```bash
-uv run python -m kassiber rates sync --source kraken-csv --path kassiber/data/rates/kraken/btc_daily
+uv run --locked python -m kassiber rates sync --source kraken-csv --path kassiber/data/rates/kraken/btc_daily
 ```
 
 Files use Kraken's original OHLCVT row format:

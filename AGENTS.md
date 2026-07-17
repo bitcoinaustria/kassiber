@@ -444,18 +444,24 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 ## Verification
 
-All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv. For the baseline push/PR pass, use `./scripts/quality-gate.sh` as the single trusted entrypoint; the commands below are the underlying pieces.
+All commands below assume project dependencies are installed with
+`uv sync --locked`. Use `uv run --locked` for Python commands so uv verifies
+that `uv.lock` matches `pyproject.toml` without rewriting it. A plain
+`pip install` is a packaging compatibility contract, not an alternate
+contributor workflow. For
+the baseline push/PR pass, use `./scripts/quality-gate.sh` as the single trusted
+entrypoint; the commands below are the underlying pieces.
 
 - Compile check:
 
 ```bash
-PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py
+PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run --locked python -m py_compile kassiber/*.py
 ```
 
 - End-to-end CLI smoke test (stdlib `unittest`, no pytest dep, ~1s):
 
 ```bash
-uv run python -m unittest tests.test_cli_smoke -v
+uv run --locked python -m unittest tests.test_cli_smoke -v
 ```
 
   This is the behavior pin. If you refactor internals the suite MUST
@@ -467,38 +473,38 @@ uv run python -m unittest tests.test_cli_smoke -v
 - CLI smoke checks:
 
 ```bash
-uv run python -m kassiber --help
-uv run python -m kassiber --machine status
-uv run python -m kassiber backends list
-uv run python -m kassiber wallets kinds
-uv run python -m kassiber wallets sync-btcpay --help
-uv run python -m kassiber wallets identify --help
-uv run python -m kassiber wallets import-river --help
-uv run python -m kassiber wallets import-coinfinity --help
-uv run python -m kassiber wallets import-21bitcoin --help
-uv run python -m kassiber wallets import-strike --help
-uv run python -m kassiber wallets import-ledger --help
-uv run python -m kassiber wallets ledger-template --help
-uv run python -m kassiber profiles create --help
-uv run python -m kassiber metadata records --help
-uv run python -m kassiber attachments list --help
-uv run python -m kassiber journals events --help
-uv run python -m kassiber journals transfers list --help
-uv run python -m kassiber reports summary --help
-uv run python -m kassiber reports tax-summary --help
-uv run python -m kassiber reports austrian-e1kv --help
-uv run python -m kassiber reports austrian-tax-summary --help
-uv run python -m kassiber reports export-austrian --help
-uv run python -m kassiber reports export-austrian-e1kv-xlsx --help
-uv run python -m kassiber reports export-austrian-e1kv-csv --help
-uv run python -m kassiber reports balance-history --help
-uv run python -m kassiber rates --help
-uv run python -m kassiber diagnostics collect --help
-uv run python -m kassiber chat --help
-uv run python -m kassiber chats --help
-uv run python -m kassiber ai --help
-uv run python -m kassiber ai providers --help
-uv run python -m kassiber ai providers create --help
+uv run --locked python -m kassiber --help
+uv run --locked python -m kassiber --machine status
+uv run --locked python -m kassiber backends list
+uv run --locked python -m kassiber wallets kinds
+uv run --locked python -m kassiber wallets sync-btcpay --help
+uv run --locked python -m kassiber wallets identify --help
+uv run --locked python -m kassiber wallets import-river --help
+uv run --locked python -m kassiber wallets import-coinfinity --help
+uv run --locked python -m kassiber wallets import-21bitcoin --help
+uv run --locked python -m kassiber wallets import-strike --help
+uv run --locked python -m kassiber wallets import-ledger --help
+uv run --locked python -m kassiber wallets ledger-template --help
+uv run --locked python -m kassiber profiles create --help
+uv run --locked python -m kassiber metadata records --help
+uv run --locked python -m kassiber attachments list --help
+uv run --locked python -m kassiber journals events --help
+uv run --locked python -m kassiber journals transfers list --help
+uv run --locked python -m kassiber reports summary --help
+uv run --locked python -m kassiber reports tax-summary --help
+uv run --locked python -m kassiber reports austrian-e1kv --help
+uv run --locked python -m kassiber reports austrian-tax-summary --help
+uv run --locked python -m kassiber reports export-austrian --help
+uv run --locked python -m kassiber reports export-austrian-e1kv-xlsx --help
+uv run --locked python -m kassiber reports export-austrian-e1kv-csv --help
+uv run --locked python -m kassiber reports balance-history --help
+uv run --locked python -m kassiber rates --help
+uv run --locked python -m kassiber diagnostics collect --help
+uv run --locked python -m kassiber chat --help
+uv run --locked python -m kassiber chats --help
+uv run --locked python -m kassiber ai --help
+uv run --locked python -m kassiber ai providers --help
+uv run --locked python -m kassiber ai providers create --help
 ```
 
 - Safe local workflow:

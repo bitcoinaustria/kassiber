@@ -8,7 +8,7 @@ forms, and inline review — use whichever surface fits the moment. For
 deeper per-topic detail, drill into the [reference docs](reference/).
 
 Examples use `python3 -m kassiber`. When running through `uv`, prefix with
-`uv run`. The installed prerelease binary exposes the same surface as
+`uv run --locked`. The installed prerelease binary exposes the same surface as
 `kassiber ...`, and the desktop bundle forwards `--cli ...` to its
 bundled CLI sidecar.
 
@@ -348,7 +348,7 @@ templates, and CoinJoin/PayJoin traversal remain deferred.
 A fictitious AT/EUR sample report can be generated locally:
 
 ```bash
-uv run python scripts/generate-source-funds-demo-report.py \
+uv run --locked python scripts/generate-source-funds-demo-report.py \
   --output /tmp/kassiber-source-funds-demo.pdf \
   --json-output /tmp/kassiber-source-funds-demo.json
 ```

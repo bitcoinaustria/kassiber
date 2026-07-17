@@ -317,12 +317,12 @@ Run the gate and a real round-trip before calling it done:
 
 ```bash
 ./scripts/quality-gate.sh                                   # compile + smoke + drift + help
-uv run python -m kassiber wallets import-<slug> --help       # parser wired
+uv run --locked python -m kassiber wallets import-<slug> --help       # parser wired
 # round-trip on a temp data root
-uv run python -m kassiber --data-root /tmp/smoke/data init
-uv run python -m kassiber --data-root /tmp/smoke/data wallets import-<slug> --file docs/exchanges/samples/<slug>/example.csv
-uv run python -m kassiber --data-root /tmp/smoke/data journals process
-uv run python -m kassiber --data-root /tmp/smoke/data --machine reports summary
+uv run --locked python -m kassiber --data-root /tmp/smoke/data init
+uv run --locked python -m kassiber --data-root /tmp/smoke/data wallets import-<slug> --file docs/exchanges/samples/<slug>/example.csv
+uv run --locked python -m kassiber --data-root /tmp/smoke/data journals process
+uv run --locked python -m kassiber --data-root /tmp/smoke/data --machine reports summary
 ```
 
 For `ui-tauri/` catalog/i18n changes also run, from `ui-tauri/`:

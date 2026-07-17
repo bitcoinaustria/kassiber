@@ -19,27 +19,13 @@ run_in_dir() {
   (cd "$dir" && "$@")
 }
 
-PYTHON_BIN="python3"
-RUNNER=()
-
-# Honor an already-activated virtualenv before falling back to repo-local tooling.
-if [ -n "${VIRTUAL_ENV:-}" ] && command -v python3 >/dev/null 2>&1; then
-  PYTHON_BIN="$(command -v python3)"
-elif command -v uv >/dev/null 2>&1; then
-  RUNNER=(uv run)
-elif [ -x "$ROOT/.venv/bin/python" ]; then
-  PYTHON_BIN="$ROOT/.venv/bin/python"
-else
-  echo "quality gate requires an activated virtualenv, 'uv' on PATH, or a repo-local .venv at $ROOT/.venv" >&2
+if ! command -v uv >/dev/null 2>&1; then
+  echo "quality gate requires uv; run ./scripts/bootstrap-dev-env.sh" >&2
   exit 2
 fi
 
 py() {
-  if [ ${#RUNNER[@]} -gt 0 ]; then
-    "${RUNNER[@]}" python "$@"
-  else
-    "$PYTHON_BIN" "$@"
-  fi
+  uv run --locked python "$@"
 }
 
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
