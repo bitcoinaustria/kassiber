@@ -268,24 +268,6 @@ def review_status(
     return str(review_state(conn, candidate, review)["status"])
 
 
-def current_dismissed_gap_ids(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    candidates: Sequence[CustodyGapCandidate],
-) -> frozenset[str]:
-    """Return only dismissals that still match the current derived evidence."""
-
-    reviews = latest_reviews(conn, profile_id)
-    return frozenset(
-        candidate.gap_id
-        for candidate in candidates
-        if (review := reviews.get(candidate.gap_id)) is not None
-        and review.get("action") == "dismissed"
-        and _event_kind(review) != "bridge_reopened"
-        and review.get("candidate_fingerprint") == candidate_fingerprint(candidate)
-    )
-
-
 def latest_dismissed_fingerprints(
     conn: sqlite3.Connection, profile_id: str
 ) -> dict[str, str]:
@@ -2250,19 +2232,6 @@ def _preview_filed_report_impacts(
     )
 
 
-def _require_fresh_fingerprint(
-    candidate: CustodyGapCandidate, expected_fingerprint: str
-) -> str:
-    actual = candidate_fingerprint(candidate)
-    if not isinstance(expected_fingerprint, str) or expected_fingerprint != actual:
-        raise AppError(
-            "Custody-gap evidence changed after preview",
-            code="custody_gap_stale",
-            hint="Reload the candidate and review a new preview before confirming.",
-        )
-    return actual
-
-
 def _guided_bridge_warnings(candidate: CustodyGapCandidate) -> tuple[str, ...]:
     warnings = ["manual_review_required"]
     if not candidate.promotion_eligible:
@@ -2386,7 +2355,6 @@ __all__ = [
     "apply_review",
     "authored_claim_fingerprint",
     "candidate_fingerprint",
-    "current_dismissed_gap_ids",
     "historical_review_gaps",
     "latest_reviews",
     "latest_dismissed_fingerprints",
