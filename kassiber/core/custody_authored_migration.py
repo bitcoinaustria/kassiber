@@ -1106,7 +1106,7 @@ def list_active_review_refs(
     if effective_ids:
         placeholders = ",".join("?" for _ in effective_ids)
         component_rows = [
-            {**dict(row), "compatibility": False}
+            dict(row)
             for row in conn.execute(
                 f"""
                 SELECT term.legacy_source_id AS id,
@@ -1160,7 +1160,6 @@ def list_active_review_refs(
                 "policy": None,
                 "term_kind": "custody_component",
                 "deleted_at": None,
-                "compatibility": False,
             }
             for row in conn.execute(
                 f"""
@@ -1244,7 +1243,6 @@ def find_active_review_for_transaction(
             "id": component["review_id"] or component["component_id"],
             "component_id": component["component_id"],
             "term_kind": component["term_kind"],
-            "compatibility": False,
         }
 
     return None

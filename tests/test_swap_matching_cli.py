@@ -681,7 +681,7 @@ class SwapMatchingCliTest(unittest.TestCase):
         try:
             projected_fees = conn.execute(
                 "SELECT relation_kind, swap_fee_msat FROM "
-                "journal_custody_economic_relations"
+                "journal_custody_projection_relations"
             ).fetchall()
         finally:
             conn.close()

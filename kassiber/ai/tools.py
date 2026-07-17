@@ -128,6 +128,37 @@ _CUSTODY_RESIDUAL_CLASSIFICATIONS = (
     "suspense_continuation",
 )
 
+
+def _custody_review_schema(*, apply: bool) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "action": {
+            "type": "string",
+            "enum": [
+                "create",
+                "dismiss",
+                "revise",
+                "reopen",
+                "classify_residual",
+            ],
+        },
+        "gap_id": {"type": "string", "minLength": 1},
+        "classification": {
+            "type": "string",
+            "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS),
+        },
+        "reason": {"type": "string", "maxLength": 500},
+    }
+    required = ["action", "gap_id"]
+    if apply:
+        properties["expected_input_version"] = {"type": "integer", "minimum": 0}
+        required.append("expected_input_version")
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": required,
+        "properties": properties,
+    }
+
 _SOURCE_FUNDS_SOURCE_TYPES = (
     "fiat_purchase",
     "exchange_withdrawal",
@@ -1735,23 +1766,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "classification action. Returns exact quantities, allocations, warnings, filed-"
             "report impact and the input version for a separately consented apply."
         ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["action", "gap_id"],
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["create", "dismiss", "revise", "reopen", "classify_residual"],
-                },
-                "gap_id": {"type": "string", "minLength": 1},
-                "classification": {
-                    "type": "string",
-                    "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS),
-                },
-                "reason": {"type": "string", "maxLength": 500},
-            },
-        },
+        parameters=_custody_review_schema(apply=False),
         kind_class="read_only",
         wire_name="ui_custody_review_plan",
         daemon_kind="ui.custody.review.plan",
@@ -1763,27 +1778,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "After explicit consent, atomically apply exactly the current custody review "
             "plan. Action inputs and reason must match the preview; stale inputs fail closed."
         ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["action", "gap_id", "expected_input_version"],
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["create", "dismiss", "revise", "reopen", "classify_residual"],
-                },
-                "gap_id": {"type": "string", "minLength": 1},
-                "classification": {
-                    "type": "string",
-                    "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS),
-                },
-                "expected_input_version": {
-                    "type": "integer",
-                    "minimum": 0,
-                },
-                "reason": {"type": "string", "maxLength": 500},
-            },
-        },
+        parameters=_custody_review_schema(apply=True),
         kind_class="mutating",
         wire_name="ui_custody_review_apply",
         daemon_kind="ui.custody.review.apply",

@@ -248,12 +248,11 @@ def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
                 row["term_kind"],
                 row["out_asset"],
                 row["in_asset"],
-                row["compatibility"],
             )
             for row in refs
         } == {
-            ("pair", "transaction_pair", "BTC", "BTC", False),
-            ("payout", "direct_swap_payout", "BTC", None, False),
+            ("pair", "transaction_pair", "BTC", "BTC"),
+            ("payout", "direct_swap_payout", "BTC", None),
         }
         assert find_active_review_for_transaction(
             migrated,
@@ -263,7 +262,6 @@ def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
             "id": "pair",
             "component_id": pair["id"],
             "term_kind": "transaction_pair",
-            "compatibility": False,
         }
         assert find_active_review_for_transaction(
             migrated,
@@ -273,7 +271,6 @@ def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
             "id": "payout",
             "component_id": payout["id"],
             "term_kind": "direct_swap_payout",
-            "compatibility": False,
         }
     finally:
         migrated.close()
@@ -427,7 +424,6 @@ def test_active_component_without_legacy_terms_claims_every_boundary(tmp_path):
         )
         assert review["id"] == "native-bridge"
         assert review["component_id"] == "native-bridge"
-        assert review["compatibility"] is False
     with pytest.raises(AppError, match="active custody component"):
         create_transaction_pair(
             conn,
