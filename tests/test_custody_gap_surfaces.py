@@ -8,7 +8,6 @@ from unittest.mock import Mock, patch
 
 from kassiber.ai.tools import get_tool
 from kassiber.ai.prompt import build_openai_tools
-from kassiber.core.custody_gaps import CustodyGapSearchLimitError
 from kassiber.core.ui_snapshot import build_custody_lineage_snapshot
 from kassiber.daemon import (
     AiToolRuntime,
@@ -32,10 +31,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             "ui.custody.gaps.list",
             "ui.custody.gaps.review_context",
             "ui.custody.gaps.history",
-            "ui.custody.gaps.bridge.preview",
-            "ui.custody.gaps.reopen.preview",
-            "ui.custody.gaps.revise.preview",
-            "ui.custody.gaps.residual.preview",
+            "ui.custody.review.plan",
         ):
             self.assertIn(kind, SUPPORTED_KINDS)
             tool = get_tool(kind)
@@ -43,13 +39,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             self.assertEqual(tool.kind_class, "read_only")
             self.assertEqual(tool.daemon_kind, kind)
 
-        for kind in (
-            "ui.custody.gaps.bridge.create",
-            "ui.custody.gaps.dismiss",
-            "ui.custody.gaps.reopen",
-            "ui.custody.gaps.revise",
-            "ui.custody.gaps.residual.classify",
-        ):
+        for kind in ("ui.custody.review.apply",):
             self.assertIn(kind, SUPPORTED_KINDS)
             self.assertEqual(get_tool(kind).kind_class, "mutating")
             self.assertIn(kind, AI_TOOL_ONCE_ONLY_CONSENT)
@@ -59,7 +49,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         self.assertFalse(review.parameters["additionalProperties"])
         gap_list = get_tool("ui.custody.gaps.list")
         self.assertEqual(gap_list.parameters["properties"]["cursor"]["type"], "string")
-        residual = get_tool("ui.custody.gaps.residual.classify")
+        residual = get_tool("ui.custody.review.apply")
         self.assertEqual(
             residual.parameters["properties"]["classification"]["enum"],
             [
@@ -260,7 +250,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
                 return_value=({"id": "workspace"}, {"id": "profile"}),
             ),
             patch(
-                "kassiber.daemon.core_custody_gap_reviews.classify_residual",
+                "kassiber.daemon.core_custody_gap_reviews.apply_review",
                 return_value={
                     "gap_id": "gap:1",
                     "review_id": "review",
@@ -271,11 +261,12 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         ):
             payload = _ui_custody_gap_payload_from_conn(
                 conn,
-                "ui.custody.gaps.residual.classify",
+                "ui.custody.review.apply",
                 {
+                    "action": "classify_residual",
                     "gap_id": "gap:1",
                     "classification": "external_gift",
-                    "expected_fingerprint": "a" * 64,
+                    "expected_input_version": 7,
                     "reason": "reviewed evidence",
                 },
                 authored_source="ai_tool",
@@ -285,9 +276,11 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             conn,
             workspace_id="workspace",
             profile_id="profile",
+            action="classify_residual",
+            candidate=None,
             gap_id="gap:1",
             classification="external_gift",
-            expected_fingerprint="a" * 64,
+            expected_input_version=7,
             reason="reviewed evidence",
             authored_source="ai_tool",
             commit=False,
@@ -297,8 +290,9 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         with self.assertRaises(AppError) as raised:
             _ui_custody_gap_payload_from_conn(
                 conn,
-                "ui.custody.gaps.residual.preview",
+                "ui.custody.review.plan",
                 {
+                    "action": "classify_residual",
                     "gap_id": "gap:1",
                     "classification": "external_gift",
                     "component": {"raw": "not accepted"},
@@ -477,12 +471,12 @@ class CustodyGapSurfaceTest(unittest.TestCase):
                 {"gap_id": ""},
             )
 
-    def test_gap_list_rejects_invalid_cursor(self):
+    def test_gap_list_rejects_non_text_cursor(self):
         with self.assertRaises(AppError) as raised:
             _ui_custody_gap_payload_from_conn(
                 sqlite3.connect(":memory:"),
                 "ui.custody.gaps.list",
-                {"cursor": "not-an-offset"},
+                {"cursor": 50},
             )
         self.assertEqual(raised.exception.code, "validation")
 
@@ -545,18 +539,19 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         preview = _execute_read_only_ai_tool(
             ParsedAiToolCall(
                 call_id="call-preview",
-                name="ui.custody.gaps.bridge.preview",
-                arguments={"gap_id": "gap"},
+                name="ui.custody.review.plan",
+                arguments={"action": "create", "gap_id": "gap"},
             ),
             runtime,
         )
         create = _execute_mutating_ai_tool(
             ParsedAiToolCall(
                 call_id="call-create",
-                name="ui.custody.gaps.bridge.create",
+                name="ui.custody.review.apply",
                 arguments={
+                    "action": "create",
                     "gap_id": "gap",
-                    "expected_fingerprint": "0" * 64,
+                    "expected_input_version": 7,
                 },
             ),
             runtime,
@@ -564,7 +559,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         self.assertEqual(preview["reason"], "local_provider_required")
         self.assertEqual(create["reason"], "local_provider_required")
 
-    def test_bounded_search_failure_does_not_claim_an_empty_queue(self):
+    def test_bounded_search_is_an_ordinary_incomplete_queue_result(self):
         with (
             patch(
                 "kassiber.daemon.resolve_scope",
@@ -572,16 +567,26 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             ),
             patch(
                 "kassiber.daemon.core_custody_gaps.build_gap_snapshot",
-                side_effect=CustodyGapSearchLimitError("too many rows"),
+                return_value={
+                    "summary": {
+                        "search_complete": False,
+                        "search_status": "capacity_limited",
+                        "search_limit_kind": "candidate_population",
+                        "search_candidate_count": 5_541,
+                    },
+                    "gaps": [],
+                    "next_cursor": None,
+                },
             ),
-            self.assertRaises(AppError) as raised,
         ):
-            _ui_custody_gap_payload_from_conn(
+            payload = _ui_custody_gap_payload_from_conn(
                 sqlite3.connect(":memory:"),
                 "ui.custody.gaps.list",
                 {},
             )
-        self.assertEqual(raised.exception.code, "custody_gap_search_limit")
+        self.assertFalse(payload["summary"]["search_complete"])
+        self.assertEqual(payload["summary"]["search_status"], "capacity_limited")
+        self.assertEqual(payload["summary"]["search_candidate_count"], 5_541)
 
 
 if __name__ == "__main__":

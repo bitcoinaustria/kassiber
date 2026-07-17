@@ -16,8 +16,48 @@ from .chain_observer.provenance import (
 from ..wallet_descriptors import normalize_chain, normalize_network
 
 
-_LIGHTNING_WALLET_KINDS = frozenset({"lnd", "coreln", "cln", "lightning", "nwc"})
+_LIGHTNING_WALLET_KINDS = frozenset(
+    {"lnd", "coreln", "cln", "lightning", "nwc", "phoenix"}
+)
 _VERIFIED_AUTHORITY_KEY = "_kassiber_verified_chain_observation"
+_EVIDENCE_ROW_FIELDS = frozenset(
+    {
+        "id",
+        "journal_transaction_id",
+        "profile_id",
+        "wallet_id",
+        "wallet_kind",
+        "fingerprint",
+        "external_id",
+        "external_id_kind",
+        "native_event_id",
+        "native_namespace",
+        "source_ref",
+        "backend_name",
+        "occurred_at",
+        "confirmed_at",
+        "direction",
+        "asset",
+        "amount",
+        "fee",
+        "amount_includes_fee",
+        "kind",
+        "payment_hash",
+        "payment_hash_source",
+        "swap_refund_funding_txid",
+        "swap_refund_funding_vout",
+        "raw_json",
+        "config_json",
+        "wallet_config_json",
+        "chain",
+        "network",
+        "observation_authority_version",
+        "observation_graph_hash",
+        "observation_quantity_hash",
+        "observation_fee_attribution",
+        "observation_application_revision",
+    }
+)
 
 
 @dataclass(frozen=True, order=True)
@@ -36,19 +76,93 @@ class ProtocolScope:
     base_chain: str
 
 
+@dataclass(frozen=True)
+class BoundaryAmounts:
+    """Canonical principal, fee, and wallet movement for one boundary leg."""
+
+    direction: str
+    observed_amount_msat: int
+    principal_msat: int
+    fee_msat: int
+    wallet_movement_msat: int
+    wallet_delta_msat: int
+
+
+def normalize_boundary_amounts(
+    *,
+    direction: Any,
+    amount_msat: Any,
+    fee_msat: Any = 0,
+    amount_includes_fee: Any = False,
+) -> BoundaryAmounts:
+    """Normalize imported boundary arithmetic without guessing semantics.
+
+    Some outbound observers store principal in ``amount`` while others store
+    the complete wallet debit. This is the single arithmetic boundary used by
+    discovery, reviewed plans, canonical observations, and component coverage.
+    Validation remains at each caller's evidence boundary so malformed imports
+    continue to fail closed in their existing typed issue path.
+    """
+
+    normalized_direction = str(direction or "").strip().lower()
+    observed = int(amount_msat or 0)
+    fee = int(fee_msat or 0)
+    included = bool(amount_includes_fee)
+    principal = (
+        observed - fee
+        if normalized_direction == "outbound" and included
+        else observed
+    )
+    wallet_movement = (
+        principal + fee
+        if normalized_direction == "outbound"
+        else observed
+    )
+    wallet_delta = (
+        -wallet_movement
+        if normalized_direction == "outbound"
+        else wallet_movement
+    )
+    return BoundaryAmounts(
+        direction=normalized_direction,
+        observed_amount_msat=observed,
+        principal_msat=principal,
+        fee_msat=fee,
+        wallet_movement_msat=wallet_movement,
+        wallet_delta_msat=wallet_delta,
+    )
+
+
+def row_boundary_amounts(row: Mapping[str, Any]) -> BoundaryAmounts:
+    """Normalize one imported transaction-like mapping."""
+
+    return normalize_boundary_amounts(
+        direction=_field(row, "direction"),
+        amount_msat=_field(row, "amount"),
+        fee_msat=_field(row, "fee"),
+        amount_includes_fee=_field(row, "amount_includes_fee", False),
+    )
+
+
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
-    if hasattr(row, "keys") and key not in row.keys():
-        return default
-    if hasattr(row, "get"):
+    if type(row) is dict:
         return row.get(key, default)
-    return row[key]
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
 
 
 def _json_object(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
+    if value in (None, "", "{}", b"{}"):
+        return {}
     try:
-        payload = json.loads(value or "{}")
+        payload = json.loads(value)
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return dict(payload) if isinstance(payload, Mapping) else {}
@@ -62,23 +176,27 @@ def row_principal_msat(row: Mapping[str, Any]) -> int:
     allocates principal, while the fee remains a separate sibling quantity.
     """
 
-    amount_msat = int(_field(row, "amount") or 0)
-    if (
-        str(_field(row, "direction") or "").strip().lower() == "outbound"
-        and bool(_field(row, "amount_includes_fee", False))
-    ):
-        return amount_msat - int(_field(row, "fee") or 0)
-    return amount_msat
+    return row_boundary_amounts(row).principal_msat
 
 
 def enriched_quantity_rows(
     rows: Sequence[Mapping[str, Any]],
+    *,
+    evidence_only: bool = False,
 ) -> tuple[dict[str, Any], ...]:
     """Attach canonical event scope without copying wallet config to evidence."""
 
     enriched = []
     for row in rows:
-        item = dict(row)
+        if evidence_only:
+            row_keys = set(row.keys())
+            item = {
+                key: row[key]
+                for key in _EVIDENCE_ROW_FIELDS
+                if key in row_keys
+            }
+        else:
+            item = dict(row)
         # Verify the persisted observer commitment before applying any
         # deterministic, multi-row accounting normalization below. The value
         # is a frozen Python object, never serialized input, so raw imports
@@ -134,7 +252,7 @@ def enriched_quantity_rows(
 
 
 def _canonical_raw_json(value: Any) -> Any:
-    if value in (None, ""):
+    if value in (None, "", "{}", b"{}"):
         return {}
     if isinstance(value, (bytes, bytearray)):
         value = value.decode("utf-8", errors="replace")
@@ -372,12 +490,6 @@ def canonical_evidence_payload(
     }
 
 
-def observation_hash(row: Mapping[str, Any]) -> str:
-    """Compatibility name for the stable quantity-core hash."""
-
-    return _hash_payload(canonical_quantity_payload(row))[0]
-
-
 @dataclass(frozen=True)
 class EvidenceSnapshot:
     quantity_hash: str
@@ -593,10 +705,14 @@ class QuantityObservation:
             ("quantity_hash", self.quantity_hash),
             ("evidence_detail_hash", self.evidence_detail_hash),
         ):
-            if len(value) != 64 or any(
-                char not in "0123456789abcdef" for char in value
-            ):
+            if len(value) != 64 or value != value.lower():
                 raise ValueError(f"quantity observation {label} must be lowercase SHA-256")
+            try:
+                int(value, 16)
+            except ValueError as exc:
+                raise ValueError(
+                    f"quantity observation {label} must be lowercase SHA-256"
+                ) from exc
         if self.direction not in {"inbound", "outbound"}:
             raise ValueError("quantity observation direction must be inbound or outbound")
         if not self.asset:
@@ -615,16 +731,21 @@ class QuantityObservation:
             raise ValueError("an included fee cannot exceed the observed amount")
 
     @property
+    def boundary_amounts(self) -> BoundaryAmounts:
+        return normalize_boundary_amounts(
+            direction=self.direction,
+            amount_msat=self.amount_msat,
+            fee_msat=self.fee_msat,
+            amount_includes_fee=self.amount_includes_fee,
+        )
+
+    @property
     def principal_msat(self) -> int:
-        if self.direction == "outbound" and self.amount_includes_fee:
-            return self.amount_msat - self.fee_msat
-        return self.amount_msat
+        return self.boundary_amounts.principal_msat
 
     @property
     def wallet_delta_msat(self) -> int:
-        if self.direction == "inbound":
-            return self.amount_msat
-        return -(self.principal_msat + self.fee_msat)
+        return self.boundary_amounts.wallet_delta_msat
 
 
 @dataclass(frozen=True)
@@ -839,6 +960,7 @@ def build_canonical_quantity_input(
 
 
 __all__ = [
+    "BoundaryAmounts",
     "ChainObservationAuthority",
     "CanonicalEventIssue",
     "CanonicalEventKey",
@@ -853,7 +975,8 @@ __all__ = [
     "canonical_evidence_payload",
     "canonical_quantity_payload",
     "enriched_quantity_rows",
-    "observation_hash",
+    "normalize_boundary_amounts",
+    "row_boundary_amounts",
     "row_principal_msat",
     "resolve_protocol_scope",
 ]

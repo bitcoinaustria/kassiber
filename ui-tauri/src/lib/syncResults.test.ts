@@ -86,6 +86,23 @@ describe("syncResults", () => {
     );
   });
 
+  it("surfaces a configured compatibility-observer route", () => {
+    expect(
+      describeWalletSyncResult(
+        {
+          wallet: "Cold",
+          status: "synced",
+          observer_route: "compatibility",
+          observer_compatibility_reason: "custom_timeout",
+          records_fetched: 2,
+        },
+        "Cold",
+      ),
+    ).toBe(
+      "Cold refreshed: compatibility observer (custom timeout) · 2 source rows.",
+    );
+  });
+
   it("only trusts all-wallet refresh results without errors for report refresh chaining", () => {
     expect(
       syncResultsAreTrustedForReports([

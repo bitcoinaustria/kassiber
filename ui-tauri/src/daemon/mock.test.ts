@@ -84,11 +84,10 @@ describe("mock daemon custody component bulk resolution", () => {
       summary: { count: number; active: number; draft: number };
       dry_run?: boolean;
     }>({
-      kind: "ui.transfers.components.bulk_resolve",
+      kind: "ui.transfers.components.plan",
       args: {
         components: [{ legs: [] }, { legs: [] }],
         activate: false,
-        dry_run: true,
       },
     });
 
@@ -195,8 +194,9 @@ describe("mock daemon custody gaps", () => {
       country_tax_meaning: string;
       residual_msat: string;
     }>({
-      kind: "ui.custody.gaps.residual.preview",
+      kind: "ui.custody.review.plan",
       args: {
+        action: "classify_residual",
         gap_id: "custody-gap:og-treasury",
         classification: "retained_custody",
       },

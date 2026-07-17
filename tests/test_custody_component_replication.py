@@ -11,8 +11,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from kassiber.cli.handlers import build_ledger_state
 from kassiber.core.accounts import create_profile, create_workspace
+from kassiber.core.custody_journal import build_ledger_state
 from kassiber.core.custody_components import (
     activate_component,
     create_component,
@@ -193,7 +193,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.owner,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -646,11 +646,12 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                     occurred_at,
                 ),
             )
-        candidates, _ = custody_gaps.load_gap_candidates(
+        gap_result, _ = custody_gaps.load_gap_search_result(
             self.owner,
             self.profile["id"],
             include_journal_claims=False,
         )
+        candidates = list(gap_result.candidates)
         candidate = next(
             item
             for item in candidates
@@ -1207,6 +1208,50 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             ).fetchone()[0],
         )
 
+    def test_arriving_legacy_payout_event_is_migrated_in_same_import(self):
+        self._join_peer()
+        _wallet_id, out_id, _in_id = self._insert_wallet_and_transactions()
+        payout_id = str(uuid.uuid4())
+        self.owner.execute(
+            """
+            INSERT INTO direct_swap_payouts(
+                id, workspace_id, profile_id, out_transaction_id,
+                kind, policy, payout_asset, payout_amount,
+                payout_occurred_at, payout_fiat_value, payout_external_id,
+                counterparty, notes, swap_fee_msat, swap_fee_kind,
+                out_amount, created_at
+            ) VALUES(?, ?, ?, ?, 'direct-swap-payout', 'taxable',
+                     'BTC', 100000, ?, 100, 'legacy-settlement',
+                     'legacy provider', 'delayed signed event', 0,
+                     'combined', 100000, ?)
+            """,
+            (
+                payout_id,
+                self.workspace["id"],
+                self.profile["id"],
+                out_id,
+                NOW,
+                NOW,
+            ),
+        )
+        self.owner.commit()
+
+        result = self._sync_owner_to_peer()
+
+        self.assertEqual(result.rejected_events, 0)
+        legacy = self.peer.execute(
+            "SELECT component_id FROM direct_swap_payouts WHERE id = ?",
+            (payout_id,),
+        ).fetchone()
+        self.assertIsNotNone(legacy)
+        self.assertIsNotNone(legacy["component_id"])
+        component = get_component(self.peer, legacy["component_id"])
+        self.assertEqual(component["effective_state"], "active")
+        self.assertEqual(
+            [term["legacy_source_id"] for term in component["economic_terms"]],
+            [payout_id],
+        )
+
     def test_open_db_backfills_only_preexisting_local_activation_snapshots(self):
         self._join_peer()
         component = self._create_component(active=True)
@@ -1426,7 +1471,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.peer,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -1575,7 +1620,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.peer,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -2085,7 +2130,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.owner,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -2339,7 +2384,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 json.dumps([component["id"]], separators=(",", ":")),
                 event_ids[0],
                 event_ids[1],
-                json.dumps("native_transfer"),
+                json.dumps("manual_bridge"),
                 json.dumps("conversion"),
                 NOW,
             ),

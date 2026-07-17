@@ -20,6 +20,7 @@ from kassiber.core import (
     custody_components,
     custody_gap_reviews,
     custody_gaps,
+    custody_journal,
     reports as core_reports,
 )
 from kassiber.core.custody_quantity_store import component_native_support_status
@@ -29,6 +30,26 @@ from tests.custody_tax_helpers import persist_authoritative_chain_observation
 
 
 BTC = 100_000_000_000
+
+
+def _review_candidate(conn, candidate, *, authored_source="gui"):
+    plan = custody_gap_reviews.plan_review(
+        conn,
+        workspace_id="ws",
+        profile_id="profile",
+        action="create",
+        candidate=candidate,
+        authored_source=authored_source,
+    )
+    return custody_gap_reviews.apply_review(
+        conn,
+        workspace_id="ws",
+        profile_id="profile",
+        action="create",
+        candidate=candidate,
+        expected_input_version=plan["input_version"],
+        authored_source=authored_source,
+    )
 
 
 @dataclass(frozen=True)
@@ -361,6 +382,40 @@ class _FlagshipTreasury:
 
 
 class CustodyLineageFlagshipTests(unittest.TestCase):
+    def test_core_builder_runs_the_real_database_pipeline_without_handlers(self):
+        with tempfile.TemporaryDirectory() as root:
+            book = _FlagshipTreasury(root)
+            try:
+                history = _FlagshipTreasury.complete_history()
+                book.insert(history)
+                profile = book.conn.execute(
+                    "SELECT * FROM profiles WHERE id = 'profile'"
+                ).fetchone()
+
+                core_state = custody_journal.build_ledger_state(book.conn, profile)
+                self.assertEqual(
+                    len(core_state["custody_quantity"].projection.observations),
+                    len(history),
+                )
+                self.assertEqual(
+                    {
+                        entry["transaction_id"]
+                        for entry in core_state["entries"]
+                        if entry["entry_type"] == "transfer_out"
+                    },
+                    {
+                        "2018-a-to-b-out",
+                        "2020-b-to-deposit-out",
+                        "2020-tx0-out",
+                        "2020-mix-out",
+                        "2022-mixout-out",
+                        "2024-c-to-d-out",
+                    },
+                )
+                self.assertFalse(core_state["custody_quantity"].report_blocked)
+            finally:
+                book.close()
+
     def test_complete_policy_history_is_automatic_fee_exact_and_order_invariant(self):
         rows = _FlagshipTreasury.complete_history()
         signatures = []
@@ -435,28 +490,15 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                 before = book.process()
                 candidate = next(
                     item
-                    for item in custody_gaps.load_gap_candidates(
+                    for item in custody_gaps.load_gap_search_result(
                         book.conn, "profile"
-                    )[0]
+                    )[0].candidates
                     if item.source_ids == ("2020-whirlpool-out",)
                     and item.return_ids
                     == ("2021-return-1", "2021-return-2")
                 )
                 self.assertTrue(candidate.promotion_eligible)
-                preview = custody_gap_reviews.preview_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                )
-                created = custody_gap_reviews.create_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                    expected_fingerprint=preview["candidate_fingerprint"],
-                    authored_source="gui",
-                )
+                created = _review_candidate(book.conn, candidate)
                 # The later vault roll arrives after review; it must not change
                 # the already reviewed missing-history boundary.
                 book.insert(
@@ -597,26 +639,13 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
 
                 candidate = next(
                     item
-                    for item in custody_gaps.load_gap_candidates(
+                    for item in custody_gaps.load_gap_search_result(
                         book.conn, "profile"
-                    )[0]
+                    )[0].candidates
                     if item.source_ids == ("2020-whirlpool-out",)
                     and item.return_ids == ("2021-return-1", "2021-return-2")
                 )
-                preview = custody_gap_reviews.preview_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                )
-                created = custody_gap_reviews.create_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                    expected_fingerprint=preview["candidate_fingerprint"],
-                    authored_source="gui",
-                )
+                created = _review_candidate(book.conn, candidate)
                 self.assertEqual(created["retained_msat"], 10 * BTC)
                 self.assertEqual(created["residual_msat"], 0)
 
@@ -653,25 +682,13 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                 book.process()
                 candidate = next(
                     item
-                    for item in custody_gaps.load_gap_candidates(
+                    for item in custody_gaps.load_gap_search_result(
                         book.conn, "profile"
-                    )[0]
+                    )[0].candidates
                     if item.source_ids == ("2020-whirlpool-out",)
                     and len(item.return_ids) == 2
                 )
-                preview = custody_gap_reviews.preview_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                )
-                created = custody_gap_reviews.create_guided_bridge(
-                    book.conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    candidate=candidate,
-                    expected_fingerprint=preview["candidate_fingerprint"],
-                )
+                created = _review_candidate(book.conn, candidate)
                 component_id = created["component_id"]
                 original = book.conn.execute(
                     """
@@ -791,7 +808,7 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
                 gap = next(
                     item
                     for item in custody_gaps.build_gap_snapshot(
-                        book.conn, "profile"
+                        book.conn, "profile", gap_id=candidate.gap_id
                     )["gaps"]
                     if item["gap_id"] == candidate.gap_id
                 )
@@ -885,9 +902,10 @@ class CustodyLineageFlagshipTests(unittest.TestCase):
             try:
                 book.insert(rows)
                 result = book.process()
-                candidates, _ = custody_gaps.load_gap_candidates(
+                gap_result, _ = custody_gaps.load_gap_search_result(
                     book.conn, "profile"
                 )
+                candidates = list(gap_result.candidates)
                 source_candidates = [
                     item
                     for item in candidates

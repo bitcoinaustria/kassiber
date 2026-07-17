@@ -114,13 +114,14 @@ or source-qualified Lightning evidence. Arbitrary provider/import ids never
 establish ownership. For BTC ↔ LBTC swaps, review the surfaced pair or create
 an explicit custody component when the route is incomplete.
 
-Use `transfers components bulk-resolve --dry-run` for 1:N, N:1, N:M,
+Use `transfers components plan --action create` for 1:N, N:1, N:M,
 multi-hop migrations, or missing intermediate wallets. Represent missing owned
 custody with `untracked_wallet`; genuine N:M requires explicit allocations.
 Activate only after exact anchor coverage and conservation pass atomically.
 In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
-then `ui.transfers.components.bulk_resolve` with `dry_run=true` before asking
-for consent to write the final component set.
+then `ui.transfers.components.plan` before asking
+for consent to write the final component set with the returned
+`expected_input_version`.
 
 If `kassiber --machine journals transfers list` reports
 `summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.

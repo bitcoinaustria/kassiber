@@ -39,21 +39,18 @@ from ..transfers import (
 )
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
 from .chain_observer.provenance import row_has_current_authoritative_observation
+from .custody_evidence import row_boundary_amounts
 
 
 COMPONENT_TYPES = frozenset(
     {
-        "native_transfer",
-        "channel_lifecycle",
-        "peg",
         "swap",
-        "refund",
         "manual_bridge",
     }
 )
 COMPONENT_STATES = frozenset({"draft", "active", "superseded"})
 CONSERVATION_MODES = frozenset({"quantity", "conversion"})
-AUTHORED_SOURCES = frozenset({"user", "cli", "gui", "ai_tool"})
+AUTHORED_SOURCES = frozenset({"user", "cli", "gui", "ai_tool", "migration"})
 # Block timestamps are not a strict sequence clock, and exchange/L2 records may
 # stamp completion after the receiving chain transaction. Custody components are
 # reviewed exact allocations, so tolerate bounded evidence-clock skew while
@@ -66,11 +63,9 @@ LEG_ROLES = frozenset(
         "fee",
         "external",
         "retained",
-        # ``unresolved`` is an incomplete authoring placeholder and therefore
-        # always blocks activation. ``suspense`` is different: it is an exact,
-        # explicitly reviewed residual quantity whose economic classification
-        # remains open while the rest of a manual bridge may become effective.
-        "unresolved",
+        # ``suspense`` is an exact, explicitly reviewed residual quantity whose
+        # economic classification remains open while the rest of a manual
+        # bridge may become effective.
         "suspense",
     }
 )
@@ -131,6 +126,41 @@ def _now_iso() -> str:
 
 def _error(message: str, code: str, *, details: Mapping[str, Any] | None = None) -> AppError:
     return AppError(message, code=code, details=dict(details or {}), retryable=False)
+
+
+def require_review_input_version(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    expected_input_version: int,
+) -> int:
+    """Fail closed unless a reviewed plan still targets current book inputs."""
+
+    if type(expected_input_version) is not int or expected_input_version < 0:
+        raise _error(
+            "Custody review plan input version is invalid",
+            "custody_review_plan_invalid",
+            details={"expected_input_version": expected_input_version},
+        )
+    row = conn.execute(
+        "SELECT journal_input_version FROM profiles "
+        "WHERE id = ? AND workspace_id = ?",
+        (profile_id, workspace_id),
+    ).fetchone()
+    if row is None:
+        raise _error("Custody review profile was not found", "not_found")
+    current = int(row["journal_input_version"] or 0)
+    if current != expected_input_version:
+        raise _error(
+            "Custody review plan is stale",
+            "custody_review_plan_stale",
+            details={
+                "expected_input_version": expected_input_version,
+                "current_input_version": current,
+            },
+        )
+    return current
 
 
 def _required_text(value: Any, field: str, *, token: bool = False) -> str:
@@ -202,6 +232,28 @@ def _exact_nonnegative_int(value: Any, field: str) -> int:
     return parsed
 
 
+def _exact_optional_signed_int(value: Any, field: str) -> int | None:
+    if value is None:
+        return None
+    if type(value) is int:
+        parsed = value
+    elif isinstance(value, str) and re.fullmatch(r"-?[0-9]+", value):
+        parsed = int(value, 10)
+    else:
+        raise _error(
+            f"{field} must be an exact integer",
+            "custody_component_validation",
+            details={"field": field, "value": value},
+        )
+    if not -_SQLITE_MAX_INTEGER <= parsed <= _SQLITE_MAX_INTEGER:
+        raise _error(
+            f"{field} must fit SQLite's signed integer range",
+            "custody_component_validation",
+            details={"field": field, "value": value},
+        )
+    return parsed
+
+
 def _json_object(value: Any, field: str) -> dict[str, Any]:
     if value in (None, ""):
         return {}
@@ -234,6 +286,63 @@ def _json_object(value: Any, field: str) -> dict[str, Any]:
 
 def _json_text(value: Any, field: str) -> str:
     return json.dumps(_json_object(value, field), sort_keys=True, separators=(",", ":"))
+
+
+def normalize_component_header(
+    *,
+    component_type: Any,
+    conservation_mode: Any = "quantity",
+    evidence_kind: Any = None,
+    evidence_grade: Any = None,
+    evidence: Any = None,
+    conversion_policy: Any = None,
+    conversion_reviewed: Any = False,
+    conversion_metadata: Any = None,
+    notes: Any = None,
+    change_reason: Any = None,
+    component_id: Any = None,
+    lineage_id: Any = None,
+    created_at: Any = None,
+    authored_source: Any = "user",
+) -> dict[str, Any]:
+    """Normalize every authored component header field without writing."""
+
+    normalized_component_id = _optional_text(component_id, "component_id")
+    normalized_lineage_id = _optional_text(lineage_id, "lineage_id")
+    normalized_source = _required_text(authored_source, "authored_source")
+    if normalized_source not in AUTHORED_SOURCES:
+        raise _error(
+            "authored_source is invalid",
+            "custody_component_validation",
+            details={"authored_source": normalized_source},
+        )
+    if type(conversion_reviewed) is not bool:
+        raise _error(
+            "conversion_reviewed must be a boolean",
+            "custody_component_validation",
+        )
+    return {
+        "component_type": _normalize_component_type(component_type),
+        "conservation_mode": _normalize_mode(conservation_mode),
+        "evidence_kind": _optional_text(evidence_kind, "evidence_kind", token=True),
+        "evidence_grade": _optional_text(
+            evidence_grade, "evidence_grade", token=True
+        ),
+        "evidence": _json_object(evidence, "evidence"),
+        "conversion_policy": _optional_text(
+            conversion_policy, "conversion_policy", token=True
+        ),
+        "conversion_reviewed": conversion_reviewed,
+        "conversion_metadata": _json_object(
+            conversion_metadata, "conversion_metadata"
+        ),
+        "notes": _optional_text(notes, "notes"),
+        "change_reason": _optional_text(change_reason, "change_reason"),
+        "component_id": normalized_component_id,
+        "lineage_id": normalized_lineage_id or normalized_component_id,
+        "created_at": parse_timestamp(created_at) if created_at is not None else None,
+        "authored_source": normalized_source,
+    }
 
 
 @contextmanager
@@ -441,6 +550,123 @@ def normalize_allocations(
     return normalized
 
 
+def normalize_economic_terms(
+    terms: Iterable[Mapping[str, Any]] | None,
+    legs: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    if terms is None:
+        return []
+    try:
+        raw_terms = list(terms)
+    except TypeError as exc:
+        raise _error(
+            "economic_terms must be a sequence",
+            "custody_component_validation",
+        ) from exc
+    by_id = {str(leg["id"]): leg for leg in legs}
+    by_ordinal = {int(leg["ordinal"]): leg for leg in legs}
+
+    def resolve_leg(
+        raw: Mapping[str, Any], kind: str, term_ordinal: int
+    ) -> Mapping[str, Any]:
+        leg_id = _optional_text(raw.get(f"{kind}_leg_id"), f"{kind}_leg_id")
+        if leg_id is not None:
+            leg = by_id.get(leg_id)
+        else:
+            raw_ordinal = raw.get(f"{kind}_ordinal")
+            leg = by_ordinal.get(raw_ordinal) if type(raw_ordinal) is int else None
+        if leg is None:
+            raise _error(
+                f"economic term {kind} leg was not found",
+                "custody_component_validation",
+                details={"term_ordinal": term_ordinal},
+            )
+        return leg
+
+    normalized: list[dict[str, Any]] = []
+    for ordinal, raw in enumerate(raw_terms):
+        if not isinstance(raw, Mapping):
+            raise _error(
+                "each economic term must be an object",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        source = resolve_leg(raw, "source", ordinal)
+        target = resolve_leg(raw, "target", ordinal)
+        if source["role"] != "source" or target["role"] == "source":
+            raise _error(
+                "economic terms must bind a source leg to a non-source leg",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        term_kind = _required_text(raw.get("term_kind"), "term_kind", token=True)
+        if term_kind not in {"transaction_pair", "direct_swap_payout"}:
+            raise _error(
+                "economic term kind is not supported",
+                "custody_component_validation",
+                details={"ordinal": ordinal, "term_kind": term_kind},
+            )
+        source_row_hash = _required_text(raw.get("source_row_hash"), "source_row_hash")
+        if not re.fullmatch(r"[0-9a-f]{64}", source_row_hash):
+            raise _error(
+                "source_row_hash must be lowercase SHA-256 hex",
+                "custody_component_validation",
+                details={"ordinal": ordinal},
+            )
+        normalized.append(
+            {
+                "id": _optional_text(raw.get("id"), "id") or str(uuid.uuid4()),
+                "ordinal": ordinal,
+                "source_leg_id": source["id"],
+                "target_leg_id": target["id"],
+                "term_kind": term_kind,
+                "legacy_source_id": _required_text(
+                    raw.get("legacy_source_id"), "legacy_source_id"
+                ),
+                "source_row_hash": source_row_hash,
+                "review_kind": _required_text(raw.get("review_kind"), "review_kind"),
+                "tax_policy": _required_text(raw.get("tax_policy"), "tax_policy"),
+                "reviewed_source_amount_msat": _exact_optional_signed_int(
+                    raw.get("reviewed_source_amount_msat"),
+                    "reviewed_source_amount_msat",
+                ),
+                "swap_fee_msat": _exact_optional_signed_int(
+                    raw.get("swap_fee_msat"), "swap_fee_msat"
+                ),
+                "swap_fee_kind": _optional_text(raw.get("swap_fee_kind"), "swap_fee_kind"),
+                "confidence_at_review": _optional_text(
+                    raw.get("confidence_at_review"), "confidence_at_review"
+                ),
+                "review_source": _optional_text(raw.get("review_source"), "review_source"),
+                "review_notes": _optional_text(raw.get("review_notes"), "review_notes"),
+                "payout_asset": _optional_text(raw.get("payout_asset"), "payout_asset"),
+                "payout_amount_msat": _exact_optional_signed_int(
+                    raw.get("payout_amount_msat"), "payout_amount_msat"
+                ),
+                "payout_occurred_at": _optional_text(
+                    raw.get("payout_occurred_at"), "payout_occurred_at"
+                ),
+                "payout_fiat_value_exact": _optional_text(
+                    raw.get("payout_fiat_value_exact"), "payout_fiat_value_exact"
+                ),
+                "payout_external_id": _optional_text(
+                    raw.get("payout_external_id"), "payout_external_id"
+                ),
+                "counterparty": _optional_text(raw.get("counterparty"), "counterparty"),
+            }
+        )
+    ids = [term["id"] for term in normalized]
+    identities = [
+        (term["term_kind"], term["legacy_source_id"]) for term in normalized
+    ]
+    if len(ids) != len(set(ids)) or len(identities) != len(set(identities)):
+        raise _error(
+            "economic term ids and legacy source identities must be unique",
+            "custody_component_validation",
+        )
+    return normalized
+
+
 def _canonical_rail(value: Any) -> str:
     rail = str(value or "").strip().lower().replace("_", "-")
     return _RAIL_ALIASES.get(rail, rail)
@@ -553,7 +779,7 @@ def _inferred_allocation_leg_pairs(
     attributed_sinks = [
         sink
         for sink in positive_sinks
-        if sink.get("role") in {"fee", "external", "unresolved", "suspense"}
+        if sink.get("role") in {"fee", "external", "suspense"}
     ]
     if len(owned_sinks) == 1 and not attributed_sinks:
         return [(source, owned_sinks[0]) for source in positive_sources]
@@ -747,26 +973,6 @@ def _allocations_with_component_inference(
                 }
             )
     return complete
-
-
-def complete_component_allocations(
-    legs: Sequence[Mapping[str, Any]],
-    allocations: Sequence[Mapping[str, Any]],
-    *,
-    conservation_mode: str,
-) -> list[dict[str, Any]]:
-    """Return explicit or unambiguous inferred allocation edges.
-
-    Effective-component consumers should use this seam instead of rebuilding
-    the 1:N/N:1 inference rules independently. N:M components have already
-    been required to carry explicit edges before they can become effective.
-    """
-
-    return _allocations_with_component_inference(
-        legs,
-        allocations,
-        conservation_mode=conservation_mode,
-    )
 
 
 def _allocation_chronology_issues(
@@ -1105,7 +1311,7 @@ def _validate_allocations(
         attributed_sinks = [
             leg
             for leg in positive_sinks
-            if leg["role"] in {"fee", "external", "unresolved", "suspense"}
+            if leg["role"] in {"fee", "external", "suspense"}
         ]
         unambiguous = (
             len(positive_sources) == 1 and len(positive_sinks) == 1
@@ -1198,7 +1404,6 @@ def _balance_rows(
             "fee": 0,
             "external": 0,
             "retained": 0,
-            "unresolved": 0,
             "suspense": 0,
         }
     )
@@ -1223,7 +1428,6 @@ def _balance_rows(
                 "fee_msat" if amount_field == "amount_msat" else "fee_amount": totals["fee"],
                 "external_msat" if amount_field == "amount_msat" else "external_amount": totals["external"],
                 "retained_msat" if amount_field == "amount_msat" else "retained_amount": totals["retained"],
-                "unresolved_msat" if amount_field == "amount_msat" else "unresolved_amount": totals["unresolved"],
                 "suspense_msat" if amount_field == "amount_msat" else "suspense_amount": totals["suspense"],
                 "sink_msat" if amount_field == "amount_msat" else "sink_amount": sinks,
                 "residual_msat" if amount_field == "amount_msat" else "residual_amount": totals["source"] - sinks,
@@ -1286,20 +1490,25 @@ def _location_continuity_issues(
             assert source_when is not None
             has_prior_credit = any(
                 sink_when is not None
-                and sink_when != source_when
-                and sink_when
-                <= source_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
+                and sink_when < source_when
                 for sink_when, _sink in parsed_sinks
             )
             if source.get("transaction_id") is None or has_prior_credit:
-                intermediate_sources.append((source_when, source))
+                # Transactionless missing-wallet hops have bounded timestamp
+                # uncertainty, so let a nearby reviewed credit arrive within
+                # the chronology tolerance. An anchored source has an exact
+                # observation time and may consume only an actual prior credit.
+                event_when = (
+                    source_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
+                    if source.get("transaction_id") is None
+                    else source_when
+                )
+                intermediate_sources.append((event_when, source))
         if not intermediate_sources:
             continue
 
         events = [
-            (when - CUSTODY_CHRONOLOGY_SKEW_TOLERANCE, 0, leg)
-            for when, leg in parsed_sinks
-            if when is not None
+            (when, 0, leg) for when, leg in parsed_sinks if when is not None
         ] + [
             (when, 1, leg) for when, leg in intermediate_sources
         ]
@@ -1378,7 +1587,6 @@ def validate_conservation(
                     "roles": unknown_roles,
                 }
             ],
-            "unresolved_msat": 0,
             "suspense_msat": 0,
             "source_msat": 0,
             "owned_destination_msat": 0,
@@ -1392,11 +1600,6 @@ def validate_conservation(
         int(leg.get("amount_msat") or 0)
         for leg in materialized
         if leg.get("role") in {"destination", "retained"}
-    )
-    unresolved_total = sum(
-        int(leg.get("amount_msat") or 0)
-        for leg in materialized
-        if leg.get("role") == "unresolved"
     )
     suspense_legs = [
         leg
@@ -1414,14 +1617,6 @@ def validate_conservation(
             {
                 "code": "missing_owned_destination",
                 "message": "component has no positive destination or retained-custody leg",
-            }
-        )
-    if unresolved_total:
-        issues.append(
-            {
-                "code": "unresolved_value",
-                "message": "component still contains unresolved value",
-                "amount_msat": unresolved_total,
             }
         )
     if suspense_legs:
@@ -1635,27 +1830,78 @@ def validate_conservation(
             for leg in materialized
             if leg.get("role") == "source" and int(leg.get("amount_msat") or 0) > 0
         ]
-        positive_owned_sinks = [
+        positive_destinations = [
             leg
             for leg in materialized
-            if leg.get("role") in {"destination", "retained"}
+            if leg.get("role") == "destination"
             and int(leg.get("amount_msat") or 0) > 0
         ]
-        if len(positive_sources) != 1 or len(positive_owned_sinks) != 1:
+        positive_retained = [
+            leg
+            for leg in materialized
+            if leg.get("role") == "retained"
+            and int(leg.get("amount_msat") or 0) > 0
+        ]
+        retained_continuations: list[Mapping[str, Any]] = []
+        retained_conversion_outputs: list[Mapping[str, Any]] = []
+        if len(positive_sources) == 1:
+            source = positive_sources[0]
+            for leg in positive_retained:
+                if (
+                    normalize_asset_code(leg.get("asset"))
+                    == normalize_asset_code(source.get("asset"))
+                    and leg.get("exposure") == source.get("exposure")
+                    and leg.get("conservation_unit")
+                    == source.get("conservation_unit")
+                ):
+                    retained_continuations.append(leg)
+                else:
+                    retained_conversion_outputs.append(leg)
+        conversion_outputs = [
+            *positive_destinations,
+            *retained_conversion_outputs,
+        ]
+        if not conversion_outputs and retained_continuations:
+            # A direct external payout has no observed destination anchor. Its
+            # first retained leg is the reviewed conversion output; any later
+            # same-unit retained legs are exact source continuations.
+            conversion_outputs.append(retained_continuations.pop(0))
+        if len(positive_sources) != 1 or len(conversion_outputs) != 1:
             issues.append(
                 {
                     "code": "conversion_topology_unsupported",
                     "message": (
                         "reviewed conversions currently require exactly one "
-                        "quantity source and one owned destination; split the "
-                        "conversion into auditable components"
+                        "quantity source and one conversion output; exact "
+                        "same-asset retained continuations may be additional sinks"
                     ),
                     "source_leg_ids": [leg["id"] for leg in positive_sources],
                     "destination_leg_ids": [
-                        leg["id"] for leg in positive_owned_sinks
+                        leg["id"] for leg in conversion_outputs
                     ],
                 }
             )
+        if retained_continuations:
+            by_id = {str(leg["id"]): leg for leg in materialized}
+            invalid_allocations = []
+            for allocation in materialized_allocations:
+                sink = by_id.get(str(allocation.get("sink_leg_id")))
+                if sink not in retained_continuations:
+                    continue
+                if int(allocation.get("source_amount_msat") or 0) != int(
+                    allocation.get("sink_amount_msat") or 0
+                ):
+                    invalid_allocations.append(allocation.get("id"))
+            if invalid_allocations:
+                issues.append(
+                    {
+                        "code": "conversion_retained_quantity_mismatch",
+                        "message": (
+                            "a retained conversion residual must preserve exact quantity"
+                        ),
+                        "allocation_ids": invalid_allocations,
+                    }
+                )
         if not conversion_reviewed:
             issues.append(
                 {
@@ -1719,7 +1965,6 @@ def validate_conservation(
         "conservation_mode": mode,
         "activatable": not issues,
         "issues": issues,
-        "unresolved_msat": unresolved_total,
         "suspense_msat": suspense_total,
         "source_msat": source_total,
         "owned_destination_msat": owned_destination_total,
@@ -1754,6 +1999,7 @@ def _validate_leg_anchors(
     workspace_id: str,
     profile_id: str,
     legs: Sequence[Mapping[str, Any]],
+    planned_wallet_ids: frozenset[str] = frozenset(),
 ) -> None:
     for leg in legs:
         transaction_id = leg.get("transaction_id")
@@ -1795,6 +2041,8 @@ def _validate_leg_anchors(
             row = conn.execute(
                 "SELECT workspace_id, profile_id FROM wallets WHERE id = ?", (wallet_id,)
             ).fetchone()
+            if not row and str(wallet_id) in planned_wallet_ids:
+                continue
             if not row:
                 raise _error(
                     "custody leg wallet was not found",
@@ -1885,6 +2133,49 @@ def _insert_allocations(
     )
 
 
+def _insert_economic_terms(
+    conn: sqlite3.Connection,
+    *,
+    component_id: str,
+    workspace_id: str,
+    profile_id: str,
+    terms: Sequence[Mapping[str, Any]],
+    created_at: str,
+) -> None:
+    conn.executemany(
+        """
+        INSERT INTO custody_component_economic_terms(
+            id, component_id, workspace_id, profile_id, ordinal,
+            source_leg_id, target_leg_id, term_kind, legacy_source_id,
+            source_row_hash, review_kind, tax_policy,
+            reviewed_source_amount_msat, swap_fee_msat, swap_fee_kind,
+            confidence_at_review, review_source, review_notes, payout_asset,
+            payout_amount_msat, payout_occurred_at, payout_fiat_value_exact,
+            payout_external_id, counterparty, created_at
+        ) VALUES(
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """,
+        [
+            (
+                term["id"], component_id, workspace_id, profile_id,
+                term["ordinal"], term["source_leg_id"], term["target_leg_id"],
+                term["term_kind"], term["legacy_source_id"],
+                term["source_row_hash"], term["review_kind"],
+                term["tax_policy"], term["reviewed_source_amount_msat"],
+                term["swap_fee_msat"], term["swap_fee_kind"],
+                term["confidence_at_review"], term["review_source"],
+                term["review_notes"],
+                term["payout_asset"], term["payout_amount_msat"],
+                term["payout_occurred_at"], term["payout_fiat_value_exact"],
+                term["payout_external_id"], term["counterparty"], created_at,
+            )
+            for term in terms
+        ],
+    )
+
+
 def _row(conn: sqlite3.Connection, component_id: str) -> sqlite3.Row:
     row = conn.execute(
         "SELECT * FROM custody_components WHERE id = ?", (component_id,)
@@ -1942,6 +2233,18 @@ def _allocation_dict(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _economic_terms_dict(row: sqlite3.Row) -> dict[str, Any]:
+    result = dict(row)
+    for field in (
+        "reviewed_source_amount_msat",
+        "swap_fee_msat",
+        "payout_amount_msat",
+    ):
+        if result.get(field) is not None:
+            result[field] = int(result[field])
+    return result
+
+
 def _active_membership_conflicts(
     conn: sqlite3.Connection,
     *,
@@ -1974,6 +2277,253 @@ def _active_membership_conflicts(
             (component_id, profile_id),
         ).fetchall()
     ]
+
+
+def validate_component_plan(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    component_type: str,
+    legs: Iterable[Mapping[str, Any]],
+    allocations: Iterable[Mapping[str, Any]] | None = None,
+    economic_terms: Iterable[Mapping[str, Any]] | None = None,
+    conservation_mode: str = "quantity",
+    conversion_policy: str | None = None,
+    conversion_reviewed: bool = False,
+    evidence_grade: str | None = None,
+    replacing_lineage_id: str | None = None,
+    planned_wallet_ids: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Validate an exact prospective component without writing any rows.
+
+    Preview callers use the same normalization, anchor checks, conservation
+    rules and active-membership arbitration as activation.  Evidence is still
+    captured atomically by :func:`activate_component`; apply therefore repeats
+    this validation against current rows before it writes the reviewed plan.
+    """
+
+    workspace_id = _required_text(workspace_id, "workspace_id")
+    profile_id = _required_text(profile_id, "profile_id")
+    normalized_type = _normalize_component_type(component_type)
+    normalized_mode = _normalize_mode(conservation_mode)
+    normalized_legs = normalize_legs(legs)
+    normalized_allocations = normalize_allocations(allocations, normalized_legs)
+    normalized_economic_terms = normalize_economic_terms(
+        economic_terms, normalized_legs
+    )
+    _scope(conn, workspace_id, profile_id)
+    _validate_leg_anchors(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        legs=normalized_legs,
+        planned_wallet_ids=frozenset(str(item) for item in planned_wallet_ids),
+    )
+    validation = validate_conservation(
+        normalized_legs,
+        allocations=normalized_allocations,
+        conservation_mode=normalized_mode,
+        conversion_policy=conversion_policy,
+        conversion_reviewed=conversion_reviewed,
+        component_type=normalized_type,
+        evidence_grade=evidence_grade,
+    )
+    anchor_validation = _db_anchor_validation(
+        conn,
+        normalized_legs,
+        allocations=normalized_allocations,
+        conservation_mode=normalized_mode,
+    )
+    if anchor_validation["issues"]:
+        validation = dict(validation)
+        validation["activatable"] = False
+        validation["issues"] = [
+            *validation["issues"],
+            *anchor_validation["issues"],
+        ]
+    if anchor_validation["warnings"]:
+        validation = dict(validation)
+        validation["warnings"] = [
+            *validation.get("warnings", ()),
+            *anchor_validation["warnings"],
+        ]
+    validation["anchors"] = anchor_validation
+    transaction_ids = sorted(
+        {
+            str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
+            for leg in normalized_legs
+            if leg.get("anchor_transaction_id") or leg.get("transaction_id")
+        }
+    )
+    conflicts: list[dict[str, str]] = []
+    if transaction_ids:
+        placeholders = ",".join("?" for _ in transaction_ids)
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT
+                   COALESCE(l.anchor_transaction_id, l.transaction_id)
+                       AS transaction_id,
+                   l.component_id, c.lineage_id
+            FROM custody_component_legs l
+            JOIN custody_components c ON c.id = l.component_id
+            WHERE l.profile_id = ?
+              AND c.state = 'active'
+              AND COALESCE(l.anchor_transaction_id, l.transaction_id)
+                  IN ({placeholders})
+            ORDER BY transaction_id, l.component_id
+            """,
+            (profile_id, *transaction_ids),
+        ).fetchall()
+        conflicts = [
+            {
+                "transaction_id": str(row["transaction_id"]),
+                "component_id": str(row["component_id"]),
+            }
+            for row in rows
+            if replacing_lineage_id is None
+            or str(row["lineage_id"]) != replacing_lineage_id
+        ]
+    if conflicts:
+        validation = dict(validation)
+        validation["activatable"] = False
+        validation["issues"] = [
+            *validation["issues"],
+            {
+                "code": "active_transaction_membership_conflict",
+                "message": "a transaction belongs to another active component",
+                "conflicts": conflicts,
+            },
+        ]
+    return {
+        "legs": normalized_legs,
+        "allocations": normalized_allocations,
+        "validation": validation,
+    }
+
+
+def validate_planned_active_batch(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    components: Sequence[Mapping[str, Any]],
+    planned_untracked_wallet_ids: Iterable[str] = (),
+) -> list[dict[str, Any]]:
+    """Validate conflicts and route continuity across a read-only active batch."""
+
+    if not components:
+        return []
+    quantity_candidates = [
+        component
+        for component in components
+        if component.get("conservation_mode") == "quantity"
+    ]
+    quantity_candidate_ids = {
+        str(component["id"]) for component in quantity_candidates
+    }
+    issues: list[dict[str, Any]] = []
+    transaction_components: dict[str, set[str]] = defaultdict(set)
+    for component in components:
+        component_id = str(component["id"])
+        for leg in component.get("legs", ()):
+            transaction_id = leg.get("anchor_transaction_id") or leg.get(
+                "transaction_id"
+            )
+            if transaction_id not in (None, ""):
+                transaction_components[str(transaction_id)].add(component_id)
+    for transaction_id, component_ids in sorted(transaction_components.items()):
+        if len(component_ids) > 1:
+            issues.append(
+                {
+                    "code": "active_transaction_membership_conflict",
+                    "message": "a transaction belongs to multiple planned active components",
+                    "transaction_id": transaction_id,
+                    "component_ids": sorted(component_ids),
+                }
+            )
+
+    if not quantity_candidates:
+        return issues
+
+    existing_legs = [
+        _leg_dict(row)
+        for row in conn.execute(
+            """
+            SELECT l.*
+            FROM custody_component_legs l
+            JOIN custody_components c ON c.id = l.component_id
+            WHERE c.profile_id = ? AND c.state = 'active'
+              AND c.conservation_mode = 'quantity'
+            ORDER BY c.id, l.ordinal, l.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    existing_allocations = [
+        _allocation_dict(row)
+        for row in conn.execute(
+            """
+            SELECT a.*
+            FROM custody_component_allocations a
+            JOIN custody_components c ON c.id = a.component_id
+            WHERE c.profile_id = ? AND c.state = 'active'
+              AND c.conservation_mode = 'quantity'
+            ORDER BY c.id, a.ordinal, a.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    candidate_legs = [
+        {**dict(leg), "component_id": str(component["id"])}
+        for component in quantity_candidates
+        for leg in component.get("legs", ())
+    ]
+    candidate_allocations = [
+        {**dict(allocation), "component_id": str(component["id"])}
+        for component in quantity_candidates
+        for allocation in component.get("allocations", ())
+    ]
+    combined_legs = [*existing_legs, *candidate_legs]
+    transaction_rows, wallet_rows = _load_scope_evidence(conn, combined_legs)
+    for wallet_id in planned_untracked_wallet_ids:
+        wallet_rows.setdefault(
+            str(wallet_id),
+            {
+                "id": str(wallet_id),
+                "wallet_kind": "untracked",
+                "config_json": "{}",
+            },
+        )
+    scoped_legs = _scoped_leg_copies(
+        combined_legs,
+        transaction_rows,
+        wallet_rows,
+    )
+    completed_allocations = _allocations_with_component_inference(
+        scoped_legs,
+        [*existing_allocations, *candidate_allocations],
+        conservation_mode="quantity",
+    )
+    route_issues = [
+        *_quantity_scope_connectivity_issues(
+            scoped_legs,
+            completed_allocations,
+            conservation_mode="quantity",
+        ),
+        *_cross_component_untracked_continuity_issues(
+            scoped_legs,
+            wallet_rows,
+            current_component_ids=quantity_candidate_ids,
+        ),
+    ]
+    issues.extend(
+        issue
+        for issue in route_issues
+        if not issue.get("component_ids")
+        or quantity_candidate_ids
+        & {str(item) for item in issue.get("component_ids", ())}
+    )
+    return issues
 
 
 def _replicated_lineage_issues(
@@ -2448,6 +2998,7 @@ def _db_anchor_validation(
     *,
     allocations: Sequence[Mapping[str, Any]] = (),
     conservation_mode: str = "quantity",
+    partial_anchor_leg_ids: frozenset[str] = frozenset(),
     profile_route_issues: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate evidence-row direction, scope facts, and complete coverage."""
@@ -2702,18 +3253,28 @@ def _db_anchor_validation(
                 )
             )
         )
-        expected = int(row["amount"] or 0)
-        if row["direction"] == "outbound" and not bool(row["amount_includes_fee"]):
-            expected += int(row["fee"] or 0)
+        boundary = row_boundary_amounts(row)
+        partial_review = any(
+            str(leg["id"]) in partial_anchor_leg_ids
+            for leg in by_transaction[transaction_id]
+        )
+        expected = (
+            boundary.principal_msat
+            if partial_review
+            else boundary.wallet_movement_msat
+        )
         coverage_row = {
             "transaction_id": transaction_id,
             "direction": row["direction"],
+            "partial_review": partial_review,
             "raw_economic_msat": expected,
             "reviewed_component_msat": actual,
             "reviewed_minus_raw_msat": actual - expected,
         }
         coverage.append(coverage_row)
-        if actual != expected:
+        if (partial_review and not 0 < actual <= expected) or (
+            not partial_review and actual != expected
+        ):
             issues.append(
                 {
                     "code": "anchor_coverage_mismatch",
@@ -2955,14 +3516,16 @@ def _materialize_component(
     *,
     include_local_evidence: bool = True,
     profile_route_issues: Sequence[Mapping[str, Any]] | None = None,
+    native_support_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    legs = [
+    stored_legs = [
         _leg_dict(leg)
         for leg in conn.execute(
             "SELECT * FROM custody_component_legs WHERE component_id = ? ORDER BY ordinal, id",
             (row["id"],),
         ).fetchall()
     ]
+    legs = stored_legs
     if not include_local_evidence:
         # ``location_ref`` may identify a private node/channel, local file, or
         # other Tier-3 custody location. Keep it in SQLite/explicit local CLI
@@ -2979,8 +3542,16 @@ def _materialize_component(
             (row["id"],),
         ).fetchall()
     ]
+    economic_terms = [
+        _economic_terms_dict(term)
+        for term in conn.execute(
+            "SELECT * FROM custody_component_economic_terms "
+            "WHERE component_id = ? ORDER BY ordinal, id",
+            (row["id"],),
+        ).fetchall()
+    ]
     validation = validate_conservation(
-        legs,
+        stored_legs,
         allocations=allocations,
         conservation_mode=row["conservation_mode"],
         conversion_policy=row["conversion_policy"],
@@ -2991,8 +3562,13 @@ def _materialize_component(
     commitment_issues: list[dict[str, Any]] = []
     expected_leg_count = row["expected_leg_count"]
     expected_allocation_count = row["expected_allocation_count"]
+    expected_economic_term_count = row["expected_economic_term_count"]
     expected_evidence_count = row["expected_evidence_count"]
-    if expected_leg_count is None or expected_allocation_count is None:
+    if (
+        expected_leg_count is None
+        or expected_allocation_count is None
+        or expected_economic_term_count is None
+    ):
         commitment_issues.append(
             {
                 "code": "component_content_commitment_missing",
@@ -3003,12 +3579,12 @@ def _materialize_component(
             }
         )
     else:
-        if int(expected_leg_count) != len(legs):
+        if int(expected_leg_count) != len(stored_legs):
             commitment_issues.append(
                 {
                     "code": "component_leg_count_mismatch",
                     "expected": int(expected_leg_count),
-                    "actual": len(legs),
+                    "actual": len(stored_legs),
                 }
             )
         if int(expected_allocation_count) != len(allocations):
@@ -3017,6 +3593,14 @@ def _materialize_component(
                     "code": "component_allocation_count_mismatch",
                     "expected": int(expected_allocation_count),
                     "actual": len(allocations),
+                }
+            )
+        if int(expected_economic_term_count) != len(economic_terms):
+            commitment_issues.append(
+                {
+                    "code": "component_economic_term_count_mismatch",
+                    "expected": int(expected_economic_term_count),
+                    "actual": len(economic_terms),
                 }
             )
     if commitment_issues:
@@ -3053,7 +3637,7 @@ def _materialize_component(
                 "id": row["id"],
                 "profile_id": row["profile_id"],
                 "expected_evidence_count": expected_evidence_count,
-                "legs": legs,
+                "legs": stored_legs,
             },
         )
         if not evidence_status["valid"]:
@@ -3077,9 +3661,10 @@ def _materialize_component(
             {
                 "id": row["id"],
                 "profile_id": row["profile_id"],
-                "legs": legs,
+                "legs": stored_legs,
                 "allocations": allocations,
             },
+            context=native_support_context,
         )
         if not native_support_status["usable"]:
             validation = dict(validation)
@@ -3102,9 +3687,13 @@ def _materialize_component(
             ]
     anchor_validation = _db_anchor_validation(
         conn,
-        legs,
+        stored_legs,
         allocations=allocations,
         conservation_mode=row["conservation_mode"],
+        partial_anchor_leg_ids=frozenset(
+            str(term["source_leg_id"]) for term in economic_terms
+        )
+        | frozenset(str(term["target_leg_id"]) for term in economic_terms),
         profile_route_issues=profile_route_issues,
     )
     if anchor_validation["issues"]:
@@ -3168,6 +3757,11 @@ def _materialize_component(
             if expected_allocation_count is None
             else int(expected_allocation_count)
         ),
+        "expected_economic_term_count": (
+            None
+            if expected_economic_term_count is None
+            else int(expected_economic_term_count)
+        ),
         "expected_evidence_count": (
             None
             if expected_evidence_count is None
@@ -3185,6 +3779,7 @@ def _materialize_component(
         "created_at": row["created_at"],
         "legs": legs,
         "allocations": allocations,
+        "economic_terms": economic_terms,
         "validation": validation,
     }
     if include_local_evidence:
@@ -3214,6 +3809,21 @@ def get_component(
     )
 
 
+def redact_component_local_evidence(
+    component: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the renderer/AI-safe view of an already validated component."""
+
+    result = dict(component)
+    result["legs"] = [
+        {key: value for key, value in leg.items() if key != "location_ref"}
+        for leg in component.get("legs", ())
+    ]
+    result.pop("evidence", None)
+    result.pop("conversion_metadata", None)
+    return result
+
+
 def create_component(
     conn: sqlite3.Connection,
     *,
@@ -3222,6 +3832,7 @@ def create_component(
     component_type: str,
     legs: Iterable[Mapping[str, Any]],
     allocations: Iterable[Mapping[str, Any]] | None = None,
+    economic_terms: Iterable[Mapping[str, Any]] | None = None,
     conservation_mode: str = "quantity",
     evidence_kind: str | None = None,
     evidence_grade: str | None = None,
@@ -3238,25 +3849,32 @@ def create_component(
 ) -> dict[str, Any]:
     workspace_id = _required_text(workspace_id, "workspace_id")
     profile_id = _required_text(profile_id, "profile_id")
-    component_type = _normalize_component_type(component_type)
-    conservation_mode = _normalize_mode(conservation_mode)
     normalized_legs = normalize_legs(legs)
     normalized_allocations = normalize_allocations(allocations, normalized_legs)
+    normalized_economic_terms = normalize_economic_terms(
+        economic_terms, normalized_legs
+    )
     component_id = _optional_text(component_id, "component_id") or str(uuid.uuid4())
-    lineage_id = _optional_text(lineage_id, "lineage_id") or component_id
-    timestamp = parse_timestamp(created_at) if created_at is not None else _now_iso()
-    authored_source = _required_text(authored_source, "authored_source")
-    if authored_source not in AUTHORED_SOURCES:
-        raise _error(
-            "authored_source is invalid",
-            "custody_component_validation",
-            details={"authored_source": authored_source},
-        )
-    if type(conversion_reviewed) is not bool:
-        raise _error(
-            "conversion_reviewed must be a boolean",
-            "custody_component_validation",
-        )
+    header = normalize_component_header(
+        component_type=component_type,
+        conservation_mode=conservation_mode,
+        evidence_kind=evidence_kind,
+        evidence_grade=evidence_grade,
+        evidence=evidence,
+        conversion_policy=conversion_policy,
+        conversion_reviewed=conversion_reviewed,
+        conversion_metadata=conversion_metadata,
+        notes=notes,
+        change_reason=change_reason,
+        component_id=component_id,
+        lineage_id=lineage_id,
+        created_at=created_at,
+        authored_source=authored_source,
+    )
+    component_type = header["component_type"]
+    conservation_mode = header["conservation_mode"]
+    lineage_id = header["lineage_id"]
+    timestamp = header["created_at"] or _now_iso()
     _scope(conn, workspace_id, profile_id)
     _validate_leg_anchors(
         conn,
@@ -3282,23 +3900,25 @@ def create_component(
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, authored_source, notes,
+                expected_leg_count, expected_allocation_count,
+                expected_economic_term_count, authored_source, notes,
                 change_reason, created_at
-            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 component_id, lineage_id, workspace_id, profile_id, component_type,
                 conservation_mode,
-                _optional_text(evidence_kind, "evidence_kind", token=True),
-                _optional_text(evidence_grade, "evidence_grade", token=True),
-                _json_text(evidence, "evidence"),
-                _optional_text(conversion_policy, "conversion_policy", token=True),
-                int(conversion_reviewed),
-                _json_text(conversion_metadata, "conversion_metadata"),
+                header["evidence_kind"],
+                header["evidence_grade"],
+                _json_text(header["evidence"], "evidence"),
+                header["conversion_policy"],
+                int(header["conversion_reviewed"]),
+                _json_text(header["conversion_metadata"], "conversion_metadata"),
                 len(normalized_legs), len(normalized_allocations),
-                authored_source,
-                _optional_text(notes, "notes"),
-                _optional_text(change_reason, "change_reason"),
+                len(normalized_economic_terms),
+                header["authored_source"],
+                header["notes"],
+                header["change_reason"],
                 timestamp,
             ),
         )
@@ -3316,6 +3936,14 @@ def create_component(
             workspace_id=workspace_id,
             profile_id=profile_id,
             allocations=normalized_allocations,
+            created_at=timestamp,
+        )
+        _insert_economic_terms(
+            conn,
+            component_id=component_id,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            terms=normalized_economic_terms,
             created_at=timestamp,
         )
     return get_component(conn, component_id)
@@ -3365,6 +3993,7 @@ def update_component(
     *,
     legs: Iterable[Mapping[str, Any]] | object = _UNSET,
     allocations: Iterable[Mapping[str, Any]] | None | object = _UNSET,
+    economic_terms: Iterable[Mapping[str, Any]] | None | object = _UNSET,
     component_type: str | object = _UNSET,
     conservation_mode: str | object = _UNSET,
     evidence_kind: str | None | object = _UNSET,
@@ -3378,6 +4007,7 @@ def update_component(
     new_component_id: str | None = None,
     created_at: str | None = None,
     authored_source: str = "user",
+    preserve_planned_row_ids: bool = False,
 ) -> dict[str, Any]:
     """Create a new immutable draft revision; never rewrite economic legs."""
 
@@ -3401,10 +4031,12 @@ def update_component(
     input_leg_ordinals = {
         str(leg["id"]): int(leg["ordinal"]) for leg in normalized_legs
     }
-    # Leg ids identify immutable revision rows, so a new revision always gets
-    # new ids even when a caller feeds a previous get_component payload back.
-    for leg in normalized_legs:
-        leg["id"] = str(uuid.uuid4())
+    # Ordinary revisions always receive fresh row ids. A reviewed plan may
+    # instead provide deterministic ids so apply can persist exactly what the
+    # user previewed; that opt-in path is validated again below.
+    if not preserve_planned_row_ids:
+        for leg in normalized_legs:
+            leg["id"] = str(uuid.uuid4())
     if allocations is _UNSET:
         if legs_unchanged:
             # Copied legs receive fresh ids, so map old allocation endpoints by
@@ -3426,6 +4058,8 @@ def update_component(
             ]
         else:
             raw_allocations = []
+    elif preserve_planned_row_ids:
+        raw_allocations = [dict(allocation) for allocation in allocations or []]  # type: ignore[union-attr]
     else:
         raw_allocations = []
         for allocation in allocations or []:  # type: ignore[union-attr]
@@ -3439,6 +4073,11 @@ def update_component(
             rewritten.pop("id", None)
             raw_allocations.append(rewritten)
     normalized_allocations = normalize_allocations(raw_allocations, normalized_legs)  # type: ignore[arg-type]
+    normalized_economic_terms = (
+        []
+        if economic_terms is _UNSET
+        else normalize_economic_terms(economic_terms, normalized_legs)  # type: ignore[arg-type]
+    )
     _validate_leg_anchors(
         conn,
         workspace_id=old["workspace_id"],
@@ -3496,16 +4135,18 @@ def update_component(
                 component_type, conservation_mode, state, evidence_kind,
                 evidence_grade, evidence_json, conversion_policy,
                 conversion_reviewed, conversion_metadata_json,
-                expected_leg_count, expected_allocation_count, authored_source, notes,
+                expected_leg_count, expected_allocation_count,
+                expected_economic_term_count, authored_source, notes,
                 change_reason, supersedes_component_id, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 new_id, old["lineage_id"], old["workspace_id"], old["profile_id"],
                 next_revision, new_type, new_mode, new_evidence_kind,
                 new_evidence_grade, new_evidence_json, new_policy,
                 int(new_reviewed), new_conversion_json,
-                len(normalized_legs), len(normalized_allocations), authored_source,
+                len(normalized_legs), len(normalized_allocations),
+                len(normalized_economic_terms), authored_source,
                 new_notes,
                 _optional_text(change_reason, "change_reason"), component_id, timestamp,
             ),
@@ -3526,6 +4167,14 @@ def update_component(
             allocations=normalized_allocations,
             created_at=timestamp,
         )
+        _insert_economic_terms(
+            conn,
+            component_id=new_id,
+            workspace_id=old["workspace_id"],
+            profile_id=old["profile_id"],
+            terms=normalized_economic_terms,
+            created_at=timestamp,
+        )
     return get_component(conn, new_id)
 
 
@@ -3540,13 +4189,35 @@ def _activation_error(component: Mapping[str, Any]) -> AppError:
     )
 
 
-def activate_component(
+def validate_component_activation(
     conn: sqlite3.Connection,
     component_id: str,
     *,
-    activated_at: str | None = None,
+    _validated_component: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    component = get_component(conn, component_id)
+    """Return the current component iff activation would be valid, without writes."""
+
+    if _validated_component is None:
+        component = get_component(conn, component_id)
+    else:
+        component = dict(_validated_component)
+        if str(component.get("id") or "") != component_id:
+            raise _error(
+                "validated component does not match the activation target",
+                "custody_component_state_conflict",
+                details={"component_id": component_id},
+            )
+        current = _row(conn, component_id)
+        if (
+            current["state"] != component.get("state")
+            or int(current["revision"]) != int(component.get("revision") or 0)
+            or current["lineage_id"] != component.get("lineage_id")
+        ):
+            raise _error(
+                "custody component changed after validation",
+                "custody_component_state_conflict",
+                details={"component_id": component_id},
+            )
     if component["state"] == "superseded":
         raise _error(
             "superseded revisions cannot be activated directly",
@@ -3581,6 +4252,21 @@ def activate_component(
         failed = dict(component)
         failed["validation"] = validation
         raise _activation_error(failed)
+    return component
+
+
+def activate_component(
+    conn: sqlite3.Connection,
+    component_id: str,
+    *,
+    activated_at: str | None = None,
+    _validated_component: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    component = validate_component_activation(
+        conn,
+        component_id,
+        _validated_component=_validated_component,
+    )
     if component["state"] == "active":
         # Idempotent reads of a received active revision must not manufacture a
         # device-local activation snapshot from the receiver's current rows.
@@ -3614,6 +4300,19 @@ def activate_component(
             "DELETE FROM custody_component_transaction_memberships WHERE component_id = ?",
             (component_id,),
         )
+        if transaction_ids:
+            placeholders = ",".join("?" for _ in transaction_ids)
+            conn.execute(
+                f"""
+                DELETE FROM custody_component_transaction_memberships
+                WHERE profile_id = ?
+                  AND transaction_id IN ({placeholders})
+                  AND component_id IN (
+                      SELECT id FROM custody_components WHERE state != 'active'
+                  )
+                """,
+                (component["profile_id"], *transaction_ids),
+            )
         try:
             conn.executemany(
                 """
@@ -3706,32 +4405,6 @@ def supersede_component(
     return get_component(conn, component_id)
 
 
-def undo_supersede(
-    conn: sqlite3.Connection,
-    component_id: str,
-    *,
-    reason: str | None = "undo_supersede",
-    new_component_id: str | None = None,
-    created_at: str | None = None,
-    authored_source: str = "user",
-) -> dict[str, Any]:
-    row = _row(conn, component_id)
-    if row["state"] != "superseded":
-        raise _error(
-            "only a superseded revision can be restored",
-            "custody_component_not_superseded",
-            details={"component_id": component_id, "state": row["state"]},
-        )
-    return update_component(
-        conn,
-        component_id,
-        change_reason=reason,
-        new_component_id=new_component_id,
-        created_at=created_at,
-        authored_source=authored_source,
-    )
-
-
 def list_components(
     conn: sqlite3.Connection,
     *,
@@ -3779,11 +4452,16 @@ def list_components(
         {query_limit}
         """,
         query_params,
-    )
+    ).fetchall()
     profile_route_issues = _profile_active_route_issues(
         conn,
         profile_id=profile_id,
     )
+    native_support_context = None
+    if any(row["state"] == "active" for row in rows):
+        from .custody_quantity_store import profile_native_support_context
+
+        native_support_context = profile_native_support_context(conn, profile_id)
     result: list[dict[str, Any]] = []
     for row in rows:
         item = _materialize_component(
@@ -3796,6 +4474,9 @@ def list_components(
             profile_route_issues=(
                 profile_route_issues if row["state"] == "active" else None
             ),
+            native_support_context=(
+                native_support_context if row["state"] == "active" else None
+            ),
         )
         if effective_only and item["effective_state"] != "active":
             continue
@@ -3803,51 +4484,6 @@ def list_components(
         if len(result) == limit:
             break
     return result
-
-
-def list_effective_components(
-    conn: sqlite3.Connection,
-    *,
-    profile_id: str,
-    transaction_id: str | None = None,
-    include_local_evidence: bool = False,
-    limit: int = 1000,
-) -> list[dict[str, Any]]:
-    return list_components(
-        conn,
-        profile_id=profile_id,
-        state="active",
-        transaction_id=transaction_id,
-        effective_only=True,
-        include_local_evidence=include_local_evidence,
-        limit=limit,
-    )
-
-
-def iter_effective_components(
-    conn: sqlite3.Connection,
-    *,
-    profile_id: str,
-    transaction_id: str | None = None,
-    include_local_evidence: bool = False,
-) -> Iterator[dict[str, Any]]:
-    """Yield every effective component for effective-only consumers.
-
-    Unlike the user-facing list API this iterator is deliberately unbounded;
-    callers process one materialized component at a time and therefore cannot
-    silently truncate long wallet-migration histories at a page limit. Journal
-    assembly must use ``iter_authored_active_components`` instead, because it
-    must also fail-close incomplete or conflicting active revisions.
-    """
-
-    for component in iter_authored_active_components(
-        conn,
-        profile_id=profile_id,
-        transaction_id=transaction_id,
-        include_local_evidence=include_local_evidence,
-    ):
-        if component["effective_state"] == "active":
-            yield component
 
 
 def iter_authored_active_components(
@@ -3859,9 +4495,9 @@ def iter_authored_active_components(
 ) -> Iterator[dict[str, Any]]:
     """Yield every authored-active component for fail-closed journal input.
 
-    ``iter_effective_components`` is appropriate for views that only want
-    usable interpretations.  Journal materialization has a stricter contract:
-    an authored ``active`` header must still claim every transaction anchor
+    Journal materialization must inspect every authored-active header, not only
+    usable interpretations. An authored ``active`` header must still claim every
+    transaction anchor
     that has arrived locally when its remaining legs are incomplete, invalid,
     or overlap another active component.  Otherwise row-wise replication can
     temporarily turn the raw anchors back into ordinary acquisitions or
@@ -3869,7 +4505,7 @@ def iter_authored_active_components(
     or must produce a component-wide quarantine.
 
     This internal iterator is deliberately unbounded for long migration
-    histories, just like ``iter_effective_components``.
+    histories.
     """
 
     params: list[Any] = [profile_id]
@@ -3890,17 +4526,23 @@ def iter_authored_active_components(
         ORDER BY c.created_at, c.revision, c.id
         """,
         params,
-    )
+    ).fetchall()
     profile_route_issues = _profile_active_route_issues(
         conn,
         profile_id=profile_id,
     )
+    native_support_context = None
+    if rows:
+        from .custody_quantity_store import profile_native_support_context
+
+        native_support_context = profile_native_support_context(conn, profile_id)
     for row in rows:
         yield _materialize_component(
             conn,
             row,
             include_local_evidence=include_local_evidence,
             profile_route_issues=profile_route_issues,
+            native_support_context=native_support_context,
         )
 
 
@@ -3924,12 +4566,16 @@ def reconcile_active_memberships(
         conn,
         profile_id=profile_id,
     )
+    from .custody_quantity_store import profile_native_support_context
+
+    native_support_context = profile_native_support_context(conn, profile_id)
     active = [
         _materialize_component(
             conn,
             row,
             include_local_evidence=False,
             profile_route_issues=profile_route_issues,
+            native_support_context=native_support_context,
         )
         for row in conn.execute(
             """
@@ -3980,18 +4626,19 @@ __all__ = [
     "CONSERVATION_MODES",
     "LEG_ROLES",
     "activate_component",
-    "complete_component_allocations",
     "create_component",
     "get_component",
     "iter_authored_active_components",
-    "iter_effective_components",
     "list_components",
-    "list_effective_components",
     "normalize_legs",
     "normalize_allocations",
+    "normalize_component_header",
+    "redact_component_local_evidence",
     "reconcile_active_memberships",
     "supersede_component",
-    "undo_supersede",
     "update_component",
     "validate_conservation",
+    "validate_component_activation",
+    "validate_component_plan",
+    "validate_planned_active_batch",
 ]

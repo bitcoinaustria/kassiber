@@ -408,9 +408,43 @@ def component_evidence_status(
     )
 
 
+def profile_native_support_context(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    """Build the profile observation index shared by component checks."""
+
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.profile_id = ? AND t.excluded = 0
+            ORDER BY t.occurred_at, t.created_at, t.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    observations: dict[str, QuantityObservation] = {}
+    keys: dict[str, Any] = {}
+    for row in enriched_quantity_rows(rows):
+        row_id = str(row.get("id") or "")
+        try:
+            key = canonical_event_key(row)
+            observations[row_id] = QuantityObservation.from_transaction(row, key)
+            keys[row_id] = key
+        except (TypeError, ValueError):
+            continue
+    return {"observations": observations, "keys": keys}
+
+
 def component_native_support_status(
     conn: sqlite3.Connection,
     component: Mapping[str, Any],
+    *,
+    context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Derive bounded native-event corroboration for reviewed boundaries.
 
@@ -436,29 +470,38 @@ def component_native_support_status(
     if not boundary_legs:
         return {**base, "status": "unverified", "usable": True}
 
-    rows = [
-        dict(row)
-        for row in conn.execute(
-            """
-            SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
-            FROM transactions t
-            JOIN wallets w ON w.id = t.wallet_id
-            WHERE t.profile_id = ? AND t.excluded = 0
-            ORDER BY t.occurred_at, t.created_at, t.id
-            """,
-            (str(component.get("profile_id") or ""),),
-        ).fetchall()
-    ]
-    observations: dict[str, QuantityObservation] = {}
-    keys: dict[str, Any] = {}
-    for row in enriched_quantity_rows(rows):
-        row_id = str(row.get("id") or "")
-        try:
-            key = canonical_event_key(row)
-            observations[row_id] = QuantityObservation.from_transaction(row, key)
-            keys[row_id] = key
-        except (TypeError, ValueError):
+    support_context = context or profile_native_support_context(
+        conn, str(component.get("profile_id") or "")
+    )
+    observations = support_context["observations"]
+    keys = support_context["keys"]
+
+    legs_by_id = {
+        str(leg.get("id") or ""): leg for leg in (component.get("legs") or ())
+    }
+    exact_native_sink_ids: set[str] = set()
+    for allocation in component.get("allocations") or ():
+        source = legs_by_id.get(str(allocation.get("source_leg_id") or ""))
+        sink = legs_by_id.get(str(allocation.get("sink_leg_id") or ""))
+        if source is None or sink is None:
             continue
+        source_anchor = str(
+            source.get("anchor_transaction_id") or source.get("transaction_id") or ""
+        )
+        sink_anchor = str(
+            sink.get("anchor_transaction_id") or sink.get("transaction_id") or ""
+        )
+        if (
+            source_anchor in keys
+            and sink_anchor in keys
+            and keys[source_anchor] == keys[sink_anchor]
+            and observations[source_anchor].direction == "outbound"
+            and observations[sink_anchor].direction == "inbound"
+            and source.get("asset") == sink.get("asset")
+            and int(allocation.get("source_amount_msat") or 0)
+            == int(allocation.get("sink_amount_msat") or 0)
+        ):
+            exact_native_sink_ids.add(str(sink.get("id") or ""))
 
     supported = 0
     partially_supported = 0
@@ -468,6 +511,14 @@ def component_native_support_status(
             leg.get("anchor_transaction_id") or leg.get("transaction_id") or ""
         )
         anchor = observations.get(anchor_id)
+        if str(leg.get("id") or "") in exact_native_sink_ids:
+            # A mixed conversion component may retain an exact same-event
+            # source slice while another slice has different economics. The
+            # protocol-qualified event key and equal explicit allocation are
+            # direct corroboration; comparing the sink against the full
+            # outbound row would misclassify that reviewed split as excess.
+            supported += 1
+            continue
         if (
             anchor is None
             or anchor.event_key.native_namespace != "chain"
@@ -526,44 +577,6 @@ def component_native_support_status(
         "supported_boundary_count": supported,
         "partially_supported_boundary_count": partially_supported,
         "contradicted_boundary_count": contradicted,
-    }
-
-
-def baseline_missing_component_evidence(
-    conn: sqlite3.Connection,
-    components: Sequence[Mapping[str, Any]],
-    *,
-    created_at: str,
-) -> dict[str, Any]:
-    """Legacy compatibility check that never blesses receiver-local evidence.
-
-    Old local activation snapshots are migrated by ``open_db``.  Keeping this
-    helper as a read-only status adapter avoids silently changing older callers
-    while ensuring a replicated/current row can never become an author
-    commitment source.
-    """
-
-    existing: list[str] = []
-    blocked: list[dict[str, str]] = []
-    for component in sorted(components, key=lambda item: str(item.get("id") or "")):
-        component_id = str(component.get("id") or "")
-        if not component_id:
-            blocked.append({"component_id": "", "reason": "component_id_missing"})
-            continue
-        if component.get("effective_state") != "active":
-            blocked.append(
-                {"component_id": component_id, "reason": "component_not_effective"}
-            )
-            continue
-        status = component_evidence_status(conn, component)
-        if status["valid"]:
-            existing.append(component_id)
-            continue
-        blocked.append({"component_id": component_id, "reason": status["status"]})
-    return {
-        "baselined_component_ids": [],
-        "existing_component_ids": existing,
-        "blocked": blocked,
     }
 
 
@@ -631,6 +644,7 @@ def _replace_canonical_quantity_state(
         "journal_quantity_issues",
         "journal_quantity_balances",
         "journal_custody_decisions",
+        "journal_custody_economic_relations",
     ):
         conn.execute(f"DELETE FROM {table} WHERE profile_id = ?", (profile_id,))
 
@@ -811,11 +825,135 @@ def _replace_canonical_quantity_state(
         """,
         decision_rows,
     )
+    observations_by_transaction = {
+        item.anchor_transaction_id: item
+        for item in state.projection.observations
+        if item.anchor_transaction_id
+    }
+    eligible_source_slices = {
+        (
+            observations[item.source.observation_hash].anchor_transaction_id,
+            item.source.amount_msat,
+            item.component_id,
+        )
+        for item in state.tax_eligibility.eligible_decisions
+    }
+    relation_rows = []
+    relations = (
+        *(
+            ("conversion", relation)
+            for relation in state.reviewed_conversion_pairs
+        ),
+        *(
+            ("direct_payout", relation)
+            for relation in state.reviewed_direct_payouts
+        ),
+    )
+    for relation_kind, relation in relations:
+        source_transaction_id = str(
+            relation.get("out_id")
+            or relation.get("out_transaction_id")
+            or ""
+        )
+        target_transaction_id = (
+            str(relation.get("in_id"))
+            if relation.get("in_id") not in (None, "")
+            else None
+        )
+        source = observations_by_transaction.get(source_transaction_id)
+        target = (
+            observations_by_transaction.get(target_transaction_id)
+            if target_transaction_id is not None
+            else None
+        )
+        if source is None:
+            continue
+        raw_source_amount = relation.get("out_amount")
+        if raw_source_amount in (None, ""):
+            raw_source_amount = relation.get("out_amount_msat")
+        source_amount = (
+            source.principal_msat
+            if raw_source_amount in (None, "")
+            else int(raw_source_amount)
+        )
+        raw_target_amount = relation.get("in_amount")
+        if raw_target_amount in (None, ""):
+            raw_target_amount = relation.get("payout_amount")
+        target_amount = (
+            target.principal_msat
+            if raw_target_amount in (None, "") and target is not None
+            else int(raw_target_amount or 0)
+        )
+        if source_amount <= 0 or target_amount <= 0:
+            continue
+        payload = [
+            "canonical-custody-economic-relation-v3",
+            relation_kind,
+            source_transaction_id,
+            target_transaction_id,
+            relation.get("component_id"),
+            source.asset,
+            (target.asset if target is not None else relation.get("payout_asset")),
+            source_amount,
+            target_amount,
+        ]
+        relation_id = hashlib.sha256(
+            json.dumps(
+                payload,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        relation_rows.append(
+            (
+                relation_id,
+                workspace_id,
+                profile_id,
+                relation_kind,
+                source_transaction_id,
+                target_transaction_id,
+                relation.get("component_id"),
+                source.asset,
+                target.asset if target is not None else relation.get("payout_asset"),
+                source_amount,
+                target_amount,
+                (
+                    "eligible"
+                    if (
+                        source_transaction_id,
+                        source_amount,
+                        relation.get("component_id"),
+                    )
+                    in eligible_source_slices
+                    else "blocked_by_prior_custody_basis"
+                ),
+                source.occurred_at or None,
+                (
+                    target.occurred_at
+                    if target is not None
+                    else relation.get("payout_occurred_at")
+                ),
+                created_at,
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO journal_custody_economic_relations(
+            relation_id, workspace_id, profile_id, relation_kind,
+            source_transaction_id, target_transaction_id, component_id,
+            source_asset, target_asset, source_amount_msat,
+            target_amount_msat, basis_state,
+            occurred_at, target_occurred_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        relation_rows,
+    )
     return {
         "postings": len(posting_rows),
         "issues": len(state.issues),
         "balances": sum(amount != 0 for amount in balances.values()),
         "decisions": len(decision_rows),
+        "economic_relations": len(relation_rows),
     }
 
 
@@ -1228,7 +1366,6 @@ def authored_evidence_hash_summary(
 
 __all__ = [
     "authored_evidence_hash_summary",
-    "baseline_missing_component_evidence",
     "blocking_quantity_issues",
     "capture_component_evidence",
     "component_evidence_status",
@@ -1239,5 +1376,6 @@ __all__ = [
     "load_component_evidence_snapshots",
     "persist_authored_evidence_snapshots",
     "persist_component_evidence_commitments",
+    "profile_native_support_context",
     "replace_canonical_quantity_state",
 ]

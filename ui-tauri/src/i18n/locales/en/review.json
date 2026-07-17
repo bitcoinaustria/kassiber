@@ -136,7 +136,6 @@
         "sourceRequired": "Component {{component}} needs a positive source leg.",
         "ownedDestinationRequired": "Component {{component}} needs a positive destination or retained-custody leg.",
         "anchorRequired": "Component {{component}} needs at least one imported transaction anchor.",
-        "unresolvedValue": "Component {{component}} still contains unresolved value; keep it as a draft until the gap is closed.",
         "suspenseReviewRequired": "Component {{component}} may use suspense only in an explicitly reviewed manual bridge.",
         "suspenseQuantityModeRequired": "Component {{component}} may use suspense only with exact quantity conservation.",
         "suspenseLocationInvalid": "Component {{component}}, leg {{leg}} is suspense and must not name a wallet or transaction anchor.",

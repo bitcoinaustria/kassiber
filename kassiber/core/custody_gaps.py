@@ -16,6 +16,8 @@ history nor turn that operational limit into a tax/report blocker.
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+import base64
+import binascii
 from dataclasses import dataclass, replace
 from datetime import datetime
 import hashlib
@@ -24,7 +26,7 @@ import sqlite3
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import custody_quantity_store as core_custody_quantity_store
-from .custody_evidence import resolve_protocol_scope
+from .custody_evidence import normalize_boundary_amounts, resolve_protocol_scope
 
 from ..errors import AppError
 from ..time_utils import parse_iso_datetime_or_none
@@ -41,6 +43,7 @@ DEFAULT_MAX_SOURCE_LEGS = 3
 DEFAULT_MAX_RETURN_LEGS = 16
 DEFAULT_MAX_AGGREGATE_RETURN_LEGS = 256
 DEFAULT_MAX_SOURCE_GROUPS = 256
+DEFAULT_MAX_UNTYPED_SOURCE_ROWS = 64
 DEFAULT_MAX_RETURN_POOL = 512
 DEFAULT_BEAM_WIDTH = 48
 DEFAULT_MAX_RETURN_GROUPS_PER_SOURCE = 24
@@ -72,46 +75,6 @@ _SAMOURAI_TRANSACTION_KINDS = frozenset(
 _EXTERNAL_ORIGIN_KINDS = frozenset(
     {"income", "revenue", "sale", "exchange_buy", "customer_payment"}
 )
-
-
-class CustodyGapSearchLimitError(ValueError):
-    """Advisory search stopped at a configured capacity ceiling.
-
-    Capacity alone says nothing about custody or tax classification. Consumers
-    may show an incomplete-search warning, but must never turn the exception
-    into a global report blocker. ``blocking_source_ids`` is narrower: typed
-    privacy-boundary evidence plus incomplete source discovery requires suspense
-    for those exact sources only.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        candidate_count: int | None = None,
-        promotion_eligible_count: int | None = None,
-        limit_kind: str = "capacity",
-        partial_candidates: Sequence[Any] = (),
-        accounting_candidates: Sequence[Any] = (),
-        normalized_legs: Sequence[Any] = (),
-        blocking_source_ids: Iterable[str] = (),
-    ) -> None:
-        super().__init__(message)
-        self.candidate_count = candidate_count
-        self.promotion_eligible_count = promotion_eligible_count
-        self.limit_kind = limit_kind
-        self.partial_candidates = tuple(partial_candidates)
-        # The UI prefix stays bounded by ``max_candidates``.  Canonical
-        # accounting must nevertheless retain every already-scored structured
-        # candidate: dropping one merely because the display queue is full
-        # would let its boundary rows fall back into RP2.
-        self.accounting_candidates = tuple(accounting_candidates)
-        self.normalized_legs = tuple(normalized_legs)
-        self.blocking_source_ids = tuple(
-            sorted({str(item) for item in blocking_source_ids if item})
-        )
-        self.blocking = False
-        self.search_complete = False
 
 
 @dataclass(frozen=True)
@@ -161,6 +124,27 @@ class CustodyGapCandidate:
 
 
 @dataclass(frozen=True)
+class CustodyGapSearchResult:
+    """Ordinary result for a complete or capacity-bounded advisory search."""
+
+    candidates: tuple[CustodyGapCandidate, ...]
+    accounting_candidates: tuple[CustodyGapCandidate, ...]
+    search_complete: bool
+    limit_kind: str | None = None
+    candidate_count: int = 0
+    promotion_eligible_count: int = 0
+    blocking_source_ids: tuple[str, ...] = ()
+    message: str | None = None
+
+
+EMPTY_GAP_SEARCH_RESULT = CustodyGapSearchResult(
+    candidates=(),
+    accounting_candidates=(),
+    search_complete=True,
+)
+
+
+@dataclass(frozen=True)
 class _Leg:
     id: str
     profile_id: str
@@ -180,19 +164,12 @@ class _Leg:
 
 
 @dataclass(frozen=True)
-class _CachedGapSnapshot:
-    version: tuple[Any, ...]
-    summary: dict[str, Any]
-    gaps: tuple[dict[str, Any], ...]
-
-
-@dataclass(frozen=True)
 class _ReturnEra:
     legs: tuple[_Leg, ...]
     total_msat: int
 
 
-def suggest_custody_gap_candidates(
+def _compute_custody_gap_search(
     rows: Sequence[Mapping[str, Any]],
     *,
     ignored_ids: Iterable[str] = (),
@@ -209,7 +186,7 @@ def suggest_custody_gap_candidates(
     max_candidates: int = DEFAULT_MAX_CANDIDATES,
     return_era_gap_seconds: int = DEFAULT_RETURN_ERA_GAP_SECONDS,
     promotion_score_margin: int = DEFAULT_PROMOTION_SCORE_MARGIN,
-) -> list[CustodyGapCandidate]:
+) -> CustodyGapSearchResult:
     """Suggest long-horizon custody bridges from transaction observations.
 
     The matcher assumes one profile represents one legal owner, but it does
@@ -221,8 +198,8 @@ def suggest_custody_gap_candidates(
     fee contributes to the wallet debit but never inflates the residual;
     ``amount_includes_fee`` prevents double counting net-delta imports.
 
-    ``max_candidates`` bounds the complete generated population. Exceeding it
-    raises :class:`CustodyGapSearchLimitError`; it never truncates the result.
+    ``max_candidates`` bounds the visible population. Completeness and any
+    already-scored accounting candidates are returned as ordinary metadata.
     """
 
     _validate_limits(
@@ -344,10 +321,8 @@ def suggest_custody_gap_candidates(
                 beam_width=beam_width,
                 result_limit=max_return_groups_per_source,
             )
-            aggregate_limited = False
-            try:
-                if worklist_limited:
-                    aggregate_groups = _matching_return_eras(
+            if worklist_limited:
+                aggregate_groups, aggregate_limited = _matching_return_eras(
                         return_eras,
                         boundary=boundary,
                         target=target,
@@ -355,9 +330,9 @@ def suggest_custody_gap_candidates(
                         max_excess_ppm=max_excess_ppm,
                         max_legs=max_aggregate_return_legs,
                         result_limit=max_return_groups_per_source,
-                    )
-                else:
-                    aggregate_groups = _wallet_era_return_groups(
+                )
+            else:
+                aggregate_groups, aggregate_limited = _wallet_era_return_groups(
                         eligible_returns,
                         target=target,
                         min_coverage_ppm=min_coverage_ppm,
@@ -365,17 +340,15 @@ def suggest_custody_gap_candidates(
                         max_legs=max_aggregate_return_legs,
                         era_gap_seconds=return_era_gap_seconds,
                         result_limit=max_return_groups_per_source,
-                    )
-            except CustodyGapSearchLimitError:
+                )
+            if aggregate_limited:
                 # One over-large wallet era must not erase candidates already
                 # proved for unrelated source boundaries. The resulting source
                 # stays explicitly capacity-limited and therefore review-only.
-                aggregate_limited = True
                 capacity_limited_search = True
                 blocking_source_ids.update(
                     leg.id for leg in source_group if leg.signal_codes
                 )
-                aggregate_groups = []
             return_groups = _dedupe_groups((*return_groups, *aggregate_groups))
             for return_group in return_groups:
                 candidate = _build_candidate(source_group, return_group)
@@ -393,9 +366,8 @@ def suggest_custody_gap_candidates(
                 break
 
     # Stamp conflicts and promotion eligibility before applying the display
-    # ceiling. The exception carries a fully scored deterministic prefix plus
-    # ``blocking=False`` / ``search_complete=False``. Candidate discovery is
-    # advisory and capacity alone is never accounting evidence.
+    # ceiling. Candidate discovery is advisory and capacity alone is never
+    # accounting evidence.
     stamped = _stamp_conflicts(list(generated.values()))
     stamped = [
         replace(
@@ -430,35 +402,61 @@ def suggest_custody_gap_candidates(
     stamped.sort(key=_candidate_sort_key)
     if len(stamped) > max_candidates:
         promotion_count = sum(candidate.promotion_eligible for candidate in stamped)
-        raise CustodyGapSearchLimitError(
-            "custody-gap search generated "
-            f"{len(stamped)} candidates, including {promotion_count} "
-            "promotion-eligible candidates; configured maximum is "
-            f"{max_candidates}",
-            candidate_count=len(stamped),
-            promotion_eligible_count=promotion_count,
-            limit_kind="candidate_population",
-            partial_candidates=stamped[:max_candidates],
+        return CustodyGapSearchResult(
+            candidates=tuple(stamped[:max_candidates]),
             accounting_candidates=tuple(
                 candidate for candidate in stamped if candidate.promotion_eligible
             ),
-            blocking_source_ids=blocking_source_ids,
+            search_complete=False,
+            limit_kind="candidate_population",
+            candidate_count=len(stamped),
+            promotion_eligible_count=promotion_count,
+            blocking_source_ids=tuple(sorted(blocking_source_ids)),
+            message=(
+                "custody-gap search generated "
+                f"{len(stamped)} candidates, including {promotion_count} "
+                "promotion-eligible candidates; configured maximum is "
+                f"{max_candidates}"
+            ),
         )
     if capacity_limited_search or capacity_limited_candidate_ids:
         promotion_count = sum(candidate.promotion_eligible for candidate in stamped)
-        raise CustodyGapSearchLimitError(
-            "custody-gap search used a bounded source/return worklist; "
-            "structured boundaries remain reviewable but discovery is incomplete",
-            candidate_count=len(stamped),
-            promotion_eligible_count=promotion_count,
-            limit_kind="boundary_worklist",
-            partial_candidates=stamped,
+        return CustodyGapSearchResult(
+            candidates=tuple(stamped),
             accounting_candidates=tuple(
                 candidate for candidate in stamped if candidate.promotion_eligible
             ),
-            blocking_source_ids=blocking_source_ids,
+            search_complete=False,
+            limit_kind="boundary_worklist",
+            candidate_count=len(stamped),
+            promotion_eligible_count=promotion_count,
+            blocking_source_ids=tuple(sorted(blocking_source_ids)),
+            message=(
+                "custody-gap search used a bounded source/return worklist; "
+                "structured boundaries remain reviewable but discovery is incomplete"
+            ),
         )
-    return stamped
+    candidates = tuple(stamped)
+    return CustodyGapSearchResult(
+        candidates=candidates,
+        accounting_candidates=tuple(
+            item for item in candidates if item.promotion_eligible
+        ),
+        search_complete=True,
+        candidate_count=len(candidates),
+        promotion_eligible_count=sum(item.promotion_eligible for item in candidates),
+    )
+
+
+def search_custody_gap_candidates(
+    rows: Sequence[Mapping[str, Any]],
+    **kwargs: Any,
+) -> CustodyGapSearchResult:
+    """Return advisory candidates and explicit search-completeness metadata.
+
+    This is the production boundary; capacity is ordinary result state.
+    """
+    return _compute_custody_gap_search(rows, **kwargs)
 
 
 def build_gap_snapshot(
@@ -473,9 +471,9 @@ def build_gap_snapshot(
 
     This adapter reads only imported transaction/wallet labels and existing
     authored claims.  It never exposes addresses, scripts, descriptors, xpubs,
-    raw transaction graphs, or wallet configuration. It persists only the
-    privacy-safe derived page population so subsequent pages neither rerun nor
-    reorder discovery; this cache is replaceable and never authored evidence.
+    raw transaction graphs, or wallet configuration. It reads and pages the
+    current bounded candidate population directly. Opaque cursors bind the
+    deterministic in-memory keyset to the current journal input version.
     ``summary.search_complete`` says whether the bounded population is complete;
     ``gaps`` is the requested page and ``next_cursor`` continues that
     deterministic order.
@@ -495,52 +493,25 @@ def build_gap_snapshot(
     if gap_id is not None and cursor is not None:
         raise ValueError("cursor is not supported when gap_id is provided")
 
+    version = _gap_snapshot_version(conn, profile_id)
+    after: tuple[int, str] | None = None
     if cursor is not None:
-        token, offset = _decode_snapshot_cursor(cursor)
-        cached = _load_cached_snapshot(conn, profile_id, token)
-        if cached.version != _gap_snapshot_version(conn, profile_id):
+        cursor_version, ordinal, last_gap_id = _decode_projection_cursor(cursor)
+        if cursor_version != version:
             raise ValueError("cursor expired because custody evidence changed")
-        page_end = offset + limit
-        return {
-            "summary": dict(cached.summary),
-            "gaps": list(cached.gaps[offset:page_end]),
-            "next_cursor": (
-                _encode_snapshot_cursor(token, page_end)
-                if page_end < len(cached.gaps)
-                else None
-            ),
-        }
+        after = (ordinal, last_gap_id)
 
     journal_status = _journal_status(conn, profile_id)
     # Page size must not change matcher semantics. Every page is cut from the
     # same bounded advisory population; an incomplete population is labelled
     # explicitly rather than represented as a global accounting failure.
-    search_limit: CustodyGapSearchLimitError | None = None
-    try:
-        candidates, normalized = load_gap_candidates(
-            conn,
-            profile_id,
-            limit=DEFAULT_MAX_CANDIDATES,
-            include_journal_claims=journal_status == "current",
-        )
-    except CustodyGapSearchLimitError as exc:
-        # Suggestions are advisory. Preserve any deterministic prefix that was
-        # fully scored, disclose that discovery is incomplete, and continue to
-        # report canonical readiness independently. A capacity limit is never
-        # evidence that custody or tax basis is wrong.
-        search_limit = exc
-        candidates = [
-            item
-            for item in exc.partial_candidates
-            if isinstance(item, CustodyGapCandidate)
-        ]
-        normalized = [
-            item for item in exc.normalized_legs if isinstance(item, _Leg)
-        ]
-    if gap_id is not None:
-        candidates = [
-            candidate for candidate in candidates if candidate.gap_id == gap_id
-        ]
+    search_result, normalized = load_gap_search_result(
+        conn,
+        profile_id,
+        limit=DEFAULT_MAX_CANDIDATES,
+        include_journal_claims=journal_status == "current",
+    )
+    candidates = list(search_result.candidates)
     from . import custody_gap_reviews
 
     reviews = custody_gap_reviews.latest_reviews(conn, profile_id)
@@ -563,29 +534,6 @@ def build_gap_snapshot(
                 "strategy": "create_revision_then_activate",
             }
         current_gaps.append(gap)
-    historical = custody_gap_reviews.historical_review_gaps(
-        conn,
-        profile_id,
-        exclude_gap_ids=[candidate.gap_id for candidate in candidates],
-    )
-    if gap_id is not None:
-        historical = [gap for gap in historical if gap.get("gap_id") == gap_id]
-    # Review state is known only after matching.  Page unresolved work first
-    # so high-scoring dismissed/resolved rows cannot starve lower-scoring
-    # needs-review or conflicting rows from a bounded desktop/AI response.
-    # Python's stable sort preserves deterministic matcher/history order
-    # within each group.
-    all_gaps = sorted(
-        [*current_gaps, *historical],
-        key=lambda gap: (
-            0
-            if gap.get("status") in {"needs_review", "conflicting"}
-            else 1
-        ),
-    )
-    page_end = limit
-    gaps = all_gaps[:page_end]
-
     residual_by_cluster: dict[tuple[str, str], int] = {}
     for candidate, gap in zip(candidates, current_gaps):
         status = gap["status"]
@@ -621,11 +569,11 @@ def build_gap_snapshot(
     ]
     candidate_residual_msat = candidate_residual_by_asset_map.get("BTC", 0)
     counts = {
-        status: sum(gap.get("status") == status for gap in all_gaps)
+        status: sum(gap.get("status") == status for gap in current_gaps)
         for status in ("needs_review", "conflicting", "resolved", "dismissed")
     }
     summary = {
-        "total": len(candidates) + len(historical),
+        "total": len(candidates),
         **counts,
         "unresolved_msat": (
             canonical_unresolved_msat
@@ -644,41 +592,54 @@ def build_gap_snapshot(
         "canonical_status_text": canonical["status_text"],
         "derived_state_current": canonical["derived_state_current"],
         "qualification": canonical["qualification"],
-        "search_complete": search_limit is None,
+        "search_complete": search_result.search_complete,
         "search_status": (
-            "complete" if search_limit is None else "capacity_limited"
+            "complete" if search_result.search_complete else "capacity_limited"
         ),
-        "search_limit_kind": (
-            None if search_limit is None else search_limit.limit_kind
-        ),
+        "search_limit_kind": search_result.limit_kind,
         "search_candidate_count": (
             len(candidates)
-            if search_limit is None or search_limit.candidate_count is None
-            else search_limit.candidate_count
+            if search_result.search_complete
+            else search_result.candidate_count
         ),
     }
+    if gap_id is not None:
+        gaps = [gap for gap in current_gaps if gap.get("gap_id") == gap_id][:1]
+        if not gaps:
+            gaps = [
+                gap
+                for gap in custody_gap_reviews.historical_review_gaps(
+                    conn, profile_id
+                )
+                if gap.get("gap_id") == gap_id
+            ][:1]
+        return {"summary": summary, "gaps": gaps, "next_cursor": None}
+
+    start = 0
+    if after is not None:
+        ordinal, last_gap_id = after
+        if (
+            ordinal >= len(candidates)
+            or candidates[ordinal].gap_id != last_gap_id
+        ):
+            raise ValueError("cursor expired because custody candidates changed")
+        start = ordinal + 1
+    page = current_gaps[start : start + limit]
     next_cursor = None
-    if page_end < len(all_gaps):
-        token = _store_cached_snapshot(
-            conn,
-            profile_id,
-            version=_gap_snapshot_version(conn, profile_id),
-            summary=summary,
-            gaps=all_gaps,
+    if start + limit < len(current_gaps) and page:
+        last_ordinal = start + len(page) - 1
+        next_cursor = _encode_projection_cursor(
+            version,
+            last_ordinal,
+            candidates[last_ordinal].gap_id,
         )
-        next_cursor = _encode_snapshot_cursor(token, page_end)
-    return {
-        "summary": summary,
-        "gaps": gaps,
-        "next_cursor": next_cursor,
-    }
+    return {"summary": summary, "gaps": page, "next_cursor": next_cursor}
 
 
 def _gap_snapshot_version(conn, profile_id: str) -> tuple[Any, ...]:
     profile = conn.execute(
         """
-        SELECT journal_input_version, last_processed_input_version,
-               last_processed_tx_count, last_processed_at
+        SELECT journal_input_version
         FROM profiles WHERE id = ?
         """,
         (profile_id,),
@@ -690,118 +651,89 @@ def _gap_snapshot_version(conn, profile_id: str) -> tuple[Any, ...]:
             (profile_id,),
         ).fetchone()[0]
     )
-    review_version: tuple[Any, ...] = (0, 0, "")
-    try:
-        row = conn.execute(
-            """
-            SELECT COUNT(*), COALESCE(MAX(revision), 0),
-                   COALESCE(MAX(created_at), '')
-            FROM custody_gap_reviews WHERE profile_id = ?
-            """,
-            (profile_id,),
-        ).fetchone()
-        review_version = (int(row[0]), int(row[1]), str(row[2]))
-    except sqlite3.OperationalError:
-        # Reduced migration fixtures may not have custody review tables yet.
-        pass
     if profile is None:
-        return (active_count, *review_version)
+        return (active_count, 0)
     return (
         active_count,
         int(profile["journal_input_version"] or 0),
-        int(profile["last_processed_input_version"] or 0),
-        int(profile["last_processed_tx_count"] or 0),
-        str(profile["last_processed_at"] or ""),
-        *review_version,
     )
 
 
-def _store_cached_snapshot(
-    conn,
-    profile_id: str,
-    *,
-    version: tuple[Any, ...],
-    summary: Mapping[str, Any],
-    gaps: Sequence[Mapping[str, Any]],
+def _encode_projection_cursor(
+    version: tuple[Any, ...], ordinal: int, gap_id: str
 ) -> str:
-    version_json = json.dumps(version, separators=(",", ":"))
-    summary_json = json.dumps(summary, sort_keys=True, separators=(",", ":"))
-    gaps_json = json.dumps(gaps, sort_keys=True, separators=(",", ":"))
-    token = hashlib.sha256(
-        "\x1f".join((profile_id, version_json, gaps_json)).encode("utf-8")
-    ).hexdigest()[:24]
-    owns_transaction = not conn.in_transaction
+    payload = json.dumps(
+        [list(version), ordinal, gap_id], separators=(",", ":")
+    ).encode()
+    return "cgr3." + base64.urlsafe_b64encode(payload).decode().rstrip("=")
+
+
+def _decode_projection_cursor(cursor: str) -> tuple[tuple[Any, ...], int, str]:
+    if not cursor.startswith("cgr3."):
+        raise ValueError("cursor is malformed")
+    encoded = cursor[5:]
     try:
-        conn.execute(
-            "DELETE FROM custody_gap_candidate_snapshots WHERE profile_id = ?",
-            (profile_id,),
+        payload = json.loads(
+            base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
         )
-        conn.execute(
-            """
-            INSERT INTO custody_gap_candidate_snapshots(
-                cache_token, profile_id, version_json, summary_json, gaps_json
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            (token, profile_id, version_json, summary_json, gaps_json),
-        )
-        if owns_transaction:
-            conn.commit()
-    except Exception:
-        if owns_transaction:
-            conn.rollback()
-        raise
-    return token
+    except (ValueError, TypeError, json.JSONDecodeError, binascii.Error) as exc:
+        raise ValueError("cursor is malformed") from exc
+    if (
+        not isinstance(payload, list)
+        or len(payload) != 3
+        or not isinstance(payload[0], list)
+        or len(payload[0]) != 2
+        or any(type(value) is not int or value < 0 for value in payload[0])
+        or type(payload[1]) is not int
+        or payload[1] < 0
+        or not isinstance(payload[2], str)
+    ):
+        raise ValueError("cursor is malformed")
+    return tuple(payload[0]), payload[1], payload[2]
 
 
-def _load_cached_snapshot(conn, profile_id: str, token: str) -> _CachedGapSnapshot:
+def _stored_journal_gap_inputs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    version: tuple[Any, ...],
+) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
     try:
         row = conn.execute(
             """
-            SELECT version_json, summary_json, gaps_json
-            FROM custody_gap_candidate_snapshots
-            WHERE profile_id = ? AND cache_token = ?
+            SELECT input_version, ignored_ids_json,
+                   accounting_ignored_ids_json
+            FROM journal_custody_gap_inputs
+            WHERE profile_id = ?
             """,
-            (profile_id, token),
+            (profile_id,),
         ).fetchone()
     except sqlite3.OperationalError:
-        row = None
-    if row is None:
-        raise ValueError("cursor is unknown or expired; reload the first page")
-    return _CachedGapSnapshot(
-        version=tuple(json.loads(row[0])),
-        summary=dict(json.loads(row[1])),
-        gaps=tuple(dict(item) for item in json.loads(row[2])),
+        return None
+    if row is None or int(row["input_version"]) != int(version[-1]):
+        return None
+    try:
+        ignored = json.loads(row["ignored_ids_json"])
+        accounting_ignored = json.loads(row["accounting_ignored_ids_json"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(ignored, list) or not isinstance(accounting_ignored, list):
+        return None
+    return (
+        tuple(sorted(str(item) for item in ignored if item)),
+        tuple(sorted(str(item) for item in accounting_ignored if item)),
     )
 
 
-def _encode_snapshot_cursor(token: str, offset: int) -> str:
-    return f"cg1.{token}.{offset}"
-
-
-def _decode_snapshot_cursor(cursor: str) -> tuple[str, int]:
-    parts = cursor.split(".")
-    if (
-        len(parts) != 3
-        or parts[0] != "cg1"
-        or len(parts[1]) != 24
-        or any(character not in "0123456789abcdef" for character in parts[1])
-        or not parts[2].isdigit()
-    ):
-        raise ValueError("cursor is malformed")
-    offset = int(parts[2])
-    if offset < 1 or offset > 2**31 - 1:
-        raise ValueError("cursor is out of range")
-    return parts[1], offset
-
-
-def load_gap_candidates(
+def load_gap_search_result(
     conn: sqlite3.Connection,
     profile_id: str,
     *,
     limit: int = DEFAULT_MAX_CANDIDATES,
     include_journal_claims: bool | None = None,
-) -> tuple[list[CustodyGapCandidate], list[_Leg]]:
-    """Load the bounded current candidate set and normalized safe legs."""
+    ignored_transaction_ids: Iterable[str] | None = None,
+    accounting_ignored_transaction_ids: Iterable[str] | None = None,
+) -> tuple[CustodyGapSearchResult, list[_Leg]]:
+    """Load candidates with ordinary search-completeness metadata."""
 
     row_count = conn.execute(
         "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0",
@@ -877,26 +809,58 @@ def load_gap_candidates(
                 ),
             ).fetchall()
         )
-        ordinary_budget = DEFAULT_MAX_SOURCE_GROUPS - len(source_rows)
+        ordinary_budget = min(
+            DEFAULT_MAX_UNTYPED_SOURCE_ROWS,
+            DEFAULT_MAX_SOURCE_GROUPS - len(source_rows),
+        )
         if ordinary_budget:
             # A missing intermediary often leaves no typed marker on the old
             # wallet's payment. Preserve a bounded high-value lane for that
             # 10 BTC out / 9.9 BTC back shape. These remain review-only because
             # the large-book search is explicitly incomplete.
-            source_rows.extend(
-                mapped_rows(
-                    conn.execute(
-                        row_select
-                        + f"""
-                        WHERE t.profile_id = ? AND t.excluded = 0
-                          AND t.direction = 'outbound'
-                          AND NOT ({structured_sql})
-                        ORDER BY t.amount DESC, t.occurred_at, t.created_at, t.id
-                        LIMIT ?
-                        """,
-                        (profile_id, *structured_params, ordinary_budget),
-                    ).fetchall()
+            ordinary_rows: list[dict[str, Any]] = []
+            assets = conn.execute(
+                """
+                SELECT DISTINCT t.asset
+                FROM transactions t
+                WHERE t.profile_id = ? AND t.excluded = 0
+                  AND t.direction = 'outbound'
+                ORDER BY t.asset
+                """,
+                (profile_id,),
+            ).fetchall()
+            for asset_row in assets:
+                ordinary_rows.extend(
+                    mapped_rows(
+                        conn.execute(
+                            row_select
+                            + f"""
+                            WHERE t.profile_id = ? AND t.excluded = 0
+                              AND t.direction = 'outbound'
+                              AND t.asset = ?
+                              AND NOT ({structured_sql})
+                            ORDER BY t.amount DESC, t.occurred_at DESC,
+                                     t.created_at DESC, t.id DESC
+                            LIMIT ?
+                            """,
+                            (
+                                profile_id,
+                                asset_row["asset"],
+                                *structured_params,
+                                ordinary_budget,
+                            ),
+                        ).fetchall()
+                    )
                 )
+            source_rows.extend(
+                sorted(
+                    ordinary_rows,
+                    key=lambda row: (
+                        -int(row.get("amount") or 0),
+                        str(row.get("occurred_at") or ""),
+                        str(row.get("id") or ""),
+                    ),
+                )[:ordinary_budget]
             )
         source_legs = [
             leg
@@ -945,7 +909,7 @@ def load_gap_candidates(
                     ORDER BY t.occurred_at, t.created_at, t.id
                     LIMIT ?
                     """,
-                    (profile_id, *range_params, DEFAULT_MAX_INPUT_ROWS),
+                    (profile_id, *range_params, DEFAULT_MAX_RETURN_POOL),
                 ).fetchall()
             )
         rows = [*source_rows, *return_rows]
@@ -955,52 +919,95 @@ def load_gap_candidates(
                 str(row.get("id") or ""),
             )
         )
+    normalized = [
+        leg for row in rows if (leg := _normalize_leg(row, set())) is not None
+    ]
     if include_journal_claims is None:
         include_journal_claims = _journal_status(conn, profile_id) == "current"
-    claimed_ids = _claimed_transaction_ids(
-        conn,
-        profile_id,
-        include_journal_claims=include_journal_claims,
+    version = _gap_snapshot_version(conn, profile_id)
+    stored_inputs = None
+    if ignored_transaction_ids is None and include_journal_claims:
+        stored_inputs = _stored_journal_gap_inputs(conn, profile_id, version)
+    claimed_ids = (
+        {str(item) for item in ignored_transaction_ids if item}
+        if ignored_transaction_ids is not None
+        else set(stored_inputs[0])
+        if stored_inputs is not None
+        else _claimed_transaction_ids(
+            conn,
+            profile_id,
+            include_journal_claims=include_journal_claims,
+        )
     )
-    normalized = [leg for row in rows if (leg := _normalize_leg(row, set())) is not None]
-    try:
-        worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
-        candidates = suggest_custody_gap_candidates(
+    ignored = tuple(sorted(claimed_ids))
+    accounting_ignored = (
+        tuple(stored_inputs[1])
+        if accounting_ignored_transaction_ids is None and stored_inputs is not None
+        else ignored
+        if accounting_ignored_transaction_ids is None
+        else tuple(
+            sorted(
+                {
+                    str(item)
+                    for item in accounting_ignored_transaction_ids
+                    if item
+                }
+            )
+        )
+    )
+    worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
+    result = search_custody_gap_candidates(
+        rows,
+        ignored_ids=ignored,
+        max_input_rows=worklist_threshold,
+        max_candidates=limit,
+    )
+    if large_book and result.search_complete:
+        result = replace(
+            result,
+            accounting_candidates=(),
+            search_complete=False,
+            limit_kind="boundary_worklist",
+            promotion_eligible_count=0,
+            message="custody-gap search used a bounded large-book worklist",
+        )
+    if accounting_ignored != ignored:
+        accounting_result = search_custody_gap_candidates(
             rows,
-            ignored_ids=claimed_ids,
+            ignored_ids=accounting_ignored,
             max_input_rows=worklist_threshold,
             max_candidates=limit,
         )
-        if large_book:
-            raise CustodyGapSearchLimitError(
-                "custody-gap search used a bounded large-book worklist",
-                candidate_count=len(candidates),
-                promotion_eligible_count=0,
+        if large_book and accounting_result.search_complete:
+            accounting_result = replace(
+                accounting_result,
+                accounting_candidates=(),
+                search_complete=False,
                 limit_kind="boundary_worklist",
-                partial_candidates=candidates,
-                normalized_legs=normalized,
+                promotion_eligible_count=0,
+                message="custody-gap search used a bounded large-book worklist",
             )
-    except CustodyGapSearchLimitError as exc:
-        exc.normalized_legs = tuple(normalized)
-        raise
-    return candidates, normalized
+        result = replace(
+            result,
+            accounting_candidates=accounting_result.accounting_candidates,
+            promotion_eligible_count=(
+                accounting_result.promotion_eligible_count
+            ),
+            blocking_source_ids=accounting_result.blocking_source_ids,
+        )
+    return result, normalized
 
 
 def find_gap_candidate(
-    conn: sqlite3.Connection, profile_id: str, gap_id: str
+    conn: sqlite3.Connection,
+    profile_id: str,
+    gap_id: str,
 ) -> CustodyGapCandidate:
-    try:
-        candidates, _normalized = load_gap_candidates(conn, profile_id)
-    except CustodyGapSearchLimitError as exc:
-        # A fully scored prefix remains safe to review even though the advisory
-        # queue is incomplete. The action still re-derives and fingerprints the
-        # exact candidate; this does not imply anything about omitted hints.
-        candidates = [
-            item
-            for item in exc.partial_candidates
-            if isinstance(item, CustodyGapCandidate)
-        ]
-    for candidate in candidates:
+    result, _normalized = load_gap_search_result(conn, profile_id)
+    # A fully scored prefix remains safe to review even though the advisory
+    # queue is incomplete. The action still re-derives and fingerprints the
+    # exact candidate; this does not imply anything about omitted hints.
+    for candidate in result.candidates:
         if candidate.gap_id == gap_id:
             return candidate
     raise AppError(
@@ -1027,24 +1034,17 @@ def _normalize_leg(row: Mapping[str, Any], ignored: set[str]) -> _Leg | None:
     fee = _exact_nonnegative_int(_get(row, "fee", 0))
     if fee is None:
         return None
-    if direction == "outbound":
-        if _truthy(_get(row, "amount_includes_fee")):
-            # Net-delta imports fold any known fee into amount.  Most such
-            # imports have fee=0 because the fee is unavailable; in that case
-            # the whole observed debit is the safest available principal.
-            if fee > amount:
-                return None
-            principal = amount - fee
-            debit = amount
-        else:
-            principal = amount
-            debit = amount + fee
-        if principal <= 0:
-            return None
-    else:
-        principal = amount
-        fee = 0
-        debit = amount
+    boundary = normalize_boundary_amounts(
+        direction=direction,
+        amount_msat=amount,
+        fee_msat=fee if direction == "outbound" else 0,
+        amount_includes_fee=_truthy(_get(row, "amount_includes_fee")),
+    )
+    principal = boundary.principal_msat
+    fee = boundary.fee_msat
+    debit = boundary.wallet_movement_msat
+    if principal <= 0:
+        return None
     occurred_at = occurred_dt.isoformat().replace("+00:00", "Z")
     try:
         scope = resolve_protocol_scope(row)
@@ -1112,6 +1112,8 @@ def _structured_evidence_codes(
 def _json_mapping(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
+    if value in (None, "", "{}", b"{}"):
+        return {}
     if not isinstance(value, str) or not value.strip():
         return {}
     try:
@@ -1259,7 +1261,7 @@ def _matching_return_eras(
     max_excess_ppm: int,
     max_legs: int,
     result_limit: int,
-) -> list[tuple[_Leg, ...]]:
+) -> tuple[list[tuple[_Leg, ...]], bool]:
     minimum = target * min_coverage_ppm // 1_000_000
     maximum = target + (target * max_excess_ppm // 1_000_000)
 
@@ -1276,10 +1278,7 @@ def _matching_return_eras(
         if group[0].occurred_dt <= boundary:
             continue
         if len(group) > max_legs:
-            raise CustodyGapSearchLimitError(
-                "custody-gap wallet/era aggregation needs "
-                f"{len(group)} return legs; configured maximum is {max_legs}"
-            )
+            return [], True
         matches.append(era)
     matches.sort(
         key=lambda era: (
@@ -1288,7 +1287,7 @@ def _matching_return_eras(
             _group_ids(era.legs),
         )
     )
-    return [era.legs for era in matches[:result_limit]]
+    return [era.legs for era in matches[:result_limit]], False
 
 
 def _return_groups(
@@ -1342,7 +1341,7 @@ def _wallet_era_return_groups(
     max_legs: int,
     era_gap_seconds: int,
     result_limit: int,
-) -> list[tuple[_Leg, ...]]:
+) -> tuple[list[tuple[_Leg, ...]], bool]:
     """Aggregate realistic many-receipt returns by wallet and activity era.
 
     A Postmix exit may fan into dozens of receipts.  Enumerating that powerset
@@ -1371,10 +1370,7 @@ def _wallet_era_return_groups(
             if not minimum <= total <= max_total:
                 continue
             if len(era) > max_legs:
-                raise CustodyGapSearchLimitError(
-                    "custody-gap wallet/era aggregation needs "
-                    f"{len(era)} return legs; configured maximum is {max_legs}"
-                )
+                return [], True
             groups.append(tuple(era))
     groups.sort(
         key=lambda group: (
@@ -1383,7 +1379,7 @@ def _wallet_era_return_groups(
             _group_ids(group),
         )
     )
-    return groups[:result_limit]
+    return groups[:result_limit], False
 
 
 def _dedupe_groups(groups: Sequence[tuple[_Leg, ...]]) -> list[tuple[_Leg, ...]]:
@@ -1618,7 +1614,9 @@ def _stamp_promotion_eligibility(
     return stamped
 
 
-def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[str, Any]:
+def _downstream_impact(
+    candidate: CustodyGapCandidate, rows: Sequence[_Leg]
+) -> dict[str, Any]:
     destination_wallets = set(candidate.destination_wallet_ids)
     ended = parse_iso_datetime_or_none(candidate.ended_at)
     affected = [
@@ -1629,6 +1627,13 @@ def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[
         and ended is not None
         and leg.occurred_dt > ended
     ]
+    return {
+        "affected_disposals": len(affected),
+        "affected_years": sorted({leg.occurred_dt.year for leg in affected}),
+    }
+
+
+def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[str, Any]:
     return {
         "gap_id": candidate.gap_id,
         # A conflict remains a review item, but must not look like a solo
@@ -1650,10 +1655,7 @@ def _snapshot_gap(candidate: CustodyGapCandidate, rows: Sequence[_Leg]) -> dict[
         "reason_codes": list(candidate.reason_codes),
         "promotion_eligible": candidate.promotion_eligible,
         "competitor_score_margin": candidate.competitor_score_margin,
-        "downstream": {
-            "affected_disposals": len(affected),
-            "affected_years": sorted({leg.occurred_dt.year for leg in affected}),
-        },
+        "downstream": _downstream_impact(candidate, rows),
     }
 
 
@@ -1664,28 +1666,30 @@ def _claimed_transaction_ids(
     include_journal_claims: bool,
 ) -> set[str]:
     claimed: set[str] = set()
-    # A normal Kassiber DB has both tables.  Keeping the reads separate makes
-    # this helper usable against narrow schema fixtures during migrations.
     try:
-        rows = conn.execute(
-            """
-            SELECT out_transaction_id AS transaction_id
-            FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL
-            UNION
-            SELECT in_transaction_id AS transaction_id
-            FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL
-            """,
-            (profile_id, profile_id),
-        ).fetchall()
-        claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows)
+        from . import custody_authored_migration
+
+        review_rows = custody_authored_migration.list_active_review_refs(
+            conn,
+            profile_id=profile_id,
+        )
+        claimed.update(
+            str(transaction_id)
+            for row in review_rows
+            for transaction_id in (
+                _get(row, "out_transaction_id"),
+                _get(row, "in_transaction_id"),
+            )
+            if transaction_id not in (None, "")
+        )
     except sqlite3.OperationalError:
-        # Narrow migration fixtures may omit authored transaction pairs.
+        # Narrow migration fixtures may omit authored review tables.
         pass
     if include_journal_claims:
         try:
             # Automatic descriptor/graph ownership paths are derived rather
-            # than authored in transaction_pairs. Only a current projection may
-            # suppress their boundaries from the live gap matcher.
+            # than authored components. Only a current projection may suppress
+            # their boundaries from the live gap matcher.
             rows = conn.execute(
                 """
                 SELECT DISTINCT transaction_id
@@ -1699,19 +1703,6 @@ def _claimed_transaction_ids(
         except sqlite3.OperationalError:
             # A reduced schema has no derived journal claims to suppress.
             pass
-    try:
-        rows = conn.execute(
-            """
-            SELECT out_transaction_id AS transaction_id
-            FROM direct_swap_payouts
-            WHERE profile_id = ? AND deleted_at IS NULL
-            """,
-            (profile_id,),
-        ).fetchall()
-        claimed.update(str(_get(row, "transaction_id") or row[0]) for row in rows)
-    except sqlite3.OperationalError:
-        # Older/reduced schemas may not contain direct payout reviews.
-        pass
     try:
         rows = conn.execute(
             """
@@ -1733,36 +1724,12 @@ def _journal_status(conn, profile_id: str) -> str:
     """Return the same fail-closed freshness state used by report readiness."""
 
     try:
-        profile = conn.execute(
-            """
-            SELECT last_processed_at, last_processed_tx_count,
-                   journal_input_version, last_processed_input_version
-            FROM profiles WHERE id = ?
-            """,
-            (profile_id,),
-        ).fetchone()
-        active_count = int(
-            conn.execute(
-                "SELECT COUNT(*) FROM transactions "
-                "WHERE profile_id = ? AND excluded = 0",
-                (profile_id,),
-            ).fetchone()[0]
-        )
+        from . import custody_journal
+
+        status = str(custody_journal.projection_freshness(conn, profile_id)["status"])
+        return "not_processed" if status == "no_profile" else status
     except sqlite3.OperationalError:
         return "not_processed"
-    if profile is None:
-        return "not_processed"
-    if active_count == 0:
-        return "no_transactions"
-    if not profile["last_processed_at"]:
-        return "not_processed"
-    if int(profile["last_processed_tx_count"] or 0) != active_count:
-        return "stale"
-    if int(profile["journal_input_version"] or 0) != int(
-        profile["last_processed_input_version"] or 0
-    ):
-        return "stale"
-    return "current"
 
 
 def _validate_limits(**limits: int) -> None:

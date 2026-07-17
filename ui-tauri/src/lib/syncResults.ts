@@ -20,6 +20,8 @@ export interface SyncResult {
   utxos_skipped_unchanged?: boolean;
   utxos_refreshed?: boolean;
   force_full?: boolean;
+  observer_route?: string;
+  observer_compatibility_reason?: string;
 }
 
 export interface FreshnessSourceState {
@@ -109,6 +111,11 @@ function syncResultObservability(result: SyncResult | undefined): string | null 
   if (!result || result.status !== "synced") return null;
   const parts: string[] = [];
   if (result.force_full) parts.push("full rescan");
+  if (result.observer_route === "compatibility") {
+    const reason = String(result.observer_compatibility_reason || "capability fallback")
+      .replaceAll("_", " ");
+    parts.push(`compatibility observer (${reason})`);
+  }
   const imported = Number(result.imported ?? 0);
   const updated = Number(result.updated ?? 0);
   const unchanged = Number(result.unchanged ?? 0);

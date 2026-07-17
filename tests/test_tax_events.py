@@ -2354,7 +2354,7 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
         )
 
         self.assertIn(
-            "transfer_network_mismatch",
+            "custody_quantity_unresolved",
             {item["reason"] for item in state.quarantines},
         )
         self.assertEqual(
@@ -2445,7 +2445,7 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
             {"out", "bridge", "bad-destination"},
         )
         self.assertIn(
-            "transfer_pair_dependency_blocked",
+            "custody_quantity_unresolved",
             {item["reason"] for item in chained_state.quarantines},
         )
 

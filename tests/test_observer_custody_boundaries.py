@@ -15,13 +15,18 @@ from kassiber.core.custody_evidence import (
 )
 from kassiber.core.custody_interpreters import compile_custody_interpreters
 from kassiber.core.custody_quantity import (
-    CUSTODY_CANDIDATE,
     CUSTODY_SUSPENSE,
     EXTERNAL_CONFIRMED,
     EXTERNAL_PRESUMED,
     INTERNAL_VERIFIED,
 )
-from kassiber.core.custody_quantity_runtime import build_canonical_quantity_state
+from kassiber.core.custody_gaps import (
+    EMPTY_GAP_SEARCH_RESULT,
+    search_custody_gap_candidates,
+)
+from kassiber.core.custody_quantity_runtime import (
+    build_canonical_quantity_state as _build_canonical_quantity_state,
+)
 from kassiber.core.ownership_policy_epochs import (
     record_observer_policy_coverage,
     technical_coverage_snapshot,
@@ -31,6 +36,11 @@ from kassiber.time_utils import now_iso
 
 
 BTC_MSAT = 100_000_000_000
+
+
+def build_canonical_quantity_state(rows, **kwargs):
+    kwargs.setdefault("gap_search_result", EMPTY_GAP_SEARCH_RESULT)
+    return _build_canonical_quantity_state(rows, **kwargs)
 
 
 class ObserverCustodyBoundaryTest(unittest.TestCase):
@@ -414,21 +424,24 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
                 network="main",
             )
 
+        rows = [self._row("whirlpool-out"), self._row("whirlpool-return")]
         state = build_canonical_quantity_state(
-            [self._row("whirlpool-out"), self._row("whirlpool-return")]
+            rows,
+            gap_search_result=search_custody_gap_candidates(rows),
         )
 
         states = {decision.state for decision in state.projection.decisions}
-        self.assertEqual(states, {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE})
+        self.assertEqual(states, {CUSTODY_SUSPENSE})
         self.assertNotIn(EXTERNAL_CONFIRMED, states)
+        self.assertTrue(all(decision.target is None for decision in state.projection.decisions))
         self.assertFalse(
             self.conn.execute(
                 "SELECT 1 FROM wallets WHERE id = 'missing-whirlpool'"
             ).fetchone()
         )
-        self.assertEqual(
-            {issue.state for issue in state.issues},
-            {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE},
+        self.assertEqual({issue.state for issue in state.issues}, {CUSTODY_SUSPENSE})
+        self.assertTrue(
+            any(issue.issue_type == "custody_gap_review_hold" for issue in state.issues)
         )
 
     def test_duplicate_event_fee_normalization_preserves_closed_authority(self):
@@ -593,49 +606,6 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
             )
 
         rows = [self._row("liquid-out"), self._row("liquid-in")]
-        safe_rows = enriched_quantity_rows(rows)
-        canonical = build_canonical_quantity_input(safe_rows)
-        compilation = compile_custody_interpreters(
-            safe_rows,
-            canonical,
-            wallet_refs_by_id={row["wallet_id"]: row for row in rows},
-            manual_pair_records=(
-                {
-                    "id": "reviewed-liquid-pair",
-                    "out_transaction_id": "liquid-out",
-                    "in_transaction_id": "liquid-in",
-                    "policy": "carrying-value",
-                    "kind": "self-transfer",
-                    "pair_source": "manual",
-                    "out_amount": 900,
-                },
-            ),
-        )
-
-        state = build_canonical_quantity_state(
-            rows,
-            interpreter_claims=compilation.claims,
-            native_evidence=compilation.native_audits,
-            interpreter_blockers=compilation.blocking_quarantines,
-        )
-
-        suspense = [
-            decision
-            for decision in state.projection.decisions
-            if decision.state == CUSTODY_SUSPENSE
-        ]
-        self.assertEqual(
-            [(decision.source.amount_msat, decision.reason) for decision in suspense],
-            [(100, "implicit_wallet_delta_unallocated")],
-        )
-        self.assertFalse(
-            [posting for posting in state.projection.postings if posting.location_kind == "fee"]
-        )
-        self.assertNotIn(
-            EXTERNAL_CONFIRMED,
-            {decision.state for decision in state.projection.decisions},
-        )
-
         native_state = build_canonical_quantity_state(
             rows,
             native_evidence=(

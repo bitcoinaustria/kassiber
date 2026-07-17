@@ -208,11 +208,7 @@ describe("daemon mutation invalidation scope", () => {
   });
 
   it("refreshes custody lineage, journals, and blockers after guided corrections", () => {
-    for (const kind of [
-      "ui.custody.gaps.reopen",
-      "ui.custody.gaps.revise",
-      "ui.custody.gaps.residual.classify",
-    ]) {
+    for (const kind of ["ui.custody.review.apply"]) {
       expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
         expect.arrayContaining([
           "ui.custody.gaps.list",
@@ -230,13 +226,7 @@ describe("daemon mutation invalidation scope", () => {
   });
 
   it("refreshes canonical lineage after every custody-gap mutation", () => {
-    for (const kind of [
-      "ui.custody.gaps.dismiss",
-      "ui.custody.gaps.bridge.create",
-      "ui.custody.gaps.reopen",
-      "ui.custody.gaps.revise",
-      "ui.custody.gaps.residual.classify",
-    ]) {
+    for (const kind of ["ui.custody.review.apply"]) {
       expect(invalidatedDaemonQueryKindsForMutation(kind)).toContain(
         "ui.custody.lineage.snapshot",
       );
@@ -275,11 +265,7 @@ describe("daemon mutation invalidation scope", () => {
 
   it("keeps custody component refreshes targeted", () => {
     for (const kind of [
-      "ui.transfers.components.bulk_resolve",
-      "ui.transfers.components.update",
-      "ui.transfers.components.activate",
-      "ui.transfers.components.supersede",
-      "ui.transfers.components.undo",
+      "ui.transfers.components.apply",
     ]) {
       expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual(
         expect.arrayContaining([
@@ -291,7 +277,7 @@ describe("daemon mutation invalidation scope", () => {
     }
     expect(
       invalidatedDaemonQueryKindsForMutation(
-        "ui.transfers.components.activate",
+        "ui.transfers.components.apply",
       ),
     ).toContain("ui.journals.snapshot");
   });

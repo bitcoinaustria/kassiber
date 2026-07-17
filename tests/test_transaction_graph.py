@@ -6,9 +6,11 @@ from unittest.mock import patch
 
 import kassiber.core.transaction_graph as tg
 from kassiber.backends import DEFAULT_BACKENDS, create_db_backend
+from kassiber.cli.handlers import create_transaction_pair, process_journals
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
 from kassiber.errors import AppError
+from tests.custody_projection_fixtures import insert_reviewed_projection
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -2222,11 +2224,8 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("a-out")
 
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("multi_source_consolidation", codes)
-        self.assertIn(
-            f"multi-consol:{CONSOL_TXID}",
-            payload["accounting"]["transferGroupIds"],
-        )
+        self.assertNotIn("multi_source_consolidation", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_partial_external_residual_annotation(self):
         # A partial owned-output interpretation also books an external
@@ -2263,8 +2262,9 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("partial-out")
 
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("ownership_derived", codes)
-        self.assertIn("partial_external_residual", codes)
+        self.assertNotIn("ownership_derived", codes)
+        self.assertNotIn("partial_external_residual", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_ambiguous_destination_receipt_warns(self):
         self._utxo("wallet-a", ADDR_A, "prev-ambig", 0, amount=51_000_000)
@@ -2281,7 +2281,8 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("ambig-out")
 
         codes = {warning["code"] for warning in payload["warnings"]}
-        self.assertIn("ownership_transfer_destination_ambiguous", codes)
+        self.assertIn("custody_projection_stale", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_mixed_case_recorded_fanout_is_annotated(self):
         txid = "ABCDEF" + "1" * 58
@@ -2293,7 +2294,8 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertEqual(payload["supportLevel"], "graphless")
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("recorded_fanout", codes)
+        self.assertNotIn("recorded_fanout", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_recorded_one_to_one_transfer_is_annotated(self):
         txid = "abcd" + "2" * 60
@@ -2314,15 +2316,67 @@ class TransactionGraphTest(unittest.TestCase):
             json.dumps({"txid": txid.upper()}),
         )
 
+        self.conn.commit()
+        create_transaction_pair(
+            self.conn,
+            "ws-1",
+            "profile-1",
+            "one-out",
+            "one-in",
+        )
+        process_journals(self.conn, "ws-1", "profile-1")
         payload = self._graph("one-out")
 
         self.assertEqual(payload["supportLevel"], "graphless")
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("recorded_self_transfer", codes)
-        self.assertIn(
-            f"recorded-self-transfer:{txid.lower()}",
-            payload["accounting"]["transferGroupIds"],
+        self.assertIn("booked_custody_move", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "current")
+        self.assertTrue(payload["accounting"]["transferGroupIds"])
+
+    def test_excluded_transaction_does_not_stale_current_custody_projection(self):
+        txid = "dcba" + "4" * 60
+        self._tx(
+            "current-out",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            txid,
+            {"txid": txid},
         )
+        self._tx(
+            "current-in",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            txid,
+            {"txid": txid},
+        )
+        self._tx(
+            "excluded-unrelated",
+            "wallet-c",
+            "inbound",
+            1_000,
+            "excluded-unrelated",
+            {},
+        )
+        self.conn.execute(
+            "UPDATE transactions SET excluded = 1 WHERE id = 'excluded-unrelated'"
+        )
+        self.conn.commit()
+        create_transaction_pair(
+            self.conn,
+            "ws-1",
+            "profile-1",
+            "current-out",
+            "current-in",
+        )
+        process_journals(self.conn, "ws-1", "profile-1")
+
+        payload = self._graph("current-out")
+
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertIn("booked_custody_move", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "current")
 
     def test_excluded_rows_are_ignored_for_graph_semantics(self):
         txid = "cdef" + "3" * 60
@@ -2338,8 +2392,9 @@ class TransactionGraphTest(unittest.TestCase):
         payload = self._graph("excluded-fan-out")
 
         codes = {annotation["code"] for annotation in payload["annotations"]}
-        self.assertIn("recorded_self_transfer", codes)
+        self.assertNotIn("recorded_self_transfer", codes)
         self.assertNotIn("recorded_fanout", codes)
+        self.assertEqual(payload["accounting"]["custodyProjection"], "stale")
 
     def test_manual_pair_ids_suppress_graph_derivation(self):
         self._utxo("wallet-a", ADDR_A, "manual-prev", 0, amount=51_000_000)
@@ -2471,30 +2526,32 @@ class TransactionGraphTest(unittest.TestCase):
             description="Bitcoin receive from swap",
             counterparty="Swap LBTC -> BTC",
         )
+        insert_reviewed_projection(
+            self.conn,
+            projection_id="a" * 64,
+            workspace_id="ws-1",
+            profile_id="profile-1",
+            source_transaction_id="swap-out",
+            target_transaction_id="swap-in",
+            source_asset="LBTC",
+            target_asset="BTC",
+            source_amount_msat=124_262_750_000,
+            target_amount_msat=124_132_980_000,
+            review_kind="swap",
+            swap_fee_msat=129_770_000,
+            swap_fee_kind="network_or_provider_fee",
+            notes="reviewed cross-chain swap",
+            occurred_at=NOW,
+            target_occurred_at=NOW,
+        )
         self.conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-                pair_source, out_amount, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
             """,
-            (
-                "pair-swap-1",
-                "ws-1",
-                "profile-1",
-                "swap-out",
-                "swap-in",
-                "swap",
-                "carrying-value",
-                "reviewed cross-chain swap",
-                129_770_000,
-                "network_or_provider_fee",
-                "manual",
-                "manual",
-                124_262_750_000,
-                NOW,
-            ),
+            (NOW,),
         )
 
         payload = self._graph("swap-out")
@@ -2515,6 +2572,14 @@ class TransactionGraphTest(unittest.TestCase):
         serialized = json.dumps(payload)
         self.assertNotIn("reviewed cross-chain swap", serialized)
         self.assertNotIn("raw_json", serialized)
+
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = 1, "
+            "last_processed_input_version = 0 WHERE id = 'profile-1'"
+        )
+        stale = self._graph("swap-out")
+        self.assertEqual(stale["accounting"]["custodyProjection"], "stale")
+        self.assertIsNone(stale["swapRoute"])
 
     def test_manual_coinjoin_pair_routes_as_coinjoin(self):
         self._tx(
@@ -2542,30 +2607,31 @@ class TransactionGraphTest(unittest.TestCase):
             kind="deposit",
             counterparty="Manual privacy wallet",
         )
+        insert_reviewed_projection(
+            self.conn,
+            projection_id="b" * 64,
+            workspace_id="ws-1",
+            profile_id="profile-1",
+            source_transaction_id="coinjoin-out",
+            target_transaction_id="coinjoin-in",
+            source_asset="BTC",
+            target_asset="BTC",
+            source_amount_msat=99_500_000_000,
+            target_amount_msat=99_500_000_000,
+            review_kind="coinjoin",
+            notes="reviewed generic Coinjoin hop",
+            occurred_at=NOW,
+            target_occurred_at=NOW,
+            relation_kind="move",
+        )
         self.conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
-                pair_source, out_amount, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
             """,
-            (
-                "pair-coinjoin-1",
-                "ws-1",
-                "profile-1",
-                "coinjoin-out",
-                "coinjoin-in",
-                "coinjoin",
-                "carrying-value",
-                "reviewed generic Coinjoin hop",
-                None,
-                None,
-                "manual",
-                "manual",
-                None,
-                NOW,
-            ),
+            (NOW,),
         )
 
         payload = self._graph("coinjoin-out")

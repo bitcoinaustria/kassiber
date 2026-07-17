@@ -14,6 +14,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from kassiber.cli.main import build_parser, dispatch
+from kassiber.core import custody_components, wallets
 from kassiber.daemon import SUPPORTED_KINDS, _ui_swap_matching_payload_from_conn
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -24,12 +25,8 @@ NOW = "2026-01-01T00:00:00Z"
 COMPONENT_KINDS = {
     "ui.transfers.components.list",
     "ui.transfers.components.get",
-    "ui.transfers.components.create",
-    "ui.transfers.components.update",
-    "ui.transfers.components.activate",
-    "ui.transfers.components.supersede",
-    "ui.transfers.components.undo",
-    "ui.transfers.components.bulk_resolve",
+    "ui.transfers.components.plan",
+    "ui.transfers.components.apply",
 }
 
 
@@ -95,7 +92,7 @@ def _fixture(data_root: Path) -> None:
 
 def _component_spec(*, note: str = "migration") -> dict:
     return {
-        "component_type": "native_transfer",
+        "component_type": "manual_bridge",
         "evidence_kind": "manual_claim",
         "evidence_grade": "reviewed",
         "notes": note,
@@ -180,16 +177,25 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.addCleanup(self.conn.close)
 
     def test_ai_bulk_resolution_stamps_component_attribution(self):
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "components": [_component_spec()],
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.plan",
+            args,
+            authored_source="ai_tool",
+        )
+        args.update(
+            expected_input_version=preview["input_version"],
+        )
         result = _ui_swap_matching_payload_from_conn(
             self.conn,
-            "ui.transfers.components.bulk_resolve",
-            {
-                "workspace": "Main",
-                "profile": "Book",
-                "components": [_component_spec()],
-                "activate": False,
-                "dry_run": False,
-            },
+            "ui.transfers.components.apply",
+            args,
             authored_source="ai_tool",
         )
 
@@ -200,44 +206,224 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(stored["authored_source"], "ai_tool")
 
+    def _create_draft_component(self) -> dict:
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "create",
+            "components": [_component_spec()],
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        result = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.apply",
+            {**args, "expected_input_version": preview["input_version"]},
+        )
+        return result["components"][0]
+
+    def test_component_activation_preview_is_pure_and_apply_is_exact(self):
+        component = self._create_draft_component()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "activate",
+            "component_id": component["id"],
+        }
+        before_changes = self.conn.total_changes
+
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(preview["current_state"], "draft")
+        self.assertEqual(preview["resulting_state"], "active")
+        self.assertEqual(self.conn.total_changes, before_changes)
+        self.assertFalse(self.conn.in_transaction)
+        result = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.apply",
+            {**args, "expected_input_version": preview["input_version"]},
+        )
+        self.assertEqual(result["component"]["effective_state"], "active")
+
+    def test_component_state_apply_rejects_stale_input_version(self):
+        component = self._create_draft_component()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "activate",
+            "component_id": component["id"],
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile'"
+        )
+        self.conn.commit()
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.apply",
+                {**args, "expected_input_version": preview["input_version"]},
+            )
+
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+        stored = self.conn.execute(
+            "SELECT state FROM custody_components WHERE id = ?", (component["id"],)
+        ).fetchone()
+        self.assertEqual(stored["state"], "draft")
+
+    def test_component_revision_preview_is_pure_and_preserves_economic_terms(self):
+        component = self._create_draft_component()
+        component = custody_components.update_component(
+            self.conn,
+            component["id"],
+            economic_terms=[
+                {
+                    "id": "legacy-term",
+                    "source_ordinal": 0,
+                    "target_ordinal": 1,
+                    "term_kind": "transaction_pair",
+                    "legacy_source_id": "legacy-pair",
+                    "source_row_hash": "a" * 64,
+                    "review_kind": "transfer",
+                    "tax_policy": "transfer",
+                    "swap_fee_msat": 1_000,
+                }
+            ],
+        )
+        self.conn.commit()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "revise",
+            "component_id": component["id"],
+            "spec": {"notes": "note-only revision"},
+            "activate": False,
+        }
+        before_changes = self.conn.total_changes
+
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+
+        self.assertEqual(self.conn.total_changes, before_changes)
+        self.assertFalse(self.conn.in_transaction)
+        self.assertTrue(preview["dry_run"])
+        self.assertNotIn("evidence", preview["component"])
+        self.assertTrue(
+            all("location_ref" not in leg for leg in preview["component"]["legs"])
+        )
+        result = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.apply",
+            {**args, "expected_input_version": preview["input_version"]},
+        )
+        revised = result["component"]
+        self.assertEqual(revised["revision"], 3)
+        self.assertEqual(len(revised["economic_terms"]), 1)
+        self.assertEqual(revised["economic_terms"][0]["tax_policy"], "transfer")
+        self.assertEqual(revised["economic_terms"][0]["swap_fee_msat"], 1_000)
+        self.assertNotEqual(
+            revised["economic_terms"][0]["id"], "legacy-term"
+        )
+
+    def test_component_revision_apply_rejects_reused_plan(self):
+        component = self._create_draft_component()
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "action": "revise",
+            "component_id": component["id"],
+            "spec": {"notes": "one reviewed revision"},
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        apply_args = {**args, "expected_input_version": preview["input_version"]}
+        _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.apply", apply_args
+        )
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn, "ui.transfers.components.apply", apply_args
+            )
+
+        self.assertEqual(caught.exception.code, "custody_component_draft_exists")
+
     def test_daemon_bulk_resolution_rejects_unbounded_batches(self):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [_component_spec() for _ in range(51)],
                     "activate": False,
-                    "dry_run": True,
                 },
             )
 
         self.assertEqual(caught.exception.code, "validation")
         self.assertEqual(caught.exception.details["max_components"], 50)
 
-    def test_bulk_resolution_retry_reuses_deterministic_draft_ids(self):
+    def test_bulk_resolution_rejects_reusing_an_applied_plan(self):
         args = {
             "workspace": "Main",
             "profile": "Book",
             "components": [_component_spec()],
             "activate": False,
-            "dry_run": False,
         }
-
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        args.update(expected_input_version=preview["input_version"])
         first = _ui_swap_matching_payload_from_conn(
-            self.conn, "ui.transfers.components.bulk_resolve", args
+            self.conn, "ui.transfers.components.apply", args
         )
-        second = _ui_swap_matching_payload_from_conn(
-            self.conn, "ui.transfers.components.bulk_resolve", args
-        )
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn, "ui.transfers.components.apply", args
+            )
 
-        self.assertEqual(first["components"][0]["id"], second["components"][0]["id"])
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+        self.assertEqual(first["components"][0]["id"], preview["components"][0]["id"])
         self.assertEqual(
             self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
             1,
         )
+
+    def test_wallet_creation_invalidates_a_component_plan(self):
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "components": [_component_spec()],
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+
+        wallets.create_wallet(
+            self.conn, "Main", "Book", "Imported after preview", "untracked"
+        )
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.apply",
+                {**args, "expected_input_version": preview["input_version"]},
+            )
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
 
     def test_bulk_resolution_bounds_legs_per_component(self):
         spec = _component_spec()
@@ -245,17 +431,137 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [spec],
                     "activate": False,
-                    "dry_run": True,
                 },
             )
 
         self.assertEqual(caught.exception.details["max_legs"], 256)
+
+    def test_bulk_preview_performs_no_database_writes(self):
+        spec = _component_spec()
+        spec["legs"][1] = {
+            "role": "retained",
+            "untracked_wallet": "Preview-only missing wallet",
+            "occurred_at": "2026-06-01T00:00:00Z",
+            "amount_msat": 99_000,
+        }
+        before_changes = self.conn.total_changes
+        before_version = self.conn.execute(
+            "SELECT journal_input_version FROM profiles WHERE id = 'profile'"
+        ).fetchone()[0]
+
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn,
+            "ui.transfers.components.plan",
+            {
+                "workspace": "Main",
+                "profile": "Book",
+                "components": [spec],
+                "activate": False,
+            },
+        )
+
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(self.conn.total_changes, before_changes)
+        self.assertFalse(self.conn.in_transaction)
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
+        self.assertIsNone(
+            self.conn.execute(
+                "SELECT id FROM wallets WHERE label = 'Preview-only missing wallet'"
+            ).fetchone()
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT journal_input_version FROM profiles WHERE id = 'profile'"
+            ).fetchone()[0],
+            before_version,
+        )
+
+    def test_bulk_apply_rejects_a_stale_input_version(self):
+        args = {
+            "workspace": "Main",
+            "profile": "Book",
+            "components": [_component_spec()],
+            "activate": False,
+        }
+        preview = _ui_swap_matching_payload_from_conn(
+            self.conn, "ui.transfers.components.plan", args
+        )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile'"
+        )
+        self.conn.commit()
+        args.update(expected_input_version=preview["input_version"])
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn, "ui.transfers.components.apply", args
+            )
+
+        self.assertEqual(caught.exception.code, "custody_review_plan_stale")
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
+
+    def test_active_preview_rejects_cross_component_anchor_conflicts(self):
+        first = _component_spec(note="first")
+        second = _component_spec(note="second")
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.plan",
+                {
+                    "workspace": "Main",
+                    "profile": "Book",
+                    "components": [first, second],
+                    "activate": True,
+                },
+            )
+
+        self.assertEqual(caught.exception.code, "custody_component_not_activatable")
+        self.assertIn(
+            "active_transaction_membership_conflict",
+            {issue["code"] for issue in caught.exception.details["issues"]},
+        )
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
+
+    def test_preview_applies_database_anchor_coverage_checks(self):
+        spec = _component_spec()
+        spec["legs"][0]["amount_msat"] = 99_999
+        spec["legs"][2]["amount_msat"] = 999
+
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.plan",
+                {
+                    "workspace": "Main",
+                    "profile": "Book",
+                    "components": [spec],
+                    "activate": True,
+                },
+            )
+
+        self.assertEqual(caught.exception.code, "custody_component_not_activatable")
+        self.assertIn("anchor_coverage_mismatch", str(caught.exception.details))
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM custody_components").fetchone()[0],
+            0,
+        )
 
     def test_transaction_and_untracked_wallet_error_names_the_real_conflict(self):
         spec = _component_spec()
@@ -264,13 +570,12 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         with self.assertRaises(AppError) as caught:
             _ui_swap_matching_payload_from_conn(
                 self.conn,
-                "ui.transfers.components.bulk_resolve",
+                "ui.transfers.components.plan",
                 {
                     "workspace": "Main",
                     "profile": "Book",
                     "components": [spec],
                     "activate": False,
-                    "dry_run": True,
                 },
             )
 
@@ -278,30 +583,53 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         self.assertIn("transaction with untracked_wallet", str(caught.exception))
 
     def test_full_revision_lifecycle_and_envelope_kinds(self):
-        created = _dispatch_json(
+        spec_json = json.dumps([_component_spec()])
+        preview = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "create",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--json",
-            json.dumps(_component_spec()),
-            "--activate",
+            spec_json,
         )
-        self.assertEqual(created["kind"], "transfers.components.create")
-        self.assertEqual(created["data"]["effective_state"], "active")
-        first_id = created["data"]["id"]
-
-        revised = _dispatch_json(
+        created = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
-            "update",
+            "apply",
+            "--action",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--json",
+            spec_json,
+            "--expected-input-version",
+            str(preview["data"]["input_version"]),
+        )
+        self.assertEqual(created["kind"], "transfers.components.apply")
+        created_component = created["data"]["components"][0]
+        self.assertEqual(created_component["effective_state"], "active")
+        first_id = created_component["id"]
+
+        revision_json = json.dumps({"notes": "reviewed again"})
+        revision_plan = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "plan",
+            "--action",
+            "revise",
             "--workspace",
             "Main",
             "--profile",
@@ -309,19 +637,41 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--component-id",
             first_id,
             "--json",
-            json.dumps({"notes": "reviewed again"}),
+            revision_json,
             "--activate",
         )
-        self.assertEqual(revised["kind"], "transfers.components.update")
-        self.assertEqual(revised["data"]["revision"], 2)
-        self.assertEqual(revised["data"]["effective_state"], "active")
-        second_id = revised["data"]["id"]
-
-        superseded = _dispatch_json(
+        revised = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "apply",
+            "--action",
+            "revise",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            first_id,
+            "--json",
+            revision_json,
+            "--activate",
+            "--expected-input-version",
+            str(revision_plan["data"]["input_version"]),
+        )
+        self.assertEqual(revised["kind"], "transfers.components.apply")
+        self.assertEqual(revised["data"]["component"]["revision"], 2)
+        self.assertEqual(revised["data"]["component"]["effective_state"], "active")
+        second_id = revised["data"]["component"]["id"]
+
+        supersede_plan = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "plan",
+            "--action",
             "supersede",
             "--workspace",
             "Main",
@@ -332,14 +682,35 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--reason",
             "replace evidence",
         )
-        self.assertEqual(superseded["kind"], "transfers.components.supersede")
-        self.assertEqual(superseded["data"]["state"], "superseded")
-
-        restored = _dispatch_json(
+        superseded = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "apply",
+            "--action",
+            "supersede",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            second_id,
+            "--reason",
+            "replace evidence",
+            "--expected-input-version",
+            str(supersede_plan["data"]["input_version"]),
+        )
+        self.assertEqual(superseded["kind"], "transfers.components.apply")
+        self.assertEqual(superseded["data"]["component"]["state"], "superseded")
+
+        undo_plan = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "plan",
+            "--action",
             "undo",
             "--workspace",
             "Main",
@@ -348,15 +719,34 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--component-id",
             second_id,
         )
-        self.assertEqual(restored["kind"], "transfers.components.undo")
-        self.assertEqual(restored["data"]["state"], "draft")
-        third_id = restored["data"]["id"]
-
-        activated = _dispatch_json(
+        restored = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "apply",
+            "--action",
+            "undo",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            second_id,
+            "--expected-input-version",
+            str(undo_plan["data"]["input_version"]),
+        )
+        self.assertEqual(restored["kind"], "transfers.components.apply")
+        self.assertEqual(restored["data"]["component"]["state"], "draft")
+        third_id = restored["data"]["component"]["id"]
+
+        activate_plan = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "plan",
+            "--action",
             "activate",
             "--workspace",
             "Main",
@@ -365,8 +755,25 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--component-id",
             third_id,
         )
-        self.assertEqual(activated["kind"], "transfers.components.activate")
-        self.assertEqual(activated["data"]["effective_state"], "active")
+        activated = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "activate",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--component-id",
+            third_id,
+            "--expected-input-version",
+            str(activate_plan["data"]["input_version"]),
+        )
+        self.assertEqual(activated["kind"], "transfers.components.apply")
+        self.assertEqual(activated["data"]["component"]["effective_state"], "active")
 
         shown = _dispatch_json(
             self.conn,
@@ -407,7 +814,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "plan",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
@@ -415,9 +824,8 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--file",
             str(spec_path),
             "--draft",
-            "--dry-run",
         )
-        self.assertEqual(preview["kind"], "transfers.components.bulk-resolve")
+        self.assertEqual(preview["kind"], "transfers.components.plan")
         self.assertTrue(preview["data"]["dry_run"])
         self.assertEqual(preview["data"]["summary"]["draft"], 1)
         count = self.conn.execute(
@@ -436,7 +844,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "bulk-resolve",
+                "plan",
+                "--action",
+                "create",
                 "--workspace",
                 "Main",
                 "--profile",
@@ -444,7 +854,6 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 "--file",
                 str(invalid_path),
                 "--draft",
-                "--dry-run",
             )
         count = self.conn.execute(
             "SELECT COUNT(*) AS count FROM custody_components"
@@ -463,7 +872,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "apply",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
@@ -471,6 +882,23 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "--file",
             str(spec_path),
             "--draft",
+            "--expected-input-version",
+            str(_dispatch_json(
+                self.conn,
+                self.data_root,
+                "transfers",
+                "components",
+                "plan",
+                "--action",
+                "create",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Book",
+                "--file",
+                str(spec_path),
+                "--draft",
+            )["data"]["input_version"]),
         )
 
         self.assertEqual(created["data"]["summary"], {"count": 1, "active": 0, "draft": 1})
@@ -503,14 +931,15 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "plan",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--file",
             str(spec_path),
-            "--dry-run",
         )
         self.assertTrue(preview["data"]["dry_run"])
         self.assertIsNone(
@@ -524,13 +953,17 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "components",
-            "bulk-resolve",
+            "apply",
+            "--action",
+            "create",
             "--workspace",
             "Main",
             "--profile",
             "Book",
             "--file",
             str(spec_path),
+            "--expected-input-version",
+            str(preview["data"]["input_version"]),
         )
         self.assertEqual(created["data"]["summary"]["active"], 1)
         wallet = self.conn.execute(
@@ -543,7 +976,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(leg["wallet_id"], wallet["id"])
 
-    def test_failed_single_create_rolls_back_untracked_wallet_placeholder(self):
+    def test_failed_single_plan_never_writes_untracked_wallet_placeholder(self):
         invalid = {
             "component_type": "manual_bridge",
             "evidence_kind": "manual_migration_review",
@@ -563,7 +996,7 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             ],
         }
         spec_path = Path(self.tmp.name) / "invalid-single-component.json"
-        spec_path.write_text(json.dumps(invalid), encoding="utf-8")
+        spec_path.write_text(json.dumps([invalid]), encoding="utf-8")
 
         with self.assertRaises(AppError):
             _dispatch_json(
@@ -571,14 +1004,15 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "create",
+                "plan",
+            "--action",
+            "create",
                 "--workspace",
                 "Main",
                 "--profile",
                 "Book",
                 "--file",
                 str(spec_path),
-                "--activate",
             )
 
         self.assertIsNone(
@@ -595,12 +1029,14 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
 
     def test_failed_revision_rolls_back_untracked_wallet_placeholder(self):
         initial_path = Path(self.tmp.name) / "initial-component.json"
-        initial_path.write_text(json.dumps(_component_spec()), encoding="utf-8")
-        initial = _dispatch_json(
+        initial_path.write_text(json.dumps([_component_spec()]), encoding="utf-8")
+        preview = _dispatch_json(
             self.conn,
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "create",
             "--workspace",
             "Main",
@@ -608,7 +1044,26 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
             "Book",
             "--file",
             str(initial_path),
+            "--draft",
         )["data"]
+        initial = _dispatch_json(
+            self.conn,
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Book",
+            "--file",
+            str(initial_path),
+            "--expected-input-version",
+            str(preview["input_version"]),
+            "--draft",
+        )["data"]["components"][0]
 
         invalid_revision = {
             "legs": [
@@ -633,7 +1088,9 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
                 self.data_root,
                 "transfers",
                 "components",
-                "update",
+                "plan",
+                "--action",
+                "revise",
                 "--workspace",
                 "Main",
                 "--profile",
@@ -683,93 +1140,163 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             component_spec["evidence"] = {"private": "local-only"}
             component_spec["conversion_metadata"] = {"private": "local-only"}
             component_spec["legs"][0]["location_ref"] = "/private/node/channel"
+            preview = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-create-plan",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Book",
+                        "components": [component_spec],
+                        "activate": True,
+                    },
+                },
+            )
             created = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.create",
-                    "request_id": "component-create",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-create-apply",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
-                        "spec": component_spec,
+                        "components": [component_spec],
                         "activate": True,
+                        "expected_input_version": preview["data"]["input_version"],
                     },
                 },
             )
-            self.assertEqual(created["kind"], "ui.transfers.components.create")
-            self.assertEqual(created["data"]["effective_state"], "active")
-            self.assertIsInstance(created["data"]["legs"][0]["amount_msat"], int)
-            self.assertNotIn("evidence", created["data"])
-            self.assertNotIn("conversion_metadata", created["data"])
+            self.assertEqual(created["kind"], "ui.transfers.components.apply")
+            created_component = created["data"]["components"][0]
+            self.assertEqual(created_component["effective_state"], "active")
+            self.assertIsInstance(created_component["legs"][0]["amount_msat"], int)
+            self.assertNotIn("evidence", created_component)
+            self.assertNotIn("conversion_metadata", created_component)
             self.assertTrue(
-                all("location_ref" not in leg for leg in created["data"]["legs"])
+                all("location_ref" not in leg for leg in created_component["legs"])
             )
-            component_id = created["data"]["id"]
+            component_id = created_component["id"]
 
+            revision_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "revise",
+                "component_id": component_id,
+                "spec": {
+                    "notes": "daemon revision",
+                    "legs": created_component["legs"],
+                    "allocations": created_component["allocations"],
+                },
+                "activate": True,
+            }
+            revision_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-revision-plan",
+                    "args": revision_args,
+                },
+            )
             revised = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.update",
-                    "request_id": "component-update",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-revision-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
-                        "spec": {
-                            "notes": "daemon revision",
-                            "legs": created["data"]["legs"],
-                            "allocations": created["data"]["allocations"],
-                        },
-                        "activate": True,
+                        **revision_args,
+                        "expected_input_version": revision_plan["data"]["input_version"],
                     },
                 },
             )
-            self.assertEqual(revised["data"]["revision"], 2)
-            component_id = revised["data"]["id"]
+            self.assertEqual(revised["data"]["component"]["revision"], 2)
+            component_id = revised["data"]["component"]["id"]
 
+            supersede_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "supersede",
+                "component_id": component_id,
+                "reason": "exercise immutable undo",
+            }
+            supersede_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-supersede-plan",
+                    "args": supersede_args,
+                },
+            )
             superseded = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.supersede",
-                    "request_id": "component-supersede",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-supersede-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
-                        "reason": "exercise immutable undo",
+                        **supersede_args,
+                        "expected_input_version": supersede_plan["data"]["input_version"],
                     },
                 },
             )
-            self.assertEqual(superseded["data"]["state"], "superseded")
+            self.assertEqual(superseded["data"]["component"]["state"], "superseded")
 
+            undo_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "undo",
+                "component_id": component_id,
+                "reason": "undo",
+            }
+            undo_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-undo-plan",
+                    "args": undo_args,
+                },
+            )
             restored = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.undo",
-                    "request_id": "component-undo",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-undo-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
+                        **undo_args,
+                        "expected_input_version": undo_plan["data"]["input_version"],
                     },
                 },
             )
-            self.assertEqual(restored["data"]["state"], "draft")
-            component_id = restored["data"]["id"]
+            self.assertEqual(restored["data"]["component"]["state"], "draft")
+            component_id = restored["data"]["component"]["id"]
 
+            activate_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "activate",
+                "component_id": component_id,
+            }
+            activate_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "component-activate-plan",
+                    "args": activate_args,
+                },
+            )
             activated = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.activate",
-                    "request_id": "component-activate",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "component-activate-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": component_id,
+                        **activate_args,
+                        "expected_input_version": activate_plan["data"]["input_version"],
                     },
                 },
             )
-            self.assertEqual(activated["data"]["effective_state"], "active")
+            self.assertEqual(
+                activated["data"]["component"]["effective_state"], "active"
+            )
 
             fetched = _request(
                 proc,
@@ -809,11 +1336,12 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             invalid = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.update",
+                    "kind": "ui.transfers.components.plan",
                     "request_id": "component-invalid",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
+                        "action": "revise",
                         "component_id": component_id,
                         "spec": [],
                     },
@@ -827,14 +1355,13 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             preview = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.bulk_resolve",
+                    "kind": "ui.transfers.components.plan",
                     "request_id": "component-preview",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
                         "components": [_component_spec(note="preview")],
                         "activate": False,
-                        "dry_run": True,
                     },
                 },
             )
@@ -906,50 +1433,84 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
                     }
                 ],
             }
+            preview = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "unsafe-integer-create-plan",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Book",
+                        "components": [spec],
+                        "activate": False,
+                    },
+                },
+            )
             created = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.create",
-                    "request_id": "unsafe-integer-create",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "unsafe-integer-create-apply",
                     "args": {
                         "workspace": "Main",
                         "profile": "Book",
-                        "spec": spec,
+                        "components": [spec],
                         "activate": False,
+                        "expected_input_version": preview["data"]["input_version"],
                     },
                 },
             )
-            self.assertEqual(created["kind"], "ui.transfers.components.create")
-            for leg in created["data"]["legs"]:
+            self.assertEqual(created["kind"], "ui.transfers.components.apply")
+            created_component = created["data"]["components"][0]
+            for leg in created_component["legs"]:
                 self.assertEqual(exact, leg["amount_msat"])
                 self.assertEqual(exact, leg["valuation_amount"])
-            allocation = created["data"]["allocations"][0]
+            allocation = created_component["allocations"][0]
             self.assertEqual(exact, allocation["source_amount_msat"])
             self.assertEqual(exact, allocation["sink_amount_msat"])
 
+            revision_args = {
+                "workspace": "Main",
+                "profile": "Book",
+                "action": "revise",
+                "component_id": created_component["id"],
+                "spec": {
+                    "notes": "exact renderer revision",
+                    "legs": created_component["legs"],
+                    "allocations": created_component["allocations"],
+                },
+                "activate": False,
+            }
+            revision_plan = _request(
+                proc,
+                {
+                    "kind": "ui.transfers.components.plan",
+                    "request_id": "unsafe-integer-revision-plan",
+                    "args": revision_args,
+                },
+            )
             revised = _request(
                 proc,
                 {
-                    "kind": "ui.transfers.components.update",
-                    "request_id": "unsafe-integer-update",
+                    "kind": "ui.transfers.components.apply",
+                    "request_id": "unsafe-integer-revision-apply",
                     "args": {
-                        "workspace": "Main",
-                        "profile": "Book",
-                        "component_id": created["data"]["id"],
-                        "spec": {
-                            "notes": "exact renderer revision",
-                            "legs": created["data"]["legs"],
-                            "allocations": created["data"]["allocations"],
-                        },
-                        "activate": False,
+                        **revision_args,
+                        "expected_input_version": revision_plan["data"]["input_version"],
                     },
                 },
             )
-            self.assertEqual(revised["data"]["revision"], 2)
-            self.assertEqual(exact, revised["data"]["legs"][0]["amount_msat"])
+            self.assertEqual(
+                revised["kind"], "ui.transfers.components.apply", revised
+            )
+            revised_component = revised["data"]["component"]
+            self.assertEqual(revised_component["revision"], 2)
+            self.assertEqual(
+                exact, revised_component["legs"][0]["amount_msat"]
+            )
             self.assertEqual(
                 exact,
-                revised["data"]["allocations"][0]["source_amount_msat"],
+                revised_component["allocations"][0]["source_amount_msat"],
             )
 
             listed = _request(
@@ -963,7 +1524,7 @@ class CustodyComponentDaemonSurfaceTests(unittest.TestCase):
             latest = next(
                 item
                 for item in listed["data"]["components"]
-                if item["id"] == revised["data"]["id"]
+                if item["id"] == revised_component["id"]
             )
             self.assertEqual(exact, latest["legs"][0]["valuation_amount"])
             self.assertEqual(

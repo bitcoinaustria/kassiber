@@ -24,18 +24,17 @@ from kassiber.backends import (
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import (
     _attachment_hooks,
-    _audit_transaction_refs,
     _report_hooks,
     cache_swap_candidate_count,
     create_direct_swap_payout,
     create_transaction_pair,
-    latest_rates_for_profile,
     list_transaction_pairs,
     process_journals,
     suggest_transfer_candidates,
     update_transaction_pair,
 )
 from kassiber.core import attachments as core_attachments
+from kassiber.core import custody_journal as core_custody_journal
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import rp2 as rp2_engine
@@ -52,6 +51,7 @@ from kassiber.core.reports import (
     report_portfolio_summary,
     report_tax_summary,
 )
+from kassiber.core.report_context import ReportContext
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
@@ -74,6 +74,7 @@ from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
 from tests.custody_tax_helpers import finalized_tax_inputs
+from tests.custody_projection_fixtures import insert_reviewed_projection
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -505,7 +506,9 @@ class ReviewRegressionTest(unittest.TestCase):
         )
 
         report_rates = latest_transaction_rates_for_profile(conn, "pf-rate")
-        ledger_rates = latest_rates_for_profile(conn, "pf-rate")
+        ledger_rates = core_custody_journal.latest_transaction_rates_for_profile(
+            conn, "pf-rate"
+        )
 
         self.assertEqual(report_rates, ledger_rates)
         self.assertEqual(report_rates["BTC"], Decimal("62000.123456789"))
@@ -685,8 +688,6 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
             resolve_account=unused,
             resolve_wallet=unused,
-            require_processed_journals=lambda _conn, _profile: None,
-            build_ledger_state=unused,
             list_journal_entries=unused,
             list_wallets=unused,
             parse_iso_datetime=unused,
@@ -695,14 +696,26 @@ class ReviewRegressionTest(unittest.TestCase):
             format_table=unused,
             write_text_pdf=unused,
         )
+        report_context = ReportContext(
+            workspace={"id": "ws-current"},
+            profile=profile,
+            active_transaction_count=2,
+            journal_input_version=0,
+            last_processed_input_version=0,
+            last_processed_at="2026-06-13T13:09:04Z",
+        )
 
         balance_rows = {
             row["asset"]: row
-            for row in report_balance_sheet(conn, None, None, hooks)
+            for row in report_balance_sheet(
+                conn, None, None, hooks, report_context=report_context
+            )
         }
         portfolio_rows = {
             row["asset"]: row
-            for row in report_portfolio_summary(conn, None, None, hooks)
+            for row in report_portfolio_summary(
+                conn, None, None, hooks, report_context=report_context
+            )
         }
 
         self.assertAlmostEqual(balance_rows["BTC"]["market_value"], 27_727.625)
@@ -3151,24 +3164,23 @@ class ReviewRegressionTest(unittest.TestCase):
         # Two journal entries on the out tx, NOT multiplied by the two pairs.
         self.assertEqual(events["summary"]["count"], 2)
         self.assertEqual(len(events["events"]), 2)
-        # Deterministic representative pair: the oldest by (created_at, id).
+        # Legacy compatibility rows are not display authority. They neither
+        # multiply journal rows nor appear as booked pair metadata.
         self.assertEqual(
-            {event["pair"]["pairId"] for event in events["events"]},
-            {"pair-mp-1"},
+            {event["pair"] for event in events["events"]},
+            {None},
         )
 
         journals = build_journals_snapshot(conn)
         self.assertEqual(len(journals["recent"]), 2)
 
-        # Window coupling: a fetch window holding only ONE receipt of the
-        # multi-pair must still suppress the giant out-in fee fallback (the
-        # counts come from the DB, not the window) — and pick a deterministic
-        # representative pair.
+        # Transaction-list display metadata no longer reads legacy pair rows;
+        # only the current stored projection may group these rows.
         window_rows = conn.execute(
             "SELECT id FROM transactions WHERE id = 'tx-mp-in-1'"
         ).fetchall()
         meta = _transaction_pair_display_meta(conn, window_rows)
-        self.assertEqual(meta["tx-mp-in-1"]["fee_msat"], 0)
+        self.assertEqual(meta, {})
 
     def test_journal_pair_payload_picks_one_pair_for_chain_edge_case(self):
         conn = open_db(self.data_root)
@@ -3305,41 +3317,62 @@ class ReviewRegressionTest(unittest.TestCase):
                 ),
             ],
         )
-        conn.executemany(
+        insert_reviewed_projection(
+            conn,
+            projection_id="a" * 64,
+            workspace_id="ws-pair-chain",
+            profile_id="pf-pair-chain",
+            source_transaction_id="tx-chain-a",
+            target_transaction_id="tx-chain-middle",
+            source_asset="LBTC",
+            target_asset="BTC",
+            source_amount_msat=btc_to_msat("0.5"),
+            target_amount_msat=btc_to_msat("0.49"),
+            review_kind="peg-out",
+            swap_fee_msat=btc_to_msat("0.01"),
+            occurred_at="2026-01-01T00:00:00Z",
+            target_occurred_at="2026-01-01T00:02:00Z",
+        )
+        conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, pair_source, out_amount, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO journal_custody_decisions(
+                decision_id, workspace_id, profile_id,
+                source_transaction_id, target_transaction_id,
+                source_observation_hash, source_start_msat, source_end_msat,
+                target_observation_hash, target_start_msat, target_end_msat,
+                source_wallet_id, target_wallet_id,
+                source_network, target_network, source_rail, target_rail,
+                source_asset, target_asset, state, basis_state, reason,
+                occurred_at, target_occurred_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [
-                (
-                    "pair-middle-as-in",
-                    "ws-pair-chain",
-                    "pf-pair-chain",
-                    "tx-chain-a",
-                    "tx-chain-middle",
-                    "peg-out",
-                    "carrying-value",
-                    btc_to_msat("0.01"),
-                    "manual",
-                    123,
-                    now,
-                ),
-                (
-                    "pair-middle-as-out",
-                    "ws-pair-chain",
-                    "pf-pair-chain",
-                    "tx-chain-middle",
-                    "tx-chain-c",
-                    "manual",
-                    "carrying-value",
-                    btc_to_msat("0.01"),
-                    "manual",
-                    None,
-                    now,
-                ),
-            ],
+            (
+                "b" * 64,
+                "ws-pair-chain",
+                "pf-pair-chain",
+                "tx-chain-middle",
+                "tx-chain-c",
+                "1" * 64,
+                0,
+                btc_to_msat("0.48"),
+                "2" * 64,
+                0,
+                btc_to_msat("0.48"),
+                "wal-pair-chain",
+                "wal-pair-chain",
+                "main",
+                "main",
+                "bitcoin",
+                "bitcoin",
+                "BTC",
+                "BTC",
+                "internal_reviewed",
+                "eligible",
+                "reviewed_custody_component",
+                "2026-01-01T00:02:00Z",
+                "2026-01-01T00:04:00Z",
+                now,
+            ),
         )
         conn.execute(
             """
@@ -3369,18 +3402,18 @@ class ReviewRegressionTest(unittest.TestCase):
         events = build_journal_events_list_snapshot(conn, {"limit": 10})
         self.assertEqual(events["summary"]["count"], 1)
         self.assertEqual(len(events["events"]), 1)
-        self.assertEqual(events["events"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(events["events"][0]["pair"]["pairId"], "b" * 64)
         self.assertEqual(
             events["events"][0]["pair"]["out"]["amountMsat"],
-            btc_to_msat("0.49"),
+            btc_to_msat("0.48"),
         )
 
         journals = build_journals_snapshot(conn)
         self.assertEqual(len(journals["recent"]), 1)
-        self.assertEqual(journals["recent"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(journals["recent"][0]["pair"]["pairId"], "b" * 64)
         self.assertEqual(
             journals["recent"][0]["pair"]["out"]["amountMsat"],
-            btc_to_msat("0.49"),
+            btc_to_msat("0.48"),
         )
 
     def test_ui_snapshots_show_reviewed_swap_movement_with_fee(self):
@@ -3523,26 +3556,74 @@ class ReviewRegressionTest(unittest.TestCase):
                 ),
             ],
         )
+        insert_reviewed_projection(
+            conn,
+            projection_id="c" * 64,
+            workspace_id="ws-swap-ui",
+            profile_id="pf-swap-ui",
+            source_transaction_id="swap-out-leg",
+            target_transaction_id="swap-in-leg",
+            source_asset="BTC",
+            target_asset="LBTC",
+            source_amount_msat=btc_to_msat("0.10000000"),
+            target_amount_msat=btc_to_msat("0.09990000"),
+            review_kind="manual",
+            swap_fee_msat=btc_to_msat("0.00010000"),
+            swap_fee_kind="deducted",
+            occurred_at="2026-03-01T10:00:00Z",
+            target_occurred_at="2026-03-01T10:05:00Z",
+        )
         conn.execute(
             """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = 3,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'pf-swap-ui'
             """,
-            (
-                "pair-swap-ui",
-                "ws-swap-ui",
-                "pf-swap-ui",
-                "swap-out-leg",
-                "swap-in-leg",
-                "manual",
-                "carrying-value",
-                btc_to_msat("0.00010000"),
-                "deducted",
-                "manual",
-                now,
-            ),
+            (now,),
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, created_at
+            ) VALUES(?, 'ws-swap-ui', 'pf-swap-ui', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-older-income",
+                    "older-income",
+                    "wal-swap-btc",
+                    "2026-02-01T10:00:00Z",
+                    "acquisition",
+                    "BTC",
+                    btc_to_msat("0.01000000"),
+                    600,
+                    now,
+                ),
+                (
+                    "je-swap-out",
+                    "swap-out-leg",
+                    "wal-swap-btc",
+                    "2026-03-01T10:00:00Z",
+                    "disposal",
+                    "BTC",
+                    -btc_to_msat("0.10000000"),
+                    -6_500,
+                    now,
+                ),
+                (
+                    "je-swap-in",
+                    "swap-in-leg",
+                    "wal-swap-lbtc",
+                    "2026-03-01T10:05:00Z",
+                    "acquisition",
+                    "LBTC",
+                    btc_to_msat("0.09990000"),
+                    0,
+                    now,
+                ),
+            ],
         )
         set_setting(conn, "context_workspace", "ws-swap-ui")
         set_setting(conn, "context_profile", "pf-swap-ui")
@@ -4196,7 +4277,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 365,
                 "moving_average_at",
                 now,
-                2,
+                3,
                 now,
             ),
         )
@@ -4298,26 +4379,22 @@ class ReviewRegressionTest(unittest.TestCase):
                 ),
             ],
         )
-        conn.execute(
-            """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "pair-neutral-swap",
-                "ws-neutral-swap",
-                "pf-neutral-swap",
-                "tx-neutral-out",
-                "tx-neutral-in",
-                "peg-out",
-                "carrying-value",
-                btc_to_msat("0.00012977"),
-                "combined",
-                "manual",
-                now,
-            ),
+        insert_reviewed_projection(
+            conn,
+            projection_id="d" * 64,
+            workspace_id="ws-neutral-swap",
+            profile_id="pf-neutral-swap",
+            source_transaction_id="tx-neutral-out",
+            target_transaction_id="tx-neutral-in",
+            source_asset="LBTC",
+            target_asset="BTC",
+            source_amount_msat=btc_to_msat("0.12426275"),
+            target_amount_msat=btc_to_msat("0.12413298"),
+            review_kind="peg-out",
+            swap_fee_msat=btc_to_msat("0.00012977"),
+            swap_fee_kind="combined",
+            occurred_at="2026-03-14T17:30:10Z",
+            target_occurred_at="2026-03-14T17:32:32Z",
         )
         conn.executemany(
             """
@@ -4463,10 +4540,6 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
             resolve_account=lambda *_args, **_kwargs: None,
             resolve_wallet=lambda *_args, **_kwargs: None,
-            require_processed_journals=lambda *_args, **_kwargs: None,
-            build_ledger_state=lambda *_args, **_kwargs: self.fail(
-                "tax summary reports should read the processed journal snapshot"
-            ),
             list_journal_entries=lambda *_args, **_kwargs: [],
             list_wallets=lambda *_args, **_kwargs: [],
             parse_iso_datetime=lambda *_args, **_kwargs: None,
@@ -5219,37 +5292,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, msg=payload)
                 self.assertEqual(payload.get("kind"), "error")
                 self.assertEqual(payload["error"]["code"], "validation")
-
-    def test_audit_transaction_refs_chunks_large_input(self):
-        class _Cursor:
-            def __init__(self, rows):
-                self._rows = rows
-
-            def fetchall(self):
-                return self._rows
-
-        class _Conn:
-            def __init__(self):
-                self.calls = []
-
-            def execute(self, query, params):
-                self.calls.append(len(params))
-                rows = [
-                    {
-                        "id": tx_id,
-                        "external_id": f"ext-{tx_id}",
-                        "occurred_at": "2026-01-01T00:00:00Z",
-                        "asset": "BTC",
-                        "wallet": "Wallet",
-                    }
-                    for tx_id in params[1:]
-                ]
-                return _Cursor(rows)
-
-        conn = _Conn()
-        refs = _audit_transaction_refs(conn, "profile-1", [f"tx-{index}" for index in range(1200)])
-        self.assertEqual(len(refs), 1200)
-        self.assertEqual(conn.calls, [401, 401, 401])
 
     def test_reports_summary_plain_output_is_human_readable(self):
         self._bootstrap_profile()
@@ -10532,7 +10574,8 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.execute(
             """
             UPDATE profiles
-            SET last_processed_at = ?, last_processed_tx_count = 1
+            SET last_processed_at = ?, last_processed_tx_count = 1,
+                last_processed_input_version = journal_input_version
             WHERE id = ?
             """,
             ("2024-01-01T00:00:00Z", profile["id"]),
@@ -11535,9 +11578,14 @@ class ReviewRegressionTest(unittest.TestCase):
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
         self.assertEqual(_legacy_snapshot_identity(actual), expected)
-        self.assertEqual(actual["intra_audit"][0]["pairing_source"], "manual")
+        self.assertEqual(
+            actual["intra_audit"][0]["pairing_source"],
+            "reviewed_custody_component",
+        )
         self.assertTrue(
-            actual["intra_audit"][0]["transfer_group_id"].startswith("pair:")
+            actual["intra_audit"][0]["transfer_group_id"].startswith(
+                "component:"
+            )
         )
 
     def test_austrian_rp2_engine_snapshot_matches_fixture(self):
@@ -12891,7 +12939,9 @@ class ReviewRegressionTest(unittest.TestCase):
                 5000, 10000, 5000, 'sell', '2024-02-10T00:00:00Z'
             );
             UPDATE profiles
-            SET last_processed_at = '2024-02-10T00:00:00Z', last_processed_tx_count = 2
+            SET last_processed_at = '2024-02-10T00:00:00Z',
+                last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
             WHERE id = '{profile["id"]}';
             """
         )

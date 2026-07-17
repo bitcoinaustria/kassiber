@@ -23,8 +23,17 @@ def test_custody_scalability_smoke_preserves_structural_invariants():
         for event in events
         if event["event"] == "benchmark_result"
     }
-    assert set(results) == {"atomic", "lineage", "gaps"}
+    assert set(results) == {"builder", "atomic", "lineage", "gaps"}
     assert all(result["ok"] for result in results.values())
+    assert results["builder"]["metrics"]["invariants"][
+        "all_observations_projected"
+    ]
+    assert results["builder"]["metrics"]["invariants"][
+        "quantity_projection_conserves"
+    ]
+    assert results["builder"]["metrics"]["invariants"][
+        "all_outbounds_decided"
+    ]
     assert results["atomic"]["metrics"]["invariants"][
         "constant_decision_traversals"
     ]

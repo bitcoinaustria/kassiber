@@ -41,6 +41,10 @@ def _conn_with_two_blank_description_transfers():
           profile_id TEXT, out_transaction_id TEXT, out_amount INTEGER,
           deleted_at TEXT
         );
+        CREATE TABLE journal_custody_projection_relations (
+          profile_id TEXT, relation_kind TEXT, out_transaction_id TEXT,
+          in_transaction_id TEXT, policy TEXT, basis_state TEXT
+        );
         """
     )
     for wallet_id, label in (
@@ -115,19 +119,16 @@ class SelfTransferLabelTests(unittest.TestCase):
         self.assertEqual(labels["tc"], "D")
         self.assertEqual(labels["td"], "C")
 
-    def test_stale_journal_fallback_uses_physical_transfer_metadata(self):
+    def test_stale_journal_does_not_redetect_physical_transfer_metadata(self):
         conn = _conn_with_two_blank_description_transfers()
 
         labels = _self_transfer_legs_by_transaction(
             conn, {"id": "p1"}, journals_current=False
         )
 
-        self.assertEqual(labels["ta"], "B")
-        self.assertEqual(labels["tb"], "A")
-        self.assertEqual(labels["tc"], "D")
-        self.assertEqual(labels["td"], "C")
+        self.assertEqual(labels, {})
 
-    def test_stale_journal_fallback_uses_native_lightning_payment_hash(self):
+    def test_stale_journal_does_not_redetect_native_lightning_payment_hash(self):
         conn = _conn_with_two_blank_description_transfers()
         payment_hash = "11" * 32
         provenance = json.dumps(
@@ -148,8 +149,7 @@ class SelfTransferLabelTests(unittest.TestCase):
             conn, {"id": "p1"}, journals_current=False
         )
 
-        self.assertEqual(labels["ta"], "B")
-        self.assertEqual(labels["tb"], "A")
+        self.assertEqual(labels, {})
 
 
 if __name__ == "__main__":

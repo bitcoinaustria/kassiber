@@ -32,6 +32,7 @@ class ComponentClaimCompilation:
     claims: tuple[QuantityClaim, ...]
     suspense_msat: int
     reviewed_conversion_pairs: tuple[Mapping[str, Any], ...] = ()
+    reviewed_direct_payouts: tuple[Mapping[str, Any], ...] = ()
 
 
 def _error(message: str, **details: Any) -> AppError:
@@ -61,6 +62,38 @@ def _location_key(leg: Mapping[str, Any]) -> tuple[str, str, str, str, str]:
         str(leg.get("conservation_unit") or "msat"),
         str(leg.get("rail") or ""),
     )
+
+
+def _direct_payout_record(
+    term: Mapping[str, Any],
+    sink: Mapping[str, Any],
+    source_observation: QuantityObservation,
+    *,
+    component_id: str,
+    source_amount_msat: int,
+    sink_amount_msat: int,
+) -> dict[str, Any]:
+    return {
+        "id": str(term.get("legacy_source_id")),
+        "component_id": component_id,
+        "out_transaction_id": source_observation.anchor_transaction_id,
+        "deleted_at": None,
+        "kind": str(term.get("review_kind") or "direct-swap-payout"),
+        "policy": str(term.get("tax_policy") or "taxable"),
+        "out_amount": source_amount_msat,
+        "payout_asset": term.get("payout_asset") or sink.get("asset"),
+        "payout_amount": term.get("payout_amount_msat") or sink_amount_msat,
+        "payout_occurred_at": term.get("payout_occurred_at")
+        or sink.get("occurred_at"),
+        "payout_fiat_value": term.get("payout_fiat_value_exact"),
+        "payout_external_id": term.get("payout_external_id"),
+        "counterparty": term.get("counterparty"),
+        "swap_fee_msat": term.get("swap_fee_msat"),
+        "swap_fee_kind": term.get("swap_fee_kind"),
+        "notes": term.get("review_notes"),
+        "confidence_at_review": term.get("confidence_at_review"),
+        "review_source": term.get("review_source"),
+    }
 
 
 def _flatten_transactionless_routes(
@@ -247,11 +280,15 @@ def compile_component_quantity_claims(
     finalized_retained_leg_ids = frozenset(
         leg_id
         for leg_id, leg in legs.items()
-        if is_guided_gap_component
-        and leg.get("role") == "retained"
+        if leg.get("role") == "retained"
         and not _transaction_id(leg)
         and str(leg.get("notes") or "")
         == "reviewed_residual:retained_custody"
+    ) | frozenset(
+        str(term.get("target_leg_id"))
+        for term in component.get("economic_terms", ())
+        if term.get("term_kind") == "direct_swap_payout"
+        and term.get("target_leg_id") not in (None, "")
     )
     explicit_allocations = component.get("allocations", ())
     if not explicit_allocations and any(
@@ -297,8 +334,49 @@ def compile_component_quantity_claims(
     target_cursors: dict[str, int] = {}
     claims: list[QuantityClaim] = []
     reviewed_conversion_pairs: list[Mapping[str, Any]] = []
+    reviewed_direct_payouts: list[Mapping[str, Any]] = []
     suspense_msat = 0
     bundle_id = f"component:{component_id}"
+    terms_by_edge = {
+        (str(term.get("source_leg_id")), str(term.get("target_leg_id"))): term
+        for term in component.get("economic_terms", ())
+    }
+    if conservation_mode == "conversion":
+        # A partial conversion owns the high-end slice of each observed source.
+        # The untouched prefix remains available for authoritative same-asset
+        # matching (or the ordinary external-presumed outcome). This makes the
+        # authored conversion and a native return disjoint without inventing a
+        # residual component claim.
+        conversion_totals: dict[str, int] = {}
+        for allocation in allocations:
+            source = legs.get(str(allocation.get("source_leg_id")))
+            if source is None or source.get("role") != "source":
+                continue
+            source_transaction_id = _transaction_id(source)
+            if not source_transaction_id:
+                continue
+            source_observation = observation(source_transaction_id)
+            conversion_totals[source_observation.quantity_hash] = (
+                conversion_totals.get(source_observation.quantity_hash, 0)
+                + int(allocation.get("source_amount_msat") or 0)
+            )
+        for quantity_hash, claimed_msat in conversion_totals.items():
+            source_observation = next(
+                item
+                for item in observations_by_transaction.values()
+                if item.quantity_hash == quantity_hash
+            )
+            if claimed_msat > source_observation.principal_msat:
+                raise _error(
+                    "component claims exceed observed source principal",
+                    component_id=component_id,
+                    transaction_id=source_observation.transaction_id,
+                    claimed_msat=claimed_msat,
+                    principal_msat=source_observation.principal_msat,
+                )
+            source_cursors[quantity_hash] = (
+                source_observation.principal_msat - claimed_msat
+            )
 
     for index, allocation in enumerate(allocations):
         source = legs.get(str(allocation.get("source_leg_id")))
@@ -319,10 +397,6 @@ def compile_component_quantity_claims(
                 component_id=component_id,
                 allocation_id=allocation.get("id"),
             )
-        if conservation_mode != "conversion" and sink.get("role") == "fee":
-            # QuantityObservation emits the exact fee posting independently of
-            # source-principal slices.
-            continue
         source_transaction_id = _transaction_id(source)
         if not source_transaction_id:
             raise _error(
@@ -337,6 +411,28 @@ def compile_component_quantity_claims(
                 component_id=component_id,
                 source_leg_id=source.get("id"),
             )
+        if conservation_mode != "conversion" and sink.get("role") == "fee":
+            # The observation projector emits network fees independently of
+            # principal. A plain authored fee allocation therefore proves
+            # exact boundary coverage without consuming the principal cursor.
+            # A reviewed residual fee is different: it classifies an observed
+            # principal shortfall (for example the refund-spend fee in a
+            # failed swap) and must consume that exact principal slice.
+            reviewed_residual_fee = str(sink.get("notes") or "") == (
+                "reviewed_residual:network_fee"
+            )
+            if not reviewed_residual_fee and (
+                source_amount != source_observation.fee_msat
+            ):
+                raise _error(
+                    "component fee allocation does not match the observed fee",
+                    component_id=component_id,
+                    transaction_id=source_observation.transaction_id,
+                    claimed_fee_msat=source_amount,
+                    observed_fee_msat=source_observation.fee_msat,
+                )
+            if not reviewed_residual_fee:
+                continue
         source_start = source_cursors.get(source_observation.quantity_hash, 0)
         source_end = source_start + source_amount
         if source_end > source_observation.principal_msat:
@@ -357,18 +453,37 @@ def compile_component_quantity_claims(
         state: str
         reason: str
         target_observation: QuantityObservation | None = None
-        supporting_hashes = (source_observation.evidence_detail_hash,)
         if sink_role in {"destination", "retained"}:
             sink_transaction_id = _transaction_id(sink)
             if not sink_transaction_id:
-                if str(sink.get("id") or "") not in finalized_retained_leg_ids:
+                term = terms_by_edge.get(
+                    (str(source.get("id")), str(sink.get("id"))), {}
+                )
+                if (
+                    conservation_mode == "conversion"
+                    and term.get("term_kind") == "direct_swap_payout"
+                ):
+                    state = EXTERNAL_CONFIRMED
+                    reason = "reviewed_direct_payout_source"
+                    reviewed_direct_payouts.append(
+                        _direct_payout_record(
+                            term,
+                            sink,
+                            source_observation,
+                            component_id=component_id,
+                            source_amount_msat=source_amount,
+                            sink_amount_msat=sink_amount,
+                        )
+                    )
+                elif str(sink.get("id") or "") not in finalized_retained_leg_ids:
                     raise _error(
                         "flattened component target is not observed",
                         component_id=component_id,
                         sink_leg_id=sink.get("id"),
                     )
-                state = INTERNAL_REVIEWED
-                reason = "reviewed_retained_custody"
+                else:
+                    state = INTERNAL_REVIEWED
+                    reason = "reviewed_retained_custody"
             else:
                 target_observation = observation(sink_transaction_id)
                 if target_observation.direction != "inbound":
@@ -389,51 +504,75 @@ def compile_component_quantity_claims(
                     )
                 target_cursors[target_observation.quantity_hash] = target_end
                 if conservation_mode == "conversion":
-                    # The inbound quantity remains an independent acquisition.
-                    # Recording it as a target slice would assert that unlike
-                    # quantities are the same conserved object and suppress the
-                    # acquisition from tax projection.
-                    state = EXTERNAL_CONFIRMED
-                    reason = "reviewed_taxable_conversion_source"
-                    allocation_key = str(allocation.get("id") or index)
-                    reviewed_conversion_pairs.append(
-                        {
-                            "pair_id": (
-                                f"component:{component_id}:conversion:"
-                                f"{allocation_key}"
-                            ),
-                            "component_id": component_id,
-                            "out_id": source_observation.anchor_transaction_id,
-                            "in_id": target_observation.anchor_transaction_id,
-                            "out_amount": source_amount,
-                            "in_amount": sink_amount,
-                            "out_asset": source_observation.asset,
-                            "in_asset": target_observation.asset,
-                            "policy": str(
-                                component.get("conversion_policy") or "taxable"
-                            ),
-                            "kind": str(component.get("component_type") or "swap"),
-                        }
-                    )
+                    if (
+                        source_observation.asset == target_observation.asset
+                        and source_amount == sink_amount
+                    ):
+                        target_slice = QuantitySlice(
+                            target_observation.quantity_hash,
+                            target_start,
+                            target_end,
+                        )
+                        state = INTERNAL_REVIEWED
+                        reason = "reviewed_native_conversion_residual"
+                    else:
+                        # Unlike inbound quantity remains an independent
+                        # acquisition; a target slice would falsely assert
+                        # native quantity identity across assets.
+                        state = EXTERNAL_CONFIRMED
+                        reason = "reviewed_taxable_conversion_source"
+                        allocation_key = str(allocation.get("id") or index)
+                        term = terms_by_edge.get(
+                            (str(source.get("id")), str(sink.get("id"))), {}
+                        )
+                        reviewed_conversion_pairs.append(
+                            {
+                                "pair_id": str(term.get("legacy_source_id") or (
+                                    f"component:{component_id}:conversion:{allocation_key}"
+                                )),
+                                "component_id": component_id,
+                                "out_id": source_observation.anchor_transaction_id,
+                                "in_id": target_observation.anchor_transaction_id,
+                                "out_amount": source_amount,
+                                "in_amount": sink_amount,
+                                "out_asset": source_observation.asset,
+                                "in_asset": target_observation.asset,
+                                "policy": str(
+                                    term.get("tax_policy")
+                                    or component.get("conversion_policy")
+                                    or "taxable"
+                                ),
+                                "kind": str(
+                                    term.get("review_kind")
+                                    or component.get("component_type")
+                                    or "swap"
+                                ),
+                                "swap_fee_msat": term.get("swap_fee_msat"),
+                                "swap_fee_kind": term.get("swap_fee_kind"),
+                                "notes": term.get("review_notes"),
+                                "confidence_at_review": term.get("confidence_at_review"),
+                                "review_source": term.get("review_source"),
+                            }
+                        )
                 else:
                     target_slice = QuantitySlice(
                         target_observation.quantity_hash, target_start, target_end
                     )
                     state = INTERNAL_REVIEWED
                     reason = "reviewed_custody_component"
-                supporting_hashes = (
-                    source_observation.evidence_detail_hash,
-                    target_observation.evidence_detail_hash,
-                )
-        elif sink_role == "fee" and conservation_mode == "conversion":
+        elif sink_role == "fee":
             if source_amount != sink_amount:
                 raise _error(
-                    "conversion fee allocation must conserve its source quantity",
+                    "fee allocation must conserve its source quantity",
                     component_id=component_id,
                     allocation_id=allocation.get("id"),
                 )
             state = EXTERNAL_CONFIRMED
-            reason = "reviewed_conversion_fee"
+            reason = (
+                "reviewed_conversion_fee"
+                if conservation_mode == "conversion"
+                else "reviewed_network_fee"
+            )
         elif sink_role == "suspense":
             state = CUSTODY_SUSPENSE
             reason = "reviewed_residual_suspense"
@@ -441,12 +580,21 @@ def compile_component_quantity_claims(
         elif sink_role == "external":
             state = EXTERNAL_CONFIRMED
             reason = "reviewed_external_component_allocation"
-        elif sink_role == "unresolved":
-            raise _error(
-                "an unresolved draft leg cannot emit an active quantity claim",
-                component_id=component_id,
-                sink_leg_id=sink.get("id"),
+            term = terms_by_edge.get(
+                (str(source.get("id")), str(sink.get("id"))), {}
             )
+            if term.get("term_kind") == "direct_swap_payout":
+                reason = "reviewed_direct_payout_source"
+                reviewed_direct_payouts.append(
+                    _direct_payout_record(
+                        term,
+                        sink,
+                        source_observation,
+                        component_id=component_id,
+                        source_amount_msat=source_amount,
+                        sink_amount_msat=sink_amount,
+                    )
+                )
         else:
             raise _error(
                 "component sink role cannot emit a quantity claim",
@@ -466,18 +614,18 @@ def compile_component_quantity_claims(
                 state=state,
                 priority=ClaimPriority.REVIEWED_COMPONENT,
                 reason=reason,
-                supporting_evidence_hashes=tuple(sorted(supporting_hashes)),
                 atomic_bundle_id=bundle_id,
                 component_id=component_id,
                 destination_kind=(
                     "fee"
-                    if conservation_mode == "conversion" and sink_role == "fee"
+                    if sink_role == "fee"
                     else (
                         "external"
                         if sink_role == "external"
                         or (
                             conservation_mode == "conversion"
                             and sink_role in {"destination", "retained"}
+                            and target_slice is None
                         )
                         else (
                             "retained_custody"
@@ -518,32 +666,35 @@ def compile_component_quantity_claims(
             )
         )
 
-    # An active component must describe every principal slice itself. This is
-    # stronger than letting the arbitrator manufacture a residual fallback.
-    for transaction_id, source_observation in observations_by_transaction.items():
-        if source_observation.direction != "outbound":
-            continue
-        if not any(
-            _transaction_id(leg) == transaction_id
-            and leg.get("role") == "source"
-            for leg in legs.values()
-        ):
-            continue
-        claimed = source_cursors.get(source_observation.quantity_hash, 0)
-        if claimed != source_observation.principal_msat:
-            raise _error(
-                "component did not claim the complete observed source principal",
-                component_id=component_id,
-                transaction_id=transaction_id,
-                claimed_msat=claimed,
-                principal_msat=source_observation.principal_msat,
-            )
+    if conservation_mode != "conversion":
+        # A quantity-conserving component must describe every principal slice
+        # itself. This is stronger than letting the arbitrator manufacture a
+        # residual fallback. Conversions are deliberately slice-scoped above.
+        for transaction_id, source_observation in observations_by_transaction.items():
+            if source_observation.direction != "outbound":
+                continue
+            if not any(
+                _transaction_id(leg) == transaction_id
+                and leg.get("role") == "source"
+                for leg in legs.values()
+            ):
+                continue
+            claimed = source_cursors.get(source_observation.quantity_hash, 0)
+            if claimed != source_observation.principal_msat:
+                raise _error(
+                    "component did not claim the complete observed source principal",
+                    component_id=component_id,
+                    transaction_id=transaction_id,
+                    claimed_msat=claimed,
+                    principal_msat=source_observation.principal_msat,
+                )
 
     return ComponentClaimCompilation(
         component_id=component_id,
         claims=tuple(claims),
         suspense_msat=suspense_msat,
         reviewed_conversion_pairs=tuple(reviewed_conversion_pairs),
+        reviewed_direct_payouts=tuple(reviewed_direct_payouts),
     )
 
 

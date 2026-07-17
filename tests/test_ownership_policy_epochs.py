@@ -207,6 +207,55 @@ class OwnershipPolicyEpochTest(unittest.TestCase):
         self.assertNotIn("old-public-descriptor", serialized)
         self.assertNotIn("new-public-descriptor", serialized)
 
+    def test_open_migrates_inline_history_to_retired_epochs_once(self):
+        config = json.loads(self.wallet["config_json"])
+        config["ownership_history"] = [
+            {
+                "chain": "btc",
+                "network": "mainnet",
+                "descriptor": "retired-public-descriptor",
+                "scan_to_index": 42,
+            }
+        ]
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = 'wallet'",
+            (json.dumps(config, sort_keys=True),),
+        )
+        self.conn.commit()
+        self.conn.close()
+
+        data_root = Path(self.temp.name) / "data"
+        self.conn = open_db(data_root)
+        self.addCleanup(self.conn.close)
+        stored = json.loads(
+            self.conn.execute(
+                "SELECT config_json FROM wallets WHERE id = 'wallet'"
+            ).fetchone()["config_json"]
+        )
+        self.assertNotIn("ownership_history", stored)
+        self.assertEqual(
+            retired_policy_materials(self.conn, "wallet"),
+            (
+                {
+                    "chain": "btc",
+                    "descriptor": "retired-public-descriptor",
+                    "network": "mainnet",
+                    "ownership_scan_to_index": 42,
+                },
+            ),
+        )
+        self.conn.close()
+
+        self.conn = open_db(data_root)
+        self.addCleanup(self.conn.close)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM wallet_policy_epochs "
+                "WHERE wallet_id = 'wallet' AND status = 'retired'"
+            ).fetchone()[0],
+            1,
+        )
+
     def test_snapshot_redacts_samourai_paths_and_unknown_observer_names(self):
         identity = ObserverIdentity(
             id="private-observer-id",

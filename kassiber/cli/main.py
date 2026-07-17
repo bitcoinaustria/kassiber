@@ -59,10 +59,7 @@ from .handlers import (
     cmd_init,
     cmd_status,
     apply_transfer_rules,
-    activate_custody_component,
-    bulk_resolve_custody_components,
     bulk_pair_transfers,
-    create_custody_component,
     create_direct_swap_payout,
     chat_history_config_cli,
     clear_chat_sessions_cli,
@@ -88,13 +85,11 @@ from .handlers import (
     derive_wallet_targets,
     emit,
     get_journal_event,
-    get_custody_component,
     identify_wallet_owners,
     import_exchange_api,
     import_into_wallet,
     inspect_transfer_audit,
     list_direct_swap_payouts,
-    list_custody_components,
     list_journal_entries,
     list_journal_events,
     list_quarantines,
@@ -116,15 +111,13 @@ from .handlers import (
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
-    supersede_custody_component,
-    undo_custody_component,
-    update_custody_component,
     update_transaction_pair,
 )
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_components as core_custody_components
+from ..core import custody_component_planner as core_custody_component_planner
 from ..core import custody_filed_reports as core_custody_filed_reports
 from ..core import custody_gaps as core_custody_gaps
 from ..core import custody_gap_reviews as core_custody_gap_reviews
@@ -2208,49 +2201,27 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workspace_profile_args(transfers_gaps_history)
     transfers_gaps_history.add_argument("--gap-id", required=True, dest="gap_id")
     transfers_gaps_history.add_argument("--limit", type=int, default=100)
-    transfers_gaps_bridge = transfers_gaps_sub.add_parser(
-        "bridge", help="Preview or create an exact reviewed bridge by gap id"
-    )
-    _add_workspace_profile_args(transfers_gaps_bridge)
-    transfers_gaps_bridge.add_argument("--gap-id", required=True, dest="gap_id")
-    transfers_gaps_bridge.add_argument("--expected-fingerprint", dest="expected_fingerprint")
-    transfers_gaps_bridge.add_argument(
-        "--dry-run", action="store_true",
-        help="Validate the exact component and print its confirmation fingerprint",
-    )
-    transfers_gaps_dismiss = transfers_gaps_sub.add_parser("dismiss")
-    _add_workspace_profile_args(transfers_gaps_dismiss)
-    transfers_gaps_dismiss.add_argument("--gap-id", required=True, dest="gap_id")
-    transfers_gaps_dismiss.add_argument(
-        "--expected-fingerprint", required=True, dest="expected_fingerprint"
-    )
-    transfers_gaps_dismiss.add_argument("--reason")
+    review_actions = ("create", "dismiss", "revise", "reopen", "classify_residual")
     for command_name, help_text in (
-        ("reopen", "Preview or reopen a reviewed bridge for correction"),
-        ("revise", "Preview or activate an exact replacement bridge revision"),
+        ("plan", "Build a pure custody review plan at the current input version"),
+        ("apply", "Apply a custody review plan while its input version is current"),
     ):
-        correction = transfers_gaps_sub.add_parser(command_name, help=help_text)
-        _add_workspace_profile_args(correction)
-        correction.add_argument("--gap-id", required=True, dest="gap_id")
-        correction.add_argument("--expected-fingerprint", dest="expected_fingerprint")
-        correction.add_argument("--dry-run", action="store_true")
-        correction.add_argument("--reason")
-    transfers_gaps_residual = transfers_gaps_sub.add_parser(
-        "classify-residual",
-        help="Preview or classify an exact reviewed bridge residual",
-    )
-    _add_workspace_profile_args(transfers_gaps_residual)
-    transfers_gaps_residual.add_argument("--gap-id", required=True, dest="gap_id")
-    transfers_gaps_residual.add_argument(
-        "--classification",
-        required=True,
-        choices=sorted(core_custody_gap_reviews.RESIDUAL_CLASSIFICATIONS),
-    )
-    transfers_gaps_residual.add_argument(
-        "--expected-fingerprint", dest="expected_fingerprint"
-    )
-    transfers_gaps_residual.add_argument("--dry-run", action="store_true")
-    transfers_gaps_residual.add_argument("--reason")
+        review_command = transfers_gaps_sub.add_parser(command_name, help=help_text)
+        _add_workspace_profile_args(review_command)
+        review_command.add_argument("--action", required=True, choices=review_actions)
+        review_command.add_argument("--gap-id", required=True, dest="gap_id")
+        review_command.add_argument(
+            "--classification",
+            choices=sorted(core_custody_gap_reviews.RESIDUAL_CLASSIFICATIONS),
+        )
+        review_command.add_argument("--reason")
+        if command_name == "apply":
+            review_command.add_argument(
+                "--expected-input-version",
+                required=True,
+                type=int,
+                dest="expected_input_version",
+            )
 
     transfers_components = transfers_sub.add_parser(
         "components",
@@ -2293,75 +2264,46 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-local-evidence", action="store_true"
     )
 
-    transfers_components_create = transfers_components_sub.add_parser(
-        "create", help="Create a draft custody component"
-    )
-    _add_workspace_profile_args(transfers_components_create)
-    _add_json_document_args(transfers_components_create, label="component spec")
-    transfers_components_create.add_argument(
-        "--activate",
-        action="store_true",
-        help="Activate after complete conservation and anchor validation",
-    )
-
-    transfers_components_update = transfers_components_sub.add_parser(
-        "update", help="Create a new immutable revision of a component"
-    )
-    _add_workspace_profile_args(transfers_components_update)
-    transfers_components_update.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-    _add_json_document_args(transfers_components_update, label="component revision")
-    transfers_components_update.add_argument(
-        "--activate",
-        action="store_true",
-        help="Activate the new revision after validation",
-    )
-
-    transfers_components_activate = transfers_components_sub.add_parser(
-        "activate", help="Make a complete custody component effective"
-    )
-    _add_workspace_profile_args(transfers_components_activate)
-    transfers_components_activate.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-
-    transfers_components_supersede = transfers_components_sub.add_parser(
-        "supersede", help="Deactivate an authored component without deleting evidence"
-    )
-    _add_workspace_profile_args(transfers_components_supersede)
-    transfers_components_supersede.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-    transfers_components_supersede.add_argument("--reason")
-
-    transfers_components_undo = transfers_components_sub.add_parser(
-        "undo", help="Restore a superseded component as a new draft revision"
-    )
-    _add_workspace_profile_args(transfers_components_undo)
-    transfers_components_undo.add_argument(
-        "--component-id", required=True, dest="component_id"
-    )
-    transfers_components_undo.add_argument("--reason", default="undo")
-
-    transfers_components_bulk = transfers_components_sub.add_parser(
-        "bulk-resolve",
-        help="Atomically create one or more N:M custody components",
-    )
-    _add_workspace_profile_args(transfers_components_bulk)
-    _add_json_document_args(
-        transfers_components_bulk, label="component array or bulk object"
-    )
-    transfers_components_bulk.add_argument(
-        "--draft",
-        action="store_true",
-        help="Create draft components instead of activating them",
-    )
-    transfers_components_bulk.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Validate and preview every component, then roll back the whole batch",
-    )
+    for command_name, help_text in (
+        ("plan", "Purely plan one or more N:M custody components"),
+        ("apply", "Atomically persist an unchanged custody component plan"),
+    ):
+        component_review = transfers_components_sub.add_parser(
+            command_name, help=help_text
+        )
+        _add_workspace_profile_args(component_review)
+        component_review.add_argument(
+            "--action",
+            required=True,
+            choices=("create", "revise", "undo", "activate", "supersede"),
+        )
+        component_review.add_argument("--component-id", dest="component_id")
+        component_review.add_argument("--reason")
+        component_source = component_review.add_mutually_exclusive_group()
+        component_source.add_argument(
+            "--json", dest="json_text", help="Inline component array JSON"
+        )
+        component_source.add_argument(
+            "--file", dest="json_file", help="Component array JSON file"
+        )
+        activation = component_review.add_mutually_exclusive_group()
+        activation.add_argument(
+            "--draft",
+            action="store_true",
+            help="Create draft components instead of activating them",
+        )
+        activation.add_argument(
+            "--activate",
+            action="store_true",
+            help="Activate a planned revision after creating it",
+        )
+        if command_name == "apply":
+            component_review.add_argument(
+                "--expected-input-version",
+                required=True,
+                type=int,
+                help="Copy the input_version from the matching plan",
+            )
 
     transfers_payouts = transfers_sub.add_parser("payouts")
     transfers_payouts_sub = transfers_payouts.add_subparsers(dest="payouts_command", required=True)
@@ -4325,250 +4267,126 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         conn, profile["id"], args.gap_id, limit=args.limit
                     ),
                 )
-            if args.transfers_gaps_command == "reopen":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_reopen_guided_bridge(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            gap_id=args.gap_id,
-                            reason=args.reason,
-                        ),
+            if args.transfers_gaps_command in {"plan", "apply"}:
+                candidate = None
+                if args.action in {"create", "revise", "dismiss"}:
+                    candidate = core_custody_gaps.find_gap_candidate(
+                        conn, profile["id"], args.gap_id
                     )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "bridge reopen requires --expected-fingerprint from --dry-run",
-                        code="validation",
-                    )
+                kwargs = {
+                    "workspace_id": workspace["id"],
+                    "profile_id": profile["id"],
+                    "action": args.action,
+                    "candidate": candidate,
+                    "gap_id": args.gap_id,
+                    "classification": args.classification,
+                    "reason": args.reason,
+                    "authored_source": "cli",
+                }
+                if args.transfers_gaps_command == "plan":
+                    plan = core_custody_gap_reviews.plan_review(conn, **kwargs)
+                    return emit(args, core_custody_gap_reviews.public_review_plan(plan))
                 return emit(
                     args,
-                    core_custody_gap_reviews.reopen_guided_bridge(
+                    core_custody_gap_reviews.apply_review(
                         conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        gap_id=args.gap_id,
-                        expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
-                    ),
-                )
-            if args.transfers_gaps_command == "classify-residual":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_residual_classification(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            gap_id=args.gap_id,
-                            classification=args.classification,
-                            reason=args.reason,
-                            authored_source="cli",
-                        ),
-                    )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "residual classification requires --expected-fingerprint "
-                        "from --dry-run",
-                        code="validation",
-                    )
-                return emit(
-                    args,
-                    core_custody_gap_reviews.classify_residual(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        gap_id=args.gap_id,
-                        classification=args.classification,
-                        expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
-                    ),
-                )
-            candidate = core_custody_gaps.find_gap_candidate(
-                conn, profile["id"], args.gap_id
-            )
-            if args.transfers_gaps_command == "bridge":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_guided_bridge(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            candidate=candidate,
-                            authored_source="cli",
-                        ),
-                    )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "bridge creation requires --expected-fingerprint from --dry-run",
-                        code="validation",
-                    )
-                return emit(
-                    args,
-                    core_custody_gap_reviews.create_guided_bridge(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        candidate=candidate,
-                        expected_fingerprint=args.expected_fingerprint,
-                        authored_source="cli",
-                    ),
-                )
-            if args.transfers_gaps_command == "revise":
-                if args.dry_run:
-                    return emit(
-                        args,
-                        core_custody_gap_reviews.preview_guided_revision(
-                            conn,
-                            workspace_id=workspace["id"],
-                            profile_id=profile["id"],
-                            candidate=candidate,
-                            reason=args.reason,
-                            authored_source="cli",
-                        ),
-                    )
-                if not args.expected_fingerprint:
-                    raise AppError(
-                        "bridge revision requires --expected-fingerprint from --dry-run",
-                        code="validation",
-                    )
-                return emit(
-                    args,
-                    core_custody_gap_reviews.revise_guided_bridge(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        candidate=candidate,
-                        expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
-                    ),
-                )
-            if args.transfers_gaps_command == "dismiss":
-                return emit(
-                    args,
-                    core_custody_gap_reviews.append_dismissal(
-                        conn,
-                        workspace_id=workspace["id"],
-                        profile_id=profile["id"],
-                        candidate=candidate,
-                        expected_fingerprint=args.expected_fingerprint,
-                        reason=args.reason,
-                        authored_source="cli",
+                        expected_input_version=args.expected_input_version,
+                        **kwargs,
                     ),
                 )
         if args.transfers_command == "components":
             if args.transfers_components_command == "list":
+                _, profile = resolve_scope(conn, args.workspace, args.profile)
+                transaction_id = None
+                if args.transaction is not None:
+                    transaction_id = resolve_transaction(
+                        conn, profile["id"], args.transaction
+                    )["id"]
                 return emit(
                     args,
-                    list_custody_components(
+                    core_custody_components.list_components(
                         conn,
-                        args.workspace,
-                        args.profile,
+                        profile_id=profile["id"],
                         state=args.state,
                         component_type=args.component_type,
-                        transaction=args.transaction,
+                        transaction_id=transaction_id,
                         effective_only=args.effective_only,
                         include_local_evidence=args.include_local_evidence,
                         limit=args.limit,
                     ),
                 )
             if args.transfers_components_command == "show":
+                _, profile = resolve_scope(conn, args.workspace, args.profile)
                 return emit(
                     args,
-                    get_custody_component(
+                    core_custody_components.get_component(
                         conn,
-                        args.workspace,
-                        args.profile,
                         args.component_id,
+                        profile_id=profile["id"],
                         include_local_evidence=args.include_local_evidence,
                     ),
                 )
-            if args.transfers_components_command == "create":
-                spec = _read_json_document(
-                    args.json_text, args.json_file, label="component spec"
+            if args.transfers_components_command in {"plan", "apply"}:
+                workspace, profile = resolve_scope(
+                    conn, args.workspace, args.profile
                 )
+                has_json = args.json_text is not None or args.json_file is not None
+                if args.action == "revise" and args.draft:
+                    raise AppError(
+                        "revise uses --activate; --draft is not accepted",
+                        code="validation",
+                    )
+                document = None
+                if has_json:
+                    document = _read_json_document(
+                        args.json_text,
+                        args.json_file,
+                        label=(
+                            "component revision"
+                            if args.action == "revise"
+                            else "component array or bulk object"
+                        ),
+                    )
+                components = document if args.action == "create" else None
+                if isinstance(components, dict):
+                    components = components.get("components")
+                spec = document if args.action == "revise" else (
+                    {} if has_json and args.action != "create" else None
+                )
+                activate = (
+                    not args.draft
+                    if args.action == "create"
+                    else args.activate
+                    if args.action == "revise"
+                    else False
+                    if args.draft or args.activate
+                    else None
+                )
+                review_args = {
+                    "workspace_id": workspace["id"],
+                    "profile_id": profile["id"],
+                    "action": args.action,
+                    "components": components,
+                    "component_id": args.component_id,
+                    "spec": spec,
+                    "activate": activate,
+                    "reason": args.reason,
+                    "authored_source": "cli",
+                }
+                if args.transfers_components_command == "plan":
+                    return emit(
+                        args,
+                        core_custody_component_planner.plan_component_review(
+                            conn, **review_args
+                        ),
+                    )
                 return emit(
                     args,
-                    create_custody_component(
+                    core_custody_component_planner.apply_component_review(
                         conn,
-                        args.workspace,
-                        args.profile,
-                        spec,
-                        activate=args.activate,
+                        expected_input_version=args.expected_input_version,
+                        **review_args,
                     ),
-                )
-            if args.transfers_components_command == "update":
-                spec = _read_json_document(
-                    args.json_text, args.json_file, label="component revision"
-                )
-                return emit(
-                    args,
-                    update_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                        spec,
-                        activate=args.activate,
-                    ),
-                )
-            if args.transfers_components_command == "activate":
-                return emit(
-                    args,
-                    activate_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                    ),
-                )
-            if args.transfers_components_command == "supersede":
-                return emit(
-                    args,
-                    supersede_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                        reason=args.reason,
-                    ),
-                )
-            if args.transfers_components_command == "undo":
-                return emit(
-                    args,
-                    undo_custody_component(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        args.component_id,
-                        reason=args.reason,
-                    ),
-                )
-            if args.transfers_components_command == "bulk-resolve":
-                specs = _read_json_document(
-                    args.json_text,
-                    args.json_file,
-                    label="component array or bulk object",
-                )
-                operation = functools.partial(
-                    bulk_resolve_custody_components,
-                    conn,
-                    args.workspace,
-                    args.profile,
-                    specs,
-                    activate=not args.draft,
-                    commit=not args.dry_run,
-                )
-                return emit(
-                    args,
-                    _dry_run_transaction(conn, operation)
-                    if args.dry_run
-                    else operation(),
                 )
         if args.transfers_command == "payouts":
             if args.payouts_command == "list":

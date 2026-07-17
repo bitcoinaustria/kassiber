@@ -42,6 +42,33 @@ class StoredOnchainParserTests(unittest.TestCase):
             [1234, 5678],
         )
 
+    def test_bitcoin_core_script_and_decimal_value_share_the_parser(self):
+        raw = {
+            "txid": "aa" * 32,
+            "vin": [
+                {
+                    "txid": "bb" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "value": 0.00002000,
+                        "scriptPubKey": {"hex": "0014AA"},
+                    },
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "value": 0.00001900,
+                    "scriptPubKey": {"hex": "0014BB"},
+                }
+            ],
+        }
+        parsed = parse_ownership_tx(raw)
+        self.assertEqual(parsed["inputs"][0]["script"], "0014AA")
+        self.assertEqual(parsed["inputs"][0]["value_sats"], 2000)
+        self.assertEqual(parsed["outputs"][0]["script"], "0014BB")
+        self.assertEqual(parsed["outputs"][0]["value_sats"], 1900)
+
     def test_decimal_value_is_btc_and_liquid_fee_output_is_preserved(self):
         valued = parse_valued_tx(
             {

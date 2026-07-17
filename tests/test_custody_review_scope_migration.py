@@ -239,9 +239,10 @@ class CustodyReviewScopeMigrationTests(unittest.TestCase):
         )
 
     def _candidate(self):
-        candidates, _ = custody_gaps.load_gap_candidates(
+        result, _ = custody_gaps.load_gap_search_result(
             self.conn, "profile", include_journal_claims=False
         )
+        candidates = list(result.candidates)
         self.assertEqual(len(candidates), 1)
         return candidates[0]
 

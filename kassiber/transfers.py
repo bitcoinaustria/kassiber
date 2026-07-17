@@ -98,7 +98,7 @@ def canonical_payment_hash(value):
 def _json_mapping(value):
     if isinstance(value, Mapping):
         return value
-    if value in (None, ""):
+    if value in (None, "", "{}", b"{}"):
         return {}
     try:
         parsed = json.loads(str(value))
@@ -119,7 +119,7 @@ def _json_mapping_sequence(value):
 
     if isinstance(value, list):
         parsed = value
-    elif value in (None, ""):
+    elif value in (None, "", "{}", b"{}"):
         return []
     else:
         try:
@@ -488,113 +488,17 @@ def normalize_group_txid(external_id):
     return text
 
 
-def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
-    """Merge manual pair records with auto-detected pairs.
-
-    Manual pairs (created via ``kassiber transfers pair``) take precedence
-    over auto-detection: any auto-pair that touches a manually-paired
-    transaction is dropped, and the manual pair takes its place.
-
-    Same-asset manual pairs with ``policy=carrying-value`` feed back into
-    the IntraTransaction pipeline (same shape as auto pairs). Cross-asset
-    pairs are returned separately so the journal pipeline can record them
-    as audit metadata without handing them to RP2. Any existing manual
-    pair with a different policy still suppresses auto-detection for those
-    rows, but the legs are left on the normal SELL + BUY path.
-
-    Args:
-        rows: full row list for the profile (sqlite3.Row-like).
-        auto_pairs: output of ``detect_intra_transfers(rows)``.
-        manual_pair_records: iterable of dicts with at least ``out_transaction_id``,
-            ``in_transaction_id``, ``policy``, ``kind``.
-
-    Returns:
-        merged_pairs: list of ``{"out": out_row, "in": in_row}`` for
-            same-asset pairs (manual + surviving auto), suitable for the
-            existing intra path.
-        cross_asset_pairs: list of dicts describing cross-asset manual
-            pairs for audit purposes only.
-    """
-    rows_by_id = {row["id"]: row for row in rows}
-    rows_by_custody_component = defaultdict(list)
-    for row in rows:
-        component_id = _row_field(row, "custody_component_id")
-        if component_id not in (None, ""):
-            rows_by_custody_component[str(component_id)].append(row)
-    manual_same_asset = []
-    cross_asset_pairs = []
-    manually_paired_ids = set()
-    for record in manual_pair_records:
-        out_id = record["out_transaction_id"]
-        in_id = record["in_transaction_id"]
-        out_row = rows_by_id.get(out_id)
-        in_row = rows_by_id.get(in_id)
-        if out_row is None or in_row is None:
-            continue
-        manually_paired_ids.add(out_id)
-        manually_paired_ids.add(in_id)
-        component_id = _row_field(record, "component_id")
-        component_id = None if component_id in (None, "") else str(component_id)
-        authored_group_id = _row_field(record, "group_id")
-        component_group_id = (
-            str(authored_group_id)
-            if authored_group_id not in (None, "")
-            else (
-                f"custody-component:{component_id}"
-                if component_id is not None
-                else None
-            )
-        )
-        component_rows = tuple(rows_by_custody_component.get(component_id, ()))
-        if out_row["asset"] == in_row["asset"] and record["policy"] == "carrying-value":
-            manual_same_asset.append(
-                {
-                    "out": out_row,
-                    "in": in_row,
-                    "pair_id": record["id"],
-                    "kind": record["kind"],
-                    "policy": record["policy"],
-                    "source": _row_field(record, "pair_source") or "manual",
-                    "out_amount": _row_field(record, "out_amount"),
-                    "component_id": component_id,
-                    "group_id": component_group_id,
-                    "group_block_rows": component_rows,
-                }
-            )
-        elif out_row["asset"] != in_row["asset"]:
-            cross_asset_pairs.append(
-                {
-                    "pair_id": record["id"],
-                    "kind": record["kind"],
-                    "policy": record["policy"],
-                    "out_id": out_id,
-                    "in_id": in_id,
-                    "out_asset": out_row["asset"],
-                    "in_asset": in_row["asset"],
-                    "out_amount": _row_field(record, "out_amount"),
-                    **(
-                        {"component_id": component_id}
-                        if component_id is not None
-                        else {}
-                    ),
-                }
-            )
-    surviving_auto = [
-        pair
-        for pair in auto_pairs
-        if pair["out"]["id"] not in manually_paired_ids
-        and pair["in"]["id"] not in manually_paired_ids
-    ]
-    return manual_same_asset + surviving_auto, cross_asset_pairs
-
-
 def _row_field(row, key):
     """Read ``key`` from a sqlite3.Row-like or dict row, ``None`` if absent."""
-    try:
-        keys = row.keys()
-    except AttributeError:
+    if type(row) is dict:
         return row.get(key)
-    return row[key] if key in keys else None
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
 
 
 _LIGHTNING_PAYMENT_HASH_SOURCES = frozenset({"core_lightning", "lnd"})

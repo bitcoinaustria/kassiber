@@ -458,28 +458,17 @@ class ExitTaxComputeTests(unittest.TestCase):
         )
 
 
-class _FakeHooks:
-    def __init__(self, profile, state):
-        self._profile = profile
-        self._state = state
-
-    def resolve_scope(self, conn, workspace_ref, profile_ref):
-        return ({"label": "Books", "id": "ws1"}, self._profile)
-
-    def require_processed_journals(self, conn, profile):
-        return None
-
-    def build_ledger_state(self, conn, profile):
-        return self._state
-
-
 class ExitTaxReportLinesTests(unittest.TestCase):
     def test_plain_lines_render_headline_and_review_gate(self):
         conn = _conn_with_rate(Decimal("60000"))
-        hooks = _FakeHooks(_profile("at"), _state())
-        lines = exit_tax.build_exit_tax_report_lines(
-            conn, None, None, hooks, departure_date="2026-06-16", destination="eu_eea"
+        report = exit_tax.compute_deemed_disposal(
+            conn,
+            _profile("at"),
+            _state(),
+            departure_date="2026-06-16",
+            destination="eu_eea",
         )
+        lines = exit_tax.format_exit_tax_lines(report)
         text = "\n".join(lines)
         self.assertIn("Estimated exit tax:", text)
         self.assertIn("2,200.00 EUR", text)
@@ -582,7 +571,9 @@ class ExitTaxEngineIntegrationTests(unittest.TestCase):
         conn, profile = self._seed_book()
         from kassiber.cli import handlers
 
-        state = handlers.build_ledger_state(conn, profile)
+        from kassiber.core import custody_journal
+
+        state = custody_journal.build_ledger_state(conn, profile)
         entry_types = {str(e.get("entry_type")) for e in state["entries"]}
         unexpected_entry_types = entry_types - exit_tax.RECOGNIZED_ENTRY_TYPES
         self.assertSetEqual(

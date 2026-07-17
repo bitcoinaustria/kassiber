@@ -26,6 +26,10 @@ import gc
 import itertools
 import json
 import platform
+try:
+    import resource
+except ImportError:  # pragma: no cover - unavailable on Windows
+    resource = None
 import sqlite3
 import sys
 import tempfile
@@ -40,6 +44,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from kassiber.core.custody_gaps import build_gap_snapshot
+from kassiber.core.custody_journal import CustodyJournalBuilder
 from kassiber.core.custody_quantity import (
     ArbitratedSlice,
     ClaimPriority,
@@ -188,6 +193,100 @@ def benchmark_atomic(transaction_count: int, decision_ratio: float) -> dict[str,
             "maximum_expected_decision_rows_yielded": expected_max_traversals,
         },
     }
+
+
+def _builder_transaction_rows(transaction_count: int) -> Iterator[tuple[Any, ...]]:
+    for index in range(transaction_count):
+        inbound = index % 2 == 0
+        yield (
+            f"builder-tx-{index}",
+            WORKSPACE_ID,
+            PROFILE_ID,
+            SOURCE_WALLET_ID,
+            f"builder-external-{index}",
+            f"builder-fingerprint-{index}",
+            f"2026-01-01T00:00:{index % 60:02d}Z",
+            "inbound" if inbound else "outbound",
+            "BTC",
+            1_000_000,
+            0,
+            "EUR",
+            30_000,
+            "buy" if inbound else "expense",
+            "{}",
+            f"2026-01-02T00:00:{index % 60:02d}Z",
+        )
+
+
+def benchmark_builder(transaction_count: int, batch_size: int) -> dict[str, Any]:
+    """Measure the real database-backed observation-to-journal composition."""
+
+    with tempfile.TemporaryDirectory(prefix="kassiber-custody-builder-") as tmp:
+        conn = open_db(tmp)
+        try:
+            _seed_scope(conn)
+            seed_started = time.perf_counter()
+            insert_sql = """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id,
+                    fingerprint, occurred_at, direction, asset, amount, fee,
+                    fiat_currency, fiat_rate, kind, raw_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            for batch in _batches(
+                _builder_transaction_rows(transaction_count),
+                batch_size,
+            ):
+                conn.executemany(insert_sql, batch)
+            conn.commit()
+            seed_seconds = time.perf_counter() - seed_started
+            profile = conn.execute(
+                "SELECT * FROM profiles WHERE id = ?",
+                (PROFILE_ID,),
+            ).fetchone()
+            rss_before = (
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                if resource is not None
+                else None
+            )
+            decisions, elapsed = _timed(
+                lambda: CustodyJournalBuilder(conn, profile).build_custody_decisions()
+            )
+            rss_after = (
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                if resource is not None
+                else None
+            )
+            quantity_state = decisions.quantity_state
+            observation_count = len(quantity_state.projection.observations)
+            return {
+                "seed_seconds": round(seed_seconds, 6),
+                "elapsed_seconds": round(elapsed, 6),
+                "transactions_per_second": round(transaction_count / elapsed, 2),
+                "observation_count": observation_count,
+                "decision_count": len(quantity_state.projection.decisions),
+                "quantity_issue_count": len(quantity_state.issues),
+                "max_rss_before_kib": rss_before,
+                "max_rss_after_kib": rss_after,
+                "invariants": {
+                    "all_observations_projected": observation_count
+                    == transaction_count,
+                    "quantity_projection_conserves": (
+                        sum(
+                            posting.amount_msat
+                            for posting in quantity_state.projection.postings
+                            if posting.asset == "BTC"
+                        )
+                        == 0
+                    ),
+                    "all_outbounds_decided": len(
+                        quantity_state.projection.decisions
+                    )
+                    == transaction_count // 2,
+                },
+            }
+        finally:
+            conn.close()
 
 
 def _lineage_transaction_rows(transaction_count: int) -> Iterator[tuple[Any, ...]]:
@@ -561,8 +660,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--stages",
-        default="atomic,lineage,gaps",
-        help="comma-separated subset of atomic,lineage,gaps",
+        default="builder,atomic,lineage,gaps",
+        help="comma-separated subset of builder,atomic,lineage,gaps",
     )
     parser.add_argument(
         "--decision-ratio",
@@ -585,7 +684,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.page_size = 20
         args.relevant_outbounds = 90
     stages = [item.strip() for item in args.stages.split(",") if item.strip()]
-    unknown = sorted(set(stages) - {"atomic", "lineage", "gaps"})
+    unknown = sorted(set(stages) - {"builder", "atomic", "lineage", "gaps"})
     if unknown:
         parser.error(f"unknown stages: {', '.join(unknown)}")
     if not 0 < args.decision_ratio <= 0.5:
@@ -618,7 +717,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         for stage in stages:
             started = time.perf_counter()
             try:
-                if stage == "atomic":
+                if stage == "builder":
+                    metrics = benchmark_builder(transaction_count, args.batch_size)
+                elif stage == "atomic":
                     metrics = benchmark_atomic(
                         transaction_count, args.decision_ratio
                     )

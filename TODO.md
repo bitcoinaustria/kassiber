@@ -162,6 +162,86 @@ same verification surface.
   and the 100k-1m benchmark prove useful candidates still surface while
   incomplete searches remain explicit.
 
+- [ ] **Simplify custody architecture after PR #439.** Follow the ordered,
+  invariant-preserving cutover in
+  [`docs/plan/15-custody-simplification.md`](docs/plan/15-custody-simplification.md).
+  - [x] Extract the production custody journal composition from CLI handlers,
+    expose the decision boundary separately from RP2, convert production gap
+    capacity state to an ordinary typed result, and add an unpatched builder
+    characterization plus a real 100k benchmark baseline.
+  - [x] Centralize boundary-leg principal/fee/wallet-movement normalization and
+    deterministic FIFO N:M allocation; make gap claims and reviewed bridge
+    plans consume the same exact-msat cells and residuals.
+  - [x] Replace heuristic transfer claims with independently scoped
+    source/return holds; delete `CUSTODY_CANDIDATE` / `HEURISTIC_CANDIDATE`
+    arbitration so suggestions cannot contain a basis-carrying target edge.
+  - [x] Persist one normalized, versioned candidate projection with explicit
+    completeness metadata and indexed keyset pagination; make journal, UI and
+    AI reuse it and clear the obsolete serialized page cache after replacement.
+  - [x] Add one read-only `plan_review` and one fingerprint/version-checked
+    `apply_review` seam for bridge creation, revision, reopening and residual
+    classification. Plans contain deterministic exact component rows and
+    report impacts; compatibility previews expose only redacted summaries and
+    perform zero SQLite writes.
+  - [x] Migrate pair/payout authored meaning into components with typed
+    replicated economic terms; freeze legacy writes and retain replay history.
+    Deterministic draft staging, typed leg-bound terms, connected 1:N/N:M
+    consolidation, activation, idempotence and atomic rollback coverage are
+    complete. The journal consumes only effective active components and has no
+    legacy pair/payout interpreter fallback. Linked legacy rows are
+    database-write-frozen migration and delayed signed-replay inputs; current
+    mutations author, revise or retire components atomically through the core
+    store. CLI handlers own no pair/payout mutation SQL. Transfer
+    matching, gap discovery, transaction-exclusion guards and commercial
+    classification now resolve active reviews through that same store; every
+    effective component boundary is claimed even when the component has no
+    migrated pair/payout economic term. Pair/payout create and revision
+    conflict checks also use those component-first references, so native
+    reviewed bridges cannot be overwritten by a compatibility command.
+    Pair/payout list surfaces now materialize effective component terms plus
+    only bounded ineffective-history exceptions. Immutable replicated terms
+    gained deterministically backfilled per-review notes, closing the final
+    metadata dependency that had kept active lists on legacy projections.
+    Transaction flow filters and public diagnostics now consume current stored
+    custody decisions/economic relations or the component-first authored view;
+    a stale projection cannot label a transaction as a booked transfer/swap.
+    CLI handlers no longer query either legacy review table, including
+    delete/revise lookup. New pair and direct-payout reviews, revisions and
+    retirements now author immutable components/terms directly and never write
+    legacy projection rows. Shared fan-out revisions preserve sibling terms;
+    miner-fee, retained and suspense residuals are explicit and exactly
+    allocated. The core store retains only the bounded frozen-row
+    migration/replay bridge needed to upgrade historical signed compatibility
+    events.
+    The producerless future-layer adapter contract and unproduced
+    `channel_lifecycle`/`peg`/`refund` authored types are deleted. Real
+    Lightning lifecycle interpretation remains at the canonical observation
+    boundary; future Ark/Bark adapters will add their native types when built.
+  - [x] Remove manufactured presumed-external fallback claims. The quantity
+    arbiter now defaults unmatched outbound slices directly to
+    `external_presumed`, while any positive hold/suspense claim keeps the
+    uncovered boundary in suspense.
+  - [ ] Cut every consumer to stored decisions/lineage, require gated report
+    contexts, delete compatibility interpretation and speculative scaffolding,
+    and demonstrate the final simplicity/LOC/performance stop state. Consumer,
+    report-gate, compatibility-interpreter, performance and quality work is
+    complete. The one remaining hard stop is raw code volume: custody core is
+    25,707 LOC versus 18,733 at the merge. The final audit in the plan records
+    why deleting the remaining migration, signed-replay, immutable audit or
+    pure planner/projection code would weaken protected invariants. The
+    transaction graph, report/export transfer and swap rows, source-of-funds
+    lineage, transaction UI, journal UI and AI snapshots now consume only
+    stored custody decisions/economic relations. Reviewed kind, policy,
+    authorship, notes, swap fee and direct-payout metadata are losslessly
+    projected for those readers. Stale books expose an explicit projection
+    state and do not render old custody grouping as current booked truth. Every
+    journal-derived report/export now acquires one core `ReportContext` proving
+    tax support, current journals, complete active components and clear
+    quantity barriers; composed reports reuse that proof, and the CLI report
+    hook/back-edge has been deleted. Component-native producer cutover,
+    speculative-scaffolding removal, builder compatibility deletion and the
+    performance proof are complete.
+
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an
   ancient-schema fixture and assert column/data parity after migration. This
@@ -1249,7 +1329,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     claim set is built) and booked as a non-taxable MOVE — the declared disposal +
     proceeds vanished silently, no quarantine. Fixed in `rp2.py`: `auto_pairs` is
     pruned of any pair touching a whole-row direct-payout-claimed id before
-    `apply_manual_pairs`, so the disposal books. Test:
+    the reviewed component source, so the disposal books. Test:
     `test_rp2_ownership_transfers...test_whole_row_payout_not_hijacked_by_same_txid_inbound`.
   - [x] **Clamped amount=0 self-send invisible → phantom acquisition (P2, round-2
     deep audit).** A coinjoin/payjoin-shaped self-send where an owned wallet's net

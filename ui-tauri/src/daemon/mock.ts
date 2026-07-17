@@ -4493,16 +4493,18 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
-    if (req.kind === "ui.transfers.components.bulk_resolve") {
+    if (
+      req.kind === "ui.transfers.components.plan" ||
+      req.kind === "ui.transfers.components.apply"
+    ) {
       const args = (req.args ?? {}) as {
         components?: unknown;
         activate?: unknown;
-        dry_run?: unknown;
       };
       const specs = Array.isArray(args.components) ? args.components : [];
       const activate = args.activate !== false;
       const base = structuredClone(
-        fixtures["ui.transfers.components.bulk_resolve"],
+        fixtures[req.kind],
       ) as {
         components: Array<Record<string, unknown>>;
       };
@@ -4519,22 +4521,26 @@ export const mockDaemon: DaemonTransport = {
         schema_version: 1,
         request_id: req.request_id,
         data: {
+          input_version: 7,
           components,
           summary: {
             count: components.length,
             active: activate ? components.length : 0,
             draft: activate ? 0 : components.length,
           },
-          ...(args.dry_run === true ? { dry_run: true } : {}),
+          ...(req.kind === "ui.transfers.components.plan"
+            ? { dry_run: true }
+            : {}),
         } as T,
       };
     }
 
-    if (
-      req.kind === "ui.custody.gaps.residual.preview" ||
-      req.kind === "ui.custody.gaps.residual.classify"
-    ) {
-      const args = (req.args ?? {}) as { classification?: unknown };
+    if (req.kind === "ui.custody.review.plan") {
+      const args = (req.args ?? {}) as {
+        action?: unknown;
+        classification?: unknown;
+      };
+      const action = typeof args.action === "string" ? args.action : "create";
       const classification =
         typeof args.classification === "string"
           ? args.classification
@@ -4556,9 +4562,17 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: {
           ...fixture,
+          action,
           classification,
           custody_state: custodyState,
-          country_tax_meaning: "not_assigned",
+          country_tax_meaning:
+            action === "classify_residual" ? "not_assigned" : null,
+          current_component_revision:
+            action === "reopen" || action === "revise" || action === "classify_residual"
+              ? 1
+              : null,
+          new_component_revision:
+            action === "revise" || action === "classify_residual" ? 2 : null,
         } as T,
       };
     }

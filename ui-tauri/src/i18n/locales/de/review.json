@@ -136,7 +136,6 @@
         "sourceRequired": "Komponente {{component}} benötigt ein positives Quell-Leg.",
         "ownedDestinationRequired": "Komponente {{component}} benötigt ein positives Ziel- oder Verwahrungs-Leg.",
         "anchorRequired": "Komponente {{component}} benötigt mindestens einen importierten Transaktionsanker.",
-        "unresolvedValue": "Komponente {{component}} enthält noch ungeklärten Wert; behalte sie als Entwurf, bis die Lücke geschlossen ist.",
         "suspenseReviewRequired": "Komponente {{component}} darf Suspense nur in einer ausdrücklich geprüften manuellen Brücke verwenden.",
         "suspenseQuantityModeRequired": "Komponente {{component}} darf Suspense nur bei exakter Mengenerhaltung verwenden.",
         "suspenseLocationInvalid": "Komponente {{component}}, Leg {{leg}} ist Suspense und darf weder Wallet noch Transaktionsanker benennen.",

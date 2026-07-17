@@ -28,7 +28,8 @@ from ..errors import AppError
 from ..time_utils import now_iso
 from . import custody_components
 from . import custody_filed_reports
-from .custody_evidence import resolve_protocol_scope
+from .custody_allocations import CustodyAllocationError, allocate_msat_fifo
+from .custody_evidence import row_boundary_amounts, resolve_protocol_scope
 from .custody_gaps import CustodyGapCandidate
 
 
@@ -67,6 +68,12 @@ def _residual_custody_state(classification: str) -> str:
     if classification == "retained_custody":
         return "internal_reviewed"
     return "custody_suspense"
+
+
+def residual_custody_state(classification: str) -> str:
+    """Return the country-neutral custody state for a reviewed residual action."""
+
+    return _residual_custody_state(_normalize_residual_classification(classification))
 
 
 def _event_kind(review: Mapping[str, Any]) -> str:
@@ -195,12 +202,12 @@ def review_state(
         return {"status": "conflicting", "reason": "concurrent_review_conflict"}
     if _event_kind(review) == "bridge_reopened":
         return {"status": "needs_review", "reason": "bridge_reopened"}
-    expected_fingerprint = (
+    expected_candidate_fingerprint = (
         authored_claim_fingerprint(candidate)
         if review.get("action") == "resolved"
         else candidate_fingerprint(candidate)
     )
-    if review.get("candidate_fingerprint") != expected_fingerprint:
+    if review.get("candidate_fingerprint") != expected_candidate_fingerprint:
         # A stale dismissal simply reopens. A formerly resolved bridge is a
         # stronger historical claim: evidence drift must stay conspicuous as
         # a conflict until the bridge is reviewed again. Exact recovered
@@ -261,24 +268,6 @@ def review_status(
     return str(review_state(conn, candidate, review)["status"])
 
 
-def current_dismissed_gap_ids(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    candidates: Sequence[CustodyGapCandidate],
-) -> frozenset[str]:
-    """Return only dismissals that still match the current derived evidence."""
-
-    reviews = latest_reviews(conn, profile_id)
-    return frozenset(
-        candidate.gap_id
-        for candidate in candidates
-        if (review := reviews.get(candidate.gap_id)) is not None
-        and review.get("action") == "dismissed"
-        and _event_kind(review) != "bridge_reopened"
-        and review.get("candidate_fingerprint") == candidate_fingerprint(candidate)
-    )
-
-
 def latest_dismissed_fingerprints(
     conn: sqlite3.Connection, profile_id: str
 ) -> dict[str, str]:
@@ -292,163 +281,649 @@ def latest_dismissed_fingerprints(
     }
 
 
-def append_dismissal(
+def _profile_input_version(conn: sqlite3.Connection, profile_id: str) -> int:
+    row = conn.execute(
+        "SELECT journal_input_version FROM profiles WHERE id = ?", (profile_id,)
+    ).fetchone()
+    if not row:
+        raise AppError("Profile was not found", code="not_found")
+    return int(row["journal_input_version"] or 0)
+
+
+def _stable_plan_rows(
+    spec: Mapping[str, Any], component_id: str
+) -> dict[str, Any]:
+    """Give every prospective immutable row a deterministic component-local id."""
+
+    planned = dict(spec)
+    raw_legs = [dict(leg) for leg in spec.get("legs", ())]
+    leg_ids: dict[str, str] = {}
+    for ordinal, leg in enumerate(raw_legs):
+        old_id = str(leg.get("id") or f"leg:{ordinal}")
+        new_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"kassiber:custody-plan:{component_id}:leg:{ordinal}",
+            )
+        )
+        leg_ids[old_id] = new_id
+        leg["id"] = new_id
+    raw_allocations = [dict(row) for row in spec.get("allocations", ())]
+    for ordinal, allocation in enumerate(raw_allocations):
+        allocation["id"] = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"kassiber:custody-plan:{component_id}:allocation:{ordinal}",
+            )
+        )
+        for endpoint in ("source", "sink"):
+            key = f"{endpoint}_leg_id"
+            try:
+                allocation[key] = leg_ids[str(allocation[key])]
+            except KeyError as exc:
+                raise AppError(
+                    "Custody review plan references an unknown leg",
+                    code="custody_component_validation",
+                    details={"allocation_ordinal": ordinal, "endpoint": endpoint},
+                ) from exc
+    planned["component_id"] = component_id
+    planned["legs"] = raw_legs
+    planned["allocations"] = raw_allocations
+    return planned
+
+
+def _component_plan(
     conn: sqlite3.Connection,
     *,
     workspace_id: str,
     profile_id: str,
-    candidate: CustodyGapCandidate,
-    expected_fingerprint: str,
+    spec: Mapping[str, Any],
+    component_id: str,
+    replacing_lineage_id: str | None = None,
+) -> dict[str, Any]:
+    planned = _stable_plan_rows(spec, component_id)
+    checked = custody_components.validate_component_plan(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+        component_type=str(planned["component_type"]),
+        legs=planned["legs"],
+        allocations=planned["allocations"],
+        conservation_mode=str(planned.get("conservation_mode") or "quantity"),
+        conversion_policy=planned.get("conversion_policy"),
+        conversion_reviewed=bool(planned.get("conversion_reviewed", False)),
+        evidence_grade=planned.get("evidence_grade"),
+        replacing_lineage_id=replacing_lineage_id,
+    )
+    planned["legs"] = checked["legs"]
+    planned["allocations"] = checked["allocations"]
+    planned["validation"] = checked["validation"]
+    return planned
+
+
+def plan_review(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    candidate: CustodyGapCandidate | None = None,
+    gap_id: str | None = None,
+    classification: str | None = None,
+    reason: str | None = None,
+    authored_source: str = "user",
+) -> dict[str, Any]:
+    """Build the exact custody review mutation using database reads only."""
+
+    input_version = _profile_input_version(conn, profile_id)
+    component_plan: dict[str, Any] | None = None
+    context: dict[str, Any] | None = None
+    residual_msat = 0
+    activatable = True
+    new_component_revision: int | None = None
+    authored_fingerprint: str | None = None
+    warnings: list[str] = []
+    if action in {"create", "revise", "dismiss"}:
+        if candidate is None:
+            raise AppError("Custody-gap candidate is required", code="invalid_argument")
+        candidate = _require_current_candidate(conn, candidate)
+        gap_id = candidate.gap_id
+        authored_fingerprint = authored_claim_fingerprint(candidate)
+        warnings = list(_guided_bridge_warnings(candidate))
+        if action == "dismiss":
+            base_fingerprint = authored_fingerprint
+            impacts = _preview_filed_report_impacts(conn, candidate)
+        elif action == "create":
+            base_fingerprint = authored_fingerprint
+            new_component_revision = 1
+            if candidate.excess_msat:
+                spec = None
+                component_id = ""
+                activatable = False
+            else:
+                spec = _guided_component_spec(
+                    conn, candidate, authored_fingerprint, authored_source
+                )
+                component_id = str(spec["component_id"])
+            replacing_lineage_id = None
+        else:
+            context = _review_context(
+                conn, profile_id, candidate.gap_id, expected_state="reopened"
+            )
+            base_fingerprint = _correction_fingerprint(
+                conn,
+                context,
+                operation="bridge_revised",
+                details={
+                    "authored_claim_fingerprint": authored_fingerprint,
+                    "reason": reason or "",
+                },
+            )
+            spec = _guided_component_spec(
+                conn, candidate, authored_fingerprint, authored_source
+            )
+            component_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"kassiber:custody-gap-revision:{base_fingerprint}",
+                )
+            )
+            replacing_lineage_id = str(context["component"]["lineage_id"])
+            new_component_revision = _next_component_revision(conn, context)
+        if action != "dismiss" and spec is not None:
+            component_plan = _component_plan(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                spec=spec,
+                component_id=component_id,
+                replacing_lineage_id=replacing_lineage_id,
+            )
+            activatable = bool(component_plan["validation"].get("activatable"))
+        if action != "dismiss":
+            impacts = _preview_filed_report_impacts(conn, candidate)
+    elif action == "reopen":
+        if not gap_id:
+            raise AppError("Custody-gap id is required", code="invalid_argument")
+        context = _review_context(conn, profile_id, gap_id, expected_state="active")
+        base_fingerprint = _correction_fingerprint(
+            conn,
+            context,
+            operation="bridge_reopened",
+            details={"reason": reason or ""},
+        )
+        impacts = _preview_snapshot_impacts(
+            conn,
+            profile_id,
+            context["snapshot"],
+            after_classification_summary=_reopened_classification_summary(
+                context["snapshot"]
+            ),
+        )
+    elif action == "classify_residual":
+        if not gap_id:
+            raise AppError("Custody-gap id is required", code="invalid_argument")
+        normalized = _normalize_residual_classification(classification or "")
+        classification = normalized
+        context = _review_context(conn, profile_id, gap_id, expected_state="active")
+        new_component_revision = _next_component_revision(conn, context)
+        base_fingerprint = _correction_fingerprint(
+            conn,
+            context,
+            operation="residual_classified",
+            details={"classification": normalized, "reason": reason or ""},
+        )
+        spec, residual_msat = _residual_revision_spec(
+            context=context,
+            classification=normalized,
+            authored_source=authored_source,
+        )
+        component_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"kassiber:custody-gap-residual:{base_fingerprint}",
+            )
+        )
+        component_plan = _component_plan(
+            conn,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            spec=spec,
+            component_id=component_id,
+            replacing_lineage_id=str(context["component"]["lineage_id"]),
+        )
+        activatable = bool(component_plan["validation"].get("activatable"))
+        impacts = _preview_snapshot_impacts(
+            conn,
+            profile_id,
+            context["snapshot"],
+            after_classification_summary=_residual_classification_summary(
+                context["snapshot"], normalized, residual_msat
+            ),
+        )
+    else:
+        raise AppError(
+            "Custody review action is unsupported",
+            code="invalid_argument",
+            details={"action": action},
+        )
+
+    commitment = {
+        "schema_version": 1,
+        "action": action,
+        "workspace_id": workspace_id,
+        "profile_id": profile_id,
+        "gap_id": gap_id,
+        "input_version": input_version,
+        "base_fingerprint": base_fingerprint,
+        "classification": classification,
+        "reason": reason or "",
+        "authored_source": authored_source,
+        "new_component_revision": new_component_revision,
+        "component_plan": component_plan,
+        "filed_report_impacts": impacts,
+    }
+    return {
+        **commitment,
+        "candidate": candidate,
+        "context": context,
+        "authored_claim_fingerprint": authored_fingerprint,
+        "component_plan": component_plan,
+        "activatable": activatable,
+        "warnings": warnings,
+        "residual_msat": residual_msat,
+    }
+
+
+def public_review_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the serializable, privacy-safe review contract shared by all clients."""
+
+    component = plan.get("component_plan") or {}
+    public_component = None
+    if component:
+        validation = component.get("validation") or {}
+        public_component = {
+            "id": component.get("component_id"),
+            "component_type": component.get("component_type"),
+            "conservation_mode": component.get("conservation_mode"),
+            "legs": [
+                {
+                    key: leg.get(key)
+                    for key in (
+                        "id",
+                        "role",
+                        "rail",
+                        "asset",
+                        "exposure",
+                        "conservation_unit",
+                        "amount_msat",
+                        "valuation_unit",
+                        "valuation_amount",
+                    )
+                }
+                for leg in component.get("legs", ())
+            ],
+            "allocations": [
+                {
+                    key: allocation.get(key)
+                    for key in (
+                        "id",
+                        "source_leg_id",
+                        "sink_leg_id",
+                        "source_amount_msat",
+                        "sink_amount_msat",
+                    )
+                }
+                for allocation in component.get("allocations", ())
+            ],
+            "validation": {
+                "activatable": bool(validation.get("activatable")),
+                "issues": [
+                    {
+                        key: issue.get(key)
+                        for key in ("code", "message")
+                        if issue.get(key) is not None
+                    }
+                    for issue in validation.get("issues", ())
+                ],
+                "warnings": [
+                    {
+                        key: warning.get(key)
+                        for key in ("code", "message")
+                        if warning.get(key) is not None
+                    }
+                    for warning in validation.get("warnings", ())
+                ],
+            },
+        }
+    candidate = plan.get("candidate")
+    action = str(plan["action"])
+    return {
+        "action": action,
+        "gap_id": plan["gap_id"],
+        "input_version": plan["input_version"],
+        "dry_run": True,
+        "activatable": plan["activatable"],
+        "requires_explicit_confirmation": True,
+        "classification": plan.get("classification"),
+        "country_tax_meaning": (
+            "not_assigned" if action == "classify_residual" else None
+        ),
+        "custody_state": (
+            residual_custody_state(str(plan["classification"]))
+            if action == "classify_residual"
+            else None
+        ),
+        "new_component_revision": plan.get("new_component_revision"),
+        "current_component_revision": (
+            (plan.get("context") or {}).get("component", {}).get("revision")
+        ),
+        "review_mode": (
+            "structured_candidate"
+            if candidate is not None
+            and candidate.promotion_eligible
+            and candidate.conflict_size == 1
+            else ("manual_weak_hint" if candidate is not None else None)
+        ),
+        "retained_msat": candidate.retained_msat if candidate is not None else 0,
+        "residual_msat": (
+            candidate.residual_msat
+            if candidate is not None
+            else plan.get("residual_msat", 0)
+        ),
+        "fee_msat": candidate.source_fee_msat if candidate is not None else 0,
+        "source_count": len(candidate.source_ids) if candidate is not None else 0,
+        "destination_count": (
+            len(candidate.return_ids) if candidate is not None else 0
+        ),
+        "warnings": plan["warnings"],
+        "filed_report_impacts": plan["filed_report_impacts"],
+        "component_plan": public_component,
+    }
+
+
+def _persist_component_plan(
+    conn: sqlite3.Connection, plan: Mapping[str, Any]
+) -> dict[str, Any]:
+    spec = dict(plan.get("component_plan") or {})
+    candidate = plan.get("candidate")
+    if (
+        plan.get("action") == "create"
+        and candidate is not None
+        and int(getattr(candidate, "excess_msat", 0) or 0) > 0
+    ):
+        raise AppError(
+            "The return exceeds the source principal",
+            code="custody_gap_bridge_excess_return",
+            hint="Classify the excess origin separately, then preview again.",
+            details={"excess_msat": int(candidate.excess_msat)},
+        )
+    validation = spec.pop("validation", {})
+    if not validation.get("activatable"):
+        raise AppError(
+            "Custody review plan is not activatable",
+            code="custody_component_incomplete",
+            details={"validation": validation},
+        )
+    component_id = str(spec.pop("component_id"))
+    context = plan.get("context")
+    if plan["action"] == "create":
+        component = custody_components.create_component(
+            conn,
+            workspace_id=str(plan["workspace_id"]),
+            profile_id=str(plan["profile_id"]),
+            component_id=component_id,
+            **spec,
+        )
+    else:
+        if not isinstance(context, Mapping):
+            raise AppError("Custody review context is missing", code="custody_gap_stale")
+        allowed = {
+            key: value
+            for key, value in spec.items()
+            if key
+            in {
+                "legs",
+                "allocations",
+                "component_type",
+                "conservation_mode",
+                "evidence_kind",
+                "evidence_grade",
+                "evidence",
+                "conversion_policy",
+                "conversion_reviewed",
+                "conversion_metadata",
+                "notes",
+                "authored_source",
+            }
+        }
+        component = custody_components.update_component(
+            conn,
+            str(context["component"]["id"]),
+            new_component_id=component_id,
+            change_reason=str(plan.get("reason") or plan["action"]),
+            preserve_planned_row_ids=True,
+            **allowed,
+        )
+    return custody_components.activate_component(
+        conn,
+        component["id"],
+        _validated_component=component,
+    )
+
+
+def apply_review(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    action: str,
+    expected_input_version: int,
+    candidate: CustodyGapCandidate | None = None,
+    gap_id: str | None = None,
+    classification: str | None = None,
     reason: str | None = None,
     authored_source: str = "user",
     commit: bool = True,
 ) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_dismiss")
+    """Atomically replan, mutate, append audit history and record impacts."""
+
+    conn.execute("SAVEPOINT custody_gap_review_apply")
     try:
-        candidate = _require_current_candidate(conn, candidate)
-        fingerprint = _require_fresh_fingerprint(candidate, expected_fingerprint)
-        review = _append_review(
+        custody_components.require_review_input_version(
             conn,
             workspace_id=workspace_id,
             profile_id=profile_id,
-            candidate=candidate,
-            fingerprint=fingerprint,
-            action="dismissed",
-            component_id=None,
-            authored_source=authored_source,
-            reason=reason,
-            event_kind="review_decision",
+            expected_input_version=expected_input_version,
         )
-        _invalidate_journals(conn, profile_id)
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_dismiss")
-        conn.execute("RELEASE SAVEPOINT custody_gap_dismiss")
-        raise
-    conn.execute("RELEASE SAVEPOINT custody_gap_dismiss")
-    if commit:
-        conn.commit()
-    return _public_review(review)
-
-
-def preview_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    authored_source: str = "gui",
-) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_bridge_preview")
-    try:
-        candidate = _require_current_candidate(conn, candidate)
-        fingerprint = authored_claim_fingerprint(candidate)
-        activatable = False
-        if not candidate.excess_msat:
-            spec = _guided_component_spec(conn, candidate, fingerprint, authored_source)
-            component = custody_components.create_component(
+        plan = plan_review(
+            conn,
+            workspace_id=workspace_id,
+            profile_id=profile_id,
+            action=action,
+            candidate=candidate,
+            gap_id=gap_id,
+            classification=classification,
+            reason=reason,
+            authored_source=authored_source,
+        )
+        context = plan.get("context")
+        if action == "dismiss":
+            current_candidate = plan["candidate"]
+            review = _append_review(
                 conn,
                 workspace_id=workspace_id,
                 profile_id=profile_id,
-                **spec,
+                candidate=current_candidate,
+                fingerprint=candidate_fingerprint(current_candidate),
+                action="dismissed",
+                component_id=None,
+                authored_source=authored_source,
+                reason=reason,
+                event_kind="review_decision",
             )
-            component = custody_components.activate_component(conn, component["id"])
-            activatable = component["effective_state"] == "active"
-        filed_report_impacts = _preview_filed_report_impacts(conn, candidate)
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_bridge_preview")
-        conn.execute("RELEASE SAVEPOINT custody_gap_bridge_preview")
-        raise
-    conn.execute("ROLLBACK TO SAVEPOINT custody_gap_bridge_preview")
-    conn.execute("RELEASE SAVEPOINT custody_gap_bridge_preview")
-    return {
-        "gap_id": candidate.gap_id,
-        # This is intentionally not the suggestion fingerprint exposed by the
-        # list response. Possession proves that the exact authored claim was
-        # previewed locally before the create call.
-        "candidate_fingerprint": fingerprint,
-        "authored_claim_fingerprint": fingerprint,
-        "dry_run": True,
-        "activatable": activatable,
-        "review_mode": (
-            "structured_candidate"
-            if candidate.promotion_eligible and candidate.conflict_size == 1
-            else "manual_weak_hint"
-        ),
-        "warnings": list(_guided_bridge_warnings(candidate)),
-        "requires_explicit_confirmation": True,
-        "retained_msat": candidate.retained_msat,
-        "residual_msat": candidate.residual_msat,
-        "fee_msat": candidate.source_fee_msat,
-        "source_count": len(candidate.source_ids),
-        "destination_count": len(candidate.return_ids),
-        "filed_report_impacts": filed_report_impacts,
-    }
+            _invalidate_journals(conn, profile_id)
+            result = {
+                **_public_review(review),
+                "filed_report_impacts": plan["filed_report_impacts"],
+            }
+        elif action == "reopen":
+            component = custody_components.supersede_component(
+                conn,
+                context["component"]["id"],
+                reason=reason or "guided_bridge_reopened",
+            )
+        elif action != "dismiss":
+            component = _persist_component_plan(conn, plan)
 
-
-def create_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    expected_fingerprint: str,
-    authored_source: str = "gui",
-    commit: bool = True,
-) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_bridge_create")
-    try:
-        candidate = _require_current_candidate(conn, candidate)
-        fingerprint = _require_fresh_claim_fingerprint(
-            candidate, expected_fingerprint
-        )
-        spec = _guided_component_spec(conn, candidate, fingerprint, authored_source)
-        component = custody_components.create_component(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            **spec,
-        )
-        component = custody_components.activate_component(conn, component["id"])
-        review = _append_review(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            candidate=candidate,
-            fingerprint=fingerprint,
-            action="resolved",
-            component_id=component["id"],
-            authored_source=authored_source,
-            reason="guided_custody_bridge",
-            event_kind="bridge_created",
-        )
-        filed_report_impacts = custody_filed_reports.append_custody_impacts(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            component_id=component["id"],
-            review_id=review["id"],
-            gap_id=candidate.gap_id,
-            candidate=candidate,
-            downstream_years=_downstream_affected_years(conn, candidate),
-        )
+        if action in {"create", "revise"}:
+            current_candidate = plan["candidate"]
+            event_kind = "bridge_created" if action == "create" else "bridge_revised"
+            review = _append_review(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                candidate=current_candidate,
+                fingerprint=plan["authored_claim_fingerprint"],
+                action="resolved",
+                component_id=component["id"],
+                authored_source=authored_source,
+                reason=(
+                    "guided_custody_bridge"
+                    if action == "create"
+                    else reason or "guided_bridge_revised"
+                ),
+                event_kind=event_kind,
+            )
+            impacts = custody_filed_reports.append_custody_impacts(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                component_id=component["id"],
+                review_id=review["id"],
+                gap_id=current_candidate.gap_id,
+                candidate=current_candidate,
+                downstream_years=_downstream_affected_years(
+                    conn, current_candidate
+                ),
+            )
+            result = {
+                "gap_id": current_candidate.gap_id,
+                "status": "resolved",
+                "component_id": component["id"],
+                "component_revision": component["revision"],
+                "review_id": review["id"],
+                "review_revision": review["revision"],
+                "retained_msat": current_candidate.retained_msat,
+                "residual_msat": current_candidate.residual_msat,
+                "filed_report_impacts": impacts,
+            }
+            if action == "create":
+                result["fee_msat"] = current_candidate.source_fee_msat
+        elif action == "reopen":
+            snapshot = dict(context["snapshot"])
+            snapshot["status"] = "needs_review"
+            snapshot["correction"] = {
+                "strategy": "create_revision_then_activate",
+                "event_kind": "bridge_reopened",
+                "plan_input_version": plan["input_version"],
+                "correction_fingerprint": plan["base_fingerprint"],
+            }
+            review = _append_review_snapshot(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                gap_id=str(plan["gap_id"]),
+                fingerprint=plan["base_fingerprint"],
+                action="dismissed",
+                event_kind="bridge_reopened",
+                component_id=component["id"],
+                authored_source=authored_source,
+                reason=reason or "guided_bridge_reopened",
+                snapshot=snapshot,
+            )
+            impacts = _append_snapshot_impacts(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                component_id=component["id"],
+                review_id=review["id"],
+                gap_id=str(plan["gap_id"]),
+                snapshot=snapshot,
+                after_classification_summary=_reopened_classification_summary(
+                    snapshot
+                ),
+            )
+            result = {
+                "gap_id": plan["gap_id"],
+                "status": "needs_review",
+                "component_id": component["id"],
+                "component_revision": component["revision"],
+                "review_id": review["id"],
+                "review_revision": review["revision"],
+                "filed_report_impacts": impacts,
+            }
+        elif action == "classify_residual":
+            normalized = str(plan["classification"])
+            residual_msat = int(plan["residual_msat"])
+            snapshot = dict(context["snapshot"])
+            snapshot["plan_input_version"] = plan["input_version"]
+            snapshot["correction_fingerprint"] = plan["base_fingerprint"]
+            snapshot["residual_classification"] = {
+                "classification": normalized,
+                "custody_state": _residual_custody_state(normalized),
+                "country_tax_meaning": "not_assigned",
+                "amount_msat": residual_msat,
+            }
+            review = _append_review_snapshot(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                gap_id=str(plan["gap_id"]),
+                fingerprint=str(context["review"]["candidate_fingerprint"]),
+                action="resolved",
+                event_kind="residual_classified",
+                component_id=component["id"],
+                authored_source=authored_source,
+                reason=reason or f"reviewed_{normalized}",
+                snapshot=snapshot,
+            )
+            impacts = _append_snapshot_impacts(
+                conn,
+                workspace_id=workspace_id,
+                profile_id=profile_id,
+                component_id=component["id"],
+                review_id=review["id"],
+                gap_id=str(plan["gap_id"]),
+                snapshot=snapshot,
+                after_classification_summary=_residual_classification_summary(
+                    snapshot, normalized, residual_msat
+                ),
+            )
+            result = {
+                "gap_id": plan["gap_id"],
+                "status": "resolved",
+                "classification": normalized,
+                "custody_state": _residual_custody_state(normalized),
+                "country_tax_meaning": "not_assigned",
+                "residual_msat": residual_msat,
+                "component_id": component["id"],
+                "component_revision": component["revision"],
+                "review_id": review["id"],
+                "review_revision": review["revision"],
+                "filed_report_impacts": impacts,
+            }
     except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_bridge_create")
-        conn.execute("RELEASE SAVEPOINT custody_gap_bridge_create")
+        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_review_apply")
+        conn.execute("RELEASE SAVEPOINT custody_gap_review_apply")
         raise
-    conn.execute("RELEASE SAVEPOINT custody_gap_bridge_create")
+    conn.execute("RELEASE SAVEPOINT custody_gap_review_apply")
     if commit:
         conn.commit()
-    return {
-        "gap_id": candidate.gap_id,
-        "status": "resolved",
-        "component_id": component["id"],
-        "review_id": review["id"],
-        "review_revision": review["revision"],
-        "retained_msat": candidate.retained_msat,
-        "residual_msat": candidate.residual_msat,
-        "fee_msat": candidate.source_fee_msat,
-        "filed_report_impacts": filed_report_impacts,
-    }
+    # Return the post-apply version so a client can plan its next action
+    # against current state instead of an instantly-stale snapshot.
+    result["input_version"] = _profile_input_version(conn, profile_id)
+    return result
 
 
 def list_review_history(
@@ -742,25 +1217,25 @@ def backfill_legacy_componentless_review_relations(
     if not pending:
         return 0
 
-    from .custody_gaps import CustodyGapSearchLimitError, load_gap_candidates
+    from .custody_gaps import load_gap_search_result
 
     inserted = 0
     by_profile: dict[str, list[Mapping[str, Any]]] = {}
     for row in pending:
         by_profile.setdefault(str(row["profile_id"]), []).append(row)
     for profile_id, reviews in by_profile.items():
-        try:
-            candidates, _ = load_gap_candidates(
-                conn,
-                profile_id,
-                include_journal_claims=False,
+        search_result, _ = load_gap_search_result(
+            conn,
+            profile_id,
+            include_journal_claims=False,
+        )
+        candidates = {
+            candidate.gap_id: candidate
+            for candidate in (
+                *search_result.candidates,
+                *search_result.accounting_candidates,
             )
-        except CustodyGapSearchLimitError as exc:
-            candidates = [
-                candidate
-                for candidate in (*exc.partial_candidates, *exc.accounting_candidates)
-                if isinstance(candidate, CustodyGapCandidate)
-            ]
+        }.values()
         exact = {
             (candidate.gap_id, candidate_fingerprint(candidate)): candidate
             for candidate in candidates
@@ -857,390 +1332,6 @@ def _redacted_review_history_row(
     if include_gap_id:
         output["gap_id"] = row["gap_id"]
     return output
-
-
-def preview_reopen_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    reason: str | None = None,
-) -> dict[str, Any]:
-    context = _review_context(conn, profile_id, gap_id, expected_state="active")
-    fingerprint = _correction_fingerprint(
-        conn, context, operation="bridge_reopened", details={"reason": reason or ""}
-    )
-    impacts = _preview_snapshot_impacts(
-        conn,
-        profile_id,
-        context["snapshot"],
-        after_classification_summary=_reopened_classification_summary(
-            context["snapshot"]
-        ),
-    )
-    return {
-        "gap_id": gap_id,
-        "expected_fingerprint": fingerprint,
-        "dry_run": True,
-        "requires_explicit_confirmation": True,
-        "current_component_id": context["component"]["id"],
-        "current_component_revision": context["component"]["revision"],
-        "resulting_status": "needs_review",
-        "filed_report_impacts": impacts,
-    }
-
-
-def reopen_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    expected_fingerprint: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-    commit: bool = True,
-) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_bridge_reopen")
-    try:
-        context = _review_context(conn, profile_id, gap_id, expected_state="active")
-        fingerprint = _correction_fingerprint(
-            conn,
-            context,
-            operation="bridge_reopened",
-            details={"reason": reason or ""},
-        )
-        _require_expected_correction(expected_fingerprint, fingerprint)
-        component = custody_components.supersede_component(
-            conn,
-            context["component"]["id"],
-            reason=reason or "guided_bridge_reopened",
-        )
-        snapshot = dict(context["snapshot"])
-        snapshot["status"] = "needs_review"
-        snapshot["correction"] = {
-            "strategy": "create_revision_then_activate",
-            "event_kind": "bridge_reopened",
-        }
-        review = _append_review_snapshot(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            gap_id=gap_id,
-            fingerprint=fingerprint,
-            action="dismissed",
-            event_kind="bridge_reopened",
-            component_id=component["id"],
-            authored_source=authored_source,
-            reason=reason or "guided_bridge_reopened",
-            snapshot=snapshot,
-        )
-        impacts = _append_snapshot_impacts(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            component_id=component["id"],
-            review_id=review["id"],
-            gap_id=gap_id,
-            snapshot=snapshot,
-            after_classification_summary=_reopened_classification_summary(snapshot),
-        )
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_bridge_reopen")
-        conn.execute("RELEASE SAVEPOINT custody_gap_bridge_reopen")
-        raise
-    conn.execute("RELEASE SAVEPOINT custody_gap_bridge_reopen")
-    if commit:
-        conn.commit()
-    return {
-        "gap_id": gap_id,
-        "status": "needs_review",
-        "component_id": component["id"],
-        "component_revision": component["revision"],
-        "review_id": review["id"],
-        "review_revision": review["revision"],
-        "filed_report_impacts": impacts,
-    }
-
-
-def preview_guided_revision(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    reason: str | None = None,
-    authored_source: str = "user",
-) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_bridge_revise_preview")
-    try:
-        candidate = _require_current_candidate(conn, candidate)
-        context = _review_context(
-            conn, profile_id, candidate.gap_id, expected_state="reopened"
-        )
-        fingerprint = _correction_fingerprint(
-            conn,
-            context,
-            operation="bridge_revised",
-            details={
-                "authored_claim_fingerprint": authored_claim_fingerprint(candidate),
-                "reason": reason or "",
-            },
-        )
-        component = _create_candidate_revision(
-            conn,
-            context=context,
-            candidate=candidate,
-            fingerprint=fingerprint,
-            reason=reason,
-            authored_source=authored_source,
-        )
-        impacts = _preview_filed_report_impacts(conn, candidate)
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_bridge_revise_preview")
-        conn.execute("RELEASE SAVEPOINT custody_gap_bridge_revise_preview")
-        raise
-    conn.execute("ROLLBACK TO SAVEPOINT custody_gap_bridge_revise_preview")
-    conn.execute("RELEASE SAVEPOINT custody_gap_bridge_revise_preview")
-    return {
-        "gap_id": candidate.gap_id,
-        "expected_fingerprint": fingerprint,
-        "dry_run": True,
-        "activatable": component["effective_state"] == "active",
-        "requires_explicit_confirmation": True,
-        "current_component_revision": context["component"]["revision"],
-        "new_component_revision": component["revision"],
-        "retained_msat": candidate.retained_msat,
-        "residual_msat": candidate.residual_msat,
-        "filed_report_impacts": impacts,
-    }
-
-
-def revise_guided_bridge(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    candidate: CustodyGapCandidate,
-    expected_fingerprint: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-    commit: bool = True,
-) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_bridge_revise")
-    try:
-        candidate = _require_current_candidate(conn, candidate)
-        context = _review_context(
-            conn, profile_id, candidate.gap_id, expected_state="reopened"
-        )
-        fingerprint = _correction_fingerprint(
-            conn,
-            context,
-            operation="bridge_revised",
-            details={
-                "authored_claim_fingerprint": authored_claim_fingerprint(candidate),
-                "reason": reason or "",
-            },
-        )
-        _require_expected_correction(expected_fingerprint, fingerprint)
-        component = _create_candidate_revision(
-            conn,
-            context=context,
-            candidate=candidate,
-            fingerprint=fingerprint,
-            reason=reason,
-            authored_source=authored_source,
-        )
-        review = _append_review(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            candidate=candidate,
-            fingerprint=authored_claim_fingerprint(candidate),
-            action="resolved",
-            component_id=component["id"],
-            authored_source=authored_source,
-            reason=reason or "guided_bridge_revised",
-            event_kind="bridge_revised",
-        )
-        impacts = custody_filed_reports.append_custody_impacts(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            component_id=component["id"],
-            review_id=review["id"],
-            gap_id=candidate.gap_id,
-            candidate=candidate,
-            downstream_years=_downstream_affected_years(conn, candidate),
-        )
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_bridge_revise")
-        conn.execute("RELEASE SAVEPOINT custody_gap_bridge_revise")
-        raise
-    conn.execute("RELEASE SAVEPOINT custody_gap_bridge_revise")
-    if commit:
-        conn.commit()
-    return {
-        "gap_id": candidate.gap_id,
-        "status": "resolved",
-        "component_id": component["id"],
-        "component_revision": component["revision"],
-        "review_id": review["id"],
-        "review_revision": review["revision"],
-        "retained_msat": candidate.retained_msat,
-        "residual_msat": candidate.residual_msat,
-        "filed_report_impacts": impacts,
-    }
-
-
-def preview_residual_classification(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    classification: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_residual_preview")
-    try:
-        normalized = _normalize_residual_classification(classification)
-        context = _review_context(conn, profile_id, gap_id, expected_state="active")
-        fingerprint = _correction_fingerprint(
-            conn,
-            context,
-            operation="residual_classified",
-            details={"classification": normalized, "reason": reason or ""},
-        )
-        component, residual_msat = _create_residual_revision(
-            conn,
-            context=context,
-            classification=normalized,
-            fingerprint=fingerprint,
-            reason=reason,
-            authored_source=authored_source,
-        )
-        summary = _residual_classification_summary(
-            context["snapshot"], normalized, residual_msat
-        )
-        impacts = _preview_snapshot_impacts(
-            conn,
-            profile_id,
-            context["snapshot"],
-            after_classification_summary=summary,
-        )
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_residual_preview")
-        conn.execute("RELEASE SAVEPOINT custody_gap_residual_preview")
-        raise
-    conn.execute("ROLLBACK TO SAVEPOINT custody_gap_residual_preview")
-    conn.execute("RELEASE SAVEPOINT custody_gap_residual_preview")
-    return {
-        "gap_id": gap_id,
-        "expected_fingerprint": fingerprint,
-        "dry_run": True,
-        "activatable": component["effective_state"] == "active",
-        "requires_explicit_confirmation": True,
-        "classification": normalized,
-        "custody_state": _residual_custody_state(normalized),
-        "country_tax_meaning": "not_assigned",
-        "residual_msat": residual_msat,
-        "current_component_revision": context["component"]["revision"],
-        "new_component_revision": component["revision"],
-        "filed_report_impacts": impacts,
-    }
-
-
-def classify_residual(
-    conn: sqlite3.Connection,
-    *,
-    workspace_id: str,
-    profile_id: str,
-    gap_id: str,
-    classification: str,
-    expected_fingerprint: str,
-    reason: str | None = None,
-    authored_source: str = "user",
-    commit: bool = True,
-) -> dict[str, Any]:
-    conn.execute("SAVEPOINT custody_gap_residual_classify")
-    try:
-        normalized = _normalize_residual_classification(classification)
-        context = _review_context(conn, profile_id, gap_id, expected_state="active")
-        fingerprint = _correction_fingerprint(
-            conn,
-            context,
-            operation="residual_classified",
-            details={"classification": normalized, "reason": reason or ""},
-        )
-        _require_expected_correction(expected_fingerprint, fingerprint)
-        component, residual_msat = _create_residual_revision(
-            conn,
-            context=context,
-            classification=normalized,
-            fingerprint=fingerprint,
-            reason=reason,
-            authored_source=authored_source,
-        )
-        snapshot = dict(context["snapshot"])
-        snapshot["correction_fingerprint"] = fingerprint
-        snapshot["residual_classification"] = {
-            "classification": normalized,
-            "custody_state": _residual_custody_state(normalized),
-            "country_tax_meaning": "not_assigned",
-            "amount_msat": residual_msat,
-        }
-        review = _append_review_snapshot(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            gap_id=gap_id,
-            # Keep the candidate-review commitment stable. The stronger exact
-            # preview token is retained separately in the immutable snapshot;
-            # using it here would make the unchanged gap look stale/conflicting
-            # to ordinary review-state evaluation.
-            fingerprint=str(context["review"]["candidate_fingerprint"]),
-            action="resolved",
-            event_kind="residual_classified",
-            component_id=component["id"],
-            authored_source=authored_source,
-            reason=reason or f"reviewed_{normalized}",
-            snapshot=snapshot,
-        )
-        impacts = _append_snapshot_impacts(
-            conn,
-            workspace_id=workspace_id,
-            profile_id=profile_id,
-            component_id=component["id"],
-            review_id=review["id"],
-            gap_id=gap_id,
-            snapshot=snapshot,
-            after_classification_summary=_residual_classification_summary(
-                snapshot, normalized, residual_msat
-            ),
-        )
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT custody_gap_residual_classify")
-        conn.execute("RELEASE SAVEPOINT custody_gap_residual_classify")
-        raise
-    conn.execute("RELEASE SAVEPOINT custody_gap_residual_classify")
-    if commit:
-        conn.commit()
-    return {
-        "gap_id": gap_id,
-        "status": "resolved",
-        "classification": normalized,
-        "custody_state": _residual_custody_state(normalized),
-        "country_tax_meaning": "not_assigned",
-        "residual_msat": residual_msat,
-        "component_id": component["id"],
-        "component_revision": component["revision"],
-        "review_id": review["id"],
-        "review_revision": review["revision"],
-        "filed_report_impacts": impacts,
-    }
 
 
 def historical_review_gaps(
@@ -1428,13 +1519,17 @@ def _correction_fingerprint(
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _require_expected_correction(expected: str, actual: str) -> None:
-    if not isinstance(expected, str) or expected != actual:
-        raise AppError(
-            "Custody bridge evidence changed after preview",
-            code="custody_gap_stale",
-            hint="Run the exact preview again before confirming this correction.",
-        )
+def _next_component_revision(
+    conn: sqlite3.Connection, context: Mapping[str, Any]
+) -> int:
+    component = context["component"]
+    return int(
+        conn.execute(
+            "SELECT COALESCE(MAX(revision), 0) + 1 "
+            "FROM custody_components WHERE profile_id = ? AND lineage_id = ?",
+            (component["profile_id"], component["lineage_id"]),
+        ).fetchone()[0]
+    )
 
 
 def _component_revision_inputs(
@@ -1478,42 +1573,6 @@ def _component_revision_inputs(
     return legs, allocations
 
 
-def _create_candidate_revision(
-    conn: sqlite3.Connection,
-    *,
-    context: Mapping[str, Any],
-    candidate: CustodyGapCandidate,
-    fingerprint: str,
-    reason: str | None,
-    authored_source: str,
-) -> dict[str, Any]:
-    spec = _guided_component_spec(
-        conn,
-        candidate,
-        authored_claim_fingerprint(candidate),
-        authored_source,
-    )
-    component = custody_components.update_component(
-        conn,
-        context["component"]["id"],
-        legs=spec["legs"],
-        allocations=spec["allocations"],
-        evidence_kind=spec["evidence_kind"],
-        evidence_grade=spec["evidence_grade"],
-        evidence=spec["evidence"],
-        notes=spec["notes"],
-        change_reason=reason or "guided_bridge_revised",
-        new_component_id=str(
-            uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"kassiber:custody-gap-revision:{fingerprint}",
-            )
-        ),
-        authored_source=authored_source,
-    )
-    return custody_components.activate_component(conn, component["id"])
-
-
 def _normalize_residual_classification(value: str) -> str:
     normalized = str(value or "").strip().lower().replace("-", "_")
     if normalized not in RESIDUAL_CLASSIFICATIONS:
@@ -1525,13 +1584,10 @@ def _normalize_residual_classification(value: str) -> str:
     return normalized
 
 
-def _create_residual_revision(
-    conn: sqlite3.Connection,
+def _residual_revision_spec(
     *,
     context: Mapping[str, Any],
     classification: str,
-    fingerprint: str,
-    reason: str | None,
     authored_source: str,
 ) -> tuple[dict[str, Any], int]:
     old_component = context["component"]
@@ -1569,22 +1625,23 @@ def _create_residual_revision(
         "country_tax_meaning": "not_assigned",
         "amount_msat": residual_msat,
     }
-    component = custody_components.update_component(
-        conn,
-        old_component["id"],
-        legs=legs,
-        allocations=allocations,
-        evidence=evidence,
-        change_reason=reason or f"reviewed_{classification}",
-        new_component_id=str(
-            uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"kassiber:custody-gap-residual:{fingerprint}",
-            )
-        ),
-        authored_source=authored_source,
+    return (
+        {
+            "component_type": old_component["component_type"],
+            "conservation_mode": old_component["conservation_mode"],
+            "evidence_kind": old_component.get("evidence_kind"),
+            "evidence_grade": old_component.get("evidence_grade"),
+            "evidence": evidence,
+            "conversion_policy": old_component.get("conversion_policy"),
+            "conversion_reviewed": bool(old_component.get("conversion_reviewed")),
+            "conversion_metadata": old_component.get("conversion_metadata") or {},
+            "notes": old_component.get("notes"),
+            "authored_source": authored_source,
+            "legs": legs,
+            "allocations": allocations,
+        },
+        residual_msat,
     )
-    return custody_components.activate_component(conn, component["id"]), residual_msat
 
 
 def _snapshot_candidate(snapshot: Mapping[str, Any]) -> SimpleNamespace:
@@ -1731,33 +1788,43 @@ def _guided_component_spec(
 
     legs: list[dict[str, Any]] = []
     allocations: list[dict[str, Any]] = []
-    source_available: list[list[Any]] = []
+    source_contexts: list[
+        tuple[str, int, Mapping[str, Any], Mapping[str, str]]
+    ] = []
     for index, transaction_id in enumerate(candidate.source_ids):
         row = by_id[transaction_id]
-        fee = int(row["fee"] or 0)
-        principal = int(row["amount"] or 0)
-        if bool(row["amount_includes_fee"]):
-            principal -= fee
-            debit = int(row["amount"] or 0)
-        else:
-            debit = principal + fee
+        boundary = row_boundary_amounts(row)
         scope = _transaction_scope(row)
         source_id = f"source-{index}"
-        legs.append(_anchored_leg(source_id, "source", debit, row, scope))
-        source_available.append([source_id, principal, row, scope])
+        legs.append(
+            _anchored_leg(
+                source_id,
+                "source",
+                boundary.wallet_movement_msat,
+                row,
+                scope,
+            )
+        )
+        source_contexts.append((source_id, boundary.principal_msat, row, scope))
 
     retained_remaining = candidate.retained_msat
+    destination_amounts: list[tuple[str, int]] = []
     for index, transaction_id in enumerate(candidate.return_ids):
         row = by_id[transaction_id]
-        observed_amount = int(row["amount"] or 0)
-        amount = min(observed_amount, retained_remaining)
+        amount = min(row_boundary_amounts(row).principal_msat, retained_remaining)
         if amount <= 0:
             continue
         destination_id = f"destination-{index}"
         legs.append(
-            _anchored_leg(destination_id, "destination", amount, row, _transaction_scope(row))
+            _anchored_leg(
+                destination_id,
+                "destination",
+                amount,
+                row,
+                _transaction_scope(row),
+            )
         )
-        _allocate(source_available, destination_id, amount, allocations)
+        destination_amounts.append((destination_id, amount))
         retained_remaining -= amount
 
     if retained_remaining:
@@ -1766,7 +1833,29 @@ def _guided_component_spec(
             code="custody_gap_stale",
         )
 
-    for index, (source_id, remaining, row, scope) in enumerate(source_available):
+    try:
+        retained_plan = allocate_msat_fifo(
+            [
+                (source_id, principal)
+                for source_id, principal, _row, _scope in source_contexts
+            ],
+            destination_amounts,
+            amount_msat=candidate.retained_msat,
+        )
+    except CustodyAllocationError as exc:
+        raise AppError(
+            "Custody-gap retained quantity is no longer available",
+            code="custody_gap_stale",
+            details={"allocation_code": exc.code, **exc.details},
+        ) from exc
+    allocations.extend(
+        _allocation(cell.source_id, cell.sink_id, cell.amount_msat)
+        for cell in retained_plan.cells
+    )
+    source_remaining = dict(retained_plan.source_remaining)
+
+    for index, (source_id, _principal, row, scope) in enumerate(source_contexts):
+        remaining = source_remaining[source_id]
         if remaining:
             suspense_id = f"suspense-{index}"
             legs.append(
@@ -1784,15 +1873,11 @@ def _guided_component_spec(
                 }
             )
             allocations.append(_allocation(source_id, suspense_id, remaining))
-            source_available[index][1] = 0
-        fee = int(row["fee"] or 0)
+        fee = row_boundary_amounts(row).fee_msat
         if fee:
             fee_id = f"fee-{index}"
             legs.append(_anchored_leg(fee_id, "fee", fee, row, scope))
             allocations.append(_allocation(source_id, fee_id, fee))
-
-    if any(remaining for _source_id, remaining, _row, _scope in source_available):
-        raise AppError("Guided bridge allocation is incomplete", code="custody_gap_stale")
     component_id = str(
         uuid.uuid5(
             uuid.NAMESPACE_URL,
@@ -1815,21 +1900,6 @@ def _guided_component_spec(
         "legs": legs,
         "allocations": allocations,
     }
-
-
-def _allocate(
-    sources: list[list[Any]], sink_id: str, amount: int, allocations: list[dict[str, Any]]
-) -> None:
-    remaining = amount
-    for source in sources:
-        take = min(int(source[1]), remaining)
-        if take:
-            allocations.append(_allocation(str(source[0]), sink_id, take))
-            source[1] = int(source[1]) - take
-            remaining -= take
-        if not remaining:
-            return
-    raise AppError("Custody-gap return exceeds source principal", code="custody_gap_stale")
 
 
 def _allocation(source_id: str, sink_id: str, amount: int) -> dict[str, Any]:
@@ -2157,43 +2227,6 @@ def _preview_filed_report_impacts(
     )
 
 
-def _require_fresh_fingerprint(
-    candidate: CustodyGapCandidate, expected_fingerprint: str
-) -> str:
-    actual = candidate_fingerprint(candidate)
-    if not isinstance(expected_fingerprint, str) or expected_fingerprint != actual:
-        raise AppError(
-            "Custody-gap evidence changed after preview",
-            code="custody_gap_stale",
-            hint="Reload the candidate and review a new preview before confirming.",
-        )
-    return actual
-
-
-def _require_fresh_claim_fingerprint(
-    candidate: CustodyGapCandidate, expected_fingerprint: str
-) -> str:
-    actual = authored_claim_fingerprint(candidate)
-    # Existing structured-candidate callers already use the full suggestion
-    # fingerprint as their reviewed token. Preserve that explicit-create API
-    # while requiring the preview-only authored token for weak/conflicted
-    # hints. New previews always return the narrower durable commitment.
-    structured_legacy_token = (
-        candidate.promotion_eligible
-        and candidate.conflict_size == 1
-        and expected_fingerprint == candidate_fingerprint(candidate)
-    )
-    if not isinstance(expected_fingerprint, str) or (
-        expected_fingerprint != actual and not structured_legacy_token
-    ):
-        raise AppError(
-            "Custody-gap evidence changed after preview",
-            code="custody_gap_stale",
-            hint="Reload the candidate and review a new preview before confirming.",
-        )
-    return actual
-
-
 def _guided_bridge_warnings(candidate: CustodyGapCandidate) -> tuple[str, ...]:
     warnings = ["manual_review_required"]
     if not candidate.promotion_eligible:
@@ -2223,7 +2256,11 @@ def _require_current_candidate(
     from .custody_gaps import find_gap_candidate
 
     try:
-        current = find_gap_candidate(conn, candidate.profile_id, candidate.gap_id)
+        current = find_gap_candidate(
+            conn,
+            candidate.profile_id,
+            candidate.gap_id,
+        )
     except (AppError, TypeError, ValueError) as exc:
         raise AppError(
             "Custody-gap evidence changed after it was loaded",
@@ -2309,22 +2346,16 @@ def _public_review(review: Mapping[str, Any]) -> dict[str, Any]:
 
 __all__ = [
     "RESIDUAL_CLASSIFICATIONS",
+    "apply_review",
     "authored_claim_fingerprint",
-    "append_dismissal",
     "candidate_fingerprint",
-    "create_guided_bridge",
-    "current_dismissed_gap_ids",
-    "classify_residual",
     "historical_review_gaps",
     "latest_reviews",
     "latest_dismissed_fingerprints",
     "list_review_history",
-    "preview_guided_bridge",
-    "preview_guided_revision",
-    "preview_reopen_guided_bridge",
-    "preview_residual_classification",
-    "reopen_guided_bridge",
-    "revise_guided_bridge",
+    "plan_review",
+    "public_review_plan",
+    "residual_custody_state",
     "review_state",
     "review_status",
 ]

@@ -76,7 +76,6 @@ BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
 BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
 BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
 WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
-OWNERSHIP_HISTORY_CONFIG_KEY = "ownership_history"
 OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
 MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
 WALLET_SAFE_CONFIG_FIELDS = (
@@ -537,12 +536,13 @@ def create_wallet(
     config=None,
     *,
     commit=True,
+    wallet_id=None,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     account = resolve_account(conn, profile["id"], account_ref or "treasury")
     normalized_kind = normalize_wallet_kind(kind)
     config = _validated_wallet_config(normalized_kind, config or {})
-    wallet_id = str(uuid.uuid4())
+    wallet_id = str(wallet_id or uuid.uuid4())
     try:
         conn.execute(
             """
@@ -566,6 +566,7 @@ def create_wallet(
             code="conflict",
             hint="Choose a different wallet label or update the existing wallet.",
         ) from exc
+    invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
     created = fetch_wallet_with_account(conn, wallet_id)
@@ -661,7 +662,6 @@ def _validated_wallet_config(normalized_kind, config):
 def _sync_material_config_json(config):
     sync_config = dict(config or {})
     sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
-    sync_config.pop(OWNERSHIP_HISTORY_CONFIG_KEY, None)
     sync_config.pop(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY, None)
     return json.dumps(
         canonical_wallet_config_identity(sync_config),
@@ -1102,7 +1102,6 @@ __all__ = [
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
     "has_silent_payment_sync_material",
-    "OWNERSHIP_HISTORY_CONFIG_KEY",
     "OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY",
     "normalize_addresses",
     "wallet_is_deprecated",

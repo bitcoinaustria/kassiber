@@ -267,17 +267,19 @@ different projector interpretation.
 ## CLI and desktop
 
 For a deterministic missing-wallet candidate, the guided workflow does not
-require raw component JSON. The preview returns a content fingerprint; creation
-or dismissal must repeat that fingerprint, so changed evidence fails closed and
-reopens review:
+require raw component JSON. The preview returns the current journal input
+version; creation or dismissal must repeat that version, so changed inputs fail
+closed. Dismissal records still bind to the exact candidate evidence fingerprint
+so materially changed evidence reopens review:
 
 ```bash
 kassiber transfers gaps list
 kassiber transfers gaps review --gap-id <gap-id>
-kassiber transfers gaps bridge --gap-id <gap-id> --dry-run
-kassiber transfers gaps bridge --gap-id <gap-id> --expected-fingerprint <sha256>
-kassiber transfers gaps dismiss --gap-id <gap-id> \
-  --expected-fingerprint <sha256> --reason "reviewed explanation"
+kassiber transfers gaps plan --action create --gap-id <gap-id>
+kassiber transfers gaps apply --action create --gap-id <gap-id> \
+  --expected-input-version <version>
+kassiber transfers gaps apply --action dismiss --gap-id <gap-id> \
+  --expected-input-version <version> --reason "reviewed explanation"
 ```
 
 Review decisions are immutable revisions. Concurrent latest decisions remain a
@@ -292,29 +294,38 @@ specific `ui.transfers.components.*` kinds.
 
 ```bash
 # Preview without persisting components or placeholder wallets.
-kassiber transfers components bulk-resolve --file migrations.json --dry-run
+kassiber transfers components plan --action create --file migrations.json
 
-# Activate the complete batch atomically.
-kassiber transfers components bulk-resolve --file migrations.json
+# Activate exactly that reviewed batch atomically.
+kassiber transfers components apply --action create --file migrations.json \
+  --expected-input-version <input-version-from-preview>
 
 # Save incomplete work without affecting accounting.
-kassiber transfers components bulk-resolve --file migrations.json --draft
+kassiber transfers components plan --action create --file migrations.json --draft
+kassiber transfers components apply --action create --file migrations.json --draft \
+  --expected-input-version <input-version-from-draft-preview>
 
 kassiber transfers components list
 kassiber transfers components show --component-id <id>
-kassiber transfers components update --component-id <id> --file revision.json
-kassiber transfers components activate --component-id <id>
-kassiber transfers components supersede --component-id <id> --reason "bad evidence"
-kassiber transfers components undo --component-id <id>
+kassiber transfers components plan --action revise --component-id <id> \
+  --file revision.json --activate
+kassiber transfers components apply --action revise --component-id <id> \
+  --file revision.json --activate --expected-input-version <version>
+kassiber transfers components plan --action activate --component-id <id>
+kassiber transfers components plan --action supersede --component-id <id> \
+  --reason "bad evidence"
+kassiber transfers components plan --action undo --component-id <id>
+# Every state plan is followed by apply with its returned input version.
 ```
 
 The operation flag is authoritative: embedded JSON cannot override `--draft`
-or a desktop “Save as drafts” action. Desktop preview calls the same daemon
-validation inside a rollback-only transaction, including anchor, scope,
-conflict, placeholder-wallet, and conservation checks.
+or a desktop “Save as drafts” action. Desktop preview uses the same read-only
+normalization and validation as apply, including anchor, scope, conflict,
+placeholder-wallet, and conservation checks. It performs no writes and needs
+no rollback simulation.
 
 The in-app assistant may draft the same typed document, but model output is not
-ownership evidence. It must call the bulk tool with `dry_run=true` first and
+ownership evidence. It must call the plan tool first and
 present the validated effects. Creating or activating the final component stays
 behind the existing explicit-consent gate. A remote model may not infer a
 suspense residual or activate a bridge from amount similarity alone.

@@ -14,8 +14,10 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from . import custody_filed_reports as core_custody_filed_reports
+from . import custody_journal as core_custody_journal
 from . import pricing
 from . import rates as core_rates
+from . import report_context as core_report_context
 from .austrian import (
     kennzahl_for_disposal_category,
     tax_year_in_vienna,
@@ -29,12 +31,9 @@ from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_rep
     report_exit_tax,
 )
 from .privacy_linkage import analyze_psbt_privacy, build_privacy_linkage_graph
-from .custody_evidence import row_principal_msat
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
-from ..tax_policy import require_tax_processing_supported
-from ..transfers import apply_manual_pairs, detect_intra_transfers
 from ..wallet_descriptors import normalize_asset_code
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
@@ -220,8 +219,6 @@ AUSTRIAN_TAX_SECTION_GROUPS = (
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
-RequireProcessedJournals = Callable[[sqlite3.Connection, Mapping[str, Any]], None]
-BuildLedgerState = Callable[[sqlite3.Connection, Mapping[str, Any]], Mapping[str, Any]]
 ListJournalEntries = Callable[..., list[Mapping[str, Any]]]
 ListWallets = Callable[..., list[Mapping[str, Any]]]
 ParseIsoDateTime = Callable[[str | None, str], Any]
@@ -267,8 +264,6 @@ class ReportHooks:
     resolve_scope: ScopeResolver
     resolve_account: AccountResolver
     resolve_wallet: WalletResolver
-    require_processed_journals: RequireProcessedJournals
-    build_ledger_state: BuildLedgerState
     list_journal_entries: ListJournalEntries
     list_wallets: ListWallets
     parse_iso_datetime: ParseIsoDateTime
@@ -278,10 +273,26 @@ class ReportHooks:
     write_text_pdf: WriteTextPdf
 
 
-def _resolve_report_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    require_tax_processing_supported(profile)
-    return workspace, profile
+def _require_report_context(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    report_context: core_report_context.ReportContext | None = None,
+    *,
+    validate_profile: core_report_context.ProfileValidator | None = None,
+) -> core_report_context.ReportContext:
+    if report_context is not None:
+        if validate_profile is not None:
+            validate_profile(report_context.profile)
+        return report_context
+    return core_report_context.require_report_context(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks.resolve_scope,
+        validate_profile=validate_profile,
+    )
 
 
 def _register_saved_export(
@@ -482,23 +493,12 @@ def _journal_freshness_fact(
     journal_entry_count: int,
     quarantine_count: int,
 ) -> dict[str, Any]:
-    last_processed_at = profile["last_processed_at"]
-    last_processed_tx_count = int(profile["last_processed_tx_count"] or 0)
-    journal_input_version = int(profile["journal_input_version"] or 0)
-    last_processed_input_version = int(profile["last_processed_input_version"] or 0)
-    if active_transaction_count == 0:
-        status = "no_transactions"
-    elif not last_processed_at:
-        status = "not_processed"
-    elif last_processed_tx_count != active_transaction_count:
-        status = "stale"
-    elif journal_input_version != last_processed_input_version:
-        status = "stale"
-    else:
-        status = "current"
+    freshness = core_custody_journal.evaluate_projection_freshness(
+        profile, active_transaction_count
+    )
     return {
-        "status": status,
-        "needs_processing": status in {"not_processed", "stale"},
+        "status": freshness["status"],
+        "needs_processing": freshness["needs_processing"],
         "active_transaction_count": active_transaction_count,
         "journal_entry_count": journal_entry_count,
         "quarantine_count": quarantine_count,
@@ -1746,44 +1746,10 @@ def psbt_privacy_table_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def latest_transaction_rates_for_profile(conn, profile_id):
-    try:
-        rows = conn.execute(
-            """
-            SELECT asset, fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            ORDER BY occurred_at DESC, created_at DESC
-            """,
-            (profile_id,),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        rows = conn.execute(
-            """
-            SELECT asset, fiat_rate, fiat_value, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            ORDER BY occurred_at DESC, created_at DESC
-            """,
-            (profile_id,),
-        ).fetchall()
-    rates = {}
-    for row in rows:
-        asset = row["asset"]
-        if asset in rates:
-            continue
-        rate = row["fiat_rate_exact"] if "fiat_rate_exact" in row.keys() else None
-        value = row["fiat_value_exact"] if "fiat_value_exact" in row.keys() else None
-        rate_dec = dec(rate) if rate is not None else None
-        value_dec = dec(value) if value is not None else None
-        if rate_dec is None and row["fiat_rate"] is not None:
-            rate_dec = dec(row["fiat_rate"])
-        if value_dec is None and row["fiat_value"] is not None:
-            value_dec = dec(row["fiat_value"])
-        if rate_dec is not None:
-            rates[asset] = rate_dec
-        elif value_dec is not None and row["amount"]:
-            rates[asset] = value_dec / msat_to_btc(row["amount"])
-    return rates
+    return core_custody_journal.latest_transaction_rates_for_profile(
+        conn,
+        profile_id,
+    )
 
 
 def _profile_market_rate_assets(conn, profile_id):
@@ -1897,51 +1863,33 @@ def market_rates_for_profile_at_or_before(conn, profile, as_of, *, assets=None, 
     return market_rates
 
 
-def _profile_has_journal_entries(conn, profile_id):
-    row = conn.execute(
-        "SELECT 1 FROM journal_entries WHERE profile_id = ? LIMIT 1",
-        (profile_id,),
-    ).fetchone()
-    return row is not None
-
-
-def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
-    fallback_rates = None
+def report_balance_sheet(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     rows = []
-    try:
-        holding_rows = conn.execute(
-            """
-            SELECT account_code, account_label, asset, quantity, cost_basis
-            FROM journal_account_holdings
-            WHERE profile_id = ?
-            ORDER BY account_code ASC, asset ASC, id ASC
-            """,
-            (profile["id"],),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        holding_rows = None
-    if holding_rows is None or (not holding_rows and _profile_has_journal_entries(conn, profile["id"])):
-        state = hooks.build_ledger_state(conn, profile)
-        fallback_rates = state["latest_rates"]
-        holding_rows = [
-            {
-                "account_code": account_code,
-                "account_label": account_label,
-                "asset": asset,
-                "quantity": btc_to_msat(value["quantity"]),
-                "cost_basis": value["cost_basis"],
-            }
-            for (_account_id, account_code, account_label, asset), value in state[
-                "account_holdings"
-            ].items()
-        ]
+    holding_rows = conn.execute(
+        """
+        SELECT account_code, account_label, asset, quantity, cost_basis
+        FROM journal_account_holdings
+        WHERE profile_id = ?
+        ORDER BY account_code ASC, asset ASC, id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
     latest_rates = latest_market_rates_for_profile(
         conn,
         profile,
         assets=[row["asset"] for row in holding_rows],
-        fallback_rates=fallback_rates,
+        fallback_rates=None,
     )
     for value in holding_rows:
         quantity = msat_to_btc(value["quantity"])
@@ -2123,47 +2071,38 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
     return results
 
 
-def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks, as_of=None, *, include_wallet_id=False):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_portfolio_summary(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    as_of=None,
+    *,
+    include_wallet_id=False,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     if as_of is not None:
         as_of_dt = hooks.parse_iso_datetime(as_of, "as_of") if not isinstance(as_of, datetime) else as_of
         return _historical_portfolio_summary(conn, profile, hooks, as_of_dt, include_wallet_id=include_wallet_id)
-    fallback_rates = None
     rows = []
-    try:
-        holding_rows = conn.execute(
-            """
-            SELECT wallet_id, wallet_label, account_code, asset, quantity, cost_basis
-            FROM journal_wallet_holdings
-            WHERE profile_id = ?
-            ORDER BY wallet_label ASC, asset ASC, id ASC
-            """,
-            (profile["id"],),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        holding_rows = None
-    if holding_rows is None or (not holding_rows and _profile_has_journal_entries(conn, profile["id"])):
-        state = hooks.build_ledger_state(conn, profile)
-        fallback_rates = state["latest_rates"]
-        holding_rows = [
-            {
-                "wallet_id": wallet_id,
-                "wallet_label": wallet_label,
-                "account_code": account_code,
-                "asset": asset,
-                "quantity": btc_to_msat(value["quantity"]),
-                "cost_basis": value["cost_basis"],
-            }
-            for (wallet_id, wallet_label, account_code, asset), value in state[
-                "wallet_holdings"
-            ].items()
-        ]
+    holding_rows = conn.execute(
+        """
+        SELECT wallet_id, wallet_label, account_code, asset, quantity, cost_basis
+        FROM journal_wallet_holdings
+        WHERE profile_id = ?
+        ORDER BY wallet_label ASC, asset ASC, id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
     latest_rates = latest_market_rates_for_profile(
         conn,
         profile,
         assets=[row["asset"] for row in holding_rows],
-        fallback_rates=fallback_rates,
+        fallback_rates=None,
     )
     for value in holding_rows:
         quantity = msat_to_btc(value["quantity"])
@@ -2192,9 +2131,19 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
     return rows
 
 
-def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_capital_gains(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    tax_year=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     where = [
         "je.profile_id = ?",
         "je.entry_type IN ('disposal', 'income')",
@@ -2257,9 +2206,18 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     return results
 
 
-def report_journal_entries(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_journal_entries(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     return hooks.list_journal_entries(conn, profile["workspace_id"], profile["id"], limit=None)
 
 
@@ -2301,6 +2259,7 @@ def report_balance_history(
     wallet_ref=None,
     account_ref=None,
     asset=None,
+    report_context: core_report_context.ReportContext | None = None,
 ):
     if interval not in INTERVAL_CHOICES:
         raise AppError(
@@ -2308,8 +2267,10 @@ def report_balance_history(
             code="validation",
             hint=f"Choose one of: {', '.join(INTERVAL_CHOICES)}",
         )
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     start_dt = hooks.parse_iso_datetime(start, "start")
     end_dt = hooks.parse_iso_datetime(end, "end")
     if start_dt and end_dt and start_dt > end_dt:
@@ -2652,23 +2613,9 @@ def _journals_current(conn, profile_id):
     rows in place, so a stale profile still has entries that must not be
     exported as current figures.
     """
-    row = conn.execute(
-        """
-        SELECT last_processed_at, last_processed_tx_count,
-               journal_input_version, last_processed_input_version
-        FROM profiles WHERE id = ?
-        """,
-        (profile_id,),
-    ).fetchone()
-    if row is None or not row["last_processed_at"]:
-        return False
-    current_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile_id,),
-    ).fetchone()["count"]
-    return int(current_count or 0) == int(row["last_processed_tx_count"] or 0) and int(
-        row["journal_input_version"] or 0
-    ) == int(row["last_processed_input_version"] or 0)
+    return bool(
+        core_custody_journal.projection_freshness(conn, str(profile_id))["is_current"]
+    )
 
 
 def _transaction_journal_values(conn, profile, wallet=None):
@@ -2738,14 +2685,11 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
     nothing it withheld, quarantined, or replaced with a direct-payout
     disposal. Reviewed carrying-value cross-asset pairs never book transfer
     entries (they carry through the swap path), so those are labeled from the
-    pair records unless a leg quarantined.
+    stored economic relations unless a leg quarantined.
 
-    Without current journals a best-effort heuristic reuses the same pure
-    detection + manual-pair layer as the journal pipeline
-    (``detect_intra_transfers`` + ``apply_manual_pairs``), including the
-    engine's whole-row direct-payout pruning. Detection spans the whole
-    profile (a transfer is two wallets), so this always works on the full
-    profile row set even when the export is wallet-scoped.
+    Without current journals no transfer label is emitted. Raw transaction
+    exports remain possible, but a stale report context never redetects or
+    presents provisional observations as booked custody truth.
     """
     rows = conn.execute(
         """
@@ -2770,8 +2714,18 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         (profile["id"],),
     ).fetchall()
     rows_by_id = {row["id"]: row for row in rows}
-    manual_records = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
+    if not journals_current:
+        # A stale report context must not reconstruct booked custody truth from
+        # observations or compatibility rows. Callers may still export the raw
+        # transaction ledger, but transfer labels remain empty until the
+        # canonical journal projection is rebuilt.
+        return {}
+    conversion_records = conn.execute(
+        "SELECT out_transaction_id AS source_transaction_id, "
+        "in_transaction_id AS target_transaction_id "
+        "FROM journal_custody_projection_relations "
+        "WHERE profile_id = ? AND relation_kind = 'conversion' "
+        "AND policy = 'carrying-value' AND basis_state = 'eligible'",
         (profile["id"],),
     ).fetchall()
 
@@ -2787,11 +2741,9 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         # Only carrying-value cross-asset pairs are reviewed as own-wallet
         # moves; `--policy taxable` pairs stay SELL + BUY in the engine and
         # must not be labeled as internal transfers.
-        for record in manual_records:
-            if record["policy"] != "carrying-value":
-                continue
-            out_row = rows_by_id.get(record["out_transaction_id"])
-            in_row = rows_by_id.get(record["in_transaction_id"])
+        for record in conversion_records:
+            out_row = rows_by_id.get(record["source_transaction_id"])
+            in_row = rows_by_id.get(record["target_transaction_id"])
             if out_row is None or in_row is None or out_row["asset"] == in_row["asset"]:
                 continue
             yield out_row, in_row
@@ -2882,58 +2834,6 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
             _add(in_row["id"], {out_row["wallet_label"]})
         return {tx_id: ", ".join(sorted(labels)) for tx_id, labels in label_sets.items()}
 
-    auto_pairs, _ = detect_intra_transfers(rows)
-
-    # A reviewed whole-row direct payout books its outbound as a taxable
-    # disposal, and the engine prunes any auto self-transfer pair touching it
-    # before apply_manual_pairs so the disposal cannot be relabelled as a MOVE.
-    # Mirror that here or the export would label the payout's source as a
-    # transfer to the owned change wallet. Partial and over-amount (rejected)
-    # payouts keep their auto pair, matching the engine.
-    payout_records = conn.execute(
-        "SELECT out_transaction_id, out_amount FROM direct_swap_payouts "
-        "WHERE profile_id = ? AND deleted_at IS NULL",
-        (profile["id"],),
-    ).fetchall()
-    payout_claimed_ids = set()
-    for record in payout_records:
-        out_row = rows_by_id.get(record["out_transaction_id"])
-        if out_row is None:
-            continue
-        reviewed = record["out_amount"]
-        full_amount = row_principal_msat(out_row)
-        if reviewed in (None, "") or int(reviewed) == full_amount:
-            payout_claimed_ids.add(out_row["id"])
-    auto_pairs = [
-        pair
-        for pair in auto_pairs
-        if pair["out"]["id"] not in payout_claimed_ids
-        and pair["in"]["id"] not in payout_claimed_ids
-    ]
-
-    manual_leg_ids = set()
-    for record in manual_records:
-        manual_leg_ids.add(record["out_transaction_id"])
-        manual_leg_ids.add(record["in_transaction_id"])
-    same_asset_pairs, _cross_asset = apply_manual_pairs(rows, auto_pairs, manual_records)
-
-    for pair in same_asset_pairs:
-        # The out leg's counterparty is the destination wallet, and vice versa.
-        _add(pair["out"]["id"], {pair["in"]["wallet_label"]})
-        _add(pair["in"]["id"], {pair["out"]["wallet_label"]})
-    for out_row, in_row in _carrying_value_cross_asset_pairs():
-        _add(out_row["id"], {in_row["wallet_label"]})
-        _add(in_row["id"], {out_row["wallet_label"]})
-    # A partial cross-asset pair (split swap: part swapped, part change back to
-    # an owned wallet) suppresses the same-txid auto pair in apply_manual_pairs,
-    # but the engine splits the source row so the change leg stays a
-    # self-transfer. Recover the label for suppressed legs that are not
-    # themselves part of any reviewed pair.
-    for pair in auto_pairs:
-        for leg, other in ((pair["out"], pair["in"]), (pair["in"], pair["out"])):
-            if leg["id"] in label_sets or leg["id"] in manual_leg_ids:
-                continue
-            _add(leg["id"], {other["wallet_label"]})
     return {tx_id: ", ".join(sorted(labels)) for tx_id, labels in label_sets.items()}
 
 
@@ -3140,7 +3040,7 @@ def _report_query_rows(conn, profile, wallet=None):
             }
         )
 
-    pair_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
+    pair_filters = ["p.profile_id = ?"]
     pair_params = [profile["id"]]
     if wallet:
         pair_filters.append("(tout.wallet_id = ? OR tin.wallet_id = ?)")
@@ -3160,23 +3060,22 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            -- Split cross-asset pairs cross only `out_amount`; the swap fee is
-            -- measured against that portion, so the Transfers & Swaps sheet must
-            -- report it too (NULL out_amount on whole/same-asset pairs).
-            COALESCE(p.out_amount, tout.amount) AS out_amount,
+            p.out_amount,
             tout.fee AS out_fee,
             tin.occurred_at AS in_occurred_at,
             COALESCE(tin.external_id, '') AS in_transaction_id,
             win.label AS in_wallet,
             tin.asset AS in_asset,
-            tin.amount AS in_amount,
+            p.in_amount,
             tin.fee AS in_fee
-        FROM transaction_pairs p
+        FROM journal_custody_projection_relations p
         JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN transactions tin ON tin.id = p.in_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
         JOIN wallets win ON win.id = tin.wallet_id
-        WHERE {pair_where}
+        WHERE p.relation_kind IN ('move', 'conversion')
+          AND p.in_transaction_id IS NOT NULL
+          AND {pair_where}
         ORDER BY
             MIN(tout.occurred_at, tin.occurred_at) ASC,
             p.created_at ASC,
@@ -3185,7 +3084,7 @@ def _report_query_rows(conn, profile, wallet=None):
         pair_params,
     ).fetchall()
 
-    direct_payout_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
+    direct_payout_filters = ["p.profile_id = ?"]
     direct_payout_params = [profile["id"]]
     if wallet:
         direct_payout_filters.append("tout.wallet_id = ?")
@@ -3197,10 +3096,10 @@ def _report_query_rows(conn, profile, wallet=None):
             p.id,
             p.kind,
             p.policy,
-            p.payout_asset,
-            p.payout_amount,
-            p.payout_occurred_at,
-            p.payout_external_id,
+            p.in_asset AS payout_asset,
+            p.in_amount AS payout_amount,
+            p.target_occurred_at AS payout_occurred_at,
+            p.target_external_id AS payout_external_id,
             p.counterparty,
             p.swap_fee_msat,
             COALESCE(p.swap_fee_kind, '') AS swap_fee_kind,
@@ -3210,14 +3109,15 @@ def _report_query_rows(conn, profile, wallet=None):
             COALESCE(tout.external_id, '') AS out_transaction_id,
             wout.label AS out_wallet,
             tout.asset AS out_asset,
-            COALESCE(p.out_amount, tout.amount) AS out_amount,
+            p.out_amount,
             tout.fee AS out_fee
-        FROM direct_swap_payouts p
+        FROM journal_custody_projection_relations p
         JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
-        WHERE {direct_payout_where}
+        WHERE p.relation_kind = 'direct_payout'
+          AND {direct_payout_where}
         ORDER BY
-            COALESCE(p.payout_occurred_at, tout.occurred_at) ASC,
+            COALESCE(p.target_occurred_at, tout.occurred_at) ASC,
             p.created_at ASC,
             p.id ASC
         """,
@@ -3304,17 +3204,22 @@ def _summary_wallet_flow_rows(rows):
 
 
 def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    hooks.require_processed_journals(conn, profile)
 
     scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
-    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
+    portfolio_rows = report_portfolio_summary(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
     balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
 
-    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"], hooks)
+    capital_rows = report_capital_gains(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
 
@@ -3325,6 +3230,7 @@ def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     return {
         "workspace": workspace,
         "profile": profile,
+        "report_context": report_context,
         "wallet": wallet,
         "scope_wallets": scope_wallets,
         "portfolio_rows": portfolio_rows,
@@ -3336,20 +3242,35 @@ def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     }
 
 
-def _build_full_report_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+def _build_full_report_context(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    wallet_ref=None,
+    history_limit=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
     if history_limit is not None and int(history_limit) < 0:
         raise AppError("--history-limit must be zero or positive", code="validation")
-    hooks.require_processed_journals(conn, profile)
-
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    workspace = report_context.workspace
+    profile = report_context.profile
+    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
-    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
+    portfolio_rows = report_portfolio_summary(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
     balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
 
-    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"], hooks)
+    capital_rows = report_capital_gains(
+        conn, workspace["id"], profile["id"], hooks, report_context=report_context
+    )
     if wallet:
         capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
     history_rows = report_balance_history(
@@ -3359,6 +3280,7 @@ def _build_full_report_context(conn, workspace_ref, profile_ref, hooks: ReportHo
         hooks,
         interval="month",
         wallet_ref=wallet["id"] if wallet else None,
+        report_context=report_context,
     )
     if history_limit is not None and int(history_limit) > 0:
         history_rows = history_rows[-int(history_limit) :]
@@ -3371,6 +3293,7 @@ def _build_full_report_context(conn, workspace_ref, profile_ref, hooks: ReportHo
     return {
         "workspace": workspace,
         "profile": profile,
+        "report_context": report_context,
         "wallet": wallet,
         "scope_wallets": scope_wallets,
         "portfolio_rows": portfolio_rows,
@@ -3563,8 +3486,25 @@ def _summary_pdf_tx_counts(conn, profile_id, wallets, hooks: ReportHooks, start_
     return {row["wallet_id"]: int(row["tx_count"] or 0) for row in rows}
 
 
-def _summary_pdf_portfolio_rows(conn, workspace_id, profile_id, hooks: ReportHooks, wallets, *, as_of=None):
-    rows = report_portfolio_summary(conn, workspace_id, profile_id, hooks, as_of=as_of, include_wallet_id=True)
+def _summary_pdf_portfolio_rows(
+    conn,
+    workspace_id,
+    profile_id,
+    hooks: ReportHooks,
+    wallets,
+    *,
+    as_of=None,
+    report_context: core_report_context.ReportContext,
+):
+    rows = report_portfolio_summary(
+        conn,
+        workspace_id,
+        profile_id,
+        hooks,
+        as_of=as_of,
+        include_wallet_id=True,
+        report_context=report_context,
+    )
     if _summary_pdf_wallet_scope_is_all(conn, workspace_id, profile_id, hooks, wallets):
         return rows
     selected_ids = {str(row["id"]) for row in wallets}
@@ -3619,7 +3559,17 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
     return results
 
 
-def _summary_pdf_balance_history_from_report(conn, workspace_id, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
+def _summary_pdf_balance_history_from_report(
+    conn,
+    workspace_id,
+    profile_id,
+    wallets,
+    hooks: ReportHooks,
+    start_dt,
+    end_dt,
+    *,
+    report_context: core_report_context.ReportContext,
+):
     start_text = hooks.iso_z(start_dt)
     end_text = hooks.iso_z(end_dt)
     if _summary_pdf_wallet_scope_is_all(conn, workspace_id, profile_id, hooks, wallets):
@@ -3631,6 +3581,7 @@ def _summary_pdf_balance_history_from_report(conn, workspace_id, profile_id, wal
             interval="month",
             start=start_text,
             end=end_text,
+            report_context=report_context,
         )
     else:
         rows = []
@@ -3645,6 +3596,7 @@ def _summary_pdf_balance_history_from_report(conn, workspace_id, profile_id, wal
                     start=start_text,
                     end=end_text,
                     wallet_ref=wallet["id"],
+                    report_context=report_context,
                 )
             )
     buckets = defaultdict(
@@ -3743,18 +3695,11 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
         """,
         tx_params,
     ).fetchall()
-    current_tx_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile["id"],),
-    ).fetchone()["count"]
-    input_version = _summary_pdf_int(profile["journal_input_version"])
-    processed_version = _summary_pdf_int(profile["last_processed_input_version"])
-    last_processed_tx_count = _summary_pdf_int(profile["last_processed_tx_count"])
-    journals_current = bool(
-        profile["last_processed_at"]
-        and _summary_pdf_int(current_tx_count) == last_processed_tx_count
-        and input_version == processed_version
-    )
+    freshness = core_custody_journal.projection_freshness(conn, profile)
+    input_version = freshness["journal_input_version"]
+    processed_version = freshness["last_processed_input_version"]
+    last_processed_tx_count = freshness["last_processed_tx_count"]
+    journals_current = freshness["is_current"]
     total_transactions = _summary_pdf_int(tx_summary["total_transactions"])
     priced_transactions = _summary_pdf_int(tx_summary["priced_transactions"])
     priced_percentage = (
@@ -3774,13 +3719,13 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
         "quarantine_reasons": quarantine_reasons,
         "internal_transfers": internal_transfers,
         "journals": {
-            "status": "current" if journals_current else ("stale" if profile["last_processed_at"] else "not_processed"),
+            "status": freshness["status"],
             "current": journals_current,
             "last_processed_at": profile["last_processed_at"],
             "journal_input_version": input_version,
             "last_processed_input_version": processed_version,
             "last_processed_tx_count": last_processed_tx_count,
-            "current_tx_count": _summary_pdf_int(current_tx_count),
+            "current_tx_count": freshness["active_transaction_count"],
         },
     }
 
@@ -4001,9 +3946,9 @@ def _summary_pdf_top_disposals(conn, profile_id, wallets, hooks: ReportHooks, st
 
 def _summary_pdf_internal_transfers(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
     wallet_filter, wallet_params = _wallet_scope_sql("tout.wallet_id", wallets)
-    # A multi-pair component (whirlpool 1->N review) repeats the SAME out leg
-    # on every pair row, so aggregate over distinct out transactions — one
-    # spend is one internal transfer, whatever the number of receipt legs.
+    # A fan-out component repeats the same source transaction on several
+    # projected decisions. Aggregate distinct sources: one spend is one
+    # internal transfer, whatever the number of destination slices.
     rows = conn.execute(
         f"""
         SELECT COUNT(*) AS count,
@@ -4011,13 +3956,10 @@ def _summary_pdf_internal_transfers(conn, profile_id, wallets, hooks: ReportHook
                COALESCE(SUM(amount), 0) AS amount_msat
         FROM (
             SELECT DISTINCT tout.id, tout.fiat_value, tout.amount
-            FROM transaction_pairs p
-            JOIN transactions tout ON tout.id = p.out_transaction_id
-            JOIN transactions tin ON tin.id = p.in_transaction_id
-            WHERE p.profile_id = ?
-              AND p.deleted_at IS NULL
-              AND p.policy = 'carrying-value'
-              AND tout.asset = tin.asset
+            FROM journal_custody_decisions decision
+            JOIN transactions tout ON tout.id = decision.source_transaction_id
+            WHERE decision.profile_id = ?
+              AND decision.source_asset = decision.target_asset
               AND {wallet_filter}
               AND tout.occurred_at >= ?
               AND tout.occurred_at <= ?
@@ -4079,9 +4021,13 @@ def build_summary_pdf_report_data(
     end=None,
     wallet_refs=None,
     include_snapshot=False,
+    report_context: core_report_context.ReportContext | None = None,
 ):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    workspace = report_context.workspace
+    profile = report_context.profile
     start_dt, end_dt = _summary_pdf_period(hooks, start=start, end=end)
     wallets = _resolve_wallet_scope_refs(conn, workspace["id"], profile["id"], hooks, wallet_refs=wallet_refs)
     generated_at = hooks.now_iso()
@@ -4092,6 +4038,7 @@ def build_summary_pdf_report_data(
         hooks,
         wallets,
         as_of=end_dt,
+        report_context=report_context,
     )
     tx_counts = _summary_pdf_tx_counts(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     wallet_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_counts)
@@ -4100,7 +4047,16 @@ def build_summary_pdf_report_data(
         "asset_quantities": _summary_pdf_total_asset_quantities_from_holdings(wallet_holdings),
         "total_market_value": _summary_pdf_total_market_value_from_holdings(wallet_holdings),
     }
-    history_rows = _summary_pdf_balance_history_from_report(conn, workspace["id"], profile["id"], wallets, hooks, start_dt, end_dt)
+    history_rows = _summary_pdf_balance_history_from_report(
+        conn,
+        workspace["id"],
+        profile["id"],
+        wallets,
+        hooks,
+        start_dt,
+        end_dt,
+        report_context=report_context,
+    )
     flow_periods, flow_totals = _summary_pdf_flow_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     realized_periods, realized_total = _summary_pdf_realized_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     period_start_value = history_rows[0]["market_value"] if history_rows else 0.0
@@ -4117,7 +4073,14 @@ def build_summary_pdf_report_data(
     title = f"Kassiber Summary Report - {profile['label']}"
     snapshot = None
     if include_snapshot:
-        snapshot_rows = _summary_pdf_portfolio_rows(conn, workspace["id"], profile["id"], hooks, wallets)
+        snapshot_rows = _summary_pdf_portfolio_rows(
+            conn,
+            workspace["id"],
+            profile["id"],
+            hooks,
+            wallets,
+            report_context=report_context,
+        )
         snapshot_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, snapshot_rows, tx_counts)
         snapshot_totals = {
             "total_quantity": _summary_pdf_total_quantity_from_holdings(snapshot_holdings),
@@ -4450,9 +4413,18 @@ def _tax_summary_from_journal_entries(conn, profile_id, *, use_vienna_year=False
     ]
 
 
-def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+def report_tax_summary(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn, workspace_ref, profile_ref, hooks, report_context
+    )
+    profile = report_context.profile
     use_vienna_year = str(_row_get(profile, "tax_country") or "").lower() == "at"
     if use_vienna_year:
         # Rebuild from journal entries so year buckets follow Europe/Vienna
@@ -4462,36 +4434,29 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
         )
         taxable_summary_rows = tax_summary_rows
     else:
-        try:
-            stored_rows = conn.execute(
-                """
-                SELECT year, asset, transaction_type, capital_gains_type, quantity,
-                       proceeds, cost_basis, gain_loss
-                FROM journal_tax_summary
-                WHERE profile_id = ?
-                """,
-                (profile["id"],),
-            ).fetchall()
-            tax_summary_rows = [
-                {
-                    "year": int(row["year"]),
-                    "asset": row["asset"],
-                    "transaction_type": row["transaction_type"],
-                    "capital_gains_type": row["capital_gains_type"],
-                    "quantity": float(msat_to_btc(row["quantity"])),
-                    "quantity_msat": int(row["quantity"]),
-                    "proceeds": row["proceeds"],
-                    "cost_basis": row["cost_basis"],
-                    "gain_loss": row["gain_loss"],
-                }
-                for row in stored_rows
-            ]
-        except sqlite3.OperationalError:
-            tax_summary_rows = None
-        if tax_summary_rows is None or (
-            not tax_summary_rows and _profile_has_journal_entries(conn, profile["id"])
-        ):
-            tax_summary_rows = hooks.build_ledger_state(conn, profile)["tax_summary"]
+        stored_rows = conn.execute(
+            """
+            SELECT year, asset, transaction_type, capital_gains_type, quantity,
+                   proceeds, cost_basis, gain_loss
+            FROM journal_tax_summary
+            WHERE profile_id = ?
+            """,
+            (profile["id"],),
+        ).fetchall()
+        tax_summary_rows = [
+            {
+                "year": int(row["year"]),
+                "asset": row["asset"],
+                "transaction_type": row["transaction_type"],
+                "capital_gains_type": row["capital_gains_type"],
+                "quantity": float(msat_to_btc(row["quantity"])),
+                "quantity_msat": int(row["quantity"]),
+                "proceeds": row["proceeds"],
+                "cost_basis": row["cost_basis"],
+                "gain_loss": row["gain_loss"],
+            }
+            for row in stored_rows
+        ]
         taxable_summary_rows = _exclude_non_reportable_tax_summary_rows(
             conn,
             profile["id"],
@@ -4579,8 +4544,7 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
 
 
 def _swap_fee_summary_rows(conn, profile_id, *, use_vienna_year=False):
-    """Aggregate ``transaction_pairs.swap_fee_msat`` per tax year and per
-    grand total, returning rows shaped to slot into the tax-summary list.
+    """Aggregate reviewed projected swap fees per tax year and grand total.
 
     Surfaces the "what actually left your custody" line that's invisible
     to the per-asset capital-gains breakdown above. For carrying-value
@@ -4593,29 +4557,15 @@ def _swap_fee_summary_rows(conn, profile_id, *, use_vienna_year=False):
         SELECT p.kind,
                p.policy,
                p.swap_fee_msat,
-               t_out.asset AS out_asset,
-               t_in.asset AS in_asset,
-               t_out.occurred_at AS occurred_at
-        FROM transaction_pairs p
-        JOIN transactions t_out ON t_out.id = p.out_transaction_id
-        JOIN transactions t_in ON t_in.id = p.in_transaction_id
-        WHERE p.profile_id = ?
-          AND p.deleted_at IS NULL
-          AND p.swap_fee_msat IS NOT NULL
-        UNION ALL
-        SELECT p.kind,
-               p.policy,
-               p.swap_fee_msat,
-               t_out.asset AS out_asset,
-               p.payout_asset AS in_asset,
-               COALESCE(p.payout_occurred_at, t_out.occurred_at) AS occurred_at
-        FROM direct_swap_payouts p
+               p.out_asset,
+               p.in_asset,
+               COALESCE(p.target_occurred_at, t_out.occurred_at) AS occurred_at
+        FROM journal_custody_projection_relations p
         JOIN transactions t_out ON t_out.id = p.out_transaction_id
         WHERE p.profile_id = ?
-          AND p.deleted_at IS NULL
           AND p.swap_fee_msat IS NOT NULL
         """,
-        (profile_id, profile_id),
+        (profile_id,),
     ).fetchall()
     if not rows:
         return []
@@ -5231,10 +5181,25 @@ def _austrian_kennzahl_table_rows(summary_rows):
     ]
 
 
-def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    _require_austrian_e1kv_profile(profile)
-    hooks.require_processed_journals(conn, profile)
+def report_austrian_e1kv(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    tax_year=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report_context = _require_report_context(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        report_context,
+        validate_profile=_require_austrian_e1kv_profile,
+    )
+    workspace = report_context.workspace
+    profile = report_context.profile
     normalized_year = _normalize_tax_year(tax_year)
     rows = _austrian_e1kv_rows(conn, profile, normalized_year)
     quarantines = _austrian_e1kv_quarantines(conn, profile, normalized_year)
@@ -5261,8 +5226,23 @@ def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     }
 
 
-def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
+def _build_austrian_e1kv_report_lines(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    tax_year=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     scope = str(report["tax_year"])
     title = f"Kassiber Austrian E 1kv / Steuerbericht - {report['profile']} ({scope})"
     lines = [title, "=" * len(title), ""]
@@ -5387,8 +5367,17 @@ def build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: Re
 
 
 def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     transaction_rows = _austrian_e1kv_transaction_rows(conn, profile, report["tax_year"])
     from ..austrian_pdf_report import write_austrian_e1kv_pdf
 
@@ -5397,7 +5386,13 @@ def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path,
             file_path,
             report=report,
             profile=dict(profile),
-            portfolio_rows=report_portfolio_summary(conn, workspace_ref, profile_ref, hooks),
+            portfolio_rows=report_portfolio_summary(
+                conn,
+                workspace_ref,
+                profile_ref,
+                hooks,
+                report_context=report_context,
+            ),
             transaction_rows=transaction_rows,
             section_specs=_austrian_e1kv_section_table_specs(report),
             generated_at=hooks.now_iso(),
@@ -6030,8 +6025,17 @@ def _austrian_e1kv_xlsx_write_section_sheets(report, workbook, formats):
 def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
     import xlsxwriter
 
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -6158,8 +6162,17 @@ def _austrian_e1kv_explanation_csv_rows(report):
 
 
 def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, hooks: ReportHooks, tax_year=None):
-    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
+    report = report_austrian_e1kv(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+        report_context=report_context,
+    )
     directory = Path(dir_path).expanduser()
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -7282,8 +7295,9 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
     Reuses the same row builder + columns as the full report's Transactions
     sheet — including note, counterparty, tags, and the linked-file/URL
     attachments — so the standalone export matches the report."""
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    hooks.require_processed_journals(conn, profile)
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     query_rows = _report_query_rows(conn, profile, wallet=wallet)
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
@@ -7300,6 +7314,7 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
         "wallet": wallet,
         "workspace": workspace,
         "profile": profile,
+        "report_context": report_context,
     }
 
 
@@ -7348,7 +7363,16 @@ def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path,
     }
 
 
-def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+def build_pdf_report_lines(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    wallet_ref=None,
+    history_limit=None,
+    *,
+    report_context: core_report_context.ReportContext | None = None,
+):
     context = _build_full_report_context(
         conn,
         workspace_ref,
@@ -7356,6 +7380,7 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
         hooks,
         wallet_ref=wallet_ref,
         history_limit=history_limit,
+        report_context=report_context,
     )
     workspace = context["workspace"]
     profile = context["profile"]
@@ -7671,6 +7696,9 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
 
 
 def export_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+    if history_limit is not None and int(history_limit) < 0:
+        raise AppError("--history-limit must be zero or positive", code="validation")
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
     title, lines = build_pdf_report_lines(
         conn,
         workspace_ref,
@@ -7678,10 +7706,12 @@ def export_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
         hooks,
         wallet_ref=wallet_ref,
         history_limit=history_limit,
+        report_context=report_context,
     )
     written = dict(hooks.write_text_pdf(file_path, title, lines))
     written["wallet"] = wallet_ref or ""
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     report_scope = None
     if wallet_ref:
         wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref)
@@ -7711,6 +7741,7 @@ def export_summary_pdf_report(
 ):
     from ..summary_pdf_report import write_summary_pdf
 
+    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
     report = build_summary_pdf_report_data(
         conn,
         workspace_ref,
@@ -7720,6 +7751,7 @@ def export_summary_pdf_report(
         end=end,
         wallet_refs=wallet_refs,
         include_snapshot=include_snapshot,
+        report_context=report_context,
     )
     written = dict(write_summary_pdf(file_path, report))
     written.update(
@@ -7748,7 +7780,8 @@ def export_summary_pdf_report(
             "balance_history": report["balance_history"],
         }
     )
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    workspace = report_context.workspace
+    profile = report_context.profile
     written["report_snapshot"] = _register_saved_export(
         conn,
         workspace=workspace,

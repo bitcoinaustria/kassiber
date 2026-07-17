@@ -239,15 +239,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_custody_gaps_list",
             "ui_custody_gaps_review_context",
             "ui_custody_gaps_history",
-            "ui_custody_gaps_bridge_preview",
-            "ui_custody_gaps_bridge_create",
-            "ui_custody_gaps_dismiss",
-            "ui_custody_gaps_reopen_preview",
-            "ui_custody_gaps_reopen",
-            "ui_custody_gaps_revise_preview",
-            "ui_custody_gaps_revise",
-            "ui_custody_gaps_residual_preview",
-            "ui_custody_gaps_residual_classify",
+            "ui_custody_review_plan",
+            "ui_custody_review_apply",
             "ui_transfers_review_context",
             "ui_transfers_list",
             "ui_transfers_payouts_list",
@@ -258,7 +251,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transfers_payouts_create",
             "ui_transfers_payouts_delete",
             "ui_transfers_update",
-            "ui_transfers_components_bulk_resolve",
+            "ui_transfers_components_plan",
+            "ui_transfers_components_apply",
             "ui_transfers_unpair",
             "ui_transfers_bulk_pair",
             "ui_transfers_dismiss",
@@ -349,10 +343,14 @@ class ToolCatalogPromptTest(unittest.TestCase):
         )
         self.assertEqual(get_tool("ui_transfers_components_list").kind_class, "read_only")
         self.assertEqual(
-            get_tool("ui_transfers_components_bulk_resolve").kind_class,
+            get_tool("ui_transfers_components_plan").kind_class,
+            "read_only",
+        )
+        self.assertEqual(
+            get_tool("ui_transfers_components_apply").kind_class,
             "mutating",
         )
-        component_schema = get_tool("ui_transfers_components_bulk_resolve").parameters[
+        component_schema = get_tool("ui_transfers_components_plan").parameters[
             "properties"
         ]["components"]["items"]
         self.assertFalse(component_schema["additionalProperties"])
@@ -365,8 +363,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("suspense", leg_properties["role"]["enum"])
         self.assertIn("incomplete draft", leg_properties["role"]["description"])
         self.assertIn(
-            "Run dry_run=true first",
-            get_tool("ui_transfers_components_bulk_resolve").description,
+            "Pass its input_version unchanged as expected_input_version",
+            get_tool("ui_transfers_components_plan").description,
         )
         valid_component_arguments = {
             "components": [
@@ -392,17 +390,16 @@ class ToolCatalogPromptTest(unittest.TestCase):
                     ],
                 }
             ],
-            "dry_run": True,
         }
         daemon_runtime._validate_ai_tool_arguments(
-            get_tool("ui_transfers_components_bulk_resolve"),
+            get_tool("ui_transfers_components_plan"),
             valid_component_arguments,
         )
         invalid_component_arguments = json.loads(json.dumps(valid_component_arguments))
         invalid_component_arguments["components"][0]["legs"][0]["location_ref"] = "/tmp/private"
         with self.assertRaisesRegex(AppError, "unsupported field"):
             daemon_runtime._validate_ai_tool_arguments(
-                get_tool("ui_transfers_components_bulk_resolve"),
+                get_tool("ui_transfers_components_plan"),
                 invalid_component_arguments,
             )
         self.assertEqual(get_tool("ui_rates_summary").kind_class, "read_only")
@@ -722,7 +719,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ),
             "Exclude tx-1 from accounting",
         )
-        components_tool = get_tool("ui.transfers.components.bulk_resolve")
+        components_tool = get_tool("ui.transfers.components.plan")
         component_properties = components_tool.parameters["properties"]["components"][
             "items"
         ]["properties"]
@@ -730,7 +727,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(
             summarize_tool_call(
                 components_tool,
-                {"components": [{}, {}], "dry_run": True},
+                {"components": [{}, {}]},
             ),
             "Preview 2 gap-resolution components",
         )

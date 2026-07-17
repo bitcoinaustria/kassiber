@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from kassiber.core import custody_journal
 from kassiber.core.ui_snapshot import (
     build_audit_changes_since_last_answer_snapshot,
     build_workspace_overview_snapshot,
@@ -13,6 +14,31 @@ from kassiber.msat import btc_to_msat
 
 
 NOW = "2026-06-06T10:00:00Z"
+
+
+class JournalProjectionFreshnessTest(unittest.TestCase):
+    def test_canonical_freshness_state_matrix(self):
+        base = {
+            "last_processed_at": NOW,
+            "last_processed_tx_count": 2,
+            "journal_input_version": 3,
+            "last_processed_input_version": 3,
+        }
+        cases = (
+            (base, 2, "current", True, False),
+            ({**base, "last_processed_at": None}, 2, "not_processed", False, True),
+            ({**base, "last_processed_tx_count": 1}, 2, "stale", False, True),
+            ({**base, "last_processed_input_version": 2}, 2, "stale", False, True),
+            ({**base, "last_processed_at": None}, 0, "no_transactions", False, False),
+        )
+        for profile, active_count, status, current, needs_processing in cases:
+            with self.subTest(status=status, profile=profile):
+                result = custody_journal.evaluate_projection_freshness(
+                    profile, active_count
+                )
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["is_current"], current)
+                self.assertEqual(result["needs_processing"], needs_processing)
 
 
 def _insert_workspace(conn: sqlite3.Connection, workspace_id: str, label: str) -> None:

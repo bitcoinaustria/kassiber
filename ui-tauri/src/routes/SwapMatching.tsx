@@ -656,8 +656,15 @@ type CustodyComponentListEnvelope = {
 };
 
 interface CustodyBulkResolveResult {
+  input_version: number;
   components: CustodyComponent[];
   summary: { count: number; active: number; draft: number };
+  dry_run?: boolean;
+}
+
+interface CustodyComponentMutationResult {
+  input_version: number;
+  component: CustodyComponent;
   dry_run?: boolean;
 }
 
@@ -692,7 +699,6 @@ const CUSTODY_LOCAL_ISSUE_KEYS = {
   sourceRequired: "swap.components.localIssue.sourceRequired",
   ownedDestinationRequired: "swap.components.localIssue.ownedDestinationRequired",
   anchorRequired: "swap.components.localIssue.anchorRequired",
-  unresolvedValue: "swap.components.localIssue.unresolvedValue",
   suspenseReviewRequired:
     "swap.components.localIssue.suspenseReviewRequired",
   suspenseQuantityModeRequired:
@@ -932,29 +938,29 @@ function CustodyComponentResolver() {
   );
   const previewMutation =
     useDaemonMutation<CustodyBulkResolveResult>(
-      "ui.transfers.components.bulk_resolve",
+      "ui.transfers.components.plan",
       { invalidateQueries: false },
     );
   const bulkMutation =
-    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.bulk_resolve");
-  const updateMutation =
-    useDaemonMutation<CustodyComponent>("ui.transfers.components.update");
-  const activateMutation =
-    useDaemonMutation<CustodyComponent>("ui.transfers.components.activate");
-  const supersedeMutation =
-    useDaemonMutation<CustodyComponent>("ui.transfers.components.supersede");
-  const undoMutation =
-    useDaemonMutation<CustodyComponent>("ui.transfers.components.undo");
+    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.apply");
+  const componentPlanMutation = useDaemonMutation<CustodyComponentMutationResult>(
+    "ui.transfers.components.plan",
+    { invalidateQueries: false },
+  );
+  const componentApplyMutation =
+    useDaemonMutation<CustodyComponentMutationResult>(
+      "ui.transfers.components.apply",
+    );
 
   const components = useMemo(
     () => custodyComponentsFromEnvelope(componentQuery.data?.data),
     [componentQuery.data?.data],
   );
   const mutationPending =
-    activateMutation.isPending ||
-    supersedeMutation.isPending ||
-    undoMutation.isPending ||
-    updateMutation.isPending;
+    previewMutation.isPending ||
+    bulkMutation.isPending ||
+    componentPlanMutation.isPending ||
+    componentApplyMutation.isPending;
   const batchPending = previewMutation.isPending || bulkMutation.isPending;
 
   const handleDocumentChange = (value: string) => {
@@ -975,17 +981,17 @@ function CustodyComponentResolver() {
     setServerPreviewError(null);
     try {
       const response = await previewMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, { activate, dryRun: true }),
+        buildCustodyBulkRequest(nextPreview, { activate }),
       );
       if (!response.data) {
         setServerPreviewError(t("swap.components.backendError.unexpected"));
-        return false;
+        return null;
       }
       setServerPreview(response.data);
-      return true;
+      return response.data;
     } catch (error) {
       setServerPreviewError(custodyMutationError(t, error));
-      return false;
+      return null;
     }
   };
 
@@ -1018,7 +1024,10 @@ function CustodyComponentResolver() {
     if (!verified) return;
     try {
       const response = await bulkMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, { activate }),
+        buildCustodyBulkRequest(nextPreview, {
+          activate,
+          expectedInputVersion: verified.input_version,
+        }),
       );
       if (response.data) setResult(response.data.summary);
     } catch (error) {
@@ -1065,10 +1074,19 @@ function CustodyComponentResolver() {
     const [spec] = buildCustodyBulkRequest(nextPreview, { activate: false }).components;
     if (!spec) return;
     try {
-      await updateMutation.mutateAsync({
+      const planArgs = {
+        action: "revise",
         component_id: editingComponent.id,
         spec,
         activate,
+      };
+      const previewResponse = await componentPlanMutation.mutateAsync(planArgs);
+      if (previewResponse.data?.input_version === undefined) {
+        throw new Error(t("swap.components.backendError.unexpected"));
+      }
+      await componentApplyMutation.mutateAsync({
+        ...planArgs,
+        expected_input_version: previewResponse.data.input_version,
       });
       closeRevisionEditor();
     } catch (error) {
@@ -1083,22 +1101,40 @@ function CustodyComponentResolver() {
     setPendingComponentId(component.id);
     setActionError(null);
     try {
-      if (action === "activate") {
-        await activateMutation.mutateAsync({ component_id: component.id });
-      } else if (action === "supersede" || action === "retire") {
-        await supersedeMutation.mutateAsync({
+      if (action === "activate" || action === "supersede" || action === "retire") {
+        const planArgs = {
+          action: action === "activate" ? "activate" : "supersede",
           component_id: component.id,
           reason:
             action === "retire"
               ? "desktop_custody_review_retire"
-              : "desktop_custody_review_supersede",
+              : action === "supersede"
+                ? "desktop_custody_review_supersede"
+                : undefined,
+        };
+        const previewResponse = await componentPlanMutation.mutateAsync(planArgs);
+        if (previewResponse.data?.input_version === undefined) {
+          throw new Error(t("swap.components.backendError.unexpected"));
+        }
+        await componentApplyMutation.mutateAsync({
+          ...planArgs,
+          expected_input_version: previewResponse.data.input_version,
         });
       } else {
-        const response = await undoMutation.mutateAsync({
+        const planArgs = {
+          action: "undo",
           component_id: component.id,
           reason: "desktop_custody_review_undo",
+        };
+        const previewResponse = await componentPlanMutation.mutateAsync(planArgs);
+        if (previewResponse.data?.input_version === undefined) {
+          throw new Error(t("swap.components.backendError.unexpected"));
+        }
+        const response = await componentApplyMutation.mutateAsync({
+          ...planArgs,
+          expected_input_version: previewResponse.data.input_version,
         });
-        if (response.data) openRevisionEditor(response.data);
+        if (response.data) openRevisionEditor(response.data.component);
       }
     } catch (error) {
       setActionError(custodyMutationError(t, error));
@@ -1491,7 +1527,7 @@ function CustodyComponentResolver() {
       <Dialog
         open={editingComponent !== null}
         onOpenChange={(open) => {
-          if (!open && !updateMutation.isPending) closeRevisionEditor();
+          if (!open && !mutationPending) closeRevisionEditor();
         }}
       >
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
@@ -1513,7 +1549,7 @@ function CustodyComponentResolver() {
               id="custody-component-revision-json"
               value={revisionDocument}
               onChange={(event) => handleRevisionDocumentChange(event.target.value)}
-              disabled={updateMutation.isPending}
+              disabled={mutationPending}
               spellCheck={false}
               aria-invalid={Boolean(revisionPreview?.structuralErrors.length)}
               className="min-h-80 resize-y font-mono text-xs leading-5"
@@ -1534,7 +1570,7 @@ function CustodyComponentResolver() {
             <Button
               type="button"
               variant="ghost"
-              disabled={updateMutation.isPending}
+              disabled={mutationPending}
               onClick={closeRevisionEditor}
             >
               {t("swap.components.revisionDialog.cancel")}
@@ -1543,7 +1579,7 @@ function CustodyComponentResolver() {
               <Button
                 type="button"
                 variant="outline"
-                disabled={updateMutation.isPending}
+                disabled={mutationPending}
                 onClick={previewRevisionDocument}
               >
                 <Eye />
@@ -1552,10 +1588,10 @@ function CustodyComponentResolver() {
               <Button
                 type="button"
                 variant="secondary"
-                disabled={updateMutation.isPending}
+                disabled={mutationPending}
                 onClick={() => void saveRevision(false)}
               >
-                {updateMutation.isPending ? (
+                {mutationPending ? (
                   <Loader2 className="animate-spin" />
                 ) : (
                   <Plus />
@@ -1564,10 +1600,10 @@ function CustodyComponentResolver() {
               </Button>
               <Button
                 type="button"
-                disabled={updateMutation.isPending}
+                disabled={mutationPending}
                 onClick={() => void saveRevision(true)}
               >
-                {updateMutation.isPending ? (
+                {mutationPending ? (
                   <Loader2 className="animate-spin" />
                 ) : (
                   <Check />

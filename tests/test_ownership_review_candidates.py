@@ -2,10 +2,12 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import patch
 
 from kassiber.cli import handlers
+from kassiber.core import custody_journal
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.ui_snapshot import _ownership_review_candidate_blocker
 from kassiber.db import open_db
@@ -129,10 +131,36 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
                 NOW,
             ),
         )
-        self.conn.commit()
         self.index = OwnedIndex()
         self.index.add_script(SCRIPT_A, _match("cold", "Cold"))
         self.index.add_script(SCRIPT_B, _match("hot", "Hot"))
+        rows = handlers._load_matcher_rows(self.conn, "profile")
+        projection = custody_journal.ownership_review_projection(
+            rows,
+            self.index,
+            [
+                {
+                    "transaction_id": "out",
+                    "reason": "ownership_transfer_destination_ambiguous",
+                }
+            ],
+            [],
+        )
+        self.review_candidates = projection["candidates"]
+        self.conn.execute(
+            "UPDATE journal_quarantines SET detail_json = ? WHERE transaction_id = 'out'",
+            (
+                custody_journal._quarantine_detail_with_ownership_candidates(
+                    "{}", self.review_candidates
+                ),
+            ),
+        )
+        self.conn.execute(
+            "UPDATE profiles SET last_processed_at = ?, last_processed_tx_count = 2, "
+            "last_processed_input_version = journal_input_version WHERE id = 'profile'",
+            (NOW,),
+        )
+        self.conn.commit()
 
     def _insert_tx(self, tx_id, wallet_id, external_id, direction, amount, raw_json):
         self.conn.execute(
@@ -161,20 +189,16 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
         )
 
     def _suggest(self):
-        with patch.object(
-            handlers.core_ownership,
-            "build_owned_index",
-            return_value=(self.index, []),
-        ):
-            return handlers.suggest_transfer_candidates(
-                self.conn, "Main", "Book", candidate_type="transfer"
-            )
+        return handlers.suggest_transfer_candidates(
+            self.conn, "Main", "Book", candidate_type="transfer"
+        )
 
     def test_blocked_graph_proof_surfaces_without_script_material(self):
         payload = self._suggest()
         self.assertEqual(payload["counts"]["ownership"], 1)
         candidate = payload["candidates"][0]
         self.assertEqual(candidate["method"], "ownership_graph")
+        self.assertEqual(candidate["confidence"], "strong")
         self.assertEqual((candidate["out_id"], candidate["in_id"]), ("out", "in"))
         self.assertEqual(candidate["default_policy"], "carrying-value")
         serialized = json.dumps(candidate)
@@ -229,13 +253,12 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
                 ("profile",),
             ).fetchall()
         ]
-        counts = handlers._ownership_review_counts_for_state(
+        counts = custody_journal.ownership_review_projection(
             rows,
             self.index,
             quarantines,
             [],
-            [],
-        )
+        )["counts"]
         self.assertEqual(
             counts,
             {
@@ -258,11 +281,18 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
         self.assertEqual(ownership["daemon_args"]["method"], "ownership_graph")
         self.assertEqual(ownership["counts"]["total"], 1)
 
-    def test_journal_processing_persists_ownership_review_count_cache(self):
+    def test_store_projection_persists_counts_and_redacted_proofs(self):
         state = {
             "entries": [],
-            "quarantines": [],
-            "intra_audit": [],
+            "quarantines": [
+                {
+                    "transaction_id": "out",
+                    "workspace_id": "ws",
+                    "profile_id": "profile",
+                    "reason": "ownership_transfer_destination_ambiguous",
+                    "detail_json": "{}",
+                }
+            ],
             "cross_asset_pairs": [],
             "direct_swap_payouts": [],
             "tax_summary": [],
@@ -270,23 +300,42 @@ class OwnershipReviewCandidateTest(unittest.TestCase):
             "wallet_holdings": {},
             "ownership_review_counts": {
                 "total": 1,
-                "by_reason": {"owned_fanout_unresolved": 1},
+                "by_reason": {"ownership_transfer_destination_ambiguous": 1},
             },
+            "ownership_review_candidates": self.review_candidates,
             "warnings": [],
         }
-        with patch.object(handlers, "build_ledger_state", return_value=state):
-            handlers.process_journals(self.conn, "Main", "Book")
+        profile = self.conn.execute(
+            "SELECT * FROM profiles WHERE id = 'profile'"
+        ).fetchone()
+        custody_journal.store_ledger_state(self.conn, profile, state, created_at=NOW)
+        self.conn.commit()
         cached = self.conn.execute(
             "SELECT ownership_review_counts_json FROM profiles WHERE id = ?",
             ("profile",),
         ).fetchone()["ownership_review_counts_json"]
         self.assertEqual(json.loads(cached), state["ownership_review_counts"])
+        self.assertEqual(
+            [
+                asdict(candidate)
+                for candidate in custody_journal.stored_ownership_review_candidates(
+                    self.conn, "profile"
+                )
+            ],
+            state["ownership_review_candidates"],
+        )
         handlers.invalidate_journals(self.conn, "profile")
         invalidated = self.conn.execute(
             "SELECT ownership_review_counts_json FROM profiles WHERE id = ?",
             ("profile",),
         ).fetchone()["ownership_review_counts_json"]
         self.assertIsNone(invalidated)
+        self.assertEqual(
+            custody_journal.stored_ownership_review_candidates(
+                self.conn, "profile"
+            ),
+            [],
+        )
 
     def test_cache_migration_marks_legacy_ownership_quarantine_stale(self):
         self.conn.execute(

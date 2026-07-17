@@ -17,8 +17,8 @@ from . import source_funds as core_source_funds
 from . import custody_filed_reports as core_custody_filed_reports
 from . import custody_gap_reviews as core_custody_gap_reviews
 from . import custody_ai_audit as core_custody_ai_audit
+from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
-from . import custody_tax_migration as core_custody_tax_migration
 from .attachments import attachment_display_label
 from . import transaction_history
 
@@ -277,44 +277,7 @@ def _direct_attachment_rows(
 
 
 def _journal_freshness(conn: sqlite3.Connection, profile: Mapping[str, Any]) -> dict[str, Any]:
-    active_count = conn.execute(
-        """
-        SELECT COUNT(*) AS count
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-        """,
-        (profile["id"],),
-    ).fetchone()["count"]
-    active_count = int(active_count or 0)
-    last_processed_at = profile["last_processed_at"] if "last_processed_at" in profile.keys() else None
-    last_processed_tx_count = _row_int(profile, "last_processed_tx_count")
-    journal_input_version = _row_int(profile, "journal_input_version")
-    last_processed_input_version = _row_int(profile, "last_processed_input_version")
-    if active_count == 0:
-        status = "no_transactions"
-        reason = "no active transactions"
-    elif not last_processed_at:
-        status = "not_processed"
-        reason = "journals have not been processed"
-    elif last_processed_tx_count != active_count:
-        status = "stale"
-        reason = "active transaction count changed since last processing"
-    elif journal_input_version != last_processed_input_version:
-        status = "stale"
-        reason = "journal inputs changed since last processing"
-    else:
-        status = "current"
-        reason = "journals match the active transaction count and input version"
-    return {
-        "status": status,
-        "needs_processing": status in {"not_processed", "stale"},
-        "reason": reason,
-        "last_processed_at": last_processed_at,
-        "last_processed_tx_count": last_processed_tx_count,
-        "journal_input_version": journal_input_version,
-        "last_processed_input_version": last_processed_input_version,
-        "active_transaction_count": active_count,
-    }
+    return core_custody_journal.projection_freshness(conn, profile)
 
 
 def _readiness_journal_freshness(
@@ -1149,11 +1112,6 @@ def build_evidence_summary(
         profile["id"],
         transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
     )
-    custody_tax_migration_audits = core_custody_tax_migration.list_redacted_reports(
-        conn,
-        profile["id"],
-        transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
-    )
     schema_migration_audits = _schema_migration_audits(conn)
     result = {
         "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
@@ -1170,7 +1128,6 @@ def build_evidence_summary(
         ),
         "custody_gap_review_history": custody_gap_review_history,
         "custody_ai_assistance": custody_ai_assistance,
-        "custody_tax_migration_audits": custody_tax_migration_audits,
         "schema_migration_audits": schema_migration_audits,
         "transactions": transactions,
         "summary": {
@@ -1190,9 +1147,6 @@ def build_evidence_summary(
                 "returned"
             ],
             "custody_ai_assistance_count": custody_ai_assistance["count"],
-            "custody_tax_migration_audit_count": len(
-                custody_tax_migration_audits
-            ),
             "schema_migration_audit_count": len(schema_migration_audits),
         },
         "excluded_sensitive_material": SENSITIVE_MATERIAL_EXCLUSIONS,

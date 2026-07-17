@@ -1,13 +1,15 @@
+import inspect
 import json
 import sqlite3
 import unittest
-from unittest.mock import patch
 
 from kassiber.core.custody_evidence import EvidenceSnapshot
+from kassiber.core import custody_journal
 from kassiber.core.custody_gap_reviews import candidate_fingerprint
 from kassiber.core.custody_gaps import (
-    CustodyGapSearchLimitError,
-    suggest_custody_gap_candidates,
+    CustodyGapSearchResult,
+    EMPTY_GAP_SEARCH_RESULT,
+    search_custody_gap_candidates,
 )
 from kassiber.core.custody_quantity import (
     CUSTODY_SUSPENSE,
@@ -19,14 +21,13 @@ from kassiber.core.custody_quantity import (
     QuantitySlice,
 )
 from kassiber.core.custody_quantity_runtime import (
-    build_canonical_quantity_state,
+    build_canonical_quantity_state as _build_canonical_quantity_state,
     canonical_internal_transfer_rows,
     compare_wallet_balances,
     enriched_quantity_rows,
 )
 from kassiber.core.custody_tax_projection import compile_finalized_tax_projection
 from kassiber.core.custody_quantity_store import (
-    baseline_missing_component_evidence,
     blocking_quantity_issues,
     capture_component_evidence,
     custody_decision_rows,
@@ -35,9 +36,18 @@ from kassiber.core.custody_quantity_store import (
     replace_canonical_quantity_state,
 )
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
-from kassiber.db import SCHEMA
+from kassiber.db import SCHEMA, _ensure_custody_projection_relation_view
 from kassiber.errors import AppError
 from tests.custody_tax_helpers import authoritative_chain_observation
+
+
+def suggest_custody_gap_candidates(rows, **kwargs):
+    return list(search_custody_gap_candidates(rows, **kwargs).candidates)
+
+
+def build_canonical_quantity_state(rows, **kwargs):
+    kwargs.setdefault("gap_search_result", EMPTY_GAP_SEARCH_RESULT)
+    return _build_canonical_quantity_state(rows, **kwargs)
 
 
 def _row(
@@ -77,6 +87,14 @@ def _row(
 
 
 class CustodyQuantityRuntimeTests(unittest.TestCase):
+    def test_gap_search_projection_is_a_required_runtime_input(self):
+        parameter = inspect.signature(
+            _build_canonical_quantity_state
+        ).parameters["gap_search_result"]
+
+        self.assertEqual(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIs(parameter.default, inspect.Parameter.empty)
+
     @staticmethod
     def _reviewed_claim(rows, *, out_id, in_id, amount):
         preliminary = build_canonical_quantity_state(rows)
@@ -91,16 +109,8 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             source=QuantitySlice(source.quantity_hash, 0, amount),
             target=QuantitySlice(target.quantity_hash, 0, amount),
             state=INTERNAL_REVIEWED,
-            priority=ClaimPriority.REVIEWED_PAIR,
+            priority=ClaimPriority.REVIEWED_COMPONENT,
             reason="reviewed_transfer_pair",
-            supporting_evidence_hashes=tuple(
-                sorted(
-                    {
-                        source.evidence_detail_hash,
-                        target.evidence_detail_hash,
-                    }
-                )
-            ),
         )
 
     @staticmethod
@@ -546,32 +556,76 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         self.assertEqual(fee.amount_msat, 1)
         self.assertEqual(fee.location_id, "network_fee")
 
-    def test_direct_payout_reserves_source_tail_beside_split_self_transfer(self):
+    def test_component_allocates_split_self_transfer_and_external_tail(self):
         rows = [
             _row("out", "wallet-a", "outbound", 5_000, "2025-01-01T00:00:00Z"),
             _row("in", "wallet-b", "inbound", 3_000, "2025-01-01T00:01:00Z"),
         ]
         state = build_canonical_quantity_state(
             rows,
-            direct_payout_records=[
+            effective_components=[
                 {
-                    "id": "payout",
-                    "out_transaction_id": "out",
-                    "out_amount": 2_000,
+                    "id": "reviewed-split",
+                    "effective_state": "active",
+                    "component_type": "manual_bridge",
+                    "conservation_mode": "quantity",
+                    "legs": [
+                        {
+                            "id": "source",
+                            "role": "source",
+                            "transaction_id": "out",
+                            "asset": "BTC",
+                            "amount_msat": 5_000,
+                        },
+                        {
+                            "id": "owned",
+                            "role": "destination",
+                            "transaction_id": "in",
+                            "asset": "BTC",
+                            "amount_msat": 3_000,
+                        },
+                        {
+                            "id": "external",
+                            "role": "external",
+                            "location_ref": "reviewed-counterparty",
+                            "asset": "BTC",
+                            "amount_msat": 2_000,
+                        },
+                    ],
+                    "allocations": [
+                        {
+                            "id": "owned-allocation",
+                            "source_leg_id": "source",
+                            "sink_leg_id": "owned",
+                            "source_amount_msat": 3_000,
+                            "sink_amount_msat": 3_000,
+                        },
+                        {
+                            "id": "external-allocation",
+                            "source_leg_id": "source",
+                            "sink_leg_id": "external",
+                            "source_amount_msat": 2_000,
+                            "sink_amount_msat": 2_000,
+                        },
+                    ],
+                    "economic_terms": [
+                        {
+                            "source_leg_id": "source",
+                            "target_leg_id": "external",
+                            "term_kind": "direct_swap_payout",
+                            "legacy_source_id": "payout",
+                            "review_kind": "direct-swap-payout",
+                            "tax_policy": "taxable",
+                            "payout_asset": "BTC",
+                            "payout_amount_msat": 2_000,
+                        }
+                    ],
                 }
-            ],
-            interpreter_claims=[
-                self._reviewed_claim(
-                    rows,
-                    out_id="out",
-                    in_id="in",
-                    amount=3_000,
-                )
             ],
         )
 
         self.assertEqual(state.issues, ())
-        self.assertEqual(
+        self.assertCountEqual(
             [(item.state, item.source.amount_msat) for item in state.projection.decisions],
             [(INTERNAL_REVIEWED, 3_000), (EXTERNAL_CONFIRMED, 2_000)],
         )
@@ -581,9 +635,90 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             if item.location_kind == "external"
         )
         self.assertEqual(payout.amount_msat, 2_000)
-        self.assertEqual(payout.location_id, "direct-payout:payout:source")
+        self.assertEqual(
+            payout.location_id,
+            "component:reviewed-split:allocation:external-allocation",
+        )
 
-    def test_promoted_gap_candidate_enters_live_canonical_projection_and_exposes_exact_residual(self):
+    def test_component_network_fee_covers_wallet_delta_without_consuming_principal(self):
+        rows = [
+            _row(
+                "out",
+                "wallet-a",
+                "outbound",
+                5_000,
+                "2025-01-01T00:00:00Z",
+                fee=1,
+            ),
+            _row("in", "wallet-b", "inbound", 5_000, "2025-01-01T00:01:00Z"),
+        ]
+        component = {
+            "id": "reviewed-fee",
+            "effective_state": "active",
+            "component_type": "manual_bridge",
+            "conservation_mode": "quantity",
+            "legs": [
+                {
+                    "id": "source",
+                    "role": "source",
+                    "transaction_id": "out",
+                    "asset": "BTC",
+                    "amount_msat": 5_001,
+                },
+                {
+                    "id": "owned",
+                    "role": "destination",
+                    "transaction_id": "in",
+                    "asset": "BTC",
+                    "amount_msat": 5_000,
+                },
+                {
+                    "id": "fee",
+                    "role": "fee",
+                    "transaction_id": "out",
+                    "asset": "BTC",
+                    "amount_msat": 1,
+                },
+            ],
+            "allocations": [
+                {
+                    "id": "owned-allocation",
+                    "source_leg_id": "source",
+                    "sink_leg_id": "owned",
+                    "source_amount_msat": 5_000,
+                    "sink_amount_msat": 5_000,
+                },
+                {
+                    "id": "fee-allocation",
+                    "source_leg_id": "source",
+                    "sink_leg_id": "fee",
+                    "source_amount_msat": 1,
+                    "sink_amount_msat": 1,
+                },
+            ],
+        }
+
+        state = build_canonical_quantity_state(rows, effective_components=[component])
+
+        self.assertEqual(state.issues, ())
+        self.assertEqual(
+            [(item.state, item.source.amount_msat) for item in state.projection.decisions],
+            [(INTERNAL_REVIEWED, 5_000)],
+        )
+        fee = next(
+            item for item in state.projection.postings if item.location_kind == "fee"
+        )
+        self.assertEqual(fee.amount_msat, 1)
+
+        component["allocations"][1]["source_amount_msat"] = 2
+        component["allocations"][1]["sink_amount_msat"] = 2
+        failed = build_canonical_quantity_state(rows, effective_components=[component])
+        self.assertIn(
+            "component_claim_compile_failed",
+            {issue.issue_type for issue in failed.issues},
+        )
+
+    def test_promoted_gap_candidate_holds_boundaries_without_transfer_edge(self):
         rows = [
             _row(
                 "out",
@@ -602,15 +737,22 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             ),
         ]
 
-        state = build_canonical_quantity_state(rows)
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=search_custody_gap_candidates(rows),
+        )
 
         self.assertEqual(
             [(item.state, item.source.amount_msat) for item in state.projection.decisions],
-            [("custody_candidate", 9_900), (CUSTODY_SUSPENSE, 100)],
+            [(CUSTODY_SUSPENSE, 10_000)],
         )
+        self.assertTrue(all(item.target is None for item in state.projection.decisions))
         self.assertEqual(
-            {(item.state, item.amount_msat) for item in state.issues},
-            {("custody_candidate", 9_900), (CUSTODY_SUSPENSE, 100)},
+            {hold.transaction_id for hold in state.gap_holds},
+            {"out", "return"},
+        )
+        self.assertTrue(
+            any(item.issue_type == "custody_gap_review_hold" for item in state.issues)
         )
         self.assertEqual(state.tax_eligibility.blocked_from, "2020-01-01T00:00:00Z")
 
@@ -642,12 +784,14 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
 
         current = build_canonical_quantity_state(
             rows,
+            gap_search_result=search_custody_gap_candidates(rows),
             dismissed_gap_fingerprints={
                 candidate.gap_id: candidate_fingerprint(candidate)
             },
         )
         stale = build_canonical_quantity_state(
             rows,
+            gap_search_result=search_custody_gap_candidates(rows),
             dismissed_gap_fingerprints={candidate.gap_id: "0" * 64},
         )
 
@@ -677,13 +821,16 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             ),
         ]
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "candidate population exceeds its hard ceiling"
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
+                candidates=(),
+                accounting_candidates=(),
+                search_complete=False,
+                limit_kind="candidate_population",
+                message="candidate population exceeds its hard ceiling",
             ),
-        ):
-            state = build_canonical_quantity_state(rows)
+        )
 
         self.assertFalse(state.report_blocked)
         self.assertIsNone(state.tax_eligibility.barrier_event_key)
@@ -707,19 +854,64 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             ),
         ]
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "weak candidate population exceeds its display ceiling",
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
+                candidates=(),
+                accounting_candidates=(),
+                search_complete=False,
+                limit_kind="candidate_population",
                 candidate_count=5_541,
                 promotion_eligible_count=0,
+                message="weak candidate population exceeds its display ceiling",
             ),
-        ):
-            state = build_canonical_quantity_state(rows)
+        )
 
         self.assertFalse(state.report_blocked)
         self.assertIsNone(state.tax_eligibility.barrier_event_key)
         self.assertFalse(state.gap_candidate_transaction_ids)
+
+    def test_shared_candidate_does_not_duplicate_interpreter_blocked_slice(self):
+        rows = [
+            _row(
+                "out",
+                "wallet-a",
+                "outbound",
+                10_000,
+                "2020-01-01T00:00:00Z",
+                privacy_boundary="coinjoin",
+            ),
+            _row(
+                "return",
+                "wallet-c",
+                "inbound",
+                9_900,
+                "2021-01-01T00:00:00Z",
+            ),
+        ]
+        candidate = next(
+            item
+            for item in suggest_custody_gap_candidates(
+                enriched_quantity_rows(rows)
+            )
+            if item.promotion_eligible
+        )
+
+        state = build_canonical_quantity_state(
+            rows,
+            ignored_gap_transaction_ids=("out",),
+            gap_search_result=CustodyGapSearchResult(
+                candidates=(candidate,),
+                accounting_candidates=(candidate,),
+                search_complete=True,
+                candidate_count=1,
+                promotion_eligible_count=1,
+            ),
+        )
+
+        self.assertFalse(state.report_blocked)
+        self.assertFalse(state.gap_candidate_transaction_ids)
+        self.assertFalse(state.gap_holds)
 
     def test_incomplete_structured_search_blocks_only_source_disposal(self):
         rows = [
@@ -747,23 +939,22 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             if candidate.promotion_eligible
         )
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "structured boundary return worklist is incomplete",
-                blocking_source_ids=("out",),
-                partial_candidates=(sampled_candidate,),
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
+                candidates=(sampled_candidate,),
+                accounting_candidates=(),
+                search_complete=False,
                 limit_kind="boundary_worklist",
+                blocking_source_ids=("out",),
+                candidate_count=1,
+                promotion_eligible_count=1,
+                message="structured boundary return worklist is incomplete",
             ),
-        ):
-            state = build_canonical_quantity_state(
-                rows,
-                dismissed_gap_fingerprints={
-                    sampled_candidate.gap_id: candidate_fingerprint(
-                        sampled_candidate
-                    )
-                },
-            )
+            dismissed_gap_fingerprints={
+                sampled_candidate.gap_id: candidate_fingerprint(sampled_candidate)
+            },
+        )
 
         decisions_by_transaction = {
             next(
@@ -820,100 +1011,24 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
             if item.promotion_eligible
         )
 
-        with patch(
-            "kassiber.core.custody_quantity_runtime.suggest_custody_gap_candidates",
-            side_effect=CustodyGapSearchLimitError(
-                "candidate population exceeds its display ceiling",
+        state = build_canonical_quantity_state(
+            rows,
+            gap_search_result=CustodyGapSearchResult(
+                candidates=(),
+                accounting_candidates=(candidate,),
+                search_complete=False,
+                limit_kind="candidate_population",
                 candidate_count=501,
                 promotion_eligible_count=1,
-                partial_candidates=(),
-                accounting_candidates=(candidate,),
-                limit_kind="candidate_population",
+                message="candidate population exceeds its display ceiling",
             ),
-        ):
-            state = build_canonical_quantity_state(rows)
+        )
 
         self.assertTrue(state.report_blocked)
         self.assertEqual(state.tax_eligibility.blocked_from, "2020-01-01T00:00:00Z")
         self.assertEqual(
             state.gap_candidate_transaction_ids,
             ("out", "return"),
-        )
-
-    def test_promoted_candidate_compile_failure_still_holds_boundaries(self):
-        rows = [
-            _row(
-                "out",
-                "wallet-a",
-                "outbound",
-                10_000,
-                "2020-01-01T00:00:00Z",
-                privacy_boundary="coinjoin",
-            ),
-            _row(
-                "return",
-                "wallet-c",
-                "inbound",
-                9_900,
-                "2021-01-01T00:00:00Z",
-            ),
-        ]
-
-        with patch(
-            "kassiber.core.custody_quantity_runtime.compile_gap_candidate_claims",
-            side_effect=ValueError("canonical mismatch"),
-        ):
-            state = build_canonical_quantity_state(rows)
-
-        self.assertEqual(
-            state.gap_candidate_transaction_ids,
-            ("out", "return"),
-        )
-        self.assertTrue(
-            any(
-                item.issue_type == "custody_gap_claim_compile_failed"
-                for item in state.issues
-            )
-        )
-        observations_by_hash = {
-            item.quantity_hash: item
-            for item in state.projection.observations
-        }
-        source_decision = next(
-            item
-            for item in state.projection.decisions
-            if observations_by_hash[item.source.observation_hash].transaction_id
-            == "out"
-        )
-        self.assertEqual(source_decision.state, CUSTODY_SUSPENSE)
-        self.assertTrue(
-            source_decision.atomic_bundle_id.startswith("candidate:")
-        )
-        self.assertFalse(
-            any(
-                item.location_kind == "external"
-                for item in state.projection.postings
-            )
-        )
-        self.assertFalse(state.tax_eligibility.eligible_decisions)
-        self.assertEqual(
-            sum(item.amount_msat or 0 for item in state.issues),
-            10_000,
-        )
-
-        projection = compile_finalized_tax_projection(
-            {
-                "id": "profile-one",
-                "workspace_id": "workspace-one",
-                "label": "Book",
-            },
-            rows,
-            state,
-        )
-        self.assertFalse(projection.rows)
-        self.assertEqual(
-            {item["transaction_id"] for item in projection.quarantines},
-            {"out", "return"},
         )
 
     def test_known_correct_acquisition_and_payment_match_current_wallet_balance(self):
@@ -1487,6 +1602,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        _ensure_custody_projection_relation_view(self.conn)
         self.conn.execute(
             "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Books', 'now')"
         )
@@ -1539,7 +1655,13 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         )
         self.assertEqual(
             counts,
-            {"postings": 2, "issues": 0, "balances": 2, "decisions": 0},
+            {
+                "postings": 2,
+                "issues": 0,
+                "balances": 2,
+                "decisions": 0,
+                "economic_relations": 0,
+            },
         )
         readiness = custody_quantity_readiness_summary(
             self.conn,
@@ -1572,6 +1694,219 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
+
+    def test_reviewed_conversion_is_stored_as_an_economic_relation(self):
+        self.conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, label, kind, created_at) "
+            "VALUES('wallet-b', 'ws', 'profile', 'B', 'descriptor', 'now')"
+        )
+        source = _row(
+            "conversion-out",
+            "wallet-a",
+            "outbound",
+            1_000,
+            "2025-01-01T00:00:00Z",
+        )
+        target = _row(
+            "conversion-in",
+            "wallet-b",
+            "inbound",
+            900,
+            "2025-01-01T00:01:00Z",
+            config={"chain": "liquid", "network": "liquidv1"},
+        )
+        target["asset"] = "LBTC"
+        self._insert_transaction(source)
+        self._insert_transaction(target)
+        component = {
+            "id": "conversion-component",
+            "component_type": "swap",
+            "conservation_mode": "conversion",
+            "conversion_policy": "carrying-value",
+            "conversion_reviewed": True,
+            "effective_state": "active",
+            "legs": [
+                {
+                    "id": "source-leg",
+                    "role": "source",
+                    "transaction_id": source["id"],
+                    "amount_msat": 1_000,
+                },
+                {
+                    "id": "target-leg",
+                    "role": "destination",
+                    "transaction_id": target["id"],
+                    "amount_msat": 900,
+                },
+            ],
+            "allocations": [
+                {
+                    "id": "conversion-allocation",
+                    "source_leg_id": "source-leg",
+                    "sink_leg_id": "target-leg",
+                    "source_amount_msat": 1_000,
+                    "sink_amount_msat": 900,
+                }
+            ],
+            "economic_terms": [
+                {
+                    "term_kind": "transaction_pair",
+                    "source_leg_id": "source-leg",
+                    "target_leg_id": "target-leg",
+                    "legacy_source_id": "reviewed-conversion",
+                    "review_kind": "peg-in",
+                    "tax_policy": "carrying-value",
+                    "swap_fee_msat": 25,
+                    "swap_fee_kind": "network",
+                    "confidence_at_review": "manual",
+                    "review_source": "migration",
+                }
+            ],
+        }
+        state = build_canonical_quantity_state(
+            [source, target],
+            effective_components=[component],
+        )
+
+        counts = replace_canonical_quantity_state(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            state=state,
+            created_at="now",
+        )
+
+        self.assertEqual(counts["economic_relations"], 1)
+        relation = self.conn.execute(
+            "SELECT * FROM journal_custody_projection_relations "
+            "WHERE relation_kind = 'conversion'"
+        ).fetchone()
+        self.assertEqual(relation["relation_kind"], "conversion")
+        self.assertEqual(relation["out_transaction_id"], source["id"])
+        self.assertEqual(relation["in_transaction_id"], target["id"])
+        self.assertEqual(relation["out_amount"], 1_000)
+        self.assertEqual(relation["in_amount"], 900)
+        self.assertEqual(relation["basis_state"], "eligible")
+        self.assertEqual(relation["component_id"], component["id"])
+
+    def test_reviewed_move_metadata_is_joined_from_authored_terms(self):
+        self.conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, label, kind, created_at) "
+            "VALUES('wallet-b', 'ws', 'profile', 'B', 'descriptor', 'now')"
+        )
+        source = _row("move-out", "wallet-a", "outbound", 100, "2025-01-01T00:00:00Z")
+        target = _row("move-in", "wallet-b", "inbound", 100, "2025-01-01T00:01:00Z")
+        self._insert_transaction(source)
+        self._insert_transaction(target)
+        component = {
+            "id": "move-component",
+            "component_type": "coinjoin",
+            "conservation_mode": "quantity",
+            "effective_state": "active",
+            "legs": [
+                {
+                    "id": "source-leg",
+                    "role": "source",
+                    "transaction_id": source["id"],
+                    "amount_msat": 100,
+                },
+                {
+                    "id": "target-leg",
+                    "role": "destination",
+                    "transaction_id": target["id"],
+                    "amount_msat": 100,
+                },
+            ],
+            "allocations": [
+                {
+                    "id": "move-allocation",
+                    "source_leg_id": "source-leg",
+                    "sink_leg_id": "target-leg",
+                    "source_amount_msat": 100,
+                    "sink_amount_msat": 100,
+                }
+            ],
+            "economic_terms": [
+                {
+                    "term_kind": "transaction_pair",
+                    "source_leg_id": "source-leg",
+                    "target_leg_id": "target-leg",
+                    "legacy_source_id": "reviewed-move",
+                    "review_kind": "coinjoin",
+                    "tax_policy": "carrying-value",
+                    "swap_fee_msat": 5,
+                    "swap_fee_kind": "provider",
+                }
+            ],
+        }
+        self.conn.execute(
+            """
+            INSERT INTO custody_components(
+                id, lineage_id, workspace_id, profile_id, revision,
+                component_type, state, authored_source, notes, created_at
+            ) VALUES(?, ?, 'ws', 'profile', 1, ?, 'active', ?, ?, 'now')
+            """,
+            ("move-component", "move-lineage", "coinjoin", "manual", "reviewed move"),
+        )
+        self.conn.executemany(
+            """
+            INSERT INTO custody_component_legs(
+                id, component_id, workspace_id, profile_id, ordinal, role,
+                rail, chain, network, asset, exposure, conservation_unit,
+                amount_msat, transaction_id, anchor_transaction_id, wallet_id,
+                created_at
+            ) VALUES(?, 'move-component', 'ws', 'profile', ?, ?, 'bitcoin',
+                     'bitcoin', 'main', 'BTC', 'bitcoin', 'msat', 100,
+                     ?, ?, ?, 'now')
+            """,
+            [
+                ("source-leg", 0, "source", source["id"], source["id"], "wallet-a"),
+                ("target-leg", 1, "destination", target["id"], target["id"], "wallet-b"),
+            ],
+        )
+        self.conn.execute(
+            """
+            INSERT INTO custody_component_economic_terms(
+                id, component_id, workspace_id, profile_id, ordinal,
+                source_leg_id, target_leg_id, term_kind, legacy_source_id,
+                source_row_hash, review_kind, tax_policy, swap_fee_msat,
+                swap_fee_kind, confidence_at_review, review_source, created_at
+            ) VALUES(?, 'move-component', 'ws', 'profile', 0,
+                     'source-leg', 'target-leg', 'transaction_pair', ?, ?, ?, ?,
+                     ?, ?, ?, ?, 'now')
+            """,
+            (
+                "move-term",
+                "reviewed-move",
+                "f" * 64,
+                "coinjoin",
+                "carrying-value",
+                5,
+                "provider",
+                "manual",
+                "manual",
+            ),
+        )
+        state = build_canonical_quantity_state(
+            [source, target], effective_components=[component]
+        )
+
+        replace_canonical_quantity_state(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            state=state,
+            created_at="now",
+        )
+
+        decision = self.conn.execute(
+            "SELECT kind, policy, swap_fee_msat, swap_fee_kind "
+            "FROM journal_custody_projection_relations"
+        ).fetchone()
+        self.assertEqual(decision["kind"], "coinjoin")
+        self.assertEqual(decision["policy"], "carrying-value")
+        self.assertEqual(decision["swap_fee_msat"], 5)
+        self.assertEqual(decision["swap_fee_kind"], "provider")
 
     def test_missing_blocker_table_fails_closed(self):
         self.conn.execute("DROP TABLE journal_quantity_issues")
@@ -1626,7 +1961,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                     observations["target-reviewed"].quantity_hash, 0, 40
                 ),
                 state=INTERNAL_REVIEWED,
-                priority=ClaimPriority.REVIEWED_PAIR,
+                priority=ClaimPriority.REVIEWED_COMPONENT,
                 reason="reviewed_gap_bridge",
                 atomic_bundle_id="bridge:reviewed",
                 component_id="component-reviewed",
@@ -1641,7 +1976,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 ),
                 state=INTERNAL_VERIFIED,
                 priority=ClaimPriority.EXACT_NATIVE_EVENT,
-                reason="verified_native_transfer",
+                reason="verified_manual_bridge",
                 atomic_bundle_id="native:verified",
             ),
         ]
@@ -1656,6 +1991,24 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         )
 
         self.assertEqual(counts["decisions"], 2)
+        self.conn.execute(
+            "UPDATE profiles SET last_processed_at = 'rebuilt', "
+            "last_processed_tx_count = 3, "
+            "last_processed_input_version = journal_input_version "
+            "WHERE id = 'profile'"
+        )
+        self.assertEqual(
+            custody_journal.stored_move_transaction_ids(self.conn, "profile"),
+            {"source", "target-reviewed", "target-verified"},
+        )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile'"
+        )
+        self.assertEqual(
+            custody_journal.stored_move_transaction_ids(self.conn, "profile"),
+            set(),
+        )
         private_rows = self.conn.execute(
             """
             SELECT source_observation_hash, source_start_msat, source_end_msat,
@@ -1977,25 +2330,16 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             ],
         }
 
-        result = baseline_missing_component_evidence(
-            self.conn, [component], created_at="migration"
-        )
         state = build_canonical_quantity_state(
             [source, target],
             effective_components=[component],
         )
-        repeated = baseline_missing_component_evidence(
-            self.conn, [component], created_at="later"
-        )
 
-        self.assertEqual(result["baselined_component_ids"], [])
-        self.assertEqual(result["blocked"][0]["reason"], "component_not_effective")
         self.assertTrue(state.report_blocked)
         self.assertIn(
             "custody_component_authored_active_invalid",
             {issue.reason for issue in state.issues},
         )
-        self.assertEqual(repeated["existing_component_ids"], [])
         self.assertEqual(
             self.conn.execute(
                 "SELECT COUNT(*) FROM custody_authored_evidence_snapshots"
@@ -2034,9 +2378,6 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 }
             ],
         }
-        baseline_missing_component_evidence(
-            self.conn, [component], created_at="reconciliation"
-        )
         original_snapshot_count = self.conn.execute(
             "SELECT COUNT(*) FROM custody_authored_evidence_snapshots"
         ).fetchone()[0]
@@ -2049,16 +2390,11 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             (changed_source["raw_json"],),
         )
 
-        repeated = baseline_missing_component_evidence(
-            self.conn, [component], created_at="after-change"
-        )
         state = build_canonical_quantity_state(
             [changed_source, target],
             effective_components=[component],
         )
 
-        self.assertEqual(repeated["existing_component_ids"], [])
-        self.assertEqual(repeated["blocked"][0]["reason"], "component_not_effective")
         self.assertEqual(
             original_snapshot_count,
             self.conn.execute(
@@ -2093,10 +2429,6 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             "allocations": [],
         }
 
-        blocked = baseline_missing_component_evidence(
-            self.conn, [incomplete], created_at="partial-replay"
-        )
-        self.assertEqual(blocked["blocked"][0]["reason"], "component_not_effective")
         self.assertEqual(
             self.conn.execute(
                 "SELECT COUNT(*) FROM custody_authored_evidence_snapshots"
@@ -2119,16 +2451,11 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 }
             ],
         }
-        result = baseline_missing_component_evidence(
-            self.conn, [complete], created_at="dependencies-arrived"
-        )
         state = build_canonical_quantity_state(
             [source, target],
             effective_components=[complete],
         )
 
-        self.assertEqual(result["baselined_component_ids"], [])
-        self.assertEqual(result["blocked"][0]["reason"], "component_not_effective")
         self.assertTrue(state.report_blocked)
 
     def test_component_evidence_capture_is_not_rewritten_by_journal_refresh(self):
@@ -2141,7 +2468,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 component_type, state, expected_leg_count,
                 expected_allocation_count, created_at
             ) VALUES('component-1', 'component-1', 'ws', 'profile', 1,
-                     'native_transfer', 'draft', 1, 0, 'now')
+                     'manual_bridge', 'draft', 1, 0, 'now')
             """
         )
         component = {
@@ -2235,13 +2562,14 @@ class CustodyQuantityStoreTests(unittest.TestCase):
             snapshot["custody_quantity"]["qualification"],
         )
 
-        from kassiber.cli.handlers import require_processed_journals
+        from kassiber.cli.handlers import resolve_scope
+        from kassiber.core.report_context import require_report_context
 
         profile = self.conn.execute(
             "SELECT * FROM profiles WHERE id = 'profile'"
         ).fetchone()
         with self.assertRaises(AppError) as raised:
-            require_processed_journals(self.conn, profile)
+            require_report_context(self.conn, "ws", "profile", resolve_scope)
         self.assertEqual(raised.exception.code, "custody_quantity_unresolved")
 
 

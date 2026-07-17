@@ -26,12 +26,23 @@ import unittest
 import uuid
 
 from kassiber.cli.handlers import (
+    create_direct_swap_payout,
     create_transaction_pair,
+    delete_direct_swap_payout,
+    delete_transaction_pair,
     dismiss_transfer_candidate,
+    list_direct_swap_payouts,
+    list_transaction_pairs,
     update_transaction_pair,
 )
+from kassiber.core import custody_review_terms
 from kassiber.core.reports import _swap_fee_summary_rows
-from kassiber.db import ensure_schema_compat, open_db
+from kassiber.db import (
+    _ensure_custody_projection_table_shapes,
+    ensure_schema_compat,
+    open_db,
+)
+from tests.custody_projection_fixtures import insert_reviewed_projection
 
 
 def _now():
@@ -86,6 +97,149 @@ def _insert_tx(conn, *, tx_id, workspace_id, profile_id, wallet_id, asset, direc
 
 
 class FreshSchemaTests(unittest.TestCase):
+    def test_projection_shape_migration_preserves_rows_and_joins_authored_terms(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                for tx_id, direction, asset, amount in (
+                    ("conversion-out", "outbound", "BTC", 1_000),
+                    ("conversion-in", "inbound", "LBTC", 900),
+                    ("move-out", "outbound", "BTC", 500),
+                    ("move-in", "inbound", "BTC", 500),
+                ):
+                    _insert_tx(
+                        conn,
+                        tx_id=tx_id,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        asset=asset,
+                        direction=direction,
+                        amount_msat=amount,
+                    )
+                insert_reviewed_projection(
+                    conn,
+                    projection_id="a" * 64,
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    source_transaction_id="conversion-out",
+                    target_transaction_id="conversion-in",
+                    source_asset="BTC",
+                    target_asset="LBTC",
+                    source_amount_msat=1_000,
+                    target_amount_msat=900,
+                    review_kind="peg-out",
+                    swap_fee_msat=100,
+                    swap_fee_kind="provider",
+                    occurred_at=_now(),
+                    target_occurred_at=_now(),
+                )
+                insert_reviewed_projection(
+                    conn,
+                    projection_id="b" * 64,
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    source_transaction_id="move-out",
+                    target_transaction_id="move-in",
+                    source_asset="BTC",
+                    target_asset="BTC",
+                    source_amount_msat=500,
+                    target_amount_msat=500,
+                    review_kind="coinjoin",
+                    occurred_at=_now(),
+                    target_occurred_at=_now(),
+                    relation_kind="move",
+                )
+                for table, columns in (
+                    (
+                        "journal_custody_decisions",
+                        ("review_kind", "policy", "swap_fee_msat"),
+                    ),
+                    (
+                        "journal_custody_economic_relations",
+                        ("review_kind", "policy", "swap_fee_msat"),
+                    ),
+                ):
+                    for column in columns:
+                        column_type = "INTEGER" if column == "swap_fee_msat" else "TEXT"
+                        conn.execute(
+                            f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"
+                        )
+                    conn.execute(
+                        f"UPDATE {table} SET review_kind = 'copied-stale', "
+                        "policy = 'taxable', swap_fee_msat = 999"
+                    )
+                conn.commit()
+
+                conn.execute(
+                    """
+                    CREATE TRIGGER test_projection_policy_dependency
+                    AFTER INSERT ON journal_custody_decisions
+                    BEGIN
+                        SELECT NEW.policy;
+                    END
+                    """
+                )
+                with self.assertRaises(sqlite3.DatabaseError):
+                    _ensure_custody_projection_table_shapes(conn)
+                self.assertIn(
+                    "review_kind",
+                    {
+                        row["name"]
+                        for row in conn.execute(
+                            "PRAGMA table_info(journal_custody_decisions)"
+                        )
+                    },
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM journal_custody_projection_relations"
+                    ).fetchone()[0],
+                    2,
+                )
+                conn.execute("DROP TRIGGER test_projection_policy_dependency")
+
+                ensure_schema_compat(conn)
+
+                decision_columns = {
+                    row["name"]
+                    for row in conn.execute(
+                        "PRAGMA table_info(journal_custody_decisions)"
+                    )
+                }
+                relation_columns = {
+                    row["name"]
+                    for row in conn.execute(
+                        "PRAGMA table_info(journal_custody_economic_relations)"
+                    )
+                }
+                for columns in (decision_columns, relation_columns):
+                    self.assertNotIn("review_kind", columns)
+                    self.assertNotIn("policy", columns)
+                    self.assertNotIn("swap_fee_msat", columns)
+                rows = {
+                    row["relation_kind"]: row
+                    for row in conn.execute(
+                        "SELECT * FROM journal_custody_projection_relations"
+                    )
+                }
+                self.assertEqual(rows["conversion"]["kind"], "peg-out")
+                self.assertEqual(rows["conversion"]["policy"], "carrying-value")
+                self.assertEqual(rows["conversion"]["swap_fee_msat"], 100)
+                self.assertEqual(rows["move"]["kind"], "coinjoin")
+                self.assertEqual(rows["move"]["out_amount"], 500)
+
+                ensure_schema_compat(conn)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM journal_custody_projection_relations"
+                    ).fetchone()[0],
+                    2,
+                )
+            finally:
+                conn.close()
+
     def test_carrying_value_pair_rejects_cross_network_rows(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)
@@ -355,6 +509,25 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertEqual(first["kind"], "whirlpool")
                 self.assertIsNone(first["swap_fee_msat"])
 
+                revised = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    second["id"],
+                    notes="fan-out review",
+                )
+                active_pairs = list_transaction_pairs(
+                    conn, workspace_id, profile_id
+                )
+                self.assertEqual(
+                    {row["id"] for row in active_pairs},
+                    {first["id"], second["id"]},
+                )
+                self.assertEqual(
+                    {row["component_id"] for row in active_pairs},
+                    {revised["component_id"]},
+                )
+
                 with self.assertRaisesRegex(Exception, "already paired"):
                     create_transaction_pair(
                         conn, workspace_id, profile_id, "tx-out", "tx-in-1"
@@ -367,6 +540,20 @@ class FreshSchemaTests(unittest.TestCase):
                         second["id"],
                         kind="submarine-swap",
                     )
+
+                delete_transaction_pair(
+                    conn, workspace_id, profile_id, second["id"]
+                )
+                remaining = list_transaction_pairs(
+                    conn, workspace_id, profile_id
+                )
+                self.assertEqual([row["id"] for row in remaining], [first["id"]])
+                self.assertEqual(
+                    delete_transaction_pair(
+                        conn, workspace_id, profile_id, second["id"]
+                    ),
+                    {"deleted": second["id"]},
+                )
             finally:
                 conn.close()
 
@@ -431,6 +618,277 @@ class FreshSchemaTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_active_pair_component_revises_and_retires_without_projection_row(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                for tx_id, direction in (
+                    ("tx-out", "outbound"),
+                    ("tx-in", "inbound"),
+                ):
+                    _insert_tx(
+                        conn,
+                        tx_id=tx_id,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        asset="BTC",
+                        direction=direction,
+                        amount_msat=100_000,
+                    )
+                pair = create_transaction_pair(
+                    conn, workspace_id, profile_id, "tx-out", "tx-in"
+                )
+                first_component_id = pair["component_id"]
+                self.assertIsNotNone(first_component_id)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (first_component_id,),
+                    ).fetchone()[0],
+                    "active",
+                )
+
+                self.assertIsNone(
+                    conn.execute(
+                        "SELECT 1 FROM transaction_pairs WHERE id = ?", (pair["id"],)
+                    ).fetchone()
+                )
+
+                revised = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    pair["id"],
+                    notes="reviewed revision",
+                )
+                revised_component_id = revised["component_id"]
+                self.assertNotEqual(revised_component_id, first_component_id)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (first_component_id,),
+                    ).fetchone()[0],
+                    "superseded",
+                )
+                current_component_id = revised_component_id
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (current_component_id,),
+                    ).fetchone()[0],
+                    "active",
+                )
+
+                delete_transaction_pair(
+                    conn, workspace_id, profile_id, pair["id"]
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (current_component_id,),
+                    ).fetchone()[0],
+                    "superseded",
+                )
+                self.assertEqual(
+                    list_transaction_pairs(conn, workspace_id, profile_id), []
+                )
+                deleted = list_transaction_pairs(
+                    conn, workspace_id, profile_id, include_deleted=True
+                )
+                self.assertEqual(len(deleted), 1)
+                self.assertEqual(deleted[0]["id"], pair["id"])
+                self.assertIsNotNone(deleted[0]["deleted_at"])
+                self.assertEqual(
+                    delete_transaction_pair(
+                        conn, workspace_id, profile_id, pair["id"]
+                    ),
+                    {"deleted": pair["id"]},
+                )
+            finally:
+                conn.close()
+
+    def test_active_payout_component_freezes_and_retires_with_review(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                payout = create_direct_swap_payout(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    "tx-out",
+                    payout_asset="BTC",
+                    payout_amount="0.000001",
+                )
+                component_id = payout["component_id"]
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (component_id,),
+                    ).fetchone()[0],
+                    "active",
+                )
+                self.assertIsNone(
+                    conn.execute(
+                        "SELECT 1 FROM direct_swap_payouts WHERE id = ?",
+                        (payout["id"],),
+                    ).fetchone()
+                )
+
+                delete_direct_swap_payout(
+                    conn, workspace_id, profile_id, payout["id"]
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT state FROM custody_components WHERE id = ?",
+                        (component_id,),
+                    ).fetchone()[0],
+                    "superseded",
+                )
+                self.assertEqual(
+                    list_direct_swap_payouts(conn, workspace_id, profile_id), []
+                )
+                deleted = list_direct_swap_payouts(
+                    conn, workspace_id, profile_id, include_deleted=True
+                )
+                self.assertEqual(len(deleted), 1)
+                self.assertEqual(deleted[0]["id"], payout["id"])
+                self.assertIsNotNone(deleted[0]["deleted_at"])
+                self.assertEqual(
+                    delete_direct_swap_payout(
+                        conn, workspace_id, profile_id, payout["id"]
+                    )["id"],
+                    payout["id"],
+                )
+            finally:
+                conn.close()
+
+    def test_same_asset_shortfall_is_explicit_suspense_when_not_a_network_fee(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                _insert_tx(
+                    conn,
+                    tx_id="tx-in",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="inbound",
+                    amount_msat=90_000,
+                )
+
+                pair = create_transaction_pair(
+                    conn, workspace_id, profile_id, "tx-out", "tx-in"
+                )
+                legs = conn.execute(
+                    "SELECT role, amount_msat FROM custody_component_legs "
+                    "WHERE component_id = ? ORDER BY ordinal",
+                    (pair["component_id"],),
+                ).fetchall()
+
+                self.assertEqual(
+                    [(row["role"], row["amount_msat"]) for row in legs],
+                    [("source", 100_000), ("destination", 90_000), ("suspense", 10_000)],
+                )
+                self.assertEqual(
+                    tuple(conn.execute(
+                        "SELECT SUM(source_amount_msat), SUM(sink_amount_msat) "
+                        "FROM custody_component_allocations WHERE component_id = ?",
+                        (pair["component_id"],),
+                    ).fetchone()),
+                    (100_000, 100_000),
+                )
+            finally:
+                conn.close()
+
+    def test_partial_conversion_claims_only_explicit_source_quantity(self):
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                _insert_tx(
+                    conn,
+                    tx_id="tx-in",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="LBTC",
+                    direction="inbound",
+                    amount_msat=60_000,
+                )
+
+                pair = custody_review_terms.create_pair_review(
+                    conn,
+                    workspace_id=workspace_id,
+                    profile=conn.execute(
+                        "SELECT * FROM profiles WHERE id = ?", (profile_id,)
+                    ).fetchone(),
+                    out_row=conn.execute(
+                        "SELECT * FROM transactions WHERE id = 'tx-out'"
+                    ).fetchone(),
+                    in_row=conn.execute(
+                        "SELECT * FROM transactions WHERE id = 'tx-in'"
+                    ).fetchone(),
+                    out_amount="0.00000060",
+                )
+                legs = conn.execute(
+                    "SELECT role, asset, amount_msat FROM custody_component_legs "
+                    "WHERE component_id = ? ORDER BY ordinal",
+                    (pair["component_id"],),
+                ).fetchall()
+
+                self.assertEqual(
+                    [(row["role"], row["asset"], row["amount_msat"]) for row in legs],
+                    [
+                        ("source", "BTC", 60_000),
+                        ("destination", "LBTC", 60_000),
+                    ],
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT SUM(source_amount_msat) FROM custody_component_allocations "
+                        "WHERE component_id = ?",
+                        (pair["component_id"],),
+                    ).fetchone()[0],
+                    60_000,
+                )
+            finally:
+                conn.close()
+
     def test_summary_internal_transfers_count_multi_pair_spend_once(self):
         # A whirlpool 1->N multi-pair repeats the SAME out leg on every pair
         # row; the summary-PDF internal-transfer volume must count that spend
@@ -467,15 +925,53 @@ class FreshSchemaTests(unittest.TestCase):
                         direction="inbound",
                         amount_msat=amount,
                     )
-                for pair_id, in_id in (("pair-1", "tx-in-1"), ("pair-2", "tx-in-2")):
-                    create_transaction_pair(
-                        conn,
-                        workspace_id,
-                        profile_id,
-                        "tx-out",
-                        in_id,
-                        kind="whirlpool",
-                    )
+                conn.executemany(
+                    """
+                    INSERT INTO journal_custody_decisions(
+                        decision_id, workspace_id, profile_id,
+                        source_transaction_id, target_transaction_id,
+                        source_observation_hash, source_start_msat, source_end_msat,
+                        target_observation_hash, target_start_msat, target_end_msat,
+                        source_wallet_id, target_wallet_id,
+                        source_network, target_network, source_rail, target_rail,
+                        source_asset, target_asset, state, basis_state, reason,
+                        occurred_at, target_occurred_at, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            decision_id,
+                            workspace_id,
+                            profile_id,
+                            "tx-out",
+                            in_id,
+                            "1" * 64,
+                            source_start,
+                            source_start + amount,
+                            target_hash,
+                            0,
+                            amount,
+                            wallet_id,
+                            wallet_id,
+                            "main",
+                            "main",
+                            "bitcoin",
+                            "bitcoin",
+                            "BTC",
+                            "BTC",
+                            "internal_reviewed",
+                            "eligible",
+                            "reviewed_custody_component",
+                            _now(),
+                            _now(),
+                            _now(),
+                        )
+                        for decision_id, in_id, target_hash, source_start, amount in (
+                            ("a" * 64, "tx-in-1", "2" * 64, 0, 50_000),
+                            ("b" * 64, "tx-in-2", "3" * 64, 50_000, 49_000),
+                        )
+                    ],
+                )
                 hooks = SimpleNamespace(iso_z=lambda value: value)
                 summary = _summary_pdf_internal_transfers(
                     conn,
@@ -573,6 +1069,23 @@ class FreshSchemaTests(unittest.TestCase):
                         "loss",
                         _now(),
                     ),
+                )
+                insert_reviewed_projection(
+                    conn,
+                    projection_id="e" * 64,
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    source_transaction_id="cross-out",
+                    target_transaction_id="cross-in",
+                    source_asset="BTC",
+                    target_asset="LBTC",
+                    source_amount_msat=1_000,
+                    target_amount_msat=900,
+                    review_kind="manual",
+                    swap_fee_msat=456,
+                    swap_fee_kind="loss",
+                    occurred_at=_now(),
+                    target_occurred_at=_now(),
                 )
                 conn.commit()
 

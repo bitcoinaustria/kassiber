@@ -15,6 +15,10 @@ from contextlib import redirect_stdout
 from kassiber.cli.handlers import process_journals
 from kassiber.cli.main import build_parser, dispatch
 from kassiber.core import custody_filed_reports
+from kassiber.core.custody_authored_migration import (
+    refresh_legacy_authored_components,
+)
+from kassiber.core.custody_journal import CustodyJournalBuilder
 from kassiber.core.custody_components import (
     activate_component,
     create_component,
@@ -59,6 +63,17 @@ def test_fresh_database_does_not_emit_a_fake_schema_migration_audit(tmp_path):
         assert conn.execute(
             "SELECT COUNT(*) FROM schema_migration_audits"
         ).fetchone()[0] == 0
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        assert not {
+            "custody_tax_migration_baselines",
+            "custody_tax_migration_baseline_events",
+            "custody_tax_migration_reports",
+        } & tables
     finally:
         conn.close()
 
@@ -357,6 +372,7 @@ def _build_current_fixture(root) -> sqlite3.Connection:
         "INSERT INTO settings(key, value) VALUES('test_fixture_schema_version', ?)",
         (LEGACY_FIXTURE_VERSION,),
     )
+    refresh_legacy_authored_components(conn)
     conn.commit()
     assert get_component(conn, conflicted["id"])["effective_state"] == "draft"
     return conn
@@ -418,6 +434,7 @@ def _downgrade_to_pre_durable_anchor(conn: sqlite3.Connection) -> None:
         ]
         for trigger_name in trigger_names:
             legacy.execute(f'DROP TRIGGER "{trigger_name}"')
+        legacy.execute("DROP VIEW IF EXISTS journal_custody_projection_relations")
         legacy.execute("DROP TABLE custody_component_evidence_commitments")
         legacy.execute(
             "ALTER TABLE custody_components DROP COLUMN expected_evidence_count"
@@ -457,6 +474,12 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
     migrated = open_db(tmp_path)
     try:
         after_tax = _tax_snapshot(migrated)
+        profile = migrated.execute(
+            "SELECT * FROM profiles WHERE id = 'profile'"
+        ).fetchone()
+        decisions = CustodyJournalBuilder(
+            migrated, profile
+        ).build_custody_decisions()
         after_rows = {
             table: int(
                 migrated.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -468,12 +491,18 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
                 migrated.execute(
                     "SELECT COUNT(*) FROM custody_component_legs "
                     "WHERE transaction_id IS NOT NULL "
-                    "AND anchor_transaction_id = transaction_id"
+                    "AND anchor_transaction_id = transaction_id "
+                    "AND component_id NOT IN ("
+                    "  SELECT component_id FROM custody_component_economic_terms"
+                    ")"
                 ).fetchone()[0]
             ),
             "payload_free_evidence_commitments": int(
                 migrated.execute(
-                    "SELECT COUNT(*) FROM custody_component_evidence_commitments"
+                    "SELECT COUNT(*) FROM custody_component_evidence_commitments e "
+                    "WHERE e.component_id NOT IN ("
+                    "  SELECT component_id FROM custody_component_economic_terms"
+                    ")"
                 ).fetchone()[0]
             ),
         }
@@ -491,6 +520,10 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
 
         assert before_tax == after_tax
+        assert [record["id"] for record in decisions.direct_payout_records] == [
+            "direct-payout"
+        ]
+        assert decisions.direct_payout_records[0]["component_id"] is not None
         assert before_rows == after_rows
         assert migrated.execute(
             "SELECT COUNT(*) FROM custody_gap_review_transactions"
@@ -508,7 +541,7 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
         assert reported_changes["durable_transaction_anchors"]["after"] == {
             "column_present": True,
-            "anchored_leg_count": 6,
+            "anchored_leg_count": 9,
         }
         assert reported_changes["payload_free_evidence_commitments"]["before"] == {
             "header_column_present": False,
@@ -516,7 +549,7 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
         }
         assert reported_changes["payload_free_evidence_commitments"]["after"] == {
             "header_column_present": True,
-            "commitment_count": 6,
+            "commitment_count": 9,
         }
         assert all(
             1 <= len(change["explanation"]) <= 240

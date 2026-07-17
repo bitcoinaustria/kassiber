@@ -14,7 +14,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from kassiber.core.transfer_matching import (
-    _deterministic_self_transfer_ids,
     CONFIDENCE_EXACT,
     CONFIDENCE_STRONG,
     KIND_CHAIN_SWAP,
@@ -519,10 +518,8 @@ class PaymentHashExactMatchTests(unittest.TestCase):
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
     def test_own_node_lightning_hash_pair_suppressed_from_review(self):
-        # The journal nets a cross-node own payment (CLN pay -> LND invoice,
-        # same hash, same asset) as a MOVE, so the matcher must not surface it
-        # as an exact payment_hash swap candidate — lockstep with
-        # transfers.detect_intra_transfers' Lightning hash pass.
+        # The stored journal projection has already booked the cross-node own
+        # payment as a MOVE, so its anchors cannot reappear in swap review.
         out = _row(
             id="cln-pay",
             wallet_id="cln-node",
@@ -547,7 +544,13 @@ class PaymentHashExactMatchTests(unittest.TestCase):
             occurred_at="2026-03-14T17:31:00Z",
             amount=100_000_000,
         )
-        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+        self.assertEqual(
+            suggest_swap_candidates(
+                [out, inbound],
+                booked_move_transaction_ids={"cln-pay", "lnd-invoice"},
+            ),
+            [],
+        )
 
     def test_same_node_circular_payment_is_also_suppressed(self):
         rows = [
@@ -574,9 +577,12 @@ class PaymentHashExactMatchTests(unittest.TestCase):
         ]
 
         self.assertEqual(
-            _deterministic_self_transfer_ids(rows), {"circular-out", "circular-in"}
+            suggest_swap_candidates(
+                rows,
+                booked_move_transaction_ids={"circular-out", "circular-in"},
+            ),
+            [],
         )
-        self.assertEqual(suggest_swap_candidates(rows), [])
 
     def test_native_hash_identity_never_crosses_networks(self):
         rows = [
@@ -602,7 +608,6 @@ class PaymentHashExactMatchTests(unittest.TestCase):
             ),
         ]
 
-        self.assertEqual(_deterministic_self_transfer_ids(rows), set())
         self.assertFalse(
             [
                 candidate
@@ -677,7 +682,6 @@ class PaymentHashExactMatchTests(unittest.TestCase):
                 "import_source": "generic-ledger"
             }
 
-        self.assertEqual(_deterministic_self_transfer_ids(rows), set())
         self.assertFalse(
             [
                 candidate
@@ -743,7 +747,6 @@ class PaymentHashExactMatchTests(unittest.TestCase):
             ),
         ]
 
-        self.assertEqual(_deterministic_self_transfer_ids(rows), set())
         self.assertEqual(len(suggest_swap_candidates(rows)), 1)
 
     def test_same_asset_transfer_defaults_to_carrying_value_for_generic_profile(self):
@@ -1365,45 +1368,6 @@ class ProviderEvidenceAdversarialTests(unittest.TestCase):
 
 
 class HeuristicMatchTests(unittest.TestCase):
-    def test_shared_provider_id_is_not_an_onchain_self_transfer(self):
-        out = _row(
-            id="out", external_id="provider-batch-17", wallet_id="cold",
-            direction="outbound", asset="BTC", amount=100_000_000,
-        )
-        inbound = _row(
-            id="in", external_id="provider-batch-17", wallet_id="hot",
-            direction="inbound", asset="BTC", amount=99_900_000,
-        )
-        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
-
-    def test_same_txid_on_different_networks_is_not_suppressed(self):
-        out = _row(
-            id="out", external_id=_TXID_A, wallet_id="regtest",
-            direction="outbound", asset="BTC", amount=100_000_000,
-            raw_json={"chain": "bitcoin", "network": "regtest"},
-        )
-        inbound = _row(
-            id="in", external_id=_TXID_A, wallet_id="mainnet",
-            direction="inbound", asset="BTC", amount=99_900_000,
-            raw_json={"chain": "bitcoin", "network": "main"},
-        )
-        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
-
-    def test_unrecognized_chain_fails_closed(self):
-        rows = [
-            _row(
-                id="out", external_id=_TXID_A, wallet_id="node-a",
-                direction="outbound", asset="BTC", amount=100_000_000,
-                raw_json={"chain": "lightning", "network": "main"},
-            ),
-            _row(
-                id="in", external_id=_TXID_A, wallet_id="node-b",
-                direction="inbound", asset="BTC", amount=99_900_000,
-                raw_json={"chain": "lightning", "network": "main"},
-            ),
-        ]
-        self.assertEqual(_deterministic_self_transfer_ids(rows), set())
-
     def test_same_txid_unknown_principal_residual_stays_reviewable(self):
         out = _row(
             id="cold-out",
@@ -1451,17 +1415,7 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].default_kind, KIND_PEG_IN)
 
-    def test_non_fee_inclusive_shortfall_is_not_deterministic(self):
-        # The explicit fee field is separate for this row shape. A principal
-        # shortfall remains unknown even when it is below the heuristic ceiling.
-        out = _row(id="o", external_id=_TXID_A, wallet_id="cold",
-                   direction="outbound", asset="BTC", amount=100_100_000_000)
-        inbound = _row(id="i", external_id=_TXID_A, wallet_id="hot",
-                       direction="inbound", asset="BTC", amount=100_000_000_000)
-        ids = _deterministic_self_transfer_ids([out, inbound])
-        self.assertEqual(ids, set())
-
-    def test_exact_principal_with_separate_fee_remains_deterministic(self):
+    def test_booked_move_anchors_suppress_swap_candidates(self):
         out = _row(
             id="o",
             external_id=_TXID_A,
@@ -1480,21 +1434,10 @@ class HeuristicMatchTests(unittest.TestCase):
             amount=100_000_000_000,
         )
         rows = [out, inbound]
-        self.assertEqual(_deterministic_self_transfer_ids(rows), {"o", "i"})
-        self.assertEqual(suggest_swap_candidates(rows), [])
-
-    def test_mixed_case_txid_does_not_hide_unknown_principal_residual(self):
-        # Bitcoin txids are case-insensitive hex; two wallets recording the same
-        # self-transfer with opposite casing must still group as one proven
-        # self-transfer (in lockstep with detect_intra_transfers grouping), so
-        # the clean move is not surfaced as a swap candidate.
-        txid = "ab" * 32
-        out = _row(id="o", external_id=txid.upper(), wallet_id="cold",
-                   direction="outbound", asset="BTC", amount=100_100_000_000)
-        inbound = _row(id="i", external_id=txid.lower(), wallet_id="hot",
-                       direction="inbound", asset="BTC", amount=100_000_000_000)
-        ids = _deterministic_self_transfer_ids([out, inbound])
-        self.assertEqual(ids, set())
+        self.assertEqual(
+            suggest_swap_candidates(rows, booked_move_transaction_ids={"o", "i"}),
+            [],
+        )
 
     def test_zero_value_placeholder_does_not_hide_unknown_principal_residual(self):
         txid = "11" * 32
@@ -1506,46 +1449,9 @@ class HeuristicMatchTests(unittest.TestCase):
                             direction="inbound", asset="BTC", amount=0)
 
         rows = [out, inbound, zero_inbound]
-        self.assertEqual(_deterministic_self_transfer_ids(rows), set())
         candidates = suggest_swap_candidates(rows)
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].confidence, CONFIDENCE_STRONG)
-
-    def test_fee_inclusive_leg_requires_exact_graph_fee_to_be_deterministic(self):
-        out = _row(id="o", external_id=_TXID_A, wallet_id="btcpay",
-                   direction="outbound", asset="BTC", amount=103_000_000,
-                   amount_includes_fee=1)
-        inbound = _row(id="i", external_id=_TXID_A, wallet_id="hot",
-                       direction="inbound", asset="BTC", amount=100_000_000)
-        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
-
-        # The complete graph may be present only on the node-backed receipt.
-        inbound["raw_json"] = {
-            "txid": _TXID_A,
-            "vin": [{"prevout": {"value": 103_000}}],
-            "vout": [{"n": 0, "value": 100_000}],
-        }
-        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), {"o", "i"})
-
-        # Control: the identical gap on a node-backed (recipient-only) outbound is
-        # NOT claimed — it stays eligible for swap review.
-        out_node = _row(id="o2", external_id=_TXID_B, wallet_id="cold",
-                        direction="outbound", asset="BTC", amount=103_000_000)
-        in_node = _row(id="i2", external_id=_TXID_B, wallet_id="hot",
-                       direction="inbound", asset="BTC", amount=100_000_000)
-        self.assertEqual(_deterministic_self_transfer_ids([out_node, in_node]), set())
-
-    def test_implausible_fee_self_transfer_not_claimed_as_deterministic(self):
-        # The id=47 split-peg shape: a ~41x-tolerance implied fee means the
-        # outbound fanned out to an unrecognized recipient, so it must NOT be
-        # claimed as a proven self-transfer (kept eligible for swap review,
-        # in lockstep with the transfer_fee_implausible tax quarantine).
-        out = _row(id="o", external_id=_TXID_A, wallet_id="cold",
-                   direction="outbound", asset="BTC", amount=4_702_253_000)
-        inbound = _row(id="i", external_id=_TXID_A, wallet_id="hot",
-                       direction="inbound", asset="BTC", amount=2_750_000_000)
-        ids = _deterministic_self_transfer_ids([out, inbound])
-        self.assertEqual(ids, set())
 
     def test_cross_asset_heuristic_without_recognized_route_skipped(self):
         # LBTC->BTC across two custodial-exchange wallets (neither a chain nor a
@@ -1570,16 +1476,7 @@ class HeuristicMatchTests(unittest.TestCase):
                        occurred_at="2026-03-14T17:31:00Z")
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
-    def test_deterministic_self_transfer_uses_journal_fee_tolerance(self):
-        # Deterministic suppression keeps the journal's fixed defaults; caller
-        # fee flags only belong to public heuristic generation.
-        out = _row(id="o", external_id=_TXID_A, wallet_id="cold",
-                   direction="outbound", asset="BTC", amount=4_702_253_000)
-        inbound = _row(id="i", external_id=_TXID_A, wallet_id="hot",
-                       direction="inbound", asset="BTC", amount=2_750_000_000)
-        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
-
-    def test_conserving_same_txid_fanout_is_suppressed_as_one_group(self):
+    def test_all_booked_fanout_anchors_are_suppressed(self):
         out = _row(
             id="o", external_id=_TXID_A, wallet_id="cold",
             direction="outbound", asset="BTC", amount=100_000_000,
@@ -1594,10 +1491,12 @@ class HeuristicMatchTests(unittest.TestCase):
         )
         rows = [out, large_in, small_in]
         self.assertEqual(
-            _deterministic_self_transfer_ids(rows),
-            {"o", "i-large", "i-small"},
+            suggest_swap_candidates(
+                rows,
+                booked_move_transaction_ids={"o", "i-large", "i-small"},
+            ),
+            [],
         )
-        self.assertEqual(suggest_swap_candidates(rows), [])
 
     def test_pegout_within_window_paired(self):
         out = _row(
@@ -2046,32 +1945,6 @@ class LightningPaymentHashSuppressionTests(unittest.TestCase):
         )
 
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
-
-    def test_mismatched_native_node_principal_is_not_claimed_as_self_transfer(self):
-        out = _row(
-            id="native-out",
-            wallet_id="lnd",
-            wallet_kind="lnd",
-            kind="lnd_pay",
-            payment_hash=_PAY_HASH,
-            payment_hash_source="lnd",
-            direction="outbound",
-            amount=10_000_000,
-            fee=200_000,
-        )
-        inbound = _row(
-            id="native-in",
-            wallet_id="cln",
-            wallet_kind="coreln",
-            kind="cln_invoice",
-            payment_hash=_PAY_HASH,
-            payment_hash_source="core_lightning",
-            direction="inbound",
-            amount=8_000_000,
-        )
-
-        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
-
 
 class RefundLinkMatchingTests(unittest.TestCase):
     def test_historical_raw_witness_recovers_exact_refund_outpoint(self):

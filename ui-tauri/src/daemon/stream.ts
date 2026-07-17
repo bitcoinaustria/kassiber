@@ -97,7 +97,7 @@ export type AiToolConsentDecision = "allow_once" | "allow_session" | "deny";
 
 const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
   "ui.journals.quarantine.resolve",
-  "ui.transfers.components.bulk_resolve",
+  "ui.transfers.components.apply",
 ]);
 
 export function aiToolAllowsSessionConsent(name: string): boolean {

@@ -188,11 +188,13 @@ kassiber --machine next-actions
 Paginated envelopes preserve `next_cursor` / `has_more` and also expose the
 same values under `data.page`. High-impact automatic reviews support previews:
 `transfers bulk-pair --dry-run`, `transfers rules apply --dry-run`, and
-`transfers components bulk-resolve --dry-run`, and
+`transfers components plan --action create`, and
 `source-funds links bulk-review --dry-run`. Long 1:N/N:1/N:M wallet migrations,
 including missing historical wallets, use the versioned custody-component
 workflow documented in
 [docs/reference/custody-components.md](docs/reference/custody-components.md).
+Custody-component preview is read-only; apply requires the journal input version
+returned by the matching preview and rejects stale inputs.
 
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:
@@ -200,9 +202,9 @@ the guided custody-gap workflow instead of writing component JSON:
 ```bash
 kassiber transfers gaps list
 kassiber transfers gaps review --gap-id <gap-id>
-kassiber transfers gaps bridge --gap-id <gap-id> --dry-run
-kassiber transfers gaps bridge --gap-id <gap-id> \
-  --expected-fingerprint <fingerprint-from-preview>
+kassiber transfers gaps plan --action create --gap-id <gap-id>
+kassiber transfers gaps apply --action create --gap-id <gap-id> \
+  --expected-input-version <input-version-from-preview>
 ```
 
 Kassiber can suggest a 1:N/N:1/N:M bridge across a long time interval, but it

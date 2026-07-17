@@ -188,7 +188,7 @@ Current rules:
 
 Manual pairs override auto-detection. `transfers suggest` still suppresses
 transactions that already have an active reviewed link. Use
-`transfers components bulk-resolve --dry-run` for 1:N, N:1, N:M, multi-hop
+`transfers components plan --action create` for 1:N, N:1, N:M, multi-hop
 migrations, or missing intermediate wallets. Model a missing owned hop with an
 `untracked_wallet`, author explicit allocations for genuine N:M, and activate
 the complete component atomically after anchor coverage and conservation pass.

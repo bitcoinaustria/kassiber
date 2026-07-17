@@ -15,7 +15,6 @@ from typing import Any, Mapping, Sequence
 from ..msat import msat_to_btc
 from ..time_utils import parse_iso_datetime_or_none
 from ..transfers import (
-    apply_manual_pairs,
     bitcoin_network_domain,
     canonical_payment_hash,
     detect_intra_transfers,
@@ -32,28 +31,34 @@ from .custody_components import CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
 from .custody_evidence import (
     CanonicalQuantityInput,
     QuantityObservation,
-    row_principal_msat,
 )
 from .custody_quantity import (
     CUSTODY_SUSPENSE,
     EXTERNAL_CONFIRMED,
     ClaimPriority,
-    INTERNAL_REVIEWED,
     INTERNAL_VERIFIED,
     QuantityClaim,
     QuantityDomain,
     QuantitySlice,
 )
-from .ownership_transfers import derive_profile_transfers
+from .ownership_transfers import (
+    OwnershipDeriveResult,
+    ProfileTransferDerivation,
+    derive_profile_transfers,
+)
 from .privacy_hops import privacy_hop_evidence_from_row
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
-    if hasattr(row, "keys") and key not in row.keys():
-        return default
-    if hasattr(row, "get"):
+    if type(row) is dict:
         return row.get(key, default)
-    return row[key]
+    getter = getattr(row, "get", None)
+    if getter is not None:
+        return getter(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
 
 
 @dataclass(frozen=True)
@@ -62,10 +67,8 @@ class CustodyInterpreterCompilation:
 
     claims: tuple[QuantityClaim, ...]
     native_audits: tuple[Mapping[str, Any], ...]
-    cross_asset_pairs: tuple[Mapping[str, Any], ...]
     non_event_transaction_ids: tuple[str, ...]
     blocked_transaction_ids: tuple[str, ...] = ()
-    direct_payout_conflict_transaction_ids: tuple[str, ...] = ()
     quarantines: tuple[Mapping[str, Any], ...] = ()
 
     @property
@@ -93,111 +96,19 @@ def _pair_source(pair: Mapping[str, Any]) -> str:
     return str(_field(pair, "source") or _field(pair, "pair_source") or "")
 
 
-def _pair_is_reviewed(pair: Mapping[str, Any]) -> bool:
-    source = _pair_source(pair)
+def _is_exact_native_pair(
+    source: QuantityObservation,
+    target: QuantityObservation,
+) -> bool:
+    """Return whether both legs prove one canonical chain event."""
+
     return bool(
-        _field(pair, "pair_id")
-        or source in {"manual", "bulk_exact", "bulk_selected", "rule_auto"}
+        source.authoritative_chain_observation
+        and target.authoritative_chain_observation
+        and source.event_key == target.event_key
+        and source.event_key.native_namespace == "chain"
+        and source.event_key.chain in {"bitcoin", "liquid"}
     )
-
-
-def _is_reviewed_privacy_kind(value: Any) -> bool:
-    kind = str(value or "").strip().lower()
-    return kind in {"coinjoin", "whirlpool"} or "coinjoin" in kind
-
-
-def _pair_priority(pair: Mapping[str, Any]) -> tuple[str, ClaimPriority, str]:
-    source = _pair_source(pair)
-    if _pair_is_reviewed(pair):
-        return (
-            INTERNAL_REVIEWED,
-            ClaimPriority.REVIEWED_PAIR,
-            source or "reviewed_transfer_pair",
-        )
-    return (
-        INTERNAL_VERIFIED,
-        ClaimPriority.EXACT_NATIVE_EVENT,
-        source or "row_matched",
-    )
-
-
-def _reviewed_split_remainder_pairs(
-    auto_pairs: Sequence[Mapping[str, Any]],
-    rows_by_id: Mapping[str, Mapping[str, Any]],
-    *,
-    manual_pair_records: Sequence[Mapping[str, Any]],
-    direct_payout_records: Sequence[Mapping[str, Any]],
-) -> tuple[Mapping[str, Any], ...]:
-    """Promote only exactly conserved remainders of explicit split reviews.
-
-    ``--out-amount`` reserves the reviewed swap or payout slice.  It also says
-    that the rest of that source transaction stayed in custody, but it does
-    not make arbitrary same-txid imports trustworthy.  The candidate rows may
-    therefore carry basis only when all unreviewed candidates for the source
-    exactly equal the principal left after every explicit review.
-    """
-
-    reserved_by_source: dict[str, int] = {}
-    review_ids_by_source: dict[str, list[str]] = {}
-    manual_targets: set[str] = set()
-    for kind, records in (
-        ("pair", manual_pair_records),
-        ("payout", direct_payout_records),
-    ):
-        for record in records:
-            source_id = str(_field(record, "out_transaction_id") or "")
-            source = rows_by_id.get(source_id)
-            raw_amount = _field(record, "out_amount")
-            if source is None or raw_amount in (None, ""):
-                continue
-            amount_msat = int(raw_amount)
-            principal_msat = row_principal_msat(source)
-            if amount_msat <= 0 or amount_msat >= principal_msat:
-                continue
-            reserved_by_source[source_id] = (
-                reserved_by_source.get(source_id, 0) + amount_msat
-            )
-            review_id = str(_field(record, "id") or source_id)
-            review_ids_by_source.setdefault(source_id, []).append(
-                f"{kind}:{review_id}"
-            )
-            if kind == "pair":
-                target_id = str(_field(record, "in_transaction_id") or "")
-                if target_id:
-                    manual_targets.add(target_id)
-
-    candidates_by_source: dict[str, list[Mapping[str, Any]]] = {}
-    for pair in auto_pairs:
-        source_id = _anchor_id(_field(pair, "out", {}) or {})
-        target_id = _anchor_id(_field(pair, "in", {}) or {})
-        if source_id in reserved_by_source and target_id not in manual_targets:
-            candidates_by_source.setdefault(source_id, []).append(pair)
-
-    promoted: list[Mapping[str, Any]] = []
-    for source_id, candidates in sorted(candidates_by_source.items()):
-        source = rows_by_id[source_id]
-        remainder_msat = row_principal_msat(source) - reserved_by_source[source_id]
-        candidate_msat = sum(
-            row_principal_msat(_field(pair, "in", {}) or {})
-            for pair in candidates
-        )
-        if remainder_msat <= 0 or candidate_msat != remainder_msat:
-            continue
-        review_key = ",".join(sorted(review_ids_by_source[source_id]))
-        for pair in candidates:
-            target_id = _anchor_id(_field(pair, "in", {}) or {})
-            promoted.append(
-                {
-                    **dict(pair),
-                    "pair_id": (
-                        f"reviewed-split-remainder:{source_id}:{target_id}:"
-                        f"{review_key}"
-                    ),
-                    "source": "reviewed_split_remainder",
-                    "allow_unclaimed_residual": True,
-                }
-            )
-    return tuple(promoted)
 
 
 def _is_exact_recorded_pair(
@@ -217,11 +128,7 @@ def _is_exact_recorded_pair(
     source_name = _pair_source(pair)
     if source_name == "row_matched":
         return bool(
-            source.authoritative_chain_observation
-            and target.authoritative_chain_observation
-            and source.event_key == target.event_key
-            and source.event_key.native_namespace == "chain"
-            and source.event_key.chain in {"bitcoin", "liquid"}
+            _is_exact_native_pair(source, target)
             and source.wallet_id != target.wallet_id
         )
     if source_name != "lightning_payment_hash":
@@ -312,7 +219,6 @@ def _samourai_privacy_pairs(
         }
         candidate_ids.update(group_candidate_ids)
         allocated = 0
-        allocated_targets: list[QuantityObservation] = []
         group_touched_ids: set[str] = set()
         authoritative_native_group = source.authoritative_chain_observation
         for in_row in sorted(ins, key=_row_id):
@@ -340,7 +246,6 @@ def _samourai_privacy_pairs(
                 }
             )
             allocated += amount_msat
-            allocated_targets.append(target)
             group_touched_ids.update((_anchor_id(out_row), _anchor_id(in_row)))
         residual_msat = source.principal_msat - allocated
         if allocated and residual_msat > 0:
@@ -348,10 +253,6 @@ def _samourai_privacy_pairs(
                 is_tx0
                 and authoritative_native_group
                 and source.fee_attribution == "exact"
-            )
-            supporting_evidence_hashes = {source.evidence_detail_hash}
-            supporting_evidence_hashes.update(
-                target.evidence_detail_hash for target in allocated_targets
             )
             fee_claims.append(
                 QuantityClaim(
@@ -375,9 +276,6 @@ def _samourai_privacy_pairs(
                         "samourai_coordinator_fee"
                         if exact_coordinator_fee
                         else "implicit_wallet_delta_unallocated"
-                    ),
-                    supporting_evidence_hashes=tuple(
-                        sorted(supporting_evidence_hashes)
                     ),
                     atomic_bundle_id=f"pair-group:{group_id}",
                     # A targetless fee is a finalized external classification.
@@ -418,11 +316,7 @@ def _exact_native_pair_ids(
             or target is None
             or source.direction != "outbound"
             or target.direction != "inbound"
-            or not source.authoritative_chain_observation
-            or not target.authoritative_chain_observation
-            or source.event_key != target.event_key
-            or source.event_key.native_namespace != "chain"
-            or source.event_key.chain not in {"bitcoin", "liquid"}
+            or not _is_exact_native_pair(source, target)
         ):
             continue
         resolved.update((out_id, in_id))
@@ -584,7 +478,6 @@ def _pair_claims(
     ordered_pairs = sorted(
         pairs,
         key=lambda item: (
-            1 if _pair_is_reviewed(item) else 0,
             str(_field(_field(item, "out", {}) or {}, "occurred_at") or ""),
             _row_id(_field(item, "out", {}) or {}),
             _row_id(_field(item, "in", {}) or {}),
@@ -605,53 +498,12 @@ def _pair_claims(
             continue
         source, target = observations.get(out_id), observations.get(in_id)
         # Rowless owned destinations are compiled by custody_native_audit below.
-        invalid_reviewed_pair = _pair_is_reviewed(pair) and (
-            source is None
-            or target is None
-            or source.direction != "outbound"
-            or target.direction != "inbound"
-        )
-        if invalid_reviewed_pair:
-            detail = {
-                "required_for": "valid_reviewed_transfer_legs",
-                "out_direction": source.direction if source is not None else None,
-                "in_direction": target.direction if target is not None else None,
-            }
-            for transaction_id, row, paired_leg in (
-                (out_id, out_row, False),
-                (in_id, in_row, True),
-            ):
-                if not transaction_id:
-                    continue
-                quarantines.append(
-                    {
-                        "transaction_id": transaction_id,
-                        "workspace_id": _field(row, "workspace_id"),
-                        "profile_id": _field(row, "profile_id"),
-                        "reason": "transfer_pair_leg_invalid",
-                        "detail_json": json.dumps(
-                            {
-                                **detail,
-                                **({"paired_leg": True} if paired_leg else {}),
-                            },
-                            sort_keys=True,
-                        ),
-                    }
-                )
-            blocked_transaction_ids.update((out_id, in_id))
-            continue
         if source is None or target is None:
             continue
         if source.direction != "outbound" or target.direction != "inbound":
             continue
         source_name = _pair_source(pair)
-        exact_native_pair = (
-            source.authoritative_chain_observation
-            and target.authoritative_chain_observation
-            and source.event_key == target.event_key
-            and source.event_key.native_namespace == "chain"
-            and source.event_key.chain in {"bitcoin", "liquid"}
-        )
+        exact_native_pair = _is_exact_native_pair(source, target)
         exact_recorded_pair = _is_exact_recorded_pair(
             pair, out_row, in_row, source, target
         )
@@ -667,8 +519,7 @@ def _pair_claims(
             and source.event_key.chain in {"bitcoin", "liquid"}
         )
         if (
-            not _pair_is_reviewed(pair)
-            and recorded_chain_candidate
+            recorded_chain_candidate
             and source.authoritative_chain_observation
             != target.authoritative_chain_observation
         ):
@@ -711,8 +562,7 @@ def _pair_claims(
             blocked_transaction_ids.add(untrusted_id)
             continue
         if (
-            not _pair_is_reviewed(pair)
-            and source_name != "channel_lifecycle"
+            source_name != "channel_lifecycle"
             and not exact_recorded_pair
             and not exact_recorded_fanout
             and not exact_native_pair
@@ -727,7 +577,8 @@ def _pair_claims(
         source_when = parse_iso_datetime_or_none(source.occurred_at)
         target_when = parse_iso_datetime_or_none(target.occurred_at)
         if (
-            source_when is not None
+            not exact_native_pair
+            and source_when is not None
             and target_when is not None
             and source_when
             > target_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
@@ -793,7 +644,9 @@ def _pair_claims(
         )
         if amount_msat <= 0:
             continue
-        state, priority, reason = _pair_priority(pair)
+        state = INTERNAL_VERIFIED
+        priority = ClaimPriority.EXACT_NATIVE_EVENT
+        reason = source_name or "row_matched"
         pair_id = str(_field(pair, "pair_id") or f"{out_id}:{in_id}:{ordinal}")
         pair_group_id = str(_field(pair, "group_id") or "")
         atomic_bundle_id = (
@@ -848,7 +701,7 @@ def _pair_claims(
         unclaimed_after_pair = available_source - amount_msat - inferred_fee_msat
         fee_tolerance_msat = max(source.principal_msat // 100, 2_500_000)
         if (
-            not _pair_is_reviewed(pair)
+            not exact_native_pair
             and not bool(_field(pair, "allow_unclaimed_residual", False))
             and source_last_ordinal.get(out_id) == ordinal
             and unclaimed_after_pair > fee_tolerance_msat
@@ -900,14 +753,6 @@ def _pair_claims(
                     state=CUSTODY_SUSPENSE,
                     priority=ClaimPriority.EXACT_NATIVE_EVENT,
                     reason="transfer_fee_implausible",
-                    supporting_evidence_hashes=tuple(
-                        sorted(
-                            {
-                                source.evidence_detail_hash,
-                                target.evidence_detail_hash,
-                            }
-                        )
-                    ),
                     atomic_bundle_id=atomic_bundle_id,
                 )
             )
@@ -922,9 +767,6 @@ def _pair_claims(
                 state=state,
                 priority=priority,
                 reason=reason,
-                supporting_evidence_hashes=tuple(
-                    sorted({source.evidence_detail_hash, target.evidence_detail_hash})
-                ),
                 atomic_bundle_id=atomic_bundle_id,
                 allow_cross_rail=allow_cross_rail,
                 transfer_kind=str(_field(pair, "kind") or "") or None,
@@ -936,9 +778,7 @@ def _pair_claims(
         target_cursor[target.quantity_hash] = target_start + amount_msat
         if source.fee_attribution == "implicit_wallet_delta":
             implicit_sources[source.quantity_hash] = source
-        if inferred_fee_msat and (
-            transition_kind or not _pair_is_reviewed(pair)
-        ) and source.fee_attribution != "implicit_wallet_delta":
+        if inferred_fee_msat and source.fee_attribution != "implicit_wallet_delta":
             fee_start = source_start + amount_msat
             claims.append(
                 QuantityClaim(
@@ -950,15 +790,7 @@ def _pair_claims(
                     ),
                     state=EXTERNAL_CONFIRMED,
                     priority=priority,
-                    reason="reviewed_transfer_fee",
-                    supporting_evidence_hashes=tuple(
-                        sorted(
-                            {
-                                source.evidence_detail_hash,
-                                target.evidence_detail_hash,
-                            }
-                        )
-                    ),
+                    reason="verified_transfer_fee",
                     atomic_bundle_id=atomic_bundle_id,
                     destination_kind="fee",
                 )
@@ -979,7 +811,6 @@ def _pair_claims(
                 state=CUSTODY_SUSPENSE,
                 priority=ClaimPriority.ACCOUNTING_CONVENTION,
                 reason="implicit_wallet_delta_unallocated",
-                supporting_evidence_hashes=(source.evidence_detail_hash,),
             )
         )
     return (
@@ -1090,18 +921,33 @@ def compile_custody_interpreters(
     canonical: CanonicalQuantityInput,
     *,
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
-    manual_pair_records: Sequence[Mapping[str, Any]] = (),
     owned_index: Any = None,
     channel_transfer_pairs: Sequence[Mapping[str, Any]] = (),
     channel_roles: Mapping[str, str] | None = None,
     loan_legs: Sequence[Mapping[str, Any]] = (),
-    direct_payout_records: Sequence[Mapping[str, Any]] = (),
     component_transaction_ids: Sequence[str] = (),
 ) -> CustodyInterpreterCompilation:
     """Compile every non-component custody interpreter before arbitration."""
 
     excluded = {str(item) for item in component_transaction_ids if item}
     observations = _observations_by_transaction(canonical)
+    has_chain_events = any(
+        event.event_key.native_namespace == "chain"
+        for event in canonical.events
+    )
+    has_lightning_hashes = False
+    has_samourai_config = False
+    has_privacy_boundaries = False
+    for row in rows:
+        has_lightning_hashes = has_lightning_hashes or (
+            _field(row, "payment_hash") not in (None, "")
+        )
+        has_samourai_config = has_samourai_config or (
+            "samourai" in str(_field(row, "config_json") or "").lower()
+        )
+        has_privacy_boundaries = has_privacy_boundaries or (
+            _field(row, "privacy_boundary") not in (None, "")
+        )
     (
         samourai_pairs,
         samourai_fee_claims,
@@ -1109,15 +955,16 @@ def compile_custody_interpreters(
         samourai_touched_ids,
     ) = (
         _samourai_privacy_pairs(rows, observations)
+        if has_samourai_config
+        else ([], [], set(), set())
     )
-    auto_pairs, _ = detect_intra_transfers(rows)
+    auto_pairs = (
+        detect_intra_transfers(rows)[0]
+        if has_chain_events or has_lightning_hashes
+        else []
+    )
     rows_by_id = {str(_field(row, "id") or ""): row for row in rows}
-    resolved_privacy_ids = {
-        str(_field(record, key) or "")
-        for record in manual_pair_records
-        if _is_reviewed_privacy_kind(_field(record, "kind"))
-        for key in ("out_transaction_id", "in_transaction_id")
-    }
+    resolved_privacy_ids: set[str] = set()
     # Structured Samourai groups get their own exact quarantine below. Avoid a
     # second generic privacy-hop blocker for the same rows; authoritative groups
     # are resolved, while unverified groups remain blocked by the specific
@@ -1128,31 +975,35 @@ def compile_custody_interpreters(
     # resolve to the same protocol-qualified txid above.
     resolved_privacy_ids.update(_exact_native_pair_ids(auto_pairs, observations))
     resolved_privacy_ids.update(excluded)
-    privacy_quarantines = tuple(
-        {
-            "transaction_id": str(_field(row, "id") or ""),
-            "workspace_id": _field(row, "workspace_id"),
-            "profile_id": _field(row, "profile_id"),
-            "reason": "privacy_hop_unresolved",
-            "detail_json": json.dumps(
-                {
-                    "wallet": _field(
-                        wallet_refs_by_id.get(
-                            str(_field(row, "wallet_id") or ""), {}
+    privacy_quarantines = (
+        tuple(
+            {
+                "transaction_id": str(_field(row, "id") or ""),
+                "workspace_id": _field(row, "workspace_id"),
+                "profile_id": _field(row, "profile_id"),
+                "reason": "privacy_hop_unresolved",
+                "detail_json": json.dumps(
+                    {
+                        "wallet": _field(
+                            wallet_refs_by_id.get(
+                                str(_field(row, "wallet_id") or ""), {}
+                            ),
+                            "label",
+                            _field(row, "wallet_id"),
                         ),
-                        "label",
-                        _field(row, "wallet_id"),
-                    ),
-                    "asset": str(_field(row, "asset") or "").upper(),
-                    "direction": _field(row, "direction"),
-                    **(privacy_hop_evidence_from_row(row) or {}),
-                },
-                sort_keys=True,
-            ),
-        }
-        for row in rows
-        if str(_field(row, "id") or "") not in resolved_privacy_ids
-        and privacy_hop_evidence_from_row(row) is not None
+                        "asset": str(_field(row, "asset") or "").upper(),
+                        "direction": _field(row, "direction"),
+                        **(privacy_hop_evidence_from_row(row) or {}),
+                    },
+                    sort_keys=True,
+                ),
+            }
+            for row in rows
+            if str(_field(row, "id") or "") not in resolved_privacy_ids
+            and privacy_hop_evidence_from_row(row) is not None
+        )
+        if has_privacy_boundaries
+        else ()
     )
     privacy_blocked_ids = {
         str(_field(item, "transaction_id") or "")
@@ -1203,148 +1054,26 @@ def compile_custody_interpreters(
     channel_blocked_ids = {
         str(item["transaction_id"]) for item in channel_role_quarantines
     }
-    whole_payout_source_ids: set[str] = set()
-    partial_payout_source_ids: set[str] = set()
-    invalid_payout_source_ids: set[str] = set()
-    direct_payout_quarantines: list[Mapping[str, Any]] = []
-    for record in direct_payout_records:
-        out_id = str(_field(record, "out_transaction_id") or "")
-        source_row = rows_by_id.get(out_id)
-        if source_row is None:
-            continue
-        source_amount = row_principal_msat(source_row)
-        reviewed_amount = _field(record, "out_amount")
-        reviewed_amount = (
-            source_amount if reviewed_amount in (None, "") else int(reviewed_amount)
-        )
-        if reviewed_amount <= 0 or reviewed_amount > source_amount:
-            invalid_payout_source_ids.add(out_id)
-            direct_payout_quarantines.append(
-                {
-                    "transaction_id": out_id,
-                    "workspace_id": _field(source_row, "workspace_id"),
-                    "profile_id": _field(source_row, "profile_id"),
-                    "reason": "direct_payout_out_amount_invalid",
-                    "detail_json": json.dumps(
-                        {
-                            "payout_id": _field(record, "id"),
-                            "out_amount_msat": reviewed_amount,
-                            "full_out_principal_msat": source_amount,
-                        },
-                        sort_keys=True,
-                    ),
-                }
-            )
-            continue
-        if source_amount > 0 and reviewed_amount == source_amount:
-            whole_payout_source_ids.add(out_id)
-        elif reviewed_amount < source_amount:
-            partial_payout_source_ids.add(out_id)
-    direct_payout_conflict_ids = {
-        _anchor_id(_field(pair, "in", {}) or {})
-        for pair in auto_pairs
-        if _anchor_id(_field(pair, "out", {}) or {}) in whole_payout_source_ids
-    }
-    direct_payout_conflict_quarantines = tuple(
-        {
-            "transaction_id": transaction_id,
-            "workspace_id": _field(rows_by_id.get(transaction_id, {}), "workspace_id"),
-            "profile_id": _field(rows_by_id.get(transaction_id, {}), "profile_id"),
-            "reason": "direct_payout_conflicting_receipt",
-            "detail_json": json.dumps(
-                {"required_for": "direct_payout_review"}, sort_keys=True
-            ),
-        }
-        for transaction_id in sorted(direct_payout_conflict_ids)
-    )
-    auto_pairs = [
-        pair
-        for pair in auto_pairs
-        if _anchor_id(_field(pair, "out", {}) or {}) not in whole_payout_source_ids
-        and _anchor_id(_field(pair, "in", {}) or {}) not in whole_payout_source_ids
-    ]
-    auto_pairs = [
-        {
-            **dict(pair),
-            **(
-                {"allow_unclaimed_residual": True}
-                if _anchor_id(_field(pair, "out", {}) or {})
-                in partial_payout_source_ids
-                else {}
-            ),
-        }
-        for pair in auto_pairs
-    ]
-    same_asset_pairs, cross_asset_pairs = apply_manual_pairs(
-        rows, auto_pairs, manual_pair_records
-    )
-    reviewed_remainders = _reviewed_split_remainder_pairs(
-        auto_pairs,
-        rows_by_id,
-        manual_pair_records=manual_pair_records,
-        direct_payout_records=direct_payout_records,
-    )
-    reviewed_remainders_by_anchors = {
-        (
-            _anchor_id(_field(pair, "out", {}) or {}),
-            _anchor_id(_field(pair, "in", {}) or {}),
-        ): pair
-        for pair in reviewed_remainders
-    }
-    same_asset_pairs = [
-        reviewed_remainders_by_anchors.get(
-            (
-                _anchor_id(_field(pair, "out", {}) or {}),
-                _anchor_id(_field(pair, "in", {}) or {}),
-            ),
-            pair,
-        )
-        for pair in same_asset_pairs
-    ]
-    existing_pair_anchors = {
-        (
-            _anchor_id(_field(pair, "out", {}) or {}),
-            _anchor_id(_field(pair, "in", {}) or {}),
-        )
-        for pair in same_asset_pairs
-    }
-    same_asset_pairs.extend(
-        pair
-        for pair in reviewed_remainders
-        if (
-            _anchor_id(_field(pair, "out", {}) or {}),
-            _anchor_id(_field(pair, "in", {}) or {}),
-        )
-        not in existing_pair_anchors
-    )
-    reviewed_cross_pairs = [
-        {
-            **dict(pair),
-            "out": rows_by_id.get(str(_field(pair, "out_id") or ""), {}),
-            "in": rows_by_id.get(str(_field(pair, "in_id") or ""), {}),
-            "source": "manual",
-        }
-        for pair in cross_asset_pairs
-    ]
+    same_asset_pairs = list(auto_pairs)
     # Graph ownership gets first opportunity only where the imported endpoints
     # are incomplete. A complete, conserving 1:1 physical event is already
     # stronger evidence; an unavailable historic prevout must not weaken it.
     paired_ids: set[str] = set()
     paired_ids.update(samourai_touched_ids)
-    paired_ids.update(whole_payout_source_ids)
-    paired_ids.update(direct_payout_conflict_ids)
-    paired_ids.update(
-        str(_field(record, key) or "")
-        for record in manual_pair_records
-        for key in ("out_transaction_id", "in_transaction_id")
-    )
     paired_ids.update(_complete_recorded_pair_ids(auto_pairs, observations))
-    derivation = derive_profile_transfers(
-        rows,
-        index=owned_index,
-        wallet_refs_by_id=wallet_refs_by_id,
-        already_paired_ids=paired_ids,
-    )
+    if has_chain_events or owned_index is not None:
+        derivation = derive_profile_transfers(
+            rows,
+            index=owned_index,
+            wallet_refs_by_id=wallet_refs_by_id,
+            already_paired_ids=paired_ids,
+        )
+    else:
+        derivation = ProfileTransferDerivation(
+            consolidation=OwnershipDeriveResult(),
+            ownership=OwnershipDeriveResult(),
+            fanout=OwnershipDeriveResult(),
+        )
     ownership_pairs = []
     for pair in derivation.ownership.derived_pairs:
         item = dict(pair)
@@ -1418,28 +1147,31 @@ def compile_custody_interpreters(
     same_asset_pairs = [
         pair
         for pair in same_asset_pairs
-        if _pair_is_reviewed(pair)
-        or not {
+        if not {
             _anchor_id(_field(pair, "out", {}) or {}),
             _anchor_id(_field(pair, "in", {}) or {}),
         }
         & derivation_touched_ids
     ]
+    pair_inputs = [
+        *same_asset_pairs,
+        *samourai_pairs,
+        *derived_pairs,
+    ]
     claims, blocked_transaction_ids, pair_quarantines = _pair_claims(
-        [
-            *same_asset_pairs,
-            *samourai_pairs,
-            *reviewed_cross_pairs,
-            *derived_pairs,
-        ],
+        pair_inputs,
         observations,
         excluded_transaction_ids=excluded,
         wallet_refs_by_id=wallet_refs_by_id,
-        physical_scopes_by_anchor={
-            _anchor_id(row): scope
-            for row in rows
-            if (scope := onchain_transfer_scope(row)) is not None
-        },
+        physical_scopes_by_anchor=(
+            {
+                _anchor_id(row): scope
+                for row in rows
+                if (scope := onchain_transfer_scope(row)) is not None
+            }
+            if pair_inputs
+            else {}
+        ),
     )
     claims = tuple(
         (
@@ -1473,31 +1205,23 @@ def compile_custody_interpreters(
     return CustodyInterpreterCompilation(
         claims=claims,
         native_audits=native_audits,
-        cross_asset_pairs=tuple(cross_asset_pairs),
         non_event_transaction_ids=non_event_ids,
         blocked_transaction_ids=tuple(
             sorted(
                 {
                     *blocked_transaction_ids,
                     *channel_blocked_ids,
-                    *direct_payout_conflict_ids,
-                    *invalid_payout_source_ids,
                     *derivation_blocked_ids,
                     *privacy_blocked_ids,
                     *samourai_unverified_ids,
                 }
             )
         ),
-        direct_payout_conflict_transaction_ids=tuple(
-            sorted(direct_payout_conflict_ids)
-        ),
         quarantines=tuple(
             (
                 *derivation_quarantines,
                 *pair_quarantines,
                 *channel_role_quarantines,
-                *direct_payout_conflict_quarantines,
-                *direct_payout_quarantines,
                 *privacy_quarantines,
                 *samourai_unverified_quarantines,
             )

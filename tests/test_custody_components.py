@@ -8,19 +8,18 @@ import tempfile
 import unittest
 
 from kassiber import db as db_module
-from kassiber.cli.handlers import process_journals, require_processed_journals
+from kassiber.cli.handlers import process_journals, resolve_scope
+from kassiber.core.report_context import require_report_context
 from kassiber.core.custody_components import (
     activate_component,
     create_component,
     get_component,
     iter_authored_active_components,
-    iter_effective_components,
     list_components,
-    list_effective_components,
     reconcile_active_memberships,
     supersede_component,
-    undo_supersede,
     update_component,
+    validate_component_plan,
     validate_conservation,
 )
 from kassiber.core.chain_observer.provenance import (
@@ -96,6 +95,7 @@ class CustodySchemaTests(unittest.TestCase):
                 self.assertIn("custody_components", tables)
                 self.assertIn("custody_component_legs", tables)
                 self.assertIn("custody_component_allocations", tables)
+                self.assertIn("custody_component_economic_terms", tables)
                 self.assertIn("custody_component_transaction_memberships", tables)
                 component_columns = {
                     row["name"]
@@ -144,7 +144,7 @@ class CustodySchemaTests(unittest.TestCase):
                     id, lineage_id, workspace_id, profile_id, revision,
                     component_type, state, created_at
                 ) VALUES('legacy-wire', 'legacy-wire', 'ws', 'profile', 1,
-                         'native_transfer', 'draft', ?)
+                         'manual_bridge', 'draft', ?)
                 """,
                 (NOW,),
             )
@@ -239,7 +239,7 @@ class CustodySchemaTests(unittest.TestCase):
                 workspace_id="ws",
                 profile_id="profile",
                 component_id="legacy-active",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     {
                         **_leg("source", 100, tx="legacy-out", wallet="btc"),
@@ -294,6 +294,9 @@ class CustodySchemaTests(unittest.TestCase):
             legacy = sqlite3.connect(db_path)
             try:
                 legacy.execute("PRAGMA foreign_keys = OFF")
+                legacy.execute(
+                    "DROP VIEW IF EXISTS journal_custody_projection_relations"
+                )
                 trigger_names = [
                     row[0]
                     for row in legacy.execute(
@@ -361,7 +364,7 @@ class CustodySchemaTests(unittest.TestCase):
                     conn,
                     workspace_id="ws",
                     profile_id="profile",
-                    component_type="native_transfer",
+                    component_type="manual_bridge",
                     legs=[
                         {**_leg("source", 100, tx="out", wallet="btc"), "id": "source"},
                         {**_leg("destination", 100, tx="in", wallet="btc"), "id": "sink"},
@@ -503,7 +506,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -526,7 +529,7 @@ class CustodyComponentApiTests(unittest.TestCase):
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     _leg("source", 100, tx=out_id, wallet="btc"),
                     _leg("destination", 100, tx=in_id, wallet="btc"),
@@ -558,9 +561,17 @@ class CustodyComponentApiTests(unittest.TestCase):
             if "from custody_component_allocations a join custody_components c"
             in statement
         ]
+        profile_observation_scans = [
+            statement
+            for statement in normalized
+            if "select t.*, w.kind as wallet_kind" in statement
+            and "from transactions t join wallets w" in statement
+            and "and t.excluded = 0" in statement
+        ]
         self.assertEqual(len(components), 6)
         self.assertEqual(len(profile_leg_scans), 1)
         self.assertEqual(len(profile_allocation_scans), 1)
+        self.assertEqual(len(profile_observation_scans), 1)
 
     def test_effective_listing_filters_before_applying_limit(self):
         active = self._balanced_component()
@@ -569,7 +580,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 60, tx="other-out", wallet="btc"),
                 _leg("destination", 60, tx="in-1", wallet="btc"),
@@ -645,7 +656,7 @@ class CustodyComponentApiTests(unittest.TestCase):
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     _leg("source", 100, tx="out", wallet="btc"),
                     _leg("destination", 60, tx="in-1", wallet="btc"),
@@ -875,7 +886,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 {
                     **_leg("source", 100, tx="out", wallet="btc"),
@@ -984,7 +995,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 100, tx="out", wallet="btc"),
                 _leg("destination", 100, tx="new-in", wallet="btc"),
@@ -1028,7 +1039,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             "SELECT * FROM profiles WHERE id = 'profile'"
         ).fetchone()
         with self.assertRaises(AppError) as blocked:
-            require_processed_journals(self.conn, profile)
+            require_report_context(self.conn, "ws", "profile", resolve_scope)
         self.assertEqual("custody_component_incomplete", blocked.exception.code)
         self.assertIn(
             "anchor_transaction_excluded",
@@ -1070,7 +1081,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             "SELECT * FROM profiles WHERE id = 'profile'"
         ).fetchone()
         with self.assertRaises(AppError) as blocked:
-            require_processed_journals(self.conn, profile)
+            require_report_context(self.conn, "ws", "profile", resolve_scope)
         self.assertEqual("custody_component_incomplete", blocked.exception.code)
         self.assertEqual(
             "partial-header",
@@ -1100,7 +1111,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=legs,
             allocations=allocations,
         )
@@ -1119,7 +1130,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             )
         )
 
-    def test_unbalanced_and_nonzero_unresolved_components_cannot_activate(self):
+    def test_unbalanced_components_cannot_activate(self):
         version_before = self.conn.execute(
             "SELECT journal_input_version FROM profiles WHERE id = 'profile'"
         ).fetchone()[0]
@@ -1131,14 +1142,12 @@ class CustodyComponentApiTests(unittest.TestCase):
             legs=[
                 _leg("source", 100, tx="out"),
                 _leg("destination", 80, tx="in-1"),
-                _leg("unresolved", 10, rail="untracked", occurred_at=NOW),
             ],
         )
         with self.assertRaises(AppError) as raised:
             activate_component(self.conn, component["id"])
         self.assertEqual("custody_component_incomplete", raised.exception.code)
         issue_codes = {issue["code"] for issue in raised.exception.details["validation"]["issues"]}
-        self.assertIn("unresolved_value", issue_codes)
         self.assertIn("unbalanced_quantity", issue_codes)
         self.assertEqual("draft", get_component(self.conn, component["id"])["state"])
         version_after = self.conn.execute(
@@ -1172,7 +1181,6 @@ class CustodyComponentApiTests(unittest.TestCase):
 
         self.assertTrue(component["validation"]["activatable"])
         self.assertEqual(1, component["validation"]["suspense_msat"])
-        self.assertEqual(0, component["validation"]["unresolved_msat"])
         activated = activate_component(self.conn, component["id"])
         self.assertEqual("active", activated["effective_state"])
         self.assertEqual(
@@ -1217,7 +1225,7 @@ class CustodyComponentApiTests(unittest.TestCase):
         report = validate_conservation(
             base,
             allocations=allocations,
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_grade="exact",
         )
         codes = {issue["code"] for issue in report["issues"]}
@@ -1355,7 +1363,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=legs,
@@ -1396,7 +1404,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 60, tx="other-out"),
                 _leg("destination", 60, tx="in-1"),
@@ -1407,6 +1415,41 @@ class CustodyComponentApiTests(unittest.TestCase):
         self.assertEqual("custody_component_incomplete", raised.exception.code)
         self.assertEqual("active", get_component(self.conn, first["id"])["state"])
         self.assertEqual("draft", get_component(self.conn, second["id"])["state"])
+
+    def test_plan_membership_check_ignores_superseded_rows_like_activation(self):
+        first = activate_component(self.conn, self._balanced_component()["id"])
+        supersede_component(self.conn, first["id"], reason="retracted review")
+        self.conn.executemany(
+            "INSERT OR IGNORE INTO custody_component_transaction_memberships("
+            "component_id, profile_id, transaction_id, created_at) "
+            "VALUES(?, 'profile', ?, ?)",
+            [(first["id"], transaction_id, NOW) for transaction_id in ("out", "in-1", "in-2")],
+        )
+
+        checked = validate_component_plan(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="manual_bridge",
+            legs=first["legs"],
+            allocations=first["allocations"],
+        )
+        self.assertTrue(checked["validation"]["activatable"])
+        replacement = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="manual_bridge",
+            legs=[
+                _leg("source", 100, tx="out", wallet="btc"),
+                _leg("destination", 60, tx="in-1", wallet="btc"),
+                _leg("destination", 39, tx="in-2", wallet="btc"),
+                _leg("fee", 1, tx="out", wallet="btc"),
+            ],
+        )
+        self.assertEqual(
+            "active", activate_component(self.conn, replacement["id"])["state"]
+        )
 
     def test_revision_activation_supersedes_old_only_when_new_is_valid(self):
         draft = self._balanced_component()
@@ -1429,9 +1472,10 @@ class CustodyComponentApiTests(unittest.TestCase):
         self.assertEqual(revision["id"], old["superseded_by_component_id"])
 
         supersede_component(self.conn, revision["id"], reason="undo")
-        restored = undo_supersede(
+        restored = update_component(
             self.conn,
             revision["id"],
+            change_reason="undo_supersede",
             new_component_id="restored",
             created_at="2026-01-04T00:00:00Z",
         )
@@ -1769,6 +1813,46 @@ class CustodyComponentApiTests(unittest.TestCase):
                     "source_amount_msat": 100,
                     "sink_amount_msat": 100,
                 },
+            ],
+        )
+
+        self.assertTrue(report["activatable"])
+        self.assertNotIn(
+            "custody_location_continuity_mismatch",
+            {issue["code"] for issue in report["issues"]},
+        )
+
+    def test_same_wallet_round_trip_does_not_require_future_return_as_funding(self):
+        report = validate_conservation(
+            [
+                {
+                    **_leg(
+                        "source",
+                        100,
+                        tx="out",
+                        wallet="btc",
+                        occurred_at="2026-01-01T00:00:00Z",
+                    ),
+                    "id": "lockup",
+                },
+                {
+                    **_leg(
+                        "destination",
+                        100,
+                        tx="in",
+                        wallet="btc",
+                        occurred_at="2026-01-01T02:00:00Z",
+                    ),
+                    "id": "refund",
+                },
+            ],
+            allocations=[
+                {
+                    "source_leg_id": "lockup",
+                    "sink_leg_id": "refund",
+                    "source_amount_msat": 100,
+                    "sink_amount_msat": 100,
+                }
             ],
         )
 
@@ -2325,7 +2409,7 @@ class CustodyComponentApiTests(unittest.TestCase):
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     _leg(
                         "source",
@@ -2351,7 +2435,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 100, tx="out", wallet="btc"),
                 _leg("destination", 100, tx="past-in", wallet="btc"),
@@ -2655,9 +2739,10 @@ class CustodyComponentApiTests(unittest.TestCase):
             INSERT INTO custody_components(
                 id, lineage_id, workspace_id, profile_id, revision,
                 component_type, state, expected_leg_count,
-                expected_allocation_count, created_at
+                expected_allocation_count, expected_economic_term_count,
+                created_at
             ) VALUES('remote', 'remote', 'ws', 'profile', 1,
-                     'native_transfer', 'active', 2, 0, ?)
+                     'manual_bridge', 'active', 2, 0, 0, ?)
             """,
             (NOW,),
         )
@@ -2667,16 +2752,21 @@ class CustodyComponentApiTests(unittest.TestCase):
             "component_leg_count_mismatch",
             {issue["code"] for issue in remote["validation"]["issues"]},
         )
-        self.assertEqual([], list_effective_components(self.conn, profile_id="profile"))
+        self.assertEqual(
+            [],
+            list_components(
+                self.conn,
+                profile_id="profile",
+                state="active",
+                effective_only=True,
+            ),
+        )
         authored_active = list(
             iter_authored_active_components(self.conn, profile_id="profile")
         )
         self.assertEqual(["remote"], [item["id"] for item in authored_active])
         self.assertEqual("active", authored_active[0]["state"])
         self.assertEqual("draft", authored_active[0]["effective_state"])
-        self.assertEqual(
-            [], list(iter_effective_components(self.conn, profile_id="profile"))
-        )
         result = reconcile_active_memberships(self.conn, profile_id="profile")
         self.assertEqual([], result["effective_component_ids"])
         self.assertEqual("remote", result["incomplete"][0]["component_id"])

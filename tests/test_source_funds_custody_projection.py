@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import tempfile
 
+from kassiber.cli.handlers import process_journals
 from kassiber.core import custody_components, source_funds
 from kassiber.core.source_funds import SourceFundsHooks
-from kassiber.db import open_db
+from kassiber.core.ui_snapshot import (
+    build_journal_events_list_snapshot,
+    build_journals_snapshot,
+    build_journals_transfers_list_snapshot,
+    build_transactions_snapshot,
+)
+from kassiber.db import open_db, set_setting
 
 
 NOW = "2026-03-01T09:00:00Z"
@@ -117,6 +124,26 @@ def test_effective_nm_bridge_becomes_reviewed_source_funds_lineage() -> None:
             )
             activated = custody_components.activate_component(conn, component["id"])
             assert activated["effective_state"] == "active"
+            process_journals(conn, "ws", "profile")
+            set_setting(conn, "context_workspace", "ws")
+            set_setting(conn, "context_profile", "profile")
+            conn.commit()
+
+            transfer_snapshot = build_journals_transfers_list_snapshot(
+                conn, {"limit": 10}
+            )
+            assert transfer_snapshot["summary"]["manual_pairs"] == 2
+            assert {
+                item["in"]["amount_msat"]
+                for item in transfer_snapshot["pairs"]
+            } == {40, 60}
+            transaction_snapshot = build_transactions_snapshot(
+                conn, {"limit": 10}
+            )
+            assert transaction_snapshot["count"] == 2
+            assert {
+                item["pair"]["type"] for item in transaction_snapshot["txs"]
+            } == {"transfer"}
 
             assembled = source_funds.assemble_history(
                 conn,
@@ -135,6 +162,18 @@ def test_effective_nm_bridge_becomes_reviewed_source_funds_lineage() -> None:
             assert link["from_allocation_amount"] == 40
 
             custody_components.supersede_component(conn, component["id"])
+            stale_transactions = build_transactions_snapshot(conn, {"limit": 10})
+            assert stale_transactions["count"] == 3
+            assert all("pair" not in item for item in stale_transactions["txs"])
+            stale_transfers = build_journals_transfers_list_snapshot(
+                conn, {"limit": 10}
+            )
+            assert stale_transfers["summary"]["projection_status"] == "stale"
+            assert stale_transfers["pairs"] == []
+            stale_events = build_journal_events_list_snapshot(conn, {"limit": 20})
+            assert all(item["pair"] is None for item in stale_events["events"])
+            stale_journals = build_journals_snapshot(conn)
+            assert all("pair" not in item for item in stale_journals["recent"])
             report = source_funds.build_report(
                 conn,
                 None,
@@ -148,5 +187,95 @@ def test_effective_nm_bridge_becomes_reviewed_source_funds_lineage() -> None:
                 if finding["severity"] == "blocker"
             }
             assert "stale_custody_component_lineage" in blocker_codes
+        finally:
+            conn.close()
+
+
+def test_report_revalidates_all_custody_links_with_one_projection_read() -> None:
+    with tempfile.TemporaryDirectory(prefix="kassiber-sof-custody-query-") as root:
+        conn = open_db(root)
+        try:
+            _setup(conn)
+            conn.execute("UPDATE transactions SET amount = 60 WHERE id = 'out-a'")
+            conn.execute("UPDATE transactions SET amount = 100 WHERE id = 'in-c'")
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, fingerprint,
+                    occurred_at, direction, asset, amount, fee, fiat_currency,
+                    fiat_rate, fiat_value, created_at
+                ) VALUES(
+                    'out-b', 'ws', 'profile', 'b', 'fp:out-b', ?, 'outbound',
+                    'BTC', 40, 0, 'EUR', 1, 1, ?
+                )
+                """,
+                (NOW, NOW),
+            )
+            component = custody_components.create_component(
+                conn,
+                workspace_id="ws",
+                profile_id="profile",
+                component_type="manual_bridge",
+                evidence_kind="manual_reconstruction",
+                evidence_grade="reviewed",
+                legs=[
+                    _leg("source", 60, "out-a", "a", "source-a"),
+                    _leg("source", 40, "out-b", "b", "source-b"),
+                    _leg("destination", 100, "in-c", "c", "destination"),
+                ],
+                allocations=[
+                    {
+                        "source_leg_id": "source-a",
+                        "sink_leg_id": "destination",
+                        "source_amount_msat": 60,
+                        "sink_amount_msat": 60,
+                    },
+                    {
+                        "source_leg_id": "source-b",
+                        "sink_leg_id": "destination",
+                        "source_amount_msat": 40,
+                        "sink_amount_msat": 40,
+                    },
+                ],
+            )
+            custody_components.activate_component(conn, component["id"])
+            process_journals(conn, "ws", "profile")
+            set_setting(conn, "context_workspace", "ws")
+            set_setting(conn, "context_profile", "profile")
+            conn.commit()
+            assembled = source_funds.assemble_history(
+                conn,
+                None,
+                None,
+                _hooks(),
+                target_transaction_ref="in-c",
+            )
+            assert assembled["methods"] == {"custody_component": 2}
+
+            statements: list[str] = []
+            conn.set_trace_callback(statements.append)
+            try:
+                report = source_funds.build_report(
+                    conn,
+                    None,
+                    None,
+                    _hooks(),
+                    target_transaction_ref="in-c",
+                )
+            finally:
+                conn.set_trace_callback(None)
+
+            blocker_codes = {
+                finding["code"]
+                for finding in report["findings"]
+                if finding["severity"] == "blocker"
+            }
+            assert "stale_custody_component_lineage" not in blocker_codes
+            projection_reads = [
+                statement
+                for statement in statements
+                if "FROM journal_custody_projection_relations" in statement
+            ]
+            assert len(projection_reads) == 1
         finally:
             conn.close()

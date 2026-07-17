@@ -70,12 +70,9 @@ from .cli.handlers import (
     _attachment_hooks,
     _metadata_hooks,
     _report_hooks,
-    activate_custody_component,
     auto_price_transactions_from_rates_cache,
     apply_transfer_rules,
-    bulk_resolve_custody_components,
     bulk_pair_transfers,
-    create_custody_component,
     create_direct_swap_payout,
     create_saved_view_cli,
     create_transaction_pair,
@@ -85,7 +82,6 @@ from .cli.handlers import (
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
-    get_custody_component,
     invalidate_journals,
     loans_link,
     loans_mark,
@@ -94,7 +90,6 @@ from .cli.handlers import (
     import_into_wallet,
     list_saved_views_cli,
     list_direct_swap_payouts,
-    list_custody_components,
     list_transaction_pairs,
     list_transfer_rules,
     process_journals,
@@ -105,9 +100,6 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
-    supersede_custody_component,
-    undo_custody_component,
-    update_custody_component,
     update_transaction_pair,
 )
 from .core import audit_package as core_audit_package
@@ -115,6 +107,8 @@ from .core import chat_history as core_chat_history
 from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import custody_gaps as core_custody_gaps
+from .core import custody_component_planner as core_custody_component_planner
+from .core import custody_components as core_custody_components
 from .core import custody_gap_reviews as core_custody_gap_reviews
 from .core import custody_ai_audit as core_custody_ai_audit
 from .core import ownership_policy_epochs as core_ownership_policy_epochs
@@ -422,26 +416,15 @@ SUPPORTED_KINDS = (
     "ui.transfers.dismiss",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
-    "ui.transfers.components.create",
-    "ui.transfers.components.update",
-    "ui.transfers.components.activate",
-    "ui.transfers.components.supersede",
-    "ui.transfers.components.undo",
-    "ui.transfers.components.bulk_resolve",
+    "ui.transfers.components.plan",
+    "ui.transfers.components.apply",
     "ui.custody.coverage.snapshot",
     "ui.custody.lineage.snapshot",
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",
-    "ui.custody.gaps.dismiss",
-    "ui.custody.gaps.bridge.preview",
-    "ui.custody.gaps.bridge.create",
-    "ui.custody.gaps.reopen.preview",
-    "ui.custody.gaps.reopen",
-    "ui.custody.gaps.revise.preview",
-    "ui.custody.gaps.revise",
-    "ui.custody.gaps.residual.preview",
-    "ui.custody.gaps.residual.classify",
+    "ui.custody.review.plan",
+    "ui.custody.review.apply",
     "ui.transfers.rules.list",
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
@@ -576,10 +559,7 @@ _CUSTODY_GAP_READ_DAEMON_KINDS = {
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",
     "ui.custody.gaps.history",
-    "ui.custody.gaps.bridge.preview",
-    "ui.custody.gaps.reopen.preview",
-    "ui.custody.gaps.revise.preview",
-    "ui.custody.gaps.residual.preview",
+    "ui.custody.review.plan",
 }
 _CUSTODY_COVERAGE_READ_DAEMON_KINDS = {"ui.custody.coverage.snapshot"}
 _CUSTODY_LINEAGE_READ_DAEMON_KINDS = {"ui.custody.lineage.snapshot"}
@@ -588,13 +568,7 @@ _LOCAL_CUSTODY_READ_DAEMON_KINDS = (
     | _CUSTODY_COVERAGE_READ_DAEMON_KINDS
     | _CUSTODY_LINEAGE_READ_DAEMON_KINDS
 )
-_CUSTODY_GAP_MUTATING_DAEMON_KINDS = {
-    "ui.custody.gaps.dismiss",
-    "ui.custody.gaps.bridge.create",
-    "ui.custody.gaps.reopen",
-    "ui.custody.gaps.revise",
-    "ui.custody.gaps.residual.classify",
-}
+_CUSTODY_GAP_MUTATING_DAEMON_KINDS = {"ui.custody.review.apply"}
 _CUSTODY_GAP_DAEMON_KINDS = (
     _CUSTODY_GAP_READ_DAEMON_KINDS | _CUSTODY_GAP_MUTATING_DAEMON_KINDS
 )
@@ -687,12 +661,8 @@ AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.journals.quarantine.resolve",
-        "ui.transfers.components.bulk_resolve",
-        "ui.custody.gaps.bridge.create",
-        "ui.custody.gaps.dismiss",
-        "ui.custody.gaps.reopen",
-        "ui.custody.gaps.revise",
-        "ui.custody.gaps.residual.classify",
+        "ui.transfers.components.apply",
+        "ui.custody.review.apply",
     }
 )
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
@@ -1834,14 +1804,6 @@ def _ui_swap_matching_payload_from_conn(
             )
         return value.strip()
 
-    def component_spec() -> dict[str, Any]:
-        value = args.get("spec", args.get("component"))
-        if not isinstance(value, dict):
-            raise AppError(
-                f"{kind} requires a JSON object in spec", code="validation"
-            )
-        return value
-
     if kind == "ui.transfers.components.list":
         limit = args.get("limit", 200)
         if type(limit) is not int or not 1 <= limit <= 1000:
@@ -1849,13 +1811,18 @@ def _ui_swap_matching_payload_from_conn(
                 f"{kind} limit must be an integer between 1 and 1000",
                 code="validation",
             )
-        components = list_custody_components(
+        _, resolved_profile = resolve_scope(conn, workspace, profile)
+        transaction_id = None
+        if args.get("transaction") is not None:
+            transaction_id = resolve_transaction(
+                conn, resolved_profile["id"], args["transaction"]
+            )["id"]
+        components = core_custody_components.list_components(
             conn,
-            workspace,
-            profile,
+            profile_id=resolved_profile["id"],
             state=args.get("state"),
             component_type=args.get("component_type"),
-            transaction=args.get("transaction"),
+            transaction_id=transaction_id,
             effective_only=exact_bool("effective_only"),
             # The renderer gets the privacy-safe projection. Local evidence
             # and location references stay behind the daemon boundary.
@@ -1870,89 +1837,19 @@ def _ui_swap_matching_payload_from_conn(
             }
         )
     if kind == "ui.transfers.components.get":
+        _, resolved_profile = resolve_scope(conn, workspace, profile)
         return _ui_exact_integer_payload(
-            get_custody_component(
+            core_custody_components.get_component(
                 conn,
-                workspace,
-                profile,
                 component_id(),
+                profile_id=resolved_profile["id"],
                 include_local_evidence=False,
             )
         )
-    if kind == "ui.transfers.components.create":
-        return _ui_exact_integer_payload(
-            create_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_spec(),
-                activate=exact_bool("activate"),
-                include_local_evidence=False,
-                authored_source=authored_source,
-            )
-        )
-    if kind == "ui.transfers.components.update":
-        return _ui_exact_integer_payload(
-            update_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                component_spec(),
-                activate=exact_bool("activate"),
-                include_local_evidence=False,
-                authored_source=authored_source,
-            )
-        )
-    if kind == "ui.transfers.components.activate":
-        return _ui_exact_integer_payload(
-            activate_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                include_local_evidence=False,
-            )
-        )
-    if kind == "ui.transfers.components.supersede":
-        reason = args.get("reason")
-        if reason is not None and not isinstance(reason, str):
-            raise AppError(f"{kind} reason must be text", code="validation")
-        return _ui_exact_integer_payload(
-            supersede_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                reason=reason,
-                include_local_evidence=False,
-            )
-        )
-    if kind == "ui.transfers.components.undo":
-        reason = args.get("reason", "undo")
-        if not isinstance(reason, str):
-            raise AppError(f"{kind} reason must be text", code="validation")
-        return _ui_exact_integer_payload(
-            undo_custody_component(
-                conn,
-                workspace,
-                profile,
-                component_id(),
-                reason=reason,
-                include_local_evidence=False,
-                authored_source=authored_source,
-            )
-        )
-    if kind == "ui.transfers.components.bulk_resolve":
+    if kind in {"ui.transfers.components.plan", "ui.transfers.components.apply"}:
+        action = args.get("action", "create")
         components = args.get("components")
-        if not isinstance(components, list) or not components or not all(
-            isinstance(item, dict) for item in components
-        ):
-            raise AppError(
-                f"{kind} requires a non-empty components array of JSON objects",
-                code="validation",
-            )
-        if len(components) > _CUSTODY_BULK_COMPONENT_CAP:
+        if isinstance(components, list) and len(components) > _CUSTODY_BULK_COMPONENT_CAP:
             raise AppError(
                 f"{kind} accepts at most {_CUSTODY_BULK_COMPONENT_CAP} components",
                 code="validation",
@@ -1961,43 +1858,46 @@ def _ui_swap_matching_payload_from_conn(
                     "max_components": _CUSTODY_BULK_COMPONENT_CAP,
                 },
             )
-        activate = exact_bool("activate", True)
-        dry_run = exact_bool("dry_run")
-        if authored_source == "ai_tool":
-            _validate_ai_custody_conversion_boundary(components, activate=activate)
-        if not dry_run:
+        activate = args.get("activate")
+        if authored_source == "ai_tool" and action == "create" and isinstance(
+            components, list
+        ):
+            _validate_ai_custody_conversion_boundary(
+                components,
+                activate=True if activate is None else activate,
+            )
+        resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
+        review_args = {
+            "workspace_id": resolved_workspace["id"],
+            "profile_id": resolved_profile["id"],
+            "action": action,
+            "components": components,
+            "component_id": args.get("component_id"),
+            "spec": args.get("spec", args.get("component")),
+            "activate": activate,
+            "reason": args.get("reason"),
+            "authored_source": authored_source,
+        }
+        if kind == "ui.transfers.components.apply":
+            expected_input_version = args.get("expected_input_version")
+            if type(expected_input_version) is not int or expected_input_version < 0:
+                raise AppError(
+                    f"{kind} requires the input version returned by plan",
+                    code="validation",
+                )
             return _ui_exact_integer_payload(
-                bulk_resolve_custody_components(
+                core_custody_component_planner.apply_component_review(
                     conn,
-                    workspace,
-                    profile,
-                    components,
-                    activate=activate,
+                    expected_input_version=expected_input_version,
                     include_local_evidence=False,
-                    authored_source=authored_source,
+                    **review_args,
                 )
             )
-
-        conn.execute("SAVEPOINT daemon_custody_component_preview")
-        try:
-            preview = bulk_resolve_custody_components(
-                conn,
-                workspace,
-                profile,
-                components,
-                activate=activate,
-                commit=False,
-                include_local_evidence=False,
-                authored_source=authored_source,
+        return _ui_exact_integer_payload(
+            core_custody_component_planner.plan_component_review(
+                conn, **review_args
             )
-        except Exception:
-            conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
-            conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
-            raise
-        conn.execute("ROLLBACK TO SAVEPOINT daemon_custody_component_preview")
-        conn.execute("RELEASE SAVEPOINT daemon_custody_component_preview")
-        preview["dry_run"] = True
-        return _ui_exact_integer_payload(preview)
+        )
 
     if kind == "ui.transfers.suggest":
         return suggest_transfer_candidates(
@@ -2042,12 +1942,19 @@ def _ui_swap_matching_payload_from_conn(
             counterparty=args.get("counterparty"),
             notes=args.get("notes") or args.get("note"),
             out_amount=args.get("out_amount"),
+            authored_source=authored_source,
         )
     if kind == "ui.transfers.payouts.delete":
         payout_id = args.get("payout_id")
         if not payout_id:
             raise AppError("ui.transfers.payouts.delete requires payout_id", code="validation")
-        return delete_direct_swap_payout(conn, workspace, profile, str(payout_id))
+        return delete_direct_swap_payout(
+            conn,
+            workspace,
+            profile,
+            str(payout_id),
+            authored_source=authored_source,
+        )
     if kind == "ui.transfers.pair":
         return create_transaction_pair(
             conn,
@@ -2061,12 +1968,19 @@ def _ui_swap_matching_payload_from_conn(
             pair_source=str(args.get("pair_source") or "manual"),
             confidence_at_pair=args.get("confidence_at_pair"),
             out_amount=args.get("out_amount"),
+            authored_source=authored_source,
         )
     if kind == "ui.transfers.unpair":
         pair_id = args.get("pair_id")
         if not pair_id:
             raise AppError("ui.transfers.unpair requires pair_id", code="validation")
-        return delete_transaction_pair(conn, workspace, profile, str(pair_id))
+        return delete_transaction_pair(
+            conn,
+            workspace,
+            profile,
+            str(pair_id),
+            authored_source=authored_source,
+        )
     if kind == "ui.transfers.update":
         pair_id = args.get("pair_id")
         if not pair_id:
@@ -2082,7 +1996,12 @@ def _ui_swap_matching_payload_from_conn(
         if "notes" in args or "note" in args:
             update_kwargs["notes"] = args.get("notes") or args.get("note")
         return update_transaction_pair(
-            conn, workspace, profile, str(pair_id), **update_kwargs
+            conn,
+            workspace,
+            profile,
+            str(pair_id),
+            authored_source=authored_source,
+            **update_kwargs,
         )
     if kind == "ui.transfers.bulk_pair":
         return bulk_pair_transfers(
@@ -2104,6 +2023,7 @@ def _ui_swap_matching_payload_from_conn(
             route_pair=args.get("route_pair"),
             method=args.get("method"),
             candidate_type=args.get("candidate_type"),
+            authored_source=authored_source,
         )
     if kind == "ui.transfers.dismiss":
         return dismiss_transfer_candidate(
@@ -2168,6 +2088,7 @@ def _ui_swap_matching_payload_from_conn(
             route_pair=args.get("route_pair"),
             method=args.get("method"),
             candidate_type=args.get("candidate_type"),
+            authored_source=authored_source,
         )
 
     if kind == "ui.saved_views.list":
@@ -2225,34 +2146,22 @@ def _ui_custody_gap_payload_from_conn(
     """Build a bounded, privacy-safe custody-gap packet for UI or AI reads."""
 
     scope_fields = {"workspace", "profile"}
-    if kind == "ui.custody.gaps.list":
+    if kind == "ui.custody.review.plan":
+        allowed = scope_fields | {"action", "gap_id", "classification", "reason"}
+    elif kind == "ui.custody.review.apply":
+        allowed = scope_fields | {
+            "action",
+            "gap_id",
+            "classification",
+            "reason",
+            "expected_input_version",
+        }
+    elif kind == "ui.custody.gaps.list":
         allowed = scope_fields | {"limit", "cursor"}
     elif kind == "ui.custody.gaps.history":
         allowed = scope_fields | {"gap_id", "limit"}
     elif kind == "ui.custody.gaps.review_context":
         allowed = scope_fields | {"gap_id"}
-    elif kind == "ui.custody.gaps.bridge.preview":
-        allowed = scope_fields | {"gap_id"}
-    elif kind == "ui.custody.gaps.bridge.create":
-        allowed = scope_fields | {"gap_id", "expected_fingerprint"}
-    elif kind == "ui.custody.gaps.dismiss":
-        allowed = scope_fields | {"gap_id", "expected_fingerprint", "reason"}
-    elif kind in {
-        "ui.custody.gaps.reopen.preview",
-        "ui.custody.gaps.revise.preview",
-    }:
-        allowed = scope_fields | {"gap_id", "reason"}
-    elif kind in {"ui.custody.gaps.reopen", "ui.custody.gaps.revise"}:
-        allowed = scope_fields | {"gap_id", "expected_fingerprint", "reason"}
-    elif kind == "ui.custody.gaps.residual.preview":
-        allowed = scope_fields | {"gap_id", "classification", "reason"}
-    elif kind == "ui.custody.gaps.residual.classify":
-        allowed = scope_fields | {
-            "gap_id",
-            "classification",
-            "expected_fingerprint",
-            "reason",
-        }
     else:
         raise AppError(
             f"Unsupported custody-gap daemon kind '{kind}'", code="validation"
@@ -2276,17 +2185,9 @@ def _ui_custody_gap_payload_from_conn(
             retryable=False,
         )
     raw_cursor = args.get("cursor")
-    if raw_cursor is not None and (
-        not isinstance(raw_cursor, str) or not raw_cursor.isdigit()
-    ):
+    if raw_cursor is not None and not isinstance(raw_cursor, str):
         raise AppError(
             f"{kind} cursor is invalid",
-            code="validation",
-            retryable=False,
-        )
-    if raw_cursor is not None and int(raw_cursor) > 2**31 - 1:
-        raise AppError(
-            f"{kind} cursor is out of range",
             code="validation",
             retryable=False,
         )
@@ -2309,6 +2210,67 @@ def _ui_custody_gap_payload_from_conn(
     _workspace, profile = resolve_scope(
         conn, args.get("workspace"), args.get("profile")
     )
+    if kind in {"ui.custody.review.plan", "ui.custody.review.apply"}:
+        action = args.get("action")
+        supported_actions = {
+            "create",
+            "dismiss",
+            "revise",
+            "reopen",
+            "classify_residual",
+        }
+        if not isinstance(action, str) or action not in supported_actions:
+            raise AppError(
+                f"{kind} action is invalid",
+                code="validation",
+                details={"supported_actions": sorted(supported_actions)},
+            )
+        classification = args.get("classification")
+        if action == "classify_residual" and not isinstance(classification, str):
+            raise AppError(f"{kind} requires classification", code="validation")
+        candidate = (
+            core_custody_gaps.find_gap_candidate(
+                conn, profile["id"], str(gap_id)
+            )
+            if action in {"create", "dismiss", "revise"}
+            else None
+        )
+        if kind == "ui.custody.review.plan":
+            plan = core_custody_gap_reviews.plan_review(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                action=action,
+                candidate=candidate,
+                gap_id=str(gap_id),
+                classification=classification,
+                reason=reason,
+                authored_source=authored_source,
+            )
+            return _ui_exact_integer_payload(
+                core_custody_gap_reviews.public_review_plan(plan)
+            )
+        expected = args.get("expected_input_version")
+        if type(expected) is not int or expected < 0:
+            raise AppError(
+                f"{kind} requires a non-negative expected_input_version",
+                code="validation",
+            )
+        return _ui_exact_integer_payload(
+            core_custody_gap_reviews.apply_review(
+                conn,
+                workspace_id=_workspace["id"],
+                profile_id=profile["id"],
+                action=action,
+                expected_input_version=expected,
+                candidate=candidate,
+                gap_id=str(gap_id),
+                classification=classification,
+                reason=reason,
+                authored_source=authored_source,
+                commit=commit,
+            )
+        )
     if kind == "ui.custody.gaps.history":
         return _ui_exact_integer_payload(
             core_custody_gap_reviews.list_review_history(
@@ -2319,160 +2281,13 @@ def _ui_custody_gap_payload_from_conn(
             )
         )
 
-    correction_kinds = {
-        "ui.custody.gaps.reopen.preview",
-        "ui.custody.gaps.reopen",
-        "ui.custody.gaps.residual.preview",
-        "ui.custody.gaps.residual.classify",
-    }
-    if kind in correction_kinds:
-        if kind == "ui.custody.gaps.reopen.preview":
-            payload = core_custody_gap_reviews.preview_reopen_guided_bridge(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                gap_id=str(gap_id),
-                reason=reason,
-            )
-            return _ui_exact_integer_payload(payload)
-        if kind == "ui.custody.gaps.residual.preview":
-            classification = args.get("classification")
-            if not isinstance(classification, str):
-                raise AppError(f"{kind} requires classification", code="validation")
-            payload = core_custody_gap_reviews.preview_residual_classification(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                gap_id=str(gap_id),
-                classification=classification,
-                reason=reason,
-                authored_source=authored_source,
-            )
-            return _ui_exact_integer_payload(payload)
-        expected = args.get("expected_fingerprint")
-        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
-            raise AppError(
-                f"{kind} requires a 64-character expected_fingerprint",
-                code="validation",
-            )
-        if kind == "ui.custody.gaps.reopen":
-            payload = core_custody_gap_reviews.reopen_guided_bridge(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                gap_id=str(gap_id),
-                expected_fingerprint=expected,
-                reason=reason,
-                authored_source=authored_source,
-                commit=commit,
-            )
-            return _ui_exact_integer_payload(payload)
-        classification = args.get("classification")
-        if not isinstance(classification, str):
-            raise AppError(f"{kind} requires classification", code="validation")
-        payload = core_custody_gap_reviews.classify_residual(
-            conn,
-            workspace_id=_workspace["id"],
-            profile_id=profile["id"],
-            gap_id=str(gap_id),
-            classification=classification,
-            expected_fingerprint=expected,
-            reason=reason,
-            authored_source=authored_source,
-            commit=commit,
-        )
-        return _ui_exact_integer_payload(payload)
-
-    if kind in {
-        "ui.custody.gaps.dismiss",
-        "ui.custody.gaps.bridge.preview",
-        "ui.custody.gaps.bridge.create",
-        "ui.custody.gaps.revise.preview",
-        "ui.custody.gaps.revise",
-    }:
-        candidate = core_custody_gaps.find_gap_candidate(
-            conn, profile["id"], str(gap_id)
-        )
-        if kind == "ui.custody.gaps.bridge.preview":
-            return _ui_exact_integer_payload(
-                core_custody_gap_reviews.preview_guided_bridge(
-                    conn,
-                    workspace_id=_workspace["id"],
-                    profile_id=profile["id"],
-                    candidate=candidate,
-                    authored_source=authored_source,
-                )
-            )
-        if kind == "ui.custody.gaps.revise.preview":
-            return _ui_exact_integer_payload(
-                core_custody_gap_reviews.preview_guided_revision(
-                    conn,
-                    workspace_id=_workspace["id"],
-                    profile_id=profile["id"],
-                    candidate=candidate,
-                    reason=reason,
-                    authored_source=authored_source,
-                )
-            )
-        expected = args.get("expected_fingerprint")
-        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
-            raise AppError(
-                f"{kind} requires a 64-character expected_fingerprint",
-                code="validation",
-            )
-        if kind == "ui.custody.gaps.dismiss":
-            return core_custody_gap_reviews.append_dismissal(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                candidate=candidate,
-                expected_fingerprint=expected,
-                authored_source=authored_source,
-                reason=reason,
-                commit=commit,
-            )
-        if kind == "ui.custody.gaps.revise":
-            return _ui_exact_integer_payload(
-                core_custody_gap_reviews.revise_guided_bridge(
-                    conn,
-                    workspace_id=_workspace["id"],
-                    profile_id=profile["id"],
-                    candidate=candidate,
-                    expected_fingerprint=expected,
-                    reason=reason,
-                    authored_source=authored_source,
-                    commit=commit,
-                )
-            )
-        return _ui_exact_integer_payload(
-            core_custody_gap_reviews.create_guided_bridge(
-                conn,
-                workspace_id=_workspace["id"],
-                profile_id=profile["id"],
-                candidate=candidate,
-                expected_fingerprint=expected,
-                authored_source=authored_source,
-                commit=commit,
-            )
-        )
-    try:
-        raw_payload = core_custody_gaps.build_gap_snapshot(
-            conn,
-            profile["id"],
-            gap_id=gap_id,
-            limit=1 if gap_id else limit,
-            cursor=raw_cursor if kind == "ui.custody.gaps.list" else None,
-        )
-    except core_custody_gaps.CustodyGapSearchLimitError as exc:
-        raise AppError(
-            "The custody-gap scan is too large for the bounded review search",
-            code="custody_gap_search_limit",
-            hint=(
-                "Narrow the imported history or use a future indexed custody-gap "
-                "scan before treating the review queue as clear."
-            ),
-            retryable=False,
-        ) from exc
+    raw_payload = core_custody_gaps.build_gap_snapshot(
+        conn,
+        profile["id"],
+        gap_id=gap_id,
+        limit=1 if gap_id else limit,
+        cursor=raw_cursor if kind == "ui.custody.gaps.list" else None,
+    )
     raw_summary = raw_payload.get("summary", {})
     payload = {
         "summary": {

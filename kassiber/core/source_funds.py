@@ -16,14 +16,9 @@ from ..source_funds_pdf_report import write_source_funds_pdf
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..transfers import onchain_transfer_scope
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
+from . import custody_journal
 from .attachments import attachment_display_label
-from .pair_allocation import connected_pair_components
 from .privacy_hops import privacy_hop_type_from_row
-from .source_funds_assembly import (
-    build_owned_outpoint_index,
-    derive_payment_hash_pairs,
-    derive_utxo_spend_pairs,
-)
 from .source_funds_hints import enrich_findings_with_next_steps
 
 
@@ -69,18 +64,12 @@ ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 PRIVACY_LINK_TYPES = {"coinjoin", "payjoin"}
 ATTESTATION_SOURCE_TYPES = {"missing_history", "opening_balance_attestation"}
 DETERMINISTIC_BULK_REVIEW_METHODS = {
-    "same_onchain_scope",
-    "transaction_pair",
-    # Assembly derivers: re-verified against transaction input/output
-    # structure and payment-hash groupings at bulk-review time. These read
-    # only locally synced wallet data — first-party wallet state, not
-    # chain observations fetched about third-party transactions — so they
-    # stay outside the uses_chain_observation manual-review policy.
-    "utxo_spend",
-    "payment_hash",
-    # An effective custody component has already passed exact conservation,
-    # anchor, evidence, and conflict validation. Its explicit/inferred edge is
-    # therefore a reviewed local allocation, including reviewed N:M bridges.
+    # This compatibility method now means a current allocation from the stored
+    # custody projection. It covers native evidence and reviewed components,
+    # including exact N:M bridges, without redetecting either in this module.
+    "custody_component",
+}
+_CUSTODY_LINEAGE_METHODS = {
     "custody_component",
 }
 PROVIDER_UNIQUE_KEYS = (
@@ -1149,185 +1138,143 @@ def _is_bulk_reviewable_suggestion(row: Mapping[str, Any]) -> bool:
         row["state"] == "suggested"
         and method in DETERMINISTIC_BULK_REVIEW_METHODS
         and row["confidence"] in {"exact", "strong"}
-        and (
-            method not in {"same_onchain_scope", "utxo_spend"}
-            or row["confidence"] == "exact"
-        )
         and row["allocation_amount"] is not None
         and not bool(row["uses_chain_observation"])
     )
 
 
-def _same_onchain_scope_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    row: Mapping[str, Any],
-    from_tx: Mapping[str, Any] | None,
-    to_tx: Mapping[str, Any],
-) -> bool:
-    if not from_tx:
-        return False
-    scope = onchain_transfer_scope(from_tx)
-    if scope is None or onchain_transfer_scope(to_tx) != scope:
-        return False
-    if int(from_tx["amount"] or 0) != int(to_tx["amount"] or 0):
-        return False
-    group = [
-        tx
-        for tx in _active_transaction_rows(conn, profile_id)
-        if onchain_transfer_scope(tx) == scope
-    ]
-    outs = [tx for tx in group if tx["direction"] == "outbound"]
-    ins = [tx for tx in group if tx["direction"] == "inbound"]
-    return (
-        len(outs) == 1
-        and len(ins) == 1
-        and outs[0]["id"] == row["from_transaction_id"] == from_tx["id"]
-        and ins[0]["id"] == row["to_transaction_id"] == to_tx["id"]
-        and outs[0]["wallet_id"] != ins[0]["wallet_id"]
-        and int(row["allocation_amount"] or 0) == int(to_tx["amount"] or 0)
-        and int(row["from_allocation_amount"] or 0) == int(from_tx["amount"] or 0)
-    )
-
-
 @dataclass(frozen=True)
-class _TransactionPairAllocation:
-    allocation_msat: int
-    from_allocation_msat: int
-
-
-@dataclass(frozen=True)
-class _CustodyComponentAllocation:
+class _StoredCustodyAllocation:
     from_transaction_id: str
     to_transaction_id: str
     link_type: str
     allocation_msat: int
     from_allocation_msat: int
+    projection_ids: tuple[str, ...]
     component_ids: tuple[str, ...]
 
 
-def _custody_link_type(
-    component: Mapping[str, Any],
-    source: Mapping[str, Any],
-    sink: Mapping[str, Any],
+def _stored_custody_link_type(
+    *,
+    relation_kind: str,
+    source_asset: Any,
+    target_asset: Any,
+    source_rail: Any = None,
+    target_rail: Any = None,
+    review_kind: Any = None,
 ) -> str:
-    component_type = str(component.get("component_type") or "")
-    source_asset = normalize_asset_code(source.get("asset"))
-    sink_asset = normalize_asset_code(sink.get("asset"))
-    if component_type == "peg":
-        source_rail = str(source.get("rail") or "")
-        sink_rail = str(sink.get("rail") or "")
-        if source_rail == "bitcoin" and sink_rail == "liquid":
-            return "peg_in"
-        if source_rail == "liquid" and sink_rail == "bitcoin":
-            return "peg_out"
-    if component_type == "channel_lifecycle":
-        source_rail = str(source.get("rail") or "")
-        sink_rail = str(sink.get("rail") or "")
-        if sink_rail == "lightning" and source_rail != "lightning":
-            return "lightning_funding"
-        if source_rail == "lightning" and sink_rail != "lightning":
-            return "lightning_close"
-    if component_type == "swap" or source_asset != sink_asset:
+    reviewed_type = str(review_kind or "").strip().lower().replace("-", "_")
+    if reviewed_type in LINK_TYPES:
+        return reviewed_type
+    source_rail = str(source_rail or "").lower()
+    target_rail = str(target_rail or "").lower()
+    if source_rail == "bitcoin" and target_rail == "liquid":
+        return "peg_in"
+    if source_rail == "liquid" and target_rail == "bitcoin":
+        return "peg_out"
+    if target_rail == "lightning" and source_rail != "lightning":
+        return "lightning_funding"
+    if source_rail == "lightning" and target_rail != "lightning":
+        return "lightning_close"
+    if (
+        relation_kind == "conversion"
+        or normalize_asset_code(source_asset) != normalize_asset_code(target_asset)
+    ):
         return "swap"
     return "self_transfer"
 
 
-def _effective_custody_component_allocation_map(
+def _custody_projection_current(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> bool:
+    return bool(custody_journal.projection_freshness(conn, profile_id)["is_current"])
+
+
+def _stored_custody_allocation_map(
     conn: sqlite3.Connection,
     profile_id: str,
     rows_by_id: Mapping[str, Mapping[str, Any]],
-) -> dict[tuple[str, str, str], _CustodyComponentAllocation]:
-    """Project effective custody allocations onto imported transaction rows."""
+) -> dict[tuple[str, str, str], _StoredCustodyAllocation]:
+    """Read exact source-funds lineage from the current journal projection."""
 
-    from .custody_components import (
-        complete_component_allocations,
-        iter_effective_components,
-    )
+    if not _custody_projection_current(conn, profile_id):
+        return {}
 
     grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
-    for component in iter_effective_components(
-        conn,
-        profile_id=profile_id,
-        include_local_evidence=False,
-    ):
-        legs_by_id = {str(leg["id"]): leg for leg in component["legs"]}
-        complete = complete_component_allocations(
-            component["legs"],
-            component["allocations"],
-            conservation_mode=str(component["conservation_mode"]),
+    projection_rows = conn.execute(
+        """
+        SELECT id AS projection_id, relation_kind,
+               out_transaction_id AS source_transaction_id,
+               in_transaction_id AS target_transaction_id, component_id,
+               out_asset AS source_asset, in_asset AS target_asset,
+               source_rail, target_rail, out_amount AS source_amount_msat,
+               in_amount AS target_amount_msat, kind AS review_kind
+        FROM journal_custody_projection_relations
+        WHERE profile_id = ? AND relation_kind IN ('move', 'conversion')
+          AND in_transaction_id IS NOT NULL
+        """,
+        (profile_id,),
+    ).fetchall()
+    for projection in projection_rows:
+        from_id = str(projection["source_transaction_id"] or "")
+        to_id = str(projection["target_transaction_id"] or "")
+        if not from_id or not to_id or from_id == to_id:
+            continue
+        from_tx = rows_by_id.get(from_id)
+        to_tx = rows_by_id.get(to_id)
+        if from_tx is None or to_tx is None:
+            continue
+        source_amount = int(projection["source_amount_msat"] or 0)
+        target_amount = int(projection["target_amount_msat"] or 0)
+        if source_amount <= 0 or target_amount <= 0:
+            continue
+        link_type = _stored_custody_link_type(
+            relation_kind=str(projection["relation_kind"]),
+            source_asset=projection["source_asset"],
+            target_asset=projection["target_asset"],
+            source_rail=projection["source_rail"],
+            target_rail=projection["target_rail"],
+            review_kind=projection["review_kind"],
         )
-        for allocation in complete:
-            source = legs_by_id.get(str(allocation["source_leg_id"]))
-            sink = legs_by_id.get(str(allocation["sink_leg_id"]))
-            if source is None or sink is None:
-                continue
-            if source.get("role") != "source" or sink.get("role") not in {
-                "destination",
-                "retained",
-            }:
-                continue
-            from_id = str(source.get("transaction_id") or "")
-            to_id = str(sink.get("transaction_id") or "")
-            if not from_id or not to_id or from_id == to_id:
-                continue
-            from_tx = rows_by_id.get(from_id)
-            to_tx = rows_by_id.get(to_id)
-            if from_tx is None or to_tx is None:
-                continue
-            if from_tx["direction"] != "outbound" or to_tx["direction"] != "inbound":
-                continue
-            source_amount = int(allocation.get("source_amount_msat") or 0)
-            sink_amount = int(allocation.get("sink_amount_msat") or 0)
-            if (
-                source_amount <= 0
-                or sink_amount <= 0
-                or source_amount > int(from_tx["amount"] or 0)
-                or sink_amount > int(to_tx["amount"] or 0)
-            ):
-                continue
-            link_type = _custody_link_type(component, source, sink)
-            key = (from_id, to_id, link_type)
-            entry = grouped.setdefault(
-                key,
-                {
-                    "allocation_msat": 0,
-                    "from_allocation_msat": 0,
-                    "component_ids": set(),
-                },
-            )
-            entry["allocation_msat"] += sink_amount
-            entry["from_allocation_msat"] += source_amount
-            entry["component_ids"].add(str(component["id"]))
+        key = (from_id, to_id, link_type)
+        entry = grouped.setdefault(
+            key,
+            {
+                "allocation_msat": 0,
+                "from_allocation_msat": 0,
+                "projection_ids": set(),
+                "component_ids": set(),
+            },
+        )
+        entry["allocation_msat"] += target_amount
+        entry["from_allocation_msat"] += source_amount
+        entry["projection_ids"].add(str(projection["projection_id"]))
+        if projection["component_id"]:
+            entry["component_ids"].add(str(projection["component_id"]))
     return {
-        key: _CustodyComponentAllocation(
+        key: _StoredCustodyAllocation(
             from_transaction_id=key[0],
             to_transaction_id=key[1],
             link_type=key[2],
             allocation_msat=int(value["allocation_msat"]),
             from_allocation_msat=int(value["from_allocation_msat"]),
+            projection_ids=tuple(sorted(value["projection_ids"])),
             component_ids=tuple(sorted(value["component_ids"])),
         )
         for key, value in grouped.items()
     }
 
 
-def _custody_component_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
+def _stored_custody_still_deterministic(
+    allocations: Mapping[tuple[str, str, str], _StoredCustodyAllocation],
     row: Mapping[str, Any],
     from_tx: Mapping[str, Any] | None,
     to_tx: Mapping[str, Any],
 ) -> bool:
     if from_tx is None:
         return False
-    rows = _active_transaction_rows(conn, profile_id)
-    rows_by_id = {str(tx["id"]): tx for tx in rows}
-    allocation = _effective_custody_component_allocation_map(
-        conn,
-        profile_id,
-        rows_by_id,
-    ).get(
+    allocation = allocations.get(
         (
             str(from_tx["id"]),
             str(to_tx["id"]),
@@ -1347,261 +1294,18 @@ def _custody_component_still_deterministic(
     )
 
 
-def _allocate_component_msat(total_msat: int, bases: Sequence[int]) -> list[int]:
-    total = max(0, int(total_msat))
-    normalized_bases = [max(0, int(base)) for base in bases]
-    base_total = sum(normalized_bases)
-    if base_total <= 0:
-        return [0 for _ in normalized_bases]
-    remaining = total
-    allocated: list[int] = []
-    for index, base in enumerate(normalized_bases):
-        if index == len(normalized_bases) - 1:
-            portion = remaining
-        else:
-            portion = min(remaining, (total * base) // base_total)
-        allocated.append(portion)
-        remaining -= portion
-    return allocated
-
-
-def _transaction_pair_components(
-    pair_rows: Sequence[Mapping[str, Any]],
-    rows_by_id: Mapping[str, Mapping[str, Any]],
-) -> list[list[Mapping[str, Any]]]:
-    def _leg_ids(pair):
-        out_id = pair["out_transaction_id"]
-        in_id = pair["in_transaction_id"]
-        if not rows_by_id.get(out_id) or not rows_by_id.get(in_id):
-            return None
-        return (out_id, in_id)
-
-    return connected_pair_components(pair_rows, _leg_ids)
-
-def _transaction_pair_allocation_map(
-    pair_rows: Sequence[Mapping[str, Any]],
-    rows_by_id: Mapping[str, Mapping[str, Any]],
-) -> dict[str, _TransactionPairAllocation]:
-    allocations: dict[str, _TransactionPairAllocation] = {}
-    for component in _transaction_pair_components(pair_rows, rows_by_id):
-        ordered_pairs = sorted(
-            component,
-            key=lambda pair: (
-                str(pair["created_at"] or ""),
-                str(pair["id"]),
-            ),
-        )
-        out_rows_by_id = {
-            str(pair["out_transaction_id"]): rows_by_id[pair["out_transaction_id"]]
-            for pair in ordered_pairs
-        }
-        in_rows_by_id = {
-            str(pair["in_transaction_id"]): rows_by_id[pair["in_transaction_id"]]
-            for pair in ordered_pairs
-        }
-        if len(ordered_pairs) == 1:
-            pair = ordered_pairs[0]
-            out_tx = out_rows_by_id[str(pair["out_transaction_id"])]
-            in_tx = in_rows_by_id[str(pair["in_transaction_id"])]
-            allocations[str(pair["id"])] = _TransactionPairAllocation(
-                allocation_msat=int(in_tx["amount"]),
-                from_allocation_msat=int(out_tx["amount"]),
-            )
-            continue
-
-        component_assets = {
-            normalize_asset_code(row["asset"])
-            for row in [*out_rows_by_id.values(), *in_rows_by_id.values()]
-        }
-        if len(component_assets) != 1:
-            # Cross-asset reused-leg accounting remains one-to-one. Existing
-            # legacy rows are intentionally hidden from source-funds suggestion
-            # derivation instead of being double-counted.
-            continue
-        if len(out_rows_by_id) > 1 and len(in_rows_by_id) > 1:
-            continue
-
-        if len(out_rows_by_id) == 1:
-            out_tx = next(iter(out_rows_by_id.values()))
-            total_from_msat = int(out_tx["amount"] or 0)
-            bases = [
-                int(rows_by_id[pair["in_transaction_id"]]["amount"] or 0)
-                for pair in ordered_pairs
-            ]
-            if total_from_msat < sum(bases):
-                continue
-            from_allocations = _allocate_component_msat(total_from_msat, bases)
-            for pair, from_allocation in zip(ordered_pairs, from_allocations):
-                in_tx = rows_by_id[pair["in_transaction_id"]]
-                allocations[str(pair["id"])] = _TransactionPairAllocation(
-                    allocation_msat=int(in_tx["amount"] or 0),
-                    from_allocation_msat=from_allocation,
-                )
-            continue
-
-        in_tx = next(iter(in_rows_by_id.values()))
-        total_to_msat = int(in_tx["amount"] or 0)
-        # An out row's spend capacity is amount + fee: a same-tx node-backed
-        # consolidation stamps the WHOLE network fee on every contributor's
-        # row (amount = net outflow - fee), so summing bare amounts comes up
-        # (N-1)*fee short of the recorded receipt and the component would be
-        # skipped entirely for any fee > 0.
-        bases = [
-            int(rows_by_id[pair["out_transaction_id"]]["amount"] or 0)
-            + int(_row_value(rows_by_id[pair["out_transaction_id"]], "fee") or 0)
-            for pair in ordered_pairs
-        ]
-        if sum(bases) < total_to_msat:
-            continue
-        to_allocations = _allocate_component_msat(total_to_msat, bases)
-        for pair, allocation in zip(ordered_pairs, to_allocations):
-            out_tx = rows_by_id[pair["out_transaction_id"]]
-            allocations[str(pair["id"])] = _TransactionPairAllocation(
-                allocation_msat=allocation,
-                from_allocation_msat=int(out_tx["amount"] or 0),
-            )
-    return allocations
-
-
-def _transaction_pair_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    row: Mapping[str, Any],
-    from_tx: Mapping[str, Any] | None,
-    to_tx: Mapping[str, Any],
-) -> bool:
-    if not from_tx:
-        return False
-    if _raw_privacy_hop(from_tx) or _raw_privacy_hop(to_tx):
-        return False
-    rows = _active_transaction_rows(conn, profile_id)
-    rows_by_id = {tx["id"]: tx for tx in rows}
-    pair_rows = conn.execute(
-        """
-        SELECT * FROM transaction_pairs
-        WHERE profile_id = ? AND deleted_at IS NULL
-        ORDER BY created_at ASC, id ASC
-        """,
-        (profile_id,),
-    ).fetchall()
-    allocation_by_pair_id = _transaction_pair_allocation_map(pair_rows, rows_by_id)
-    try:
-        expected_allocation = int(row["allocation_amount"] or 0)
-        expected_from_allocation = int(
-            row["from_allocation_amount"]
-            if row["from_allocation_amount"] is not None
-            else expected_allocation
-        )
-    except (TypeError, ValueError):
-        return False
-    for pair in pair_rows:
-        if (
-            pair["out_transaction_id"] != from_tx["id"]
-            or pair["in_transaction_id"] != to_tx["id"]
-        ):
-            continue
-        allocation = allocation_by_pair_id.get(pair["id"])
-        if allocation is None:
-            continue
-        if (
-            allocation.allocation_msat == expected_allocation
-            and allocation.from_allocation_msat == expected_from_allocation
-        ):
-            return True
-    return False
-
-
-def _skip_assembly_row(row: Mapping[str, Any]) -> bool:
-    """Rows the assembly derivers must never assert lineage through.
-
-    Privacy-boundary rows (CoinJoin/PayJoin/sweeps) keep their deferred
-    semantics, and Samourai group wallets keep the dedicated Whirlpool
-    boundary handling instead of raw input/output edges.
-    """
-    if _raw_privacy_hop(row):
-        return True
-    return _samourai_metadata_from_wallet_config(row["wallet_config_json"]) is not None
-
-
-def _utxo_spend_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    row: Mapping[str, Any],
-    from_tx: Mapping[str, Any] | None,
-    to_tx: Mapping[str, Any],
-) -> bool:
-    if not from_tx:
-        return False
-    owned_index = build_owned_outpoint_index(conn, profile_id)
-    if not owned_index:
-        return False
-    pairs = derive_utxo_spend_pairs(
-        _active_transaction_rows(conn, profile_id),
-        owned_index,
-        skip_row=_skip_assembly_row,
-    )
-    try:
-        expected_allocation = int(row["allocation_amount"] or 0)
-        expected_from_allocation = int(
-            row["from_allocation_amount"]
-            if row["from_allocation_amount"] is not None
-            else expected_allocation
-        )
-    except (TypeError, ValueError):
-        return False
-    return any(
-        pair["from_row"]["id"] == row["from_transaction_id"]
-        and pair["to_row"]["id"] == row["to_transaction_id"]
-        and int(pair["allocation_msat"]) == expected_allocation
-        and int(pair["from_allocation_msat"]) == expected_from_allocation
-        and pair.get("confidence") == "exact"
-        and not bool(pair.get("requires_review"))
-        for pair in pairs
-    )
-
-
-def _payment_hash_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    row: Mapping[str, Any],
-    from_tx: Mapping[str, Any] | None,
-    to_tx: Mapping[str, Any],
-) -> bool:
-    if not from_tx:
-        return False
-    pairs = derive_payment_hash_pairs(
-        _active_transaction_rows(conn, profile_id),
-        skip_row=_skip_assembly_row,
-    )
-    return any(
-        pair["from_row"]["id"] == row["from_transaction_id"]
-        and pair["to_row"]["id"] == row["to_transaction_id"]
-        for pair in pairs
-    )
-
-
 def _suggestion_still_deterministic(
-    conn: sqlite3.Connection,
-    profile_id: str,
+    custody_allocations: Mapping[
+        tuple[str, str, str], _StoredCustodyAllocation
+    ],
     row: Mapping[str, Any],
     from_tx: Mapping[str, Any] | None,
     to_tx: Mapping[str, Any],
 ) -> bool:
     method = str(row["method"] or "")
-    if method == "same_onchain_scope":
-        return _same_onchain_scope_still_deterministic(
-            conn, profile_id, row, from_tx, to_tx
-        )
-    if method == "transaction_pair":
-        return _transaction_pair_still_deterministic(conn, profile_id, row, from_tx, to_tx)
-    if method == "utxo_spend":
-        return _utxo_spend_still_deterministic(conn, profile_id, row, from_tx, to_tx)
-    if method == "payment_hash":
-        return _payment_hash_still_deterministic(conn, profile_id, row, from_tx, to_tx)
     if method == "custody_component":
-        return _custody_component_still_deterministic(
-            conn,
-            profile_id,
+        return _stored_custody_still_deterministic(
+            custody_allocations,
             row,
             from_tx,
             to_tx,
@@ -1667,6 +1371,14 @@ def _validated_bulk_review_candidates(
     rows: Sequence[Mapping[str, Any]],
 ) -> list[Mapping[str, Any]]:
     candidates: list[Mapping[str, Any]] = []
+    rows_by_id = {
+        str(tx["id"]): tx for tx in _active_transaction_rows(conn, profile_id)
+    }
+    custody_allocations = _stored_custody_allocation_map(
+        conn,
+        profile_id,
+        rows_by_id,
+    )
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
             continue
@@ -1675,15 +1387,20 @@ def _validated_bulk_review_candidates(
         # the re-suggestion stays a manual review item.
         if _pair_has_rejected_link(conn, profile_id, row["from_transaction_id"], row["to_transaction_id"]):
             continue
-        to_tx = _transaction_by_id(conn, profile_id, row["to_transaction_id"])
+        to_tx = rows_by_id.get(str(row["to_transaction_id"]))
         if not to_tx:
             continue
         from_tx = (
-            _transaction_by_id(conn, profile_id, row["from_transaction_id"])
+            rows_by_id.get(str(row["from_transaction_id"]))
             if row["from_transaction_id"]
             else None
         )
-        if not _suggestion_still_deterministic(conn, profile_id, row, from_tx, to_tx):
+        if not _suggestion_still_deterministic(
+            custody_allocations,
+            row,
+            from_tx,
+            to_tx,
+        ):
             continue
         try:
             _validate_transaction_link_for_review(
@@ -1712,13 +1429,9 @@ def bulk_review_suggestions(
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
-    This is intentionally narrow: canonical transaction scope, unambiguous
-    input/output structure (utxo_spend), source-qualified Lightning payment
-    hashes, already-reviewed transaction_pairs, and effective custody-component
-    allocations can be accepted in bulk, each re-verified against the live
-    database. Unreviewed N:M pro-rata allocations, provider ids, weak
-    time/amount guesses, chain-observation hints, and pairs the user previously
-    rejected stay manual.
+    This is intentionally narrow: only exact allocations from the current
+    stored custody projection can be accepted in bulk. Provider ids, privacy
+    hints, time/amount guesses, and stale projections remain manual.
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
@@ -1750,12 +1463,9 @@ def bulk_review_suggestions(
         "target_transaction_id": target["id"],
         "links": [_link_row_to_dict(conn, row) for row in reviewed_rows if row],
         "policy": (
-            "Bulk review only accepts re-verified canonical transaction scope, "
-            "unambiguous transaction input/output structure, source-qualified Lightning "
-            "payment hashes, existing reviewed transaction_pairs, or effective "
-            "custody-component allocations. Provider ids, unreviewed N:M pro-rata "
-            "allocations, time/amount matches, chain observations, "
-            "and pairs the user previously rejected remain manual review items."
+            "Bulk review only accepts exact links re-verified against the current "
+            "stored custody projection. Provider ids, privacy hints, time/amount "
+            "matches, chain observations, and rejected pairs remain manual."
         ),
     }
 
@@ -2061,55 +1771,6 @@ def suggest_links(
             scoped_tx_ids.add(link["from_transaction_id"])
             scoped_tx_ids.add(link["to_transaction_id"])
 
-    by_onchain_scope = defaultdict(list)
-    for row in rows:
-        scope = onchain_transfer_scope(row)
-        if scope is not None:
-            by_onchain_scope[scope].append(row)
-    for group in by_onchain_scope.values():
-        outs = [row for row in group if row["direction"] == "outbound"]
-        ins = [row for row in group if row["direction"] == "inbound"]
-        if len(outs) != 1 or len(ins) != 1:
-            continue
-        out_tx, in_tx = outs[0], ins[0]
-        out_samourai = _samourai_metadata_from_wallet_config(
-            out_tx["wallet_config_json"]
-        )
-        in_samourai = _samourai_metadata_from_wallet_config(
-            in_tx["wallet_config_json"]
-        )
-        if out_samourai or in_samourai:
-            continue
-        if out_tx["wallet_id"] == in_tx["wallet_id"]:
-            continue
-        if not in_scope(out_tx, in_tx):
-            continue
-        if _raw_privacy_hop(out_tx) or _raw_privacy_hop(in_tx):
-            continue
-        whole_row_equal = int(out_tx["amount"] or 0) == int(in_tx["amount"] or 0)
-        link = _insert_suggestion(
-            conn,
-            workspace["id"],
-            profile["id"],
-            from_tx=out_tx,
-            to_tx=in_tx,
-            link_type="self_transfer",
-            method="same_onchain_scope",
-            confidence="exact" if whole_row_equal else "strong",
-            allocation_msat=int(in_tx["amount"]),
-            from_allocation_msat=int(out_tx["amount"]),
-            explanation=(
-                "The same canonical chain/network/txid/asset transaction scope "
-                "appears as an outbound and inbound row in two owned wallets."
-                + (
-                    " Equal whole-row principal permits deterministic review."
-                    if whole_row_equal
-                    else " Unequal rows require manual allocation or a custody component."
-                )
-            ),
-        )
-        remember(link)
-
     by_samourai_tx = defaultdict(list)
     for row in rows:
         metadata = _samourai_metadata_from_wallet_config(row["wallet_config_json"])
@@ -2157,12 +1818,10 @@ def suggest_links(
                 )
                 remember(link)
 
-    # Effective custody components are the reviewed, country-neutral ownership
-    # interpretation. Project their exact allocation edges into source-funds
-    # instead of forcing the user to recreate a missing-wallet bridge here.
-    # The deterministic bulk-review pass revalidates the live component before
-    # promoting each suggestion.
-    custody_allocations = _effective_custody_component_allocation_map(
+    # Booked custody lineage is projected once by the journal builder. Source
+    # funds consumes those exact slices and does not re-run native matching,
+    # component allocation, or legacy pair rules.
+    custody_allocations = _stored_custody_allocation_map(
         conn,
         profile["id"],
         rows_by_id,
@@ -2179,7 +1838,7 @@ def suggest_links(
         in_tx = rows_by_id[allocation.to_transaction_id]
         if not in_scope(out_tx, in_tx):
             continue
-        component_refs = ", ".join(allocation.component_ids)
+        projection_refs = ", ".join(allocation.projection_ids)
         link = _insert_suggestion(
             conn,
             workspace["id"],
@@ -2192,98 +1851,9 @@ def suggest_links(
             allocation_msat=allocation.allocation_msat,
             from_allocation_msat=allocation.from_allocation_msat,
             explanation=(
-                "Effective reviewed custody component allocation links these "
-                f"transaction rows ({component_refs})."
+                "Current stored custody projection links these transaction "
+                f"rows ({projection_refs})."
             ),
-        )
-        remember(link)
-
-    pair_rows = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL "
-        "ORDER BY created_at ASC, id ASC",
-        (profile["id"],),
-    ).fetchall()
-    pair_allocations = _transaction_pair_allocation_map(pair_rows, rows_by_id)
-    for pair in pair_rows:
-        out_tx = rows_by_id.get(pair["out_transaction_id"])
-        in_tx = rows_by_id.get(pair["in_transaction_id"])
-        if not out_tx or not in_tx:
-            continue
-        allocation = pair_allocations.get(pair["id"])
-        if allocation is None:
-            continue
-        if _raw_privacy_hop(out_tx) or _raw_privacy_hop(in_tx):
-            continue
-        if not in_scope(out_tx, in_tx):
-            continue
-        link_type = "self_transfer" if out_tx["asset"] == in_tx["asset"] else "swap"
-        link = _insert_suggestion(
-            conn,
-            workspace["id"],
-            profile["id"],
-            from_tx=out_tx,
-            to_tx=in_tx,
-            link_type=link_type,
-            method="transaction_pair",
-            confidence="strong",
-            allocation_msat=allocation.allocation_msat,
-            from_allocation_msat=allocation.from_allocation_msat,
-            explanation=f"Existing reviewed transaction_pair ({pair['kind']}, {pair['policy']}) links these rows.",
-        )
-        remember(link)
-
-    # Assembly derivers: exact edges from real transaction structure
-    # (inputs/outputs joined against owned outputs, Bitcoin and Liquid
-    # alike) and from Lightning payment hashes. Local reads only — the
-    # privacy_warning below stays true. Pairs that already carry any
-    # active link are skipped so assembly composes with manual review
-    # and the other derivers instead of double-allocating hops.
-    owned_index = build_owned_outpoint_index(conn, profile["id"])
-    if owned_index:
-        for pair in derive_utxo_spend_pairs(rows, owned_index, skip_row=_skip_assembly_row):
-            out_tx, in_tx = pair["from_row"], pair["to_row"]
-            if not in_scope(out_tx, in_tx):
-                continue
-            if int(pair["allocation_msat"]) <= 0:
-                continue
-            pair_confidence = str(pair.get("confidence") or "exact")
-            if pair.get("requires_review"):
-                # Fail closed if a future deriver accidentally combines the
-                # manual-review marker with exact confidence.
-                pair_confidence = "strong"
-            link = _insert_suggestion(
-                conn,
-                workspace["id"],
-                profile["id"],
-                from_tx=out_tx,
-                to_tx=in_tx,
-                link_type="self_transfer",
-                method="utxo_spend",
-                confidence=pair_confidence,
-                allocation_msat=int(pair["allocation_msat"]),
-                from_allocation_msat=int(pair["from_allocation_msat"]),
-                explanation=pair["explanation"],
-            )
-            remember(link)
-
-    for pair in derive_payment_hash_pairs(rows, skip_row=_skip_assembly_row):
-        out_tx, in_tx = pair["from_row"], pair["to_row"]
-        if not in_scope(out_tx, in_tx):
-            continue
-        if int(pair["allocation_msat"]) <= 0:
-            continue
-        link = _insert_suggestion(
-            conn,
-            workspace["id"],
-            profile["id"],
-            from_tx=out_tx,
-            to_tx=in_tx,
-            link_type="self_transfer",
-            method="payment_hash",
-            confidence="exact",
-            allocation_msat=int(pair["allocation_msat"]),
-            from_allocation_msat=int(pair["from_allocation_msat"]),
-            explanation=pair["explanation"],
         )
         remember(link)
 
@@ -3035,6 +2605,15 @@ def build_report(
         max_depth = _MAX_BUILD_REPORT_DEPTH
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
+    active_rows_by_id = {
+        str(tx["id"]): tx
+        for tx in _active_transaction_rows(conn, str(profile["id"]))
+    }
+    custody_allocations = _stored_custody_allocation_map(
+        conn,
+        str(profile["id"]),
+        active_rows_by_id,
+    )
     from .source_funds_recipients import effective_reveal_mode
     resolved_mode, recipient = effective_reveal_mode(
         conn,
@@ -3197,15 +2776,12 @@ def build_report(
             if _graph_over_budget():
                 _emit_size_truncation()
                 break
-            if link["method"] == "custody_component":
-                component_parent = _transaction_by_id(
-                    conn,
-                    profile["id"],
-                    link["from_transaction_id"],
+            if link["method"] in _CUSTODY_LINEAGE_METHODS:
+                component_parent = active_rows_by_id.get(
+                    str(link["from_transaction_id"])
                 )
-                if not _custody_component_still_deterministic(
-                    conn,
-                    profile["id"],
+                if not _stored_custody_still_deterministic(
+                    custody_allocations,
                     link,
                     component_parent,
                     tx,
@@ -3214,7 +2790,7 @@ def build_report(
                         findings,
                         "stale_custody_component_lineage",
                         "blocker",
-                        "A reviewed custody-component link is no longer effective with the recorded allocation.",
+                        "A reviewed custody link is absent or stale in the current stored projection.",
                         ref=link["id"],
                     )
                     continue

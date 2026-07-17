@@ -17,6 +17,12 @@ from ..util import normalize_chain_value, normalize_network_value
 from ..wallet_descriptors import derive_descriptor_targets
 from . import freshness as core_freshness
 from .address_scripts import scriptpubkey_for_address_or_none
+from .onchain import (
+    input_script,
+    normalized_script_hex,
+    output_script,
+    stored_tx_mapping,
+)
 from .wallets import (
     has_descriptor_sync_material,
     load_wallet_descriptor_plan_from_config,
@@ -81,27 +87,9 @@ def _normalize_chain_network(chain: Any, network: Any) -> tuple[str, str]:
     return normalized_chain, normalized_network
 
 
-def _normalized_script_pubkey(value: Any) -> str | None:
-    if value in (None, ""):
-        return None
-    text = str(value).strip().lower()
-    if len(text) % 2 != 0:
-        return None
-    try:
-        bytes.fromhex(text)
-    except ValueError:
-        return None
-    return text
-
-
 def _script_pubkey_from_raw_json(value: Any) -> str | None:
-    try:
-        raw = json.loads(value or "{}") if isinstance(value, str) else dict(value or {})
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, dict):
-        return None
-    return _normalized_script_pubkey(raw.get("script_pubkey"))
+    raw = stored_tx_mapping(value)
+    return normalized_script_hex(raw.get("script_pubkey")) if raw else None
 
 
 def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, str]:
@@ -202,7 +190,7 @@ def _inventory_scripts(
     for row in rows:
         wallet_id = str(row["wallet_id"])
         script_pubkey = (
-            _normalized_script_pubkey(row["script_pubkey"])
+            normalized_script_hex(row["script_pubkey"])
             or _script_pubkey_from_raw_json(row["raw_json"])
             or scriptpubkey_for_address_or_none(row["address"])
         )
@@ -757,39 +745,26 @@ def _overlap_scripts_by_wallet(
     return scripts_by_wallet
 
 
-def _raw_script_pubkey(value: Any) -> str | None:
-    if not isinstance(value, Mapping):
-        return None
-    script = value.get("scriptpubkey") or value.get("script_hex")
-    nested = value.get("scriptPubKey")
-    if not script and isinstance(nested, Mapping):
-        script = nested.get("hex") or nested.get("scriptpubkey")
-    return _normalized_script_pubkey(script)
-
-
 def _transaction_scripts_from_raw(raw_json: Any, direction: str) -> set[str]:
-    try:
-        raw = (
-            json.loads(raw_json or "{}")
-            if isinstance(raw_json, str)
-            else dict(raw_json or {})
-        )
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return set()
-    if not isinstance(raw, Mapping):
+    raw = stored_tx_mapping(raw_json, allow_nested=True)
+    if raw is None:
         return set()
     direction = str(direction or "").strip().lower()
     scripts: set[str] = set()
     if direction in {"", "inbound"}:
         for vout in raw.get("vout") or []:
-            script = _raw_script_pubkey(vout)
+            script = (
+                normalized_script_hex(output_script(vout))
+                if isinstance(vout, Mapping)
+                else None
+            )
             if script:
                 scripts.add(script)
     if direction in {"", "outbound"}:
         for vin in raw.get("vin") or []:
             if not isinstance(vin, Mapping):
                 continue
-            script = _raw_script_pubkey(vin.get("prevout"))
+            script = normalized_script_hex(input_script(vin))
             if script:
                 scripts.add(script)
     return scripts

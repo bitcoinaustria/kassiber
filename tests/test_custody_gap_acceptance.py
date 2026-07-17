@@ -160,6 +160,20 @@ def _request(proc: subprocess.Popen[str], payload: dict, timeout: float = 10.0) 
     )
 
 
+def _stop_daemon(proc: subprocess.Popen[str]) -> None:
+    if proc.stdin is not None:
+        proc.stdin.close()
+    try:
+        proc.wait(timeout=5.0)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5.0)
+    if proc.stdout is not None:
+        proc.stdout.close()
+    if proc.stderr is not None:
+        proc.stderr.close()
+
+
 class CustodyGapCliAcceptanceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-gap-cli-")
@@ -201,10 +215,11 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "gaps",
-            "bridge",
+            "plan",
+            "--action",
+            "create",
             "--gap-id",
             gap_id,
-            "--dry-run",
             *self._scope(),
         )
         preview = previewed["data"]
@@ -215,19 +230,23 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             self.data_root,
             "transfers",
             "gaps",
-            "bridge",
+            "apply",
+            "--action",
+            "create",
             "--gap-id",
             gap_id,
-            "--expected-fingerprint",
-            preview["candidate_fingerprint"],
+            "--expected-input-version",
+            str(preview["input_version"]),
             *self._scope(),
         )["data"]
         self.assertEqual(created["status"], "resolved")
 
-        superseded = _run_cli(
+        supersede_plan = _run_cli(
             self.data_root,
             "transfers",
             "components",
+            "plan",
+            "--action",
             "supersede",
             "--component-id",
             created["component_id"],
@@ -235,12 +254,29 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             "review correction",
             *self._scope(),
         )["data"]
-        self.assertEqual(superseded["state"], "superseded")
-
-        revised = _run_cli(
+        superseded = _run_cli(
             self.data_root,
             "transfers",
             "components",
+            "apply",
+            "--action",
+            "supersede",
+            "--component-id",
+            created["component_id"],
+            "--reason",
+            "review correction",
+            "--expected-input-version",
+            str(supersede_plan["input_version"]),
+            *self._scope(),
+        )["data"]["component"]
+        self.assertEqual(superseded["state"], "superseded")
+
+        undo_plan = _run_cli(
+            self.data_root,
+            "transfers",
+            "components",
+            "plan",
+            "--action",
             "undo",
             "--component-id",
             created["component_id"],
@@ -248,6 +284,21 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
             "restore for revision",
             *self._scope(),
         )["data"]
+        revised = _run_cli(
+            self.data_root,
+            "transfers",
+            "components",
+            "apply",
+            "--action",
+            "undo",
+            "--component-id",
+            created["component_id"],
+            "--reason",
+            "restore for revision",
+            "--expected-input-version",
+            str(undo_plan["input_version"]),
+            *self._scope(),
+        )["data"]["component"]
         self.assertEqual(revised["state"], "draft")
         self.assertGreater(revised["revision"], superseded["revision"])
 
@@ -261,15 +312,30 @@ class CustodyGapCliAcceptanceTests(unittest.TestCase):
         gap = _run_cli(
             self.data_root, "transfers", "gaps", "list", *self._scope()
         )["data"]["gaps"][0]
+        plan = _run_cli(
+            self.data_root,
+            "transfers",
+            "gaps",
+            "plan",
+            "--action",
+            "dismiss",
+            "--gap-id",
+            gap["gap_id"],
+            "--reason",
+            "known external disposal",
+            *self._scope(),
+        )["data"]
         dismissed = _run_cli(
             self.data_root,
             "transfers",
             "gaps",
+            "apply",
+            "--action",
             "dismiss",
             "--gap-id",
             gap["gap_id"],
-            "--expected-fingerprint",
-            gap["candidate_fingerprint"],
+            "--expected-input-version",
+            str(plan["input_version"]),
             "--reason",
             "known external disposal",
             *self._scope(),
@@ -285,6 +351,58 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
         self.data_root = Path(self.tmp.name) / "data"
         _seed_gap(self.data_root)
 
+    def test_real_jsonl_protocol_accepts_opaque_candidate_cursor(self) -> None:
+        conn = open_db(str(self.data_root))
+        try:
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id,
+                    fingerprint, occurred_at, direction, asset, amount, fee,
+                    raw_json, created_at
+                ) VALUES(
+                    'return-two', 'ws', 'profile', 'new', 'return-two',
+                    'fingerprint-return-two', '2021-02-01T00:00:00Z',
+                    'inbound', 'BTC', ?, 0, '{}', '2021-02-01T00:00:00Z'
+                )
+                """,
+                (99 * BTC // 10,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        proc = _start_daemon(self.data_root)
+        try:
+            scope = {"workspace": "Books", "profile": "Book"}
+            first = _request(
+                proc,
+                {
+                    "request_id": "gap-page-one",
+                    "kind": "ui.custody.gaps.list",
+                    "args": {**scope, "limit": 1},
+                },
+            )["data"]
+            self.assertRegex(first["next_cursor"], r"^cgr3\.")
+            second = _request(
+                proc,
+                {
+                    "request_id": "gap-page-two",
+                    "kind": "ui.custody.gaps.list",
+                    "args": {
+                        **scope,
+                        "limit": 1,
+                        "cursor": first["next_cursor"],
+                    },
+                },
+            )["data"]
+            self.assertNotEqual(
+                first["gaps"][0]["gap_id"], second["gaps"][0]["gap_id"]
+            )
+            self.assertIsNone(second["next_cursor"])
+        finally:
+            _stop_daemon(proc)
+
     def test_real_jsonl_protocol_previews_confirms_and_refreshes_gap(self) -> None:
         proc = _start_daemon(self.data_root)
         try:
@@ -298,12 +416,12 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                 },
             )
             gap = listed["data"]["gaps"][0]
-            preview_args = {**scope, "gap_id": gap["gap_id"]}
+            preview_args = {**scope, "action": "create", "gap_id": gap["gap_id"]}
             preview = _request(
                 proc,
                 {
                     "request_id": "gap-preview",
-                    "kind": "ui.custody.gaps.bridge.preview",
+                    "kind": "ui.custody.review.plan",
                     "args": preview_args,
                 },
             )["data"]
@@ -311,13 +429,13 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
 
             create_args = {
                 **preview_args,
-                "expected_fingerprint": preview["candidate_fingerprint"],
+                "expected_input_version": preview["input_version"],
             }
             created = _request(
                 proc,
                 {
                     "request_id": "gap-create",
-                    "kind": "ui.custody.gaps.bridge.create",
+                    "kind": "ui.custody.review.apply",
                     "args": create_args,
                 },
             )["data"]
@@ -327,8 +445,8 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                 proc,
                 {
                     "request_id": "gap-refresh",
-                    "kind": "ui.custody.gaps.list",
-                    "args": scope,
+                    "kind": "ui.custody.gaps.review_context",
+                    "args": {**scope, "gap_id": gap["gap_id"]},
                 },
             )["data"]
             self.assertEqual(refreshed["gaps"][0]["status"], "resolved")
@@ -336,23 +454,21 @@ class CustodyGapDaemonProtocolAcceptanceTests(unittest.TestCase):
                 "raw_json",
                 json.dumps([listed, preview, created, refreshed]),
             )
-            self.assertEqual(set(preview_args), {"workspace", "profile", "gap_id"})
+            self.assertEqual(
+                set(preview_args), {"workspace", "profile", "action", "gap_id"}
+            )
             self.assertEqual(
                 set(create_args),
-                {"workspace", "profile", "gap_id", "expected_fingerprint"},
+                {
+                    "workspace",
+                    "profile",
+                    "action",
+                    "gap_id",
+                    "expected_input_version",
+                },
             )
         finally:
-            if proc.stdin is not None:
-                proc.stdin.close()
-            try:
-                proc.wait(timeout=5.0)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5.0)
-            if proc.stdout is not None:
-                proc.stdout.close()
-            if proc.stderr is not None:
-                proc.stderr.close()
+            _stop_daemon(proc)
 
 
 if __name__ == "__main__":

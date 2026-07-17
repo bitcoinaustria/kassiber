@@ -246,7 +246,7 @@ class SwapMatchingCliTest(unittest.TestCase):
         )
         self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
 
-    def test_same_txid_self_transfer_not_suggested_as_swap(self):
+    def test_untrusted_same_txid_rows_remain_review_candidates(self):
         data_root = self._fresh_root("same-txid-transfer")
         out_csv = Path(self._tmp.name) / "cold-to-hot-out.csv"
         in_csv = Path(self._tmp.name) / "cold-to-hot-in.csv"
@@ -291,7 +291,10 @@ class SwapMatchingCliTest(unittest.TestCase):
         )
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["kind"], "transfers.suggest")
-        self.assertEqual(payload["data"]["counts"]["total"], 0)
+        # Matching imported txids are not authoritative ownership evidence.
+        # Only a current stored custody MOVE may suppress these rows without
+        # review; the swap queue must not recreate the journal interpreter.
+        self.assertEqual(payload["data"]["counts"]["total"], 1)
 
     def test_candidate_type_splits_same_asset_transfers_from_swaps(self):
         data_root = self._fresh_root("candidate-type")
@@ -667,7 +670,25 @@ class SwapMatchingCliTest(unittest.TestCase):
             "--policy", "taxable",
         )
         self.assertEqual(code, 0, payload)
-        _mark_journals_processed(data_root)
+        payload, code = _run(
+            data_root,
+            "journals",
+            "process",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Swap",
+        )
+        self.assertEqual(code, 0, payload)
+        conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+        try:
+            projected_fees = conn.execute(
+                "SELECT relation_kind, swap_fee_msat FROM "
+                "journal_custody_projection_relations"
+            ).fetchall()
+        finally:
+            conn.close()
+        self.assertTrue(projected_fees, payload)
 
         result = _run_raw(
             data_root,

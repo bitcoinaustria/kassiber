@@ -5,19 +5,155 @@ from datetime import datetime, timedelta, timezone
 import json
 import random
 import sqlite3
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from kassiber.core import custody_gaps
+from kassiber.core import custody_gap_reviews, custody_gaps
 from kassiber.core.custody_gaps import (
-    CustodyGapSearchLimitError,
+    CustodyGapSearchResult,
     build_gap_snapshot,
-    suggest_custody_gap_candidates,
+    search_custody_gap_candidates,
 )
+from kassiber.db import open_db
 
 
 BTC_MSAT = 100_000_000_000
+
+
+def suggest_custody_gap_candidates(rows, **kwargs):
+    return list(search_custody_gap_candidates(rows, **kwargs).candidates)
+
+
+class CustodyGapLegacySchemaMigrationTests(unittest.TestCase):
+    def test_open_drops_serialized_candidate_page_table(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = open_db(Path(root) / "data")
+            conn.execute(
+                """
+                CREATE TABLE custody_gap_candidate_snapshots (
+                    cache_token TEXT PRIMARY KEY,
+                    profile_id TEXT NOT NULL,
+                    version_json TEXT NOT NULL,
+                    summary_json TEXT NOT NULL,
+                    gaps_json TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO custody_gap_candidate_snapshots VALUES "
+                "('legacy', 'profile', '[]', '{}', '[]')"
+            )
+            conn.execute(
+                "CREATE TABLE custody_gap_projection_rows ("
+                "projection_id TEXT, payload_json TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO custody_gap_projection_rows VALUES ('legacy', '{}')"
+            )
+            conn.commit()
+            conn.close()
+
+            migrated = open_db(Path(root) / "data")
+            try:
+                self.assertIsNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' "
+                        "AND name = 'custody_gap_candidate_snapshots'"
+                    ).fetchone()
+                )
+                self.assertIsNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' "
+                        "AND name = 'custody_gap_projection_rows'"
+                    ).fetchone()
+                )
+                self.assertIsNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' "
+                        "AND name = 'custody_gap_candidates'"
+                    ).fetchone()
+                )
+                self.assertIsNotNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' "
+                        "AND name = 'journal_custody_gap_inputs'"
+                    ).fetchone()
+                )
+            finally:
+                migrated.close()
+
+    def test_open_preserves_latest_journal_builder_inputs_before_cache_drop(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            conn = open_db(data_root)
+            conn.execute(
+                "INSERT INTO workspaces(id, label, created_at) "
+                "VALUES ('ws', 'Books', '2026-01-01T00:00:00Z')"
+            )
+            conn.execute(
+                "INSERT INTO profiles(id, workspace_id, label, created_at) "
+                "VALUES ('profile', 'ws', 'Book', '2026-01-01T00:00:00Z')"
+            )
+            conn.execute(
+                """
+                CREATE TABLE custody_gap_candidate_projections (
+                    id TEXT PRIMARY KEY,
+                    profile_id TEXT NOT NULL,
+                    producer_kind TEXT NOT NULL,
+                    version_json TEXT NOT NULL,
+                    ignored_ids_json TEXT NOT NULL,
+                    accounting_ignored_ids_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO custody_gap_candidate_projections VALUES (
+                    'old', 'profile', 'journal', '[3, 6]', '["old-ignore"]',
+                    '["old-accounting-ignore"]', '2026-01-01T00:00:00Z'
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO custody_gap_candidate_projections VALUES (
+                    'latest', 'profile', 'journal', '[3, 7]', '["ignore"]',
+                    '["accounting-ignore"]', '2026-01-02T00:00:00Z'
+                )
+                """
+            )
+            conn.commit()
+            conn.close()
+
+            migrated = open_db(data_root)
+            try:
+                row = migrated.execute(
+                    "SELECT * FROM journal_custody_gap_inputs "
+                    "WHERE profile_id = 'profile'"
+                ).fetchone()
+                self.assertEqual(row["workspace_id"], "ws")
+                self.assertEqual(int(row["input_version"]), 7)
+                self.assertEqual(json.loads(row["ignored_ids_json"]), ["ignore"])
+                self.assertEqual(
+                    json.loads(row["accounting_ignored_ids_json"]),
+                    ["accounting-ignore"],
+                )
+                self.assertIsNone(
+                    migrated.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                        "AND name = 'custody_gap_candidate_projections'"
+                    ).fetchone()
+                )
+            finally:
+                migrated.close()
 
 
 def _row(
@@ -443,18 +579,20 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(6)
         )
 
-        with self.assertRaisesRegex(
-            CustodyGapSearchLimitError,
-            "generated 6 candidates.*configured maximum is 3",
-        ):
-            suggest_custody_gap_candidates(rows, max_candidates=3)
+        limited = search_custody_gap_candidates(rows, max_candidates=3)
+        self.assertFalse(limited.search_complete)
+        self.assertRegex(
+            limited.message or "", "generated 6 candidates.*configured maximum is 3"
+        )
+        self.assertEqual(len(limited.candidates), 3)
 
         candidates = suggest_custody_gap_candidates(rows, max_candidates=6)
         self.assertEqual(len(candidates), 6)
         self.assertTrue(all(candidate.conflict_size == 6 for candidate in candidates))
 
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows, max_input_rows=2)
+        self.assertFalse(
+            search_custody_gap_candidates(rows, max_input_rows=2).search_complete
+        )
 
     def test_candidate_ceiling_cannot_hide_a_promotion_eligible_gap(self):
         rows = [
@@ -495,11 +633,9 @@ class CustodyGapMatcherTests(unittest.TestCase):
         self.assertEqual(len(complete), 2)
         self.assertEqual(sum(candidate.promotion_eligible for candidate in complete), 1)
 
-        with self.assertRaisesRegex(
-            CustodyGapSearchLimitError,
-            "including 1 promotion-eligible candidates",
-        ):
-            suggest_custody_gap_candidates(rows, max_candidates=1)
+        limited = search_custody_gap_candidates(rows, max_candidates=1)
+        self.assertFalse(limited.search_complete)
+        self.assertIn("including 1 promotion-eligible candidates", limited.message or "")
 
     def test_candidate_ceiling_reports_zero_promotion_eligible_hints(self):
         rows = [
@@ -522,11 +658,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(3)
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError) as raised:
-            suggest_custody_gap_candidates(rows, max_candidates=2)
-
-        self.assertEqual(raised.exception.candidate_count, 3)
-        self.assertEqual(raised.exception.promotion_eligible_count, 0)
+        limited = search_custody_gap_candidates(rows, max_candidates=2)
+        self.assertFalse(limited.search_complete)
+        self.assertEqual(limited.candidate_count, 3)
+        self.assertEqual(limited.promotion_eligible_count, 0)
 
     def test_separate_profiles_and_assets_never_cross_match(self):
         rows = [
@@ -791,8 +926,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(5)
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows, max_aggregate_return_legs=4)
+        limited = search_custody_gap_candidates(
+            rows, max_aggregate_return_legs=4
+        )
+        self.assertFalse(limited.search_complete)
 
     def test_return_pool_ceiling_fails_instead_of_sampling_history(self):
         rows = [
@@ -815,8 +952,9 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for index in range(6)
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows, max_return_pool=5)
+        self.assertFalse(
+            search_custody_gap_candidates(rows, max_return_pool=5).search_complete
+        )
 
     def test_source_group_ceiling_marks_search_incomplete_instead_of_sampling(self):
         rows = [
@@ -839,12 +977,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
             )
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError) as raised:
-            suggest_custody_gap_candidates(rows, max_source_groups=2)
-
-        self.assertEqual(raised.exception.limit_kind, "boundary_worklist")
-        self.assertTrue(raised.exception.partial_candidates)
-        self.assertFalse(raised.exception.search_complete)
+        limited = search_custody_gap_candidates(rows, max_source_groups=2)
+        self.assertEqual(limited.limit_kind, "boundary_worklist")
+        self.assertTrue(limited.candidates)
+        self.assertFalse(limited.search_complete)
 
     def test_more_than_87_sources_preserve_seeded_structured_candidate(self):
         rows = [
@@ -880,20 +1016,19 @@ class CustodyGapMatcherTests(unittest.TestCase):
             )
         )
 
-        with self.assertRaises(CustodyGapSearchLimitError) as raised:
-            suggest_custody_gap_candidates(rows)
+        limited = search_custody_gap_candidates(rows)
 
         seeded = [
             candidate
-            for candidate in raised.exception.partial_candidates
+            for candidate in limited.candidates
             if candidate.source_ids == ("structured-out",)
             and candidate.return_ids == ("structured-return",)
         ]
         self.assertEqual(len(seeded), 1)
         self.assertFalse(seeded[0].promotion_eligible)
         self.assertIn("search_capacity_incomplete", seeded[0].reason_codes)
-        self.assertEqual(raised.exception.blocking_source_ids, ("structured-out",))
-        self.assertEqual(raised.exception.limit_kind, "boundary_worklist")
+        self.assertEqual(limited.blocking_source_ids, ("structured-out",))
+        self.assertEqual(limited.limit_kind, "boundary_worklist")
 
     def test_structured_source_scoring_is_bounded_without_losing_suspense_scope(self):
         rows = [
@@ -920,19 +1055,16 @@ class CustodyGapMatcherTests(unittest.TestCase):
             )
         )
 
-        with (
-            patch(
-                "kassiber.core.custody_gaps._indexed_return_pool",
-                wraps=custody_gaps._indexed_return_pool,
-            ) as indexed_pool,
-            self.assertRaises(CustodyGapSearchLimitError) as raised,
-        ):
-            suggest_custody_gap_candidates(rows, max_input_rows=1)
+        with patch(
+            "kassiber.core.custody_gaps._indexed_return_pool",
+            wraps=custody_gaps._indexed_return_pool,
+        ) as indexed_pool:
+            limited = search_custody_gap_candidates(rows, max_input_rows=1)
 
         self.assertLessEqual(
             indexed_pool.call_count, custody_gaps.DEFAULT_MAX_SOURCE_GROUPS
         )
-        self.assertEqual(len(raised.exception.blocking_source_ids), 300)
+        self.assertEqual(len(limited.blocking_source_ids), 300)
 
     def test_wallet_era_result_group_cap_is_honored(self):
         raw_rows = [
@@ -950,7 +1082,7 @@ class CustodyGapMatcherTests(unittest.TestCase):
             for row in raw_rows
         ]
 
-        groups = custody_gaps._wallet_era_return_groups(
+        groups, limited = custody_gaps._wallet_era_return_groups(
             [leg for leg in legs if leg is not None],
             target=10 * BTC_MSAT,
             min_coverage_ppm=800_000,
@@ -961,6 +1093,7 @@ class CustodyGapMatcherTests(unittest.TestCase):
         )
 
         self.assertEqual(len(groups), 2)
+        self.assertFalse(limited)
 
     def test_large_history_runtime_stays_bounded(self):
         rows = [
@@ -985,10 +1118,10 @@ class CustodyGapMatcherTests(unittest.TestCase):
         )
 
         started = time.monotonic()
-        with self.assertRaises(CustodyGapSearchLimitError):
-            suggest_custody_gap_candidates(rows)
+        limited = search_custody_gap_candidates(rows)
         elapsed = time.monotonic() - started
 
+        self.assertFalse(limited.search_complete)
         self.assertLess(elapsed, 5.0)
 
 
@@ -1011,6 +1144,18 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
                 journal_input_version INTEGER NOT NULL DEFAULT 0,
                 last_processed_input_version INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE custody_gap_reviews (
+                id TEXT PRIMARY KEY,
+                profile_id TEXT NOT NULL,
+                gap_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                candidate_fingerprint TEXT NOT NULL,
+                action TEXT NOT NULL,
+                event_kind TEXT NOT NULL,
+                component_id TEXT,
+                snapshot_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
             );
             CREATE TABLE transactions (
                 id TEXT PRIMARY KEY,
@@ -1045,12 +1190,13 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 reason TEXT NOT NULL,
                 blocks_from TEXT
             );
-            CREATE TABLE custody_gap_candidate_snapshots (
-                cache_token TEXT PRIMARY KEY,
-                profile_id TEXT NOT NULL,
-                version_json TEXT NOT NULL,
-                summary_json TEXT NOT NULL,
-                gaps_json TEXT NOT NULL
+            CREATE TABLE journal_custody_gap_inputs (
+                workspace_id TEXT NOT NULL,
+                profile_id TEXT PRIMARY KEY,
+                input_version INTEGER NOT NULL,
+                ignored_ids_json TEXT NOT NULL DEFAULT '[]',
+                accounting_ignored_ids_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL
             );
             """
         )
@@ -1117,6 +1263,209 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         self.assertEqual(gap["downstream"]["affected_years"], [2022])
         self.assertNotIn("raw_json", gap)
         self.assertNotIn("address", gap)
+
+    def test_snapshot_recomputes_without_persisting_candidate_rows(self):
+        before = self.conn.total_changes
+        snapshot = build_gap_snapshot(self.conn, "profile-one")
+
+        self.assertEqual(self.conn.total_changes, before)
+        self.assertEqual(snapshot["gaps"][0]["downstream"]["affected_disposals"], 1)
+        for table in (
+            "custody_gap_candidate_projections",
+            "custody_gap_candidates",
+            "custody_gap_candidate_boundaries",
+            "custody_gap_projection_rows",
+        ):
+            self.assertIsNone(
+                self.conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                    (table,),
+                ).fetchone()
+            )
+
+    def test_recomputed_projection_preserves_excess_return_candidate(self):
+        self.conn.execute(
+            "UPDATE transactions SET amount = ? WHERE id = 'return'",
+            (21 * BTC_MSAT // 2,),
+        )
+
+        candidate = build_gap_snapshot(self.conn, "profile-one")["gaps"][0]
+
+        self.assertEqual(candidate["retained_msat"], 10 * BTC_MSAT)
+        self.assertEqual(candidate["residual_msat"], 0)
+        self.assertEqual(candidate["excess_msat"], BTC_MSAT // 2)
+
+    def test_repeated_projection_read_recomputes_bounded_matcher(self):
+        first, _ = custody_gaps.load_gap_search_result(
+            self.conn, "profile-one"
+        )
+        with patch(
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            wraps=custody_gaps.search_custody_gap_candidates,
+        ) as matcher:
+            second, _ = custody_gaps.load_gap_search_result(
+                self.conn, "profile-one"
+            )
+
+        matcher.assert_called_once()
+        self.assertEqual(first.candidates, second.candidates)
+
+    def test_projection_recomputes_and_refreshes_readiness_display(self):
+        first = build_gap_snapshot(self.conn, "profile-one")
+        self.assertFalse(first["summary"]["derived_state_current"])
+
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = '2022-01-02T00:00:00Z',
+                last_processed_tx_count = 3,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-one'
+            """
+        )
+        with patch(
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            wraps=custody_gaps.search_custody_gap_candidates,
+        ) as matcher:
+            second = build_gap_snapshot(self.conn, "profile-one")
+
+        matcher.assert_called_once()
+        self.assertTrue(second["summary"]["derived_state_current"])
+
+    def test_review_change_refreshes_display_after_recompute(self):
+        first = build_gap_snapshot(self.conn, "profile-one")
+        candidate = custody_gaps.load_gap_search_result(
+            self.conn, "profile-one"
+        )[0].candidates[0]
+        self.assertEqual(first["gaps"][0]["status"], "needs_review")
+        self.conn.execute(
+            """
+            INSERT INTO custody_gap_reviews(
+                id, profile_id, gap_id, revision, candidate_fingerprint,
+                action, event_kind, component_id, snapshot_json, created_at
+            ) VALUES ('review-1', 'profile-one', ?, 1, ?, 'dismissed',
+                      'review_decision', NULL, '{}', '2026-01-01T00:00:00Z')
+            """,
+            (
+                candidate.gap_id,
+                custody_gap_reviews.candidate_fingerprint(candidate),
+            ),
+        )
+
+        with patch(
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            wraps=custody_gaps.search_custody_gap_candidates,
+        ) as matcher:
+            second = build_gap_snapshot(self.conn, "profile-one")
+
+        matcher.assert_called_once()
+        self.assertEqual(second["gaps"][0]["status"], "dismissed")
+
+    def test_current_review_surface_reuses_journal_builder_inputs(self):
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = '2022-01-02T00:00:00Z',
+                last_processed_tx_count = 3,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-one'
+            """
+        )
+        self.conn.execute(
+            """
+            INSERT INTO journal_custody_gap_inputs(
+                workspace_id, profile_id, input_version, ignored_ids_json,
+                accounting_ignored_ids_json, created_at
+            ) VALUES ('ws-one', 'profile-one', 0, '["later-disposal"]', '[]',
+                      '2026-01-01T00:00:00Z')
+            """
+        )
+
+        review, _ = custody_gaps.load_gap_search_result(self.conn, "profile-one")
+        explicit, _ = custody_gaps.load_gap_search_result(
+            self.conn, "profile-one", ignored_transaction_ids=("later-disposal",)
+        )
+
+        self.assertEqual(review.candidates, explicit.candidates)
+
+    def test_distinct_explicit_ignored_sets_are_pure_and_independent(self):
+        review, _ = custody_gaps.load_gap_search_result(
+            self.conn, "profile-one"
+        )
+        journal, _ = custody_gaps.load_gap_search_result(
+            self.conn,
+            "profile-one",
+            ignored_transaction_ids=("out",),
+        )
+
+        self.assertNotEqual(review.candidates, journal.candidates)
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM journal_custody_gap_inputs").fetchone()[0],
+            0,
+        )
+
+    def test_accounting_population_excludes_blocked_competitor_before_matching(self):
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind,
+                privacy_boundary
+            ) VALUES (
+                'other-out', 'profile-one', 'old',
+                '2020-02-01T00:00:00Z', '2020-02-01T00:00:00Z', 'outbound',
+                'BTC', ?, 0, 0, 0, '', 'coinjoin'
+            )
+            """,
+            (10 * BTC_MSAT,),
+        )
+
+        result, _ = custody_gaps.load_gap_search_result(
+            self.conn,
+            "profile-one",
+            ignored_transaction_ids=(),
+            accounting_ignored_transaction_ids=("out",),
+        )
+
+        self.assertIn(
+            ("out",),
+            {candidate.source_ids for candidate in result.candidates},
+        )
+        self.assertEqual(
+            {candidate.source_ids for candidate in result.accounting_candidates},
+            {("other-out",)},
+        )
+        self.assertTrue(result.accounting_candidates[0].promotion_eligible)
+
+    def test_review_recomputation_does_not_persist_projection_churn(self):
+        for index in range(12):
+            custody_gaps.load_gap_search_result(
+                self.conn,
+                "profile-one",
+                ignored_transaction_ids=(f"provisional-{index}",),
+            )
+
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM journal_custody_gap_inputs").fetchone()[0],
+            0,
+        )
+
+    def test_gap_candidates_have_no_persisted_page_index(self):
+        build_gap_snapshot(self.conn, "profile-one")
+        tables = {
+            row[0]
+            for row in self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        self.assertFalse(
+            {
+                "custody_gap_candidate_projections",
+                "custody_gap_candidates",
+                "custody_gap_candidate_boundaries",
+            }
+            & tables
+        )
 
     def test_book_above_50k_rows_still_surfaces_structured_boundary(self):
         self.conn.executemany(
@@ -1218,7 +1567,7 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         self.assertEqual(len(snapshot["gaps"]), 2)
         self.assertEqual({gap["status"] for gap in snapshot["gaps"]}, {"conflicting"})
 
-    def test_snapshot_pages_actionable_candidates_before_reviewed_rows(self):
+    def test_snapshot_pages_in_stable_normalized_projection_order(self):
         self.conn.execute(
             """
             INSERT INTO transactions(
@@ -1232,9 +1581,10 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             """,
             (99 * BTC_MSAT // 10,),
         )
-        candidates, _normalized = custody_gaps.load_gap_candidates(
+        result, _normalized = custody_gaps.load_gap_search_result(
             self.conn, "profile-one"
         )
+        candidates = list(result.candidates)
         actionable_id = candidates[-1].gap_id
 
         def review_state(_conn, candidate, _review):
@@ -1250,93 +1600,49 @@ class CustodyGapSnapshotTests(unittest.TestCase):
 
         self.assertEqual(snapshot["summary"]["needs_review"], 1)
         self.assertEqual(snapshot["summary"]["dismissed"], 1)
-        self.assertEqual(snapshot["gaps"][0]["gap_id"], actionable_id)
-        self.assertEqual(snapshot["gaps"][0]["status"], "needs_review")
+        self.assertEqual(snapshot["gaps"][0]["gap_id"], candidates[0].gap_id)
+        self.assertEqual(snapshot["gaps"][0]["status"], "dismissed")
 
-    def test_snapshot_cursor_reaches_every_actionable_gap_after_first_page(self):
-        actionable = [
-            {
-                "gap_id": f"gap-{index:03d}",
-                "status": "needs_review",
-                "asset": "BTC",
-                "residual_msat": BTC_MSAT,
-            }
-            for index in range(101)
-        ]
-        reviewed = [
-            {
-                "gap_id": f"reviewed-{index:03d}",
-                "status": "dismissed",
-                "asset": "BTC",
-                "residual_msat": 0,
-            }
-            for index in range(5)
-        ]
-        historical = [*reviewed, *actionable]
-        with (
-            patch(
-                "kassiber.core.custody_gaps.load_gap_candidates",
-                return_value=([], []),
-            ) as load_candidates,
-            patch(
-                "kassiber.core.custody_gap_reviews.latest_reviews",
-                return_value={},
-            ),
-            patch(
-                "kassiber.core.custody_gap_reviews.historical_review_gaps",
-                return_value=historical,
-            ),
-        ):
-            self.conn.commit()
-            first = build_gap_snapshot(self.conn, "profile-one", limit=100)
-            self.assertFalse(self.conn.in_transaction)
-            second = build_gap_snapshot(
-                self.conn,
-                "profile-one",
-                limit=100,
-                cursor=first["next_cursor"],
+    def test_snapshot_cursor_reaches_every_normalized_candidate(self):
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind
+            ) VALUES (
+                'competing-return', 'profile-one', 'new',
+                '2021-02-01T00:00:00Z', '2021-02-01T00:00:00Z', 'inbound',
+                'BTC', ?, 0, 0, 0, ''
             )
+            """,
+            (99 * BTC_MSAT // 10,),
+        )
+        self.conn.commit()
+        first = build_gap_snapshot(self.conn, "profile-one", limit=1)
+        second = build_gap_snapshot(
+            self.conn, "profile-one", limit=1, cursor=first["next_cursor"]
+        )
 
-        self.assertEqual(first["summary"]["total"], 106)
-        self.assertEqual(
-            [call.kwargs["limit"] for call in load_candidates.call_args_list],
-            [custody_gaps.DEFAULT_MAX_CANDIDATES],
-        )
-        self.assertEqual(first["summary"]["needs_review"], 101)
-        self.assertRegex(first["next_cursor"], r"^cg1\.[0-9a-f]{24}\.100$")
-        self.assertTrue(all(gap["status"] == "needs_review" for gap in first["gaps"]))
-        self.assertEqual(second["gaps"][0]["gap_id"], "gap-100")
-        self.assertEqual(
-            [gap["gap_id"] for gap in second["gaps"][1:]],
-            [f"reviewed-{index:03d}" for index in range(5)],
-        )
+        self.assertEqual(first["summary"]["total"], 2)
+        self.assertRegex(first["next_cursor"], r"^cgr3\.[A-Za-z0-9_-]+$")
+        self.assertNotEqual(first["gaps"][0]["gap_id"], second["gaps"][0]["gap_id"])
         self.assertIsNone(second["next_cursor"])
 
     def test_snapshot_cursor_expires_when_journal_input_changes(self):
-        historical = [
-            {
-                "gap_id": f"gap-{index}",
-                "status": "needs_review",
-                "asset": "BTC",
-                "residual_msat": 0,
-            }
-            for index in range(2)
-        ]
-        with (
-            patch(
-                "kassiber.core.custody_gaps.load_gap_candidates",
-                return_value=([], []),
-            ),
-            patch(
-                "kassiber.core.custody_gap_reviews.latest_reviews",
-                return_value={},
-            ),
-            patch(
-                "kassiber.core.custody_gap_reviews.historical_review_gaps",
-                return_value=historical,
-            ),
-        ):
-            first = build_gap_snapshot(self.conn, "profile-one", limit=1)
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind
+            ) VALUES (
+                'competing-return', 'profile-one', 'new',
+                '2021-02-01T00:00:00Z', '2021-02-01T00:00:00Z', 'inbound',
+                'BTC', ?, 0, 0, 0, ''
+            )
+            """,
+            (99 * BTC_MSAT // 10,),
+        )
+        first = build_gap_snapshot(self.conn, "profile-one", limit=1)
 
         self.conn.execute(
             "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
@@ -1350,6 +1656,29 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 cursor=first["next_cursor"],
             )
 
+    def test_recomputation_observes_evidence_changes_without_cache_identity(self):
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, profile_id, wallet_id, occurred_at, created_at, direction,
+                asset, amount, fee, amount_includes_fee, excluded, kind
+            ) VALUES (
+                'competing-return', 'profile-one', 'new',
+                '2021-02-01T00:00:00Z', '2021-02-01T00:00:00Z', 'inbound',
+                'BTC', ?, 0, 0, 0, ''
+            )
+            """,
+            (99 * BTC_MSAT // 10,),
+        )
+        first, _ = custody_gaps.load_gap_search_result(self.conn, "profile-one")
+
+        self.conn.execute(
+            "UPDATE transactions SET amount = amount - 1 WHERE id = 'return'"
+        )
+        second, _ = custody_gaps.load_gap_search_result(self.conn, "profile-one")
+
+        self.assertNotEqual(second.candidates, first.candidates)
+
     def test_snapshot_rejects_invalid_cursor(self):
         with self.assertRaisesRegex(ValueError, "cursor"):
             build_gap_snapshot(
@@ -1359,19 +1688,26 @@ class CustodyGapSnapshotTests(unittest.TestCase):
             )
 
     def test_snapshot_reports_capacity_limit_as_advisory_incomplete_search(self):
-        candidate = custody_gaps.load_gap_candidates(
+        result, _normalized = custody_gaps.load_gap_search_result(
             self.conn, "profile-one"
-        )[0][0]
-        limited = CustodyGapSearchLimitError(
-            "bounded advisory search reached capacity",
+        )
+        candidate = result.candidates[0]
+        limited = CustodyGapSearchResult(
+            candidates=(candidate,),
+            accounting_candidates=(),
+            search_complete=False,
+            message="bounded advisory search reached capacity",
             candidate_count=5_541,
             promotion_eligible_count=12,
             limit_kind="candidate_population",
-            partial_candidates=(candidate,),
+        )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile-one'"
         )
         with patch(
-            "kassiber.core.custody_gaps.load_gap_candidates",
-            side_effect=limited,
+            "kassiber.core.custody_gaps.search_custody_gap_candidates",
+            return_value=limited,
         ):
             snapshot = build_gap_snapshot(self.conn, "profile-one")
             found = custody_gaps.find_gap_candidate(
@@ -1386,7 +1722,6 @@ class CustodyGapSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["summary"]["search_candidate_count"], 5_541)
         self.assertEqual(snapshot["gaps"][0]["gap_id"], candidate.gap_id)
         self.assertEqual(found, candidate)
-        self.assertFalse(CustodyGapSearchLimitError("capacity").blocking)
 
     def test_stale_journal_entries_do_not_suppress_candidates(self):
         self.conn.executemany(

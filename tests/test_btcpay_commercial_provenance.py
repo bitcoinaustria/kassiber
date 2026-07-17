@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.core import commercial
+from kassiber.core.custody_review_terms import create_pair_review
 from kassiber.db import _migrate_attachment_table_shape, open_db
 from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
@@ -815,18 +816,23 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
                 'BTC', ?, 0, 'EUR', 'withdrawal', '{}', ?
             )
             """,
-            (-btcpay_to_msat("0.01000000"), now),
+            (btcpay_to_msat("0.01000000"), now),
         )
-        self.conn.execute(
-            """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, created_at
-            ) VALUES('pair-1', 'ws', 'prof', 'tx-out', 'tx', 'manual', 'carrying-value', ?)
-            """,
-            (now,),
+        create_pair_review(
+            self.conn,
+            workspace_id="ws",
+            profile=self.conn.execute(
+                "SELECT * FROM profiles WHERE id = 'prof'"
+            ).fetchone(),
+            out_row=self.conn.execute(
+                "SELECT * FROM transactions WHERE id = 'tx-out'"
+            ).fetchone(),
+            in_row=self.conn.execute(
+                "SELECT * FROM transactions WHERE id = 'tx'"
+            ).fetchone(),
+            kind="manual",
+            policy="carrying-value",
         )
-        self.conn.commit()
         with self.assertRaises(AppError):
             commercial.review_link(
                 self.conn,

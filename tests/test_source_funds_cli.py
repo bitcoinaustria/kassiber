@@ -489,6 +489,9 @@ class SourceFundsCliTest(unittest.TestCase):
             "--policy",
             "taxable",
         )
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         suggested = self.cli(
             "source-funds",
             "suggest",
@@ -499,8 +502,8 @@ class SourceFundsCliTest(unittest.TestCase):
         )
         methods = {row["method"] for row in suggested["data"]["links"]}
         self.assertNotIn("same_onchain_scope", methods)
-        self.assertIn("transaction_pair", methods)
-        self.assertTrue(any(row["link_type"] == "swap" for row in suggested["data"]["links"]))
+        self.assertIn("custody_component", methods)
+        self.assertTrue(any(row["link_type"] == "peg_in" for row in suggested["data"]["links"]))
 
         exchange_tx_id = self._tx_id("Exchange", "withdraw-1")
         cold_in_tx_id = self._tx_id("Cold", "withdraw-1")
@@ -1308,7 +1311,7 @@ class SourceFundsCliTest(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_assemble_builds_utxo_proven_chain_transitively(self):
+    def test_assemble_does_not_redetect_utxo_chain_transitively(self):
         self._seed_utxo_chain()
         target_id = self._tx_id("Chain B", self.T_TXID)
         result = self.cli(
@@ -1321,59 +1324,12 @@ class SourceFundsCliTest(unittest.TestCase):
             "--target-transaction",
             target_id,
         )["data"]
-        self.assertEqual(result["auto_reviewed"], 2)
-        # The same-txid leg hop may be claimed by same_onchain_scope (equally
-        # exact, runs first); the parent hop is only provable from the UTXO
-        # structure.
-        self.assertEqual(sum(result["methods"].values()), 2)
-        self.assertGreaterEqual(result["methods"].get("utxo_spend", 0), 1)
-        self.assertGreaterEqual(result["passes"], 2)
+        self.assertEqual(result["auto_reviewed"], 0)
+        self.assertEqual(result["methods"], {})
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
-        self.assertEqual({link["state"] for link in links}, {"reviewed"})
-        self.assertEqual({link["confidence"] for link in links}, {"exact"})
-        # Documenting the root source makes the whole chain exportable: the
-        # parent hop demands the gross 0.3 BTC input that fed the spend.
-        source = self.cli(
-            "source-funds",
-            "sources",
-            "create",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--type",
-            "fiat_purchase",
-            "--label",
-            "Chain root purchase",
-            "--asset",
-            "BTC",
-            "--amount",
-            "0.30000000",
-        )["data"]
-        self.cli(
-            "source-funds",
-            "links",
-            "create",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--from-source",
-            source["id"],
-            "--to-transaction",
-            self.P_TXID,
-            "--type",
-            "manual_source",
-            "--allocation-amount",
-            "0.30000000",
-            "--allocation-policy",
-            "explicit",
-        )
-        report = self._source_funds_report_for_target(target=target_id, amount="0.20000000")
-        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
-        self.assertEqual(len(report["flow_levels"]), 4)
+        self.assertEqual(links, [])
 
     def test_assemble_skips_ambiguous_owned_outpoints(self):
         self._seed_utxo_chain()
@@ -1430,11 +1386,8 @@ class SourceFundsCliTest(unittest.TestCase):
                 ),
             )
 
-    def test_assemble_multi_parent_consolidation_covers_exactly(self):
-        """Two parents feeding one spend must be sized as a group: per-edge
-        capping would over-cover the spend leg by the fee. The exact-sum
-        pro-rata proposal still needs review because Bitcoin does not identify
-        which parent paid the fee."""
+    def test_assemble_does_not_propose_imported_multi_parent_allocation(self):
+        """A raw multi-parent import cannot author reviewed custody lineage."""
         p1, p2, tt = "11" * 32, "22" * 32, "33" * 32
         self._init_default_workspace()
         self._write_csv(
@@ -1476,51 +1429,20 @@ class SourceFundsCliTest(unittest.TestCase):
             "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
             "--target-transaction", target_id,
         )["data"]
-        self.assertEqual(result["auto_reviewed"], 1)
+        self.assertEqual(result["auto_reviewed"], 0)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
-        parent_allocs = sorted(
-            link["allocation_amount"]
-            for link in links
-            if link["method"] == "utxo_spend" and link["to_transaction_id"] == self._tx_id("Multi A", tt)
-        )
-        # 0.799 split pro-rata over 0.3 + 0.5 contributed: exact-sum group sizing.
-        self.assertEqual(parent_allocs, [0.2996250, 0.4993750])
-        self.assertAlmostEqual(sum(parent_allocs), 0.799, places=8)
         parent_links = [
             link
             for link in links
-            if link["method"] == "utxo_spend"
+            if link["method"] == "custody_component"
             and link["to_transaction_id"] == self._tx_id("Multi A", tt)
         ]
-        self.assertTrue(all(link["confidence"] == "strong" for link in parent_links))
-        self.assertTrue(all(link["requires_review"] for link in parent_links))
-        for link in parent_links:
-            self.cli(
-                "source-funds", "links", "review",
-                "--workspace", "Sof", "--profile", "Default",
-                "--link", link["id"], "--state", "reviewed",
-                "--allocation-policy", "explicit",
-            )
-        source = self.cli(
-            "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
-            "--type", "fiat_purchase", "--label", "Multi root", "--asset", "BTC",
-            "--amount", "0.80000000",
-        )["data"]
-        for parent_txid, amount in ((p1, "0.30000000"), (p2, "0.50000000")):
-            self.cli(
-                "source-funds", "links", "create", "--workspace", "Sof", "--profile", "Default",
-                "--from-source", source["id"], "--to-transaction", parent_txid,
-                "--type", "manual_source", "--allocation-amount", amount,
-                "--allocation-policy", "explicit",
-            )
-        report = self._source_funds_report_for_target(target=target_id, amount="0.79900000")
-        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+        self.assertEqual(parent_links, [])
 
-    def test_assemble_apportions_shared_receive_across_spenders(self):
-        """A transaction funded by multiple owned wallets must not assign the
-        full received output to every spender wallet."""
+    def test_assemble_does_not_book_imported_utxo_guess_as_lineage(self):
+        """Imported UTXO hints do not bypass the journal authority boundary."""
         p1, p2, tt = "71" * 32, "72" * 32, "73" * 32
         self._init_default_workspace()
         self._write_csv(
@@ -1565,57 +1487,26 @@ class SourceFundsCliTest(unittest.TestCase):
             conn.close()
 
         target_id = self._tx_id("Shared C", tt)
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         result = self.cli(
             "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
             "--target-transaction", target_id,
         )["data"]
-        self.assertEqual(result["methods"].get("utxo_spend", 0), 2)
+        self.assertEqual(result["methods"].get("custody_component", 0), 0)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
         spend_rows = {self._tx_id("Shared A", tt), self._tx_id("Shared B", tt)}
-        target_allocs = sorted(
-            link["allocation_amount"]
-            for link in links
-            if link["method"] == "utxo_spend"
-            and link["from_transaction_id"] in spend_rows
-            and link["to_transaction_id"] == target_id
-        )
-        self.assertEqual(target_allocs, [0.2996250, 0.4993750])
-        self.assertAlmostEqual(sum(target_allocs), 0.799, places=8)
-        target_links = [
+        inferred = [
             link
             for link in links
-            if link["method"] == "utxo_spend"
+            if link["method"] == "custody_component"
             and link["from_transaction_id"] in spend_rows
             and link["to_transaction_id"] == target_id
         ]
-        self.assertTrue(all(link["confidence"] == "strong" for link in target_links))
-        self.assertTrue(all(link["requires_review"] for link in target_links))
-        for link in target_links:
-            self.cli(
-                "source-funds", "links", "review",
-                "--workspace", "Sof", "--profile", "Default",
-                "--link", link["id"], "--state", "reviewed",
-                "--allocation-policy", "explicit",
-            )
-
-        source = self.cli(
-            "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
-            "--type", "fiat_purchase", "--label", "Shared roots", "--asset", "BTC",
-            "--amount", "0.80000000",
-        )["data"]
-        for parent_txid, amount in ((p1, "0.30000000"), (p2, "0.50000000")):
-            self.cli(
-                "source-funds", "links", "create", "--workspace", "Sof", "--profile", "Default",
-                "--from-source", source["id"], "--to-transaction", parent_txid,
-                "--type", "manual_source", "--allocation-amount", amount,
-                "--allocation-policy", "explicit",
-            )
-        report = self._source_funds_report_for_target(target=target_id, amount="0.79900000")
-        blockers = {item["code"] for item in report["explain_gates"]["blockers"]}
-        self.assertNotIn("ambiguous_allocation", blockers)
-        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+        self.assertEqual(inferred, [])
 
     def test_multi_source_multi_destination_utxo_allocations_require_review(self):
         """Bitcoin inputs do not identify a source wallet for each output.
@@ -1686,103 +1577,23 @@ class SourceFundsCliTest(unittest.TestCase):
         suggested = self.cli(
             "source-funds", "suggest", "--workspace", "Sof", "--profile", "Default"
         )["data"]
-        self.assertGreaterEqual(suggested["inserted"], 4)
+        self.assertEqual(suggested["inserted"], 0)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
         spend_ids = {self._tx_id("Matrix A", tt), self._tx_id("Matrix B", tt)}
         destination_ids = {self._tx_id("Matrix C", tt), self._tx_id("Matrix D", tt)}
-        initial_c_links = [
-            link
-            for link in links
-            if link["method"] == "utxo_spend"
-            and link["from_transaction_id"] in spend_ids
-            and link["to_transaction_id"] == self._tx_id("Matrix C", tt)
-        ]
-        self.assertEqual(len(initial_c_links), 2)
-        self.assertTrue(all(link["confidence"] == "strong" for link in initial_c_links))
-        self.assertTrue(all(link["requires_review"] for link in initial_c_links))
-
-        # Discovering D later changes the live evidence into a genuine 2x2
-        # matrix. Bulk review must re-derive topology and refuse the now-stale
-        # exact C links even before suggestions are refreshed.
-        with self._db() as conn:
-            wallet_d = conn.execute(
-                "SELECT id, workspace_id, profile_id FROM wallets WHERE label = 'Matrix D'"
-            ).fetchone()
-            conn.execute(
-                """
-                INSERT INTO wallet_utxos(
-                    id, workspace_id, profile_id, wallet_id, chain, network,
-                    asset, amount, txid, vout, outpoint, confirmation_status,
-                    first_seen_at, last_seen_at
-                ) VALUES('utxo-matrix-d', ?, ?, ?, 'bitcoin', 'main', 'BTC', ?, ?, 1, ?,
-                         'confirmed', '2026-05-02T10:00:00Z', '2026-05-02T10:00:00Z')
-                """,
-                (
-                    wallet_d["workspace_id"],
-                    wallet_d["profile_id"],
-                    wallet_d["id"],
-                    30_000_000_000,
-                    tt,
-                    f"{tt}:1",
-                ),
-            )
-            conn.commit()
-
-        reviewed = self.cli(
-            "source-funds",
-            "links",
-            "bulk-review",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            self._tx_id("Matrix C", tt),
-        )["data"]
-        self.assertEqual(reviewed["reviewed"], 2)
-        self.assertEqual(reviewed["skipped"], 2)
-
-        refreshed = self.cli(
-            "source-funds", "suggest", "--workspace", "Sof", "--profile", "Default"
-        )["data"]
-        self.assertGreaterEqual(refreshed["inserted"], 4)
-        links_after_refresh = self.cli(
-            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
-        )["data"]
-        matrix_links = [
-            link
-            for link in links_after_refresh
-            if link["method"] == "utxo_spend"
-            and link["from_transaction_id"] in spend_ids
-            and link["to_transaction_id"] in destination_ids
-        ]
-        self.assertEqual(len(matrix_links), 4)
-        self.assertEqual(
-            sorted(link["allocation_amount_msat"] for link in matrix_links),
-            [12_000_000_000, 18_000_000_000, 28_000_000_000, 42_000_000_000],
+        self.assertFalse(
+            [
+                link
+                for link in links
+                if link["method"] == "custody_component"
+                and link["from_transaction_id"] in spend_ids
+                and link["to_transaction_id"] in destination_ids
+            ]
         )
-        self.assertTrue(all(link["confidence"] == "strong" for link in matrix_links))
-        self.assertTrue(all(link["requires_review"] for link in matrix_links))
-
-        strong_review = self.cli(
-            "source-funds",
-            "links",
-            "bulk-review",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            self._tx_id("Matrix D", tt),
-        )["data"]
-        self.assertEqual(strong_review["reviewed"], 0)
-        self.assertEqual(strong_review["skipped"], 2)
-
-    def test_assemble_apportions_split_receive_parent_requirements(self):
-        """A single spender funding multiple owned receive legs must split
-        its proof requirement across those children."""
+    def test_suggest_does_not_allocate_imported_fanout_outside_journal(self):
+        """Raw imported fan-out structure is not a booked lineage source."""
         p1, tt = "74" * 32, "75" * 32
         self._init_default_workspace()
         self._write_csv(
@@ -1830,28 +1641,21 @@ class SourceFundsCliTest(unittest.TestCase):
         suggested = self.cli(
             "source-funds", "suggest", "--workspace", "Sof", "--profile", "Default"
         )["data"]
-        self.assertGreaterEqual(suggested["inserted"], 3)
+        self.assertEqual(suggested["inserted"], 0)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
         spend_id = self._tx_id("Split A", tt)
-        by_target = {
-            link["to_transaction_id"]: link
+        inferred = [
+            link
             for link in links
-            if link["method"] == "utxo_spend"
+            if link["method"] == "custody_component"
             and link["from_transaction_id"] == spend_id
-        }
-        split_b = by_target[self._tx_id("Split B", tt)]
-        split_c = by_target[self._tx_id("Split C", tt)]
-        self.assertEqual(split_b["allocation_amount"], 0.6)
-        self.assertEqual(split_b["from_allocation_amount"], 0.6)
-        self.assertEqual(split_c["allocation_amount"], 0.4)
-        self.assertEqual(split_c["from_allocation_amount"], 0.4)
+        ]
+        self.assertEqual(inferred, [])
 
-    def test_assemble_resolves_through_net_zero_consolidation(self):
-        """An in-wallet consolidation nets to a 0-amount row that cannot carry
-        allocation demand; assembly must link its parents directly to the
-        following spend instead of producing unfixable 0-amount edges."""
+    def test_assemble_does_not_reconstruct_net_zero_consolidation(self):
+        """Imported consolidation structure remains outside booked lineage."""
         pp, cc, ss = "44" * 32, "55" * 32, "66" * 32
         self._init_default_workspace()
         self._write_csv(
@@ -1906,41 +1710,14 @@ class SourceFundsCliTest(unittest.TestCase):
             "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
             "--target-transaction", target_id,
         )["data"]
-        self.assertGreaterEqual(result["auto_reviewed"], 2)
+        self.assertEqual(result["auto_reviewed"], 0)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
-        cons_leg = self._tx_id("Cons A", cc)
-        self.assertFalse(
-            [link for link in links if cons_leg in (link["from_transaction_id"], link["to_transaction_id"])],
-            "net-zero consolidation leg must be bypassed, not linked",
-        )
-        parent_links = [
-            link
-            for link in links
-            if link["from_transaction_id"] == self._tx_id("Cons A", pp)
-            and link["to_transaction_id"] == self._tx_id("Cons A", ss)
-        ]
-        self.assertEqual(len(parent_links), 1)
-        self.assertEqual(parent_links[0]["state"], "reviewed")
-        self.assertIn("via in-wallet consolidation", parent_links[0]["explanation"])
-        source = self.cli(
-            "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
-            "--type", "fiat_purchase", "--label", "Cons root", "--asset", "BTC",
-            "--amount", "0.30000000",
-        )["data"]
-        self.cli(
-            "source-funds", "links", "create", "--workspace", "Sof", "--profile", "Default",
-            "--from-source", source["id"], "--to-transaction", pp,
-            "--type", "manual_source", "--allocation-amount", "0.30000000",
-            "--allocation-policy", "explicit",
-        )
-        report = self._source_funds_report_for_target(target=target_id, amount="0.25000000")
-        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+        self.assertEqual(links, [])
 
-    def test_assemble_resolves_through_owned_change_output(self):
-        """A spend from owned change must trace through the change tx inputs,
-        not cap source proof at the small external payment row."""
+    def test_assemble_does_not_reconstruct_imported_change_path(self):
+        """Imported change hints do not become booked lineage."""
         pp, cc, ss = "76" * 32, "77" * 32, "78" * 32
         self._init_default_workspace()
         self._write_csv(
@@ -1994,25 +1771,11 @@ class SourceFundsCliTest(unittest.TestCase):
             "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
             "--target-transaction", target_id,
         )["data"]
-        self.assertGreaterEqual(result["auto_reviewed"], 2)
+        self.assertEqual(result["auto_reviewed"], 0)
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
-        change_leg = self._tx_id("Change A", cc)
-        spend_leg = self._tx_id("Change A", ss)
-        self.assertFalse(
-            [link for link in links if link["from_transaction_id"] == change_leg and link["to_transaction_id"] == spend_leg],
-            "owned change must be a passthrough hop, not a small parent proof",
-        )
-        root_links = [
-            link
-            for link in links
-            if link["from_transaction_id"] == self._tx_id("Change A", pp)
-            and link["to_transaction_id"] == spend_leg
-        ]
-        self.assertEqual(len(root_links), 1)
-        self.assertEqual(root_links[0]["state"], "reviewed")
-        self.assertGreater(root_links[0]["from_allocation_amount"], 0.1)
+        self.assertEqual(links, [])
 
     def test_assemble_links_lightning_legs_by_payment_hash(self):
         self._init_default_workspace()
@@ -2050,6 +1813,9 @@ class SourceFundsCliTest(unittest.TestCase):
             conn.commit()
         finally:
             conn.close()
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         result = self.cli(
             "source-funds",
             "assemble",
@@ -2061,12 +1827,12 @@ class SourceFundsCliTest(unittest.TestCase):
             "ln-recv-1",
         )["data"]
         self.assertEqual(result["auto_reviewed"], 1)
-        self.assertEqual(result["methods"], {"payment_hash": 1})
+        self.assertEqual(result["methods"], {"custody_component": 1})
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
         self.assertEqual(len(links), 1)
-        self.assertEqual(links[0]["method"], "payment_hash")
+        self.assertEqual(links[0]["method"], "custody_component")
         self.assertEqual(links[0]["state"], "reviewed")
         self.assertEqual(links[0]["confidence"], "exact")
 
@@ -2221,9 +1987,9 @@ class SourceFundsCliTest(unittest.TestCase):
             "--target-transaction",
             in_leg,
         )["data"]
-        # Only the parent hop is added; the manually linked leg pair is not
-        # duplicated into a double allocation.
-        self.assertEqual(result["methods"], {"utxo_spend": 1})
+        # Source-funds does not reconstruct a parent hop; the explicit manual
+        # link remains the only authored path.
+        self.assertEqual(result["methods"], {})
         links = self.cli(
             "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
         )["data"]
@@ -2234,84 +2000,6 @@ class SourceFundsCliTest(unittest.TestCase):
         ]
         self.assertEqual(len(pair_links), 1)
         self.assertEqual(pair_links[0]["method"], "manual")
-
-    def test_bulk_review_skips_utxo_suggestion_when_inventory_changes(self):
-        self._seed_utxo_chain()
-        target_id = self._tx_id("Chain B", self.T_TXID)
-        suggested = self.cli(
-            "source-funds",
-            "suggest",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            target_id,
-        )["data"]
-        self.assertGreaterEqual(suggested["inserted"], 1)
-        conn = self._db()
-        try:
-            # Isolate the utxo_spend suggestions, then invalidate the
-            # evidence they were derived from.
-            conn.execute("DELETE FROM source_funds_links WHERE method != 'utxo_spend'")
-            conn.execute("DELETE FROM wallet_utxos")
-            conn.execute("UPDATE transactions SET raw_json = '{}'")
-            conn.commit()
-        finally:
-            conn.close()
-        result = self.cli(
-            "source-funds",
-            "links",
-            "bulk-review",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            # Scope to the spend leg: the surviving utxo_spend suggestion is
-            # the parent hop feeding it.
-            self._tx_id("Chain A", self.T_TXID),
-        )["data"]
-        self.assertEqual(result["reviewed"], 0)
-        self.assertGreaterEqual(result["skipped"], 1)
-
-    def test_bulk_review_skips_utxo_suggestion_when_allocation_changes(self):
-        self._seed_utxo_chain()
-        target_id = self._tx_id("Chain A", self.T_TXID)
-        suggested = self.cli(
-            "source-funds",
-            "suggest",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            target_id,
-        )["data"]
-        self.assertGreaterEqual(suggested["inserted"], 1)
-        conn = self._db()
-        try:
-            conn.execute("DELETE FROM source_funds_links WHERE method != 'utxo_spend'")
-            conn.execute(
-                "UPDATE wallet_utxos SET amount = ? WHERE txid = ? AND vout = 0",
-                (10_000_000_000, self.P_TXID),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-        result = self.cli(
-            "source-funds",
-            "links",
-            "bulk-review",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            target_id,
-        )["data"]
-        self.assertEqual(result["reviewed"], 0)
-        self.assertGreaterEqual(result["skipped"], 1)
 
     def test_wallet_data_provenance_mapping(self):
         from kassiber.core.source_funds import _wallet_data_provenance
@@ -4019,6 +3707,15 @@ class SourceFundsCliTest(unittest.TestCase):
                 f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
             )
             self._create_wallet_and_import(wallet, csv_name)
+        for prefix, txid in (("First", first_txid), ("Second", second_txid)):
+            self.cli(
+                "transfers", "pair", "--workspace", "Sof", "--profile", "Default",
+                "--tx-out", self._tx_id(f"{prefix} Out", txid),
+                "--tx-in", self._tx_id(f"{prefix} In", txid),
+            )
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")
         first_target = self._tx_id("First In", first_txid)
         second_target = self._tx_id("Second In", second_txid)
@@ -4039,61 +3736,6 @@ class SourceFundsCliTest(unittest.TestCase):
         second_link = next(link for link in links if link["to_transaction_id"] == second_target)
         self.assertEqual(first_link["state"], "reviewed")
         self.assertEqual(second_link["state"], "suggested")
-
-    def test_bulk_review_skips_same_onchain_scope_when_third_row_appears(self):
-        self._init_default_workspace()
-        txid = "33" * 32
-        for wallet, csv_name, direction in [
-            ("Pair Out", "stale-pair-out.csv", "outbound"),
-            ("Pair In", "stale-pair-in.csv", "inbound"),
-        ]:
-            self._write_csv(
-                csv_name,
-                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
-            )
-            self._create_wallet_and_import(wallet, csv_name)
-        target_id = self._tx_id("Pair In", txid)
-        suggested = self.cli(
-            "source-funds",
-            "suggest",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            target_id,
-        )["data"]["links"]
-        self.assertEqual(
-            len(
-                [
-                    link
-                    for link in suggested
-                    if link["method"] == "same_onchain_scope"
-                ]
-            ),
-            1,
-        )
-        self._write_csv(
-            "stale-third-in.csv",
-            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-            f"2026-03-01T09:05:00Z,{txid},inbound,BTC,0.10000000,0,50000,Third matching row\n",
-        )
-        self._create_wallet_and_import("Pair Third", "stale-third-in.csv")
-        reviewed = self.cli(
-            "source-funds",
-            "links",
-            "bulk-review",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            target_id,
-        )["data"]
-        self.assertEqual(reviewed["reviewed"], 0)
-        link = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"][0]
-        self.assertEqual(link["state"], "suggested")
 
     def test_arbitrary_shared_import_id_is_not_a_physical_link(self):
         self._init_default_workspace()
@@ -4123,7 +3765,7 @@ class SourceFundsCliTest(unittest.TestCase):
             [link for link in suggested if link["method"] == "same_onchain_scope"]
         )
 
-    def test_same_onchain_scope_partial_rows_stay_manual(self):
+    def test_partial_import_rows_do_not_create_booked_lineage(self):
         self._init_default_workspace()
         txid = "aa" * 32
         for wallet, csv_name, direction, amount in (
@@ -4148,10 +3790,9 @@ class SourceFundsCliTest(unittest.TestCase):
             "--target-transaction",
             target_id,
         )["data"]["links"]
-        link = next(
-            link for link in suggested if link["method"] == "same_onchain_scope"
+        self.assertFalse(
+            [link for link in suggested if link["method"] == "custody_component"]
         )
-        self.assertEqual(link["confidence"], "strong")
 
         reviewed = self.cli(
             "source-funds",
@@ -4165,62 +3806,7 @@ class SourceFundsCliTest(unittest.TestCase):
             target_id,
         )["data"]
         self.assertEqual(reviewed["reviewed"], 0)
-        self.assertEqual(reviewed["skipped"], 1)
-
-    def test_bulk_review_skips_transaction_pair_when_pair_row_deleted(self):
-        self._init_default_workspace()
-        for wallet, csv_name, txid, direction in [
-            ("Pair Out", "deleted-pair-out.csv", "deleted-pair-out", "outbound"),
-            ("Pair In", "deleted-pair-in.csv", "deleted-pair-in", "inbound"),
-        ]:
-            self._write_csv(
-                csv_name,
-                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
-            )
-            self._create_wallet_and_import(wallet, csv_name)
-        out_id = self._tx_id("Pair Out", "deleted-pair-out")
-        in_id = self._tx_id("Pair In", "deleted-pair-in")
-        self.cli(
-            "transfers",
-            "pair",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--tx-out",
-            out_id,
-            "--tx-in",
-            in_id,
-            "--kind",
-            "manual",
-            "--policy",
-            "carrying-value",
-        )
-        self.cli(
-            "source-funds",
-            "suggest",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            in_id,
-        )
-        with self._db() as conn:
-            conn.execute("DELETE FROM transaction_pairs")
-        reviewed = self.cli(
-            "source-funds",
-            "links",
-            "bulk-review",
-            "--workspace",
-            "Sof",
-            "--profile",
-            "Default",
-            "--target-transaction",
-            in_id,
-        )["data"]
-        self.assertEqual(reviewed["reviewed"], 0)
+        self.assertEqual(reviewed["skipped"], 0)
 
     def test_transaction_pair_suggestions_allocate_reused_outbound_leg(self):
         self._init_default_workspace()
@@ -4256,13 +3842,17 @@ class SourceFundsCliTest(unittest.TestCase):
                 "carrying-value",
             )
 
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")
         links = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"]
         pair_links = {
             link["to_transaction_id"]: link
             for link in links
-            if link["method"] == "transaction_pair"
+            if link["method"] == "custody_component"
         }
+        self.assertTrue(pair_links, links)
         self.assertEqual(pair_links[in_b_id]["allocation_amount"], 0.4)
         self.assertEqual(pair_links[in_b_id]["from_allocation_amount"], 0.4)
         self.assertEqual(pair_links[in_c_id]["allocation_amount"], 0.6)
@@ -4302,12 +3892,15 @@ class SourceFundsCliTest(unittest.TestCase):
                 "carrying-value",
             )
 
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")
         links = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"]
         pair_links = {
             link["from_transaction_id"]: link
             for link in links
-            if link["method"] == "transaction_pair"
+            if link["method"] == "custody_component"
         }
         self.assertEqual(pair_links[out_a_id]["allocation_amount"], 0.4)
         self.assertEqual(pair_links[out_a_id]["from_allocation_amount"], 0.4)
@@ -4348,6 +3941,9 @@ class SourceFundsCliTest(unittest.TestCase):
                 "carrying-value",
             )
         self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
+        self.cli(
             "source-funds",
             "suggest",
             "--workspace",
@@ -4362,7 +3958,7 @@ class SourceFundsCliTest(unittest.TestCase):
                 """
                 UPDATE source_funds_links
                 SET from_allocation_amount = ?
-                WHERE method = 'transaction_pair' AND to_transaction_id = ?
+                WHERE method = 'custody_component' AND to_transaction_id = ?
                 """,
                 (100_000_000_000, in_b_id),
             )
@@ -4397,6 +3993,15 @@ class SourceFundsCliTest(unittest.TestCase):
             self._create_wallet_and_import(wallet, csv_name)
         first_target = self._tx_id("First In", first_txid)
         second_target = self._tx_id("Second In", second_txid)
+        for prefix, txid in (("First", first_txid), ("Second", second_txid)):
+            self.cli(
+                "transfers", "pair", "--workspace", "Sof", "--profile", "Default",
+                "--tx-out", self._tx_id(f"{prefix} Out", txid),
+                "--tx-in", self._tx_id(f"{prefix} In", txid),
+            )
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         suggested = self.cli(
             "source-funds",
             "suggest",
@@ -4428,6 +4033,15 @@ class SourceFundsCliTest(unittest.TestCase):
                 f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
             )
             self._create_wallet_and_import(wallet, csv_name)
+        for prefix, txid in (("First", first_txid), ("Second", second_txid)):
+            self.cli(
+                "transfers", "pair", "--workspace", "Sof", "--profile", "Default",
+                "--tx-out", self._tx_id(f"{prefix} Out", txid),
+                "--tx-in", self._tx_id(f"{prefix} In", txid),
+            )
+        self.cli(
+            "journals", "process", "--workspace", "Sof", "--profile", "Default"
+        )
         error = self.cli_error(
             "source-funds",
             "suggest",

@@ -24,7 +24,7 @@ _MAX_REASON_CHARS = 500
 _PROPOSAL_KEYS = frozenset(
     {
         "gap_id",
-        "expected_fingerprint",
+        "expected_input_version",
         "reason",
         "classification",
         "economic_kind",
@@ -96,12 +96,14 @@ def append_assistance_record(
     model_packet = _bounded_proposal(model_proposal)
     final_packet = _bounded_proposal(final_proposal or model_proposal)
     user_edited = final_packet != model_packet
-    candidate_fingerprint = final_packet.get("expected_fingerprint")
+    candidate_fingerprint = None
+    input_version = final_packet.get("expected_input_version")
     gap_id = final_packet.get("gap_id")
     facts_packet = {
         "daemon_kind": daemon_kind,
         "gap_id": gap_id,
         "candidate_fingerprint": candidate_fingerprint,
+        "input_version": input_version,
         "proposal": final_packet,
     }
     result_packet = _bounded_result(result)

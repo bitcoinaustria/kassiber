@@ -147,8 +147,7 @@ export interface FiledReportImpactPreview {
 
 export interface BridgePreview {
   gap_id: string;
-  candidate_fingerprint: string;
-  authored_claim_fingerprint?: string;
+  input_version: number;
   dry_run: true;
   activatable: boolean;
   review_mode?: "structured_candidate" | "manual_weak_hint";
@@ -164,7 +163,7 @@ export interface BridgePreview {
 
 export interface GuidedCorrectionPreview {
   gap_id: string;
-  expected_fingerprint: string;
+  input_version: number;
   dry_run: true;
   requires_explicit_confirmation: true;
   activatable?: boolean;
@@ -188,14 +187,14 @@ export interface ResidualClassificationPreview extends GuidedCorrectionPreview {
 }
 
 export function bridgePreviewArgs(gapId: string) {
-  return { gap_id: gapId };
+  return { action: "create", gap_id: gapId };
 }
 
 export function bridgeCreateArgs(preview: BridgePreview) {
   return {
     gap_id: preview.gap_id,
-    expected_fingerprint:
-      preview.authored_claim_fingerprint ?? preview.candidate_fingerprint,
+    action: "create",
+    expected_input_version: preview.input_version,
   };
 }
 
@@ -205,7 +204,7 @@ function reasonArg(reason: string): { reason?: string } {
 }
 
 export function reopenPreviewArgs(gapId: string, reason: string) {
-  return { gap_id: gapId, ...reasonArg(reason) };
+  return { action: "reopen", gap_id: gapId, ...reasonArg(reason) };
 }
 
 export function reopenConfirmArgs(
@@ -214,13 +213,14 @@ export function reopenConfirmArgs(
 ) {
   return {
     gap_id: preview.gap_id,
-    expected_fingerprint: preview.expected_fingerprint,
+    action: "reopen",
+    expected_input_version: preview.input_version,
     ...reasonArg(reason),
   };
 }
 
 export function revisePreviewArgs(gapId: string, reason: string) {
-  return { gap_id: gapId, ...reasonArg(reason) };
+  return { action: "revise", gap_id: gapId, ...reasonArg(reason) };
 }
 
 export function reviseConfirmArgs(
@@ -229,7 +229,8 @@ export function reviseConfirmArgs(
 ) {
   return {
     gap_id: preview.gap_id,
-    expected_fingerprint: preview.expected_fingerprint,
+    action: "revise",
+    expected_input_version: preview.input_version,
     ...reasonArg(reason),
   };
 }
@@ -241,6 +242,7 @@ export function residualPreviewArgs(
 ) {
   return {
     gap_id: gapId,
+    action: "classify_residual",
     classification,
     ...reasonArg(reason),
   };
@@ -252,8 +254,9 @@ export function residualConfirmArgs(
 ) {
   return {
     gap_id: preview.gap_id,
+    action: "classify_residual",
     classification: preview.classification,
-    expected_fingerprint: preview.expected_fingerprint,
+    expected_input_version: preview.input_version,
     ...reasonArg(reason),
   };
 }

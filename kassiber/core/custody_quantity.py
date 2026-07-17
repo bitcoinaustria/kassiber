@@ -7,17 +7,17 @@ observed quantity go?  It deliberately has no SQLite or RP2 dependency.
 Imported transaction rows become content-addressed observations.  Interpreters
 may propose claims over half-open msat slices of an outbound observation.  One
 arbiter selects the strongest claim for every slice, fails closed on equal-rank
-overlap, prevents two sources from consuming the same inbound slice, and fills
-every unclaimed residual with custody suspense.
+overlap, prevents two sources from consuming the same inbound slice, and
+classifies unmatched outbound residuals directly as presumed external.
 
 The resulting postings preserve every observed wallet debit and credit even
 when no tax classification is final.  Their per-asset sum is always zero:
 
     observed wallets + external/origin + fees + suspense/conflict == 0
 
-This is the Gate-1 contract.  It is intentionally not wired into journals yet;
-the integration must replace RP2-derived quantity views rather than decorate
-or filter RP2 input rows.
+This is the Gate-1 contract consumed by the custody journal builder. RP2 and
+reporting receive only its finalized projection; unresolved slices remain
+outside tax inputs behind scoped barriers.
 """
 
 from __future__ import annotations
@@ -37,7 +37,6 @@ from .custody_evidence import (
     canonical_event_key,
     canonical_evidence_payload,
     canonical_quantity_payload,
-    observation_hash,
 )
 
 
@@ -45,7 +44,6 @@ INTERNAL_VERIFIED = "internal_verified"
 INTERNAL_REVIEWED = "internal_reviewed"
 EXTERNAL_CONFIRMED = "external_confirmed"
 EXTERNAL_PRESUMED = "external_presumed"
-CUSTODY_CANDIDATE = "custody_candidate"
 CUSTODY_SUSPENSE = "custody_suspense"
 CONFLICTING = "conflicting"
 
@@ -54,20 +52,14 @@ CLAIM_STATES = frozenset(
         INTERNAL_VERIFIED,
         INTERNAL_REVIEWED,
         EXTERNAL_CONFIRMED,
-        EXTERNAL_PRESUMED,
-        CUSTODY_CANDIDATE,
         CUSTODY_SUSPENSE,
     }
 )
 EXTERNAL_ECONOMIC_SUBTYPES = frozenset(
     {"payment", "disposal", "gift", "lost"}
 )
-TARGET_STATES = frozenset(
-    {INTERNAL_VERIFIED, INTERNAL_REVIEWED, CUSTODY_CANDIDATE}
-)
-UNRESOLVED_STATES = frozenset(
-    {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE, CONFLICTING}
-)
+TARGET_STATES = frozenset({INTERNAL_VERIFIED, INTERNAL_REVIEWED})
+UNRESOLVED_STATES = frozenset({CUSTODY_SUSPENSE, CONFLICTING})
 FINALIZED_STATES = frozenset(
     {
         INTERNAL_VERIFIED,
@@ -126,33 +118,24 @@ class ClaimPriority(IntEnum):
 
     REVIEWED_COMPONENT = 10
     EXACT_NATIVE_EVENT = 20
-    REVIEWED_PAIR = 30
     ACCOUNTING_CONVENTION = 40
-    HEURISTIC_CANDIDATE = 50
-    PRESUMED_EXTERNAL_FALLBACK = 60
 
 
 STATE_PRIORITIES = {
     INTERNAL_VERIFIED: frozenset({ClaimPriority.EXACT_NATIVE_EVENT}),
     INTERNAL_REVIEWED: frozenset(
-        {ClaimPriority.REVIEWED_COMPONENT, ClaimPriority.REVIEWED_PAIR}
+        {ClaimPriority.REVIEWED_COMPONENT}
     ),
     EXTERNAL_CONFIRMED: frozenset(
         {
             ClaimPriority.REVIEWED_COMPONENT,
             ClaimPriority.EXACT_NATIVE_EVENT,
-            ClaimPriority.REVIEWED_PAIR,
         }
     ),
-    EXTERNAL_PRESUMED: frozenset(
-        {ClaimPriority.PRESUMED_EXTERNAL_FALLBACK}
-    ),
-    CUSTODY_CANDIDATE: frozenset({ClaimPriority.HEURISTIC_CANDIDATE}),
     CUSTODY_SUSPENSE: frozenset(
         {
             ClaimPriority.REVIEWED_COMPONENT,
             ClaimPriority.EXACT_NATIVE_EVENT,
-            ClaimPriority.REVIEWED_PAIR,
             ClaimPriority.ACCOUNTING_CONVENTION,
         }
     ),
@@ -191,8 +174,6 @@ class QuantityClaim:
     priority: ClaimPriority
     reason: str
     target: QuantitySlice | None = None
-    supporting_evidence_hashes: tuple[str, ...] = ()
-    fallback: bool = False
     atomic_bundle_id: str | None = None
     destination_kind: str | None = None
     # Country-neutral economic meaning attached to an exact reviewed external
@@ -206,9 +187,6 @@ class QuantityClaim:
     # interpreter that has reviewed/native rail evidence.  Generic claims stay
     # rail-local even where the numerical amount happens to match.
     allow_cross_rail: bool = False
-    # Reviewed evidence is not silently priority-overridden.  A new claim may
-    # replace another active interpretation only by naming it explicitly.
-    supersedes_claim_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.claim_id or not self.reason:
@@ -237,14 +215,8 @@ class QuantityClaim:
             raise ValueError(f"{self.state} claims cannot consume a target slice")
         if self.target is not None and self.target.amount_msat != self.source.amount_msat:
             raise ValueError("source and target quantity slices must conserve exact msat")
-        if self.fallback and self.priority != ClaimPriority.PRESUMED_EXTERNAL_FALLBACK:
-            raise ValueError("fallback claims must use presumed-external fallback priority")
-        if self.state == EXTERNAL_PRESUMED and not self.fallback:
-            raise ValueError("external_presumed is only valid as an explicit fallback")
         if self.atomic_bundle_id is not None and not self.atomic_bundle_id.strip():
             raise ValueError("atomic_bundle_id cannot be empty")
-        if self.atomic_bundle_id is not None and self.fallback:
-            raise ValueError("presumed-external fallbacks cannot join atomic bundles")
         if self.destination_kind not in {
             None,
             "external",
@@ -282,8 +254,6 @@ class QuantityClaim:
             )
         if self.allow_cross_rail and self.target is None:
             raise ValueError("only target claims can bridge custody rails")
-        if any(not item for item in self.supersedes_claim_ids):
-            raise ValueError("superseded claim ids cannot be empty")
 
     @property
     def effective_bundle_id(self) -> str | None:
@@ -291,7 +261,6 @@ class QuantityClaim:
             return self.atomic_bundle_id
         if self.priority in {
             ClaimPriority.REVIEWED_COMPONENT,
-            ClaimPriority.REVIEWED_PAIR,
         }:
             return f"single:{self.claim_id}"
         return None
@@ -338,12 +307,6 @@ class QuantityProjection:
     postings: tuple[QuantityPosting, ...]
     claim_errors: tuple["QuantityClaimError", ...] = ()
 
-    def totals_by_asset(self) -> dict[str, int]:
-        totals: dict[str, int] = {}
-        for posting in self.postings:
-            totals[posting.asset] = totals.get(posting.asset, 0) + posting.amount_msat
-        return totals
-
     def totals_by_domain(self) -> dict[tuple[str, str, str], int]:
         """Return conservation totals independent of custody rail.
 
@@ -364,18 +327,6 @@ class QuantityProjection:
             totals[key] = totals.get(key, 0) + posting.amount_msat
         return totals
 
-    def unresolved_msat_by_asset(self) -> dict[str, int]:
-        totals: dict[str, int] = {}
-        by_hash = {item.quantity_hash: item for item in self.observations}
-        for decision in self.decisions:
-            if decision.state in UNRESOLVED_STATES:
-                observation = by_hash[decision.source.observation_hash]
-                totals[observation.asset] = (
-                    totals.get(observation.asset, 0) + decision.source.amount_msat
-                )
-        return totals
-
-
 @dataclass(frozen=True)
 class QuantityClaimError:
     """One rejected claim bundle, isolated from independent arbitration."""
@@ -384,6 +335,7 @@ class QuantityClaimError:
     reasons: tuple[str, ...]
     claim_ids: tuple[str, ...]
     source_observation_hashes: tuple[str, ...]
+    involved_observation_hashes: tuple[str, ...]
 
 
 def _validated_inputs(
@@ -455,6 +407,19 @@ def _validated_inputs(
                 reasons=tuple(sorted(reasons)),
                 claim_ids=tuple(sorted({claim.claim_id for claim in members})),
                 source_observation_hashes=tuple(sorted(source_hashes)),
+                involved_observation_hashes=tuple(
+                    sorted(
+                        {
+                            claim.source.observation_hash
+                            for claim in members
+                        }
+                        | {
+                            claim.target.observation_hash
+                            for claim in members
+                            if claim.target is not None
+                        }
+                    )
+                ),
             )
         )
         eligible_priorities = [
@@ -481,7 +446,6 @@ def _validated_inputs(
                 state=CUSTODY_SUSPENSE,
                 priority=priority,
                 reason="malformed_claim_bundle",
-                supporting_evidence_hashes=(source.evidence_detail_hash,),
             )
         )
     return (
@@ -505,18 +469,13 @@ def _source_decisions(
         key=lambda item: (item.occurred_at, item.quantity_hash),
     ):
         source_claims = claims_by_source.get(source.quantity_hash, [])
-        # The whole-row fallback remains available where a positive internal or
-        # external classification leaves a source slice unclaimed. Boundaries
-        # below split it around those stronger claims. A candidate or suspense
-        # claim is different: it positively says this source has unresolved
-        # custody history, so its uncovered remainder must stay suspense rather
-        # than silently reverting to presumed disposal.
-        if any(
-            not claim.fallback
-            and claim.state in {CUSTODY_CANDIDATE, CUSTODY_SUSPENSE}
-            for claim in source_claims
-        ):
-            source_claims = [claim for claim in source_claims if not claim.fallback]
+        # Unmatched source slices are presumed external directly. A positive
+        # suspense/hold claim says this boundary has unresolved custody history,
+        # so its uncovered remainder also stays suspense rather than silently
+        # becoming a disposal.
+        source_requires_suspense = any(
+            claim.state == CUSTODY_SUSPENSE for claim in source_claims
+        )
         boundaries = {0, source.principal_msat}
         for claim in source_claims:
             boundaries.update((claim.source.start_msat, claim.source.end_msat))
@@ -534,20 +493,28 @@ def _source_decisions(
                 decisions.append(
                     ArbitratedSlice(
                         source=segment,
-                        state=CUSTODY_SUSPENSE,
-                        reason="unclaimed_source_residual",
+                        state=(
+                            CUSTODY_SUSPENSE
+                            if source_requires_suspense
+                            else EXTERNAL_PRESUMED
+                        ),
+                        reason=(
+                            "unclaimed_source_residual"
+                            if source_requires_suspense
+                            else "unmatched_outbound_default"
+                        ),
                     )
                 )
                 continue
             # Any active reviewed/verified interpretations of the same source
             # slice must agree.  Evidence priority is an ordering aid, not a
             # permission to overwrite a different reviewed conclusion.  Exact
-            # semantic duplicates coalesce; a newer interpretation has to name
-            # the prior claim in ``supersedes_claim_ids``.
+            # semantic duplicates coalesce; incompatible reviewed/native
+            # interpretations always fail closed.
             authoritative = [
                 claim
                 for claim in contenders
-                if claim.priority <= ClaimPriority.REVIEWED_PAIR
+                if claim.priority <= ClaimPriority.EXACT_NATIVE_EVENT
             ]
             if authoritative:
                 def semantic_key(claim: QuantityClaim) -> tuple[object, ...]:
@@ -574,23 +541,15 @@ def _source_decisions(
                     by_semantics.setdefault(semantic_key(claim), []).append(claim)
                 if len(by_semantics) > 1:
                     active_ids = {claim.claim_id for claim in authoritative}
-                    superseders = [
-                        claim
-                        for claim in authoritative
-                        if active_ids - {claim.claim_id}
-                        <= set(claim.supersedes_claim_ids)
-                    ]
-                    if len(superseders) != 1:
-                        decisions.append(
-                            ArbitratedSlice(
-                                source=segment,
-                                state=CONFLICTING,
-                                reason="incompatible_reviewed_claims",
-                                contender_claim_ids=tuple(sorted(active_ids)),
-                            )
+                    decisions.append(
+                        ArbitratedSlice(
+                            source=segment,
+                            state=CONFLICTING,
+                            reason="incompatible_reviewed_claims",
+                            contender_claim_ids=tuple(sorted(active_ids)),
                         )
-                        continue
-                    contenders = [superseders[0]]
+                    )
+                    continue
             strongest = min(claim.priority for claim in contenders)
             winners = [claim for claim in contenders if claim.priority == strongest]
             if len(winners) != 1:
@@ -791,17 +750,8 @@ def _fail_closed_atomic_bundles(
 
 def _uncovered_inbound_slices(
     observation: QuantityObservation,
-    decisions: Sequence[ArbitratedSlice],
+    consumed: Sequence[QuantitySlice],
 ) -> list[QuantitySlice]:
-    consumed = sorted(
-        (
-            decision.target
-            for decision in decisions
-            if decision.target is not None
-            and decision.target.observation_hash == observation.quantity_hash
-        ),
-        key=lambda item: (item.start_msat, item.end_msat),
-    )
     uncovered: list[QuantitySlice] = []
     cursor = 0
     for item in consumed:
@@ -826,6 +776,7 @@ def _build_postings(
     decisions: Sequence[ArbitratedSlice],
 ) -> tuple[QuantityPosting, ...]:
     by_hash = {item.quantity_hash: item for item in observations}
+    targets_by_observation: dict[str, list[QuantitySlice]] = {}
     postings: list[QuantityPosting] = []
     for observation in sorted(observations, key=lambda item: item.quantity_hash):
         postings.append(
@@ -856,12 +807,14 @@ def _build_postings(
 
     for decision in decisions:
         if decision.target is not None:
+            targets_by_observation.setdefault(
+                decision.target.observation_hash, []
+            ).append(decision.target)
             continue
         source = by_hash[decision.source.observation_hash]
         location_kind = decision.destination_kind or {
             EXTERNAL_CONFIRMED: "external",
             EXTERNAL_PRESUMED: "external",
-            CUSTODY_CANDIDATE: "custody_candidate",
             CUSTODY_SUSPENSE: "custody_suspense",
             CONFLICTING: "conflicting",
         }.get(decision.state)
@@ -885,10 +838,16 @@ def _build_postings(
             )
         )
 
+    for targets in targets_by_observation.values():
+        targets.sort(key=lambda item: (item.start_msat, item.end_msat))
+
     for observation in observations:
         if observation.direction != "inbound":
             continue
-        for item in _uncovered_inbound_slices(observation, decisions):
+        for item in _uncovered_inbound_slices(
+            observation,
+            targets_by_observation.get(observation.quantity_hash, ()),
+        ):
             postings.append(
                 QuantityPosting(
                     posting_id=(
@@ -955,7 +914,6 @@ __all__ = [
     "CanonicalQuantityEvent",
     "CanonicalQuantityInput",
     "CONFLICTING",
-    "CUSTODY_CANDIDATE",
     "CUSTODY_SUSPENSE",
     "ClaimPriority",
     "EXTERNAL_CONFIRMED",
@@ -978,6 +936,5 @@ __all__ = [
     "canonical_event_key",
     "canonical_evidence_payload",
     "canonical_quantity_payload",
-    "observation_hash",
     "project_quantities",
 ]

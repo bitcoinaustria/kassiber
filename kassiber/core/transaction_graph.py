@@ -1,9 +1,9 @@
 """Curated transaction-flow graph payloads for the desktop detail view.
 
-The builder intentionally reuses the ownership-transfer parser/derivers for
-classification hints, but returns a UI-specific model. It never exposes raw
-transaction JSON, script hex, wallet configuration, descriptors, xpubs, backend
-URLs, or credentials.
+Physical input/output ownership comes from local observation evidence. Booked
+custody annotations come only from the current stored journal projection. The
+payload never exposes raw transaction JSON, script hex, wallet configuration,
+descriptors, xpubs, backend URLs, or credentials.
 """
 
 from __future__ import annotations
@@ -26,14 +26,13 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..time_utils import now_iso
-from ..transfers import detect_intra_transfers, normalize_group_txid
+from . import custody_journal
 from . import ownership as core_ownership
 from .ownership_transfers import (
     _norm_chain_network,
     _parse_onchain_tx,
-    derive_profile_transfers,
-    derive_recorded_fanout_transfers,
 )
+from .onchain import output_address, output_script, output_value_sats
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .sync_backends import (
@@ -145,7 +144,11 @@ def build_transaction_graph_snapshot(
 
     tx_meta = _transaction_meta(row, graph)
     tx_id = str(row["id"])
-    swap_route = _swap_route_for_row(conn, profile_id, row)
+    swap_route = (
+        _swap_route_for_row(conn, profile_id, row)
+        if semantics.get("projection_current")
+        else None
+    )
     return {
         "transaction": tx_meta,
         "supportLevel": graph["supportLevel"],
@@ -157,6 +160,9 @@ def build_transaction_graph_snapshot(
         "annotations": semantics["by_row"].get(tx_id, []),
         "accounting": {
             "quarantine": _quarantine(row),
+            "custodyProjection": (
+                "current" if semantics.get("projection_current") else "stale"
+            ),
             "linkedPairs": _linked_pairs_for_row(row, semantics),
             "transferGroupIds": sorted(
                 {
@@ -358,13 +364,7 @@ def _compute_profile_semantics(
     profile_rows = _load_profile_transaction_rows(conn, profile_id)
     wallet_refs_by_id = _wallet_refs_by_id(conn, profile_id)
     owned_index, index_warnings = _build_owned_index(conn, profile_id, profile_rows)
-    manual_pair_records = _active_pair_records(conn, profile_id)
-    semantics = _preview_ownership_semantics(
-        profile_rows,
-        owned_index,
-        wallet_refs_by_id,
-        manual_pair_records,
-    )
+    semantics = _stored_custody_semantics(conn, profile_id)
     return _ProfileSemantics(
         owned_index=owned_index,
         index_warnings=list(index_warnings),
@@ -385,6 +385,12 @@ def _profile_semantics_signature(
         """
         SELECT
             (SELECT journal_input_version FROM profiles WHERE id = :pid) AS version,
+            (SELECT last_processed_input_version FROM profiles WHERE id = :pid)
+                AS processed_version,
+            (SELECT last_processed_tx_count FROM profiles WHERE id = :pid)
+                AS processed_tx_count,
+            (SELECT COUNT(*) FROM transactions WHERE profile_id = :pid)
+                AS transaction_count,
             (SELECT COUNT(*) FROM wallets WHERE profile_id = :pid) AS wallets,
             u.cnt AS utxos,
             u.seen AS utxo_seen
@@ -397,10 +403,135 @@ def _profile_semantics_signature(
     ).fetchone()
     return (
         int(_row_get(row, "version") or 0),
+        int(_row_get(row, "processed_version") or 0),
+        int(_row_get(row, "processed_tx_count") or 0),
+        int(_row_get(row, "transaction_count") or 0),
         int(_row_get(row, "wallets") or 0),
         int(_row_get(row, "utxos") or 0),
         _row_get(row, "utxo_seen"),
     )
+
+
+def _stored_custody_semantics(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    """Project graph annotations only from the current stored journal seam."""
+
+    if not custody_journal.projection_freshness(conn, profile_id)["is_current"]:
+        return {
+            "by_row": {},
+            "linked_pairs": {},
+            "touched": set(),
+            "projection_current": False,
+        }
+    rows = conn.execute(
+        """
+        SELECT d.decision_id, d.source_transaction_id, d.target_transaction_id,
+               d.source_wallet_id, source_wallet.label AS source_wallet_label,
+               d.target_wallet_id, target_wallet.label AS target_wallet_label,
+               d.source_end_msat - d.source_start_msat AS amount_msat,
+               d.state, d.basis_state, d.reason, d.atomic_group_id,
+               d.component_id
+        FROM journal_custody_decisions d
+        LEFT JOIN wallets source_wallet ON source_wallet.id = d.source_wallet_id
+        LEFT JOIN wallets target_wallet ON target_wallet.id = d.target_wallet_id
+        WHERE d.profile_id = ?
+        ORDER BY d.occurred_at, d.decision_id
+        """,
+        (profile_id,),
+    ).fetchall()
+    by_row: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    linked_pairs: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    touched: set[str] = set()
+    for row in rows:
+        source_id = str(row["source_transaction_id"])
+        target_id = str(row["target_transaction_id"])
+        group_id = str(row["atomic_group_id"] or row["decision_id"])
+        annotation = {
+            "code": "booked_custody_move",
+            "label": "Booked custody move",
+            "severity": "info",
+            "groupId": f"custody-decision:{group_id}",
+            "outTransactionId": source_id,
+            "inTransactionId": target_id,
+            "amountMsat": int(row["amount_msat"]),
+            "amountBtc": _msat_to_btc(int(row["amount_msat"])),
+            "custodyState": row["state"],
+            "basisState": row["basis_state"],
+            "reason": row["reason"],
+            "componentId": row["component_id"],
+            "sourceWallet": row["source_wallet_label"],
+            "targetWallet": row["target_wallet_label"],
+            "booked": True,
+        }
+        for transaction_id in (source_id, target_id):
+            projected = {
+                key: value for key, value in annotation.items() if value is not None
+            }
+            by_row[transaction_id].append(projected)
+            linked_pairs[transaction_id].append(projected)
+            touched.add(transaction_id)
+    relation_rows = conn.execute(
+        """
+        SELECT id AS relation_id, relation_kind,
+               out_transaction_id AS source_transaction_id,
+               in_transaction_id AS target_transaction_id,
+               component_id, out_asset AS source_asset,
+               in_asset AS target_asset, out_amount AS source_amount_msat,
+               in_amount AS target_amount_msat, kind AS review_kind, policy,
+               basis_state
+        FROM journal_custody_projection_relations
+        WHERE profile_id = ?
+          AND relation_kind IN ('conversion', 'direct_payout')
+        ORDER BY occurred_at, id
+        """,
+        (profile_id,),
+    ).fetchall()
+    for row in relation_rows:
+        source_id = str(row["source_transaction_id"])
+        target_id = (
+            str(row["target_transaction_id"])
+            if row["target_transaction_id"] not in (None, "")
+            else None
+        )
+        annotation = {
+            "code": f"booked_custody_{row['relation_kind']}",
+            "label": (
+                "Booked custody conversion"
+                if row["relation_kind"] == "conversion"
+                else "Booked direct payout"
+            ),
+            "severity": "info",
+            "groupId": f"custody-relation:{row['relation_id']}",
+            "outTransactionId": source_id,
+            "inTransactionId": target_id,
+            "amountMsat": int(row["source_amount_msat"]),
+            "amountBtc": _msat_to_btc(int(row["source_amount_msat"])),
+            "targetAmountMsat": int(row["target_amount_msat"]),
+            "sourceAsset": row["source_asset"],
+            "targetAsset": row["target_asset"],
+            "basisState": row["basis_state"],
+            "policy": row["policy"],
+            "reviewKind": row["review_kind"],
+            "componentId": row["component_id"],
+            "booked": True,
+        }
+        for transaction_id in (source_id, target_id):
+            if transaction_id is None:
+                continue
+            projected = {
+                key: value for key, value in annotation.items() if value is not None
+            }
+            by_row[transaction_id].append(projected)
+            linked_pairs[transaction_id].append(projected)
+            touched.add(transaction_id)
+    return {
+        "by_row": dict(by_row),
+        "linked_pairs": dict(linked_pairs),
+        "touched": touched,
+        "projection_current": True,
+    }
 
 
 def _public_nodes_capped(nodes: Sequence[Mapping[str, Any]], side: str) -> list[dict[str, Any]]:
@@ -560,11 +691,11 @@ def _parse_graph(
             if local_value_sats is not None
             else None
             if value_hidden
-            else _value_sats_or_none(prevout.get("value"))
+            else output_value_sats(prevout)
         )
         if value_sats is None:
             input_value_complete = False
-        script = _script_from_prevout(prevout)
+        script = _string_or_none(output_script(prevout))
         inputs.append(
             {
                 "id": f"in-{index}",
@@ -572,7 +703,7 @@ def _parse_graph(
                 "outpoint": outpoint,
                 "txid": str(entry.get("txid") or "") or None,
                 "vout": _int_or_none(entry.get("vout")),
-                "address": _string_or_none(prevout.get("scriptpubkey_address")),
+                "address": output_address(prevout),
                 "scriptType": _script_type(prevout, script),
                 "valueSats": value_sats,
                 "valueBtc": _sats_to_btc(value_sats),
@@ -596,11 +727,11 @@ def _parse_graph(
             # is the fee, not an OP_RETURN/non-address output, and its amount is
             # public even when every other leg is confidential — so route its
             # value to the fee node and keep it out of the output strands.
-            fee_value = _value_sats_or_none(entry.get("value"))
+            fee_value = output_value_sats(entry)
             if fee_value is not None and fee_value >= 0:
                 liquid_fee_sats = (liquid_fee_sats or 0) + fee_value
             continue
-        script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+        script = _string_or_none(output_script(entry))
         n = _int_or_none(entry.get("n"))
         if n is None:
             n = index
@@ -612,7 +743,7 @@ def _parse_graph(
             if local_value_sats is not None
             else None
             if value_hidden
-            else _value_sats_or_none(entry.get("value"))
+            else output_value_sats(entry)
         )
         if value_sats is None:
             output_value_complete = False
@@ -621,7 +752,7 @@ def _parse_graph(
                 "id": f"out-{n}",
                 "index": n,
                 "outpoint": outpoint,
-                "address": _string_or_none(entry.get("scriptpubkey_address")),
+                "address": output_address(entry),
                 "scriptType": _script_type(entry, script),
                 "valueSats": value_sats,
                 "valueBtc": _sats_to_btc(value_sats),
@@ -1158,10 +1289,11 @@ def _can_lookup_public_bitcoin_prevouts(row: Mapping[str, Any], raw: Mapping[str
     return any(
         isinstance(entry, Mapping)
         and not _confidential_leg(entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {})
-        and _value_sats_or_none(
-            (entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {}).get("value")
-        )
-        is None
+        and output_value_sats(
+            entry.get("prevout")
+            if isinstance(entry.get("prevout"), Mapping)
+            else {}
+        ) is None
         for entry in vin
     )
 
@@ -1629,7 +1761,7 @@ def _attach_bitcoin_prevouts_from_cache_or_electrum(
             continue
         if isinstance(entry.get("prevout"), Mapping):
             prevout = entry["prevout"]
-            if _value_sats_or_none(prevout.get("value")) is not None or _confidential_leg(prevout):
+            if output_value_sats(prevout) is not None or _confidential_leg(prevout):
                 continue
         cached = _load_graph_lookup_cache(conn, chain, network, prev_txid)
         if cached is not None:
@@ -1738,12 +1870,10 @@ def _bitcoin_current_graph_has_required_prevouts(raw: Mapping[str, Any]) -> bool
         prevout = entry.get("prevout")
         if not isinstance(prevout, Mapping):
             return False
-        value_sats = _int_or_none(prevout.get("value_sats"))
-        if value_sats is None:
-            value_sats = _value_sats_or_none(prevout.get("value"))
+        value_sats = output_value_sats(prevout)
         if value_sats is None:
             return False
-        if _string_or_none(prevout.get("scriptpubkey") or prevout.get("script_hex")) is None:
+        if _string_or_none(output_script(prevout)) is None:
             return False
     return True
 
@@ -1783,12 +1913,10 @@ def _bitcoin_electrum_decoded_to_graph_raw(
         if n is None:
             n = index
         output: dict[str, Any] = {"n": n}
-        script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+        script = _string_or_none(output_script(entry))
         if script is not None:
             output["scriptpubkey"] = script
-        value_sats = _int_or_none(entry.get("value_sats"))
-        if value_sats is None:
-            value_sats = _value_sats_or_none(entry.get("value"))
+        value_sats = output_value_sats(entry)
         if value_sats is not None:
             output["value"] = value_sats
         raw["vout"].append(output)
@@ -1914,19 +2042,17 @@ def _sanitize_graph_value_script(
         n = _int_or_none(entry.get("n"))
         if n is not None:
             sanitized["n"] = n
-    script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+    script = _string_or_none(output_script(entry))
     if script is not None:
         sanitized["scriptpubkey"] = script
     script_type = _string_or_none(entry.get("scriptpubkey_type") or entry.get("type"))
     if script_type is not None:
         sanitized["scriptpubkey_type"] = script_type
-    address = _string_or_none(entry.get("scriptpubkey_address") or entry.get("address"))
+    address = output_address(entry)
     if address is not None:
         sanitized["scriptpubkey_address"] = address
     confidential = _confidential_leg(entry)
-    value_sats = _int_or_none(entry.get("value_sats"))
-    if value_sats is None:
-        value_sats = _value_sats_or_none(entry.get("value"))
+    value_sats = output_value_sats(entry)
     if confidential:
         sanitized["value_state"] = "confidential"
     elif chain == "liquid" and not _is_liquid_fee_output(sanitized | {"value": value_sats}):
@@ -1934,199 +2060,6 @@ def _sanitize_graph_value_script(
     elif value_sats is not None:
         sanitized["value"] = value_sats
     return sanitized
-
-
-def _preview_ownership_semantics(
-    rows: Sequence[Mapping[str, Any]],
-    owned_index: Any | None,
-    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
-    manual_pair_records: Sequence[Mapping[str, Any]] = (),
-) -> dict[str, Any]:
-    by_row: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    linked_pairs: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    working_rows: list[Mapping[str, Any]] = list(rows)
-    manual_pair_ids = _manual_pair_ids(manual_pair_records)
-    detected_pairs, _detected_ids = detect_intra_transfers(working_rows)
-    surviving_detected_pairs = [
-        pair
-        for pair in detected_pairs
-        if str(_row_get(pair.get("out"), "id")) not in manual_pair_ids
-        and str(_row_get(pair.get("in"), "id")) not in manual_pair_ids
-    ]
-    touched: set[str] = set(manual_pair_ids)
-    _record_detected_pairs(by_row, linked_pairs, touched, surviving_detected_pairs)
-
-    if owned_index is not None:
-        derivation = derive_profile_transfers(
-            working_rows,
-            index=owned_index,
-            wallet_refs_by_id=wallet_refs_by_id,
-            already_paired_ids=set(touched),
-        )
-        _record_result(
-            by_row,
-            linked_pairs,
-            touched,
-            derivation.consolidation,
-            "multi_source_consolidation",
-        )
-        _record_result(
-            by_row,
-            linked_pairs,
-            touched,
-            derivation.ownership,
-            "ownership_derived",
-        )
-        for blocked in derivation.ownership.blocked_sources:
-            row = blocked.get("row")
-            if row is None:
-                continue
-            row_id = str(_row_get(row, "id"))
-            by_row[row_id].append(
-                {
-                    "code": str(blocked.get("reason") or "ownership_transfer_blocked"),
-                    "label": _humanize_code(str(blocked.get("reason") or "ownership_transfer_blocked")),
-                    "severity": "warning",
-                    "detail": _safe_detail(blocked.get("detail")),
-                }
-            )
-        fanout = derivation.fanout
-    else:
-        fanout = derive_recorded_fanout_transfers(
-            working_rows,
-            already_paired_ids=set(touched),
-        )
-    _record_result(by_row, linked_pairs, touched, fanout, "recorded_fanout")
-    return {
-        "by_row": dict(by_row),
-        "linked_pairs": dict(linked_pairs),
-        "touched": touched,
-    }
-
-
-def _active_pair_records(conn: sqlite3.Connection, profile_id: str) -> list[sqlite3.Row]:
-    return conn.execute(
-        """
-        SELECT *
-        FROM transaction_pairs
-        WHERE profile_id = ?
-          AND deleted_at IS NULL
-        """,
-        (profile_id,),
-    ).fetchall()
-
-
-def _manual_pair_ids(manual_pair_records: Sequence[Mapping[str, Any]]) -> set[str]:
-    ids: set[str] = set()
-    for record in manual_pair_records:
-        out_id = _row_get(record, "out_transaction_id")
-        in_id = _row_get(record, "in_transaction_id")
-        if out_id:
-            ids.add(str(out_id))
-        if in_id:
-            ids.add(str(in_id))
-    return ids
-
-
-def _record_detected_pairs(
-    by_row: dict[str, list[dict[str, Any]]],
-    linked_pairs: dict[str, list[dict[str, Any]]],
-    touched: set[str],
-    pairs: Sequence[Mapping[str, Any]],
-) -> None:
-    for pair in pairs:
-        out_row = pair.get("out")
-        in_row = pair.get("in")
-        out_id = str(_row_get(out_row, "id") or "")
-        in_id = str(_row_get(in_row, "id") or "")
-        if not out_id or not in_id:
-            continue
-        external_id = _row_get(out_row, "external_id") or _row_get(in_row, "external_id") or ""
-        group_key = normalize_group_txid(str(external_id)) if external_id else out_id
-        annotation = {
-            "code": "recorded_self_transfer",
-            "label": _semantic_label("recorded_self_transfer"),
-            "severity": "info",
-            "groupId": f"recorded-self-transfer:{group_key}",
-            "outTransactionId": out_id,
-            "inTransactionId": in_id,
-            "amountMsat": int(_row_get(out_row, "amount") or 0),
-            "amountBtc": _msat_to_btc(int(_row_get(out_row, "amount") or 0)),
-        }
-        for row_id in {out_id, in_id}:
-            by_row[row_id].append(dict(annotation))
-            linked_pairs[row_id].append(dict(annotation))
-            touched.add(row_id)
-
-
-def _record_result(
-    by_row: dict[str, list[dict[str, Any]]],
-    linked_pairs: dict[str, list[dict[str, Any]]],
-    touched: set[str],
-    result: Any,
-    fallback_source: str,
-) -> None:
-    for row_id in getattr(result, "dropped_out_ids", set()):
-        by_row[str(row_id)].append(
-            {
-                "code": "dropped_recorded_outbound",
-                "label": "Recorded outbound replaced by derived transfer legs",
-                "severity": "info",
-            }
-        )
-        touched.add(str(row_id))
-    for row_id in getattr(result, "dropped_in_ids", set()):
-        by_row[str(row_id)].append(
-            {
-                "code": "dropped_recorded_destination_receipt",
-                "label": "Recorded destination receipt replaced by consolidation legs",
-                "severity": "info",
-            }
-        )
-        touched.add(str(row_id))
-    for row_id, override in getattr(result, "out_row_overrides", {}).items():
-        by_row[str(row_id)].append(
-            {
-                "code": "partial_external_residual",
-                "label": "Owned transfer plus external residual",
-                "severity": "info",
-                "residualMsat": int(_row_get(override, "amount") or 0),
-                "residualBtc": _msat_to_btc(int(_row_get(override, "amount") or 0)),
-            }
-        )
-        touched.add(str(row_id))
-
-    for pair in getattr(result, "derived_pairs", []):
-        source = str(pair.get("source") or fallback_source)
-        group_id = pair.get("group_id")
-        out_row = pair.get("out")
-        in_row = pair.get("in")
-        out_id = str(_row_get(out_row, "journal_transaction_id") or _row_get(out_row, "id"))
-        in_id = str(_row_get(in_row, "journal_transaction_id") or _row_get(in_row, "id"))
-        annotation = {
-            "code": source,
-            "label": _semantic_label(source),
-            "severity": "info",
-            "groupId": group_id,
-            "outTransactionId": out_id,
-            "inTransactionId": in_id,
-            "amountMsat": int(_row_get(out_row, "amount") or 0),
-            "amountBtc": _msat_to_btc(int(_row_get(out_row, "amount") or 0)),
-        }
-        for row_id in {out_id, in_id}:
-            by_row[row_id].append({k: v for k, v in annotation.items() if v is not None})
-            linked_pairs[row_id].append({k: v for k, v in annotation.items() if v is not None})
-            touched.add(row_id)
-        for blocked_row in pair.get("group_block_rows") or ():
-            blocked_id = str(_row_get(blocked_row, "id"))
-            by_row[blocked_id].append(
-                {
-                    "code": "derived_transfer_group_blocked_row",
-                    "label": "Recorded row belongs to this derived transfer group",
-                    "severity": "info",
-                    "groupId": group_id,
-                }
-            )
 
 
 def _annotate_graph(
@@ -2327,6 +2260,16 @@ def _transaction_meta(row: Mapping[str, Any], graph: Mapping[str, Any]) -> dict[
 
 def _warnings_for_row(row: Mapping[str, Any], semantics: Mapping[str, Any]) -> list[dict[str, Any]]:
     warnings: list[dict[str, Any]] = []
+    if not semantics.get("projection_current"):
+        warnings.append(
+            {
+                "code": "custody_projection_stale",
+                "level": "warning",
+                "message": (
+                    "Custody annotations are unavailable until journals are rebuilt."
+                ),
+            }
+        )
     for annotation in semantics.get("by_row", {}).get(str(_row_get(row, "id")), []):
         if annotation.get("severity") == "warning" or str(annotation.get("code", "")).endswith("ambiguous"):
             warnings.append(
@@ -2391,7 +2334,7 @@ def _swap_route_for_row(
             out_t.direction AS out_direction,
             out_t.asset AS out_asset,
             out_t.amount AS out_full_amount_msat,
-            COALESCE(p.out_amount, out_t.amount) AS out_amount_msat,
+            p.out_amount AS out_amount_msat,
             out_t.fee AS out_fee_msat,
             out_t.occurred_at AS out_occurred_at,
             out_t.confirmed_at AS out_confirmed_at,
@@ -2406,7 +2349,7 @@ def _swap_route_for_row(
             in_t.external_id AS in_external_id,
             in_t.direction AS in_direction,
             in_t.asset AS in_asset,
-            in_t.amount AS in_amount_msat,
+            p.in_amount AS in_amount_msat,
             in_t.fee AS in_fee_msat,
             in_t.occurred_at AS in_occurred_at,
             in_t.confirmed_at AS in_confirmed_at,
@@ -2417,13 +2360,13 @@ def _swap_route_for_row(
             in_w.id AS in_wallet_id,
             in_w.label AS in_wallet_label,
             in_w.kind AS in_wallet_kind
-        FROM transaction_pairs p
+        FROM journal_custody_projection_relations p
         JOIN transactions out_t ON out_t.id = p.out_transaction_id
         JOIN transactions in_t ON in_t.id = p.in_transaction_id
         JOIN wallets out_w ON out_w.id = out_t.wallet_id
         JOIN wallets in_w ON in_w.id = in_t.wallet_id
         WHERE p.profile_id = ?
-          AND p.deleted_at IS NULL
+          AND p.relation_kind IN ('move', 'conversion')
           AND (p.out_transaction_id = ? OR p.in_transaction_id = ?)
         ORDER BY p.created_at DESC, p.id DESC
         LIMIT 1
@@ -2679,10 +2622,6 @@ def _outpoint(entry: Mapping[str, Any]) -> str | None:
         return None
 
 
-def _script_from_prevout(prevout: Mapping[str, Any]) -> str | None:
-    return _string_or_none(prevout.get("scriptpubkey") or prevout.get("script_hex"))
-
-
 def _script_type(source: Mapping[str, Any], script: Any) -> str:
     explicit = _string_or_none(source.get("scriptpubkey_type") or source.get("type"))
     if explicit:
@@ -2894,34 +2833,6 @@ def _int_or_none(value: Any) -> int | None:
         return None
 
 
-def _value_sats_or_none(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        # On-chain JSON encodes integer sats as ints; a float (e.g. 0.005 or a
-        # round 1.0) always denotes a decimal-BTC amount, so scale to sats. Note
-        # `1.0` is BTC, not 1 sat — never short-circuit whole-number floats.
-        return int(round(value * 100_000_000))
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            if "." in text:
-                return int(round(float(text) * 100_000_000))
-            return int(text)
-        except ValueError:
-            return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _string_or_none(value: Any) -> str | None:
     if value is None:
         return None
@@ -2952,16 +2863,6 @@ def _node_annotation(code: str, label: str, group_id: Any = None) -> dict[str, A
     if group_id is not None:
         item["groupId"] = group_id
     return item
-
-
-def _semantic_label(source: str) -> str:
-    labels = {
-        "ownership_derived": "Ownership-derived transfer",
-        "recorded_self_transfer": "Recorded self-transfer",
-        "recorded_fanout": "Recorded fan-out transfer",
-        "multi_source_consolidation": "Multi-wallet consolidation",
-    }
-    return labels.get(source, _humanize_code(source))
 
 
 def _humanize_code(code: Any) -> str:

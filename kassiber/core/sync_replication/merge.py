@@ -68,7 +68,10 @@ _CUSTODY_COMPONENT_TABLES = frozenset(
         "custody_components",
         "custody_component_legs",
         "custody_component_allocations",
+        "custody_component_economic_terms",
         "custody_component_evidence_commitments",
+        "transaction_pairs",
+        "direct_swap_payouts",
     }
 )
 
@@ -2518,8 +2521,12 @@ def import_bundle(
             # drained events) so reordered headers/legs and concurrent active
             # revisions are evaluated atomically.  Invalid authored rows stay
             # visible but receive no effective membership.
+            from ..custody_authored_migration import (
+                refresh_legacy_authored_components,
+            )
             from ..custody_components import reconcile_active_memberships
 
+            refresh_legacy_authored_components(conn)
             reconcile_active_memberships(conn, profile_id=profile_id)
         if mutations or conflicts:
             invalidate_journals(conn, profile_id)

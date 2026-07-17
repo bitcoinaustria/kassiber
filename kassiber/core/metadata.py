@@ -178,34 +178,30 @@ def _guard_excluding_paired_leg(conn, profile_id, tx_id):
     The journal pipeline filters excluded rows but loads pair/payout records by
     ``deleted_at IS NULL`` only, so excluding one leg orphans the survivor into a
     phantom disposal (or a fresh-basis acquisition with the original basis lost).
-    Require the user to unpair / delete the payout first.
+    Require the user to reopen or supersede the authored review first.
     """
-    pair = conn.execute(
-        "SELECT id FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL "
-        "AND (out_transaction_id = ? OR in_transaction_id = ?) LIMIT 1",
-        (profile_id, tx_id, tx_id),
-    ).fetchone()
-    if pair:
-        pair_id = pair["id"] if hasattr(pair, "keys") else pair[0]
+    from . import custody_authored_migration
+
+    review = custody_authored_migration.find_active_review_for_transaction(
+        conn,
+        profile_id=profile_id,
+        transaction_id=tx_id,
+    )
+    if review:
+        review_id = review["id"]
         raise AppError(
-            f"Transaction is a leg of active pair {pair_id}; excluding it would "
-            f"orphan the other leg into a phantom journal entry.",
+            f"Transaction belongs to active custody review {review_id}; excluding "
+            "it would orphan reviewed custody evidence.",
             code="conflict",
-            hint=f"Unpair first: `kassiber transfers unpair --pair-id {pair_id}`.",
-            retryable=False,
-        )
-    payout = conn.execute(
-        "SELECT id FROM direct_swap_payouts WHERE profile_id = ? AND deleted_at IS NULL "
-        "AND out_transaction_id = ? LIMIT 1",
-        (profile_id, tx_id),
-    ).fetchone()
-    if payout:
-        payout_id = payout["id"] if hasattr(payout, "keys") else payout[0]
-        raise AppError(
-            f"Transaction has an active direct swap payout {payout_id}; excluding it "
-            f"would drop the payout's synthetic swap legs.",
-            code="conflict",
-            hint=f"Delete it first: `kassiber transfers payouts delete --payout-id {payout_id}`.",
+            hint=(
+                "Reopen or supersede the custody review before excluding this "
+                "transaction."
+            ),
+            details={
+                "review_id": review_id,
+                "component_id": review["component_id"],
+                "term_kind": review["term_kind"],
+            },
             retryable=False,
         )
 
