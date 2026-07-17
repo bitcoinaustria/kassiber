@@ -2594,13 +2594,23 @@ def sync_wallet(
         if not wallet_ref:
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
+    hooks = _wallet_sync_hooks(commit=False)
     if freshness_checkpoints is None:
+        checkpoint_wallets = [
+            wallet
+            for wallet in wallets
+            if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses)
+            == "backend"
+        ]
         freshness_checkpoints = (
             {}
             if force_full
-            else _stored_wallet_freshness_checkpoints(conn, profile["id"], wallets)
+            else _stored_wallet_freshness_checkpoints(
+                conn,
+                profile["id"],
+                checkpoint_wallets,
+            )
         )
-    hooks = _wallet_sync_hooks(commit=False)
     prefetched = _prefetch_chain_wallets(
         conn,
         runtime_config,
