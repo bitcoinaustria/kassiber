@@ -203,9 +203,12 @@ def _report_scope(value: Mapping[str, Any] | None) -> dict[str, Any]:
             continue
         timestamp = str(value[field]).strip()
         if len(timestamp) > 64 or not re.fullmatch(
-            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", timestamp
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", timestamp
         ):
-            raise _error(f"report_scope.{field} must be RFC3339 UTC", field=f"report_scope.{field}")
+            raise _error(
+                f"report_scope.{field} must use whole-second RFC3339 UTC",
+                field=f"report_scope.{field}",
+            )
         output[field] = timestamp
     start = output.get("occurred_at_start")
     end = output.get("occurred_at_end")
