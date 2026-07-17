@@ -206,6 +206,108 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_exact_native_pair_ignores_import_timestamp_skew(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = _book(root, "FIFO")
+            try:
+                native_txid = _prepare_same_txid_roll(conn)
+                conn.execute(
+                    "UPDATE transactions SET occurred_at = ? WHERE id = 'in'",
+                    ("2023-01-01T00:00:00Z",),
+                )
+                profile = conn.execute(
+                    "SELECT * FROM profiles WHERE id = 'profile'"
+                ).fetchone()
+                for wallet_id, direction in (("a", "outbound"), ("c", "inbound")):
+                    wallet = conn.execute(
+                        "SELECT * FROM wallets WHERE id = ?", (wallet_id,)
+                    ).fetchone()
+                    persist_chain_observation_provenance(
+                        conn,
+                        profile,
+                        wallet,
+                        application_revision=f"test:{wallet_id}",
+                        chain="bitcoin",
+                        network="main",
+                        entries=(
+                            {
+                                "external_id": native_txid,
+                                "asset": "BTC",
+                                "direction": direction,
+                                "observer_ids": [f"test-observer:{wallet_id}"],
+                                "observer_kinds": ["bdk"],
+                            },
+                        ),
+                    )
+
+                result = handlers.process_journals(conn, "Books", "Book")
+
+                self.assertFalse(result["custody_quantity"]["blocked"])
+                reasons = {
+                    row["reason"]
+                    for row in conn.execute(
+                        "SELECT reason FROM journal_quarantines"
+                    ).fetchall()
+                }
+                self.assertNotIn("transfer_pair_chronology_mismatch", reasons)
+            finally:
+                conn.close()
+
+    def test_exact_native_partial_fanout_books_residual_as_external(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = _book(root, "FIFO")
+            try:
+                native_txid = _prepare_same_txid_roll(conn)
+                conn.execute(
+                    "UPDATE transactions SET amount = ? WHERE id = 'in'",
+                    (9 * BTC,),
+                )
+                profile = conn.execute(
+                    "SELECT * FROM profiles WHERE id = 'profile'"
+                ).fetchone()
+                for wallet_id, direction in (("a", "outbound"), ("c", "inbound")):
+                    wallet = conn.execute(
+                        "SELECT * FROM wallets WHERE id = ?", (wallet_id,)
+                    ).fetchone()
+                    persist_chain_observation_provenance(
+                        conn,
+                        profile,
+                        wallet,
+                        application_revision=f"test:{wallet_id}",
+                        chain="bitcoin",
+                        network="main",
+                        entries=(
+                            {
+                                "external_id": native_txid,
+                                "asset": "BTC",
+                                "direction": direction,
+                                "observer_ids": [f"test-observer:{wallet_id}"],
+                                "observer_kinds": ["bdk"],
+                            },
+                        ),
+                    )
+
+                result = handlers.process_journals(conn, "Books", "Book")
+
+                self.assertFalse(result["custody_quantity"]["blocked"])
+                reasons = {
+                    row["reason"]
+                    for row in conn.execute(
+                        "SELECT reason FROM journal_quarantines"
+                    ).fetchall()
+                }
+                self.assertNotIn("transfer_fee_implausible", reasons)
+                entry_types = {
+                    row["entry_type"]
+                    for row in conn.execute(
+                        "SELECT entry_type FROM journal_entries WHERE transaction_id = 'out'"
+                    ).fetchall()
+                }
+                self.assertIn("transfer_out", entry_types)
+                self.assertIn("disposal", entry_types)
+            finally:
+                conn.close()
+
     def test_promoted_gap_is_force_blocked_before_rp2_and_reported(self):
         with tempfile.TemporaryDirectory() as root:
             conn = _book(root, "FIFO")

@@ -96,6 +96,21 @@ def _pair_source(pair: Mapping[str, Any]) -> str:
     return str(_field(pair, "source") or _field(pair, "pair_source") or "")
 
 
+def _is_exact_native_pair(
+    source: QuantityObservation,
+    target: QuantityObservation,
+) -> bool:
+    """Return whether both legs prove one canonical chain event."""
+
+    return bool(
+        source.authoritative_chain_observation
+        and target.authoritative_chain_observation
+        and source.event_key == target.event_key
+        and source.event_key.native_namespace == "chain"
+        and source.event_key.chain in {"bitcoin", "liquid"}
+    )
+
+
 def _is_exact_recorded_pair(
     pair: Mapping[str, Any],
     out_row: Mapping[str, Any],
@@ -113,11 +128,7 @@ def _is_exact_recorded_pair(
     source_name = _pair_source(pair)
     if source_name == "row_matched":
         return bool(
-            source.authoritative_chain_observation
-            and target.authoritative_chain_observation
-            and source.event_key == target.event_key
-            and source.event_key.native_namespace == "chain"
-            and source.event_key.chain in {"bitcoin", "liquid"}
+            _is_exact_native_pair(source, target)
             and source.wallet_id != target.wallet_id
         )
     if source_name != "lightning_payment_hash":
@@ -314,11 +325,7 @@ def _exact_native_pair_ids(
             or target is None
             or source.direction != "outbound"
             or target.direction != "inbound"
-            or not source.authoritative_chain_observation
-            or not target.authoritative_chain_observation
-            or source.event_key != target.event_key
-            or source.event_key.native_namespace != "chain"
-            or source.event_key.chain not in {"bitcoin", "liquid"}
+            or not _is_exact_native_pair(source, target)
         ):
             continue
         resolved.update((out_id, in_id))
@@ -505,13 +512,7 @@ def _pair_claims(
         if source.direction != "outbound" or target.direction != "inbound":
             continue
         source_name = _pair_source(pair)
-        exact_native_pair = (
-            source.authoritative_chain_observation
-            and target.authoritative_chain_observation
-            and source.event_key == target.event_key
-            and source.event_key.native_namespace == "chain"
-            and source.event_key.chain in {"bitcoin", "liquid"}
-        )
+        exact_native_pair = _is_exact_native_pair(source, target)
         exact_recorded_pair = _is_exact_recorded_pair(
             pair, out_row, in_row, source, target
         )
@@ -585,7 +586,8 @@ def _pair_claims(
         source_when = parse_iso_datetime_or_none(source.occurred_at)
         target_when = parse_iso_datetime_or_none(target.occurred_at)
         if (
-            source_when is not None
+            not exact_native_pair
+            and source_when is not None
             and target_when is not None
             and source_when
             > target_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
@@ -708,7 +710,8 @@ def _pair_claims(
         unclaimed_after_pair = available_source - amount_msat - inferred_fee_msat
         fee_tolerance_msat = max(source.principal_msat // 100, 2_500_000)
         if (
-            not bool(_field(pair, "allow_unclaimed_residual", False))
+            not exact_native_pair
+            and not bool(_field(pair, "allow_unclaimed_residual", False))
             and source_last_ordinal.get(out_id) == ordinal
             and unclaimed_after_pair > fee_tolerance_msat
         ):
