@@ -6415,6 +6415,11 @@ def _unreviewed_swap_candidate_blocker(
             rows,
             pair_records=pair_records,
             dismissals=dismissals,
+            booked_move_transaction_ids=(
+                core_custody_journal.stored_move_transaction_ids(
+                    conn, str(profile["id"])
+                )
+            ),
         )
         if _swap_candidate_blocks_reports(candidate)
     ]

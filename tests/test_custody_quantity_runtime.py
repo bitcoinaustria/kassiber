@@ -4,6 +4,7 @@ import sqlite3
 import unittest
 
 from kassiber.core.custody_evidence import EvidenceSnapshot
+from kassiber.core import custody_journal
 from kassiber.core.custody_gap_reviews import candidate_fingerprint
 from kassiber.core.custody_gaps import (
     CustodyGapSearchResult,
@@ -1990,6 +1991,24 @@ class CustodyQuantityStoreTests(unittest.TestCase):
         )
 
         self.assertEqual(counts["decisions"], 2)
+        self.conn.execute(
+            "UPDATE profiles SET last_processed_at = 'rebuilt', "
+            "last_processed_tx_count = 3, "
+            "last_processed_input_version = journal_input_version "
+            "WHERE id = 'profile'"
+        )
+        self.assertEqual(
+            custody_journal.stored_move_transaction_ids(self.conn, "profile"),
+            {"source", "target-reviewed", "target-verified"},
+        )
+        self.conn.execute(
+            "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+            "WHERE id = 'profile'"
+        )
+        self.assertEqual(
+            custody_journal.stored_move_transaction_ids(self.conn, "profile"),
+            set(),
+        )
         private_rows = self.conn.execute(
             """
             SELECT source_observation_hash, source_start_msat, source_end_msat,

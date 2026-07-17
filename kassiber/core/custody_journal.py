@@ -127,6 +127,35 @@ def projection_freshness(
     return evaluate_projection_freshness(profile, active_count)
 
 
+def stored_move_transaction_ids(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> set[str]:
+    """Return anchors booked as MOVE only from a current projection."""
+
+    if not projection_freshness(conn, profile_id)["is_current"]:
+        return set()
+    rows = conn.execute(
+        """
+        SELECT source_transaction_id, target_transaction_id
+        FROM journal_custody_decisions
+        WHERE profile_id = ?
+          AND state IN ('internal_verified', 'internal_reviewed')
+          AND target_transaction_id IS NOT NULL
+        """,
+        (profile_id,),
+    ).fetchall()
+    return {
+        str(transaction_id)
+        for row in rows
+        for transaction_id in (
+            row["source_transaction_id"],
+            row["target_transaction_id"],
+        )
+        if transaction_id not in (None, "")
+    }
+
+
 def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any]:
     """Return the latest usable transaction-derived rate for each asset."""
 

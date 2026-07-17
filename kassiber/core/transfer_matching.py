@@ -72,7 +72,6 @@ from .htlc_parser import (
     extract_from_claim_witness,
     refund_funding_outpoint_from_tx_mapping,
 )
-from .onchain import exact_onchain_fee_msat_from_observations
 
 
 # Compatibility exports for callers/UI routing. The canonical sets live next to
@@ -186,6 +185,7 @@ def suggest_swap_candidates(
     *,
     pair_records: Iterable[Mapping] = (),
     dismissals: Iterable[Mapping] = (),
+    booked_move_transaction_ids: Iterable[str] = (),
     time_window_seconds: int = DEFAULT_TIME_WINDOW_SECONDS,
     fee_pct_max: float = DEFAULT_FEE_PCT_MAX,
     fee_sats_min: int = DEFAULT_FEE_SATS_MIN,
@@ -207,6 +207,8 @@ def suggest_swap_candidates(
             ``out_transaction_id``, ``in_transaction_id``, ``expires_at``.
             A dismissal that has not yet expired (relative to ``now_iso``)
             suppresses that exact pair.
+        booked_move_transaction_ids: Transaction anchors already carried by a
+            current stored custody MOVE. These rows are not swap candidates.
         time_window_seconds: Maximum seconds between out and in
             ``occurred_at`` for the heuristic to consider them.
         fee_pct_max: Maximum fractional fee tolerance for the heuristic.
@@ -230,21 +232,18 @@ def suggest_swap_candidates(
     # edge to exact on the next run.
     population_rows = _select_eligible_rows(rows, set())
     eligible_rows = _select_eligible_rows(rows, paired_ids)
-    # Deterministic suppression mirrors the journal's fixed safety ceiling.
-    # Caller flags widen only heuristic generation; they must never hide a row
-    # that the journal still quarantines with the default ceiling.
-    deterministic_transfer_ids = _deterministic_self_transfer_ids(population_rows)
+    booked_move_ids = set(booked_move_transaction_ids)
     out_rows = [
         row
         for row in eligible_rows
         if row["direction"] == "outbound"
-        and _record_get(row, "id") not in deterministic_transfer_ids
+        and _record_get(row, "id") not in booked_move_ids
     ]
     in_rows = [
         row
         for row in eligible_rows
         if row["direction"] == "inbound"
-        and _record_get(row, "id") not in deterministic_transfer_ids
+        and _record_get(row, "id") not in booked_move_ids
     ]
 
     population_out_rows = [
@@ -542,116 +541,6 @@ def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list
             continue
         eligible.append(row)
     return eligible
-
-
-def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
-    """Return row ids that are already proven same-chain self-transfers.
-
-    The swap review queue is for ambiguous layer hops. One outbound and one or
-    more inbound rows in one canonical chain/network/txid/asset scope, across
-    owned wallets, are the conservative on-chain self-transfer shapes
-    used by the journal pipeline. The conserving 1->N shape is suppressed as one
-    group so its largest leg cannot leak back as a strong heuristic candidate.
-
-    A non-fee-inclusive row reports its network/routing fee separately. Therefore
-    any positive ``out_amount - in_amount`` is unallocated principal, not a fee;
-    it stays visible for component review. Net-delta rows may suppress a gap only
-    when a complete valued graph proves that exact network fee.
-    """
-    grouped: dict[tuple[str, str, str, str], list[Mapping]] = {}
-    for row in rows:
-        scope = onchain_transfer_scope(row)
-        if scope is None:
-            continue
-        grouped.setdefault(scope, []).append(row)
-
-    deterministic_ids: set[object] = set()
-    for group in grouped.values():
-        outs = [
-            row
-            for row in group
-            if _record_get(row, "direction") == "outbound"
-            and int(_record_get(row, "amount") or 0) > 0
-        ]
-        ins = [
-            row
-            for row in group
-            if _record_get(row, "direction") == "inbound"
-            and int(_record_get(row, "amount") or 0) > 0
-        ]
-        if len(outs) != 1 or not ins:
-            continue
-        out_row = outs[0]
-        out_wallet_id = _record_get(out_row, "wallet_id")
-        if any(out_wallet_id == _record_get(in_row, "wallet_id") for in_row in ins):
-            continue
-        out_amount = int(_record_get(out_row, "amount") or 0)
-        in_amount = sum(int(_record_get(in_row, "amount") or 0) for in_row in ins)
-        if in_amount > out_amount:
-            continue
-        gap_msat = out_amount - in_amount
-        if _record_get(out_row, "amount_includes_fee") and gap_msat > 0:
-            exact_fee_msat = exact_onchain_fee_msat_from_observations(
-                [_record_get(row, "raw_json") for row in group],
-                asset=str(_record_get(out_row, "asset") or ""),
-            )
-            if exact_fee_msat != gap_msat:
-                # A net wallet delta can include a recipient/payment as well as
-                # the miner fee.  Without a complete valued graph, this is not a
-                # deterministic MOVE and must remain visible for review.
-                continue
-        elif gap_msat > 0:
-            # The explicit fee column already accounts for network/routing cost.
-            # This remaining principal delta is an external payment or a missing
-            # wallet leg until an authored custody component proves otherwise.
-            continue
-        deterministic_ids.add(_record_get(out_row, "id"))
-        deterministic_ids.update(_record_get(in_row, "id") for in_row in ins)
-
-    # Mirror of the journal's Lightning payment-hash pass
-    # (transfers.detect_intra_transfers): an own-node payment whose hash
-    # matches another owned node's invoice is netted as a MOVE by the journal,
-    # so it must not surface as an exact payment_hash swap candidate. ONLY
-    # node-sourced hashes qualify — a chain_script HTLC hash (reverse swap
-    # claim) is swap evidence and stays reviewable.
-    by_hash: dict[tuple[str, str, str], list[Mapping]] = {}
-    for row in rows:
-        if _record_get(row, "id") in deterministic_ids:
-            continue
-        payment_hash = _normalized_payment_hash(_record_get(row, "payment_hash"))
-        if not payment_hash:
-            continue
-        if not is_lightning_payment_hash_row(row):
-            continue
-        network_domain = bitcoin_network_domain(row)
-        if network_domain is None:
-            continue
-        by_hash.setdefault(
-            (payment_hash, _record_get(row, "asset"), network_domain), []
-        ).append(row)
-    for group in by_hash.values():
-        outs = [
-            row
-            for row in group
-            if _record_get(row, "direction") == "outbound"
-            and int(_record_get(row, "amount") or 0) > 0
-        ]
-        ins = [
-            row
-            for row in group
-            if _record_get(row, "direction") == "inbound"
-            and int(_record_get(row, "amount") or 0) > 0
-        ]
-        if len(outs) != 1 or len(ins) != 1:
-            continue
-        out_row, in_row = outs[0], ins[0]
-        if int(_record_get(out_row, "amount") or 0) != int(
-            _record_get(in_row, "amount") or 0
-        ):
-            continue
-        deterministic_ids.add(_record_get(out_row, "id"))
-        deterministic_ids.add(_record_get(in_row, "id"))
-    return deterministic_ids
 
 
 def _match_by_payment_hash(

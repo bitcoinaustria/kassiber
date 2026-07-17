@@ -856,6 +856,9 @@ def suggest_transfer_candidates(
         rows,
         pair_records=pair_records,
         dismissals=dismissals,
+        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
+            conn, profile["id"]
+        ),
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
@@ -956,6 +959,9 @@ def bulk_pair_transfers(
         rows,
         pair_records=pair_records,
         dismissals=dismissals,
+        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
+            conn, profile["id"]
+        ),
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
@@ -1049,6 +1055,9 @@ def apply_transfer_rules(
         rows,
         pair_records=pair_records,
         dismissals=dismissals,
+        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
+            conn, profile["id"]
+        ),
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
