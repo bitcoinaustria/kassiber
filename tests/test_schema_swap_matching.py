@@ -35,6 +35,7 @@ from kassiber.cli.handlers import (
     list_transaction_pairs,
     update_transaction_pair,
 )
+from kassiber.core import custody_review_terms
 from kassiber.core.reports import _swap_fee_summary_rows
 from kassiber.db import ensure_schema_compat, open_db
 
@@ -676,7 +677,7 @@ class FreshSchemaTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_explicit_partial_conversion_retains_unconverted_source_quantity(self):
+    def test_partial_conversion_claims_only_explicit_source_quantity(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)
             try:
@@ -702,12 +703,18 @@ class FreshSchemaTests(unittest.TestCase):
                     amount_msat=60_000,
                 )
 
-                pair = create_transaction_pair(
+                pair = custody_review_terms.create_pair_review(
                     conn,
-                    workspace_id,
-                    profile_id,
-                    "tx-out",
-                    "tx-in",
+                    workspace_id=workspace_id,
+                    profile=conn.execute(
+                        "SELECT * FROM profiles WHERE id = ?", (profile_id,)
+                    ).fetchone(),
+                    out_row=conn.execute(
+                        "SELECT * FROM transactions WHERE id = 'tx-out'"
+                    ).fetchone(),
+                    in_row=conn.execute(
+                        "SELECT * FROM transactions WHERE id = 'tx-in'"
+                    ).fetchone(),
                     out_amount="0.00000060",
                 )
                 legs = conn.execute(
@@ -719,9 +726,8 @@ class FreshSchemaTests(unittest.TestCase):
                 self.assertEqual(
                     [(row["role"], row["asset"], row["amount_msat"]) for row in legs],
                     [
-                        ("source", "BTC", 100_000),
+                        ("source", "BTC", 60_000),
                         ("destination", "LBTC", 60_000),
-                        ("retained", "BTC", 40_000),
                     ],
                 )
                 self.assertEqual(
@@ -730,7 +736,7 @@ class FreshSchemaTests(unittest.TestCase):
                         "WHERE component_id = ?",
                         (pair["component_id"],),
                     ).fetchone()[0],
-                    100_000,
+                    60_000,
                 )
             finally:
                 conn.close()

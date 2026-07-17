@@ -39,9 +39,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
-from ..core.custody_evidence import (
-    row_principal_msat,
-)
+from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
 from ..core import imports as core_imports
@@ -116,15 +114,11 @@ from ..tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
     DEFAULT_TAX_COUNTRY,
     build_tax_policy,
-    cross_asset_carrying_value_supported,
     recommended_pair_policy,
     require_tax_country_supported_for_profile_mutation,
     require_tax_processing_supported,
 )
-from ..transfers import (
-    bitcoin_network_domain_evidence,
-    profile_bitcoin_rail_carrying_value,
-)
+from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
@@ -411,269 +405,10 @@ def _journals_current_for_profile(conn, profile):
 
 
 BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
-    "chain-swap",
-    "peg-in",
-    "peg-out",
-    "reverse-submarine-swap",
-    "submarine-swap",
-    "swap-refund",
+    core_custody_review_terms.BITCOIN_LAYER_TRANSITION_PAIR_KINDS
 )
-TRANSFER_PAIR_KINDS = (
-    "manual",
-    "coinjoin",
-    "whirlpool",
-    *BITCOIN_LAYER_TRANSITION_PAIR_KINDS,
-)
-TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
-DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
-REUSABLE_SAME_ASSET_PAIR_KINDS = ("manual", "coinjoin", "whirlpool")
-
-
-_PAIR_SOURCE_VALUES = ("manual", "bulk_exact", "bulk_selected", "rule_auto")
-
-
-def _pair_stores_swap_fee(out_row, in_row, kind):
-    if out_row["asset"] != in_row["asset"]:
-        return True
-    return kind in BITCOIN_LAYER_TRANSITION_PAIR_KINDS
-
-
-def _pair_allows_leg_reuse(out_asset, in_asset, kind, policy):
-    return (
-        str(out_asset).upper() == str(in_asset).upper()
-        and policy == "carrying-value"
-        and kind in REUSABLE_SAME_ASSET_PAIR_KINDS
-    )
-
-
-def _active_pairs_reusing_leg(
-    conn,
-    profile_id,
-    out_transaction_id,
-    in_transaction_id,
-    *,
-    exclude_pair_id=None,
-    review_refs=None,
-):
-    refs = review_refs
-    if refs is None:
-        refs = core_custody_authored_migration.list_active_review_refs(
-            conn,
-            profile_id=profile_id,
-        )
-    return [
-        row
-        for row in refs
-        if row["term_kind"] == "transaction_pair"
-        and row["id"] != exclude_pair_id
-        and (
-            row["out_transaction_id"] == out_transaction_id
-            or row["in_transaction_id"] == in_transaction_id
-        )
-    ]
-
-
-def _reject_disallowed_leg_reuse(
-    conn,
-    profile_id,
-    out_transaction_id,
-    in_transaction_id,
-    out_asset,
-    in_asset,
-    kind,
-    policy,
-    *,
-    exclude_pair_id=None,
-    review_refs=None,
-):
-    new_pair_allows_reuse = _pair_allows_leg_reuse(out_asset, in_asset, kind, policy)
-    for existing_pair in _active_pairs_reusing_leg(
-        conn,
-        profile_id,
-        out_transaction_id,
-        in_transaction_id,
-        exclude_pair_id=exclude_pair_id,
-        review_refs=review_refs,
-    ):
-        existing_pair_allows_reuse = _pair_allows_leg_reuse(
-            existing_pair["out_asset"],
-            existing_pair["in_asset"],
-            existing_pair["kind"],
-            existing_pair["policy"],
-        )
-        if not (new_pair_allows_reuse and existing_pair_allows_reuse):
-            _raise_leg_reuse_conflict(existing_pair, out_transaction_id)
-
-
-def _raise_leg_reuse_conflict(existing_pair, out_transaction_id):
-    reused_leg = (
-        "--tx-out"
-        if existing_pair["out_transaction_id"] == out_transaction_id
-        else "--tx-in"
-    )
-    raise AppError(
-        f"{reused_leg} already belongs to active pair id={existing_pair['id']}. "
-        "Only same-asset manual, coinjoin, or whirlpool carrying-value links "
-        "may reuse a transaction leg; cross-asset and layer-transition pairs "
-        "must remain one-to-one.",
-        code="conflict",
-        hint=f"Unpair `{existing_pair['id']}` first, or use a same-asset privacy/manual pair kind.",
-    )
-
-
-def _review_ref_uses_transaction(review, transaction_ids):
-    return bool(
-        {
-            review.get("out_transaction_id"),
-            review.get("in_transaction_id"),
-        }
-        & set(transaction_ids)
-    )
-
-
-def _raise_non_pair_review_conflict(review):
-    review_id = review["id"]
-    if review["term_kind"] == "direct_swap_payout":
-        raise AppError(
-            "One of the transactions already has an active direct swap payout "
-            f"(id={review_id}). Delete that payout review before pairing.",
-            code="conflict",
-            hint=(
-                "Run `kassiber transfers payouts delete --payout-id "
-                f"{review_id}` first."
-            ),
-        )
-    raise AppError(
-        "One of the transactions belongs to active custody component "
-        f"{review['component_id']}.",
-        code="conflict",
-        hint="Reopen or supersede that custody review before creating a pair.",
-        details={"component_id": review["component_id"]},
-    )
-
-
-def _pair_to_dict(row):
-    keys = set(row.keys()) if hasattr(row, "keys") else set()
-    swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
-    swap_fee_kind = row["swap_fee_kind"] if "swap_fee_kind" in keys else None
-    confidence_at_pair = row["confidence_at_pair"] if "confidence_at_pair" in keys else None
-    pair_source = row["pair_source"] if "pair_source" in keys else None
-    deleted_at = row["deleted_at"] if "deleted_at" in keys else None
-    out_amount = row["out_amount"] if "out_amount" in keys else None
-    return {
-        "id": row["id"],
-        "component_id": row["component_id"] if "component_id" in keys else None,
-        "workspace_id": row["workspace_id"],
-        "profile_id": row["profile_id"],
-        "out_transaction_id": row["out_transaction_id"],
-        "in_transaction_id": row["in_transaction_id"],
-        "kind": row["kind"],
-        "policy": row["policy"],
-        "notes": row["notes"],
-        "swap_fee_msat": int(swap_fee_msat) if swap_fee_msat is not None else None,
-        "swap_fee_kind": swap_fee_kind,
-        "confidence_at_pair": confidence_at_pair,
-        "pair_source": pair_source,
-        "out_amount": int(out_amount) if out_amount is not None else None,
-        "deleted_at": deleted_at,
-        "created_at": row["created_at"],
-    }
-
-
-def _direct_payout_to_dict(row):
-    keys = set(row.keys()) if hasattr(row, "keys") else set()
-    payout_fiat_value = row["payout_fiat_value"] if "payout_fiat_value" in keys else None
-    swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
-    out_amount = row["out_amount"] if "out_amount" in keys else None
-    return {
-        "id": row["id"],
-        "component_id": row["component_id"] if "component_id" in keys else None,
-        "workspace_id": row["workspace_id"],
-        "profile_id": row["profile_id"],
-        "out_transaction_id": row["out_transaction_id"],
-        "kind": row["kind"],
-        "policy": row["policy"],
-        "payout_asset": row["payout_asset"],
-        "payout_amount": float(msat_to_btc(row["payout_amount"])),
-        "payout_amount_msat": int(row["payout_amount"]),
-        "payout_occurred_at": row["payout_occurred_at"],
-        "payout_fiat_value": float(payout_fiat_value) if payout_fiat_value is not None else None,
-        "payout_external_id": row["payout_external_id"],
-        "counterparty": row["counterparty"],
-        "notes": row["notes"],
-        "swap_fee_msat": int(swap_fee_msat) if swap_fee_msat is not None else None,
-        "swap_fee_kind": row["swap_fee_kind"],
-        "out_amount": int(out_amount) if out_amount is not None else None,
-        "deleted_at": row["deleted_at"],
-        "created_at": row["created_at"],
-    }
-
-
-def _positive_btc_amount_msat(value, flag_name):
-    amount = dec(value)
-    if amount <= 0:
-        raise AppError(f"{flag_name} must be positive", code="validation")
-    return btc_to_msat(amount)
-
-
-def _transaction_pair_identity_row(conn, row):
-    """Attach wallet rail metadata used by country-neutral identity checks."""
-
-    payload = dict(row)
-    wallet = conn.execute(
-        "SELECT kind, config_json FROM wallets WHERE id = ?",
-        (row["wallet_id"],),
-    ).fetchone()
-    if wallet is not None:
-        payload["wallet_kind"] = wallet["kind"]
-        payload["config_json"] = wallet["config_json"]
-    return payload
-
-
-def _validate_carrying_pair_network(conn, out_row, in_row, policy):
-    """Never carry basis between two known, incompatible Bitcoin networks."""
-
-    if policy != "carrying-value":
-        return
-    out_domain, out_valid = bitcoin_network_domain_evidence(
-        _transaction_pair_identity_row(conn, out_row)
-    )
-    in_domain, in_valid = bitcoin_network_domain_evidence(
-        _transaction_pair_identity_row(conn, in_row)
-    )
-    if not out_valid or not in_valid:
-        raise AppError(
-            "A carrying-value pair has contradictory Bitcoin network metadata.",
-            code="transfer_network_mismatch",
-            hint=(
-                "Correct the wallet/transaction chain and network metadata "
-                "before pairing; conflicting observations cannot carry basis."
-            ),
-            details={
-                "out_transaction_id": out_row["id"],
-                "in_transaction_id": in_row["id"],
-                "out_network_valid": out_valid,
-                "in_network_valid": in_valid,
-            },
-        )
-    if out_domain is None or in_domain is None or out_domain == in_domain:
-        return
-    raise AppError(
-        "A carrying-value pair cannot cross Bitcoin network boundaries "
-        f"({out_domain} -> {in_domain}).",
-        code="transfer_network_mismatch",
-        hint=(
-            "Correct the wallet/transaction network metadata or leave these "
-            "transactions unpaired; mainnet, testnet, signet, and regtest are "
-            "distinct physical value domains."
-        ),
-        details={
-            "out_transaction_id": out_row["id"],
-            "in_transaction_id": in_row["id"],
-            "out_network_domain": out_domain,
-            "in_network_domain": in_domain,
-        },
-    )
+TRANSFER_PAIR_KINDS = core_custody_review_terms.TRANSFER_PAIR_KINDS
+TRANSFER_PAIR_POLICIES = core_custody_review_terms.TRANSFER_PAIR_POLICIES
 
 
 def create_transaction_pair(
@@ -693,150 +428,25 @@ def create_transaction_pair(
     authored_source="cli",
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    if kind not in TRANSFER_PAIR_KINDS:
-        raise AppError(
-            f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
-            code="validation",
-        )
-    if policy is not None and policy not in TRANSFER_PAIR_POLICIES:
-        raise AppError(
-            f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
-            code="validation",
-        )
-    if pair_source not in _PAIR_SOURCE_VALUES:
-        raise AppError(
-            f"Unsupported pair_source '{pair_source}'. Supported: {', '.join(_PAIR_SOURCE_VALUES)}",
-            code="validation",
-        )
-    out_row = resolve_transaction(conn, profile["id"], out_ref, direction="outbound")
-    in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
-    if out_row["id"] == in_row["id"]:
-        raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
-    if policy is None:
-        policy = (
-            "carrying-value"
-            if str(out_row["asset"]).upper() == str(in_row["asset"]).upper()
-            else recommended_pair_policy(profile, out_row["asset"], in_row["asset"])
-        )
-    _validate_carrying_pair_network(conn, out_row, in_row, policy)
-    if out_row["asset"] == in_row["asset"] and policy == "taxable":
-        raise AppError(
-            f"Same-asset taxable pairs are not supported yet "
-            f"(asset={out_row['asset']}). Leave the legs unpaired to keep "
-            f"normal SELL + BUY treatment, or use --policy carrying-value "
-            f"for a self-transfer.",
-            code="validation",
-            hint="Re-run with --policy carrying-value, or omit the pair entirely to preserve taxable SELL + BUY behavior.",
-        )
-    if out_row["asset"] != in_row["asset"] and policy == "carrying-value":
-        tax_country = str(profile["tax_country"] or "").strip().lower()
-        if not cross_asset_carrying_value_supported(tax_country, out_row["asset"], in_row["asset"]):
-            raise AppError(
-                f"Cross-asset carrying-value pairs are only supported for Austrian profiles "
-                f"or BTC/LBTC rail swaps right now "
-                f"(out={out_row['asset']}, in={in_row['asset']}). "
-                f"Use --policy taxable for other cross-asset swaps.",
-                code="validation",
-                hint="Re-run with --policy taxable, or pair only BTC/LBTC rail changes as carrying-value outside Austrian profiles.",
-            )
-    out_amount_msat = None
-    if out_amount is not None:
-        if out_row["asset"] == in_row["asset"]:
-            raise AppError(
-                "--out-amount only applies to cross-asset swap pairs: it is the "
-                "portion of the outbound that was swapped, with the remainder "
-                "treated as a same-asset self-transfer.",
-                code="validation",
-            )
-        out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
-        full_out_msat = row_principal_msat(out_row)
-        if out_amount_msat > full_out_msat:
-            raise AppError(
-                f"--out-amount exceeds the outbound amount "
-                f"({out_amount_msat} > {full_out_msat} msat).",
-                code="validation",
-            )
-    review_refs = core_custody_authored_migration.list_active_review_refs(
+    return core_custody_review_terms.create_pair_review(
         conn,
-        profile_id=profile["id"],
-    )
-    existing = next(
-        (
-            row
-            for row in review_refs
-            if row["term_kind"] == "transaction_pair"
-            and row["out_transaction_id"] == out_row["id"]
-            and row["in_transaction_id"] == in_row["id"]
-        ),
-        None,
-    )
-    if existing:
-        raise AppError(
-            f"Those transactions are already paired (pair id={existing['id']}). "
-            f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
-            code="conflict",
-        )
-    conflicting_review = next(
-        (
-            row
-            for row in review_refs
-            if row["term_kind"] != "transaction_pair"
-            and _review_ref_uses_transaction(
-                row,
-                {out_row["id"], in_row["id"]},
-            )
-        ),
-        None,
-    )
-    if conflicting_review:
-        _raise_non_pair_review_conflict(conflicting_review)
-    _reject_disallowed_leg_reuse(
-        conn,
-        profile["id"],
-        out_row["id"],
-        in_row["id"],
-        out_row["asset"],
-        in_row["asset"],
-        kind,
-        policy,
-        review_refs=review_refs,
-    )
-    if _pair_stores_swap_fee(out_row, in_row, kind):
-        # On a split pair only the swapped portion (`out_amount`) crosses to the
-        # other asset, so the persisted swap fee must be measured against that,
-        # not the full outbound (the remainder is a same-asset self-transfer).
-        split_pair = out_amount_msat is not None
-        swap_fee_out_msat = out_amount_msat if split_pair else int(out_row["amount"] or 0)
-        swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-            swap_fee_out_msat,
-            int(in_row["amount"] or 0),
-            _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
-        )
-    else:
-        swap_fee_msat, swap_fee_kind = None, None
-    pair_id = str(uuid.uuid4())
-    pair_row = core_custody_authored_migration.create_pair_review_component(
-        conn,
-        review_id=pair_id,
         workspace_id=workspace["id"],
-        profile_id=profile["id"],
-        out_transaction_id=out_row["id"],
-        in_transaction_id=in_row["id"],
+        profile=profile,
+        out_row=resolve_transaction(
+            conn, profile["id"], out_ref, direction="outbound"
+        ),
+        in_row=resolve_transaction(
+            conn, profile["id"], in_ref, direction="inbound"
+        ),
         kind=kind,
         policy=policy,
         notes=notes,
-        swap_fee_msat=swap_fee_msat,
-        swap_fee_kind=swap_fee_kind,
-        confidence_at_pair=confidence_at_pair,
         pair_source=pair_source,
-        out_amount_msat=out_amount_msat,
-        created_at=now_iso(),
+        confidence_at_pair=confidence_at_pair,
+        out_amount=out_amount,
+        commit=commit,
         authored_source=authored_source,
     )
-    invalidate_journals(conn, profile["id"])
-    if commit:
-        conn.commit()
-    return _pair_to_dict(pair_row)
 
 
 def create_direct_swap_payout(
@@ -858,232 +468,55 @@ def create_direct_swap_payout(
     authored_source="cli",
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    if kind not in DIRECT_SWAP_PAYOUT_KINDS:
-        raise AppError(
-            f"Unsupported direct payout kind '{kind}'. Supported: {', '.join(DIRECT_SWAP_PAYOUT_KINDS)}",
-            code="validation",
-        )
-    if policy is not None and policy not in TRANSFER_PAIR_POLICIES:
-        raise AppError(
-            f"Unsupported direct payout policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
-            code="validation",
-        )
-
-    out_row = resolve_transaction(conn, profile["id"], out_ref, direction="outbound")
-    target_asset = normalize_asset_code(payout_asset)
-    if not target_asset:
-        raise AppError("--payout-asset is required", code="validation")
-    payout_amount_msat = _positive_btc_amount_msat(payout_amount, "--payout-amount")
-    out_amount_msat = None
-    if out_amount is not None:
-        out_amount_msat = _positive_btc_amount_msat(out_amount, "--out-amount")
-        full_out_msat = row_principal_msat(out_row)
-        if out_amount_msat > full_out_msat:
-            raise AppError(
-                f"--out-amount exceeds the outbound amount "
-                f"({out_amount_msat} > {full_out_msat} msat).",
-                code="validation",
-            )
-    payout_value = dec(payout_fiat_value) if payout_fiat_value is not None else None
-    if payout_value is not None and payout_value < 0:
-        raise AppError("--payout-fiat-value must not be negative", code="validation")
-
-    if policy is None:
-        policy = (
-            "carrying-value"
-            if str(out_row["asset"]).upper() == target_asset
-            else recommended_pair_policy(profile, out_row["asset"], target_asset)
-        )
-
-    if out_row["asset"] != target_asset and policy == "carrying-value":
-        tax_country = str(profile["tax_country"] or "").strip().lower()
-        if not cross_asset_carrying_value_supported(tax_country, out_row["asset"], target_asset):
-            raise AppError(
-                "Cross-asset direct swap payouts with carrying value are only supported for Austrian profiles or BTC/LBTC rail swaps right now.",
-                code="validation",
-                hint="Re-run with --policy taxable, or use carrying-value only for BTC/LBTC rail payouts outside Austrian profiles.",
-            )
-
-    review_refs = core_custody_authored_migration.list_active_review_refs(
+    return core_custody_review_terms.create_payout_review(
         conn,
-        profile_id=profile["id"],
-    )
-    existing_review = next(
-        (
-            row
-            for row in review_refs
-            if _review_ref_uses_transaction(row, {out_row["id"]})
-        ),
-        None,
-    )
-    if existing_review and existing_review["term_kind"] == "transaction_pair":
-        raise AppError(
-            f"Transaction is already paired (pair id={existing_review['id']}). "
-            "Run `kassiber transfers unpair --pair-id "
-            f"{existing_review['id']}` first.",
-            code="conflict",
-        )
-    if existing_review and existing_review["term_kind"] == "direct_swap_payout":
-        raise AppError(
-            "Transaction already has an active direct swap payout "
-            f"(id={existing_review['id']}).",
-            code="conflict",
-            hint="Delete the existing payout review before creating a replacement.",
-        )
-    if existing_review:
-        raise AppError(
-            "Transaction belongs to active custody component "
-            f"{existing_review['component_id']}.",
-            code="conflict",
-            hint=(
-                "Reopen or supersede that custody review before creating a "
-                "direct payout."
-            ),
-            details={"component_id": existing_review["component_id"]},
-        )
-
-    swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        (
-            out_amount_msat
-            if out_amount_msat is not None
-            else row_principal_msat(out_row)
-        ),
-        payout_amount_msat,
-        _outbound_pair_fee_component_msat(
-            out_row,
-            split_pair=out_amount_msat is not None,
-        ),
-    )
-    payout_id = str(uuid.uuid4())
-    payout_row = core_custody_authored_migration.create_payout_review_component(
-        conn,
-        review_id=payout_id,
         workspace_id=workspace["id"],
-        profile_id=profile["id"],
-        out_transaction_id=out_row["id"],
+        profile=profile,
+        out_row=resolve_transaction(
+            conn, profile["id"], out_ref, direction="outbound"
+        ),
+        payout_asset=payout_asset,
+        payout_amount=payout_amount,
         kind=kind,
         policy=policy,
-        payout_asset=target_asset,
-        payout_amount_msat=payout_amount_msat,
         payout_occurred_at=payout_occurred_at,
-        payout_fiat_value=(
-            float(payout_value) if payout_value is not None else None
-        ),
+        payout_fiat_value=payout_fiat_value,
         payout_external_id=payout_external_id,
         counterparty=counterparty,
         notes=notes,
-        swap_fee_msat=swap_fee_msat,
-        swap_fee_kind=swap_fee_kind,
-        out_amount_msat=out_amount_msat,
-        created_at=now_iso(),
+        out_amount=out_amount,
         authored_source=authored_source,
     )
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return _direct_payout_to_dict(payout_row)
 
 
-def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_deleted=False):
+def list_direct_swap_payouts(
+    conn, workspace_ref, profile_ref, *, include_deleted=False
+):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    rows = core_custody_authored_migration.list_payout_review_records(
-        conn,
-        profile_id=profile["id"],
-        include_deleted=include_deleted,
+    return core_custody_review_terms.list_payout_reviews(
+        conn, profile["id"], include_deleted=include_deleted
     )
-    output = []
-    for row in rows:
-        entry = _direct_payout_to_dict(row)
-        entry["out"] = {
-            "transaction_id": row["out_transaction_id"],
-            "external_id": row["out_external_id"] or "",
-            "wallet": row["out_wallet"],
-            "asset": row["out_asset"],
-            "amount": float(msat_to_btc(row["reviewed_out_amount_msat"])),
-            "amount_msat": int(row["reviewed_out_amount_msat"]),
-            "full_amount": float(msat_to_btc(row["full_out_amount_msat"])),
-            "full_amount_msat": int(row["full_out_amount_msat"]),
-            "occurred_at": row["out_occurred_at"],
-        }
-        entry["payout"] = {
-            "asset": row["payout_asset"],
-            "amount": float(msat_to_btc(row["payout_amount"])),
-            "amount_msat": int(row["payout_amount"]),
-            "occurred_at": row["payout_occurred_at"] or row["out_occurred_at"],
-            "external_id": row["payout_external_id"],
-            "counterparty": row["counterparty"],
-        }
-        output.append(entry)
-    return output
 
 
 def delete_direct_swap_payout(
     conn, workspace_ref, profile_ref, payout_id, *, authored_source="cli"
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = next(
-        (
-            item
-            for item in core_custody_authored_migration.list_payout_review_records(
-                conn, profile_id=profile["id"], include_deleted=True
-            )
-            if item["id"] == payout_id
-        ),
-        None,
-    )
-    if not row:
-        raise AppError("Direct swap payout not found", code="not_found")
-    if row["deleted_at"]:
-        return _direct_payout_to_dict(row)
-    deleted = {**row, "deleted_at": now_iso()}
-    core_custody_authored_migration.delete_authored_review(
+    return core_custody_review_terms.delete_payout_review(
         conn,
-        profile_id=profile["id"],
-        review_id=payout_id,
-        term_kind="direct_swap_payout",
-        deleted_at=deleted["deleted_at"],
+        profile["id"],
+        payout_id,
         authored_source=authored_source,
     )
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return _direct_payout_to_dict(deleted)
 
 
-def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=False):
+def list_transaction_pairs(
+    conn, workspace_ref, profile_ref, *, include_deleted=False
+):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    rows = core_custody_authored_migration.list_pair_review_records(
-        conn,
-        profile_id=profile["id"],
-        include_deleted=include_deleted,
+    return core_custody_review_terms.list_pair_reviews(
+        conn, profile["id"], include_deleted=include_deleted
     )
-    output = []
-    for row in rows:
-        entry = _pair_to_dict(row)
-        entry["out"] = {
-            "transaction_id": row["out_transaction_id"],
-            "external_id": row["out_external_id"] or "",
-            "wallet": row["out_wallet"],
-            "wallet_kind": row["out_wallet_kind"],
-            "asset": row["out_asset"],
-            "occurred_at": row["out_occurred_at"],
-            # `amount` is the swapped portion on a split pair; `full_amount`
-            # carries the underlying transaction's total for transparency.
-            "amount": float(msat_to_btc(row["out_amount_msat"])),
-            "amount_msat": int(row["out_amount_msat"]),
-            "full_amount": float(msat_to_btc(row["out_full_amount_msat"])),
-            "full_amount_msat": int(row["out_full_amount_msat"]),
-        }
-        entry["in"] = {
-            "transaction_id": row["in_transaction_id"],
-            "external_id": row["in_external_id"] or "",
-            "wallet": row["in_wallet"],
-            "wallet_kind": row["in_wallet_kind"],
-            "asset": row["in_asset"],
-            "occurred_at": row["in_occurred_at"],
-            "amount": float(msat_to_btc(row["in_amount_msat"])),
-            "amount_msat": int(row["in_amount_msat"]),
-        }
-        output.append(entry)
-    return output
 
 
 def _candidate_to_dict(candidate):
@@ -1127,23 +560,6 @@ def _candidate_to_dict(candidate):
             "spend_path": candidate.evidence_spend_path,
         }
     return data
-
-
-def _outbound_pair_fee_component_msat(row, *, split_pair=False):
-    if split_pair:
-        # A reviewed split amount is only the portion that crossed rails. Without
-        # a reviewed fee allocation, charging the full transaction fee to that
-        # portion would overstate the swap fee.
-        return 0
-    try:
-        if row["amount_includes_fee"]:
-            return 0
-    except (IndexError, KeyError):
-        return 0
-    try:
-        return max(0, int(row["fee"] or 0))
-    except (TypeError, ValueError, IndexError, KeyError):
-        return 0
 
 
 def _load_transfer_rules(conn, profile_id):
@@ -1955,43 +1371,16 @@ def chat_history_config_cli(conn, *, history=None, database_encrypted):
 def delete_transaction_pair(
     conn, workspace_ref, profile_ref, pair_id, *, authored_source="cli"
 ):
-    """Retire the active component revision while preserving audit history."""
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = next(
-        (
-            item
-            for item in core_custody_authored_migration.list_pair_review_records(
-                conn, profile_id=profile["id"], include_deleted=True
-            )
-            if item["id"] == pair_id
-        ),
-        None,
-    )
-    if not row:
-        if core_custody_authored_migration.authored_review_exists(
-            conn,
-            profile_id=profile["id"],
-            review_id=pair_id,
-            term_kind="transaction_pair",
-        ):
-            return {"deleted": pair_id}
-        raise AppError(f"Pair '{pair_id}' not found", code="not_found")
-    if row["deleted_at"]:
-        return {"deleted": pair_id}
-    core_custody_authored_migration.delete_authored_review(
+    return core_custody_review_terms.delete_pair_review(
         conn,
-        profile_id=profile["id"],
-        review_id=pair_id,
-        term_kind="transaction_pair",
-        deleted_at=now_iso(),
+        profile["id"],
+        pair_id,
         authored_source=authored_source,
     )
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {"deleted": pair_id}
 
 
-_UNSET = object()
+_UNSET = core_custody_review_terms.UNSET
 
 
 def update_transaction_pair(
@@ -2006,126 +1395,17 @@ def update_transaction_pair(
     commit=True,
     authored_source="cli",
 ):
-    """Append an authored revision and refresh its compatibility projection.
-
-    ``kind`` / ``policy`` default to the stored value when omitted; ``notes``
-    is only revised when explicitly passed. The same-asset / cross-asset policy
-    guards from :func:`create_transaction_pair` are re-applied so an edit can't
-    reach an unsupported combination.
-    """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    row = next(
-        (
-            item
-            for item in core_custody_authored_migration.list_pair_review_records(
-                conn, profile_id=profile["id"]
-            )
-            if item["id"] == pair_id
-        ),
-        None,
-    )
-    if not row:
-        raise AppError(f"Pair '{pair_id}' not found", code="not_found")
-    new_kind = row["kind"] if kind is None else kind
-    new_policy = row["policy"] if policy is None else policy
-    if new_kind not in TRANSFER_PAIR_KINDS:
-        raise AppError(
-            f"Unsupported pair kind '{new_kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
-            code="validation",
-        )
-    if new_policy not in TRANSFER_PAIR_POLICIES:
-        raise AppError(
-            f"Unsupported pair policy '{new_policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
-            code="validation",
-        )
-    same_asset = str(row["out_asset"]).upper() == str(row["in_asset"]).upper()
-    if same_asset and new_policy == "taxable":
-        raise AppError(
-            f"Same-asset taxable pairs are not supported yet "
-            f"(asset={row['out_asset']}). Use --policy carrying-value for a "
-            f"self-transfer, or unpair the legs to keep SELL + BUY treatment.",
-            code="validation",
-            hint="Re-run with --policy carrying-value, or unpair to preserve taxable SELL + BUY behavior.",
-        )
-    if not same_asset and new_policy == "carrying-value":
-        tax_country = str(profile["tax_country"] or "").strip().lower()
-        if not cross_asset_carrying_value_supported(tax_country, row["out_asset"], row["in_asset"]):
-            raise AppError(
-                f"Cross-asset carrying-value pairs are only supported for Austrian profiles "
-                f"or BTC/LBTC rail swaps right now "
-                f"(out={row['out_asset']}, in={row['in_asset']}). "
-                f"Use --policy taxable for other cross-asset swaps.",
-                code="validation",
-                hint="Re-run with --policy taxable, or pair only BTC/LBTC rail changes as carrying-value outside Austrian profiles.",
-            )
-    out_row = conn.execute(
-        "SELECT * FROM transactions WHERE id = ?",
-        (row["out_transaction_id"],),
-    ).fetchone()
-    in_row = conn.execute(
-        "SELECT * FROM transactions WHERE id = ?",
-        (row["in_transaction_id"],),
-    ).fetchone()
-    if out_row is not None and in_row is not None:
-        _validate_carrying_pair_network(conn, out_row, in_row, new_policy)
-    _reject_disallowed_leg_reuse(
+    return core_custody_review_terms.update_pair_review(
         conn,
-        profile["id"],
-        row["out_transaction_id"],
-        row["in_transaction_id"],
-        row["out_asset"],
-        row["in_asset"],
-        new_kind,
-        new_policy,
-        exclude_pair_id=pair_id,
+        profile=profile,
+        pair_id=pair_id,
+        kind=kind,
+        policy=policy,
+        notes=notes,
+        commit=commit,
+        authored_source=authored_source,
     )
-    new_notes = row["notes"] if notes is _UNSET else notes
-    unchanged = (
-        new_kind == row["kind"]
-        and new_policy == row["policy"]
-        and new_notes == row["notes"]
-    )
-    if not unchanged:
-        # Whether a pair persists a swap fee is kind-dependent
-        # (_pair_stores_swap_fee), so a kind edit must reconcile the stored
-        # fee the same way create_transaction_pair would: a pair moving into
-        # a fee-storing kind gains the computed fee, one moving out of it
-        # drops the now-stale fee (instead of keeping it until the next DB
-        # open's migration wipes it).
-        new_fee_msat = row["swap_fee_msat"]
-        new_fee_kind = row["swap_fee_kind"]
-        if new_kind != row["kind"]:
-            if out_row and in_row and _pair_stores_swap_fee(out_row, in_row, new_kind):
-                split_pair = row["out_amount"] is not None
-                swap_fee_out_msat = (
-                    int(row["out_amount"])
-                    if split_pair
-                    else int(out_row["amount"] or 0)
-                )
-                new_fee_msat, new_fee_kind = core_transfer_matching.compute_swap_fee(
-                    swap_fee_out_msat,
-                    int(in_row["amount"] or 0),
-                    _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
-                )
-            else:
-                new_fee_msat, new_fee_kind = None, None
-        updated_row = (
-            core_custody_authored_migration.revise_pair_review_component(
-                conn,
-                row,
-                kind=new_kind,
-                policy=new_policy,
-                notes=new_notes,
-                swap_fee_msat=new_fee_msat,
-                swap_fee_kind=new_fee_kind,
-                authored_source=authored_source,
-            )
-        )
-        invalidate_journals(conn, profile["id"])
-        if commit:
-            conn.commit()
-        return _pair_to_dict(updated_row)
-    return _pair_to_dict(row)
 
 
 def init_app(conn):

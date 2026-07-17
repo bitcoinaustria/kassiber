@@ -269,6 +269,12 @@ binary.
    core service directly. The source-overlap integration test now creates a
    real active reviewed component through plan/apply instead of manufacturing
    a legacy `transaction_pairs` row.
+   Pair and direct-payout review policy, conflict detection, component
+   authoring/revision/deletion, journal invalidation and public projection now
+   live in one core component-term service. `cli.handlers` retains only scope
+   and transaction-reference resolution for these commands; it no longer
+   contains their custody mutation rules. Bulk/rule matching and CLI, daemon
+   and AI entry points consequently invoke the same component-native service.
    Balance sheet, current portfolio, tax summary and exit-tax reports now read
    only the gated stored journal projection. Their live-builder fallbacks and
    the `ReportHooks.build_ledger_state` injection seam are deleted. Exit tax
