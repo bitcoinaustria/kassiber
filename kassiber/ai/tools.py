@@ -215,7 +215,6 @@ _LOAN_MARK_TYPES = (
 )
 _DIRECT_PAYOUT_ASSETS = ("BTC", "LBTC", "LNBTC")
 _CUSTODY_COMPONENT_TYPES = (
-    "native_transfer",
     "swap",
     "manual_bridge",
 )
@@ -225,7 +224,6 @@ _CUSTODY_LEG_ROLES = (
     "fee",
     "external",
     "retained",
-    "unresolved",
     "suspense",
 )
 _EXACT_NONNEGATIVE_INTEGER_SCHEMA: dict[str, Any] = {

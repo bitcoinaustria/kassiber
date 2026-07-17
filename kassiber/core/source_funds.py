@@ -71,13 +71,6 @@ DETERMINISTIC_BULK_REVIEW_METHODS = {
 }
 _CUSTODY_LINEAGE_METHODS = {
     "custody_component",
-    # Bounded read compatibility for previously reviewed links. These method
-    # labels no longer select separate detectors; every one must revalidate
-    # against the current stored projection or it blocks the report.
-    "transaction_pair",
-    "same_onchain_scope",
-    "utxo_spend",
-    "payment_hash",
 }
 PROVIDER_UNIQUE_KEYS = (
     "trade_id",

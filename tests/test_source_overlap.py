@@ -823,7 +823,7 @@ class SourceOverlapTests(unittest.TestCase):
                     "action": "create",
                     "components": [
                         {
-                            "component_type": "native_transfer",
+                            "component_type": "manual_bridge",
                             "evidence_kind": "manual_claim",
                             "evidence_grade": "reviewed",
                             "legs": [

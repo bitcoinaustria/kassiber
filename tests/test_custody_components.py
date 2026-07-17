@@ -144,7 +144,7 @@ class CustodySchemaTests(unittest.TestCase):
                     id, lineage_id, workspace_id, profile_id, revision,
                     component_type, state, created_at
                 ) VALUES('legacy-wire', 'legacy-wire', 'ws', 'profile', 1,
-                         'native_transfer', 'draft', ?)
+                         'manual_bridge', 'draft', ?)
                 """,
                 (NOW,),
             )
@@ -239,7 +239,7 @@ class CustodySchemaTests(unittest.TestCase):
                 workspace_id="ws",
                 profile_id="profile",
                 component_id="legacy-active",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     {
                         **_leg("source", 100, tx="legacy-out", wallet="btc"),
@@ -364,7 +364,7 @@ class CustodySchemaTests(unittest.TestCase):
                     conn,
                     workspace_id="ws",
                     profile_id="profile",
-                    component_type="native_transfer",
+                    component_type="manual_bridge",
                     legs=[
                         {**_leg("source", 100, tx="out", wallet="btc"), "id": "source"},
                         {**_leg("destination", 100, tx="in", wallet="btc"), "id": "sink"},
@@ -506,7 +506,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -529,7 +529,7 @@ class CustodyComponentApiTests(unittest.TestCase):
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     _leg("source", 100, tx=out_id, wallet="btc"),
                     _leg("destination", 100, tx=in_id, wallet="btc"),
@@ -572,7 +572,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 60, tx="other-out", wallet="btc"),
                 _leg("destination", 60, tx="in-1", wallet="btc"),
@@ -648,7 +648,7 @@ class CustodyComponentApiTests(unittest.TestCase):
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     _leg("source", 100, tx="out", wallet="btc"),
                     _leg("destination", 60, tx="in-1", wallet="btc"),
@@ -878,7 +878,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 {
                     **_leg("source", 100, tx="out", wallet="btc"),
@@ -987,7 +987,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 100, tx="out", wallet="btc"),
                 _leg("destination", 100, tx="new-in", wallet="btc"),
@@ -1103,7 +1103,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=legs,
             allocations=allocations,
         )
@@ -1122,7 +1122,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             )
         )
 
-    def test_unbalanced_and_nonzero_unresolved_components_cannot_activate(self):
+    def test_unbalanced_components_cannot_activate(self):
         version_before = self.conn.execute(
             "SELECT journal_input_version FROM profiles WHERE id = 'profile'"
         ).fetchone()[0]
@@ -1134,14 +1134,12 @@ class CustodyComponentApiTests(unittest.TestCase):
             legs=[
                 _leg("source", 100, tx="out"),
                 _leg("destination", 80, tx="in-1"),
-                _leg("unresolved", 10, rail="untracked", occurred_at=NOW),
             ],
         )
         with self.assertRaises(AppError) as raised:
             activate_component(self.conn, component["id"])
         self.assertEqual("custody_component_incomplete", raised.exception.code)
         issue_codes = {issue["code"] for issue in raised.exception.details["validation"]["issues"]}
-        self.assertIn("unresolved_value", issue_codes)
         self.assertIn("unbalanced_quantity", issue_codes)
         self.assertEqual("draft", get_component(self.conn, component["id"])["state"])
         version_after = self.conn.execute(
@@ -1175,7 +1173,6 @@ class CustodyComponentApiTests(unittest.TestCase):
 
         self.assertTrue(component["validation"]["activatable"])
         self.assertEqual(1, component["validation"]["suspense_msat"])
-        self.assertEqual(0, component["validation"]["unresolved_msat"])
         activated = activate_component(self.conn, component["id"])
         self.assertEqual("active", activated["effective_state"])
         self.assertEqual(
@@ -1220,7 +1217,7 @@ class CustodyComponentApiTests(unittest.TestCase):
         report = validate_conservation(
             base,
             allocations=allocations,
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_grade="exact",
         )
         codes = {issue["code"] for issue in report["issues"]}
@@ -1358,7 +1355,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=legs,
@@ -1399,7 +1396,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 60, tx="other-out"),
                 _leg("destination", 60, tx="in-1"),
@@ -1425,7 +1422,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=first["legs"],
             allocations=first["allocations"],
         )
@@ -1434,7 +1431,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 100, tx="out", wallet="btc"),
                 _leg("destination", 60, tx="in-1", wallet="btc"),
@@ -2404,7 +2401,7 @@ class CustodyComponentApiTests(unittest.TestCase):
                 self.conn,
                 workspace_id="ws",
                 profile_id="profile",
-                component_type="native_transfer",
+                component_type="manual_bridge",
                 legs=[
                     _leg(
                         "source",
@@ -2430,7 +2427,7 @@ class CustodyComponentApiTests(unittest.TestCase):
             self.conn,
             workspace_id="ws",
             profile_id="profile",
-            component_type="native_transfer",
+            component_type="manual_bridge",
             legs=[
                 _leg("source", 100, tx="out", wallet="btc"),
                 _leg("destination", 100, tx="past-in", wallet="btc"),
@@ -2737,7 +2734,7 @@ class CustodyComponentApiTests(unittest.TestCase):
                 expected_allocation_count, expected_economic_term_count,
                 created_at
             ) VALUES('remote', 'remote', 'ws', 'profile', 1,
-                     'native_transfer', 'active', 2, 0, 0, ?)
+                     'manual_bridge', 'active', 2, 0, 0, ?)
             """,
             (NOW,),
         )

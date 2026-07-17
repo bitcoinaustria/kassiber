@@ -654,7 +654,7 @@ class CustodyQuantityRuntimeTests(unittest.TestCase):
         component = {
             "id": "reviewed-fee",
             "effective_state": "active",
-            "component_type": "native_transfer",
+            "component_type": "manual_bridge",
             "conservation_mode": "quantity",
             "legs": [
                 {
@@ -1975,7 +1975,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 ),
                 state=INTERNAL_VERIFIED,
                 priority=ClaimPriority.EXACT_NATIVE_EVENT,
-                reason="verified_native_transfer",
+                reason="verified_manual_bridge",
                 atomic_bundle_id="native:verified",
             ),
         ]
@@ -2449,7 +2449,7 @@ class CustodyQuantityStoreTests(unittest.TestCase):
                 component_type, state, expected_leg_count,
                 expected_allocation_count, created_at
             ) VALUES('component-1', 'component-1', 'ws', 'profile', 1,
-                     'native_transfer', 'draft', 1, 0, 'now')
+                     'manual_bridge', 'draft', 1, 0, 'now')
             """
         )
         component = {

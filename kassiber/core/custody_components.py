@@ -44,7 +44,6 @@ from .custody_evidence import row_boundary_amounts
 
 COMPONENT_TYPES = frozenset(
     {
-        "native_transfer",
         "swap",
         "manual_bridge",
     }
@@ -64,11 +63,9 @@ LEG_ROLES = frozenset(
         "fee",
         "external",
         "retained",
-        # ``unresolved`` is an incomplete authoring placeholder and therefore
-        # always blocks activation. ``suspense`` is different: it is an exact,
-        # explicitly reviewed residual quantity whose economic classification
-        # remains open while the rest of a manual bridge may become effective.
-        "unresolved",
+        # ``suspense`` is an exact, explicitly reviewed residual quantity whose
+        # economic classification remains open while the rest of a manual
+        # bridge may become effective.
         "suspense",
     }
 )
@@ -782,7 +779,7 @@ def _inferred_allocation_leg_pairs(
     attributed_sinks = [
         sink
         for sink in positive_sinks
-        if sink.get("role") in {"fee", "external", "unresolved", "suspense"}
+        if sink.get("role") in {"fee", "external", "suspense"}
     ]
     if len(owned_sinks) == 1 and not attributed_sinks:
         return [(source, owned_sinks[0]) for source in positive_sources]
@@ -1314,7 +1311,7 @@ def _validate_allocations(
         attributed_sinks = [
             leg
             for leg in positive_sinks
-            if leg["role"] in {"fee", "external", "unresolved", "suspense"}
+            if leg["role"] in {"fee", "external", "suspense"}
         ]
         unambiguous = (
             len(positive_sources) == 1 and len(positive_sinks) == 1
@@ -1407,7 +1404,6 @@ def _balance_rows(
             "fee": 0,
             "external": 0,
             "retained": 0,
-            "unresolved": 0,
             "suspense": 0,
         }
     )
@@ -1432,7 +1428,6 @@ def _balance_rows(
                 "fee_msat" if amount_field == "amount_msat" else "fee_amount": totals["fee"],
                 "external_msat" if amount_field == "amount_msat" else "external_amount": totals["external"],
                 "retained_msat" if amount_field == "amount_msat" else "retained_amount": totals["retained"],
-                "unresolved_msat" if amount_field == "amount_msat" else "unresolved_amount": totals["unresolved"],
                 "suspense_msat" if amount_field == "amount_msat" else "suspense_amount": totals["suspense"],
                 "sink_msat" if amount_field == "amount_msat" else "sink_amount": sinks,
                 "residual_msat" if amount_field == "amount_msat" else "residual_amount": totals["source"] - sinks,
@@ -1592,7 +1587,6 @@ def validate_conservation(
                     "roles": unknown_roles,
                 }
             ],
-            "unresolved_msat": 0,
             "suspense_msat": 0,
             "source_msat": 0,
             "owned_destination_msat": 0,
@@ -1606,11 +1600,6 @@ def validate_conservation(
         int(leg.get("amount_msat") or 0)
         for leg in materialized
         if leg.get("role") in {"destination", "retained"}
-    )
-    unresolved_total = sum(
-        int(leg.get("amount_msat") or 0)
-        for leg in materialized
-        if leg.get("role") == "unresolved"
     )
     suspense_legs = [
         leg
@@ -1628,14 +1617,6 @@ def validate_conservation(
             {
                 "code": "missing_owned_destination",
                 "message": "component has no positive destination or retained-custody leg",
-            }
-        )
-    if unresolved_total:
-        issues.append(
-            {
-                "code": "unresolved_value",
-                "message": "component still contains unresolved value",
-                "amount_msat": unresolved_total,
             }
         )
     if suspense_legs:
@@ -1984,7 +1965,6 @@ def validate_conservation(
         "conservation_mode": mode,
         "activatable": not issues,
         "issues": issues,
-        "unresolved_msat": unresolved_total,
         "suspense_msat": suspense_total,
         "source_msat": source_total,
         "owned_destination_msat": owned_destination_total,

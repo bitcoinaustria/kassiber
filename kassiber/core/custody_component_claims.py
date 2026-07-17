@@ -595,12 +595,6 @@ def compile_component_quantity_claims(
                         sink_amount_msat=sink_amount,
                     )
                 )
-        elif sink_role == "unresolved":
-            raise _error(
-                "an unresolved draft leg cannot emit an active quantity claim",
-                component_id=component_id,
-                sink_leg_id=sink.get("id"),
-            )
         else:
             raise _error(
                 "component sink role cannot emit a quantity claim",

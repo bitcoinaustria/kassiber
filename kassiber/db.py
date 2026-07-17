@@ -4162,7 +4162,13 @@ def ensure_schema_compat(conn):
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
-    if _migrate_inline_ownership_history(conn):
+    migrated_ownership_history = _migrate_inline_ownership_history(conn)
+    migrated_source_links = conn.execute(
+        "UPDATE source_funds_links SET method = 'custody_component' "
+        "WHERE method IN ('transaction_pair', 'same_onchain_scope', "
+        "'utxo_spend', 'payment_hash')"
+    ).rowcount
+    if migrated_ownership_history or migrated_source_links:
         conn.commit()
     # Derived gap pages and normalized candidate caches carry no authored
     # evidence or rollback history. Preserve only the latest journal builder's

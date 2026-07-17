@@ -92,7 +92,7 @@ def _fixture(data_root: Path) -> None:
 
 def _component_spec(*, note: str = "migration") -> dict:
     return {
-        "component_type": "native_transfer",
+        "component_type": "manual_bridge",
         "evidence_kind": "manual_claim",
         "evidence_grade": "reviewed",
         "notes": note,

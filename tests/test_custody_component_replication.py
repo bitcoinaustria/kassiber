@@ -193,7 +193,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.owner,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -1471,7 +1471,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.peer,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -1620,7 +1620,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.peer,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -2130,7 +2130,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
             self.owner,
             workspace_id=self.workspace["id"],
             profile_id=self.profile["id"],
-            component_type="native_transfer",
+            component_type="manual_bridge",
             evidence_kind="ownership_graph",
             evidence_grade="exact",
             legs=[
@@ -2384,7 +2384,7 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 json.dumps([component["id"]], separators=(",", ":")),
                 event_ids[0],
                 event_ids[1],
-                json.dumps("native_transfer"),
+                json.dumps("manual_bridge"),
                 json.dumps("conversion"),
                 NOW,
             ),
