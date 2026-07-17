@@ -39,8 +39,8 @@ RuntimeConfig = Mapping[str, Any]
 SyncOutcome = dict[str, Any]
 BackendRecord = Mapping[str, Any]
 SyncTarget = Mapping[str, Any]
-HistoryEntry = Mapping[str, Any]
-HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
+StoredTransactionGraph = Mapping[str, Any] | str
+HistoryCache = MutableMapping[str, StoredTransactionGraph]
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 
