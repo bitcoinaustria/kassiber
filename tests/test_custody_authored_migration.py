@@ -615,6 +615,57 @@ def test_connected_fanout_pairs_activate_as_one_atomic_component(tmp_path):
         migrated.close()
 
 
+def test_component_native_pair_creation_grows_one_atomic_fanin(tmp_path):
+    conn = open_db(tmp_path)
+    _scope(conn)
+    _tx(conn, "fanin-out-a", "btc", "outbound", "BTC", 400, NOW)
+    _tx(conn, "fanin-out-b", "btc", "outbound", "BTC", 600, NOW)
+    _tx(conn, "fanin-in", "btc2", "inbound", "BTC", 1_000, NOW)
+
+    first = create_transaction_pair(
+        conn,
+        "ws",
+        "profile",
+        "fanin-out-a",
+        "fanin-in",
+        kind="whirlpool",
+        policy="carrying-value",
+    )
+    second = create_transaction_pair(
+        conn,
+        "ws",
+        "profile",
+        "fanin-out-b",
+        "fanin-in",
+        kind="whirlpool",
+        policy="carrying-value",
+    )
+
+    assert first["component_id"] != second["component_id"]
+    assert get_component(conn, first["component_id"])["state"] == "superseded"
+    component = get_component(conn, second["component_id"])
+    assert component["effective_state"] == "active"
+    assert len(component["economic_terms"]) == 2
+    assert sum(
+        allocation["source_amount_msat"]
+        for allocation in component["allocations"]
+    ) == 1_000
+    assert sum(
+        allocation["sink_amount_msat"]
+        for allocation in component["allocations"]
+    ) == 1_000
+    assert {
+        leg["anchor_transaction_id"]
+        for leg in component["legs"]
+        if leg["role"] == "source"
+    } == {"fanin-out-a", "fanin-out-b"}
+    assert {
+        row["component_id"]
+        for row in list_transaction_pairs(conn, "ws", "profile")
+    } == {second["component_id"]}
+    conn.close()
+
+
 def test_backfill_rolls_back_component_terms_and_links_together(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)

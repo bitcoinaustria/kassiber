@@ -171,8 +171,11 @@ binary.
    deleted historical reviews migrate to immutable component history; connected
    pair graphs become one atomic N:M aggregate; explicit residual and fee legs
    cover every source boundary. New create/revise/delete operations are
-   component-native. Historical rows that cannot satisfy current conservation
-   or provenance rules produce durable `custody_authored_migration_issues` and
+   component-native. Incremental reusable same-asset reviews grow that same
+   immutable aggregate for both 1:N fan-out and N:1 fan-in, so a shared
+   boundary is never represented by overlapping active components. Historical
+   rows that cannot satisfy current conservation or provenance rules produce
+   durable `custody_authored_migration_issues` and
    block their exact transaction scope. Delayed signed legacy events are
    migrated during the same bundle import. Specialized pair/payout claims,
    arbitration conflicts, tax relations, list mutations and `apply_manual_pairs`

@@ -2041,13 +2041,18 @@ def create_pair_review_component(
     related = [
         record
         for record in list_pair_review_records(conn, profile_id=profile_id)
-        if record["out_transaction_id"] == out_transaction_id
+        if (
+            record["out_transaction_id"] == out_transaction_id
+            or record["in_transaction_id"] == in_transaction_id
+        )
     ]
     if related:
-        component_ids = {str(record.get("component_id") or "") for record in related}
+        component_ids = {
+            str(record.get("component_id") or "") for record in related
+        }
         if len(component_ids) != 1 or "" in component_ids:
             raise AppError(
-                "Reviewed fan-out does not have one active component",
+                "Connected reviewed pair terms do not have one active component",
                 code="custody_component_membership_conflict",
             )
         active_component = get_component(conn, component_ids.pop())
