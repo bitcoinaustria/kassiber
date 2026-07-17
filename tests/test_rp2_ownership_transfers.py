@@ -1744,6 +1744,10 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
             self.assertEqual(len(derived), 1)
             self.assertEqual(derived[0]["from_wallet"], "Cold")
             self.assertEqual(derived[0]["to_wallet"], "Hot")
+            # A moves-only profile has no reviewed conversions or payouts:
+            # booked MOVE decisions must never leak into the relation lists.
+            self.assertEqual(audit["cross_asset_pairs"], [])
+            self.assertEqual(audit["direct_swap_payouts"], [])
 
 
 class DuplicateWalletLabelGuardTest(unittest.TestCase):

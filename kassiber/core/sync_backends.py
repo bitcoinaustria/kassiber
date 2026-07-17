@@ -4159,6 +4159,9 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     transactions_total=len(ordered_histories),
                     records=len(records),
                 )
+    # The write-only per-wallet txid ledger is retired; purge it from
+    # checkpoints written by earlier versions.
+    checkpoint.pop("electrum_known_txids", None)
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),

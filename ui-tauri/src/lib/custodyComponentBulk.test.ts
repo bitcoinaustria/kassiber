@@ -27,7 +27,7 @@ describe("previewCustodyComponentBatch", () => {
     });
   });
 
-  it("allows an unresolved migration to be saved as a draft but blocks activation", () => {
+  it("rejects the retired unresolved leg role as unsupported", () => {
     const preview = previewCustodyComponentBatch(
       JSON.stringify([
         {
@@ -52,8 +52,7 @@ describe("previewCustodyComponentBatch", () => {
       ]),
     );
 
-    expect(preview.structuralErrors).toEqual([]);
-    expect(issueCodes(preview.activationErrors)).toContain("unresolvedValue");
+    expect(issueCodes(preview.structuralErrors)).toContain("roleUnsupported");
   });
 
   it("accepts exact reviewed residual suspense without treating it as unresolved", () => {
@@ -106,7 +105,6 @@ describe("previewCustodyComponentBatch", () => {
     expect(preview.structuralErrors).toEqual([]);
     expect(preview.activationErrors).toEqual([]);
     expect(preview.summary).toMatchObject({
-      unresolvedLegs: 0,
       suspenseLegs: 1,
     });
   });
@@ -136,7 +134,7 @@ describe("previewCustodyComponentBatch", () => {
     const invalid = previewCustodyComponentBatch(
       JSON.stringify([
         {
-          component_type: "native_transfer",
+          component_type: "swap",
           evidence_grade: "exact",
           legs: [
             {

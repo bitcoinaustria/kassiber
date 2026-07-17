@@ -132,7 +132,13 @@ counterparty.
 matcher; they do not assert custody or carry basis.
 
 Legacy `transaction_pairs` and `direct_swap_payouts` are migrated using
-deterministic component IDs and source-row hashes. Their historical replication
+deterministic component IDs and source-row hashes. The one-phase rewrite
+derives every pair component — including singletons — from the
+`transaction_pair_group` namespace; the earlier staged flow derived singleton
+IDs from the `transaction_pair` namespace. This identity change is intentional
+and safe only because no pre-rewrite build of this branch was released:
+replicas that migrated on an earlier draft build must restore from backup and
+re-migrate. Their historical replication
 events remain replayable, so the old tables are write-frozen and removed from
 production interpretation before any physical deletion is considered. Physical
 removal requires the replication acknowledgement/tombstone protocol; it is not

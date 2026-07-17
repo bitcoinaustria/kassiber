@@ -4222,6 +4222,15 @@ def ensure_schema_compat(conn):
         "custody_gap_candidate_projections",
     ):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
+    # The custody tax-cutover audit recorded the engine's own first rebuild as
+    # a "legacy" baseline on fresh books. The module is deleted; remove its
+    # local-only tables (their immutability triggers drop with them).
+    for table in (
+        "custody_tax_migration_baseline_events",
+        "custody_tax_migration_baselines",
+        "custody_tax_migration_reports",
+    ):
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
     ensure_column(
         conn,
         "chain_observer_instances",
@@ -4829,19 +4838,7 @@ def _ensure_custody_revision_immutability_triggers(conn):
           OR OLD.conversion_metadata_json IS NOT NEW.conversion_metadata_json
           OR OLD.expected_leg_count IS NOT NEW.expected_leg_count
           OR OLD.expected_allocation_count IS NOT NEW.expected_allocation_count
-          OR (
-              OLD.expected_economic_term_count IS NOT NEW.expected_economic_term_count
-              AND NOT (
-                  OLD.state = 'draft'
-                  AND NEW.state = 'draft'
-                  AND COALESCE(OLD.expected_economic_term_count, 0) = 0
-                  AND NEW.expected_economic_term_count >= 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM custody_component_economic_terms terms
-                      WHERE terms.component_id = OLD.id
-                  )
-              )
-          )
+          OR OLD.expected_economic_term_count IS NOT NEW.expected_economic_term_count
           OR (
               OLD.expected_evidence_count IS NOT NEW.expected_evidence_count
               AND NOT (

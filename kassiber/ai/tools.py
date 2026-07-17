@@ -1889,7 +1889,8 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "Purely validate one or more reviewed custody components. This is the review "
             "planner for missing wallets and "
             "1:N, N:1, or explicit N:M custody flows that cannot be represented by one pair. "
-            "Pass its fingerprint unchanged to ui.transfers.components.apply. Activation "
+            "Pass its input_version unchanged as expected_input_version to "
+            "ui.transfers.components.apply. Activation "
             "remains fail-closed: every anchor, amount, "
             "fee, network, asset, chronology, and allocation must conserve exactly. The result "
             "omits local-only evidence and location references. AI output is not evidence: "
@@ -3399,7 +3400,7 @@ receipts should remain unpaired. Read swap-matching when review policy,
 confidence bands, or pairing workflow matters.
 For missing wallets, multi-hop migrations, or 1:N/N:1/N:M self-custody gaps,
 read ui.transfers.components.list and the relevant transaction/transfer review
-context, then validate ui.transfers.components.plan before applying its fingerprint.
+context, then validate ui.transfers.components.plan before applying its input_version.
 Ask for consent before the final atomic write; exact conservation and complete
 anchor coverage are mandatory, and tax policy is downstream of custody proof.
 For source-of-funds/provenance questions, read source-funds links and preview

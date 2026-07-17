@@ -699,7 +699,6 @@ const CUSTODY_LOCAL_ISSUE_KEYS = {
   sourceRequired: "swap.components.localIssue.sourceRequired",
   ownedDestinationRequired: "swap.components.localIssue.ownedDestinationRequired",
   anchorRequired: "swap.components.localIssue.anchorRequired",
-  unresolvedValue: "swap.components.localIssue.unresolvedValue",
   suspenseReviewRequired:
     "swap.components.localIssue.suspenseReviewRequired",
   suspenseQuantityModeRequired:

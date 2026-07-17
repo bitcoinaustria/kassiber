@@ -296,7 +296,6 @@ def ownership_review_projection(
                     ),
                     "kind": component.get("component_type"),
                     "policy": component.get("conversion_policy"),
-                    "deleted_at": None,
                 }
             )
     proofs = ownership_transfers.derive_ownership_review_proofs(
@@ -372,11 +371,27 @@ def stored_ownership_review_candidates(
         stored = detail.get("ownership_review_candidates")
         if not isinstance(stored, list):
             continue
-        candidates.extend(
-            transfer_matching.SwapCandidate(**dict(item))
-            for item in stored
-            if isinstance(item, Mapping)
-        )
+        # Candidates were persisted by the binary that processed journals.
+        # Tolerate shape drift after an upgrade instead of breaking the
+        # review worklist; the next journal rebuild rewrites them.
+        candidate_fields = {
+            field.name for field in fields(transfer_matching.SwapCandidate)
+        }
+        for item in stored:
+            if not isinstance(item, Mapping):
+                continue
+            try:
+                candidates.append(
+                    transfer_matching.SwapCandidate(
+                        **{
+                            key: value
+                            for key, value in dict(item).items()
+                            if key in candidate_fields
+                        }
+                    )
+                )
+            except TypeError:
+                continue
     return candidates
 
 
@@ -1281,6 +1296,7 @@ def load_stored_transfer_audit(
         LEFT JOIN transactions target ON target.id = r.in_transaction_id
         LEFT JOIN wallets target_wallet ON target_wallet.id = target.wallet_id
         WHERE r.profile_id = ?
+          AND r.relation_kind IN ('conversion', 'direct_payout')
         ORDER BY COALESCE(r.target_occurred_at, r.occurred_at) ASC,
                  r.id ASC
         """,

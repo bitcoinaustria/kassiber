@@ -352,6 +352,55 @@ def test_deleted_legacy_reviews_migrate_to_component_history(tmp_path):
         migrated.close()
 
 
+def test_unchanged_rows_resolve_stale_migration_issues(tmp_path):
+    # A durable issue can outlive its cause when a peer migrates the same
+    # legacy row and replicates the component. The next refresh must resolve
+    # the stale issue on the unchanged path instead of skipping past it.
+    conn = open_db(tmp_path)
+    _legacy_rows(conn)
+    conn.execute(
+        "UPDATE direct_swap_payouts SET deleted_at = ? WHERE id = 'payout'",
+        (NOW,),
+    )
+    conn.commit()
+    conn.close()
+
+    migrated = open_db(tmp_path)
+    for legacy_table, legacy_source_id in (
+        ("transaction_pairs", "pair"),
+        ("direct_swap_payouts", "payout"),
+    ):
+        migrated.execute(
+            """
+            INSERT INTO custody_authored_migration_issues(
+                id, workspace_id, profile_id, legacy_table, legacy_source_id,
+                issue_code, transaction_ids_json, details_json,
+                resolved_at, created_at, updated_at
+            ) VALUES(?, 'ws', 'profile', ?, ?, 'custody_legacy_migration_failed',
+                     '[]', '{}', NULL, ?, ?)
+            """,
+            (
+                f"stale-issue-{legacy_source_id}",
+                legacy_table,
+                legacy_source_id,
+                NOW,
+                NOW,
+            ),
+        )
+    migrated.commit()
+    migrated.close()
+
+    refreshed = open_db(tmp_path)
+    try:
+        open_issues = refreshed.execute(
+            "SELECT legacy_source_id FROM custody_authored_migration_issues "
+            "WHERE resolved_at IS NULL"
+        ).fetchall()
+        assert open_issues == []
+    finally:
+        refreshed.close()
+
+
 def test_active_component_without_legacy_terms_claims_every_boundary(tmp_path):
     conn = open_db(tmp_path)
     _scope(conn)

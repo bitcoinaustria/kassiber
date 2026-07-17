@@ -788,6 +788,7 @@ def _migrate_legacy_payouts(
             try:
                 linked_id = str(_field(row, "component_id") or "")
                 if linked_id and get_component(conn, linked_id)["effective_state"] == "active":
+                    _resolve_migration_issues(conn, [row])
                     unchanged += 1
                     continue
                 with _savepoint(conn, f"custody_payout_{uuid.uuid4().hex}"):
@@ -941,6 +942,7 @@ def _migrate_deleted_legacy_rows(conn: sqlite3.Connection) -> ConsolidationResul
             if linked_id:
                 try:
                     if get_component(conn, linked_id)["state"] == "superseded":
+                        _resolve_migration_issues(conn, [row])
                         unchanged += 1
                         continue
                 except AppError:

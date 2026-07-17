@@ -1,9 +1,5 @@
 const CUSTODY_COMPONENT_TYPES = [
-  "native_transfer",
-  "channel_lifecycle",
-  "peg",
   "swap",
-  "refund",
   "manual_bridge",
 ] as const;
 
@@ -13,7 +9,6 @@ const CUSTODY_LEG_ROLES = [
   "fee",
   "external",
   "retained",
-  "unresolved",
   "suspense",
 ] as const;
 
@@ -48,7 +43,6 @@ export type CustodyPreviewIssueCode =
   | "sourceRequired"
   | "ownedDestinationRequired"
   | "anchorRequired"
-  | "unresolvedValue"
   | "suspenseReviewRequired"
   | "suspenseQuantityModeRequired"
   | "suspenseLocationInvalid"
@@ -88,7 +82,6 @@ export interface CustodyBatchPreview {
     destinations: number;
     transactionAnchors: number;
     untrackedLegs: number;
-    unresolvedLegs: number;
     suspenseLegs: number;
   };
 }
@@ -100,7 +93,6 @@ const SINK_ROLES = new Set<string>([
   "fee",
   "external",
   "retained",
-  "unresolved",
   "suspense",
 ]);
 const SQLITE_MAX_INTEGER = 9_223_372_036_854_775_807n;
@@ -263,7 +255,6 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
         destinations: 0,
         transactionAnchors: 0,
         untrackedLegs: 0,
-        unresolvedLegs: 0,
         suspenseLegs: 0,
       },
     };
@@ -286,7 +277,6 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
         destinations: 0,
         transactionAnchors: 0,
         untrackedLegs: 0,
-        unresolvedLegs: 0,
         suspenseLegs: 0,
       },
     };
@@ -306,7 +296,6 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
   let destinationCount = 0;
   let transactionAnchors = 0;
   let untrackedLegs = 0;
-  let unresolvedLegs = 0;
   let suspenseLegs = 0;
 
   rawComponents.forEach((rawComponent, componentIndex) => {
@@ -368,7 +357,6 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
     let componentSources = 0;
     let componentOwnedDestinations = 0;
     let componentAnchors = 0;
-    let componentUnresolved = 0;
     let componentSuspense = 0;
 
     legs.forEach((leg, legIndex) => {
@@ -415,10 +403,6 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
       ) {
         destinationCount += 1;
         componentOwnedDestinations += 1;
-      }
-      if (leg.role === "unresolved" && amount !== null && amount > 0n) {
-        unresolvedLegs += 1;
-        componentUnresolved += 1;
       }
       if (leg.role === "suspense" && amount !== null && amount > 0n) {
         suspenseLegs += 1;
@@ -490,11 +474,6 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
     if (componentAnchors === 0) {
       activationErrors.push(
         issue("anchorRequired", { component: componentIndex + 1 }),
-      );
-    }
-    if (componentUnresolved > 0) {
-      activationErrors.push(
-        issue("unresolvedValue", { component: componentIndex + 1 }),
       );
     }
     if (componentSuspense > 0) {
@@ -570,7 +549,7 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
         SINK_ROLES.has(String(leg.role)) && (amountAsMsat(leg) ?? 0n) > 0n,
     );
     const attributedSinks = positiveSinks.filter((leg) =>
-      ["fee", "external", "unresolved", "suspense"].includes(String(leg.role)),
+      ["fee", "external", "suspense"].includes(String(leg.role)),
     );
     const ownedSinks = positiveSinks.filter((leg) =>
       ["destination", "retained"].includes(String(leg.role)),
@@ -783,7 +762,6 @@ export function previewCustodyComponentBatch(text: string): CustodyBatchPreview 
       destinations: destinationCount,
       transactionAnchors,
       untrackedLegs,
-      unresolvedLegs,
       suspenseLegs,
     },
   };

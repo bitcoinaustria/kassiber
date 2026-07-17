@@ -507,16 +507,6 @@ def apply_component_batch(
             )
         created = []
         for item in plan["prepared_components"]:
-            if item["existing"]:
-                created.append(
-                    custody_components.get_component(
-                        conn,
-                        item["component"]["id"],
-                        profile_id=profile_id,
-                        include_local_evidence=include_local_evidence,
-                    )
-                )
-                continue
             spec = item["spec"]
             component = custody_components.create_component(
                 conn,

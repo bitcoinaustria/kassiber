@@ -920,7 +920,9 @@ def apply_review(
     conn.execute("RELEASE SAVEPOINT custody_gap_review_apply")
     if commit:
         conn.commit()
-    result["input_version"] = plan["input_version"]
+    # Return the post-apply version so a client can plan its next action
+    # against current state instead of an instantly-stale snapshot.
+    result["input_version"] = _profile_input_version(conn, profile_id)
     return result
 
 
