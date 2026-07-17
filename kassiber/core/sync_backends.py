@@ -486,6 +486,7 @@ class _ElectrumBatchDispatcher:
 
     def __init__(self, backend):
         self.backend = backend
+        self.batch_size = backend_batch_size(backend)
         self._queue = queue.Queue()
         self._closed = False
         self._thread = threading.Thread(
@@ -555,7 +556,11 @@ class _ElectrumBatchDispatcher:
                         for pending in pending_calls
                         for request in pending["requests"]
                     ]
-                    combined_results = client.batch_call(combined)
+                    combined_results = []
+                    for start in range(0, len(combined), self.batch_size):
+                        combined_results.extend(
+                            client.batch_call(combined[start : start + self.batch_size])
+                        )
                     offset = 0
                     for pending in pending_calls:
                         count = len(pending["requests"])
