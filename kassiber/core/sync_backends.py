@@ -527,6 +527,30 @@ class _ElectrumBatchDispatcher:
     def _run(self):
         client = None
         stop_after_batch = False
+
+        def discard_client():
+            nonlocal client
+            current = client
+            client = None
+            if current is not None:
+                try:
+                    current.__exit__(None, None, None)
+                except Exception:
+                    pass
+
+        def execute_requests(requests):
+            nonlocal client
+            if client is None:
+                candidate = ElectrumClient(self.backend)
+                candidate.__enter__()
+                client = candidate
+            results = []
+            for start in range(0, len(requests), self.batch_size):
+                results.extend(
+                    client.batch_call(requests[start : start + self.batch_size])
+                )
+            return results
+
         try:
             while True:
                 first = self._queue.get()
@@ -547,36 +571,47 @@ class _ElectrumBatchDispatcher:
                         break
                     pending_calls.append(item)
                 try:
-                    if client is None:
-                        candidate = ElectrumClient(self.backend)
-                        candidate.__enter__()
-                        client = candidate
                     combined = [
                         request
                         for pending in pending_calls
                         for request in pending["requests"]
                     ]
-                    combined_results = []
-                    for start in range(0, len(combined), self.batch_size):
-                        combined_results.extend(
-                            client.batch_call(combined[start : start + self.batch_size])
-                        )
-                    offset = 0
-                    for pending in pending_calls:
-                        count = len(pending["requests"])
-                        pending["result"] = combined_results[offset : offset + count]
-                        offset += count
+                    try:
+                        combined_results = execute_requests(combined)
+                    except Exception as combined_error:
+                        discard_client()
+                        if len(pending_calls) == 1:
+                            pending_calls[0]["error"] = combined_error
+                        else:
+                            # Read-only Electrum calls are safe to retry. Split a
+                            # failed coalesced batch back into its logical callers
+                            # so one RPC error cannot contaminate another wallet.
+                            for pending in pending_calls:
+                                try:
+                                    pending["result"] = execute_requests(
+                                        pending["requests"]
+                                    )
+                                except Exception as exc:
+                                    pending["error"] = exc
+                                    discard_client()
+                    else:
+                        offset = 0
+                        for pending in pending_calls:
+                            count = len(pending["requests"])
+                            pending["result"] = combined_results[offset : offset + count]
+                            offset += count
                 except BaseException as exc:
+                    discard_client()
                     for pending in pending_calls:
-                        pending["error"] = exc
+                        if pending["error"] is None and pending["result"] is None:
+                            pending["error"] = exc
                 finally:
                     for pending in pending_calls:
                         pending["event"].set()
                 if stop_after_batch:
                     break
         finally:
-            if client is not None:
-                client.__exit__(None, None, None)
+            discard_client()
 
 
 _active_electrum_client_pool = ContextVar("active_electrum_client_pool", default=None)

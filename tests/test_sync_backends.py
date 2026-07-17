@@ -1535,6 +1535,87 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual([len(batch) for batch in wire_batches], [1, 1])
         self.assertEqual(results, [["wallet-a"], ["wallet-b"]])
 
+    def test_electrum_pool_isolates_error_to_its_logical_caller(self):
+        backend = {
+            "name": "fulcrum",
+            "kind": "electrum",
+            "url": "tcp://electrum.example:50001",
+        }
+        wire_batches = []
+
+        class FakeElectrumClient:
+            def __init__(self, _backend):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                markers = [params[0] for _method, params in requests]
+                wire_batches.append(markers)
+                if len(requests) > 1 or "bad" in markers:
+                    raise AppError("rejected request", code="electrum_error")
+                return markers
+
+        barrier = threading.Barrier(2)
+
+        def fetch(client, marker):
+            barrier.wait()
+            return client.batch_call([("example", [marker])])
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient):
+            with sb.shared_electrum_client_pool() as pool:
+                client = pool.client(backend)
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    good = executor.submit(fetch, client, "good")
+                    bad = executor.submit(fetch, client, "bad")
+                    self.assertEqual(good.result(), ["good"])
+                    with self.assertRaises(AppError):
+                        bad.result()
+
+        self.assertTrue(
+            any(len(batch) == 2 and set(batch) == {"good", "bad"} for batch in wire_batches)
+        )
+        self.assertIn(["good"], wire_batches)
+        self.assertIn(["bad"], wire_batches)
+
+    def test_electrum_pool_reconnects_after_transport_failure(self):
+        backend = {
+            "name": "fulcrum",
+            "kind": "electrum",
+            "url": "tcp://electrum.example:50001",
+        }
+        counts = {"init": 0, "exit": 0}
+
+        class FakeElectrumClient:
+            def __init__(self, _backend):
+                counts["init"] += 1
+                self.instance = counts["init"]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                counts["exit"] += 1
+                return False
+
+            def batch_call(self, requests):
+                if self.instance == 1:
+                    raise OSError("connection closed")
+                return [params[0] for _method, params in requests]
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient):
+            with sb.shared_electrum_client_pool() as pool:
+                client = pool.client(backend)
+                with self.assertRaises(OSError):
+                    client.call("example", ["first"])
+                self.assertEqual(client.call("example", ["second"]), "second")
+
+        self.assertEqual(counts, {"init": 2, "exit": 2})
+
     def test_electrum_call_raises_app_error_for_non_json_response(self):
         client = ElectrumClient({"name": "electrum", "url": "tcp://electrum.example:50001"})
         client.socket = _DummySocket()
