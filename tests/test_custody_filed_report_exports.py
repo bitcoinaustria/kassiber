@@ -54,6 +54,31 @@ def _scope(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def test_bundle_hash_rejects_duplicate_basenames_and_is_order_independent(
+    tmp_path,
+):
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first = first_dir / "report.csv"
+    second = second_dir / "report.csv"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+
+    for paths in ((first, second), (second, first)):
+        with pytest.raises(AppError) as raised:
+            custody_filed_reports.artifact_content_sha256(paths)
+        assert raised.value.code == "filed_report_snapshot_validation"
+        assert raised.value.details == {"field": "paths"}
+
+    uniquely_named = second_dir / "details.csv"
+    uniquely_named.write_bytes(second.read_bytes())
+    assert custody_filed_reports.artifact_content_sha256(
+        (first, uniquely_named)
+    ) == custody_filed_reports.artifact_content_sha256((uniquely_named, first))
+
+
 def test_completed_full_report_export_registers_computed_saved_snapshot(tmp_path):
     conn = open_db(tmp_path / "book")
     try:

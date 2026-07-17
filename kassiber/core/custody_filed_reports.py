@@ -392,6 +392,12 @@ def artifact_content_sha256(paths: Sequence[str | Path]) -> str:
             raise _error("exported artifact is not a regular file", field="paths")
     if len(materialized) == 1:
         return _file_sha256(materialized[0])
+    basenames = [path.name for path in materialized]
+    if len(set(basenames)) != len(basenames):
+        raise _error(
+            "bundle artifact basenames must be unique",
+            field="paths",
+        )
     manifest = [
         {
             "name": path.name,
