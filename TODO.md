@@ -178,22 +178,15 @@ same verification surface.
     classification. Plans contain deterministic exact component rows and
     report impacts; compatibility previews expose only redacted summaries and
     perform zero SQLite writes.
-  - [ ] Migrate pair/payout authored meaning into components with typed
+  - [x] Migrate pair/payout authored meaning into components with typed
     replicated economic terms; freeze legacy writes and retain replay history.
-    Deterministic draft staging, one-to-many leg-bound terms, compatibility
-    links, full-source connected 1:N/N:M consolidation, activation,
-    idempotence and atomic rollback coverage are complete. The journal consumes
-    effective active components and falls back to legacy interpretation for
-    skipped, ineffective, or partial-source historical rows; component-native
-    residual decisions and writes remain. Linked active compatibility rows are
-    database-write-frozen, and current mutation handlers retire/revise their
-    component atomically through the core authored-review store. CLI handlers
-    no longer own pair/payout INSERT, UPDATE or tombstone SQL. Removing the
-    frozen compatibility projections from new writes is the final producer
-    cutover after all readers move to component terms. The journal builder no
-    longer queries either legacy table directly: the core authored store now
-    exposes only linked rows whose component is ineffective, keeping the
-    partial-source residual exception explicit and deletable. Transfer
+    Deterministic draft staging, typed leg-bound terms, connected 1:N/N:M
+    consolidation, activation, idempotence and atomic rollback coverage are
+    complete. The journal consumes only effective active components and has no
+    legacy pair/payout interpreter fallback. Linked legacy rows are
+    database-write-frozen migration and delayed signed-replay inputs; current
+    mutations author, revise or retire components atomically through the core
+    store. CLI handlers own no pair/payout mutation SQL. Transfer
     matching, gap discovery, transaction-exclusion guards and commercial
     classification now resolve active reviews through that same store; every
     effective component boundary is claimed even when the component has no
@@ -212,8 +205,9 @@ same verification surface.
     retirements now author immutable components/terms directly and never write
     legacy projection rows. Shared fan-out revisions preserve sibling terms;
     miner-fee, retained and suspense residuals are explicit and exactly
-    allocated. The core store retains only the bounded frozen-row mutation
-    bridge needed to upgrade historical compatibility exceptions.
+    allocated. The core store retains only the bounded frozen-row
+    migration/replay bridge needed to upgrade historical signed compatibility
+    events.
     The producerless future-layer adapter contract and unproduced
     `channel_lifecycle`/`peg`/`refund` authored types are deleted. Real
     Lightning lifecycle interpretation remains at the canonical observation
@@ -224,7 +218,12 @@ same verification surface.
     uncovered boundary in suspense.
   - [ ] Cut every consumer to stored decisions/lineage, require gated report
     contexts, delete compatibility interpretation and speculative scaffolding,
-    and demonstrate the final simplicity/LOC/performance stop state. The
+    and demonstrate the final simplicity/LOC/performance stop state. Consumer,
+    report-gate, compatibility-interpreter, performance and quality work is
+    complete. The one remaining hard stop is raw code volume: custody core is
+    25,943 LOC versus 18,733 at the merge. The final audit in the plan records
+    why deleting the remaining migration, signed-replay, immutable audit or
+    pure planner/projection code would weaken protected invariants. The
     transaction graph, report/export transfer and swap rows, source-of-funds
     lineage, transaction UI, journal UI and AI snapshots now consume only
     stored custody decisions/economic relations. Reviewed kind, policy,
@@ -234,9 +233,9 @@ same verification surface.
     journal-derived report/export now acquires one core `ReportContext` proving
     tax support, current journals, complete active components and clear
     quantity barriers; composed reports reuse that proof, and the CLI report
-    hook/back-edge has been deleted. Component-native producer cutover and
-    speculative-scaffolding removal are complete; builder compatibility
-    deletion and the final simplicity/performance proof remain.
+    hook/back-edge has been deleted. Component-native producer cutover,
+    speculative-scaffolding removal, builder compatibility deletion and the
+    performance proof are complete.
 
 - [x] Harden the pre-msat legacy schema migration so rebuilding a very old
   database preserves columns added after that historical table shape. Add an

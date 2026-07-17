@@ -1,7 +1,8 @@
 # Custody architecture simplification
 
-Status: active follow-up to merged PR #439 (`76d907f6`). `TODO.md` remains the
-execution backlog; this document records the invariant and migration boundary.
+Status: behavioral cutover and validation complete; final hard-stop audit found
+one unmet criterion (raw custody-core LOC). `TODO.md` remains the execution
+backlog; this document records the invariant and migration boundary.
 
 ## Why this follow-up exists
 
@@ -26,9 +27,15 @@ means that every wallet owned by that person or company has been imported.
 Descriptor presence establishes ownership only inside authoritative current
 observer coverage.
 
-## Current competing paths
+## Starting competing paths and current authority
 
-The current path assembles custody in `CustodyJournalBuilder`:
+At the merge baseline, authored meaning could be read independently from
+`transaction_pairs`, `direct_swap_payouts`, active custody components and gap
+reviews. Transfer interpretation was repeated by the RP2 path, reports,
+transaction graphs and source-of-funds, while mutation-specific CLI/daemon
+handlers assembled their own lifecycle operations.
+
+The current path has one accounting authority. `CustodyJournalBuilder`:
 
 1. load transactions, observer provenance, wallet policy, loan and channel
    state;
@@ -40,6 +47,11 @@ The current path assembles custody in `CustodyJournalBuilder`:
 Reports, transaction graphs, source-of-funds, UI and AI consume the stored
 projection. Gap discovery is versioned once and all presentation pages read its
 normalized keyset rows.
+
+The legacy pair and payout tables are no longer accounting truths: they are
+write-frozen migration and delayed signed-replay inputs. That narrow physical
+compatibility exception cannot create, revise, delete, interpret or report a
+current review.
 
 ## Merge baseline
 
@@ -192,7 +204,8 @@ binary.
 5. Cut reports, graph, source-of-funds, UI and AI to stored decisions/lineage;
    require a gated report context; delete compatibility interpretation,
    rollback previews, speculative layer scaffolding, and obsolete commands.
-   In progress: MOVE decisions and non-quantity conversion/payout relations are
+   Behavioral cutover complete: MOVE decisions and non-quantity
+   conversion/payout relations are
    stored together by the canonical projection replacement, including reviewed
    kind/policy/source, notes, fees and payout presentation metadata. Reports,
    exports, transaction graphs, source-of-funds, transaction/journal UI and AI
@@ -404,3 +417,114 @@ write, consumers read the same stored projection, candidate discovery is
 versioned and genuinely paginated, compatibility interpretation is deleted,
 production code volume is materially lower, and all functional, replication,
 regtest, migration, performance-invariant, and repository quality gates pass.
+
+## Final hard-stop audit (2026-07-16)
+
+The initiative remains justified after the merged-code inspection. Every
+reported competing accounting path was either reproduced and removed or shown
+to be a bounded migration/replication concern rather than a live authority.
+The completed series is grouped below by coherent slice:
+
+- journal ownership and ordinary gap-capacity state: `156122fc`, `56e611b4`,
+  `9c786906`, `48c18e86`, `a42d6c8c`, `fe46d5cf`;
+- normalization, exact allocation and claim arbitration: `eed37863`,
+  `9ed58f7c`, `0e25df1a`, `3e3b502e`, `f3737c2e`, `14ced060`;
+- one versioned gap projection and pure review plan/apply: `3b903070`,
+  `139d97dc`, `f3518296`, `08c6c4b9`, `ffe3efac`, `1b3d8046`, `d2dcb9ca`,
+  `19f94edc`, `c51e010b`, `9940ac8e`, `3c6fc2e9`, `3003c518`, `d18554bf`,
+  `c1acfd35`;
+- component-authored pair/payout migration and lifecycle convergence:
+  `4f226eb2`, `4b75309c`, `b4cd82b2`, `5fb881ae`, `65eb4110`, `52204aef`,
+  `495bcd53`, `e982376d`, `0616b5e5`, `8a8ba05e`, `372e4486`, `c11976e4`,
+  `6073010f`, `11f3bf40`, `6e7f897a`, `a2513315`, `949d3874`, `68e67636`;
+- stored-projection consumers, report gate and surface consolidation:
+  `3c41deea`, `f149357e`, `fa4621de`, `c13015fe`, `ddbdea8d`, `04d50951`;
+- speculative-scaffold deletion, performance and final correctness repairs:
+  `a8131a8a`, `5c12439a`, `9e75efd3`.
+
+The final production flow is the target flow above. Static call-site audit
+finds `detect_intra_transfers` only in the custody interpreter and
+`build_canonical_quantity_state` only in `CustodyJournalBuilder`. The runtime
+has no discovery fallback. No `CUSTODY_CANDIDATE`, `HEURISTIC_CANDIDATE`,
+`CustodyGapSearchLimitError`, preview savepoint or manufactured fallback claim
+remains. Seven custody daemon operations replace the baseline fourteen:
+coverage, lineage, gap list/context/history, and shared review plan/apply.
+
+### Acceptance evidence
+
+The acceptance scenarios are covered by real database-backed tests, with live
+observers reserved for protocol physics:
+
+- authoritative MOVE, 1:N/N:1 and hostile duplicate provenance:
+  `test_authoritative_rowless_native_proof_projects_only_internal_move`,
+  `test_rowless_native_fanout_and_consolidation_use_aggregate_target_slots`,
+  `test_fanout_becomes_moves_with_deriver` and the two
+  `test_untrusted_same_txid_*_cannot_suppress_external_disposal` regressions;
+- current-coverage ownership and reorg invalidation:
+  `test_source_technical_coverage_cannot_confirm_an_unknown_destination`,
+  `test_anchor_coverage_mismatch_cannot_activate_even_when_manually_reviewed`,
+  `test_lagging_backend_fails_before_reorg_rebuild`, plus the live BDK/LWK and
+  Core/Elements observer lanes;
+- missing Whirlpool suggestion, explicit 9.9/0.1 bridge/residual, dismissal,
+  later sale barrier and exit-tax rebuild:
+  `test_missing_whirlpool_review_carries_99_and_keeps_residual_and_sale_blocked`,
+  `test_exit_tax_blocks_until_exact_missing_wallet_bridge_carries_basis`,
+  `test_guided_cli_dismissal_uses_only_gap_identity` and the real JSONL guided
+  lifecycle tests;
+- stale plans, atomic N:M and source-of-funds lineage:
+  `test_component_state_apply_rejects_stale_input_version`,
+  `test_bulk_apply_rejects_a_stale_input_version`, component replication tests
+  and `test_effective_nm_bridge_becomes_reviewed_source_funds_lineage`;
+- fail-closed pre-tax projection and report barriers:
+  `test_rp2_boundary_spy_never_receives_residual_or_later_basis_consumer`,
+  `test_unresolved_quantity_never_enters_finalized_projection_and_blocks_later`
+  and `test_quantity_issue_blocks_reports_and_appears_in_blocker_snapshot`;
+- genuine candidate/lineage pagination without rediscovery:
+  `test_projection_page_query_uses_keyset_index`, the real JSONL opaque-cursor
+  test and the 100k/250k scalability runs.
+
+Exact validation on the final code:
+
+- repository quality gate: 2,960 Python tests passed, 8 skipped; TypeScript
+  compilation passed; ESLint had zero errors (49 pre-existing warnings);
+  744 Vitest tests passed; shard and compile checks passed;
+- fast integration harness: 39 passed; custody desktop harness: 22 Python and
+  49 focused UI tests passed;
+- live Bitcoin Core journal/export and Fulcrum parity lanes passed;
+- the live all-observer lane passed independent Core/Elements truth manifests,
+  BDK Esplora/Electrum restart parity, and LWK multi-asset restart/no-op/reorg;
+- migration, delayed signed-replay, component replication, focused custody and
+  swap-refund regressions all passed. Performance and query-plan results are
+  recorded in the preceding section and meet every declared blocking budget.
+
+### Migration window and rollback risk
+
+The live schema contains 25 custody-related tables. The increase from the
+baseline 20 is the normalized candidate projection, component economic terms
+and durable migration-issue state; the serialized snapshot tables are dropped.
+Legacy pair/payout rows remain physically present only until every signed
+replica has acknowledged the component-native epoch or a tombstone protocol is
+available. Applying an older binary after component-native writes is unsafe;
+rollback requires the pre-migration backup. Removing those tables sooner could
+lose delayed signed events. Removing immutable migration snapshots, revision
+chains or filed-report history could break audit and amendment evidence.
+
+### Unmet code-volume hard stop
+
+The final audit cannot truthfully claim lower raw code volume. At the merge,
+the 17 `kassiber/core/custody*.py` modules contained 18,733 lines; the final 20
+modules contain 25,943 lines. Across the audited production surface, the series
+deleted 7,298 lines and added 11,775 (net +4,477). Custody references in
+`cli/handlers.py` fell from 116 to 32, and the competing interpreter, consumer,
+preview, command and serialized-snapshot paths were deleted, but the
+crash-safe authored migration, immutable replication terms, pure planners and
+normalized projection add more code than those paths contained.
+
+Reaching a lower raw total now would require removing the bounded legacy replay
+window, migration/audit history, or required planner/projection behavior, or
+would merely hide it behind a facade. Those choices would weaken replication
+safety, audit history or the requested invariants. The mandated stop-and-report
+rule therefore applies: all behavioral, acceptance, performance and quality
+conditions are demonstrated, but the initiative remains open on this one
+literal hard stop until the code-volume criterion or compatibility-window
+requirement is changed.
