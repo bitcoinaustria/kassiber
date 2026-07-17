@@ -705,7 +705,11 @@ def _persist_component_plan(
             preserve_planned_row_ids=True,
             **allowed,
         )
-    return custody_components.activate_component(conn, component["id"])
+    return custody_components.activate_component(
+        conn,
+        component["id"],
+        _validated_component=component,
+    )
 
 
 def apply_review(

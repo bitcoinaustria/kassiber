@@ -3516,6 +3516,7 @@ def _materialize_component(
     *,
     include_local_evidence: bool = True,
     profile_route_issues: Sequence[Mapping[str, Any]] | None = None,
+    native_support_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     stored_legs = [
         _leg_dict(leg)
@@ -3663,6 +3664,7 @@ def _materialize_component(
                 "legs": stored_legs,
                 "allocations": allocations,
             },
+            context=native_support_context,
         )
         if not native_support_status["usable"]:
             validation = dict(validation)
@@ -3805,6 +3807,21 @@ def get_component(
     return _materialize_component(
         conn, row, include_local_evidence=include_local_evidence
     )
+
+
+def redact_component_local_evidence(
+    component: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the renderer/AI-safe view of an already validated component."""
+
+    result = dict(component)
+    result["legs"] = [
+        {key: value for key, value in leg.items() if key != "location_ref"}
+        for leg in component.get("legs", ())
+    ]
+    result.pop("evidence", None)
+    result.pop("conversion_metadata", None)
+    return result
 
 
 def create_component(
@@ -4175,10 +4192,32 @@ def _activation_error(component: Mapping[str, Any]) -> AppError:
 def validate_component_activation(
     conn: sqlite3.Connection,
     component_id: str,
+    *,
+    _validated_component: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the current component iff activation would be valid, without writes."""
 
-    component = get_component(conn, component_id)
+    if _validated_component is None:
+        component = get_component(conn, component_id)
+    else:
+        component = dict(_validated_component)
+        if str(component.get("id") or "") != component_id:
+            raise _error(
+                "validated component does not match the activation target",
+                "custody_component_state_conflict",
+                details={"component_id": component_id},
+            )
+        current = _row(conn, component_id)
+        if (
+            current["state"] != component.get("state")
+            or int(current["revision"]) != int(component.get("revision") or 0)
+            or current["lineage_id"] != component.get("lineage_id")
+        ):
+            raise _error(
+                "custody component changed after validation",
+                "custody_component_state_conflict",
+                details={"component_id": component_id},
+            )
     if component["state"] == "superseded":
         raise _error(
             "superseded revisions cannot be activated directly",
@@ -4221,8 +4260,13 @@ def activate_component(
     component_id: str,
     *,
     activated_at: str | None = None,
+    _validated_component: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    component = validate_component_activation(conn, component_id)
+    component = validate_component_activation(
+        conn,
+        component_id,
+        _validated_component=_validated_component,
+    )
     if component["state"] == "active":
         # Idempotent reads of a received active revision must not manufacture a
         # device-local activation snapshot from the receiver's current rows.
@@ -4408,11 +4452,16 @@ def list_components(
         {query_limit}
         """,
         query_params,
-    )
+    ).fetchall()
     profile_route_issues = _profile_active_route_issues(
         conn,
         profile_id=profile_id,
     )
+    native_support_context = None
+    if any(row["state"] == "active" for row in rows):
+        from .custody_quantity_store import profile_native_support_context
+
+        native_support_context = profile_native_support_context(conn, profile_id)
     result: list[dict[str, Any]] = []
     for row in rows:
         item = _materialize_component(
@@ -4424,6 +4473,9 @@ def list_components(
             # graph, matching get_component/activation semantics exactly.
             profile_route_issues=(
                 profile_route_issues if row["state"] == "active" else None
+            ),
+            native_support_context=(
+                native_support_context if row["state"] == "active" else None
             ),
         )
         if effective_only and item["effective_state"] != "active":
@@ -4474,17 +4526,23 @@ def iter_authored_active_components(
         ORDER BY c.created_at, c.revision, c.id
         """,
         params,
-    )
+    ).fetchall()
     profile_route_issues = _profile_active_route_issues(
         conn,
         profile_id=profile_id,
     )
+    native_support_context = None
+    if rows:
+        from .custody_quantity_store import profile_native_support_context
+
+        native_support_context = profile_native_support_context(conn, profile_id)
     for row in rows:
         yield _materialize_component(
             conn,
             row,
             include_local_evidence=include_local_evidence,
             profile_route_issues=profile_route_issues,
+            native_support_context=native_support_context,
         )
 
 
@@ -4508,12 +4566,16 @@ def reconcile_active_memberships(
         conn,
         profile_id=profile_id,
     )
+    from .custody_quantity_store import profile_native_support_context
+
+    native_support_context = profile_native_support_context(conn, profile_id)
     active = [
         _materialize_component(
             conn,
             row,
             include_local_evidence=False,
             profile_route_issues=profile_route_issues,
+            native_support_context=native_support_context,
         )
         for row in conn.execute(
             """
@@ -4571,6 +4633,7 @@ __all__ = [
     "normalize_legs",
     "normalize_allocations",
     "normalize_component_header",
+    "redact_component_local_evidence",
     "reconcile_active_memberships",
     "supersede_component",
     "update_component",

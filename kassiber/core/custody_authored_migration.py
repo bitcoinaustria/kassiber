@@ -1789,7 +1789,12 @@ def _activate_native_review(
             change_reason=change_reason or f"{term_kind} review revised",
             **component_kwargs,
         )
-    activate_component(conn, component["id"], activated_at=str(row["created_at"]))
+    activate_component(
+        conn,
+        component["id"],
+        activated_at=str(row["created_at"]),
+        _validated_component=component,
+    )
     return {**dict(row), "component_id": component["id"]}
 
 

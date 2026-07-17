@@ -408,9 +408,43 @@ def component_evidence_status(
     )
 
 
+def profile_native_support_context(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    """Build the profile observation index shared by component checks."""
+
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.profile_id = ? AND t.excluded = 0
+            ORDER BY t.occurred_at, t.created_at, t.id
+            """,
+            (profile_id,),
+        ).fetchall()
+    ]
+    observations: dict[str, QuantityObservation] = {}
+    keys: dict[str, Any] = {}
+    for row in enriched_quantity_rows(rows):
+        row_id = str(row.get("id") or "")
+        try:
+            key = canonical_event_key(row)
+            observations[row_id] = QuantityObservation.from_transaction(row, key)
+            keys[row_id] = key
+        except (TypeError, ValueError):
+            continue
+    return {"observations": observations, "keys": keys}
+
+
 def component_native_support_status(
     conn: sqlite3.Connection,
     component: Mapping[str, Any],
+    *,
+    context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Derive bounded native-event corroboration for reviewed boundaries.
 
@@ -436,29 +470,11 @@ def component_native_support_status(
     if not boundary_legs:
         return {**base, "status": "unverified", "usable": True}
 
-    rows = [
-        dict(row)
-        for row in conn.execute(
-            """
-            SELECT t.*, w.kind AS wallet_kind, w.config_json AS config_json
-            FROM transactions t
-            JOIN wallets w ON w.id = t.wallet_id
-            WHERE t.profile_id = ? AND t.excluded = 0
-            ORDER BY t.occurred_at, t.created_at, t.id
-            """,
-            (str(component.get("profile_id") or ""),),
-        ).fetchall()
-    ]
-    observations: dict[str, QuantityObservation] = {}
-    keys: dict[str, Any] = {}
-    for row in enriched_quantity_rows(rows):
-        row_id = str(row.get("id") or "")
-        try:
-            key = canonical_event_key(row)
-            observations[row_id] = QuantityObservation.from_transaction(row, key)
-            keys[row_id] = key
-        except (TypeError, ValueError):
-            continue
+    support_context = context or profile_native_support_context(
+        conn, str(component.get("profile_id") or "")
+    )
+    observations = support_context["observations"]
+    keys = support_context["keys"]
 
     legs_by_id = {
         str(leg.get("id") or ""): leg for leg in (component.get("legs") or ())
@@ -1360,5 +1376,6 @@ __all__ = [
     "load_component_evidence_snapshots",
     "persist_authored_evidence_snapshots",
     "persist_component_evidence_commitments",
+    "profile_native_support_context",
     "replace_canonical_quantity_state",
 ]

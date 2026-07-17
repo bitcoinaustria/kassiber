@@ -561,9 +561,17 @@ class CustodyComponentApiTests(unittest.TestCase):
             if "from custody_component_allocations a join custody_components c"
             in statement
         ]
+        profile_observation_scans = [
+            statement
+            for statement in normalized
+            if "select t.*, w.kind as wallet_kind" in statement
+            and "from transactions t join wallets w" in statement
+            and "and t.excluded = 0" in statement
+        ]
         self.assertEqual(len(components), 6)
         self.assertEqual(len(profile_leg_scans), 1)
         self.assertEqual(len(profile_allocation_scans), 1)
+        self.assertEqual(len(profile_observation_scans), 1)
 
     def test_effective_listing_filters_before_applying_limit(self):
         active = self._balanced_component()

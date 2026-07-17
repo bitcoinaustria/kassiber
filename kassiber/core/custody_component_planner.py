@@ -530,13 +530,14 @@ def apply_component_batch(
                 },
             )
             if activate:
-                component = custody_components.activate_component(conn, component["id"])
-            if not include_local_evidence:
-                component = custody_components.get_component(
+                component = custody_components.activate_component(
                     conn,
                     component["id"],
-                    profile_id=profile_id,
-                    include_local_evidence=False,
+                    _validated_component=component,
+                )
+            if not include_local_evidence:
+                component = custody_components.redact_component_local_evidence(
+                    component
                 )
             created.append(component)
     except Exception:
@@ -937,13 +938,14 @@ def apply_component_revision(
             **prepared,
         )
         if activate:
-            component = custody_components.activate_component(conn, component["id"])
-        if not include_local_evidence:
-            component = custody_components.get_component(
+            component = custody_components.activate_component(
                 conn,
                 component["id"],
-                profile_id=profile_id,
-                include_local_evidence=False,
+                _validated_component=component,
+            )
+        if not include_local_evidence:
+            component = custody_components.redact_component_local_evidence(
+                component
             )
     except Exception:
         conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
@@ -977,7 +979,7 @@ def plan_component_state_change(
     )
     if action == "activate":
         component = custody_components.validate_component_activation(
-            conn, component_id
+            conn, component_id, _validated_component=component
         )
         resulting_state = "active"
     else:
@@ -993,11 +995,8 @@ def plan_component_state_change(
         "resulting_state": resulting_state,
         "reason": reason or "",
     }
-    public_component = custody_components.get_component(
-        conn,
-        component_id,
-        profile_id=profile_id,
-        include_local_evidence=False,
+    public_component = custody_components.redact_component_local_evidence(
+        component
     )
     return {
         **commitment,
@@ -1039,17 +1038,18 @@ def apply_component_state_change(
     conn.execute(f"SAVEPOINT {savepoint}")
     try:
         if action == "activate":
-            component = custody_components.activate_component(conn, component_id)
+            component = custody_components.activate_component(
+                conn,
+                component_id,
+                _validated_component=plan["component"],
+            )
         else:
             component = custody_components.supersede_component(
                 conn, component_id, reason=reason
             )
         if not include_local_evidence:
-            component = custody_components.get_component(
-                conn,
-                component["id"],
-                profile_id=profile_id,
-                include_local_evidence=False,
+            component = custody_components.redact_component_local_evidence(
+                component
             )
     except Exception:
         conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
