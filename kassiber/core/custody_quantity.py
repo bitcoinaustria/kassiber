@@ -15,9 +15,9 @@ when no tax classification is final.  Their per-asset sum is always zero:
 
     observed wallets + external/origin + fees + suspense/conflict == 0
 
-This is the Gate-1 contract.  It is intentionally not wired into journals yet;
-the integration must replace RP2-derived quantity views rather than decorate
-or filter RP2 input rows.
+This is the Gate-1 contract consumed by the custody journal builder. RP2 and
+reporting receive only its finalized projection; unresolved slices remain
+outside tax inputs behind scoped barriers.
 """
 
 from __future__ import annotations

@@ -492,6 +492,12 @@ protocol decoding, HTLC evidence,
 normalization, and Kassiber's ownership/tax domain logic remain intentionally
 separate.
 
+Descriptor configurations that BDK/LWK cannot faithfully express (for example
+remote-DNS Tor, custom CA/auth, or binding-specific custom timeouts) use
+`observer_route=compatibility` with an explicit
+`observer_compatibility_reason`. CLI/daemon payloads retain both fields and the
+desktop refresh summary displays the reason.
+
 The required Linux `chain-observers` CI job is path-aware for observer,
 descriptor, sync, persistence, dependency, and regtest changes. Packaging
 smokes import both pinned bindings in macOS ARM64, Linux x86_64, and Windows

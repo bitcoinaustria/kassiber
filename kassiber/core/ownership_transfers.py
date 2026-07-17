@@ -1,56 +1,10 @@
-"""Address-ownership self-transfer deriver.
+"""Derive graph-proven on-chain custody moves for the journal interpreter.
 
-``kassiber.transfers.detect_intra_transfers`` pairs a self-transfer only when
-two wallets independently recorded a row in the same canonical
-``(chain, network, txid, asset)`` scope. That misses the cases users actually
-hit:
-
-* the destination wallet never recorded a row (it was not synced for that
-  period) — the source outbound then looks like a disposal;
-* the two wallets' rows carry different/missing txids (CSV imports);
-* one transaction fans out to two or more owned wallets (1->N), which the
-  conservative 1-out/1-in detector skips; and
-* several owned wallets fund one consolidation transaction (N->1).
-
-This module closes those by reading the *actual transaction graph*: for an
-on-chain Bitcoin outbound whose full ``vin``/``vout`` are stored in
-``transactions.raw_json``, it asks the profile-wide :class:`OwnedIndex`
-("which of my wallets owns this output's script?"). An output paying an
-address owned by a *different* wallet of the same profile is a self-transfer
-leg — proven deterministically, with no amount/time heuristic.
-
-Scope (intentionally conservative — anything outside falls through to the
-existing row-matching + quarantine behavior, never mis-booked):
-
-* **Graph-proven source ownership.** Single-source spends can become 1:1 or
-  1:N moves (with any external residual kept as a real disposal). Multi-source
-  N:1 consolidations are handled first when every input, destination and shared
-  fee conserves exactly. Mixed-owner/PayJoin/CoinJoin and ambiguous N:M graphs
-  are never guessed; they stay reviewable and can be closed with an explicit
-  custody component.
-* **Rail-scoped valued graph.** Bitcoin rows usually carry the whole graph.
-  Liquid rows persist the non-secret valued inputs/outputs each wallet can
-  unblind and the deriver merges those observations only within one canonical
-  ``(chain, network, txid)`` scope. Assets conserve independently by Liquid
-  asset id. An owned confidential leg that remains unknown is blocked.
-* **Owned outputs only.** External recipients and OP_RETURN are never legs;
-  the residual ``amount - Σ(legs)`` stays on the source as a real disposal.
-
-Canonical custody arbitration gives exact native-event and conserving recorded
-pair claims precedence over graph heuristics. Graph interpretation handles
-external residuals, sync-gapped fan-outs, and consolidations; ambiguity remains
-reviewable instead of being folded into a transfer fee.
-
-Amount model: an outbound row's spend capacity is ``amount + fee`` unless
-``amount_includes_fee`` is set. Esplora-style rows usually have ``amount`` as
-the sum of non-change output values and ``fee`` as the miner fee, while some
-Core wallet shapes report ``amount`` net of the fee. The deriver therefore
-matches owned outputs against total capacity and assigns only the fee still
-available after those outputs are covered.
-
-Pure-ish: no SQLite. The caller builds the :class:`OwnedIndex` once and passes
-it in alongside the already-fetched rows; raw transaction JSON is read from the
-row's ``raw_json`` column.
+The pure deriver consumes canonical transaction graphs plus one profile-wide
+``OwnedIndex``. It emits conserving 1:N and N:1 owned-wallet legs, leaves
+external output residuals for ordinary disposal treatment, and fails closed on
+mixed-owner, PayJoin, CoinJoin, ambiguous N:M, or unknown-valued Liquid graphs.
+Exact native-event claims remain stronger at arbitration time.
 """
 
 from __future__ import annotations
