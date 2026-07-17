@@ -697,6 +697,29 @@ random by default (that is the point); pass `--tick-seed` to
 itself always ends with one built-in tick + resync and fails if that resync
 imports nothing — a standing guard that "refresh" is never a dead button.
 
+### Large-book sync benchmark
+
+The July 2026 performance slice used the checked-in full-accounting scenario on
+the same local Docker stack before and after the changes. The resulting book
+contained 997 transaction rows across 13 wallets after the built-in activity
+tick. Three active Bitcoin wallets used Fulcrum, the remaining ordinary Bitcoin
+wallets used Core RPC, and Liquid wallets continued to use their Electrum
+backend. Each reported resync figure is the median of repeated runs against the
+same chain and SQLite book:
+
+| Path | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| CLI `wallets sync --all`, unchanged chain (5 runs) | 12.156 s | 2.057 s | 83.1% faster |
+| Desktop freshness sync, unchanged chain (5 runs) | 2.966 s | 1.814 s | 38.8% faster |
+| Desktop forced full replay, 590 Fulcrum transaction fetches / 642 records (3 runs) | — | 4.674 s | reference point |
+
+The unchanged-chain runs imported zero rows, wrote zero false updates, and
+fetched zero Fulcrum transaction bodies. The forced replay also wrote zero
+false updates. End-to-end `demo-full` setup remains roughly 16 minutes on the
+benchmark host because broadcasting and mining about 1,000 real operations over
+the historical 50-block workload dominates that lane. Treat setup generation
+and wallet resync as separate measurements when investigating regressions.
+
 Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 
 ```bash
