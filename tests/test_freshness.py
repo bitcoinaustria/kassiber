@@ -1225,6 +1225,50 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(len(payload["completed"]), 1)
         self.assertEqual(payload["completed"][0]["status"], freshness.JOB_DONE)
 
+    def test_desktop_sync_does_not_prefetch_duplicate_wallet_jobs(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind,
+                config_json, created_at
+            ) VALUES(
+                'wallet-a', 'ws', ?, NULL, 'Alpha', 'address',
+                '{"addresses":["bc1qwallet-a"]}', '2026-06-04T00:00:00Z'
+            )
+            """,
+            (profile_id,),
+        )
+        conn.commit()
+        source_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-a")
+        jobs = [
+            {
+                "id": f"job-{index}",
+                "job_type": freshness.JOB_ONCHAIN_WALLET,
+                "source_key": source_key,
+                "payload": {"wallet_id": "wallet-a", "force_full": True},
+            }
+            for index in range(2)
+        ]
+        profile = conn.execute(
+            "SELECT * FROM profiles WHERE id = ?",
+            (profile_id,),
+        ).fetchone()
+
+        with patch(
+            "kassiber.daemon_freshness.prefetch_wallets_from_backend"
+        ) as prefetch:
+            result = daemon_freshness._prefetch_onchain_freshness_jobs(
+                conn,
+                {},
+                profile,
+                jobs,
+            )
+
+        self.assertEqual(result, {})
+        prefetch.assert_not_called()
+
     def test_desktop_sync_falls_back_to_isolated_jobs_if_batch_prefetch_fails(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

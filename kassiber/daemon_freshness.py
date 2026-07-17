@@ -1140,26 +1140,34 @@ def _prefetch_onchain_freshness_jobs(
     ]
     if not onchain_jobs:
         return {}
-    wallet_ids = {
-        str((job.get("payload") or {}).get("wallet_id") or "")
-        for job in onchain_jobs
+    jobs_by_wallet_id: dict[str, list[Mapping[str, Any]]] = {}
+    for job in onchain_jobs:
+        wallet_id = str((job.get("payload") or {}).get("wallet_id") or "")
+        if wallet_id:
+            jobs_by_wallet_id.setdefault(wallet_id, []).append(job)
+    # Forced-full jobs deliberately disable single-flight. Keep duplicate jobs
+    # serial so a later job cannot apply a network snapshot captured before an
+    # earlier job advanced the wallet's checkpoint.
+    eligible_job_by_wallet_id = {
+        wallet_id: wallet_jobs[0]
+        for wallet_id, wallet_jobs in jobs_by_wallet_id.items()
+        if len(wallet_jobs) == 1
     }
-    wallet_ids.discard("")
     wallet_rows = conn.execute(
         "SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC",
         (profile["id"],),
     ).fetchall()
-    wallets = [wallet for wallet in wallet_rows if str(wallet["id"]) in wallet_ids]
-    jobs_by_wallet_id = {
-        str((job.get("payload") or {}).get("wallet_id") or ""): job
-        for job in onchain_jobs
-    }
+    wallets = [
+        wallet
+        for wallet in wallet_rows
+        if str(wallet["id"]) in eligible_job_by_wallet_id
+    ]
     checkpoints = {
         str(wallet["id"]): _source_checkpoint_for_job(
             conn,
             str(profile["id"]),
-            str(jobs_by_wallet_id[str(wallet["id"])]["source_key"]),
-            jobs_by_wallet_id[str(wallet["id"])],
+            str(eligible_job_by_wallet_id[str(wallet["id"])]["source_key"]),
+            eligible_job_by_wallet_id[str(wallet["id"])],
         )
         for wallet in wallets
     }
@@ -1168,7 +1176,7 @@ def _prefetch_onchain_freshness_jobs(
         grouped_wallets = [
             wallet
             for wallet in wallets
-            if _job_force_full(jobs_by_wallet_id[str(wallet["id"])]) is force_full
+            if _job_force_full(eligible_job_by_wallet_id[str(wallet["id"])]) is force_full
         ]
         if not grouped_wallets:
             continue
@@ -1188,7 +1196,7 @@ def _prefetch_onchain_freshness_jobs(
             wallet_id = str(wallet["id"])
             if wallet_id not in group_results:
                 continue
-            job = jobs_by_wallet_id[wallet_id]
+            job = eligible_job_by_wallet_id[wallet_id]
             prefetched_by_job[str(job["id"])] = {
                 "wallet_id": wallet_id,
                 "wallet_signature": _wallet_sync_config_signature(wallet),
