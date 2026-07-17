@@ -184,6 +184,13 @@ Electrum-specific fields:
 - `BATCH_SIZE`
 - `INSECURE`
 
+Bitcoin transactions synced through an Electrum backend persist their decoded
+graph in `transactions.raw_json` with inline prevouts (Esplora-shaped
+`scriptpubkey`/`value` outputs) plus a `_kassiber_electrum_graph` marker object
+recording the shape kind and version. The marker lets unchanged-chain resyncs
+reuse the stored graph instead of re-fetching transaction bodies; external
+tooling that parses `raw_json` should ignore the marker key.
+
 Bitcoin Core-specific fields:
 
 - `USERNAME`
