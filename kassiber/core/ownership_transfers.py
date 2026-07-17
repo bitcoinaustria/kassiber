@@ -452,10 +452,6 @@ def derive_ownership_transfers(
                     row,
                     "liquid_transfer_graph_incomplete",
                     {
-                        "required_for": "ownership_transfer_review",
-                        "wallet": _get(row, "wallet_label") or _get(row, "wallet_id"),
-                        "asset": _get(row, "asset"),
-                        "external_id": _get(row, "external_id"),
                         "row_amount_msat": int(_get(row, "amount") or 0),
                         "owned_receipts_msat": owned_receipts_msat,
                     },
@@ -544,10 +540,6 @@ def derive_ownership_transfers(
                         row,
                         "liquid_transfer_graph_incomplete",
                         {
-                            "required_for": "ownership_transfer_review",
-                            "wallet": _get(row, "wallet_label") or _get(row, "wallet_id"),
-                            "asset": _get(row, "asset"),
-                            "external_id": _get(row, "external_id"),
                             "row_amount_msat": int(_get(row, "amount") or 0),
                             "owned_receipts_msat": sum(
                                 int(_get(candidate, "amount") or 0)
@@ -570,10 +562,6 @@ def derive_ownership_transfers(
                 row,
                 "ownership_transfer_asset_evidence_incomplete",
                 {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
                     "evidence_conflicts": list(parsed.get("evidence_conflicts") or ()),
                 },
             )
@@ -595,10 +583,6 @@ def derive_ownership_transfers(
                 row,
                 "ownership_transfer_source_ambiguous",
                 {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
                     "canonical_chain": physical_scope[0],
                     "canonical_network": physical_scope[1],
                     "scope_conflict": True,
@@ -661,10 +645,6 @@ def derive_ownership_transfers(
                 row,
                 "ownership_transfer_asset_evidence_incomplete",
                 {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
                     "missing": "owned_output_value_or_asset",
                 },
             )
@@ -674,21 +654,11 @@ def derive_ownership_transfers(
                 result,
                 row,
                 "ownership_transfer_ambiguous_output",
-                {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
-                    **(
-                        {
-                            "verified_external_msat": (
-                                external_value_sats * SATS_TO_MSAT
-                            )
-                        }
-                        if external_value_complete and external_value_sats > 0
-                        else {}
-                    ),
-                },
+                (
+                    {"verified_external_msat": external_value_sats * SATS_TO_MSAT}
+                    if external_value_complete and external_value_sats > 0
+                    else None
+                ),
             )
             continue
         if not by_dest:
@@ -700,10 +670,6 @@ def derive_ownership_transfers(
                 row,
                 "ownership_transfer_duplicate_outbound",
                 {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
                     "outbound_count": len(duplicate_group),
                     "outbound_ids": sorted(str(_get(item, "id")) for item in duplicate_group),
                 },
@@ -716,17 +682,7 @@ def derive_ownership_transfers(
             row,
             physical_scope=physical_scope,
         ):
-            _block_source(
-                result,
-                row,
-                "ownership_transfer_source_ambiguous",
-                {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
-                },
-            )
+            _block_source(result, row, "ownership_transfer_source_ambiguous")
             continue
         source_amount_msat = int(_get(row, "amount") or 0)
         source_fee_msat = int(_get(row, "fee") or 0)
@@ -763,10 +719,6 @@ def derive_ownership_transfers(
                 row,
                 "ownership_transfer_conservation_mismatch",
                 {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
                     **conservation_detail,
                 },
             )
@@ -782,10 +734,6 @@ def derive_ownership_transfers(
                 row,
                 "ownership_transfer_amount_mismatch",
                 {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
                     "row_amount_msat": source_amount_msat,
                     "row_total_outflow_msat": source_total_msat,
                     "owned_outputs_msat": legs_value_msat,
@@ -801,13 +749,10 @@ def derive_ownership_transfers(
                     row,
                     "ownership_transfer_fee_evidence_incomplete",
                     {
-                        "required_for": "complete_transfer_component",
-                        "wallet": _get(row, "wallet_label") or source_wallet_id,
-                        "asset": _get(row, "asset"),
-                        "external_id": _get(row, "external_id"),
                         "folded_gap_msat": folded_gap_msat,
                         "missing": "exact_network_fee",
                     },
+                    required_for="complete_transfer_component",
                 )
                 continue
             if exact_folded_fee_msat > folded_gap_msat:
@@ -816,13 +761,10 @@ def derive_ownership_transfers(
                     row,
                     "ownership_transfer_conservation_mismatch",
                     {
-                        "required_for": "complete_transfer_component",
-                        "wallet": _get(row, "wallet_label") or source_wallet_id,
-                        "asset": _get(row, "asset"),
-                        "external_id": _get(row, "external_id"),
                         "folded_gap_msat": folded_gap_msat,
                         "exact_network_fee_msat": exact_folded_fee_msat,
                     },
+                    required_for="complete_transfer_component",
                 )
                 continue
 
@@ -875,11 +817,7 @@ def derive_ownership_transfers(
                 ok = False
                 decline_reason = "ownership_transfer_destination_ambiguous"
                 decline_detail = {
-                    "required_for": "ownership_transfer_review",
-                    "wallet": _get(row, "wallet_label") or source_wallet_id,
                     "destination_wallet_id": dest_wallet_id,
-                    "asset": _get(row, "asset"),
-                    "external_id": _get(row, "external_id"),
                     "leg_amount_msat": leg_msat,
                 }
                 break
@@ -893,11 +831,7 @@ def derive_ownership_transfers(
                     ok = False
                     decline_reason = "ownership_transfer_destination_missing_ref"
                     decline_detail = {
-                        "required_for": "ownership_transfer_review",
-                        "wallet": _get(row, "wallet_label") or source_wallet_id,
                         "destination_wallet_id": dest_wallet_id,
-                        "asset": _get(row, "asset"),
-                        "external_id": _get(row, "external_id"),
                     }
                     break
                 in_row = _clone_row(
@@ -2241,10 +2175,19 @@ def _block_source(
     result: OwnershipDeriveResult,
     row: Mapping[str, Any],
     reason: str,
-    detail: Mapping[str, Any],
+    detail: Mapping[str, Any] | None = None,
+    *,
+    required_for: str = "ownership_transfer_review",
 ) -> None:
+    payload = {
+        "required_for": required_for,
+        "wallet": _get(row, "wallet_label") or _get(row, "wallet_id"),
+        "asset": _get(row, "asset"),
+        "external_id": _get(row, "external_id"),
+    }
+    payload.update(detail or {})
     result.blocked_sources.append(
-        {"row": row, "reason": reason, "detail": dict(detail)}
+        {"row": row, "reason": reason, "detail": payload}
     )
 
 
