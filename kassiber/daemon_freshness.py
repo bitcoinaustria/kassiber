@@ -19,6 +19,7 @@ from .cli.handlers import (
     cache_swap_candidate_count,
     enrich_wallet_from_btcpay_provenance,
     process_journals,
+    prefetch_wallets_from_backend,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
     sync_configured_btcpay_wallet,
@@ -28,6 +29,7 @@ from .cli.handlers import (
 from .core import commercial as core_commercial
 from .core import freshness as core_freshness
 from .core import rates as core_rates
+from .core import sync_backends as core_sync_backends
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.sync import sync_progress_emitter
@@ -642,7 +644,52 @@ def _load_freshness_profile(
     return profile
 
 
-def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_freshness.JobHandler]:
+def _prefetched_onchain_fetches_for_job(
+    prefetched_onchain: Mapping[str, Any] | None,
+    job: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    checkpoint: Mapping[str, Any],
+    force_full: bool,
+) -> Mapping[str, Any] | None:
+    """Return a batch fetch only when it belongs to this exact job contract."""
+
+    if prefetched_onchain is None:
+        return None
+    entry = prefetched_onchain.get(str(job.get("id") or ""))
+    if not isinstance(entry, Mapping):
+        return None
+    wallet_id = str(wallet["id"])
+    if str(entry.get("wallet_id") or "") != wallet_id:
+        return None
+    if entry.get("wallet_signature") != _wallet_sync_config_signature(wallet):
+        return None
+    if bool(entry.get("force_full")) is not force_full:
+        return None
+    entry_checkpoint = entry.get("checkpoint")
+    if not isinstance(entry_checkpoint, Mapping):
+        return None
+    if dict(entry_checkpoint) != dict(checkpoint):
+        return None
+    fetches = entry.get("fetches")
+    if not isinstance(fetches, Mapping) or wallet_id not in fetches:
+        return None
+    return fetches
+
+
+def _wallet_sync_config_signature(wallet: Mapping[str, Any]) -> dict[str, str]:
+    """Identify the persisted wallet inputs that determine an on-chain fetch."""
+
+    return {
+        "kind": str(wallet["kind"]),
+        "config_json": str(wallet["config_json"] or "{}"),
+    }
+
+
+def _freshness_handlers(
+    runtime_config: dict[str, object],
+    *,
+    prefetched_onchain: Mapping[str, Any] | None = None,
+) -> Mapping[str, core_freshness.JobHandler]:
     def onchain_wallet(
         conn: sqlite3.Connection,
         job: Mapping[str, Any],
@@ -652,6 +699,13 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         profile, wallet = _load_freshness_profile_wallet(conn, job)
         force_full = _job_force_full(job)
         checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)
+        prefetched_fetches = _prefetched_onchain_fetches_for_job(
+            prefetched_onchain,
+            job,
+            wallet,
+            checkpoint,
+            force_full,
+        )
         wallet_with_checkpoint = _wallet_with_freshness_checkpoint(wallet, checkpoint)
         progress({"phase": core_freshness.PHASE_DISCOVERY, "wallet": wallet["label"]})
         check_cancelled()
@@ -667,6 +721,7 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
                 checkpoint=checkpoint,
                 force_full=force_full,
                 check_cancelled=check_cancelled,
+                prefetched=prefetched_fetches,
             )
         finally:
             sync_progress_emitter.reset(token)
@@ -1075,6 +1130,100 @@ def _filter_freshness_specs_by_policy(
     ]
 
 
+def _prefetch_onchain_freshness_jobs(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    profile: Mapping[str, Any],
+    jobs: list[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    """Batch the backend I/O for due on-chain jobs before they run.
+
+    This runs before any selected job is marked running, so adapter-side
+    effects the prefetch performs (for example Bitcoin Core descriptor or
+    address import during observer preparation) can land for a job that is
+    later cancelled or superseded. Those side effects must stay idempotent;
+    the fetched network snapshots themselves are only applied when a job
+    matches its full prefetch contract (job id, wallet config signature,
+    checkpoint, and force-full flag) at execution time.
+    """
+
+    onchain_jobs = [
+        job for job in jobs if job.get("job_type") == core_freshness.JOB_ONCHAIN_WALLET
+    ]
+    if not onchain_jobs:
+        return {}
+    jobs_by_wallet_id: dict[str, list[Mapping[str, Any]]] = {}
+    for job in onchain_jobs:
+        wallet_id = str((job.get("payload") or {}).get("wallet_id") or "")
+        if wallet_id:
+            jobs_by_wallet_id.setdefault(wallet_id, []).append(job)
+    # Forced-full jobs deliberately disable single-flight. Keep duplicate jobs
+    # serial so a later job cannot apply a network snapshot captured before an
+    # earlier job advanced the wallet's checkpoint.
+    eligible_job_by_wallet_id = {
+        wallet_id: wallet_jobs[0]
+        for wallet_id, wallet_jobs in jobs_by_wallet_id.items()
+        if len(wallet_jobs) == 1
+    }
+    wallet_rows = conn.execute(
+        "SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC",
+        (profile["id"],),
+    ).fetchall()
+    wallets = [
+        wallet
+        for wallet in wallet_rows
+        if str(wallet["id"]) in eligible_job_by_wallet_id
+    ]
+    checkpoints = {
+        str(wallet["id"]): _source_checkpoint_for_job(
+            conn,
+            str(profile["id"]),
+            str(eligible_job_by_wallet_id[str(wallet["id"])]["source_key"]),
+            eligible_job_by_wallet_id[str(wallet["id"])],
+        )
+        for wallet in wallets
+    }
+    prefetched_by_job: dict[str, Any] = {}
+    # Both force-full groups reuse one shared Electrum pool so the incremental
+    # and forced-full prefetches do not tear down and re-establish the same
+    # backend connection between groups.
+    with core_sync_backends.shared_electrum_client_pool():
+        for force_full in (False, True):
+            grouped_wallets = [
+                wallet
+                for wallet in wallets
+                if _job_force_full(eligible_job_by_wallet_id[str(wallet["id"])])
+                is force_full
+            ]
+            if not grouped_wallets:
+                continue
+            group_results = prefetch_wallets_from_backend(
+                conn,
+                runtime_config,
+                profile["workspace_id"],
+                profile["id"],
+                grouped_wallets,
+                freshness_checkpoints={
+                    str(wallet["id"]): checkpoints[str(wallet["id"])]
+                    for wallet in grouped_wallets
+                },
+                force_full=force_full,
+            )
+            for wallet in grouped_wallets:
+                wallet_id = str(wallet["id"])
+                if wallet_id not in group_results:
+                    continue
+                job = eligible_job_by_wallet_id[wallet_id]
+                prefetched_by_job[str(job["id"])] = {
+                    "wallet_id": wallet_id,
+                    "wallet_signature": _wallet_sync_config_signature(wallet),
+                    "checkpoint": checkpoints[wallet_id],
+                    "force_full": force_full,
+                    "fetches": {wallet_id: group_results[wallet_id]},
+                }
+    return prefetched_by_job
+
+
 def _parse_freshness_timestamp(value: Any) -> datetime | None:
     return parse_iso_datetime_or_none(value)
 
@@ -1474,9 +1623,39 @@ def _freshness_run_payload(
                 }
             )
 
+        token = (
+            sync_progress_emitter.set(_progress_with_run_context)
+            if progress_observer is not None
+            else None
+        )
+        try:
+            selected_jobs = core_freshness.list_due_jobs(
+                conn,
+                profile_id=profile["id"],
+                limit=run_limit,
+            )
+            try:
+                prefetched_onchain = _prefetch_onchain_freshness_jobs(
+                    conn,
+                    runtime_config,
+                    profile,
+                    selected_jobs,
+                )
+            except Exception as exc:
+                _LOGGER.warning(
+                    "Freshness batch prefetch fell back to isolated jobs (%s)",
+                    f"{exc.__class__.__module__}.{exc.__class__.__qualname__}",
+                )
+                prefetched_onchain = {}
+        finally:
+            if token is not None:
+                sync_progress_emitter.reset(token)
         completed = core_freshness.run_due_jobs(
             conn,
-            _freshness_handlers(runtime_config),
+            _freshness_handlers(
+                runtime_config,
+                prefetched_onchain=prefetched_onchain,
+            ),
             profile_id=profile["id"],
             limit=run_limit,
             progress_observer=(

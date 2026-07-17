@@ -1691,6 +1691,15 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_sync.add_argument("--profile")
     wallets_sync.add_argument("--wallet")
     wallets_sync.add_argument("--all", action="store_true")
+    wallets_sync.add_argument(
+        "--force-full",
+        action="store_true",
+        help=(
+            "Ignore stored freshness checkpoints and replay the full backend"
+            " history (repair path when local rows diverge from an"
+            " unchanged-chain checkpoint)"
+        ),
+    )
     wallets_derive = wallets_sub.add_parser("derive")
     wallets_derive.add_argument("--workspace")
     wallets_derive.add_argument("--profile")
@@ -3665,7 +3674,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.wallets_command == "sync":
-            return emit(args, sync_wallet(conn, args.runtime_config, args.workspace, args.profile, args.wallet, args.all))
+            return emit(
+                args,
+                sync_wallet(
+                    conn,
+                    args.runtime_config,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.all,
+                    force_full=args.force_full,
+                ),
+            )
         if args.wallets_command == "derive":
             return emit(
                 args,

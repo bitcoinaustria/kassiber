@@ -707,14 +707,24 @@ def recover_interrupted_jobs(
     return recovered
 
 
-def _next_due_job(conn: sqlite3.Connection, profile_id: str | None = None) -> dict[str, Any] | None:
+def list_due_jobs(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Preview the jobs `run_due_jobs` would select, in execution order."""
+
+    bounded_limit = max(0, int(limit))
+    if bounded_limit == 0:
+        return []
     now = now_iso()
     params: list[Any] = [JOB_QUEUED, JOB_RATE_LIMITED, now, now]
     profile_filter = ""
     if profile_id:
         profile_filter = "AND profile_id = ?"
         params.append(profile_id)
-    row = conn.execute(
+    rows = conn.execute(
         f"""
         SELECT *
         FROM freshness_jobs
@@ -730,11 +740,16 @@ def _next_due_job(conn: sqlite3.Connection, profile_id: str | None = None) -> di
           )
           {profile_filter}
         ORDER BY priority ASC, created_at ASC, id ASC
-        LIMIT 1
+        LIMIT ?
         """,
-        params,
-    ).fetchone()
-    return _row_payload(row) if row else None
+        [*params, bounded_limit],
+    ).fetchall()
+    return [_row_payload(row) for row in rows]
+
+
+def _next_due_job(conn: sqlite3.Connection, profile_id: str | None = None) -> dict[str, Any] | None:
+    jobs = list_due_jobs(conn, profile_id=profile_id, limit=1)
+    return jobs[0] if jobs else None
 
 
 def update_job_progress(
@@ -1250,6 +1265,7 @@ __all__ = [
     "get_source_state",
     "journal_source_key",
     "list_jobs",
+    "list_due_jobs",
     "list_source_states",
     "pause_source",
     "rate_source_key",

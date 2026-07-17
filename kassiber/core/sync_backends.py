@@ -6,13 +6,16 @@ import base64
 import hashlib
 import json
 import os
+import queue
 import socket
 import ssl
 import stat
+import threading
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
-from contextvars import copy_context
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar, copy_context
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -68,6 +71,7 @@ from .wallets import (
 
 
 ELECTRUM_STORED_GRAPH_VERSION = 1
+ELECTRUM_STORED_GRAPH_MARKER = "_kassiber_electrum_graph"
 
 
 def _emit_backend_progress(phase: str, **payload):
@@ -278,39 +282,42 @@ class ElectrumClient:
         self.server_version = None
         self._egress_host = None
         self._egress_port = None
+        self._io_lock = threading.RLock()
 
     def __enter__(self):
-        scheme, host, port = parse_socket_backend_url(
-            self.backend["url"],
-            default_scheme="ssl",
-            default_ports={"ssl": 50002, "tcp": 50001},
-        )
-        raw_socket = _connect_backend_socket(self.backend, host, port)
-        self._egress_host = host
-        self._egress_port = port
-        if scheme in {"ssl", "tls"}:
-            certificate = backend_value(self.backend, "certificate")
-            context = ssl.create_default_context(cafile=certificate)
-            if parse_bool(backend_value(self.backend, "insecure"), default=False):
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-            raw_socket = context.wrap_socket(raw_socket, server_hostname=host)
-        elif scheme != "tcp":
-            raise AppError(f"Unsupported Electrum transport '{scheme}'")
-        self.socket = raw_socket
-        self.reader = raw_socket.makefile("r", encoding="utf-8", newline="\n")
-        self.server_version = self.call("server.version", ["Kassiber", "1.6"])
-        return self
+        with self._io_lock:
+            scheme, host, port = parse_socket_backend_url(
+                self.backend["url"],
+                default_scheme="ssl",
+                default_ports={"ssl": 50002, "tcp": 50001},
+            )
+            raw_socket = _connect_backend_socket(self.backend, host, port)
+            self._egress_host = host
+            self._egress_port = port
+            if scheme in {"ssl", "tls"}:
+                certificate = backend_value(self.backend, "certificate")
+                context = ssl.create_default_context(cafile=certificate)
+                if parse_bool(backend_value(self.backend, "insecure"), default=False):
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                raw_socket = context.wrap_socket(raw_socket, server_hostname=host)
+            elif scheme != "tcp":
+                raise AppError(f"Unsupported Electrum transport '{scheme}'")
+            self.socket = raw_socket
+            self.reader = raw_socket.makefile("r", encoding="utf-8", newline="\n")
+            self.server_version = self.call("server.version", ["Kassiber", "1.6"])
+            return self
 
     def __exit__(self, exc_type, exc, tb):
-        if self.reader is not None:
-            self.reader.close()
-        if self.socket is not None:
-            self.socket.close()
-        self.reader = None
-        self.socket = None
-        self.server_version = None
-        return False
+        with self._io_lock:
+            if self.reader is not None:
+                self.reader.close()
+            if self.socket is not None:
+                self.socket.close()
+            self.reader = None
+            self.socket = None
+            self.server_version = None
+            return False
 
     def _decode_message(self, line):
         try:
@@ -335,6 +342,10 @@ class ElectrumClient:
         return message
 
     def call(self, method, params=None):
+        with self._io_lock:
+            return self._call_locked(method, params)
+
+    def _call_locked(self, method, params=None):
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         self.request_id += 1
@@ -372,11 +383,16 @@ class ElectrumClient:
                 # The Electrum server message is untrusted free text that can
                 # echo a txid/amount; pseudonymize at the source.
                 raise AppError(
-                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                    f"Electrum call {method} failed {redact_operational_text(detail)}",
+                    code="electrum_rpc_error",
                 )
             return message.get("result")
 
     def batch_call(self, requests):
+        with self._io_lock:
+            return self._batch_call_locked(requests)
+
+    def _batch_call_locked(self, requests):
         if self.socket is None or self.reader is None:
             raise AppError("Electrum client is not connected")
         if not requests:
@@ -427,11 +443,271 @@ class ElectrumClient:
                 # The Electrum server message is untrusted free text that can
                 # echo a txid/amount; pseudonymize at the source.
                 raise AppError(
-                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                    f"Electrum call {method} failed {redact_operational_text(detail)}",
+                    code="electrum_rpc_error",
                 )
             results[index] = message.get("result")
             remaining -= 1
         return results
+
+
+def _electrum_pool_key(backend):
+    return (
+        str(_mapping_get(backend, "name", "") or ""),
+        str(_mapping_get(backend, "url", "") or ""),
+        str(backend_value(backend, "tor_proxy") or ""),
+        str(backend_value(backend, "certificate") or ""),
+        str(backend_value(backend, "insecure") or ""),
+    )
+
+
+class _ElectrumClientPool:
+    def __init__(self):
+        self._dispatchers = {}
+        self._lock = threading.Lock()
+
+    def client(self, backend):
+        key = _electrum_pool_key(backend)
+        with self._lock:
+            dispatcher = self._dispatchers.get(key)
+            if dispatcher is None:
+                dispatcher = _ElectrumBatchDispatcher(backend)
+                self._dispatchers[key] = dispatcher
+            return dispatcher
+
+    def close(self):
+        with self._lock:
+            dispatchers = list(self._dispatchers.values())
+            self._dispatchers.clear()
+        for dispatcher in reversed(dispatchers):
+            dispatcher.close()
+
+
+class _ElectrumBatchDispatcher:
+    """Serialize one backend's Electrum traffic through a single connection.
+
+    Wallet prefetch parallelism deliberately funnels into one socket per
+    backend: concurrent callers are coalesced into shared wire batches, which
+    keeps the server-side connection count flat no matter how many wallets
+    sync at once. Do not "fix" throughput by opening one connection per
+    caller; the pipelining here is the intended design and per-backend
+    throughput is bounded by the server, not this dispatcher.
+    """
+
+    _COALESCE_SECONDS = 0.002
+
+    def __init__(self, backend):
+        self.backend = backend
+        self.batch_size = backend_batch_size(backend)
+        self._queue = queue.Queue()
+        self._closed = False
+        self._state_lock = threading.Lock()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="kassiber-electrum-batch",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def call(self, method, params=None):
+        return self.batch_call([(method, params or [])])[0]
+
+    def batch_call(self, requests):
+        requests = list(requests)
+        if not requests:
+            return []
+        pending = {
+            "requests": requests,
+            "event": threading.Event(),
+            "result": None,
+            "error": None,
+        }
+        with self._state_lock:
+            if self._closed:
+                raise AppError("Electrum client pool is closed")
+            self._queue.put(pending)
+        pending["event"].wait()
+        if pending["error"] is not None:
+            raise pending["error"]
+        return pending["result"]
+
+    def close(self):
+        with self._state_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._queue.put(None)
+        self._thread.join()
+
+    def _fail_unsignaled(self, pending_calls):
+        """Never strand a waiting caller when the dispatcher thread exits.
+
+        Callers block on their pending event without a timeout, so an
+        unexpected thread exit must reject new work, then fail and signal
+        every collected or still-queued pending. On a clean close this is a
+        no-op: the queue only holds the consumed sentinel and no pending is
+        left unsignaled.
+        """
+        with self._state_lock:
+            self._closed = True
+        stranded = list(pending_calls)
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            if item is not None:
+                stranded.append(item)
+        for pending in stranded:
+            if pending["event"].is_set():
+                continue
+            if pending["error"] is None and pending["result"] is None:
+                pending["error"] = AppError(
+                    "Electrum batch dispatcher exited unexpectedly"
+                )
+            pending["event"].set()
+
+    def _run(self):
+        client = None
+        stop_after_batch = False
+
+        def discard_client():
+            nonlocal client
+            current = client
+            client = None
+            if current is not None:
+                try:
+                    current.__exit__(None, None, None)
+                except Exception:
+                    # Best-effort teardown of an already-failed connection:
+                    # close errors carry no signal beyond the original failure
+                    # and must not mask the error being reported to callers.
+                    pass
+
+        def execute_requests(requests):
+            nonlocal client
+            if client is None:
+                candidate = ElectrumClient(self.backend)
+                candidate.__enter__()
+                client = candidate
+            results = []
+            for start in range(0, len(requests), self.batch_size):
+                results.extend(
+                    client.batch_call(requests[start : start + self.batch_size])
+                )
+            return results
+
+        pending_calls = []
+        try:
+            while True:
+                first = self._queue.get()
+                if first is None:
+                    break
+                pending_calls = [first]
+                deadline = time.monotonic() + self._COALESCE_SECONDS
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    try:
+                        item = self._queue.get(timeout=remaining)
+                    except queue.Empty:
+                        break
+                    if item is None:
+                        stop_after_batch = True
+                        break
+                    pending_calls.append(item)
+                try:
+                    combined = [
+                        request
+                        for pending in pending_calls
+                        for request in pending["requests"]
+                    ]
+                    try:
+                        combined_results = execute_requests(combined)
+                    except Exception as combined_error:
+                        discard_client()
+                        can_isolate_rpc_error = (
+                            len(pending_calls) > 1
+                            and isinstance(combined_error, AppError)
+                            and combined_error.code == "electrum_rpc_error"
+                        )
+                        if can_isolate_rpc_error:
+                            # Read-only Electrum calls are safe to retry. Split a
+                            # request-level RPC error back into its logical callers
+                            # so one rejected request cannot contaminate another
+                            # wallet. Transport/session failures affect the whole
+                            # connection and must not multiply timeouts per caller.
+                            for index, pending in enumerate(pending_calls):
+                                try:
+                                    pending["result"] = execute_requests(
+                                        pending["requests"]
+                                    )
+                                except Exception as exc:
+                                    pending["error"] = exc
+                                    discard_client()
+                                    if not (
+                                        isinstance(exc, AppError)
+                                        and exc.code == "electrum_rpc_error"
+                                    ):
+                                        for remaining in pending_calls[index + 1 :]:
+                                            remaining["error"] = exc
+                                        break
+                        else:
+                            for pending in pending_calls:
+                                pending["error"] = combined_error
+                    else:
+                        offset = 0
+                        for pending in pending_calls:
+                            count = len(pending["requests"])
+                            pending["result"] = combined_results[offset : offset + count]
+                            offset += count
+                except Exception as exc:
+                    # Unblock waiting callers and release the connection for
+                    # ordinary failures.
+                    discard_client()
+                    for pending in pending_calls:
+                        if pending["error"] is None and pending["result"] is None:
+                            pending["error"] = exc
+                except (KeyboardInterrupt, SystemExit, GeneratorExit) as exc:
+                    # Preserve control-flow exceptions after unblocking callers.
+                    discard_client()
+                    for pending in pending_calls:
+                        if pending["error"] is None and pending["result"] is None:
+                            pending["error"] = exc
+                    raise
+                finally:
+                    for pending in pending_calls:
+                        pending["event"].set()
+                    pending_calls = []
+                if stop_after_batch:
+                    break
+        finally:
+            discard_client()
+            self._fail_unsignaled(pending_calls)
+
+
+_active_electrum_client_pool = ContextVar("active_electrum_client_pool", default=None)
+
+
+@contextmanager
+def shared_electrum_client_pool():
+    active = _active_electrum_client_pool.get()
+    if active is not None:
+        yield active
+        return
+    pool = _ElectrumClientPool()
+    token = _active_electrum_client_pool.set(pool)
+    try:
+        yield pool
+    finally:
+        _active_electrum_client_pool.reset(token)
+        pool.close()
+
+
+def _electrum_client_context(backend):
+    pool = _active_electrum_client_pool.get()
+    return nullcontext(pool.client(backend)) if pool is not None else ElectrumClient(backend)
 
 
 def batched(items, batch_size):
@@ -750,7 +1026,7 @@ def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
         return _map_bounded(script_pubkeys, probe, workers)
     if kind == "electrum":
         scripthashes = [scriptpubkey_scripthash(spk) for spk in script_pubkeys]
-        with ElectrumClient(backend) as client:
+        with _electrum_client_context(backend) as client:
             statuses = electrum_call_many(
                 client,
                 [("blockchain.scripthash.subscribe", [scripthash]) for scripthash in scripthashes],
@@ -835,7 +1111,7 @@ def discover_compatibility_descriptor_targets(backend, plan, kind, checkpoint=No
     if kind == "electrum":
         electrum_batch_size = backend_batch_size(backend)
         cached_statuses = dict(checkpoint.get("electrum_scripthash_statuses") or {})
-        with ElectrumClient(backend) as client:
+        with _electrum_client_context(backend) as client:
 
             def target_used_batch(targets):
                 scripthashes = [
@@ -913,6 +1189,7 @@ def _offline_descriptor_targets(plan, checkpoint=None):
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
+    stored_history_cache = _mapping_get(wallet, "_history_cache", {}) or {}
     if silent_payments.has_silent_payment_sync_material(config):
         plan = silent_payments.build_plan(config)
         kind = validate_backend_for_wallet(backend, plan.chain, plan.network, has_descriptor=False)
@@ -933,7 +1210,7 @@ def resolve_wallet_sync_targets(backend, wallet):
         if (config.get("descriptor") or config.get("xpub"))
         else None
     )
-    history_cache = {}
+    history_cache = dict(stored_history_cache)
     if descriptor_plan:
         chain = descriptor_plan.chain
         network = descriptor_plan.network
@@ -952,7 +1229,7 @@ def resolve_wallet_sync_targets(backend, wallet):
         else:
             discovery = discover_bitcoinrpc_descriptor_targets(descriptor_plan, checkpoint)
         targets = discovery["targets"]
-        history_cache = discovery.get("history_cache") or {}
+        history_cache.update(discovery.get("history_cache") or {})
     else:
         addresses = normalize_addresses(config.get("addresses"))
         if not addresses:
@@ -1083,7 +1360,10 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                     for target in online_targets
                     if target.get("script_pubkey")
                 },
-                history_cache=online_discovery.get("history_cache") or {},
+                history_cache={
+                    **dict(state.history_cache),
+                    **(online_discovery.get("history_cache") or {}),
+                },
             )
             # The finite local horizon was filtered before any connection.
             # Reapply ownership to every online result so deeper targets cannot
@@ -1479,7 +1759,7 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
         if client is not None:
             raw_hex = client.call("blockchain.transaction.get", [txid])
         else:
-            with ElectrumClient(backend) as owned_client:
+            with _electrum_client_context(backend) as owned_client:
                 raw_hex = owned_client.call("blockchain.transaction.get", [txid])
         if normalized_chain == "liquid":
             return _legs_from_liquid_tx(decode_liquid_transaction(raw_hex))
@@ -1526,7 +1806,7 @@ def verify_session(backend):
     """
     kind = normalize_backend_kind(backend.get("kind"))
     if kind == "electrum":
-        with ElectrumClient(backend) as client:
+        with _electrum_client_context(backend) as client:
             yield lambda txid, chain=None: fetch_transaction_legs(
                 backend, txid, chain, client=client
             )
@@ -3748,6 +4028,10 @@ def _normalize_electrum_bitcoin_graph_for_storage(tx, tx_lookup):
     """
     if not isinstance(tx, dict):
         return tx
+    tx[ELECTRUM_STORED_GRAPH_MARKER] = {
+        "kind": "bitcoin_electrum",
+        "version": ELECTRUM_STORED_GRAPH_VERSION,
+    }
     vout = tx.get("vout")
     if isinstance(vout, list):
         for entry in vout:
@@ -3829,7 +4113,7 @@ def compatibility_electrum_utxos_for_wallet(backend, sync_state: WalletSyncState
     outputs = []
     batch_size = backend_batch_size(backend)
     header_timestamps = {}
-    with ElectrumClient(backend) as client:
+    with _electrum_client_context(backend) as client:
         tip_height = _electrum_tip_height(client)
         scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in sync_state.targets]
         target_by_scripthash = dict(zip(scripthashes, sync_state.targets))
@@ -3913,6 +4197,37 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
 
 def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncState):
     transactions = {}
+    stored_transactions = (
+        dict(sync_state.history_cache or {}) if sync_state.chain == "bitcoin" else {}
+    )
+
+    def stored_transaction(txid):
+        stored = stored_transactions.get(str(txid))
+        if isinstance(stored, str):
+            try:
+                stored = json.loads(stored)
+            except ValueError:
+                return None
+        if not isinstance(stored, dict):
+            return None
+        marker = stored.get(ELECTRUM_STORED_GRAPH_MARKER)
+        if not isinstance(marker, dict):
+            return None
+        if marker.get("kind") != "bitcoin_electrum":
+            return None
+        try:
+            marker_version = int(marker.get("version") or 0)
+        except (TypeError, ValueError):
+            return None
+        if marker_version != ELECTRUM_STORED_GRAPH_VERSION:
+            return None
+        if str(stored.get("txid") or "").lower() != str(txid).lower():
+            return None
+        if not isinstance(stored.get("vin"), list) or not isinstance(
+            stored.get("vout"), list
+        ):
+            return None
+        return stored
     records = []
     batch_size = backend_batch_size(backend)
     tracked_scripts = (
@@ -3923,6 +4238,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
     checkpoint = _checkpoint_mapping(sync_state)
     previous_statuses = checkpoint.get("electrum_scripthash_statuses") or {}
     previous_dirty = set(checkpoint.get("electrum_dirty_scripthashes") or [])
+    previous_history_entries = checkpoint.get("electrum_history_entries") or {}
     stored_graph_current = (
         int(checkpoint.get("electrum_stored_graph_version") or 0)
         >= ELECTRUM_STORED_GRAPH_VERSION
@@ -3934,11 +4250,12 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         if str(height).isdigit()
     }
     next_statuses = {}
+    next_history_entries = {}
     dirty_scripthashes = set()
     unchanged_scripts = 0
     changed_scripts = 0
     header_cache_hits = 0
-    with ElectrumClient(backend) as client:
+    with _electrum_client_context(backend) as client:
         histories = []
         target_by_scripthash = {}
         scripthashes = []
@@ -3961,6 +4278,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             target = target_by_scripthash[scripthash]
             highest_used = _merge_highest_used(highest_used, target, status is not None)
             if status is None and previous_statuses.get(scripthash) is None:
+                next_history_entries[scripthash] = {}
                 unchanged_scripts += 1
                 if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
                     _emit_backend_progress(
@@ -3976,6 +4294,9 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 and status == previous_statuses.get(scripthash)
                 and scripthash not in previous_dirty
             ):
+                next_history_entries[scripthash] = dict(
+                    previous_history_entries.get(scripthash) or {}
+                )
                 unchanged_scripts += 1
                 if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
                     _emit_backend_progress(
@@ -4010,7 +4331,20 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 start=1,
             ):
                 normalized_history = history or []
-                histories.extend(normalized_history)
+                current_entries = {
+                    str(item["tx_hash"]): json_ready(item)
+                    for item in normalized_history
+                    if isinstance(item, dict) and item.get("tx_hash")
+                }
+                prior_entries = previous_history_entries.get(scripthash) or {}
+                histories.extend(
+                    item
+                    for item in normalized_history
+                    if isinstance(item, dict)
+                    and item.get("tx_hash")
+                    and prior_entries.get(str(item["tx_hash"])) != json_ready(item)
+                )
+                next_history_entries[scripthash] = current_entries
                 if any(_history_needs_recheck(item) for item in normalized_history):
                     dirty_scripthashes.add(scripthash)
                 if history_index % max(1, batch_size) == 0 or history_index == changed_scripts:
@@ -4029,14 +4363,18 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
 
         def lookup(txid):
             if txid not in transactions:
-                raw_tx = client.call("blockchain.transaction.get", [txid])
-                if sync_state.chain == "liquid":
-                    transactions[txid] = {
-                        "raw_hex": raw_tx,
-                        "decoded": decode_liquid_transaction(raw_tx),
-                    }
+                cached = stored_transaction(txid)
+                if cached is not None:
+                    transactions[txid] = cached
                 else:
-                    transactions[txid] = decode_raw_transaction(raw_tx)
+                    raw_tx = client.call("blockchain.transaction.get", [txid])
+                    if sync_state.chain == "liquid":
+                        transactions[txid] = {
+                            "raw_hex": raw_tx,
+                            "decoded": decode_liquid_transaction(raw_tx),
+                        }
+                    else:
+                        transactions[txid] = decode_raw_transaction(raw_tx)
             return transactions[txid]
 
         def height_to_timestamp(height):
@@ -4056,13 +4394,19 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             key=lambda item: _history_sort_key(item[0], item[1]),
         )
         ordered_txids = [txid for txid, _ in ordered_histories]
-        if ordered_txids:
+        for txid in ordered_txids:
+            cached = stored_transaction(txid)
+            if cached is not None:
+                transactions[txid] = cached
+        missing_ordered_txids = [txid for txid in ordered_txids if txid not in transactions]
+        fetched_transaction_count = len(missing_ordered_txids)
+        if missing_ordered_txids:
             raw_transactions = electrum_call_many(
                 client,
-                [("blockchain.transaction.get", [txid]) for txid in ordered_txids],
+                [("blockchain.transaction.get", [txid]) for txid in missing_ordered_txids],
                 batch_size=batch_size,
             )
-            for txid, raw_tx in zip(ordered_txids, raw_transactions):
+            for txid, raw_tx in zip(missing_ordered_txids, raw_transactions):
                 if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
@@ -4079,9 +4423,15 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 prev_txid = liquid_input_txid(vin) if sync_state.chain == "liquid" else vin.get("txid")
                 if not prev_txid or prev_txid in seen_txids:
                     continue
+                cached = stored_transaction(prev_txid)
+                if cached is not None:
+                    transactions[prev_txid] = cached
+                    seen_txids.add(prev_txid)
+                    continue
                 seen_txids.add(prev_txid)
                 prev_txids.append(prev_txid)
         if prev_txids:
+            fetched_transaction_count += len(prev_txids)
             raw_prev_transactions = electrum_call_many(
                 client,
                 [("blockchain.transaction.get", [txid]) for txid in prev_txids],
@@ -4159,8 +4509,9 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                     transactions_total=len(ordered_histories),
                     records=len(records),
                 )
-    # The write-only per-wallet txid ledger is retired; purge it from
-    # checkpoints written by earlier versions.
+    # The known-txid set is fully derivable from the persisted history
+    # entries, so drop the redundant legacy key instead of storing the same
+    # txids twice per scripthash (including any copy left by older syncs).
     checkpoint.pop("electrum_known_txids", None)
     checkpoint.update(
         {
@@ -4170,6 +4521,7 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
                 str(height): header_timestamps[height] for height in sorted(header_timestamps)
             },
             "electrum_stored_graph_version": ELECTRUM_STORED_GRAPH_VERSION,
+            "electrum_history_entries": dict(sorted(next_history_entries.items())),
             "electrum_scripthash_statuses": dict(sorted(next_statuses.items())),
             "highest_used": dict(sorted(highest_used.items())),
         }
@@ -4178,7 +4530,11 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
         "freshness_checkpoint": checkpoint,
         "scripts_changed": changed_scripts,
         "scripts_unchanged": unchanged_scripts,
+        "known_txids": len(
+            {txid for entries in next_history_entries.values() for txid in entries}
+        ),
         "header_cache_hits": header_cache_hits,
+        "transactions_fetched": fetched_transaction_count,
     }
 
 

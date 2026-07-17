@@ -167,8 +167,8 @@ wallet files, and no production descriptors. The Compose stack publishes only
 loopback ports: Core RPC, Elements RPC, the optional Frigate Electrum endpoint,
 and the four protocol endpoints used by the UI/backend health and graph paths:
 
-- `core-regtest` -> Bitcoin Core RPC, authoritative sync backend explicitly
-  assigned to ordinary Bitcoin wallets
+- `core-regtest` -> Bitcoin Core RPC, assigned to the ordinary Bitcoin wallets
+  that do not opt into the Fulcrum coverage slice
 - Elements Core runs as `elementsd` on `elementsregtest` to provision a local
   Liquid daemon. The demo includes a descriptor-backed Liquid wallet with
   private blinding material stored inside the disposable test book; it receives
@@ -651,18 +651,21 @@ What `demo-up` does:
   syncs from the app keep seeing new activity.
 
 The `fulcrum` container is provisioned and exposed as the
-`bitcoin-electrum-regtest` backend row. The slow Bitcoin lane now includes a
-dedicated Fulcrum/Electrum parity slice that syncs the same real address wallet
+`bitcoin-electrum-regtest` backend row. The full-accounting demo assigns the
+active `treasury_2020`, `merchant_2022`, and `cold_2024` wallets to Fulcrum while
+the remaining ordinary Bitcoin wallets stay on Core RPC. The slow Bitcoin lane
+also includes a dedicated Fulcrum/Electrum parity slice that syncs the same real
+address wallet
 through Core RPC and Electrum, then compares the persisted transaction and UTXO
 views after receipts, a spend, an incremental receipt, and a no-op sync. The
-demo book itself still pins ordinary Bitcoin wallet sync to Core RPC
-(`core-regtest`). The Liquid Electrum and Liquid mempool rows are local services
+Liquid Electrum and Liquid mempool rows are local services
 backed by `elementsd`; every Liquid wallet in the demo is descriptor-backed and
 syncs real elementsregtest LBTC transactions. The preview stays repeatable
 without inventing Liquid transaction ids or contacting public mainnet explorers.
 The stored default backend is `bitcoin-mempool-regtest`: wallet configs still
-pin their sync source (`core-regtest` for ordinary Bitcoin, `bitcoin-frigate-regtest`
-for the Silent Payments wallet), while graph-capable UI paths prefer the local
+pin their sync source (`core-regtest` or `bitcoin-electrum-regtest` for ordinary
+Bitcoin, `bitcoin-frigate-regtest` for the Silent Payments wallet), while
+graph-capable UI paths prefer the local
 HTTP mempool/esplora endpoint.
 Remaining backend-parity work is demo-wallet sync through Bitcoin explorer HTTP,
 plus broader Liquid Electrum/explorer/Elements comparisons across the historical
@@ -693,6 +696,29 @@ random by default (that is the point); pass `--tick-seed` to
 `tests.integration.regtest_demo --tick` for a reproducible batch. `demo-full`
 itself always ends with one built-in tick + resync and fails if that resync
 imports nothing — a standing guard that "refresh" is never a dead button.
+
+### Large-book sync benchmark
+
+The July 2026 performance slice used the checked-in full-accounting scenario on
+the same local Docker stack before and after the changes. The resulting book
+contained 998 transaction rows across 13 wallets after the built-in activity
+tick and final indexer catch-up. Three active Bitcoin wallets used Fulcrum, the remaining ordinary Bitcoin
+wallets used Core RPC, and Liquid wallets continued to use their Electrum
+backend. Each reported resync figure is the median of repeated runs against the
+same chain and SQLite book:
+
+| Path | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| CLI `wallets sync --all`, unchanged chain (5 runs) | 12.156 s | 2.461 s | 79.8% faster |
+| Desktop freshness sync, unchanged chain (5 runs) | 2.966 s | 1.878 s | 36.7% faster |
+| Desktop forced full replay, 594 Fulcrum transaction fetches / 642 records (3 runs) | — | 5.265 s | reference point |
+
+The unchanged-chain runs imported zero rows, wrote zero false updates, and
+fetched zero Fulcrum transaction bodies. The forced replay also wrote zero
+false updates. End-to-end `demo-full` setup remains roughly 16 minutes on the
+benchmark host because broadcasting and mining about 1,000 real operations over
+the historical 50-block workload dominates that lane. Treat setup generation
+and wallet resync as separate measurements when investigating regressions.
 
 Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 

@@ -149,7 +149,7 @@ def normalize_import_direction(direction: Any, amount: Any) -> str:
 
 
 _EXISTING_TRANSACTION_COLUMNS = """
-       id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+       id, workspace_id, profile_id, wallet_id, external_id, external_id_kind, fingerprint,
        occurred_at, direction, asset, amount, fee, amount_includes_fee,
        confirmed_at, fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,

@@ -320,6 +320,14 @@ class RegtestHarnessTest(unittest.TestCase):
             {wallet["network"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"},
             {"elementsregtest"},
         )
+        self.assertEqual(
+            {
+                wallet["key"]
+                for wallet in scenario["wallets"]
+                if wallet.get("backend") == "bitcoin-electrum-regtest"
+            },
+            {"treasury_2020", "merchant_2022", "cold_2024"},
+        )
         local_backends = regtest_demo._local_backend_specs()
         self.assertIn(scenario["backend"]["default"], {backend["name"] for backend in local_backends})
         self.assertEqual(

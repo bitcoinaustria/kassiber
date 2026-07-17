@@ -57,6 +57,10 @@ def _is_silent_payment_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
     return _wallet_kind(wallet_spec) == core_silent_payments.WALLET_KIND
 
 
+def _bitcoin_wallet_backend_name(scenario: dict[str, Any], wallet_spec: dict[str, Any]) -> str:
+    return str(wallet_spec.get("backend") or scenario["backend"]["name"])
+
+
 def _is_core_wallet(wallet: "DemoWallet") -> bool:
     return wallet.chain == "bitcoin" and bool(wallet.address and wallet.core_wallet)
 
@@ -249,6 +253,10 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
     wallet_key_set = set(wallet_keys)
     wallet_specs_by_key = {wallet["key"]: wallet for wallet in scenario["wallets"]}
     core_wallet_keys = {wallet["key"] for wallet in scenario["wallets"] if _is_core_wallet_spec(wallet)}
+    allowed_bitcoin_wallet_backends = {
+        str(scenario["backend"]["name"]),
+        "bitcoin-electrum-regtest",
+    }
     for wallet in scenario["wallets"]:
         for field in ("key", "label", "account", "initial_btc"):
             if not wallet.get(field):
@@ -290,6 +298,12 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             raise ValueError(
                 f"Scenario wallet {wallet['key']!r} has unsupported Bitcoin address_type: {address_type}"
             )
+        if _is_core_wallet_spec(wallet):
+            backend_name = _bitcoin_wallet_backend_name(scenario, wallet)
+            if backend_name not in allowed_bitcoin_wallet_backends:
+                raise ValueError(
+                    f"Scenario wallet {wallet['key']!r} has unsupported Bitcoin backend: {backend_name}"
+                )
     def _validate_operation(operation: dict[str, Any], *, pending: bool = False) -> None:
         op_id = operation.get("id") or "<unnamed>"
         kind = operation.get("kind")
@@ -2765,7 +2779,7 @@ def _create_kassiber_book(
                 "--account",
                 wallet.account,
                 "--backend",
-                scenario["backend"]["name"],
+                _bitcoin_wallet_backend_name(scenario, wallet_spec),
                 "--chain",
                 "bitcoin",
                 "--network",
@@ -4271,6 +4285,7 @@ def run_demo(
     run_business_tick: bool = True,
 ) -> dict[str, Any]:
     scenario = load_scenario(scenario_path)
+    wallet_specs_by_key = {wallet["key"]: wallet for wallet in scenario["wallets"]}
     url = os.environ.get("KASSIBER_REGTEST_CORE_URL", "http://127.0.0.1:18443")
     elements_url = _elements_url()
     username = os.environ.get("KASSIBER_REGTEST_RPC_USER", "kassiber")
@@ -4595,15 +4610,20 @@ def run_demo(
                     confirmed=False,
                     source="pending_mempool",
                 )
-                _wait_for_watchonly_mempool_tx(
-                    url,
-                    username,
-                    password,
-                    receiver,
-                    txids[operation["id"]],
+                receiver_backend = _bitcoin_wallet_backend_name(
+                    scenario,
+                    wallet_specs_by_key[receiver.key],
                 )
+                if receiver_backend == scenario["backend"]["name"]:
+                    _wait_for_watchonly_mempool_tx(
+                        url,
+                        username,
+                        password,
+                        receiver,
+                        txids[operation["id"]],
+                    )
             pending_txids = {txids[operation["id"]] for operation in scenario["pending_operations"]}
-            for attempt in range(3):
+            for attempt in range(10):
                 pending_sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
                 pending_rows = run_cli(
                     data_root,
@@ -4617,7 +4637,9 @@ def run_demo(
                 )["data"]
                 if pending_txids.issubset({row["external_id"] for row in pending_rows}):
                     break
-                if attempt < 2:
+                if attempt < 9:
+                    # Core wallet notification and Fulcrum indexing are both
+                    # asynchronous relative to the broadcast.
                     time.sleep(0.25)
 
         transactions = run_cli(
@@ -4733,6 +4755,11 @@ def run_demo(
                 "wallets": {
                     key: {
                         "label": wallet.label,
+                        "backend": (
+                            _bitcoin_wallet_backend_name(scenario, wallet_specs_by_key[key])
+                            if _is_core_wallet_spec(wallet_specs_by_key[key])
+                            else None
+                        ),
                         "address": wallet.address,
                         "addresses": list(wallet.addresses),
                         "chain": wallet.chain,

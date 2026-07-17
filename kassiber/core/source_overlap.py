@@ -57,6 +57,12 @@ class SourceScript:
     address_index: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ProfileSourceIndex:
+    profile_id: str
+    sources: tuple[SourceScript, ...]
+
+
 def _row_get(row: Mapping[str, Any] | sqlite3.Row, key: str, default: Any = None) -> Any:
     try:
         return row[key]
@@ -362,6 +368,102 @@ def _descriptor_config_scripts(
     return scripts
 
 
+def _candidate_descriptor_supplements(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    profile_index: ProfileSourceIndex,
+    candidate_scripts: Sequence[SourceScript],
+) -> list[SourceScript]:
+    """Extend only descriptor branches whose candidate horizon grew.
+
+    The operation-scoped index contains each descriptor's baseline finite
+    horizon. A widened candidate (for example a repair scan) can require the
+    same candidate-dependent gap tail that the uncached path derives. Rebuild
+    only that tail instead of re-deriving every indexed descriptor.
+    """
+
+    candidate_maxes = _candidate_branch_maxes(candidate_scripts)
+    if not candidate_maxes:
+        return []
+    baseline_ends: dict[tuple[str, int], int] = {}
+    active_counts: dict[str, int] = {}
+    for source in profile_index.sources:
+        active_counts[source.wallet_id] = max(
+            active_counts.get(source.wallet_id, 0),
+            int(source.active_transaction_count),
+        )
+        if (
+            source.source != "descriptor_config"
+            or source.branch_index is None
+            or source.address_index is None
+        ):
+            continue
+        key = (source.wallet_id, int(source.branch_index))
+        baseline_ends[key] = max(
+            baseline_ends.get(key, 0),
+            int(source.address_index) + 1,
+        )
+    supplements: list[SourceScript] = []
+    for wallet_id, branch_maxes in candidate_maxes.items():
+        wallet = conn.execute(
+            """
+            SELECT id, label, kind, config_json
+            FROM wallets
+            WHERE profile_id = ? AND id = ?
+            """,
+            (profile_id, wallet_id),
+        ).fetchone()
+        if wallet is None:
+            continue
+        config = _wallet_config(wallet)
+        if not has_descriptor_sync_material(config):
+            continue
+        try:
+            plan = load_wallet_descriptor_plan_from_config(config)
+        except (AppError, ValueError):
+            continue
+        if plan is None:
+            continue
+        deprecated = wallet_is_deprecated(config)
+        for branch in plan.branches:
+            candidate_max = branch_maxes.get(branch.branch_index)
+            if candidate_max is None:
+                continue
+            start = baseline_ends.get((wallet_id, branch.branch_index), 0)
+            end = max(start, int(candidate_max) + plan.gap_limit + 1)
+            end = min(end, MAX_STORED_DESCRIPTOR_TARGETS_PER_BRANCH)
+            if end <= start:
+                continue
+            try:
+                targets = derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=start,
+                    end=end,
+                )
+            except (AppError, ValueError):
+                continue
+            for target in targets:
+                supplements.append(
+                    SourceScript(
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        wallet_label=str(_row_get(wallet, "label") or wallet_id),
+                        wallet_kind=str(_row_get(wallet, "kind") or ""),
+                        chain=plan.chain,
+                        network=plan.network,
+                        script_pubkey=target.script_pubkey.lower(),
+                        source="descriptor_config",
+                        deprecated=deprecated,
+                        active_transaction_count=active_counts.get(wallet_id, 0),
+                        branch_index=target.branch_index,
+                        branch_label=target.branch_label,
+                        address_index=target.address_index,
+                    )
+                )
+    return supplements
+
+
 def scripts_from_sync_state(
     profile: Mapping[str, Any] | sqlite3.Row,
     wallet: Mapping[str, Any] | sqlite3.Row,
@@ -534,17 +636,32 @@ def _source_script_groups(
     *,
     candidate_scripts: Sequence[SourceScript] | None = None,
     include_deprecated: bool = False,
+    profile_index: ProfileSourceIndex | None = None,
 ) -> tuple[dict[tuple[str, str, str, str], list[SourceScript]], list[SourceScript]]:
-    active_counts = _active_transaction_counts(conn, profile_id)
     candidate_scripts = list(candidate_scripts or [])
     candidate_wallet_ids = {source.wallet_id for source in candidate_scripts}
-    sources: list[SourceScript] = []
-    for wallet in _wallets_for_profile(conn, profile_id):
-        config = _wallet_config(wallet)
-        sources.extend(_address_list_scripts(profile_id, wallet, config, active_counts))
-    sources.extend(_inventory_scripts(conn, profile_id, active_counts))
-    sources.extend(candidate_scripts)
-    sources.extend(_descriptor_config_scripts(conn, profile_id, active_counts, candidate_scripts))
+    if profile_index is not None and profile_index.profile_id == profile_id:
+        sources = [
+            *profile_index.sources,
+            *candidate_scripts,
+            *_candidate_descriptor_supplements(
+                conn,
+                profile_id,
+                profile_index,
+                candidate_scripts,
+            ),
+        ]
+    else:
+        active_counts = _active_transaction_counts(conn, profile_id)
+        sources = []
+        for wallet in _wallets_for_profile(conn, profile_id):
+            config = _wallet_config(wallet)
+            sources.extend(_address_list_scripts(profile_id, wallet, config, active_counts))
+        sources.extend(_inventory_scripts(conn, profile_id, active_counts))
+        sources.extend(candidate_scripts)
+        sources.extend(
+            _descriptor_config_scripts(conn, profile_id, active_counts, candidate_scripts)
+        )
     filtered = [
         source
         for source in sources
@@ -564,6 +681,27 @@ def _source_script_groups(
         key = (source.profile_id, chain, network, source.script_pubkey)
         grouped.setdefault(key, []).append(source)
     return grouped, filtered
+
+
+def build_profile_source_index(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> ProfileSourceIndex:
+    """Build one immutable ownership index for a wallet-prefetch operation.
+
+    Callers deliberately rebuild this index for the next sync operation, so a
+    wallet config, output inventory, or freshness-checkpoint mutation cannot
+    leave a stale cross-operation cache behind.
+    """
+
+    active_counts = _active_transaction_counts(conn, profile_id)
+    sources: list[SourceScript] = []
+    for wallet in _wallets_for_profile(conn, profile_id):
+        config = _wallet_config(wallet)
+        sources.extend(_address_list_scripts(profile_id, wallet, config, active_counts))
+    sources.extend(_inventory_scripts(conn, profile_id, active_counts))
+    sources.extend(_descriptor_config_scripts(conn, profile_id, active_counts, ()))
+    return ProfileSourceIndex(profile_id=profile_id, sources=tuple(sources))
 
 
 def detect_profile_source_overlaps(
@@ -808,6 +946,8 @@ def filter_sync_state_for_canonical_owner(
     profile: Mapping[str, Any] | sqlite3.Row,
     wallet: Mapping[str, Any] | sqlite3.Row,
     sync_state: Any,
+    *,
+    profile_index: ProfileSourceIndex | None = None,
 ) -> Any:
     """Remove sync targets whose script is already owned by a better source.
 
@@ -825,6 +965,7 @@ def filter_sync_state_for_canonical_owner(
             conn,
             profile_id,
             candidate_scripts=candidate_scripts,
+            profile_index=profile_index,
         )
     except sqlite3.OperationalError as exc:
         if "no such table" in str(exc).lower():
@@ -995,8 +1136,10 @@ def raise_for_sync_source_overlap(
 
 
 __all__ = [
+    "ProfileSourceIndex",
     "SourceScript",
     "apply_address_list_overlap_repairs",
+    "build_profile_source_index",
     "detect_profile_source_overlaps",
     "duplicate_transaction_preview",
     "filter_sync_state_for_canonical_owner",

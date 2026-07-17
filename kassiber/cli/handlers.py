@@ -60,6 +60,7 @@ from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
+from ..core.chain_observer.provenance import canonical_graph_hash
 from ..core.repo import current_context_snapshot, resolve_account
 from ..core.runtime import (
     build_status_payload,
@@ -2220,6 +2221,8 @@ def _prepare_negative_balance_repairs(
     wallets,
     hooks,
     prefetched,
+    *,
+    source_overlap_index=None,
 ):
     """Fetch any widened descriptor repair before opening the apply savepoint."""
 
@@ -2262,6 +2265,7 @@ def _prepare_negative_balance_repairs(
                         profile,
                         candidate,
                         state,
+                        profile_index=source_overlap_index,
                     )
                 ),
                 observer_fetch_preflight=(
@@ -2307,45 +2311,122 @@ def _prefetch_chain_wallets(
 ):
     """Finish chain discovery and backend I/O before any write savepoint."""
 
-    backend_wallets = [
+    backend_wallet_rows = [
         wallet
         for wallet in wallets
         if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses) == "backend"
     ]
-    prefetched = core_sync.prefetch_wallets_backend(
-        runtime_config,
-        profile,
-        backend_wallets,
-        hooks,
-        checkpoints=freshness_checkpoints,
-        force_full=force_full,
-        source_overlap_preflight=(
-            lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
-                conn,
-                profile,
-                wallet,
-                sync_state,
-            )
-        ),
-        observer_fetch_preflight=(
-            lambda candidate, discovery: hooks.prepare_observer_fetch(
-                conn,
-                profile,
-                candidate,
-                discovery,
-            )
-            if hooks.prepare_observer_fetch is not None
-            else None
-        ),
+    stored_graph_wallets = _electrum_stored_graph_wallets(conn, backend_wallet_rows)
+    history_cache_by_wallet = (
+        {}
+        if force_full
+        else _stored_wallet_chain_history(conn, profile["id"], stored_graph_wallets)
     )
-    return _prepare_negative_balance_repairs(
+    backend_wallets = [
+        {
+            **dict(wallet),
+            "_history_cache": history_cache_by_wallet.get(str(wallet["id"]), {}),
+        }
+        for wallet in backend_wallet_rows
+    ]
+    source_overlap_index = core_source_overlap.build_profile_source_index(
         conn,
-        runtime_config,
-        profile,
-        backend_wallets,
-        hooks,
-        prefetched,
+        str(profile["id"]),
     )
+    with core_sync_backends.shared_electrum_client_pool():
+        prefetched = core_sync.prefetch_wallets_backend(
+            runtime_config,
+            profile,
+            backend_wallets,
+            hooks,
+            checkpoints=freshness_checkpoints,
+            force_full=force_full,
+            source_overlap_preflight=(
+                lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
+                    conn,
+                    profile,
+                    wallet,
+                    sync_state,
+                    profile_index=source_overlap_index,
+                )
+            ),
+            observer_fetch_preflight=(
+                lambda candidate, discovery: hooks.prepare_observer_fetch(
+                    conn,
+                    profile,
+                    candidate,
+                    discovery,
+                )
+                if hooks.prepare_observer_fetch is not None
+                else None
+            ),
+        )
+        return _prepare_negative_balance_repairs(
+            conn,
+            runtime_config,
+            profile,
+            backend_wallets,
+            hooks,
+            prefetched,
+            source_overlap_index=source_overlap_index,
+        )
+
+
+def _stored_wallet_chain_history(conn, profile_id, wallets):
+    wallet_ids = sorted({str(wallet["id"]) for wallet in wallets})
+    if not wallet_ids:
+        return {}
+    placeholders = ",".join("?" for _wallet_id in wallet_ids)
+    rows = conn.execute(
+        f"""
+        SELECT
+            transactions.wallet_id,
+            transactions.external_id,
+            transactions.raw_json,
+            chain_observation_provenance.graph_hash,
+            chain_observation_provenance.observer_kinds_json
+        FROM transactions
+        JOIN chain_observation_provenance
+          ON chain_observation_provenance.transaction_id = transactions.id
+        WHERE transactions.profile_id = ?
+          AND transactions.wallet_id IN ({placeholders})
+          AND transactions.external_id_kind = 'txid'
+          AND transactions.raw_json IS NOT NULL
+        """,
+        (profile_id, *wallet_ids),
+    ).fetchall()
+    history_by_wallet = {}
+    for row in rows:
+        wallet_id = str(row["wallet_id"])
+        try:
+            observer_kinds = json.loads(row["observer_kinds_json"] or "[]")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(observer_kinds, list) or "electrum" not in observer_kinds:
+            continue
+        raw_json = row["raw_json"]
+        if not isinstance(raw_json, str) or not raw_json:
+            continue
+        if str(row["graph_hash"] or "") != canonical_graph_hash(raw_json):
+            continue
+        history_by_wallet.setdefault(wallet_id, {})[str(row["external_id"])] = raw_json
+    return history_by_wallet
+
+
+def _electrum_stored_graph_wallets(conn, wallets):
+    backend_kinds = {
+        str(row["name"]): core_sync.normalize_backend_kind(row["kind"])
+        for row in conn.execute("SELECT name, kind FROM backends").fetchall()
+    }
+    selected = []
+    for wallet in wallets:
+        try:
+            config = json.loads(wallet["config_json"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        if backend_kinds.get(str(config.get("backend") or "")) == "electrum":
+            selected.append(wallet)
+    return selected
 
 
 def _apply_wallet_sync_atomically(
@@ -2414,18 +2495,21 @@ def sync_wallet_from_backend(
     checkpoint=None,
     force_full=False,
     check_cancelled=None,
+    prefetched=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     hooks = _wallet_sync_hooks(commit=False)
-    prefetched = _prefetch_chain_wallets(
-        conn,
-        runtime_config,
-        profile,
-        [wallet],
-        hooks,
-        freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
-        force_full=force_full,
-    )
+    prefetched_fetches = prefetched
+    if prefetched_fetches is None:
+        prefetched_fetches = _prefetch_chain_wallets(
+            conn,
+            runtime_config,
+            profile,
+            [wallet],
+            hooks,
+            freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
+            force_full=force_full,
+        )
     results = _apply_wallet_sync_atomically(
         conn,
         runtime_config,
@@ -2434,7 +2518,7 @@ def sync_wallet_from_backend(
         hooks,
         freshness_checkpoints={str(wallet["id"]): checkpoint or {}},
         force_full=force_full,
-        prefetched=prefetched,
+        prefetched=prefetched_fetches,
         check_cancelled=check_cancelled,
     )
     result = results[0]
@@ -2443,6 +2527,59 @@ def sync_wallet_from_backend(
         for key, value in result.items()
         if key != "wallet"
     }
+
+
+def prefetch_wallets_from_backend(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    wallets,
+    *,
+    freshness_checkpoints=None,
+    force_full=False,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return _prefetch_chain_wallets(
+        conn,
+        runtime_config,
+        profile,
+        wallets,
+        _wallet_sync_hooks(commit=False),
+        freshness_checkpoints=freshness_checkpoints,
+        force_full=force_full,
+    )
+
+
+def _stored_wallet_freshness_checkpoints(conn, profile_id, wallets):
+    wallet_ids_by_source_key = {
+        core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, str(wallet["id"])): str(
+            wallet["id"]
+        )
+        for wallet in wallets
+    }
+    if not wallet_ids_by_source_key:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT source_key, checkpoint_json
+        FROM freshness_source_states
+        WHERE profile_id = ? AND source_type = ?
+        """,
+        (profile_id, core_freshness.SOURCE_ONCHAIN),
+    ).fetchall()
+    checkpoints = {}
+    for row in rows:
+        wallet_id = wallet_ids_by_source_key.get(str(row["source_key"]))
+        if wallet_id is None:
+            continue
+        try:
+            checkpoint = json.loads(row["checkpoint_json"] or "{}")
+        except (TypeError, ValueError):
+            checkpoint = {}
+        if isinstance(checkpoint, dict):
+            checkpoints[wallet_id] = checkpoint
+    return checkpoints
 
 
 def sync_wallet(
@@ -2476,6 +2613,22 @@ def sync_wallet(
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
     hooks = _wallet_sync_hooks(commit=False)
+    if freshness_checkpoints is None:
+        checkpoint_wallets = [
+            wallet
+            for wallet in wallets
+            if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses)
+            == "backend"
+        ]
+        freshness_checkpoints = (
+            {}
+            if force_full
+            else _stored_wallet_freshness_checkpoints(
+                conn,
+                profile["id"],
+                checkpoint_wallets,
+            )
+        )
     prefetched = _prefetch_chain_wallets(
         conn,
         runtime_config,

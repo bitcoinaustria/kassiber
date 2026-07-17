@@ -39,8 +39,8 @@ RuntimeConfig = Mapping[str, Any]
 SyncOutcome = dict[str, Any]
 BackendRecord = Mapping[str, Any]
 SyncTarget = Mapping[str, Any]
-HistoryEntry = Mapping[str, Any]
-HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
+StoredTransactionGraph = Mapping[str, Any] | str
+HistoryCache = MutableMapping[str, StoredTransactionGraph]
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 
@@ -1190,13 +1190,13 @@ def prefetch_wallets_backend(
 ) -> dict[str, "WalletBackendFetch | BaseException"]:
     """Run discovery/preflight/fetch for several backend wallets.
 
-    Returns ``{wallet_id: WalletBackendFetch | AppError}``. Per-wallet AppErrors
-    are captured (mirroring the serial path's per-wallet AppError isolation) and
-    re-raised when applied under that wallet's savepoint; any non-AppError
-    propagates, as it would have on the serial path. Discovery and fetch work run
-    in worker threads; the optional overlap preflight runs on the caller thread
-    between them so it can safely use the owning SQLite connection before
-    adapter-side effects such as Bitcoin Core address import.
+    Returns ``{wallet_id: WalletBackendFetch | Exception}``. Per-wallet failures
+    are captured and re-raised when applied under that wallet's savepoint, so a
+    freshness runner can retain the serial path's job isolation. Process-control
+    exceptions still propagate. Discovery and fetch work run in worker threads;
+    the optional overlap preflight runs on the caller thread between them so it
+    can safely use the owning SQLite connection before adapter-side effects such
+    as Bitcoin Core address import.
     """
     wallets = list(wallets)
     if not wallets:
@@ -1226,7 +1226,7 @@ def prefetch_wallets_backend(
                 checkpoint,
                 force_full=force_full,
             )
-        except AppError as exc:
+        except Exception as exc:
             return exc
 
     discoveries = _parallel_wallet_step(_discover)
@@ -1248,7 +1248,7 @@ def prefetch_wallets_backend(
                     discovery,
                     source_overlap_preflight,
                 )
-            except AppError as exc:
+            except Exception as exc:
                 discoveries[wallet_id] = exc
 
     observer_fetches: dict[str, WalletBackendFetch | BaseException] = {}
@@ -1266,7 +1266,7 @@ def prefetch_wallets_backend(
                 observer_fetch = observer_fetch_preflight(wallet, discovery)
                 if observer_fetch is not None:
                     observer_fetches[wallet_id] = observer_fetch
-            except AppError as exc:
+            except Exception as exc:
                 observer_fetches[wallet_id] = exc
             finally:
                 if token is not None:
@@ -1283,7 +1283,7 @@ def prefetch_wallets_backend(
             return AppError("Wallet discovery result was not found", code="sync_state_missing")
         try:
             return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
-        except AppError as exc:
+        except Exception as exc:
             return exc
 
     return _parallel_wallet_step(_fetch)
