@@ -61,6 +61,9 @@ CHAIN_ALIASES = {
     "elements": "liquid",
 }
 _EMBIT_MODULES = None
+_EXTENDED_PUBLIC_KEY_PREFIX_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?P<prefix>xpub|tpub)(?=[1-9A-HJ-NP-Za-km-z])"
+)
 
 # Fixed receive/change branch indices per script type. Stable bases keep a
 # type's derived addresses and its sync checkpoint (highest_used is keyed by
@@ -155,6 +158,41 @@ def normalize_network(chain, value):
     if not normalized:
         raise ValueError(f"Unsupported {chain} network '{value}'")
     return normalized
+
+
+def _bitcoin_extended_key_network(*values: object) -> str | None:
+    families = {
+        "main" if match.group("prefix") == "xpub" else "test"
+        for value in values
+        for match in _EXTENDED_PUBLIC_KEY_PREFIX_RE.finditer(str(value or ""))
+    }
+    if len(families) > 1:
+        raise AppError(
+            "Bitcoin descriptors cannot mix mainnet and test-family extended public keys",
+            code="validation",
+            retryable=False,
+        )
+    return next(iter(families), None)
+
+
+def _descriptor_network(chain: str, configured: object, *key_material: object) -> str:
+    network = normalize_network(chain, configured)
+    if chain != "bitcoin":
+        return network
+    key_network = _bitcoin_extended_key_network(*key_material)
+    if key_network is None:
+        return network
+    if configured in (None, ""):
+        return key_network
+    configured_family = "main" if network == "main" else "test"
+    if configured_family != key_network:
+        raise AppError(
+            "Extended public key network does not match the configured Bitcoin network",
+            code="validation",
+            details={"configured_network": network, "key_network": key_network},
+            retryable=False,
+        )
+    return network
 
 
 def default_policy_asset_id(network):
@@ -277,6 +315,29 @@ def enabled_script_branches(xpub, script_types, descriptor_class):
     return branches
 
 
+def _plan_fingerprint(
+    *,
+    chain: str,
+    network: str,
+    gap_limit: int,
+    branches: list[DescriptorBranch],
+) -> str:
+    payload = {
+        "chain": chain,
+        "network": network,
+        "gap_limit": gap_limit,
+        "branches": [
+            {
+                "branch_index": branch.branch_index,
+                "selector": branch.selector,
+                "descriptor": str(branch.descriptor),
+            }
+            for branch in branches
+        ],
+    }
+    return sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def load_descriptor_plan(config):
     descriptor_text = str(config.get("descriptor") or "").strip()
     xpub = str(config.get("xpub") or "").strip()
@@ -304,7 +365,13 @@ def load_descriptor_plan(config):
         elif config.get("descriptor_source") == BSMS_DESCRIPTOR_SOURCE:
             synthesize_change = False
     chain = normalize_chain(config.get("chain"))
-    network = normalize_network(chain, config.get("network"))
+    network = _descriptor_network(
+        chain,
+        config.get("network"),
+        xpub,
+        descriptor_text,
+        change_text,
+    )
     gap_limit = int(config.get("gap_limit") or DEFAULT_DESCRIPTOR_GAP_LIMIT)
     if gap_limit <= 0:
         raise ValueError("Descriptor gap limit must be positive")
@@ -320,18 +387,12 @@ def load_descriptor_plan(config):
         branches = enabled_script_branches(xpub, script_types, descriptor_class)
         for branch in branches:
             assert_descriptor_is_watch_only(branch.descriptor)
-        fingerprint = sha256(
-            json.dumps(
-                {
-                    "chain": chain,
-                    "network": network,
-                    "xpub": xpub,
-                    "script_types": script_types,
-                    "gap_limit": gap_limit,
-                },
-                sort_keys=True,
-            ).encode("utf-8")
-        ).hexdigest()
+        fingerprint = _plan_fingerprint(
+            chain=chain,
+            network=network,
+            gap_limit=gap_limit,
+            branches=branches,
+        )
         return DescriptorPlan(
             chain=chain,
             network=network,
@@ -362,18 +423,12 @@ def load_descriptor_plan(config):
         branches.append(DescriptorBranch(1, "change", primary, 1))
     else:
         branches.append(DescriptorBranch(0, "receive", primary, None))
-    fingerprint = sha256(
-        json.dumps(
-            {
-                "chain": chain,
-                "network": network,
-                "descriptor": descriptor_text,
-                "change_descriptor": change_text,
-                "gap_limit": gap_limit,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
+    fingerprint = _plan_fingerprint(
+        chain=chain,
+        network=network,
+        gap_limit=gap_limit,
+        branches=branches,
+    )
     return DescriptorPlan(
         chain=chain,
         network=network,

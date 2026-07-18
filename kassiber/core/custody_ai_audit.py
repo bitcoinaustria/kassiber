@@ -94,7 +94,9 @@ def append_assistance_record(
         raise ValueError("unsupported custody AI execution status")
 
     model_packet = _bounded_proposal(model_proposal)
-    final_packet = _bounded_proposal(final_proposal or model_proposal)
+    final_packet = _bounded_proposal(
+        model_proposal if final_proposal is None else final_proposal
+    )
     user_edited = final_packet != model_packet
     candidate_fingerprint = None
     input_version = final_packet.get("expected_input_version")

@@ -3445,8 +3445,9 @@ def build_summary_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHo
 
 def _summary_pdf_period(hooks: ReportHooks, start=None, end=None):
     end_dt = hooks.parse_iso_datetime(end, "end") if end else hooks.parse_iso_datetime(hooks.now_iso(), "now")
+    end_dt = end_dt.replace(microsecond=0)
     if start:
-        start_dt = hooks.parse_iso_datetime(start, "start")
+        start_dt = hooks.parse_iso_datetime(start, "start").replace(microsecond=0)
     else:
         start_dt = end_dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     if start_dt > end_dt:

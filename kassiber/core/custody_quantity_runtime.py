@@ -843,6 +843,11 @@ def _tax_eligibility(
         if item_barrier is None:
             return True
         order = event_order_by_hash[item.source.observation_hash]
+        # Only the timestamp is temporal evidence. The remaining tuple fields
+        # make replay deterministic, but using them to order distinct events at
+        # the same instant would grant basis eligibility by arbitrary event id.
+        # Keep the barrier event's finalized sibling slices, and fail closed for
+        # every other event sharing that timestamp.
         return order[0] < item_barrier[0] or order == item_barrier
 
     eligible = tuple(

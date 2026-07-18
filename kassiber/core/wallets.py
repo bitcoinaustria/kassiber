@@ -606,7 +606,14 @@ def _validated_wallet_config(normalized_kind, config):
         return silent_payments.validate_wallet_config(config)
     has_live_material = bool(config.get("descriptor") or config.get("xpub"))
     descriptor_plan = load_wallet_descriptor_plan_from_config(config) if has_live_material else None
-    chain, network = wallet_live_chain_config(config)
+    if descriptor_plan is not None:
+        # The descriptor is authoritative for key-network family when the
+        # caller omitted chain metadata.  Re-normalizing the raw config here
+        # would turn an inferred tpub/test plan back into a persisted mainnet
+        # wallet, making the same config fail on its next load.
+        chain, network = descriptor_plan.chain, descriptor_plan.network
+    else:
+        chain, network = wallet_live_chain_config(config)
     if normalized_kind == "address" and not config.get("addresses") and not config.get("source_file"):
         raise AppError(
             "Address wallets require at least one --address or a file-based source",

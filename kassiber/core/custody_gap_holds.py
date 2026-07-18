@@ -168,6 +168,22 @@ def _validate_candidate(
             "candidate source and return observations must be disjoint",
             details={"gap_id": candidate.gap_id},
         )
+    if not candidate.profile_id:
+        raise CustodyGapHoldCompileError(
+            "candidate profile scope must be non-empty",
+            details={"gap_id": candidate.gap_id},
+        )
+    observations = (*sources, *returns)
+    profile_ids = {item.profile_id for item in observations}
+    if profile_ids != {candidate.profile_id}:
+        raise CustodyGapHoldCompileError(
+            "candidate profile scope does not match every observation",
+            details={
+                "gap_id": candidate.gap_id,
+                "candidate_profile_id": candidate.profile_id,
+                "observation_profile_ids": sorted(profile_ids),
+            },
+        )
     expected_gap_id = custody_gap_id(
         candidate.profile_id,
         candidate.asset,
@@ -179,8 +195,6 @@ def _validate_candidate(
             "candidate identity does not match its boundary transactions",
             details={"gap_id": candidate.gap_id, "expected_gap_id": expected_gap_id},
         )
-
-    observations = (*sources, *returns)
     quantity_hashes = [item.quantity_hash for item in observations]
     if len(set(quantity_hashes)) != len(quantity_hashes):
         raise CustodyGapHoldCompileError(

@@ -520,6 +520,60 @@ class WasabiImportFlowTest(unittest.TestCase):
                 str(bundle_path),
             )
 
+            conn = open_db(data_root)
+            try:
+                wasabi_wallet = conn.execute(
+                    "SELECT workspace_id, profile_id FROM wallets WHERE label = 'Wasabi'"
+                ).fetchone()
+                conn.execute(
+                    """
+                    INSERT INTO wallets(
+                        id, workspace_id, profile_id, label, kind, config_json, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "unrelated-wallet",
+                        wasabi_wallet["workspace_id"],
+                        wasabi_wallet["profile_id"],
+                        "Unrelated",
+                        "descriptor",
+                        '{"chain":"bitcoin","network":"main"}',
+                        "2026-01-01T00:00:00Z",
+                    ),
+                )
+                unrelated_txid = "dd" * 32
+                conn.execute(
+                    """
+                    INSERT INTO wallet_utxos(
+                        id, workspace_id, profile_id, wallet_id,
+                        backend_name, backend_kind, chain, network, asset,
+                        amount, txid, vout, outpoint, confirmation_status,
+                        first_seen_at, last_seen_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "unrelated-utxo",
+                        wasabi_wallet["workspace_id"],
+                        wasabi_wallet["profile_id"],
+                        "unrelated-wallet",
+                        "fixture",
+                        "fixture",
+                        "bitcoin",
+                        "main",
+                        "BTC",
+                        1000,
+                        unrelated_txid,
+                        0,
+                        f"{unrelated_txid}:0",
+                        "confirmed",
+                        "2026-01-01T00:00:00Z",
+                        "2026-01-01T00:00:00Z",
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
             empty_coin_payload = _wasabi_bundle_payload()
             empty_coin_payload["listcoins"] = {"result": []}
             empty_coin_payload["listunspentcoins"] = {"result": []}
@@ -539,10 +593,21 @@ class WasabiImportFlowTest(unittest.TestCase):
 
             conn = open_db(data_root)
             try:
-                active_count = conn.execute(
-                    "SELECT COUNT(*) AS count FROM wallet_utxos WHERE spent_at IS NULL"
-                ).fetchone()["count"]
-                self.assertEqual(active_count, 0)
+                active_by_wallet = {
+                    row["label"]: row["active_count"]
+                    for row in conn.execute(
+                        """
+                        SELECT w.label, COUNT(u.id) AS active_count
+                        FROM wallets w
+                        LEFT JOIN wallet_utxos u
+                          ON u.wallet_id = w.id AND u.spent_at IS NULL
+                        WHERE w.label IN ('Wasabi', 'Unrelated')
+                        GROUP BY w.id, w.label
+                        """
+                    )
+                }
+                self.assertEqual(active_by_wallet["Wasabi"], 0)
+                self.assertEqual(active_by_wallet["Unrelated"], 1)
             finally:
                 conn.close()
 

@@ -152,6 +152,55 @@ def test_suspense_principal_still_projects_separately_known_network_fee():
     )
 
 
+def test_basis_barrier_fails_closed_for_distinct_same_timestamp_event():
+    barrier_at = "2025-01-01T00:00:00Z"
+    rows = [
+        _row("acquisition", "source", "inbound", 100, "2024-01-01T00:00:00Z"),
+        # This id sorts before the barrier id, but that deterministic tie-break
+        # cannot prove that the disposal happened first in real time.
+        _row("a-same-time-sale", "source", "outbound", 10, barrier_at),
+        _row("z-gap", "source", "outbound", 20, barrier_at),
+    ]
+    baseline = build_canonical_quantity_state(rows)
+    observations = {
+        item.transaction_id: item for item in baseline.projection.observations
+    }
+    gap = observations["z-gap"]
+    state = build_canonical_quantity_state(
+        rows,
+        interpreter_claims=[
+            QuantityClaim(
+                claim_id="same-time-gap-suspense",
+                source=QuantitySlice(gap.quantity_hash, 0, gap.principal_msat),
+                state=CUSTODY_SUSPENSE,
+                priority=ClaimPriority.ACCOUNTING_CONVENTION,
+                reason="missing_wallet",
+            )
+        ],
+    )
+
+    same_time_hash = observations["a-same-time-sale"].quantity_hash
+    assert any(
+        item.observation_hash == same_time_hash
+        for item in state.tax_eligibility.ineligible_slices
+    )
+
+    projection = compile_finalized_tax_projection(
+        {"id": "profile", "workspace_id": "workspace", "label": "Book"},
+        rows,
+        state,
+    )
+    assert all(
+        row["journal_transaction_id"] != "a-same-time-sale"
+        for row in projection.rows
+    )
+    assert any(
+        item["transaction_id"] == "a-same-time-sale"
+        and item["reason"] == "custody_basis_barrier"
+        for item in projection.quarantines
+    )
+
+
 def test_basis_barrier_does_not_suppress_unrelated_asset_projection():
     rows = [
         _row("btc-acquisition", "source", "inbound", 100, "2024-01-01T00:00:00Z"),

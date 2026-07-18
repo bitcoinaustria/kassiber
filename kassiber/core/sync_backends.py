@@ -1044,22 +1044,22 @@ def detect_active_script_types(backend, xpub, *, chain="bitcoin", network=None, 
     deliberately no gap-window scan here: detection must stay rate-limit-safe.
     """
     chain = normalize_chain_value(chain)
-    network = normalize_network_value(chain, network)
+    candidates = list(SCRIPT_TYPE_BRANCH_BASE)
+    plan_config = {
+        "xpub": xpub,
+        "script_types": candidates,
+        "chain": chain,
+        "gap_limit": 1,
+    }
+    if network not in (None, ""):
+        plan_config["network"] = normalize_network_value(chain, network)
+    plan = load_wallet_descriptor_plan_from_config(plan_config)
+    chain, network = plan.chain, plan.network
     kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
     if timeout is None:
         timeout = backend_timeout(backend)
-    candidates = list(SCRIPT_TYPE_BRANCH_BASE)
     script_pubkeys = []
     for script_type in candidates:
-        plan = load_wallet_descriptor_plan_from_config(
-            {
-                "xpub": xpub,
-                "script_types": [script_type],
-                "chain": chain,
-                "network": network,
-                "gap_limit": 1,
-            }
-        )
         base = SCRIPT_TYPE_BRANCH_BASE[script_type]
         script_pubkeys.append(derive_descriptor_target(plan, base, 0).script_pubkey)
     history = _probe_scripts_have_history(backend, kind, script_pubkeys, timeout=timeout)

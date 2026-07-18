@@ -15,6 +15,7 @@ from unittest import mock
 from embit import bip32
 
 from kassiber.errors import AppError
+from kassiber.wallet_descriptors import derive_descriptor_target, load_descriptor_plan
 from kassiber.wallet_setup import (
     BSMS_DESCRIPTOR_SOURCE,
     normalize_script_types,
@@ -54,6 +55,7 @@ class NormalizeWalletMaterialSlip132Tests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], f"wpkh({xpub}/0/*)")
         self.assertEqual(result["change_descriptor"], f"wpkh({xpub}/1/*)")
+        self.assertEqual(result["network"], "main")
 
     def test_ypub_converts_to_p2sh_wrapped_segwit_descriptors(self):
         account, xpub = _account_xpub()
@@ -63,6 +65,7 @@ class NormalizeWalletMaterialSlip132Tests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], f"sh(wpkh({xpub}/0/*))")
         self.assertEqual(result["change_descriptor"], f"sh(wpkh({xpub}/1/*))")
+        self.assertEqual(result["network"], "main")
 
     def test_vpub_converts_to_testnet_native_segwit_descriptors(self):
         account, _ = _account_xpub()
@@ -73,6 +76,11 @@ class NormalizeWalletMaterialSlip132Tests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], f"wpkh({tpub}/0/*)")
         self.assertEqual(result["change_descriptor"], f"wpkh({tpub}/1/*)")
+        self.assertEqual(result["network"], "test")
+
+        plan = load_descriptor_plan({"chain": "bitcoin", **result})
+        self.assertEqual(plan.network, "test")
+        self.assertTrue(derive_descriptor_target(plan, 0, 0).address.startswith("tb1"))
 
     def test_upub_converts_to_testnet_p2sh_wrapped_segwit_descriptors(self):
         account, _ = _account_xpub()
@@ -83,6 +91,7 @@ class NormalizeWalletMaterialSlip132Tests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], f"sh(wpkh({tpub}/0/*))")
         self.assertEqual(result["change_descriptor"], f"sh(wpkh({tpub}/1/*))")
+        self.assertEqual(result["network"], "test")
 
     def test_bare_xpub_is_rejected_as_ambiguous(self):
         _, xpub = _account_xpub()
@@ -137,6 +146,7 @@ class NormalizeWalletMaterialBareXpubScriptTypeTests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], f"wpkh({tpub}/0/*)")
         self.assertEqual(result["change_descriptor"], f"wpkh({tpub}/1/*)")
+        self.assertEqual(result["network"], "test")
 
     def test_unknown_script_type_is_rejected(self):
         _, xpub = _account_xpub()
@@ -203,7 +213,14 @@ class NormalizeWalletMaterialMultiScriptTests(unittest.TestCase):
 
         result = normalize_wallet_material(xpub, script_types=["p2tr", "p2wpkh"])
 
-        self.assertEqual(result, {"xpub": xpub, "script_types": ["p2tr", "p2wpkh"]})
+        self.assertEqual(
+            result,
+            {
+                "xpub": xpub,
+                "script_types": ["p2tr", "p2wpkh"],
+                "network": "main",
+            },
+        )
         self.assertNotIn("descriptor", result)
 
     def test_bare_xpub_with_single_script_type_in_list(self):
@@ -211,7 +228,10 @@ class NormalizeWalletMaterialMultiScriptTests(unittest.TestCase):
 
         result = normalize_wallet_material(xpub, script_types=["p2wpkh"])
 
-        self.assertEqual(result, {"xpub": xpub, "script_types": ["p2wpkh"]})
+        self.assertEqual(
+            result,
+            {"xpub": xpub, "script_types": ["p2wpkh"], "network": "main"},
+        )
 
     def test_empty_script_types_falls_back_to_ambiguous(self):
         _, xpub = _account_xpub()

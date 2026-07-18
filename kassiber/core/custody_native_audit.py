@@ -505,13 +505,32 @@ def _augment_targets(
     invalid_evidence: set[str] = set()
     issues: list[NativeAuditIssue] = []
     events = {event.event_key: event for event in canonical.events}
-    for (event_key, wallet_id, asset), members in sorted(
+    slot_items = sorted(
         by_slot.items(),
         key=lambda item: (item[0][0], item[0][1], item[0][2]),
-    ):
-        members = sorted(members, key=lambda item: item.evidence_id)
-        amount_msat = sum(item.received_msat for item in members)
+    )
+
+    # Validate every target slot before materializing any synthetic inbound.
+    # A contradiction invalidates the whole physical source interpretation;
+    # preflighting avoids leaving an earlier sibling target behind as an
+    # uncovered inbound/external-origin posting.
+    invalid_slots: set[tuple[Any, str, str]] = set()
+    alias_owners: dict[Any, dict[str, tuple[Any, str, str] | None]] = {
+        event.event_key: {
+            transaction_id: None
+            for transaction_id, _quantity_hash in event.observation_aliases
+        }
+        for event in canonical.events
+    }
+    original_aliases = {
+        event.event_key: dict(event.observation_aliases)
+        for event in canonical.events
+    }
+    for slot, raw_members in slot_items:
+        event_key, wallet_id, asset = slot
+        members = sorted(raw_members, key=lambda item: item.evidence_id)
         event = events[event_key]
+        amount_msat = sum(item.received_msat for item in members)
         existing = [
             observation
             for observation in event.legs
@@ -522,7 +541,7 @@ def _augment_targets(
         if existing and (
             len(existing) != 1 or existing[0].principal_msat != amount_msat
         ):
-            invalid_evidence.update(item.evidence_id for item in members)
+            invalid_slots.add(slot)
             issues.append(
                 _issue(
                     "native_audit_target_contradiction",
@@ -546,8 +565,103 @@ def _augment_targets(
             )
             continue
         if existing:
+            continue
+
+        conflicting_aliases: list[dict[str, Any]] = []
+        owners = alias_owners[event_key]
+        aliases = original_aliases[event_key]
+        for member in members:
+            if member.in_id not in owners:
+                continue
+            owner_slot = owners[member.in_id]
+            if owner_slot == slot:
+                continue
+            detail: dict[str, Any] = {"transaction_id": member.in_id}
+            if owner_slot is None:
+                detail["quantity_hash"] = aliases[member.in_id]
+            else:
+                detail.update(
+                    {
+                        "target_wallet_id": owner_slot[1],
+                        "asset": owner_slot[2],
+                    }
+                )
+                invalid_slots.add(owner_slot)
+            conflicting_aliases.append(detail)
+        if conflicting_aliases:
+            invalid_slots.add(slot)
+            issues.append(
+                _issue(
+                    "native_audit_alias_contradiction",
+                    audit={
+                        "pairing_source": members[0].pairing_source,
+                        "occurred_at": members[0].occurred_at,
+                    },
+                    transaction_ids=(
+                        *(item.source_transaction_id for item in members),
+                        *(item.in_id for item in members),
+                    ),
+                    asset=asset,
+                    amount_msat=amount_msat,
+                    wallet_id=wallet_id,
+                    conflicting_aliases=conflicting_aliases,
+                    chain=event_key.chain,
+                    network=event_key.network,
+                )
+            )
+            continue
+        for member in members:
+            owners[member.in_id] = slot
+
+    invalid_source_hashes = {
+        member.source.quantity_hash
+        for slot, members in slot_items
+        if slot in invalid_slots
+        for member in members
+    }
+    # Source interpretations and aggregate destination slots form a bipartite
+    # graph.  Close invalidity over the connected component so a contradicted
+    # source cannot leave a sibling target behind, and an aggregate target
+    # cannot retain only the non-contradicted share of an inseparable amount.
+    changed = True
+    while changed:
+        changed = False
+        for slot, members in slot_items:
+            if slot in invalid_slots:
+                continue
+            if any(
+                member.source.quantity_hash in invalid_source_hashes
+                for member in members
+            ):
+                invalid_slots.add(slot)
+                invalid_source_hashes.update(
+                    member.source.quantity_hash for member in members
+                )
+                changed = True
+    invalid_evidence.update(
+        member.evidence_id
+        for slot, members in slot_items
+        if slot in invalid_slots
+        for member in members
+    )
+
+    for (event_key, wallet_id, asset), raw_members in slot_items:
+        if (event_key, wallet_id, asset) in invalid_slots:
+            continue
+        members = sorted(raw_members, key=lambda item: item.evidence_id)
+        event = events[event_key]
+        amount_msat = sum(item.received_msat for item in members)
+        existing = [
+            observation
+            for observation in event.legs
+            if observation.direction == "inbound"
+            and observation.wallet_id == wallet_id
+            and observation.asset == asset
+        ]
+        if existing:
             target = existing[0]
         else:
+            aliases = dict(event.observation_aliases)
             proof = {
                 "schema_version": 1,
                 "kind": "verified_native_owned_destination",
@@ -596,15 +710,7 @@ def _augment_targets(
                 target.evidence_detail_hash,
                 target.evidence_payload_json,
             )
-            aliases = {
-                transaction_id: quantity_hash
-                for transaction_id, quantity_hash in event.observation_aliases
-            }
             for member in members:
-                prior = aliases.get(member.in_id)
-                if prior is not None and prior != target.quantity_hash:
-                    invalid_evidence.add(member.evidence_id)
-                    continue
                 aliases[member.in_id] = target.quantity_hash
             event = replace(
                 event,
@@ -629,8 +735,7 @@ def _augment_targets(
             )
             events[event_key] = event
         for member in members:
-            if member.evidence_id not in invalid_evidence:
-                target_hash_by_evidence[member.evidence_id] = target.quantity_hash
+            target_hash_by_evidence[member.evidence_id] = target.quantity_hash
 
     augmented = CanonicalQuantityInput(
         events=tuple(events[key] for key in sorted(events)),

@@ -259,8 +259,11 @@ def _json_object(value: Any, field: str) -> dict[str, Any]:
         return {}
     if isinstance(value, str):
         try:
-            value = json.loads(value)
-        except json.JSONDecodeError as exc:
+            value = json.loads(
+                value,
+                parse_constant=_raise_nonfinite_json,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
             raise _error(
                 f"{field} must contain valid JSON",
                 "custody_component_validation",
@@ -275,7 +278,14 @@ def _json_object(value: Any, field: str) -> dict[str, Any]:
     # Round-trip now so unsupported/non-deterministic objects fail at the API
     # boundary rather than halfway through an authored SQL transaction.
     try:
-        return json.loads(json.dumps(dict(value), sort_keys=True, separators=(",", ":")))
+        return json.loads(
+            json.dumps(
+                dict(value),
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        )
     except (TypeError, ValueError) as exc:
         raise _error(
             f"{field} contains a value that cannot be encoded as JSON",
@@ -284,8 +294,17 @@ def _json_object(value: Any, field: str) -> dict[str, Any]:
         ) from exc
 
 
+def _raise_nonfinite_json(constant: str) -> None:
+    raise ValueError(f"non-finite JSON number: {constant}")
+
+
 def _json_text(value: Any, field: str) -> str:
-    return json.dumps(_json_object(value, field), sort_keys=True, separators=(",", ":"))
+    return json.dumps(
+        _json_object(value, field),
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
 
 
 def normalize_component_header(

@@ -13,8 +13,9 @@ import unittest
 
 from embit import bip32
 
-from kassiber.daemon import _preview_descriptor_payload
+from kassiber.daemon import _apply_wallet_material_config, _preview_descriptor_payload
 from kassiber.errors import AppError
+from kassiber.wallet_setup import normalize_wallet_material
 
 from .descriptor_fixtures import PUBLIC_MAINNET_ZPUB_FIXTURE
 
@@ -28,6 +29,12 @@ def _xpub_from_seed() -> str:
 def _xprv_from_seed() -> str:
     seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
     return bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_base58()
+
+
+def _vpub_from_seed() -> str:
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
+    account = bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_public()
+    return account.to_base58(version=bytes.fromhex("045f1cf6"))
 
 
 class PreviewDescriptorTests(unittest.TestCase):
@@ -45,6 +52,36 @@ class PreviewDescriptorTests(unittest.TestCase):
         self.assertEqual(len(change), 1)
         for entry in receive + change:
             self.assertTrue(entry["address"].startswith("bc1"))
+
+    def test_vpub_material_infers_testnet_and_rejects_mainnet(self):
+        vpub = _vpub_from_seed()
+        result = _preview_descriptor_payload({"wallet_material": vpub, "count": 1})
+
+        self.assertEqual(result["network"], "test")
+        self.assertTrue(
+            all(entry["address"].startswith("tb1") for entry in result["addresses"])
+        )
+
+        with self.assertRaises(AppError) as raised:
+            _preview_descriptor_payload(
+                {"wallet_material": vpub, "network": "main", "count": 1}
+            )
+        self.assertEqual(raised.exception.code, "validation")
+
+    def test_wallet_material_network_merge_preserves_explicit_test_family(self):
+        material = normalize_wallet_material(_vpub_from_seed())
+
+        inferred: dict[str, object] = {}
+        _apply_wallet_material_config(inferred, material)
+        self.assertEqual(inferred["network"], "test")
+
+        signet: dict[str, object] = {"network": "signet"}
+        _apply_wallet_material_config(signet, material)
+        self.assertEqual(signet["network"], "signet")
+
+        with self.assertRaises(AppError) as raised:
+            _apply_wallet_material_config({"network": "main"}, material)
+        self.assertEqual(raised.exception.code, "validation")
 
     def test_explicit_descriptor_with_change_branch_is_honored(self):
         xpub = _xpub_from_seed()

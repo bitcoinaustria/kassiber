@@ -353,6 +353,9 @@ def compile_finalized_tax_projection(
         order = event_order_by_hash.get(observation.quantity_hash)
         if order is None:
             return True
+        # The tie-break fields make replay deterministic; they do not establish
+        # chronology between distinct events recorded at the same timestamp.
+        # Only the barrier event itself may retain its finalized sibling slices.
         return order[0] > basis_barrier[0] or (
             order[0] == basis_barrier[0] and order != basis_barrier
         )

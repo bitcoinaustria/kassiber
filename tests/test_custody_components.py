@@ -668,6 +668,49 @@ class CustodyComponentApiTests(unittest.TestCase):
 
         self.assertEqual(caught.exception.code, "validation")
 
+    def test_component_json_metadata_rejects_nonfinite_numbers(self):
+        cases = [
+            {"rate": float("nan")},
+            {"rate": float("inf")},
+            {"rate": float("-inf")},
+            '{"rate": NaN}',
+            '{"rate": Infinity}',
+            '{"rate": -Infinity}',
+        ]
+
+        for evidence in cases:
+            with self.subTest(evidence=evidence):
+                with self.assertRaises(AppError) as raised:
+                    create_component(
+                        self.conn,
+                        workspace_id="ws",
+                        profile_id="profile",
+                        component_type="manual_bridge",
+                        evidence=evidence,
+                        legs=[
+                            _leg("source", 100, tx="out", wallet="btc"),
+                            _leg("destination", 100, tx="in-1", wallet="btc"),
+                        ],
+                    )
+                self.assertEqual(
+                    "custody_component_validation", raised.exception.code
+                )
+
+        component = create_component(
+            self.conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_type="manual_bridge",
+            evidence={"rate": 1.25, "nested": {"valid": True}},
+            legs=[
+                _leg("source", 100, tx="out", wallet="btc"),
+                _leg("destination", 100, tx="in-1", wallet="btc"),
+            ],
+        )
+        self.assertEqual(
+            {"nested": {"valid": True}, "rate": 1.25}, component["evidence"]
+        )
+
     def test_decimal_string_quantities_cannot_exceed_sqlite_integer_range(self):
         too_large = "9223372036854775808"
         base_legs = [

@@ -54,6 +54,56 @@ def _scope(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def test_bundle_hash_rejects_duplicate_basenames_and_is_order_independent(
+    tmp_path,
+):
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first = first_dir / "report.csv"
+    second = second_dir / "report.csv"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+
+    for paths in ((first, second), (second, first)):
+        with pytest.raises(AppError) as raised:
+            custody_filed_reports.artifact_content_sha256(paths)
+        assert raised.value.code == "filed_report_snapshot_validation"
+        assert raised.value.details == {"field": "paths"}
+
+    uniquely_named = second_dir / "details.csv"
+    uniquely_named.write_bytes(second.read_bytes())
+    assert custody_filed_reports.artifact_content_sha256(
+        (first, uniquely_named)
+    ) == custody_filed_reports.artifact_content_sha256((uniquely_named, first))
+
+
+def test_report_scope_requires_fixed_width_whole_second_timestamps():
+    for field in ("occurred_at_start", "occurred_at_end"):
+        with pytest.raises(AppError) as raised:
+            custody_filed_reports._report_scope(
+                {field: "2025-01-01T00:00:00.1Z"}
+            )
+        assert raised.value.code == "filed_report_snapshot_validation"
+        assert raised.value.details == {"field": f"report_scope.{field}"}
+
+
+def test_summary_report_period_canonicalizes_fractional_user_bounds():
+    hooks = handlers._report_hooks()
+    start, end = reports._summary_pdf_period(
+        hooks,
+        start="2025-01-01T00:00:00Z",
+        end="2025-01-01T00:00:00.9Z",
+    )
+
+    assert start == end
+    assert hooks.iso_z(end) == "2025-01-01T00:00:00Z"
+    assert reports._summary_pdf_period_label(hooks, start, end) == (
+        "2025-01-01 to 2025-01-01"
+    )
+
+
 def test_completed_full_report_export_registers_computed_saved_snapshot(tmp_path):
     conn = open_db(tmp_path / "book")
     try:
