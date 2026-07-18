@@ -3291,8 +3291,10 @@ class DaemonSmokeTest(unittest.TestCase):
                         "auth": self.headers.get("Authorization"),
                     }
                 )
-                body = json.dumps(
-                    [
+                if self.path == "/api/v1/stores":
+                    payload = [{"id": "STORE1", "name": "Probe store"}]
+                else:
+                    payload = [
                         {
                             "transactionHash": "probe-tx",
                             "amount": "0.001",
@@ -3302,7 +3304,7 @@ class DaemonSmokeTest(unittest.TestCase):
                             "labels": [],
                         }
                     ]
-                ).encode("utf-8")
+                body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -3338,6 +3340,19 @@ class DaemonSmokeTest(unittest.TestCase):
                     _write_payload(
                         proc,
                         {
+                            "request_id": "btcpay-backend-test",
+                            "kind": "ui.backends.btcpay.test",
+                            "args": {"backend": "btcpay-probe"},
+                        },
+                    )
+                    backend_envelope = _read_payload_timeout(proc)
+                    self.assertEqual(backend_envelope["kind"], "ui.backends.btcpay.test")
+                    self.assertTrue(backend_envelope["data"]["ok"])
+                    self.assertEqual(backend_envelope["data"]["stores_seen"], 1)
+
+                    _write_payload(
+                        proc,
+                        {
                             "request_id": "btcpay-test",
                             "kind": "ui.connections.btcpay.test",
                             "args": {
@@ -3349,10 +3364,12 @@ class DaemonSmokeTest(unittest.TestCase):
                     envelope = _read_payload_timeout(proc)
                     self.assertEqual(envelope["kind"], "ui.connections.btcpay.test")
                     self.assertTrue(envelope["data"]["ok"])
-                    self.assertEqual(len(received), 1)
+                    self.assertEqual(len(received), 2)
+                    self.assertEqual(received[0]["path"], "/api/v1/stores")
                     self.assertEqual(received[0]["auth"], "token probe-secret")
-                    self.assertIn("skip=0", received[0]["path"])
-                    self.assertIn("limit=1", received[0]["path"])
+                    self.assertEqual(received[1]["auth"], "token probe-secret")
+                    self.assertIn("skip=0", received[1]["path"])
+                    self.assertIn("limit=1", received[1]["path"])
                 finally:
                     if proc.poll() is None:
                         proc.terminate()
@@ -5176,6 +5193,22 @@ class DaemonSmokeTest(unittest.TestCase):
         )
         self.assertEqual(validated["screen_context"]["route"], "/transactions")
         self.assertEqual(validated["screen_context"]["entity_id"], "tx-1")
+
+        custody_gap = _ai_chat_args(
+            {
+                **base,
+                "screen_context": {
+                    "route": "/custody-gaps",
+                    "entity_type": "custody_gap",
+                    "entity_id": "custody-gap:123",
+                    "capabilities": ["transfers", "transactions", "wallets"],
+                },
+            }
+        )
+        self.assertEqual(custody_gap["screen_context"]["route"], "/custody-gaps")
+        self.assertEqual(
+            custody_gap["screen_context"]["entity_type"], "custody_gap"
+        )
 
         for invalid_context in (
             {"route": "/transactions/tx-1"},
@@ -7777,7 +7810,11 @@ class DaemonSmokeTest(unittest.TestCase):
             )
 
             _write_payload(proc, {"request_id": "process-1", "kind": "ui.journals.process"})
-            processed = _read_payload_timeout(proc)
+            progress = _read_payload_timeout(proc)
+            self.assertEqual(progress["kind"], "ui.journals.process.progress")
+            self.assertEqual(progress["request_id"], "process-1")
+            self.assertEqual(progress["data"]["phase"], "writer_wait")
+            processed = _read_until_kind(proc, "ui.journals.process")
             self.assertEqual(processed["kind"], "ui.journals.process")
             self.assertEqual(processed["data"]["processed_transactions"], 1)
             self.assertEqual(processed["data"]["quarantined"], 0)
@@ -8376,7 +8413,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertFalse(saved["data"]["taxable"])
 
             _write_payload(proc, {"request_id": "process-1", "kind": "ui.journals.process"})
-            processed = _read_payload_timeout(proc)
+            processed = _read_until_kind(proc, "ui.journals.process")
             self.assertEqual(processed["kind"], "ui.journals.process")
             self.assertEqual(processed["data"]["processed_transactions"], 2)
 
@@ -8463,7 +8500,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertTrue(resaved["data"]["taxable"])
 
             _write_payload(proc, {"request_id": "process-2", "kind": "ui.journals.process"})
-            reprocessed = _read_payload_timeout(proc)
+            reprocessed = _read_until_kind(proc, "ui.journals.process")
             self.assertEqual(reprocessed["kind"], "ui.journals.process")
             self.assertEqual(reprocessed["data"]["processed_transactions"], 2)
 
@@ -8524,7 +8561,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertFalse(saved["data"]["taxable"])
 
             _write_payload(proc, {"request_id": "process-income-1", "kind": "ui.journals.process"})
-            processed = _read_payload_timeout(proc)
+            processed = _read_until_kind(proc, "ui.journals.process")
             self.assertEqual(processed["kind"], "ui.journals.process")
             self.assertEqual(processed["data"]["processed_transactions"], 1)
 
@@ -8571,7 +8608,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertTrue(resaved["data"]["taxable"])
 
             _write_payload(proc, {"request_id": "process-income-2", "kind": "ui.journals.process"})
-            reprocessed = _read_payload_timeout(proc)
+            reprocessed = _read_until_kind(proc, "ui.journals.process")
             self.assertEqual(reprocessed["kind"], "ui.journals.process")
             self.assertEqual(reprocessed["data"]["processed_transactions"], 1)
 
@@ -8621,7 +8658,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertFalse(saved["data"]["taxable"])
 
             _write_payload(proc, {"request_id": "process-buckets-1", "kind": "ui.journals.process"})
-            processed = _read_payload_timeout(proc)
+            processed = _read_until_kind(proc, "ui.journals.process")
             self.assertEqual(processed["kind"], "ui.journals.process")
             self.assertEqual(processed["data"]["processed_transactions"], 4)
 

@@ -11,6 +11,7 @@ from kassiber.sync_btcpay import (
     discover_btcpay_wallet_sources,
     fetch_btcpay_invoice_provenance,
     fetch_btcpay_records,
+    probe_btcpay_instance,
 )
 
 
@@ -166,6 +167,23 @@ class BtcpayIncrementalTest(unittest.TestCase):
         self.assertTrue(
             any("/api/v1/stores/store-two/payment-methods?" in url for url in opener.urls)
         )
+
+    def test_instance_probe_does_not_walk_store_payment_methods(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        opener = _DiscoveryOpener(
+            [{"id": "store-one", "name": "Main store"}],
+            {"store-one": [{"paymentMethodId": "BTC-CHAIN"}]},
+        )
+
+        result = probe_btcpay_instance(backend, opener=opener)
+
+        self.assertEqual(result, {"checked": True, "stores_seen": 1})
+        self.assertEqual(opener.urls, ["https://btcpay.example/api/v1/stores"])
 
     def test_wallet_history_default_opener_uses_backend_proxy(self):
         backend = {

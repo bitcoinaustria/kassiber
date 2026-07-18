@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useUiStore } from "@/store/ui";
 import {
   abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
@@ -128,8 +129,8 @@ type LightningProbeEnvelope = {
 
 type BtcpayProbeEnvelope = {
   backend?: string;
-  stores?: unknown[];
-  payment_methods?: unknown[];
+  ok: boolean;
+  stores_seen?: number;
 };
 
 function bitcoinRpcHealth(
@@ -374,6 +375,9 @@ export function NetworkStatusIndicator({
   const [healthRecords, setHealthRecords] = React.useState<
     Record<string, ConnectionHealthRecord>
   >({});
+  const maintenanceActive = useUiStore(
+    (state) => Boolean(state.activeMaintenanceProgress?.active),
+  );
   const backendSettingsQuery = useDaemon<BackendSettingsData>(
     "ui.backends.settings.list",
     undefined,
@@ -381,18 +385,23 @@ export function NetworkStatusIndicator({
   );
   const testElectrum = useDaemonMutation<BackendProbeEnvelope>(
     "ui.backends.electrum.test",
+    { invalidateQueries: false },
   );
   const testHttp = useDaemonMutation<BackendProbeEnvelope>(
     "ui.backends.http.test",
+    { invalidateQueries: false },
   );
   const testBitcoinRpc = useDaemonMutation<BitcoinRpcProbeEnvelope>(
     "ui.backends.bitcoinrpc.test",
+    { invalidateQueries: false },
   );
   const testLightning = useDaemonMutation<LightningProbeEnvelope>(
     "ui.backends.lightning.test",
+    { invalidateQueries: false },
   );
   const testBtcpay = useDaemonMutation<BtcpayProbeEnvelope>(
-    "ui.connections.btcpay.discover",
+    "ui.backends.btcpay.test",
+    { invalidateQueries: false },
   );
   const savedBackends = React.useMemo(
     () =>
@@ -438,6 +447,7 @@ export function NetworkStatusIndicator({
     checkableConnectionCount: checkableRows.length,
     daemonEnabled,
     documentVisible,
+    maintenanceActive,
     networkStatus: status,
   });
   const shouldRunImmediateCheck = shouldRunImmediateConnectionHealthCheck({
@@ -466,84 +476,76 @@ export function NetworkStatusIndicator({
     const now = new Date().toISOString();
     if (!canCheckConnections) return;
     setChecking(true);
-    const results = await Promise.all(
-      checkableRows.map(
-        async (row): Promise<[string, ConnectionHealthRecord]> => {
-          try {
-            const envelope =
-              row.probeKind === "electrum"
-                ? await testElectrum.mutateAsync({
-                    url: row.rawUrl,
-                    trust_self_signed: row.trustSelfSigned,
-                    proxy: row.proxy,
+    const results: Array<[string, ConnectionHealthRecord]> = [];
+    // The Python daemon currently executes foreground requests serially. Send
+    // probes one at a time so later probes do not spend their supervisor
+    // timeout waiting behind earlier network calls.
+    for (const row of checkableRows) {
+      if (useUiStore.getState().activeMaintenanceProgress?.active) break;
+      try {
+        const envelope =
+          row.probeKind === "electrum"
+            ? await testElectrum.mutateAsync({
+                url: row.rawUrl,
+                trust_self_signed: row.trustSelfSigned,
+                proxy: row.proxy,
+                timeout: 5,
+              })
+            : row.probeKind === "bitcoinrpc"
+              ? await testBitcoinRpc.mutateAsync({
+                  backend: row.backendId,
+                  url: row.backendId ? undefined : row.rawUrl,
+                  timeout: 5,
+                })
+              : row.probeKind === "lightning"
+                ? await testLightning.mutateAsync({
+                    backend: row.backendId,
                     timeout: 5,
                   })
-                : row.probeKind === "bitcoinrpc"
-                  ? await testBitcoinRpc.mutateAsync({
+                : row.probeKind === "btcpay"
+                  ? await testBtcpay.mutateAsync({
                       backend: row.backendId,
-                      url: row.backendId ? undefined : row.rawUrl,
                       timeout: 5,
                     })
-                  : row.probeKind === "lightning"
-                    ? await testLightning.mutateAsync({
-                        backend: row.backendId,
-                        timeout: 5,
-                      })
-                    : row.probeKind === "btcpay"
-                      ? await testBtcpay.mutateAsync({
-                          backend: row.backendId,
-                          timeout: 5,
-                        })
-                      : await testHttp.mutateAsync({
-                          url: row.rawUrl,
-                          proxy: row.proxy,
-                          timeout: 5,
-                        });
-            const payload = envelope.data;
-            const coreHealth =
-              row.probeKind === "bitcoinrpc"
-                ? bitcoinRpcHealth(payload as BitcoinRpcProbeEnvelope | undefined, t)
-                : undefined;
-            const btcpayHealth =
-              row.probeKind === "btcpay"
-                ? Array.isArray((payload as BtcpayProbeEnvelope | undefined)?.stores)
-                : undefined;
-            const ok =
-              coreHealth?.ok ??
-              btcpayHealth ??
-              Boolean((payload as BackendProbeEnvelope | undefined)?.ok);
-            return [
-              row.id,
-              {
-                fingerprint: row.fingerprint,
-                status: ok ? "healthy" : "unhealthy",
-                message:
-                  coreHealth?.message ??
-                  (payload as LightningProbeEnvelope | undefined)?.logs?.at(-1) ??
-                  (payload as BackendProbeEnvelope | undefined)?.logs?.at(-1) ??
-                  (ok
-                    ? t("network.checkPassed")
-                    : t("network.checkFailed")),
-                checkedAt: now,
-              },
-            ];
-          } catch (error) {
-            return [
-              row.id,
-              {
-                fingerprint: row.fingerprint,
-                status: "unhealthy",
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : t("network.checkFailed"),
-                checkedAt: now,
-              },
-            ];
-          }
-        },
-      ),
-    );
+                  : await testHttp.mutateAsync({
+                      url: row.rawUrl,
+                      proxy: row.proxy,
+                      timeout: 5,
+                    });
+        const payload = envelope.data;
+        const coreHealth =
+          row.probeKind === "bitcoinrpc"
+            ? bitcoinRpcHealth(payload as BitcoinRpcProbeEnvelope | undefined, t)
+            : undefined;
+        const ok =
+          coreHealth?.ok ??
+          Boolean((payload as BackendProbeEnvelope | undefined)?.ok);
+        results.push([
+          row.id,
+          {
+            fingerprint: row.fingerprint,
+            status: ok ? "healthy" : "unhealthy",
+            message:
+              coreHealth?.message ??
+              (payload as LightningProbeEnvelope | undefined)?.logs?.at(-1) ??
+              (payload as BackendProbeEnvelope | undefined)?.logs?.at(-1) ??
+              (ok ? t("network.checkPassed") : t("network.checkFailed")),
+            checkedAt: now,
+          },
+        ]);
+      } catch (error) {
+        results.push([
+          row.id,
+          {
+            fingerprint: row.fingerprint,
+            status: "unhealthy",
+            message:
+              error instanceof Error ? error.message : t("network.checkFailed"),
+            checkedAt: now,
+          },
+        ]);
+      }
+    }
     setHealthRecords((current) => {
       const next = { ...current };
       for (const [id, record] of results) {

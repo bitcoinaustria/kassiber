@@ -274,6 +274,10 @@ function numberField(value: unknown): AppLogField {
   return { type: "number", value: typeof value === "number" ? value : 0 };
 }
 
+function durationField(value: number): AppLogField {
+  return { type: "duration_ms", value: Math.max(0, Math.round(value)) };
+}
+
 function booleanField(value: unknown): AppLogField {
   return { type: "boolean", value: Boolean(value) };
 }
@@ -325,6 +329,18 @@ export function summarizeEnvelopeFields(
     summary.data_type = textField(typeof envelope.data);
   }
   return summary;
+}
+
+export function summarizeDaemonCompletionFields(
+  request: DaemonRequest,
+  envelope: DaemonEnvelope,
+  durationMs: number,
+): Record<string, AppLogField> {
+  return {
+    ...summarizeEnvelopeFields(envelope),
+    request_kind: textField(request.kind),
+    duration_ms: durationField(durationMs),
+  };
 }
 
 function addDataSummaryFields(
@@ -432,6 +448,7 @@ function withDaemonLogging(
         return transport.invoke<T>(requestWithId(req));
       }
       const request = requestWithId(req);
+      const startedAt = performance.now();
       recordDaemonLog(
         "debug",
         source,
@@ -444,7 +461,11 @@ function withDaemonLogging(
           envelopeLogLevel(envelope),
           source,
           "Daemon invoke finished",
-          summarizeEnvelopeFields(envelope),
+          summarizeDaemonCompletionFields(
+            request,
+            envelope,
+            performance.now() - startedAt,
+          ),
         );
         return envelope;
       } catch (error) {
@@ -470,6 +491,7 @@ function withDaemonLogging(
         return transport.stream<T, R>(requestWithId(req), options);
       }
       const request = requestWithId(req);
+      const startedAt = performance.now();
       recordDaemonLog(
         "debug",
         source,
@@ -493,7 +515,11 @@ function withDaemonLogging(
           envelopeLogLevel(envelope),
           source,
           "Daemon stream finished",
-          summarizeEnvelopeFields(envelope),
+          summarizeDaemonCompletionFields(
+            request,
+            envelope,
+            performance.now() - startedAt,
+          ),
         );
         return envelope;
       } catch (error) {

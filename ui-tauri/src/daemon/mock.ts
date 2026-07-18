@@ -3469,6 +3469,32 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.backends.btcpay.test") {
+      const args = (req.args ?? {}) as { backend?: unknown };
+      const backend =
+        typeof args.backend === "string" && args.backend.trim()
+          ? args.backend.trim()
+          : "";
+      if (!backend) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "BTCPay backend test requires backend",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.backends.btcpay.test",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { backend, ok: true, stores_seen: 1 } as T,
+      };
+    }
+
     if (req.kind === "ui.connections.btcpay.test") {
       const args = (req.args ?? {}) as {
         backend?: unknown;

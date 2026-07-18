@@ -1309,6 +1309,20 @@ def _current_component_term_rows(
             SELECT term.*,
                    component.state AS component_state,
                    component.superseded_at,
+                   (
+                       SELECT SUM(allocation.source_amount_msat)
+                       FROM custody_component_allocations allocation
+                       WHERE allocation.component_id = term.component_id
+                         AND allocation.source_leg_id = term.source_leg_id
+                         AND allocation.sink_leg_id = term.target_leg_id
+                   ) AS allocated_source_amount_msat,
+                   (
+                       SELECT SUM(allocation.sink_amount_msat)
+                       FROM custody_component_allocations allocation
+                       WHERE allocation.component_id = term.component_id
+                         AND allocation.source_leg_id = term.source_leg_id
+                         AND allocation.sink_leg_id = term.target_leg_id
+                   ) AS allocated_sink_amount_msat,
                    COALESCE(source.anchor_transaction_id,
                             source.transaction_id) AS out_transaction_id,
                    COALESCE(target.anchor_transaction_id,
@@ -1352,6 +1366,19 @@ def list_pair_review_records(
         }
     )
     contexts = _review_transaction_contexts(conn, transaction_ids)
+    component_shapes: dict[str, dict[str, Any]] = {}
+    for row in component_rows:
+        component_id = str(row["component_id"])
+        shape = component_shapes.setdefault(
+            component_id,
+            {"source_count": 0, "sink_count": 0, "allocation_count": 0},
+        )
+        shape.setdefault("source_ids", set()).add(str(row["out_transaction_id"]))
+        shape.setdefault("sink_ids", set()).add(str(row["in_transaction_id"]))
+        shape["allocation_count"] += 1
+    for shape in component_shapes.values():
+        shape["source_count"] = len(shape.pop("source_ids"))
+        shape["sink_count"] = len(shape.pop("sink_ids"))
     records: list[dict[str, Any]] = []
     for row in component_rows:
         out_id = str(row["out_transaction_id"])
@@ -1359,6 +1386,9 @@ def list_pair_review_records(
         out_context = contexts[out_id]
         in_context = contexts[in_id]
         reviewed_out = row["reviewed_source_amount_msat"]
+        allocated_out = row.get("allocated_source_amount_msat")
+        allocated_in = row.get("allocated_sink_amount_msat")
+        component_shape = component_shapes[str(row["component_id"])]
         records.append(
             {
                 "id": row["legacy_source_id"],
@@ -1380,7 +1410,9 @@ def list_pair_review_records(
                 "out_external_id": out_context["external_id"],
                 "out_asset": out_context["asset"],
                 "out_amount_msat": (
-                    int(reviewed_out)
+                    int(allocated_out)
+                    if allocated_out is not None
+                    else int(reviewed_out)
                     if reviewed_out is not None
                     else int(out_context["amount"])
                 ),
@@ -1390,10 +1422,18 @@ def list_pair_review_records(
                 "out_wallet_kind": out_context["wallet_kind"],
                 "in_external_id": in_context["external_id"],
                 "in_asset": in_context["asset"],
-                "in_amount_msat": int(in_context["amount"]),
+                "in_amount_msat": (
+                    int(allocated_in)
+                    if allocated_in is not None
+                    else int(in_context["amount"])
+                ),
+                "in_full_amount_msat": int(in_context["amount"]),
                 "in_occurred_at": in_context["occurred_at"],
                 "in_wallet": in_context["wallet"],
                 "in_wallet_kind": in_context["wallet_kind"],
+                "component_source_count": component_shape["source_count"],
+                "component_sink_count": component_shape["sink_count"],
+                "component_allocation_count": component_shape["allocation_count"],
             }
         )
     current_by_review_id = {str(row["id"]): row for row in records}

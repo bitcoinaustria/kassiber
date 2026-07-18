@@ -162,6 +162,18 @@ describe("daemon mutation invalidation scope", () => {
     ]);
   });
 
+  it("does not invalidate query caches after connection probes", () => {
+    for (const kind of [
+      "ui.backends.bitcoinrpc.test",
+      "ui.backends.btcpay.test",
+      "ui.backends.electrum.test",
+      "ui.backends.http.test",
+      "ui.backends.lightning.test",
+    ]) {
+      expect(invalidatedDaemonQueryKindsForMutation(kind)).toEqual([]);
+    }
+  });
+
   it("refreshes journal-derived reads after journal processing", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.journals.process"),

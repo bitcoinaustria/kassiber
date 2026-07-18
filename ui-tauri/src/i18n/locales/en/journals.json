@@ -1,4 +1,25 @@
 {
+  "processing": {
+    "title": "Refreshing journals",
+    "alreadyTitle": "Journal processing already running",
+    "alreadyBody": "Kassiber is already refreshing the journal state.",
+    "startedTitle": "Journal processing started",
+    "startedBody": "Kassiber is rebuilding report-ready journal state.",
+    "successTitle": "Journals processed",
+    "failedTitle": "Journal processing failed",
+    "failedBody": "Could not process journals.",
+    "reportHint": "Reports update when processing finishes",
+    "phase": {
+      "writerWait": "Waiting for the database writer",
+      "preparing": "Preparing journal inputs",
+      "repairing": "Checking overlapping sources",
+      "pricing": "Applying cached prices",
+      "building": "Building journal entries",
+      "storing": "Saving the journal projection",
+      "complete": "Journal projection saved",
+      "fallback": "Processing journals"
+    }
+  },
   "ledger": {
     "tabs": {
       "state": "State",

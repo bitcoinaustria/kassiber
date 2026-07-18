@@ -37,6 +37,7 @@ export interface ConnectionHealthCheckGateInput {
   checkableConnectionCount: number;
   daemonEnabled: boolean;
   documentVisible: boolean;
+  maintenanceActive: boolean;
   networkStatus: NetworkStatus;
 }
 
@@ -161,12 +162,14 @@ export function canRunConnectionHealthChecks({
   checkableConnectionCount,
   daemonEnabled,
   documentVisible,
+  maintenanceActive,
   networkStatus,
 }: ConnectionHealthCheckGateInput): boolean {
   return (
     daemonEnabled &&
     documentVisible &&
     networkStatus === "online" &&
+    !maintenanceActive &&
     !checking &&
     checkableConnectionCount > 0
   );

@@ -4118,7 +4118,13 @@ def _journal_source_overlap_warning(conn, profile, repair_attempt=None):
     return details
 
 
-def process_journals(conn, workspace_ref, profile_ref):
+def process_journals(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    progress_observer=None,
+):
     return core_custody_journal.process_journals(
         conn,
         workspace_ref,
@@ -4126,6 +4132,7 @@ def process_journals(conn, workspace_ref, profile_ref):
         repair_source_overlaps=_repair_journal_source_overlaps,
         source_overlap_warning=_journal_source_overlap_warning,
         auto_price=auto_price_transactions_from_rates_cache,
+        progress_observer=progress_observer,
     )
 
 

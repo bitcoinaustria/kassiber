@@ -13,6 +13,10 @@ from typing import Any, Callable, Mapping
 
 from ..envelope import json_ready
 from ..errors import AppError
+from ..db import (
+    safe_sqlite_error_details as _safe_sqlite_error_details,
+    sqlite_error_is_busy as _sqlite_error_is_busy,
+)
 from ..redaction import redact_operational_text, redact_operational_value
 from ..time_utils import now_iso, parse_iso_datetime_or_none
 
@@ -830,44 +834,6 @@ def _retry_after_from_error(exc: AppError, job: Mapping[str, Any]) -> tuple[str 
         jitter = _stable_jitter_seconds(f"{job['id']}:{attempts}", min(base // 4, 300))
         return _iso_from_now_plus(base + jitter), "exponential-backoff"
     return None, None
-
-
-def _safe_sqlite_error_details(exc: Exception) -> dict[str, Any]:
-    """Return driver-neutral, non-sensitive SQLite diagnostics.
-
-    ``sqlcipher3.dbapi2.OperationalError`` does not inherit from stdlib
-    ``sqlite3.OperationalError``.  Both drivers do expose SQLite's numeric and
-    symbolic result codes, which are safe to log and let freshness distinguish
-    transient writer contention from a real SQL/schema defect without putting
-    the exception message (which may contain operational data) in the RAM ring.
-    """
-
-    error_name = getattr(exc, "sqlite_errorname", None)
-    error_code = getattr(exc, "sqlite_errorcode", None)
-    if not (
-        isinstance(error_name, str)
-        and error_name.startswith("SQLITE_")
-        and error_name.replace("_", "").isalnum()
-    ):
-        return {}
-    details: dict[str, Any] = {
-        "error_class": f"{exc.__class__.__module__}.{exc.__class__.__qualname__}",
-        "sqlite_error_name": error_name,
-    }
-    if type(error_code) is int and error_code >= 0:
-        details["sqlite_error_code"] = error_code
-    return details
-
-
-def _sqlite_error_is_busy(details: Mapping[str, Any]) -> bool:
-    error_name = str(details.get("sqlite_error_name") or "")
-    if error_name.startswith(("SQLITE_BUSY", "SQLITE_LOCKED")):
-        return True
-    error_code = details.get("sqlite_error_code")
-    return type(error_code) is int and (error_code & 0xFF) in {
-        sqlite3.SQLITE_BUSY,
-        sqlite3.SQLITE_LOCKED,
-    }
 
 
 def _database_busy_retry_seconds(job: Mapping[str, Any]) -> int:

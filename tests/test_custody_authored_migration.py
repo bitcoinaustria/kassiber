@@ -24,12 +24,19 @@ from kassiber.core.custody_components import (
     get_component,
     iter_authored_active_components,
 )
-from kassiber.core.custody_journal import CustodyJournalBuilder
+from kassiber.core.custody_journal import (
+    CustodyJournalBuilder,
+    process_journals as process_custody_journals,
+)
 from kassiber.db import open_db
 from kassiber.errors import AppError
 
 
 NOW = "2026-01-01T00:00:00Z"
+
+
+class _StopAfterWriterProbe(Exception):
+    pass
 
 
 def _scope(conn: sqlite3.Connection) -> None:
@@ -285,6 +292,163 @@ def test_reopen_migrates_legacy_reviews_to_active_exact_components(tmp_path):
         ).fetchone()[0] == 2
     finally:
         reopened.close()
+
+
+def test_many_to_one_pair_list_uses_allocation_amounts_on_both_sides(tmp_path):
+    conn = open_db(tmp_path)
+    try:
+        _scope(conn)
+        _tx(conn, "out-a", "btc", "outbound", "BTC", 60, NOW)
+        _tx(conn, "out-b", "btc", "outbound", "BTC", 40, NOW)
+        _tx(conn, "in-shared", "btc2", "inbound", "BTC", 100, NOW)
+        component = create_component(
+            conn,
+            workspace_id="ws",
+            profile_id="profile",
+            component_id="many-to-one",
+            component_type="manual_bridge",
+            legs=[
+                {
+                    "id": "source-a",
+                    "role": "source",
+                    "rail": "bitcoin",
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "asset": "BTC",
+                    "exposure": "bitcoin",
+                    "conservation_unit": "msat",
+                    "amount_msat": 60,
+                    "transaction_id": "out-a",
+                    "wallet_id": "btc",
+                },
+                {
+                    "id": "source-b",
+                    "role": "source",
+                    "rail": "bitcoin",
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "asset": "BTC",
+                    "exposure": "bitcoin",
+                    "conservation_unit": "msat",
+                    "amount_msat": 40,
+                    "transaction_id": "out-b",
+                    "wallet_id": "btc",
+                },
+                {
+                    "id": "sink",
+                    "role": "destination",
+                    "rail": "bitcoin",
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "asset": "BTC",
+                    "exposure": "bitcoin",
+                    "conservation_unit": "msat",
+                    "amount_msat": 100,
+                    "transaction_id": "in-shared",
+                    "wallet_id": "btc2",
+                },
+            ],
+            allocations=[
+                {
+                    "id": "allocation-a",
+                    "source_leg_id": "source-a",
+                    "sink_leg_id": "sink",
+                    "source_amount_msat": 60,
+                    "sink_amount_msat": 60,
+                },
+                {
+                    "id": "allocation-b",
+                    "source_leg_id": "source-b",
+                    "sink_leg_id": "sink",
+                    "source_amount_msat": 40,
+                    "sink_amount_msat": 40,
+                },
+            ],
+            economic_terms=[
+                {
+                    "id": "term-a",
+                    "source_leg_id": "source-a",
+                    "target_leg_id": "sink",
+                    "term_kind": "transaction_pair",
+                    "legacy_source_id": "pair-a",
+                    "source_row_hash": "aa" * 32,
+                    "review_kind": "manual",
+                    "tax_policy": "carrying-value",
+                    "reviewed_source_amount_msat": 60,
+                },
+                {
+                    "id": "term-b",
+                    "source_leg_id": "source-b",
+                    "target_leg_id": "sink",
+                    "term_kind": "transaction_pair",
+                    "legacy_source_id": "pair-b",
+                    "source_row_hash": "bb" * 32,
+                    "review_kind": "manual",
+                    "tax_policy": "carrying-value",
+                    "reviewed_source_amount_msat": 40,
+                },
+            ],
+            created_at=NOW,
+        )
+        activate_component(conn, component["id"], activated_at=NOW)
+
+        pairs = sorted(
+            list_transaction_pairs(conn, "ws", "profile"),
+            key=lambda row: row["id"],
+        )
+
+        assert [row["out"]["amount_msat"] for row in pairs] == [60, 40]
+        assert [row["in"]["amount_msat"] for row in pairs] == [60, 40]
+        assert [row["in"]["full_amount_msat"] for row in pairs] == [100, 100]
+        assert all(
+            row["component"]
+            == {
+                "id": "many-to-one",
+                "source_count": 2,
+                "sink_count": 1,
+                "allocation_count": 2,
+            }
+            for row in pairs
+        )
+    finally:
+        conn.close()
+
+
+def test_journal_processing_reserves_writer_before_projection_reads(tmp_path):
+    owner = open_db(tmp_path)
+    contender = None
+    try:
+        _scope(owner)
+        owner.commit()
+        contender = open_db(tmp_path)
+        contender.execute("PRAGMA busy_timeout = 1")
+        phases: list[str] = []
+
+        def probe_writer(_conn, _profile):
+            with pytest.raises(sqlite3.OperationalError) as raised:
+                contender.execute("BEGIN IMMEDIATE")
+            assert raised.value.sqlite_errorname.startswith("SQLITE_BUSY")
+            raise _StopAfterWriterProbe
+
+        with pytest.raises(_StopAfterWriterProbe):
+            process_custody_journals(
+                owner,
+                "ws",
+                "profile",
+                repair_source_overlaps=lambda *_args: None,
+                source_overlap_warning=lambda *_args: None,
+                auto_price=probe_writer,
+                progress_observer=lambda payload: phases.append(payload["phase"]),
+            )
+
+        assert phases[:3] == ["writer_wait", "preparing", "repairing"]
+        assert "pricing" in phases
+        assert not owner.in_transaction
+    finally:
+        if contender is not None:
+            contender.rollback()
+            contender.close()
+        owner.close()
 
 
 def test_malformed_legacy_review_becomes_persisted_journal_blocker(tmp_path):

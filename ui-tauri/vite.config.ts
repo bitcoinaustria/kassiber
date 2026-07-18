@@ -123,6 +123,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.backends.delete",
   "ui.backends.set_default",
   "ui.backends.bitcoinrpc.test",
+  "ui.backends.btcpay.test",
   "ui.backends.detect_core",
   "ui.backends.electrum.test",
   "ui.backends.http.test",
