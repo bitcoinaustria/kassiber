@@ -90,6 +90,9 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertEqual(payload["peers"], 8)
         self.assertTrue(payload["wallet_rpc"]["available"])
         self.assertTrue(payload["block_filters"]["available"])
+        self.assertTrue(payload["birthday_covered"])
+        self.assertTrue(payload["rescan_possible"])
+        self.assertIsNone(payload["earliest_retained_at"])
         self.assertEqual(payload["warnings"], [])
         self.assertEqual(calls[0][0]["username"], "rpcuser")
 
@@ -223,7 +226,59 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertEqual(payload, {"candidates": []})
         probe.assert_not_called()
 
-    def test_bitcoinrpc_probe_rejects_pruned_below_birthday(self):
+    def test_bitcoinrpc_probe_reports_pruned_birthday_without_guessing_coverage(self):
+        ctx = SimpleNamespace(runtime_config={})
+        block_hash_heights = []
+
+        def fake_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, wallet_name, timeout
+            if method == "getblockchaininfo":
+                return {
+                    "chain": "main",
+                    "blocks": 20,
+                    "headers": 20,
+                    "pruned": True,
+                    "pruneheight": 8,
+                    "initialblockdownload": False,
+                }
+            if method == "getnetworkinfo":
+                return {"version": 270000, "connections": 8}
+            if method == "getblockhash":
+                block_hash_heights.append(params[0])
+                return f"block-{params[0]}"
+            if method == "getblockheader":
+                return {"time": int(str(params[0]).split("-")[-1]) * 600}
+            if method == "listwallets":
+                return []
+            if method == "getbestblockhash":
+                return "best-block"
+            if method == "getblockfilter":
+                return {"filter": "00", "header": "11"}
+            raise AssertionError(f"Unexpected RPC call: {method}")
+
+        with patch("kassiber.daemon.bitcoinrpc_call", side_effect=fake_call):
+            payload = daemon._test_bitcoinrpc_backend_payload(
+                ctx,
+                {
+                    "url": "http://127.0.0.1:8332",
+                    "config": {"username": "rpcuser", "password": "rpcpass"},
+                    "birthday": "1970-01-01T02:30:00Z",
+                },
+            )
+
+        self.assertTrue(payload["reachable"])
+        self.assertTrue(payload["pruned"])
+        self.assertIsNone(payload["birthday_covered"])
+        self.assertIsNone(payload["rescan_possible"])
+        self.assertEqual(payload["rescan_start_at"], "1970-01-01T00:30:00Z")
+        self.assertEqual(payload["earliest_retained_at"], "1970-01-01T01:20:00Z")
+        self.assertEqual(
+            block_hash_heights,
+            [8],
+            "coverage probes must not binary-search non-monotonic header times",
+        )
+
+    def test_bitcoinrpc_probe_reports_pruned_horizon_without_wallet_birthday(self):
         ctx = SimpleNamespace(runtime_config={})
 
         def fake_call(backend, method, params=None, wallet_name=None, timeout=None):
@@ -243,22 +298,30 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
                 return f"block-{params[0]}"
             if method == "getblockheader":
                 return {"time": int(str(params[0]).split("-")[-1]) * 10}
+            if method == "listwallets":
+                return []
+            if method == "getbestblockhash":
+                return "best-block"
+            if method == "getblockfilter":
+                return {"filter": "00", "header": "11"}
             raise AssertionError(f"Unexpected RPC call: {method}")
 
         with patch("kassiber.daemon.bitcoinrpc_call", side_effect=fake_call):
-            with self.assertRaises(AppError) as raised:
-                daemon._test_bitcoinrpc_backend_payload(
-                    ctx,
-                    {
-                        "url": "http://127.0.0.1:8332",
-                        "config": {"username": "rpcuser", "password": "rpcpass"},
-                        "birthday": "1970-01-01T00:00:50Z",
-                    },
-                )
+            payload = daemon._test_bitcoinrpc_backend_payload(
+                ctx,
+                {
+                    "url": "http://127.0.0.1:8332",
+                    "config": {"username": "rpcuser", "password": "rpcpass"},
+                },
+            )
 
-        self.assertEqual(raised.exception.code, "bitcoinrpc_pruned_below_birthday")
-        self.assertEqual(raised.exception.details["birthday_height"], 5)
-        self.assertEqual(raised.exception.details["pruneheight"], 8)
+        self.assertTrue(payload["reachable"])
+        self.assertTrue(payload["pruned"])
+        self.assertEqual(payload["pruneheight"], 8)
+        self.assertEqual(payload["earliest_retained_at"], "1970-01-01T00:01:20Z")
+        self.assertIsNone(payload["birthday_covered"])
+        self.assertIsNone(payload["rescan_possible"])
+        self.assertIn("pruned", payload["warnings"])
 
     def test_detect_core_returns_cookiefile_candidate_without_cookie_contents(self):
         with tempfile.TemporaryDirectory() as tmp:

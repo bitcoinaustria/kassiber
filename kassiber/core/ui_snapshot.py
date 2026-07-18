@@ -5158,6 +5158,7 @@ def build_wallets_list_snapshot(
                 },
                 "chain": str(config.get("chain") or ""),
                 "network": str(config.get("network") or ""),
+                "birthday": str(config.get("birthday") or ""),
                 "descriptor": bool(config.get("descriptor")),
                 "change_descriptor": bool(config.get("change_descriptor")),
                 "silent_payment": {

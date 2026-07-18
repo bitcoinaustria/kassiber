@@ -85,6 +85,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  DaemonRequestError,
   daemonMutationKey,
   useDaemon,
   useDaemonMutation,
@@ -257,6 +258,7 @@ type WalletListItem = {
   };
   chain?: string;
   network?: string;
+  birthday?: string;
   descriptor?: boolean;
   change_descriptor?: boolean;
   sync_mode?: string;
@@ -275,6 +277,17 @@ type WalletListItem = {
   samourai?: SamouraiWalletMetadata | null;
   script_types?: string[];
 };
+
+interface CoreProbeData {
+  reachable: boolean;
+  pruned?: boolean | null;
+  earliest_retained_at?: string | null;
+  rescan_start_at?: string | null;
+  error?: {
+    message?: string;
+    hint?: string;
+  };
+}
 
 function btcpayProvenanceRouteKey(
   route: NonNullable<WalletListItem["btcpay_provenance"]>[number],
@@ -598,6 +611,10 @@ function ConnectionDetailView({
   });
   const updateWallet =
     useDaemonMutation<UpdateWalletResult>("ui.wallets.update");
+  const testCore = useDaemonMutation<CoreProbeData>(
+    "ui.backends.bitcoinrpc.test",
+    { invalidateQueries: false },
+  );
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
   const revealDescriptor = useDaemonMutation<RevealDescriptorResult>(
@@ -670,6 +687,7 @@ function ConnectionDetailView({
   const [editWalletMaterial, setEditWalletMaterial] = useState("");
   const [editScriptTypes, setEditScriptTypes] = useState<string[]>([]);
   const [editGapLimit, setEditGapLimit] = useState("");
+  const [editBirthday, setEditBirthday] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
   const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
   const [editBackend, setEditBackend] = useState("");
@@ -774,7 +792,7 @@ function ConnectionDetailView({
     ? t("detail.refreshing")
     : t("detail.refresh");
 
-  const onSync = (options?: { forceFull?: boolean }) => {
+  const onSync = async (options?: { forceFull?: boolean }) => {
     if (
       syncWallet.isPending ||
       queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
@@ -786,6 +804,62 @@ function ConnectionDetailView({
         dedupeKey: "wallet-sync",
       });
       return;
+    }
+    if (
+      options?.forceFull &&
+      walletDetail?.backend?.kind === "bitcoinrpc" &&
+      walletDetail.backend.name
+    ) {
+      try {
+        const envelope = await testCore.mutateAsync({
+          backend: walletDetail.backend.name,
+          ...(walletDetail.birthday
+            ? { birthday: walletDetail.birthday }
+            : {}),
+        });
+        const probe = envelope.data;
+        if (!probe?.reachable) {
+          throw new Error(
+            probe?.error?.message ?? t("detail.sync.rescanCoverageFailed"),
+          );
+        }
+        if (probe.pruned && !walletDetail.birthday) {
+          throw new Error(t("detail.sync.rescanBirthdayRequired"));
+        }
+      } catch (error) {
+        let message =
+          error instanceof Error
+            ? error.message
+            : t("detail.sync.rescanCoverageFailed");
+        if (
+          error instanceof DaemonRequestError &&
+          error.envelope.error?.code === "bitcoinrpc_pruned_below_birthday"
+        ) {
+          const details = error.envelope.error.details;
+          const retainedRaw =
+            details && typeof details === "object"
+              ? (details as Record<string, unknown>).earliest_retained_at
+              : null;
+          const retained =
+            typeof retainedRaw === "string"
+              ? retainedRaw.slice(0, 10)
+              : t("detail.sync.retainedDateUnknown");
+          message = t("detail.sync.rescanPrunedBlocked", {
+            birthday:
+              walletDetail.birthday?.slice(0, 10) ??
+              t("detail.sync.retainedDateUnknown"),
+            retained,
+          });
+        }
+        setSyncErrorMessage(message);
+        addNotification({
+          title: t("detail.sync.rescanUnavailableTitle"),
+          body: message,
+          tone: "error",
+          dedupeKey: "wallet-sync",
+        });
+        return;
+      }
     }
     setSyncErrorMessage(null);
     progressValueRef.current = startingSyncProgress().value ?? 5;
@@ -864,6 +938,7 @@ function ConnectionDetailView({
     setEditWalletMaterial("");
     setEditScriptTypes(walletDetail?.script_types ?? []);
     setEditGapLimit(connection.gap != null ? String(connection.gap) : "");
+    setEditBirthday(walletDetail?.birthday?.slice(0, 10) ?? "");
     setEditStoreId("");
     setEditPaymentMethodId("");
     setEditBackend("");
@@ -913,6 +988,13 @@ function ConnectionDetailView({
     if (kind === "btcpay" || kind === "coreln" || kind === "lnd") return false;
     return backendOptionChain(backend) === walletChain;
   });
+  const selectedEditBackend =
+    editBackend === CLEAR_BACKEND_SELECTION
+      ? liveBackendOptions.find((backend) => backend.is_default)
+      : liveBackendOptions.find((backend) => backend.name === editBackend);
+  const effectiveEditBackendKind =
+    selectedEditBackend?.kind ??
+    (editBackend ? undefined : walletDetail?.backend?.kind);
   const canClearLiveBackend =
     canEditLiveBackend &&
     walletChain !== "liquid" &&
@@ -987,12 +1069,15 @@ function ConnectionDetailView({
     const labelChanged = nextLabel !== connection.label;
     const walletMaterial = editWalletMaterial.trim();
     const gapLimitText = editGapLimit.trim();
+    const birthday = editBirthday.trim();
     const storeId = editStoreId.trim();
     const paymentMethodId = editPaymentMethodId.trim();
     const backend = editBackend.trim();
     const sourceFile = editSourceFile.trim();
     const configChanges: Record<string, unknown> = {};
     const clearFields: string[] = [];
+    const currentBirthday = walletDetail?.birthday?.slice(0, 10) ?? "";
+    const birthdayChanged = birthday !== currentBirthday;
     if (editConfigKind === "descriptor" && walletMaterial) {
       const detection = detectWalletMaterial(walletMaterial);
       if (detection.kind === "unknown") {
@@ -1036,6 +1121,18 @@ function ConnectionDetailView({
       }
       if (connection.gap == null || gapLimit !== connection.gap) {
         configChanges.gap_limit = gapLimit;
+      }
+    }
+    if (
+      editConfigKind === "descriptor" ||
+      effectiveEditBackendKind === "bitcoinrpc"
+    ) {
+      if (birthdayChanged) {
+        if (birthday) {
+          configChanges.birthday = birthday;
+        } else {
+          clearFields.push("birthday");
+        }
       }
     }
     if (editConfigKind === "btcpay") {
@@ -1288,7 +1385,7 @@ function ConnectionDetailView({
                   action: refreshButtonLabel,
                   label: connection.label,
                 })}
-                onClick={() => onSync()}
+                onClick={() => void onSync()}
               >
                 <RefreshCw
                   className={cn("size-4", isWalletSyncRunning && "animate-spin")}
@@ -1329,8 +1426,8 @@ function ConnectionDetailView({
                     </DropdownMenuItem>
                   ) : null}
                   <DropdownMenuItem
-                    disabled={isWalletSyncRunning}
-                    onClick={() => onSync({ forceFull: true })}
+                    disabled={isWalletSyncRunning || testCore.isPending}
+                    onClick={() => void onSync({ forceFull: true })}
                   >
                     <RotateCcw className="size-4" aria-hidden="true" />
                     {t("detail.fullRescan")}
@@ -1667,7 +1764,7 @@ function ConnectionDetailView({
               variant="outline"
               size="sm"
               disabled={isWalletSyncRunning}
-              onClick={() => onSync()}
+              onClick={() => void onSync()}
             >
               <RefreshCw
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
@@ -1810,7 +1907,7 @@ function ConnectionDetailView({
                     variant="outline"
                     size="sm"
                     disabled={isWalletSyncRunning}
-                    onClick={() => onSync()}
+                    onClick={() => void onSync()}
                   >
                     <RefreshCw
                       className={cn(
@@ -2154,6 +2251,25 @@ function ConnectionDetailView({
                     </p>
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+            {editConfigKind === "descriptor" ||
+            effectiveEditBackendKind === "bitcoinrpc" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-birthday">
+                  {t("detail.edit.birthday")}
+                </Label>
+                <Input
+                  id="connection-edit-birthday"
+                  type="date"
+                  value={editBirthday}
+                  onChange={(event) => setEditBirthday(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {effectiveEditBackendKind === "bitcoinrpc"
+                    ? t("detail.edit.birthdayCoreHelper")
+                    : t("detail.edit.birthdayHelper")}
+                </p>
               </div>
             ) : null}
             {editConfigKind === "descriptor" ? (

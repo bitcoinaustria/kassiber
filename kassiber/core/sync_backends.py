@@ -3001,6 +3001,98 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None
     return response.get("result")
 
 
+BITCOINRPC_RESCAN_TIMESTAMP_WINDOW_SECONDS = 2 * 60 * 60
+BITCOINRPC_HISTORY_ATTESTATION_VERSION = 1
+
+
+def bitcoinrpc_prune_coverage(
+    backend,
+    birthday_ts=0,
+    *,
+    blockchain_info=None,
+    rpc_call=None,
+):
+    """Return wallet-rescan coverage facts for a Bitcoin Core backend."""
+
+    call = rpc_call or bitcoinrpc_call
+    info = blockchain_info
+    if info is None:
+        info = call(backend, "getblockchaininfo")
+    if not isinstance(info, dict):
+        raise AppError(
+            "Bitcoin Core getblockchaininfo returned an unexpected payload",
+            code="bitcoinrpc_unexpected_response",
+            retryable=True,
+        )
+
+    pruned = bool(info.get("pruned"))
+    coverage = {
+        "pruned": pruned,
+        "pruneheight": None,
+        "earliest_retained_at": None,
+        "birthday": timestamp_to_iso(birthday_ts) if birthday_ts > 0 else None,
+        "rescan_start_at": None,
+        "rescan_start_height": None,
+        "birthday_covered": True if not pruned else None,
+        "rescan_possible": True if not pruned else None,
+    }
+    if not pruned:
+        return coverage
+
+    pruneheight = info.get("pruneheight")
+    try:
+        normalized_pruneheight = int(pruneheight)
+    except (TypeError, ValueError):
+        return coverage
+    coverage["pruneheight"] = normalized_pruneheight
+
+    try:
+        prune_hash = call(backend, "getblockhash", [normalized_pruneheight])
+        prune_header = call(backend, "getblockheader", [prune_hash])
+        prune_time = int(prune_header.get("time") or 0)
+    except (AppError, AttributeError, TypeError, ValueError):
+        prune_time = 0
+    if prune_time > 0:
+        coverage["earliest_retained_at"] = timestamp_to_iso(prune_time)
+
+    if birthday_ts <= 0:
+        return coverage
+
+    # Core intentionally starts timestamp-based imports up to two hours early.
+    # Raw header timestamps are not monotonic, while Core internally searches
+    # a cumulative max-time index that RPC does not expose. Do not guess a
+    # height or claim coverage here: the import/rescan result is authoritative.
+    rescan_start_ts = max(
+        0,
+        birthday_ts - BITCOINRPC_RESCAN_TIMESTAMP_WINDOW_SECONDS,
+    )
+    coverage["rescan_start_at"] = timestamp_to_iso(rescan_start_ts)
+    return coverage
+
+
+def bitcoinrpc_require_rescan_coverage(backend, birthday_ts=0):
+    """Fail closed when a Core import/rescan cannot cover wallet history."""
+
+    coverage = bitcoinrpc_prune_coverage(backend, birthday_ts)
+    if not coverage["pruned"]:
+        return coverage
+    if birthday_ts <= 0:
+        raise AppError(
+            "A wallet birthday is required when Bitcoin Core is pruned",
+            code="bitcoinrpc_birthday_required",
+            hint=(
+                "Set the wallet's real first-use date, or use an unpruned Core "
+                "node or archival backend."
+            ),
+            details={
+                "pruneheight": coverage.get("pruneheight"),
+                "earliest_retained_at": coverage.get("earliest_retained_at"),
+            },
+            retryable=False,
+        )
+    return coverage
+
+
 def bitcoinrpc_import_timeout(backend):
     return max(backend_timeout(backend), 1800)
 
@@ -3013,14 +3105,14 @@ def bitcoinrpc_wallet_name(backend, wallet):
     return f"{sanitize_wallet_segment(prefix)}-{sanitize_wallet_segment(wallet['id'])}"
 
 
-def bitcoinrpc_ensure_watchonly_wallet(backend, wallet):
+def bitcoinrpc_ensure_watchonly_wallet_state(backend, wallet):
     wallet_name = bitcoinrpc_wallet_name(backend, wallet)
     loaded_wallets = bitcoinrpc_call(backend, "listwallets")
     if wallet_name in loaded_wallets:
-        return wallet_name
+        return wallet_name, False
     try:
         bitcoinrpc_call(backend, "loadwallet", [wallet_name, True])
-        return wallet_name
+        return wallet_name, False
     except AppError as load_error:
         create_attempts = [
             [wallet_name, True, True, "", False, True, True],
@@ -3030,7 +3122,7 @@ def bitcoinrpc_ensure_watchonly_wallet(backend, wallet):
         for params in create_attempts:
             try:
                 bitcoinrpc_call(backend, "createwallet", params)
-                return wallet_name
+                return wallet_name, True
             except AppError:
                 continue
         raise AppError(
@@ -3039,13 +3131,122 @@ def bitcoinrpc_ensure_watchonly_wallet(backend, wallet):
         ) from load_error
 
 
-def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses, birthday_ts=0):
+def bitcoinrpc_ensure_watchonly_wallet(backend, wallet):
+    wallet_name, _created = bitcoinrpc_ensure_watchonly_wallet_state(backend, wallet)
+    return wallet_name
+
+
+def bitcoinrpc_history_target_fingerprint(descriptor_plan=None, addresses=None):
+    if descriptor_plan is not None:
+        payload = {
+            "descriptor_fingerprint": str(
+                getattr(descriptor_plan, "descriptor_fingerprint", "") or ""
+            ),
+            "gap_limit": int(getattr(descriptor_plan, "gap_limit", 0) or 0),
+            "branches": [
+                {
+                    "branch": int(branch.branch_index),
+                    "descriptor": branch_descriptor(branch).to_string(),
+                }
+                for branch in descriptor_plan.branches
+            ],
+        }
+    else:
+        payload = {"addresses": sorted({str(address) for address in addresses or []})}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def bitcoinrpc_backend_endpoint_fingerprint(backend):
+    payload = {
+        "kind": normalize_backend_kind(backend.get("kind")),
+        "url": str(backend.get("url") or ""),
+        "proxy_url": str(_backend_proxy_url(backend) or ""),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def bitcoinrpc_history_attestation(
+    backend,
+    wallet_name,
+    birthday_ts,
+    target_fingerprint,
+):
+    return {
+        "version": BITCOINRPC_HISTORY_ATTESTATION_VERSION,
+        "backend": str(backend.get("name") or ""),
+        "backend_endpoint_fingerprint": bitcoinrpc_backend_endpoint_fingerprint(
+            backend
+        ),
+        "core_wallet": str(wallet_name),
+        "birthday": int(birthday_ts),
+        "target_fingerprint": str(target_fingerprint),
+    }
+
+
+def _bitcoinrpc_history_attestation_matches(checkpoint, expected):
+    if not isinstance(checkpoint, dict):
+        return False
+    return checkpoint.get("bitcoinrpc_history_attestation") == expected
+
+
+def _raise_bitcoinrpc_import_failure(
+    backend,
+    birthday_ts,
+    operation,
+    failure,
+):
+    failure_text = json.dumps(failure, sort_keys=True, default=str)
+    normalized = failure_text.lower()
+    if "rescan" in normalized and ("fail" in normalized or "prun" in normalized):
+        coverage = bitcoinrpc_prune_coverage(backend, birthday_ts)
+        pruned = bool(coverage.get("pruned"))
+        raise AppError(
+            "Bitcoin Core could not complete the required wallet history rescan",
+            code=(
+                "bitcoinrpc_pruned_below_birthday"
+                if pruned
+                else "bitcoinrpc_rescan_failed"
+            ),
+            hint=(
+                "Use an unpruned Core node or archival backend. Only change "
+                "the birthday if the wallet genuinely had no earlier activity."
+                if pruned
+                else "Check Bitcoin Core's block data and retry the rescan."
+            ),
+            details={
+                "operation": operation,
+                "birthday": coverage.get("birthday"),
+                "rescan_start_at": coverage.get("rescan_start_at"),
+                "pruneheight": coverage.get("pruneheight"),
+                "earliest_retained_at": coverage.get("earliest_retained_at"),
+            },
+            retryable=not pruned,
+        )
+    raise AppError(f"{operation} failed: {failure_text}")
+
+
+def bitcoinrpc_import_addresses(
+    backend,
+    wallet_name,
+    wallet,
+    addresses,
+    birthday_ts=0,
+    *,
+    enforce_rescan_coverage=False,
+    force_reimport=False,
+):
     label = f"{APP_NAME}:{wallet['id']}"
     missing_addresses = []
     descriptors = []
     for address in addresses:
         info = bitcoinrpc_call(backend, "getaddressinfo", [address], wallet_name=wallet_name)
-        if info.get("iswatchonly") or info.get("ismine"):
+        if (info.get("iswatchonly") or info.get("ismine")) and not force_reimport:
             continue
         descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [f"addr({address})"])
         descriptors.append(
@@ -3054,6 +3255,8 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses, birthda
         missing_addresses.append(address)
     if not missing_addresses:
         return 0
+    if enforce_rescan_coverage:
+        bitcoinrpc_require_rescan_coverage(backend, birthday_ts)
     try:
         results = bitcoinrpc_call(
             backend,
@@ -3062,10 +3265,17 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses, birthda
             wallet_name=wallet_name,
             timeout=bitcoinrpc_import_timeout(backend),
         )
-        failures = [result for result in results if not result.get("success")]
-        if failures:
-            raise AppError(f"descriptor import failed: {failures[0]}")
-    except AppError:
+    except AppError as exc:
+        normalized_error = str(exc).lower()
+        if "rescan" in normalized_error and (
+            "fail" in normalized_error or "prun" in normalized_error
+        ):
+            _raise_bitcoinrpc_import_failure(
+                backend,
+                birthday_ts,
+                "descriptor import",
+                {"error": str(exc)},
+            )
         requests = [
             {
                 "scriptPubKey": {"address": address},
@@ -3085,7 +3295,21 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses, birthda
         )
         failures = [result for result in results if not result.get("success")]
         if failures:
-            raise AppError(f"address import failed: {failures[0]}")
+            _raise_bitcoinrpc_import_failure(
+                backend,
+                birthday_ts,
+                "address import",
+                failures[0],
+            )
+    else:
+        failures = [result for result in results if not result.get("success")]
+        if failures:
+            _raise_bitcoinrpc_import_failure(
+                backend,
+                birthday_ts,
+                "descriptor import",
+                failures[0],
+            )
     return len(missing_addresses)
 
 
@@ -3170,7 +3394,16 @@ def bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts):
     return request
 
 
-def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint, birthday_ts):
+def bitcoinrpc_import_ranged_descriptors(
+    backend,
+    wallet_name,
+    plan,
+    checkpoint,
+    birthday_ts,
+    *,
+    enforce_rescan_coverage=False,
+    force_reimport=False,
+):
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     highest_used = checkpoint.get("highest_used")
     previous_ends = _int_mapping(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
@@ -3185,11 +3418,13 @@ def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint,
             previous_ends.get(branch_key),
         )
         next_ends[branch_key] = max(int(next_ends.get(branch_key, -1)), end)
-        if end <= int(previous_ends.get(branch_key, -1)):
+        if not force_reimport and end <= int(previous_ends.get(branch_key, -1)):
             continue
         descriptors.append(bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts))
     if not descriptors:
         return 0, next_ends
+    if enforce_rescan_coverage:
+        bitcoinrpc_require_rescan_coverage(backend, birthday_ts)
     results = bitcoinrpc_call(
         backend,
         "importdescriptors",
@@ -3199,7 +3434,12 @@ def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint,
     )
     failures = [result for result in results if not result.get("success")]
     if failures:
-        raise AppError(f"ranged descriptor import failed: {failures[0]}")
+        _raise_bitcoinrpc_import_failure(
+            backend,
+            birthday_ts,
+            "ranged descriptor import",
+            failures[0],
+        )
     return len(descriptors), next_ends
 
 
@@ -3749,12 +3989,37 @@ def bitcoinrpc_utxos_for_wallet_name(
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
     if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
         return _silent_payment_sync_adapter(backend, wallet, sync_state)
-    wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
-    checkpoint = _checkpoint_mapping(sync_state)
+    wallet_name, wallet_created = bitcoinrpc_ensure_watchonly_wallet_state(
+        backend,
+        wallet,
+    )
+    # A recreated node-side wallet has no descriptor/address history even when
+    # Kassiber still has a freshness checkpoint. Rebuild its watch-only state
+    # from the wallet birthday instead of trusting stale imported-range facts.
+    checkpoint = {} if wallet_created else _checkpoint_mapping(sync_state)
     config = json.loads(_mapping_get(wallet, "config_json", "{}") or "{}")
     birthday_ts = iso_to_unix(config.get("birthday"))
     descriptor_range_ends = None
     effective_sync_state = sync_state
+    addresses = [
+        target["address"]
+        for target in effective_sync_state.targets
+        if target.get("address")
+    ]
+    target_fingerprint = bitcoinrpc_history_target_fingerprint(
+        descriptor_plan=sync_state.descriptor_plan,
+        addresses=addresses,
+    )
+    history_attestation = bitcoinrpc_history_attestation(
+        backend,
+        wallet_name,
+        birthday_ts,
+        target_fingerprint,
+    )
+    history_attested = _bitcoinrpc_history_attestation_matches(
+        checkpoint,
+        history_attestation,
+    )
     if sync_state.descriptor_plan is not None:
         imported_count, descriptor_range_ends = bitcoinrpc_import_ranged_descriptors(
             backend,
@@ -3762,6 +4027,8 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
             sync_state.descriptor_plan,
             checkpoint,
             birthday_ts,
+            enforce_rescan_coverage=True,
+            force_reimport=not history_attested,
         )
         expanded_targets = _bitcoinrpc_descriptor_targets_for_range_ends(
             sync_state.descriptor_plan,
@@ -3777,17 +4044,14 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
             },
         )
     else:
-        addresses = [
-            target["address"]
-            for target in effective_sync_state.targets
-            if target.get("address")
-        ]
         imported_count = bitcoinrpc_import_addresses(
             backend,
             wallet_name,
             wallet,
             addresses,
             birthday_ts=birthday_ts,
+            enforce_rescan_coverage=True,
+            force_reimport=not history_attested,
         )
     addresses = [
         target["address"]
@@ -3812,6 +4076,8 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
     )
     meta["utxos"] = utxos
     meta["observer_route"] = "bitcoin_core_rpc"
+    if wallet_created:
+        meta["core_wallet_created"] = True
     meta.pop("_bitcoinrpc_verbose_tx_cache", None)
     if sync_state.descriptor_plan is not None:
         highest_used = dict(checkpoint.get("highest_used") or {})
@@ -3826,6 +4092,7 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
     if meta.get("bitcoinrpc_last_block") or descriptor_range_ends is not None:
         next_checkpoint = dict(checkpoint)
         next_checkpoint["backend"] = _backend_identity(backend, sync_state)
+        next_checkpoint["bitcoinrpc_history_attestation"] = history_attestation
         if meta.get("bitcoinrpc_last_block"):
             next_checkpoint["bitcoinrpc_last_block"] = meta["bitcoinrpc_last_block"]
         if meta.get("bitcoinrpc_pending_maturity"):
@@ -4579,6 +4846,11 @@ SYNC_BACKEND_ADAPTERS = MappingProxyType(
 __all__ = [
     "SYNC_BACKEND_ADAPTERS",
     "address_to_scriptpubkey",
+    "bitcoinrpc_backend_endpoint_fingerprint",
+    "bitcoinrpc_history_attestation",
+    "bitcoinrpc_history_target_fingerprint",
+    "bitcoinrpc_prune_coverage",
+    "bitcoinrpc_require_rescan_coverage",
     "bitcoinrpc_sync_adapter",
     "bitcoinrpc_utxos_for_wallet_name",
     "custom_sync_adapter",
