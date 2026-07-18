@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..backends import (
     DEFAULT_BACKEND_SETTING,
@@ -64,6 +65,9 @@ from .wallets import (
 
 MAX_UI_LIST_LIMIT = 500
 MAX_UI_PREVIEW_LIMIT = 100
+MAX_UI_TRANSACTION_IDS = 128
+MAX_UI_DASHBOARD_CANDIDATES = 256
+MAX_UI_TRANSACTION_CANDIDATE_IDS = MAX_UI_DASHBOARD_CANDIDATES * 2
 DISPLAY_BALANCE_ASSETS = {"BTC", "LBTC", "L-BTC"}
 _UI_TRANSACTION_SORT_COLUMNS = {
     "occurred-at": "t.occurred_at",
@@ -336,6 +340,7 @@ def _ui_transaction_cursor_filters(
     until: str | None,
     query: str | None,
     txids: list[str],
+    candidate_txids: list[str],
     status: str | None,
     flow: str | None,
     payment_method: str | None,
@@ -353,6 +358,7 @@ def _ui_transaction_cursor_filters(
         "until": until or "",
         "query": query or "",
         "txids": ",".join(txids),
+        "candidate_txids": ",".join(candidate_txids),
         "status": status or "",
         "flow": flow or "",
         "payment_method": payment_method or "",
@@ -393,7 +399,12 @@ def _coerce_optional_string_arg(args: dict[str, Any], key: str) -> str | None:
     return value.strip()
 
 
-def _coerce_optional_string_list_arg(args: dict[str, Any], key: str) -> list[str]:
+def _coerce_optional_string_list_arg(
+    args: dict[str, Any],
+    key: str,
+    *,
+    maximum: int | None = None,
+) -> list[str]:
     value = args.get(key)
     if value is None:
         return []
@@ -423,6 +434,13 @@ def _coerce_optional_string_list_arg(args: dict[str, Any], key: str) -> list[str
         if normalized and normalized.lower() not in seen:
             output.append(normalized)
             seen.add(normalized.lower())
+            if maximum is not None and len(output) > maximum:
+                raise AppError(
+                    f"{key} accepts at most {maximum} values",
+                    code="validation",
+                    details={"key": key, "maximum": maximum},
+                    retryable=False,
+                )
     return output
 
 
@@ -1772,7 +1790,40 @@ def _activity_transactions(
                 "running_cost_basis_eur": running_cost_basis,
             }
         )
-    return _activity_transaction_rows_to_ui(conn, activity_rows)
+    marker_fields = {
+        "id",
+        "externalId",
+        "explorerId",
+        "date",
+        "occurredAt",
+        "type",
+        "asset",
+        "chain",
+        "network",
+        "account",
+        "counter",
+        "amountSat",
+        "feeSat",
+        "eur",
+        "rate",
+        "fiatCurrency",
+        "tag",
+        "conf",
+        "internal",
+        "balanceBtc",
+        "costBasisEur",
+        "pair",
+        "excluded",
+        "quarantineReason",
+        "reviewStatus",
+    }
+    return [
+        {
+            **{key: value for key, value in row.items() if key in marker_fields},
+            "summaryOnly": True,
+        }
+        for row in _activity_transaction_rows_to_ui(conn, activity_rows)
+    ]
 
 
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
@@ -3394,6 +3445,7 @@ def _build_transactions_page_snapshot(
             "cursor",
             "query",
             "txids",
+            "candidate_txids",
             "direction",
             "asset",
             "wallet",
@@ -3486,7 +3538,11 @@ def _build_transactions_page_snapshot(
         until_filter = _iso_z(_parse_iso_datetime(until, "until"))
         filters.append("t.occurred_at <= ?")
         params.append(until_filter)
-    txids_filter = _coerce_optional_string_list_arg(raw_args, "txids")
+    txids_filter = _coerce_optional_string_list_arg(
+        raw_args,
+        "txids",
+        maximum=MAX_UI_TRANSACTION_IDS,
+    )
     if txids_filter:
         txid_terms = [value.lower() for value in txids_filter]
         placeholders = ", ".join("?" for _ in txid_terms)
@@ -3494,13 +3550,16 @@ def _build_transactions_page_snapshot(
             f"""(
               lower(t.id) IN ({placeholders})
               OR lower(COALESCE(t.external_id, '')) IN ({placeholders})
-              OR (
-                length(COALESCE(t.external_id, '')) = 64
-                AND lower(COALESCE(t.external_id, '')) IN ({placeholders})
-              )
             )"""
         )
-        params.extend([*txid_terms, *txid_terms, *txid_terms])
+        params.extend([*txid_terms, *txid_terms])
+    candidate_txids_filter = _coerce_optional_string_list_arg(
+        raw_args,
+        "candidate_txids",
+        maximum=MAX_UI_TRANSACTION_CANDIDATE_IDS,
+    )
+    candidate_terms = [value.lower() for value in candidate_txids_filter]
+    candidate_placeholders = ", ".join("?" for _ in candidate_terms)
     status_filter_raw = _coerce_optional_string_arg(raw_args, "status")
     status_filter = _normalize_ui_transaction_status(status_filter_raw) if status_filter_raw else None
     if status_filter:
@@ -3527,22 +3586,41 @@ def _build_transactions_page_snapshot(
         )
         params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS | {"transfer"}))
     elif flow_filter == "transfer":
-        filters.append(
-            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {pair_exists_sql('transfer')})"
+        candidate_clause = (
+            f" OR lower(t.id) IN ({candidate_placeholders})"
+            if candidate_terms
+            else ""
         )
+        filters.append(
+            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {pair_exists_sql('transfer')}{candidate_clause})"
+        )
+        params.extend(candidate_terms)
     elif flow_filter == "swap":
+        candidate_clause = (
+            f" OR lower(t.id) IN ({candidate_placeholders})"
+            if candidate_terms
+            else ""
+        )
         filters.append(
             f"""(
               lower(COALESCE(t.kind, '')) IN ({", ".join("?" for _ in _UI_TRANSACTION_FLOW_KINDS)})
               OR {pair_exists_sql('swap')}
+              {candidate_clause}
             )"""
         )
         params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS))
+        params.extend(candidate_terms)
     elif flow_filter == "layer-transition":
+        candidate_clause = (
+            f" OR lower(t.id) IN ({candidate_placeholders})"
+            if candidate_terms
+            else ""
+        )
         filters.append(
-            f"lower(COALESCE(t.kind, '')) IN ({', '.join('?' for _ in _UI_TRANSACTION_LAYER_TRANSITION_KINDS)})"
+            f"(lower(COALESCE(t.kind, '')) IN ({', '.join('?' for _ in _UI_TRANSACTION_LAYER_TRANSITION_KINDS)}){candidate_clause})"
         )
         params.extend(sorted(_UI_TRANSACTION_LAYER_TRANSITION_KINDS))
+        params.extend(candidate_terms)
     payment_raw = _coerce_optional_string_arg(raw_args, "payment_method")
     if payment_raw is None:
         payment_raw = _coerce_optional_string_arg(raw_args, "paymentMethod")
@@ -3661,6 +3739,7 @@ def _build_transactions_page_snapshot(
         until=until_filter,
         query=query,
         txids=txids_filter,
+        candidate_txids=candidate_txids_filter,
         status=status_filter,
         flow=flow_filter,
         payment_method=payment_filter,
@@ -3809,6 +3888,7 @@ def _build_transactions_page_snapshot(
             "since": since_filter,
             "until": until_filter,
             "txids": txids_filter,
+            "candidateTxids": candidate_txids_filter,
             "status": status_filter,
             "flow": flow_filter,
             "paymentMethod": payment_filter,
@@ -3836,6 +3916,408 @@ def build_transactions_snapshot(
         default_limit=100,
         maximum_limit=MAX_UI_LIST_LIMIT,
     )
+
+
+def _dashboard_candidate_type(candidate: dict[str, Any]) -> str:
+    explicit = candidate.get("candidate_type")
+    if explicit in {"transfer", "swap"}:
+        return str(explicit)
+    if candidate.get("default_kind") in _UI_TRANSACTION_LAYER_TRANSITION_KINDS:
+        return "transfer"
+    in_asset = str(candidate.get("in_asset") or "").upper()
+    out_asset = str(candidate.get("out_asset") or "").upper()
+    if in_asset and out_asset:
+        return "transfer" if in_asset == out_asset else "swap"
+    return "swap"
+
+
+def _dashboard_non_conflicted_candidates(
+    candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    cluster_sizes: dict[str, int] = defaultdict(int)
+    for index, candidate in enumerate(candidates):
+        cluster_sizes[str(candidate.get("conflict_set_id") or f"solo:{index}")] += 1
+    output: list[dict[str, Any]] = []
+    used_legs: set[str] = set()
+    for index, candidate in enumerate(candidates):
+        cluster_id = str(candidate.get("conflict_set_id") or f"solo:{index}")
+        conflict_size = candidate.get("conflict_size")
+        size = (
+            int(conflict_size)
+            if isinstance(conflict_size, int)
+            else cluster_sizes[cluster_id]
+        )
+        in_id = str(candidate.get("in_id") or "")
+        out_id = str(candidate.get("out_id") or "")
+        if size > 1 or not in_id or not out_id:
+            continue
+        if in_id in used_legs or out_id in used_legs:
+            continue
+        used_legs.update((in_id, out_id))
+        output.append(candidate)
+    return output
+
+
+def _dashboard_flow(tx: dict[str, Any]) -> str:
+    tag = str(tx.get("tag") or "").lower()
+    tx_type = str(tx.get("type") or "")
+    if "swap" in tag or tx_type in {"Swap", "Mint", "Melt"}:
+        return "swaps"
+    if bool(tx.get("internal")) or tx_type in {
+        "Transfer",
+        "Consolidation",
+        "Rebalance",
+    }:
+        return "transfers"
+    return "incoming" if int(tx.get("amountSat") or 0) >= 0 else "outgoing"
+
+
+def _dashboard_status(tx: dict[str, Any]) -> str:
+    raw = str(tx.get("reviewStatus") or "").strip().lower().replace("-", "_")
+    if raw in {"failed", "error"}:
+        return "failed"
+    if raw in {"review", "needs_review", "blocked", "quarantined"}:
+        return "review"
+    if raw == "pending":
+        return "pending"
+    if "review" in str(tx.get("tag") or "").lower():
+        return "review"
+    return "completed" if int(tx.get("conf") or 0) > 0 else "pending"
+
+
+def _dashboard_empty_stats() -> dict[str, Any]:
+    return {
+        "count": 0,
+        "btc": 0.0,
+        "eur": 0.0,
+        "missingPrice": 0,
+        "review": 0,
+        "failed": 0,
+    }
+
+
+def _dashboard_add_stats(stats: dict[str, Any], tx: dict[str, Any]) -> None:
+    btc = abs(float(tx.get("amountSat") or 0)) / 100_000_000
+    raw_eur = tx.get("eur")
+    rate = tx.get("rate")
+    eur = (
+        abs(float(raw_eur))
+        if raw_eur is not None
+        else btc * float(rate)
+        if rate is not None
+        else 0.0
+    )
+    status = _dashboard_status(tx)
+    stats["count"] += 1
+    stats["btc"] += btc
+    stats["eur"] += eur
+    if not rate:
+        stats["missingPrice"] += 1
+    if status in {"review", "pending"}:
+        stats["review"] += 1
+    if status == "failed":
+        stats["failed"] += 1
+    largest = stats.get("largest")
+    if largest is None or btc > float(largest["btc"]):
+        stats["largest"] = {
+            "label": tx.get("counter") or tx.get("account") or tx.get("id"),
+            "btc": btc,
+            "eur": eur,
+        }
+
+
+def _dashboard_bucket_key(local_date: datetime, period: str) -> tuple[str, datetime]:
+    if period == "30days":
+        start = local_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        return start.date().isoformat(), start
+    if period == "3months":
+        start = (local_date - timedelta(days=local_date.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        return start.date().isoformat(), start
+    if period in {"5years", "10years", "15years", "all"}:
+        quarter_month = ((local_date.month - 1) // 3) * 3 + 1
+        start = local_date.replace(
+            month=quarter_month, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        return f"{start.year}-Q{((start.month - 1) // 3) + 1}", start
+    start = local_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return f"{start.year}-{start.month:02d}", start
+
+
+def _dashboard_next_bucket(value: datetime, period: str) -> datetime:
+    if period == "30days":
+        return value + timedelta(days=1)
+    if period == "3months":
+        return value + timedelta(days=7)
+    months = 3 if period in {"5years", "10years", "15years", "all"} else 1
+    month_index = value.year * 12 + value.month - 1 + months
+    return value.replace(year=month_index // 12, month=month_index % 12 + 1, day=1)
+
+
+def build_transactions_dashboard_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+    *,
+    candidates: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"period", "since", "until", "wallet", "timezone"})
+    if unknown:
+        raise AppError(
+            "ui.transactions.dashboard received unsupported filters",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    context = current_context_snapshot(conn)
+    profile_id = context.get("profile_id")
+    if not profile_id:
+        empty_summary = {
+            segment: _dashboard_empty_stats()
+            for segment in ("incoming", "outgoing", "transfers", "swaps")
+        }
+        return {
+            "period": "all",
+            "window": {"since": None, "until": None},
+            "history": {"count": 0, "earliest": None, "latest": None, "walletOptions": []},
+            "counts": {"all": 0, "external": 0},
+            "summary": {
+                **empty_summary,
+                "review": 0,
+                "pending": 0,
+                "failed": 0,
+                "markedSwapCount": 0,
+                "swapCandidateCount": 0,
+            },
+            "buckets": [],
+            "candidates": [],
+            "swapCandidateTotal": 0,
+        }
+    period_raw = _coerce_optional_string_arg(raw_args, "period") or "1year"
+    period = _coerce_ui_transaction_period(period_raw)
+    since_raw = _coerce_optional_string_arg(raw_args, "since")
+    until_raw = _coerce_optional_string_arg(raw_args, "until")
+    if period != "all" and (since_raw is None or until_raw is None):
+        raise AppError(
+            "ui.transactions.dashboard requires exact since and until bounds",
+            code="validation",
+            details={"period": period},
+            retryable=False,
+        )
+    since = _iso_z(_parse_iso_datetime(since_raw, "since")) if since_raw else None
+    until = _iso_z(_parse_iso_datetime(until_raw, "until")) if until_raw else None
+    if since and until and since > until:
+        raise AppError("since must not be after until", code="validation", retryable=False)
+    timezone_name = _coerce_optional_string_arg(raw_args, "timezone") or "UTC"
+    try:
+        display_timezone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise AppError(
+            "timezone must be an IANA timezone name",
+            code="validation",
+            details={"timezone": timezone_name},
+            retryable=False,
+        ) from exc
+    wallet = _coerce_optional_string_arg(raw_args, "wallet")
+    base_filters = ["t.profile_id = ?"]
+    base_params: list[Any] = [profile_id]
+    if wallet:
+        base_filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
+        base_params.extend([wallet, wallet])
+    history = conn.execute(
+        f"""
+        SELECT COUNT(*) AS count, MIN(t.occurred_at) AS earliest,
+               MAX(t.occurred_at) AS latest
+        FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+        WHERE {' AND '.join(base_filters)}
+        """,
+        base_params,
+    ).fetchone()
+    wallet_rows = conn.execute(
+        f"""
+        SELECT DISTINCT w.label FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE {' AND '.join(base_filters)} ORDER BY lower(w.label), w.label
+        """,
+        base_params,
+    ).fetchall()
+    filters = list(base_filters)
+    params = list(base_params)
+    if since:
+        filters.append("t.occurred_at >= ?")
+        params.append(since)
+    if until:
+        filters.append("t.occurred_at <= ?")
+        params.append(until)
+    rows = conn.execute(
+        f"""
+        SELECT t.id, t.external_id AS external_id, t.occurred_at, t.confirmed_at,
+               w.label AS wallet, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json, t.direction, t.asset,
+               t.amount, t.fee, t.fiat_currency, t.fiat_value, t.fiat_rate,
+               t.pricing_source_kind, t.pricing_quality, t.pricing_external_ref,
+               t.pricing_provider, t.pricing_pair, t.pricing_timestamp,
+               t.pricing_fetched_at, t.pricing_granularity, t.pricing_method,
+               t.review_status, t.taxability_override, t.at_regime_override,
+               t.at_category_override, COALESCE(t.kind, '') AS kind,
+               COALESCE(t.description, '') AS description,
+               COALESCE(t.counterparty, '') AS counterparty,
+               COALESCE(t.note, '') AS note, t.excluded,
+               jq.reason AS quarantine_reason
+        FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE {' AND '.join(filters)}
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
+        params,
+    ).fetchall()
+    transactions = _activity_transaction_rows_to_ui(conn, rows)
+    candidate_refs = _dashboard_non_conflicted_candidates(list(candidates or []))
+    by_id = {str(tx["id"]): tx for tx in transactions}
+    candidate_flow_by_id: dict[str, str] = {}
+    candidate_pairs: dict[str, list[dict[str, Any]]] = {"transfers": [], "swaps": []}
+    for candidate in candidate_refs:
+        in_id = str(candidate.get("in_id") or "")
+        out_id = str(candidate.get("out_id") or "")
+        if in_id not in by_id or out_id not in by_id:
+            continue
+        flow = "transfers" if _dashboard_candidate_type(candidate) == "transfer" else "swaps"
+        candidate_flow_by_id[in_id] = flow
+        candidate_flow_by_id[out_id] = flow
+        candidate_pairs[flow].append(candidate)
+
+    summary = {
+        "incoming": _dashboard_empty_stats(),
+        "outgoing": _dashboard_empty_stats(),
+        "transfers": _dashboard_empty_stats(),
+        "swaps": _dashboard_empty_stats(),
+        "review": 0,
+        "pending": 0,
+        "failed": 0,
+    }
+    buckets_by_key: dict[str, dict[str, Any]] = {}
+    if transactions:
+        start_value = (
+            _parse_iso_datetime(since, "since").astimezone(display_timezone)
+            if since
+            else _parse_iso_datetime(str(history["earliest"]), "earliest").astimezone(display_timezone)
+        )
+        end_value = (
+            _parse_iso_datetime(until, "until").astimezone(display_timezone)
+            if until
+            else _parse_iso_datetime(str(history["latest"]), "latest").astimezone(display_timezone)
+        )
+        _, cursor = _dashboard_bucket_key(start_value, period)
+        while cursor <= end_value:
+            bucket_key, bucket_start = _dashboard_bucket_key(cursor, period)
+            buckets_by_key[bucket_key] = {
+                "bucketKey": bucket_key,
+                "bucketStart": bucket_start.isoformat(),
+                "stats": {
+                    segment: _dashboard_empty_stats()
+                    for segment in ("incoming", "outgoing", "transfers", "swaps")
+                },
+            }
+            cursor = _dashboard_next_bucket(cursor, period)
+
+    external_count = 0
+    for tx in transactions:
+        tx_id = str(tx["id"])
+        flow = candidate_flow_by_id.get(tx_id) or _dashboard_flow(tx)
+        status = _dashboard_status(tx)
+        if status in {"review", "pending", "failed"}:
+            summary[status] += 1
+        if tx_id not in candidate_flow_by_id:
+            _dashboard_add_stats(summary[flow], tx)
+            if flow in {"incoming", "outgoing"}:
+                external_count += 1
+        tx_date = _parse_iso_datetime(
+            str(tx.get("occurredAt") or tx["date"]),
+            "occurredAt",
+        ).astimezone(display_timezone)
+        bucket_key, bucket_start = _dashboard_bucket_key(tx_date, period)
+        bucket = buckets_by_key.setdefault(
+            bucket_key,
+            {
+                "bucketKey": bucket_key,
+                "bucketStart": bucket_start.isoformat(),
+                "stats": {
+                    segment: _dashboard_empty_stats()
+                    for segment in ("incoming", "outgoing", "transfers", "swaps")
+                },
+            },
+        )
+        _dashboard_add_stats(bucket["stats"][flow], tx)
+
+    summary["markedSwapCount"] = summary["swaps"]["count"]
+    summary["swapCandidateCount"] = len(candidate_pairs["swaps"])
+    for flow, pairs in candidate_pairs.items():
+        for candidate in pairs:
+            input_tx = by_id[str(candidate["in_id"])]
+            output_tx = by_id[str(candidate["out_id"])]
+            pair_tx = dict(input_tx)
+            pair_tx["amountSat"] = min(
+                abs(int(input_tx.get("amountSat") or 0)),
+                abs(int(output_tx.get("amountSat") or 0)),
+            )
+            input_eur = input_tx.get("eur")
+            output_eur = output_tx.get("eur")
+            pair_tx["eur"] = (
+                min(abs(float(input_eur)), abs(float(output_eur)))
+                if input_eur is not None and output_eur is not None
+                else None
+            )
+            _dashboard_add_stats(summary[flow], pair_tx)
+
+    payment_methods = sorted(
+        {
+            "Lightning"
+            if "lightning" in str(tx.get("account") or "").lower()
+            or "phoenix" in str(tx.get("account") or "").lower()
+            else "Liquid"
+            if str(tx.get("chain") or "").lower() == "liquid"
+            or "liquid" in str(tx.get("account") or "").lower()
+            else "On-chain"
+            for tx in transactions
+        }
+    )
+    candidate_payload_fields = {
+        "in_id",
+        "out_id",
+        "in_asset",
+        "out_asset",
+        "default_kind",
+        "candidate_type",
+        "conflict_set_id",
+        "conflict_size",
+    }
+    compact_candidates = [
+        {
+            key: value
+            for key, value in candidate.items()
+            if key in candidate_payload_fields
+        }
+        for candidate in candidate_refs[:MAX_UI_DASHBOARD_CANDIDATES]
+    ]
+    return {
+        "period": period,
+        "window": {"since": since, "until": until, "timezone": timezone_name},
+        "history": {
+            "count": int(history["count"] or 0),
+            "earliest": history["earliest"],
+            "latest": history["latest"],
+            "walletOptions": [str(row["label"]) for row in wallet_rows],
+            "paymentMethods": payment_methods,
+        },
+        "counts": {"all": len(transactions), "external": external_count},
+        "summary": summary,
+        "buckets": list(buckets_by_key.values()),
+        "candidates": compact_candidates,
+        "swapCandidateTotal": sum(
+            1 for candidate in candidate_refs if _dashboard_candidate_type(candidate) == "swap"
+        ),
+    }
 
 
 def build_transactions_extremes_snapshot(

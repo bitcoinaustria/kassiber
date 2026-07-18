@@ -150,6 +150,7 @@ from .core.ui_snapshot import (
     build_report_blockers_snapshot,
     build_review_badges_snapshot,
     build_transactions_extremes_snapshot,
+    build_transactions_dashboard_snapshot,
     build_transactions_resolve_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
@@ -306,6 +307,7 @@ SUPPORTED_KINDS = (
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
+    "ui.transactions.dashboard",
     "ui.transactions.extremes",
     "ui.transactions.resolve",
     "ui.transactions.graph",
@@ -13849,6 +13851,33 @@ def handle_request(
                 build_envelope(
                     "ui.transactions.list",
                     build_transactions_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.dashboard":
+        dashboard_args = _coerce_args_dict(request_id, request.get("args"))
+        active_context = current_context_snapshot(ctx.conn)
+        suggestions = (
+            _ui_swap_matching_payload_from_conn(
+                ctx.conn,
+                "ui.transfers.suggest",
+                {},
+            )
+            if active_context.get("profile_id")
+            else {"candidates": []}
+        )
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.dashboard",
+                    build_transactions_dashboard_snapshot(
+                        ctx.conn,
+                        dashboard_args,
+                        candidates=list(suggestions.get("candidates") or []),
+                    ),
                 ),
                 request_id,
             ),

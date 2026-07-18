@@ -56,6 +56,33 @@ type FlowChartSegmentStats = {
   };
 };
 
+type TransactionDashboardSnapshot = {
+  period: ResolvedPeriodKey;
+  window: { since: string | null; until: string | null; timezone?: string };
+  history: {
+    count: number;
+    earliest: string | null;
+    latest: string | null;
+    walletOptions: string[];
+    paymentMethods?: string[];
+  };
+  counts: { all: number; external: number };
+  summary: Record<FlowChartSegment, FlowChartSegmentStats> & {
+    review: number;
+    pending: number;
+    failed: number;
+    markedSwapCount?: number;
+    swapCandidateCount?: number;
+  };
+  buckets: Array<{
+    bucketKey: string;
+    bucketStart: string;
+    stats: Record<FlowChartSegment, FlowChartSegmentStats>;
+  }>;
+  candidates: SwapCandidateReference[];
+  swapCandidateTotal: number;
+};
+
 type FlowChartSelection = {
   id: string;
   period: ResolvedPeriodKey;
@@ -98,6 +125,25 @@ type TransactionTableFilterState = {
   sort: TransactionTableSortState;
 };
 
+type TransactionFilterState = {
+  period: PeriodKey;
+  flowChartSelection: FlowChartSelection | null;
+  quickFilter: TableQuickFilter | null;
+  breakdownSelection: BreakdownSelection | null;
+  transactionIds: string[];
+  table: TransactionTableFilterState;
+};
+
+type TransactionScopeParams = {
+  wallet: string | null;
+  quick: TableQuickFilter | null;
+  transactionIds: string[];
+  period: PeriodKey | null;
+  flowChartSelection: FlowChartSelection | null;
+  breakdownSelection: BreakdownSelection | null;
+  table: TransactionTableFilterState;
+};
+
 type TransactionListFilterInput = {
   period: ResolvedPeriodKey;
   transactionIds: readonly string[];
@@ -105,6 +151,8 @@ type TransactionListFilterInput = {
   quickFilter: TableQuickFilter | null;
   breakdownSelection: BreakdownSelection | null;
   tableFilterState: TransactionTableFilterState;
+  pairingCandidateRefs?: readonly SwapCandidateReference[];
+  now?: Date;
 };
 
 type FlowChartClickData = {
@@ -153,6 +201,15 @@ const BITCOIN_LAYER_TRANSITION_PAIR_KINDS = new Set([
   "submarine-swap",
   "swap-refund",
 ]);
+
+const MAX_TRANSACTION_ID_FILTER_SIZE = 128;
+const DEFAULT_TRANSACTION_TABLE_FILTER_STATE: TransactionTableFilterState = {
+  status: "all",
+  flow: "all",
+  paymentMethod: "all",
+  fee: "all",
+  sort: null,
+};
 
 const flowColors: Record<TransactionFlow, string> = {
   incoming: "oklch(0.56 0.16 150)",
@@ -696,6 +753,17 @@ function transactionListPeriodFilter(
   return period;
 }
 
+function transactionPeriodDateWindow(
+  period: ResolvedPeriodKey,
+  now = new Date(),
+): { since: string; until: string } | null {
+  if (period === "all") return null;
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  const start = periodStartDate(end, period);
+  return { since: start.toISOString(), until: end.toISOString() };
+}
+
 function buildTransactionListFilterArgs({
   period,
   transactionIds,
@@ -703,10 +771,15 @@ function buildTransactionListFilterArgs({
   quickFilter,
   breakdownSelection,
   tableFilterState,
+  pairingCandidateRefs,
+  now,
 }: TransactionListFilterInput): Record<string, unknown> {
   const args: Record<string, unknown> = {};
   const periodFilter = transactionListPeriodFilter(period, transactionIds);
-  if (periodFilter) args.period = periodFilter;
+  const periodWindow = periodFilter
+    ? transactionPeriodDateWindow(periodFilter, now)
+    : null;
+  if (periodWindow) Object.assign(args, periodWindow);
   if (transactionIds.length > 0) args.txids = transactionIds;
 
   if (flowChartSelection) {
@@ -748,6 +821,19 @@ function buildTransactionListFilterArgs({
   } else if (tableFilterState.sort?.key === "amount") {
     args.sort = "amount";
     args.order = tableFilterState.sort.direction;
+  }
+
+  const candidateFlow =
+    args.flow === "swap"
+      ? "swap"
+      : args.flow === "transfer" || args.flow === "layer-transition"
+        ? "transfer"
+        : null;
+  if (candidateFlow && pairingCandidateRefs?.length) {
+    const candidateIds = nonConflictedCandidateRefs([...pairingCandidateRefs])
+      .filter((candidate) => candidateReferenceReviewType(candidate) === candidateFlow)
+      .flatMap((candidate) => [candidate.in_id, candidate.out_id]);
+    if (candidateIds.length) args.candidate_txids = candidateIds;
   }
 
   return args;
@@ -819,6 +905,28 @@ function availablePeriodKeysForRecords(records: Transaction[]): ResolvedPeriodKe
   ];
 }
 
+function availablePeriodKeysForHistory(
+  earliest: string | null | undefined,
+  latest: string | null | undefined,
+): ResolvedPeriodKey[] {
+  const earliestDate = earliest ? parseTransactionDate(earliest) : null;
+  const latestDate = latest ? parseTransactionDate(latest) : null;
+  if (!earliestDate || !latestDate) return [...basePeriodKeys, "all"];
+  const end = periodAnchorDate([latestDate]);
+  const historyYears = Math.max(
+    0,
+    (startOfLocalDay(end).getTime() - startOfLocalDay(earliestDate).getTime()) /
+      MS_PER_YEAR,
+  );
+  return [
+    ...basePeriodKeys,
+    ...longHistoryPeriodKeys
+      .filter((period) => historyYears >= period.years)
+      .map((period) => period.key),
+    "all",
+  ];
+}
+
 function resolveAutoPeriodForRecords(
   records: Transaction[],
   period: PeriodKey,
@@ -880,25 +988,34 @@ function periodStartDate(
   earliest?: Date,
 ) {
   const start = startOfLocalDay(end);
+  const shiftCalendarMonths = (months: number) => {
+    const originalDay = start.getDate();
+    const targetMonthIndex = start.getFullYear() * 12 + start.getMonth() - months;
+    const targetYear = Math.floor(targetMonthIndex / 12);
+    const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+    const lastTargetDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+    start.setDate(1);
+    start.setFullYear(targetYear, targetMonth, Math.min(originalDay, lastTargetDay));
+  };
   if (period === "30days") {
     start.setDate(start.getDate() - 29);
   } else if (period === "3months") {
-    start.setMonth(start.getMonth() - 3);
+    shiftCalendarMonths(3);
   } else if (period === "6months") {
-    start.setMonth(start.getMonth() - 6);
+    shiftCalendarMonths(6);
   } else if (period === "ytd") {
     start.setMonth(0, 1);
     start.setHours(0, 0, 0, 0);
   } else if (period === "5years") {
-    start.setFullYear(start.getFullYear() - 5);
+    shiftCalendarMonths(5 * 12);
   } else if (period === "10years") {
-    start.setFullYear(start.getFullYear() - 10);
+    shiftCalendarMonths(10 * 12);
   } else if (period === "15years") {
-    start.setFullYear(start.getFullYear() - 15);
+    shiftCalendarMonths(15 * 12);
   } else if (period === "all" && earliest) {
     return startOfLocalDay(earliest);
   } else {
-    start.setFullYear(start.getFullYear() - 1);
+    shiftCalendarMonths(12);
   }
   return start;
 }
@@ -1285,6 +1402,34 @@ function buildFlowChartRows(
   return Array.from(grouped.values());
 }
 
+function dashboardFlowChartRows(
+  snapshot: TransactionDashboardSnapshot,
+  currency: Currency,
+  metric: FlowChartMetric,
+  mode: FlowChartMode,
+): FlowChartPoint[] {
+  return snapshot.buckets.map((bucket) => {
+    const date = bucketTransactionDate(new Date(bucket.bucketStart), snapshot.period).label;
+    const value = (segment: FlowChartSegment) => {
+      if (mode === "external" && (segment === "transfers" || segment === "swaps")) {
+        return 0;
+      }
+      const stats = bucket.stats[segment];
+      const amount = metric === "count" ? stats.count : currency === "btc" ? stats.btc : stats.eur;
+      return segment === "outgoing" ? -amount : amount;
+    };
+    return {
+      bucketKey: bucket.bucketKey,
+      date,
+      incoming: value("incoming"),
+      outgoing: value("outgoing"),
+      transfers: value("transfers"),
+      swaps: value("swaps"),
+      stats: bucket.stats,
+    };
+  });
+}
+
 function buildBreakdown<T extends string>(
   records: Transaction[],
   getKey: (txn: Transaction) => T,
@@ -1446,33 +1591,154 @@ const quickFilterValues: TableQuickFilter[] = [
   "failed_import",
 ];
 
-/**
- * Read the wallet/quick-filter scope from the URL. Used by Wallet Detail
- * deep links ("Show all" / "Needs review") that arrive at
- * `/transactions?wallet=<label>&quick=review_queue#transactions-table`.
- */
-function readTransactionScopeParams(): {
-  wallet: string | null;
-  quick: TableQuickFilter | null;
-  transactionIds: string[];
-} {
-  if (typeof window === "undefined") {
-    return { wallet: null, quick: null, transactionIds: [] };
+/** Canonical codec for every transaction-list filter stored in the URL. */
+function readTransactionScopeParams(search?: string): TransactionScopeParams {
+  if (typeof window === "undefined" && search === undefined) {
+    return {
+      wallet: null,
+      quick: null,
+      transactionIds: [],
+      period: null,
+      flowChartSelection: null,
+      breakdownSelection: null,
+      table: { ...DEFAULT_TRANSACTION_TABLE_FILTER_STATE },
+    };
   }
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(
+    search ?? (typeof window === "undefined" ? "" : window.location.search),
+  );
   const wallet = params.get("wallet");
   const quick = params.get("quick");
-  const transactionIds = (params.get("txids") ?? "")
+  const transactionIds = [...new Set((params.get("txids") ?? "")
     .split(",")
     .map((id) => id.trim())
-    .filter(Boolean);
+    .filter(Boolean))].slice(0, MAX_TRANSACTION_ID_FILTER_SIZE);
+  const status = params.get("status");
+  const flow = params.get("flow");
+  const paymentMethod = params.get("payment");
+  const fees = params.get("fees");
+  const sort = params.get("sort");
+  const order = params.get("order");
+  const table: TransactionTableFilterState = {
+    status:
+      status === "all" ||
+      ["completed", "pending", "failed", "review"].includes(status ?? "")
+        ? status ?? "all"
+        : "all",
+    flow:
+      flow === "all" ||
+      ["incoming", "outgoing", "transfer", "swap", "layer-transition"].includes(
+        flow ?? "",
+      )
+        ? flow ?? "all"
+        : "all",
+    paymentMethod:
+      paymentMethod === "all" ||
+      ["On-chain", "Lightning", "Liquid", "Exchange"].includes(
+        paymentMethod ?? "",
+      )
+        ? paymentMethod ?? "all"
+        : "all",
+    fee:
+      fees === "with-fees" || fees === "true" || fees === "1"
+        ? "with-fees"
+        : "all",
+    sort:
+      (sort === "amount" || sort === "date") &&
+      (order === "asc" || order === "desc")
+        ? { key: sort, direction: order }
+        : null,
+  };
+  const period = normalizePeriodParam(params.get("period"));
+  const chartBucket = params.get("chartBucket");
+  const chartSegment = params.get("chartSegment");
+  const chartMode = params.get("chartMode");
+  const chartPeriod = normalizePeriodParam(params.get("chartPeriod"));
+  const resolvedChartPeriod =
+    chartPeriod && chartPeriod !== "auto"
+      ? chartPeriod
+      : period && period !== "auto"
+        ? period
+        : null;
+  const validChartSegment = ["incoming", "outgoing", "transfers", "swaps"].includes(
+    chartSegment ?? "",
+  )
+    ? (chartSegment as FlowChartSegment)
+    : null;
+  const validChartMode: FlowChartMode = chartMode === "external" ? "external" : "all";
+  const flowChartSelection =
+    resolvedChartPeriod && (chartBucket || validChartSegment)
+      ? {
+          id: `${resolvedChartPeriod}:${chartBucket ?? "all"}:${validChartSegment ?? "all"}:${validChartMode}`,
+          period: resolvedChartPeriod,
+          bucketKey: chartBucket,
+          bucketLabel: params.get("chartLabel") ?? chartBucket ?? resolvedChartPeriod,
+          segment: validChartSegment,
+          mode: validChartMode,
+        }
+      : null;
+  const network = params.get("network");
+  const breakdownSelection: BreakdownSelection | null = wallet?.trim()
+    ? { dimension: "wallet", key: wallet.trim(), match: "leg" }
+    : network?.trim()
+      ? { dimension: "network", key: network.trim() }
+      : null;
   return {
     wallet: wallet && wallet.trim() ? wallet : null,
     quick: quickFilterValues.includes(quick as TableQuickFilter)
       ? (quick as TableQuickFilter)
       : null,
     transactionIds,
+    period,
+    flowChartSelection,
+    breakdownSelection,
+    table,
   };
+}
+
+function serializeTransactionFilterParams(
+  currentSearch: string,
+  state: TransactionFilterState,
+): string {
+  const params = new URLSearchParams(currentSearch);
+  for (const legacyKey of ["q", "page", "pageSize", "date"]) {
+    params.delete(legacyKey);
+  }
+  params.set("period", state.period);
+  const setOrDelete = (key: string, value: string | null) => {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  };
+  setOrDelete("quick", state.quickFilter);
+  setOrDelete(
+    "wallet",
+    state.breakdownSelection?.dimension === "wallet" &&
+      state.breakdownSelection.match === "leg"
+      ? state.breakdownSelection.key
+      : null,
+  );
+  setOrDelete(
+    "network",
+    state.breakdownSelection?.dimension === "network"
+      ? state.breakdownSelection.key
+      : null,
+  );
+  setOrDelete("txids", state.transactionIds.length ? state.transactionIds.join(",") : null);
+  setOrDelete("status", state.table.status !== "all" ? state.table.status : null);
+  setOrDelete("flow", state.table.flow !== "all" ? state.table.flow : null);
+  setOrDelete(
+    "payment",
+    state.table.paymentMethod !== "all" ? state.table.paymentMethod : null,
+  );
+  setOrDelete("fees", state.table.fee === "with-fees" ? "with-fees" : null);
+  setOrDelete("sort", state.table.sort?.key ?? null);
+  setOrDelete("order", state.table.sort?.direction ?? null);
+  setOrDelete("chartBucket", state.flowChartSelection?.bucketKey ?? null);
+  setOrDelete("chartSegment", state.flowChartSelection?.segment ?? null);
+  setOrDelete("chartMode", state.flowChartSelection?.mode ?? null);
+  setOrDelete("chartLabel", state.flowChartSelection?.bucketLabel ?? null);
+  setOrDelete("chartPeriod", state.flowChartSelection?.period ?? null);
+  return params.toString();
 }
 
 function updateTransactionDetailParams(
@@ -1580,10 +1846,12 @@ function matchesFlowChartSelection(
 
 function flowChartSelectionServerFlow(
   selection: FlowChartSelection,
-): "incoming" | "outgoing" | null {
+): "incoming" | "outgoing" | "transfer" | "swap" | null {
   if (selection.segment === "incoming" || selection.segment === "outgoing") {
     return selection.segment;
   }
+  if (selection.segment === "transfers") return "transfer";
+  if (selection.segment === "swaps") return "swap";
   return null;
 }
 
@@ -1603,12 +1871,15 @@ export {
   addFlowChartSegmentStats,
   attachmentRecordToItem,
   availablePeriodKeysForRecords,
+  availablePeriodKeysForHistory,
   breakdownSelectionLabel,
   bucketTransactionDate,
   buildTransactionListFilterArgs,
+  DEFAULT_TRANSACTION_TABLE_FILTER_STATE,
   buildBreakdown,
   buildCandidateFlowOverrides,
   buildFlowChartRows,
+  dashboardFlowChartRows,
   buildSwapCandidates,
   buildTransferCandidates,
   candidateReferenceReviewType,
@@ -1647,9 +1918,11 @@ export {
   removeAttachmentRecord,
   replaceAttachmentRecord,
   sortTransactionsByDateDesc,
+  serializeTransactionFilterParams,
   sumByFlow,
   toDashboardTransaction,
   transactionListPeriodFilter,
+  transactionPeriodDateWindow,
   transactionFlowWithCandidateOverrides,
   upsertAttachmentRecords,
   transactionRecords,
@@ -1676,4 +1949,7 @@ export type {
   SwapCandidate,
   TableQuickFilter,
   TransactionTableFilterState,
+  TransactionFilterState,
+  TransactionScopeParams,
+  TransactionDashboardSnapshot,
 };

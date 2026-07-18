@@ -67,6 +67,7 @@ from kassiber.core.ui_snapshot import (
     build_review_badges_snapshot,
     build_transactions_search_snapshot,
     build_transactions_resolve_snapshot,
+    build_transactions_dashboard_snapshot,
     build_transactions_snapshot,
 )
 from kassiber.db import open_db, set_setting
@@ -985,6 +986,9 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview["activityTxs"][1]["feeSat"], 100_000)
         self.assertAlmostEqual(overview["activityTxs"][1]["balanceBtc"], 0.899)
         self.assertAlmostEqual(overview["activityTxs"][1]["costBasisEur"], 44_950)
+        self.assertTrue(overview["activityTxs"][0]["summaryOnly"])
+        self.assertNotIn("pricingExternalRef", overview["activityTxs"][0])
+        self.assertNotIn("note", overview["activityTxs"][0])
 
         transactions = build_transactions_snapshot(conn, {"limit": 10})
         self.assertEqual(transactions["year"], 2026)
@@ -10433,6 +10437,33 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.commit()
 
+        dashboard = build_transactions_dashboard_snapshot(
+            conn,
+            {
+                "period": "1year",
+                "since": "2024-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59Z",
+                "timezone": "Europe/Vienna",
+            },
+            candidates=[],
+        )
+        self.assertEqual(dashboard["history"]["count"], 4)
+        self.assertEqual(dashboard["counts"]["all"], 4)
+        self.assertEqual(dashboard["summary"]["incoming"]["count"], 3)
+        self.assertEqual(dashboard["summary"]["outgoing"]["count"], 1)
+        self.assertEqual(
+            {bucket["bucketKey"] for bucket in dashboard["buckets"] if any(
+                stats["count"] for stats in bucket["stats"].values()
+            )},
+            {"2024-01", "2024-02", "2024-03", "2024-04"},
+        )
+
+        with self.assertRaises(AppError):
+            build_transactions_snapshot(
+                conn,
+                {"txids": [f"tx-{index}" for index in range(129)]},
+            )
+
         by_txids = build_transactions_snapshot(
             conn,
             {"txids": ["internal-receipt", public_txid], "limit": 10},
@@ -10463,6 +10494,17 @@ class ReviewRegressionTest(unittest.TestCase):
         failed = build_transactions_snapshot(conn, {"status": "failed", "limit": 10})
         self.assertEqual(failed["count"], 1)
         self.assertEqual(failed["txs"][0]["id"], "failed-import")
+
+        candidate_backed_swap = build_transactions_snapshot(
+            conn,
+            {
+                "flow": "swap",
+                "candidate_txids": ["internal-receipt"],
+                "limit": 10,
+            },
+        )
+        self.assertEqual(candidate_backed_swap["count"], 1)
+        self.assertEqual(candidate_backed_swap["txs"][0]["id"], "internal-receipt")
 
         liquid = build_transactions_snapshot(
             conn,
@@ -10520,6 +10562,77 @@ class ReviewRegressionTest(unittest.TestCase):
                     "cursor": incoming_page["nextCursor"],
                 },
             )
+
+    def test_ui_transactions_dashboard_aggregates_beyond_list_page_limit(self):
+        self._bootstrap_wallet(label="Aggregate", kind="custom")
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        profile = conn.execute(
+            "SELECT id, workspace_id, fiat_currency FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        wallet = conn.execute(
+            "SELECT id FROM wallets WHERE label = 'Aggregate'"
+        ).fetchone()
+        rows = []
+        for index in range(750):
+            month = index % 12 + 1
+            day = index % 28 + 1
+            occurred_at = f"2024-{month:02d}-{day:02d}T12:00:00Z"
+            tx_id = f"aggregate-{index:04d}"
+            rows.append(
+                (
+                    tx_id,
+                    profile["workspace_id"],
+                    profile["id"],
+                    wallet["id"],
+                    tx_id,
+                    f"fp-{tx_id}",
+                    occurred_at,
+                    "inbound",
+                    "BTC",
+                    100_000,
+                    0,
+                    profile["fiat_currency"],
+                    None,
+                    None,
+                    "deposit",
+                    tx_id,
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    occurred_at,
+                )
+            )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                fiat_rate, fiat_value, kind, description, counterparty, note,
+                excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+
+        dashboard = build_transactions_dashboard_snapshot(
+            conn,
+            {
+                "period": "1year",
+                "since": "2024-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59Z",
+                "timezone": "UTC",
+            },
+            candidates=[],
+        )
+
+        self.assertEqual(dashboard["history"]["count"], 750)
+        self.assertEqual(dashboard["counts"]["all"], 750)
+        self.assertEqual(dashboard["summary"]["incoming"]["count"], 750)
+        self.assertEqual(len(dashboard["buckets"]), 12)
+        self.assertNotIn("txs", dashboard)
 
     def test_report_journal_entries_is_not_truncated_to_internal_page_size(self):
         self._bootstrap_wallet(label="Ledger")

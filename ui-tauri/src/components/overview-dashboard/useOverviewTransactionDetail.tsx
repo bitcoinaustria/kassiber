@@ -22,6 +22,7 @@ import {
   replaceAttachmentRecord,
   updateTransactionDetailParams,
   upsertAttachmentRecords,
+  toDashboardTransaction,
   type AttachmentOpenData,
   type AttachmentRecord,
   type AttachmentsCopyData,
@@ -41,7 +42,7 @@ import type {
   HistoryRevertTarget,
   TransactionHistoryList,
 } from "@/lib/transactionHistory";
-import type { OverviewSnapshot } from "@/mocks/seed";
+import type { OverviewSnapshot, Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 import { activeMarketFiatRate } from "./model";
 import { overviewDetailTransactions } from "./overviewTransactionDetailModel";
@@ -81,6 +82,9 @@ export function useOverviewTransactionDetail({
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
   const queryClient = useQueryClient();
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
+  const resolveTransaction = useDaemonMutation<{ transaction?: Tx | null }>(
+    "ui.transactions.resolve",
+  );
   const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
   const attachmentCopy = useDaemonMutation<AttachmentsCopyData>(
     "ui.attachments.copy",
@@ -127,6 +131,17 @@ export function useOverviewTransactionDetail({
     () => overviewDetailTransactions(snapshot, extraTransactions),
     [extraTransactions, snapshot],
   );
+  const summaryOnlyTransactionIds = React.useMemo(() => {
+    const fullIds = new Set([
+      ...snapshot.txs.map((tx) => tx.id),
+      ...extraTransactions.map((tx) => tx.id),
+    ]);
+    return new Set(
+      (snapshot.activityTxs ?? [])
+        .filter((tx) => tx.summaryOnly && !fullIds.has(tx.id))
+        .map((tx) => tx.id),
+    );
+  }, [extraTransactions, snapshot.activityTxs, snapshot.txs]);
   const getDraft = React.useCallback(
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
     [drafts],
@@ -205,12 +220,27 @@ export function useOverviewTransactionDetail({
         matchesTransactionDeepLink(txn, transactionId),
       );
       if (!transaction) return;
-      setSaveError(null);
-      setDetailInitialTab(tab);
-      setDetailTransaction(transaction);
-      updateTransactionDetailParams(transaction.id, tab);
+      const openResolved = (resolved: Transaction) => {
+        setSaveError(null);
+        setDetailInitialTab(tab);
+        setDetailTransaction(resolved);
+        updateTransactionDetailParams(resolved.id, tab);
+      };
+      if (!summaryOnlyTransactionIds.has(transaction.id)) {
+        openResolved(transaction);
+        return;
+      }
+      resolveTransaction.mutate(
+        { query: transaction.id },
+        {
+          onSuccess: (envelope) => {
+            const resolved = envelope.data?.transaction;
+            if (resolved) openResolved(toDashboardTransaction(resolved, 0, t));
+          },
+        },
+      );
     },
-    [transactions],
+    [resolveTransaction, summaryOnlyTransactionIds, t, transactions],
   );
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
