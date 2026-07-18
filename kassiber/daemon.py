@@ -13025,15 +13025,19 @@ def _test_btcpay_backend_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    timeout = args.get("timeout", 10)
+    if type(timeout) is not int or not 1 <= timeout <= 10:
+        raise AppError(
+            "ui.backends.btcpay.test timeout must be an integer between 1 and 10 seconds",
+            code="validation",
+            retryable=False,
+        )
     backend, safe_backend = _resolve_btcpay_backend_for_setup(
         ctx,
         args,
         create_if_inline=False,
         reveal=True,
     )
-    timeout = args.get("timeout")
-    if not isinstance(timeout, int) or timeout <= 0:
-        timeout = 10
     backend = {**backend, "timeout": timeout}
     result = probe_btcpay_instance(backend)
     return {

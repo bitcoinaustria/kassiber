@@ -3337,6 +3337,26 @@ class DaemonSmokeTest(unittest.TestCase):
                 proc = _start_daemon(data_root)
                 try:
                     self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                    for request_id, timeout in (
+                        ("btcpay-timeout-bool", True),
+                        ("btcpay-timeout-long", 3_600),
+                    ):
+                        _write_payload(
+                            proc,
+                            {
+                                "request_id": request_id,
+                                "kind": "ui.backends.btcpay.test",
+                                "args": {
+                                    "backend": "btcpay-probe",
+                                    "timeout": timeout,
+                                },
+                            },
+                        )
+                        rejected = _read_payload_timeout(proc)
+                        self.assertEqual(rejected["kind"], "error")
+                        self.assertEqual(rejected["error"]["code"], "validation")
+                    self.assertEqual(received, [])
+
                     _write_payload(
                         proc,
                         {

@@ -144,9 +144,11 @@ import {
 } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 import {
+  formatPairHistoryAssetTotals,
   formatPairHistoryMsatAsBtc,
   groupPairedComponents,
   pairHistoryExactInteger,
+  pairHistoryFeePercent,
 } from "./swapPairHistoryModel";
 
 const PAIR_KIND_OPTIONS = [
@@ -329,9 +331,11 @@ function compactRecordId(value: string) {
 
 /** Accepts any leg-fee shape (candidate or persisted pair) — only the swapped
  *  outbound magnitude and the fee delta matter for the percentage. */
-function feePercent(fee: { swap_fee_msat: number; out_amount_msat: number }) {
-  if (!fee.out_amount_msat) return 0;
-  return (Math.abs(fee.swap_fee_msat) / fee.out_amount_msat) * 100;
+function feePercent(fee: {
+  swap_fee_msat: CustodyExactInteger;
+  out_amount_msat: CustodyExactInteger;
+}) {
+  return pairHistoryFeePercent(fee.swap_fee_msat, fee.out_amount_msat);
 }
 
 function candidatePairType(candidate: SwapCandidate) {
@@ -445,9 +449,6 @@ interface PairedSwap {
 interface PairsEnvelope {
   pairs: PairedSwap[];
 }
-
-/** msat → BTC (1 BTC = 100_000_000_000 msat); pairs carry only the msat fee. */
-const MSAT_PER_BTC = 100_000_000_000;
 
 // Persisted ``pair_source`` codes (handlers.py `_PAIR_SOURCE_VALUES`) → i18n
 // keys. Returns a literal key (so the typed `t()` accepts it) or null for an
@@ -1765,11 +1766,9 @@ function CustodyErrorList({
 
 /** A persisted pair's fee, shaped for {@link SwapFeeText} / {@link feePercent}. */
 function pairFee(pair: PairedSwap) {
-  const swapFeeMsat = Number(pair.swap_fee_msat ?? 0);
   return {
-    swap_fee: swapFeeMsat / MSAT_PER_BTC,
-    swap_fee_msat: swapFeeMsat,
-    out_amount_msat: Number(pair.out.amount_msat),
+    swap_fee_msat: pair.swap_fee_msat ?? 0,
+    out_amount_msat: pair.out.amount_msat,
   };
 }
 
@@ -1930,12 +1929,8 @@ function PairedSwaps({
                           </span>
                           <span className={cn("font-mono text-muted-foreground", blurClass(hideSensitive))}>
                             {t("swap.paired.componentTotals", {
-                              source: formatPairHistoryMsatAsBtc(
-                                group.sourceTotalMsat,
-                              ),
-                              sink: formatPairHistoryMsatAsBtc(
-                                group.sinkTotalMsat,
-                              ),
+                              source: formatPairHistoryAssetTotals(group.sourceTotals),
+                              sink: formatPairHistoryAssetTotals(group.sinkTotals),
                             })}
                           </span>
                         </div>
@@ -2013,9 +2008,13 @@ function PairedSwaps({
         {!isLoading && !isError && pairs.length > 0 ? (
           <div className="flex items-center border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
             <span>
-              {t("swap.paired.componentCount", {
-                components: componentGroups.length,
-                allocations: pairs.length,
+              {t("swap.paired.componentSummary", {
+                components: t("swap.paired.componentCount", {
+                  count: componentGroups.length,
+                }),
+                allocations: t("swap.paired.allocationCount", {
+                  count: pairs.length,
+                }),
               })}
             </span>
           </div>
@@ -3629,7 +3628,10 @@ function SwapFeeText({
   candidate,
   hideSensitive,
 }: {
-  candidate: { swap_fee: number; swap_fee_msat: number; out_amount_msat: number };
+  candidate: {
+    swap_fee_msat: CustodyExactInteger;
+    out_amount_msat: CustodyExactInteger;
+  };
   hideSensitive: boolean;
 }) {
   const percent = feePercent(candidate);
@@ -3642,7 +3644,9 @@ function SwapFeeText({
   return (
     <div className="text-right">
       <div className={cn("text-sm font-semibold tabular-nums", tone, blurClass(hideSensitive))}>
-        {formatBtc(candidate.swap_fee)}
+        {formatPairHistoryMsatAsBtc(
+          pairHistoryExactInteger(candidate.swap_fee_msat),
+        )}
       </div>
       <div className={cn("mt-1 text-xs text-muted-foreground", blurClass(hideSensitive))}>
         {formatSats(candidate.swap_fee_msat)} · {percent.toFixed(2)}%

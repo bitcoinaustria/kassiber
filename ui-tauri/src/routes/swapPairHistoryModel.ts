@@ -8,8 +8,13 @@ export interface PairHistoryAllocation {
     source_count: number;
     sink_count: number;
   } | null;
-  out: { amount_msat: PairHistoryExactInteger };
-  in: { amount_msat: PairHistoryExactInteger };
+  out: { asset: string; amount_msat: PairHistoryExactInteger };
+  in: { asset: string; amount_msat: PairHistoryExactInteger };
+}
+
+export interface PairHistoryAssetTotal {
+  asset: string;
+  amountMsat: bigint;
 }
 
 export interface PairedComponentGroup<T extends PairHistoryAllocation> {
@@ -17,8 +22,8 @@ export interface PairedComponentGroup<T extends PairHistoryAllocation> {
   sourceCount: number;
   sinkCount: number;
   pairs: T[];
-  sourceTotalMsat: bigint;
-  sinkTotalMsat: bigint;
+  sourceTotals: PairHistoryAssetTotal[];
+  sinkTotals: PairHistoryAssetTotal[];
 }
 
 export function pairHistoryExactInteger(
@@ -27,13 +32,58 @@ export function pairHistoryExactInteger(
   return BigInt(value);
 }
 
-export function formatPairHistoryMsatAsBtc(value: bigint): string {
+export function pairHistoryFeePercent(
+  feeMsat: PairHistoryExactInteger,
+  outAmountMsat: PairHistoryExactInteger,
+): number {
+  const rawFee = pairHistoryExactInteger(feeMsat);
+  const rawOut = pairHistoryExactInteger(outAmountMsat);
+  if (rawOut === 0n) return 0;
+  const absoluteFee = rawFee < 0n ? -rawFee : rawFee;
+  const absoluteOut = rawOut < 0n ? -rawOut : rawOut;
+  // Retain six decimal places of percentage precision without routing unsafe
+  // custody integers through Number first. UI callers render two decimals.
+  const scaledPercent = (absoluteFee * 100_000_000n) / absoluteOut;
+  return Number(scaledPercent) / 1_000_000;
+}
+
+function formatPairHistoryMsatDecimal(value: bigint): string {
   const negative = value < 0n;
   const absolute = negative ? -value : value;
   const roundedSats = (absolute + 500n) / 1000n;
   const whole = roundedSats / 100_000_000n;
   const fraction = (roundedSats % 100_000_000n).toString().padStart(8, "0");
-  return `${negative ? "−" : ""}₿${whole.toString()}.${fraction}`;
+  return `${negative ? "−" : ""}${whole.toString()}.${fraction}`;
+}
+
+export function formatPairHistoryMsatAsBtc(value: bigint): string {
+  const decimal = formatPairHistoryMsatDecimal(value);
+  return decimal.startsWith("−") ? `−₿${decimal.slice(1)}` : `₿${decimal}`;
+}
+
+export function formatPairHistoryAssetTotals(
+  totals: PairHistoryAssetTotal[],
+): string {
+  return totals
+    .map((total) => `${formatPairHistoryMsatDecimal(total.amountMsat)} ${total.asset}`)
+    .join(" + ");
+}
+
+function addAssetTotal(
+  totals: PairHistoryAssetTotal[],
+  asset: string,
+  amountMsat: PairHistoryExactInteger,
+) {
+  const normalizedAsset = asset.trim().toUpperCase() || "UNKNOWN";
+  const current = totals.find((total) => total.asset === normalizedAsset);
+  if (current) {
+    current.amountMsat += pairHistoryExactInteger(amountMsat);
+    return;
+  }
+  totals.push({
+    asset: normalizedAsset,
+    amountMsat: pairHistoryExactInteger(amountMsat),
+  });
 }
 
 export function groupPairedComponents<T extends PairHistoryAllocation>(
@@ -49,14 +99,14 @@ export function groupPairedComponents<T extends PairHistoryAllocation>(
         sourceCount: pair.component?.source_count ?? 1,
         sinkCount: pair.component?.sink_count ?? 1,
         pairs: [],
-        sourceTotalMsat: 0n,
-        sinkTotalMsat: 0n,
+        sourceTotals: [],
+        sinkTotals: [],
       };
       grouped.set(id, group);
     }
     group.pairs.push(pair);
-    group.sourceTotalMsat += pairHistoryExactInteger(pair.out.amount_msat);
-    group.sinkTotalMsat += pairHistoryExactInteger(pair.in.amount_msat);
+    addAssetTotal(group.sourceTotals, pair.out.asset, pair.out.amount_msat);
+    addAssetTotal(group.sinkTotals, pair.in.asset, pair.in.amount_msat);
   }
   return [...grouped.values()];
 }
