@@ -451,6 +451,7 @@ const TransactionsDashboard = ({
     onTableFilterArgsChange?.(
       buildTransactionListFilterArgs({
         period: resolvedPeriod,
+        currency,
         transactionIds,
         flowChartSelection,
         quickFilter,
@@ -461,6 +462,7 @@ const TransactionsDashboard = ({
     );
   }, [
     breakdownSelection,
+    currency,
     transactionIds,
     flowChartSelection,
     effectiveCandidateRefs,

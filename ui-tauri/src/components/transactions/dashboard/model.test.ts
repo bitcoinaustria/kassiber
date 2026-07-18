@@ -209,6 +209,84 @@ describe("transaction dashboard chart selection", () => {
     ).toEqual(window);
   });
 
+  it("clamps partial edge buckets to the chart period's exact window", () => {
+    const now = new Date(2026, 6, 18, 12, 30);
+    const tableFilterState = {
+      status: "all",
+      flow: "all",
+      paymentMethod: "all",
+      fee: "all" as const,
+      sort: null,
+    };
+    expect(
+      buildTransactionListFilterArgs({
+        period: "1year",
+        transactionIds: [],
+        flowChartSelection: {
+          id: "1year:2025-07:incoming:external",
+          period: "1year",
+          bucketKey: "2025-07",
+          bucketLabel: "Jul 25",
+          segment: "incoming",
+          mode: "external",
+        },
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState,
+        now,
+      }),
+    ).toMatchObject({
+      since: new Date(2025, 6, 18, 0, 0, 0, 0).toISOString(),
+      until: new Date(2025, 7, 1, 0, 0, 0, -1).toISOString(),
+    });
+    expect(
+      buildTransactionListFilterArgs({
+        period: "30days",
+        transactionIds: [],
+        flowChartSelection: {
+          id: "1year:2026-07:outgoing:external",
+          period: "1year",
+          bucketKey: "2026-07",
+          bucketLabel: "Jul 26",
+          segment: "outgoing",
+          mode: "external",
+        },
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState,
+        now,
+      }),
+    ).toMatchObject({
+      since: new Date(2026, 6, 1).toISOString(),
+      until: new Date(2026, 6, 18, 23, 59, 59, 999).toISOString(),
+    });
+  });
+
+  it("requests the backend amount order for the displayed currency", () => {
+    const base = {
+      period: "all" as const,
+      transactionIds: [],
+      flowChartSelection: null,
+      quickFilter: null,
+      breakdownSelection: null,
+      tableFilterState: {
+        status: "all",
+        flow: "all",
+        paymentMethod: "all",
+        fee: "all" as const,
+        sort: { key: "amount" as const, direction: "asc" as const },
+      },
+    };
+    expect(buildTransactionListFilterArgs({ ...base, currency: "btc" })).toMatchObject({
+      sort: "amount",
+      order: "asc",
+    });
+    expect(buildTransactionListFilterArgs({ ...base, currency: "eur" })).toMatchObject({
+      sort: "fiat-value",
+      order: "asc",
+    });
+  });
+
   it("round-trips the controlled filter state through URL parameters", () => {
     const state = {
       period: "1year" as const,

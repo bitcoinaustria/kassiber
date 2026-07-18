@@ -146,6 +146,7 @@ type TransactionScopeParams = {
 
 type TransactionListFilterInput = {
   period: ResolvedPeriodKey;
+  currency?: Currency;
   transactionIds: readonly string[];
   flowChartSelection: FlowChartSelection | null;
   quickFilter: TableQuickFilter | null;
@@ -764,8 +765,18 @@ function transactionPeriodDateWindow(
   return { since: start.toISOString(), until: end.toISOString() };
 }
 
+function intersectTransactionDateWindows(
+  left: { since: string; until: string },
+  right: { since: string; until: string },
+): { since: string; until: string } | null {
+  const since = left.since > right.since ? left.since : right.since;
+  const until = left.until < right.until ? left.until : right.until;
+  return since <= until ? { since, until } : null;
+}
+
 function buildTransactionListFilterArgs({
   period,
+  currency,
   transactionIds,
   flowChartSelection,
   quickFilter,
@@ -783,7 +794,15 @@ function buildTransactionListFilterArgs({
   if (transactionIds.length > 0) args.txids = transactionIds;
 
   if (flowChartSelection) {
-    const window = flowChartSelectionDateWindow(flowChartSelection);
+    const bucketWindow = flowChartSelectionDateWindow(flowChartSelection);
+    const selectionPeriodWindow = transactionPeriodDateWindow(
+      flowChartSelection.period,
+      now,
+    );
+    const window =
+      bucketWindow && selectionPeriodWindow
+        ? intersectTransactionDateWindows(bucketWindow, selectionPeriodWindow)
+        : bucketWindow;
     if (window) {
       args.since = window.since;
       args.until = window.until;
@@ -819,7 +838,7 @@ function buildTransactionListFilterArgs({
     args.sort = "occurred-at";
     args.order = tableFilterState.sort.direction;
   } else if (tableFilterState.sort?.key === "amount") {
-    args.sort = "amount";
+    args.sort = currency && currency !== "btc" ? "fiat-value" : "amount";
     args.order = tableFilterState.sort.direction;
   }
 

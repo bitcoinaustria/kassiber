@@ -80,6 +80,8 @@ export function useOverviewTransactionDetail({
   const [reuseSourceTransactionId, setReuseSourceTransactionId] =
     React.useState("");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
+  const failedPendingDetailLinkRef = React.useRef<string | null>(null);
+  const resolvingPendingDetailLinkRef = React.useRef<string | null>(null);
   const queryClient = useQueryClient();
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
   const resolveTransaction = useDaemonMutation<{ transaction?: Tx | null }>(
@@ -215,16 +217,37 @@ export function useOverviewTransactionDetail({
     [drafts, metadataUpdate, transactions],
   );
   const openTransactionDetail = React.useCallback(
-    (transactionId: string, tab = "details") => {
+    (transactionId: string, tab = "details", fromPendingLink = false) => {
       const transaction = transactions.find((txn) =>
         matchesTransactionDeepLink(txn, transactionId),
       );
       if (!transaction) return;
+      const resolutionKey = `${transaction.id}:${tab}`;
+      if (!fromPendingLink) failedPendingDetailLinkRef.current = null;
       const openResolved = (resolved: Transaction) => {
         setSaveError(null);
         setDetailInitialTab(tab);
         setDetailTransaction(resolved);
         updateTransactionDetailParams(resolved.id, tab);
+        const pending = pendingDetailLinkRef.current;
+        if (
+          pending.transactionId &&
+          matchesTransactionDeepLink(resolved, pending.transactionId)
+        ) {
+          pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
+        }
+        failedPendingDetailLinkRef.current = null;
+        resolvingPendingDetailLinkRef.current = null;
+      };
+      const notifyResolutionFailure = () => {
+        if (fromPendingLink) failedPendingDetailLinkRef.current = resolutionKey;
+        resolvingPendingDetailLinkRef.current = null;
+        useUiStore.getState().addNotification({
+          title: t("route.resolveError.title"),
+          body: t("route.resolveError.body"),
+          tone: "error",
+          dedupeKey: `transaction-resolve-${transaction.id}`,
+        });
       };
       if (!summaryOnlyTransactionIds.has(transaction.id)) {
         openResolved(transaction);
@@ -235,8 +258,19 @@ export function useOverviewTransactionDetail({
         {
           onSuccess: (envelope) => {
             const resolved = envelope.data?.transaction;
-            if (resolved) openResolved(toDashboardTransaction(resolved, 0, t));
+            if (!resolved) {
+              notifyResolutionFailure();
+              return;
+            }
+            openResolved(
+              toDashboardTransaction(
+                resolved,
+                0,
+                t as (key: string, opts?: Record<string, unknown>) => string,
+              ),
+            );
           },
+          onError: notifyResolutionFailure,
         },
       );
     },
@@ -373,8 +407,15 @@ export function useOverviewTransactionDetail({
       matchesTransactionDeepLink(txn, pending.transactionId ?? ""),
     );
     if (!transaction) return;
-    pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
-    openTransactionDetail(transaction.id, pending.tab);
+    const resolutionKey = `${transaction.id}:${pending.tab}`;
+    if (
+      resolvingPendingDetailLinkRef.current === resolutionKey ||
+      failedPendingDetailLinkRef.current === resolutionKey
+    ) {
+      return;
+    }
+    resolvingPendingDetailLinkRef.current = resolutionKey;
+    openTransactionDetail(transaction.id, pending.tab, true);
   }, [openTransactionDetail, transactions]);
 
   const detailSheet = (

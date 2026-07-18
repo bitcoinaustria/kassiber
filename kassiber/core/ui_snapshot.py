@@ -69,11 +69,51 @@ MAX_UI_TRANSACTION_IDS = 128
 MAX_UI_DASHBOARD_CANDIDATES = 256
 MAX_UI_TRANSACTION_CANDIDATE_IDS = MAX_UI_DASHBOARD_CANDIDATES * 2
 DISPLAY_BALANCE_ASSETS = {"BTC", "LBTC", "L-BTC"}
+_UI_TRANSACTION_EXTERNAL_SIGN_SQL = """
+    CASE
+      WHEN t.direction = 'outbound'
+       AND lower(COALESCE(t.kind, '')) NOT IN (
+         'chain-swap', 'consolidation', 'peg-in', 'peg-out', 'rebalance',
+         'reverse-submarine-swap', 'submarine-swap', 'swap', 'swap-refund',
+         'transfer'
+       )
+        THEN -1
+      ELSE 1
+    END
+""".strip()
+_UI_TRANSACTION_DISPLAY_AMOUNT_SQL = """
+    CASE
+      WHEN t.direction = 'outbound'
+       AND COALESCE(t.amount, 0) = 0
+       AND COALESCE(t.fee, 0) > 0
+        THEN ABS(t.fee)
+      ELSE ABS(COALESCE(t.amount, 0))
+    END
+""".strip()
+_UI_TRANSACTION_FIAT_MAGNITUDE_SQL = f"""
+    COALESCE(
+      CASE
+        WHEN CAST(t.fiat_value AS REAL) > 0
+          THEN ABS(CAST(t.fiat_value AS REAL))
+      END,
+      CASE
+        WHEN CAST(t.fiat_rate AS REAL) > 0
+          THEN CAST(({_UI_TRANSACTION_DISPLAY_AMOUNT_SQL}) AS REAL)
+               / 100000000000.0 * CAST(t.fiat_rate AS REAL)
+      END
+    )
+""".strip()
 _UI_TRANSACTION_SORT_COLUMNS = {
     "occurred-at": "t.occurred_at",
-    "amount": "t.amount",
-    "fiat-value": "COALESCE(t.fiat_value, 0)",
-    "fee": "t.fee",
+    "amount": (
+        f"({_UI_TRANSACTION_EXTERNAL_SIGN_SQL})"
+        f" * ({_UI_TRANSACTION_DISPLAY_AMOUNT_SQL})"
+    ),
+    "fiat-value": (
+        f"({_UI_TRANSACTION_EXTERNAL_SIGN_SQL})"
+        f" * ({_UI_TRANSACTION_FIAT_MAGNITUDE_SQL})"
+    ),
+    "fee": "COALESCE(t.fee, 0)",
 }
 _UI_TRANSACTION_FLOW_KINDS = {
     "chain-swap",
@@ -368,15 +408,19 @@ def _ui_transaction_cursor_filters(
     }
 
 
-def _ui_transaction_cursor_value(row: sqlite3.Row, sort: str) -> int | float | str:
+def _ui_transaction_cursor_value(
+    row: sqlite3.Row,
+    sort: str,
+) -> int | float | str | None:
+    value = row["_sort_value"]
     if sort == "occurred-at":
-        return row["occurred_at"] or ""
+        return str(value or "")
     if sort == "amount":
-        return int(row["amount"] or 0)
+        return int(value or 0)
     if sort == "fee":
-        return int(row["fee"] or 0)
+        return int(value or 0)
     if sort == "fiat-value":
-        return float(row["fiat_value"] or 0)
+        return float(value) if value is not None else None
     raise AppError(
         f"Unsupported transaction sort: {sort}",
         code="validation",
@@ -679,11 +723,13 @@ def _encode_ui_transaction_cursor(
     filters: dict[str, str],
     skip_pairs: set[str] | None = None,
 ) -> str:
+    value = _ui_transaction_cursor_value(row, sort)
     payload = {
         "sort": sort,
         "order": order,
         "filters": filters,
-        "value": _ui_transaction_cursor_value(row, sort),
+        "value": value,
+        "value_is_null": value is None,
         "occurred_at": row["occurred_at"] or "",
         "created_at": row["_created_at"] or "",
         "id": row["id"],
@@ -717,12 +763,17 @@ def _decode_ui_transaction_cursor(
             "order",
             "filters",
             "value",
+            "value_is_null",
             "occurred_at",
             "created_at",
             "id",
         }
         if not required.issubset(payload):
             raise ValueError("missing cursor fields")
+        if not isinstance(payload.get("value_is_null"), bool):
+            raise ValueError("invalid cursor null marker")
+        if payload["value_is_null"] != (payload.get("value") is None):
+            raise ValueError("cursor null marker mismatch")
         if not isinstance(payload.get("skip_pairs", []), list):
             raise ValueError("invalid cursor skip_pairs")
         return payload
@@ -3727,7 +3778,7 @@ def _build_transactions_page_snapshot(
         order_by = f"t.occurred_at {order_sql}, t.created_at {order_sql}, t.id {order_sql}"
     else:
         order_by = (
-            f"{sort_column} {order_sql}, "
+            f"({sort_column}) IS NULL ASC, {sort_column} {order_sql}, "
             "t.occurred_at DESC, t.created_at DESC, t.id DESC"
         )
     cursor_filters = _ui_transaction_cursor_filters(
@@ -3787,25 +3838,32 @@ def _build_transactions_page_snapshot(
             )
         else:
             primary_op = ">" if order == "asc" else "<"
-            filters.append(
-                f"({sort_column} {primary_op} ? OR "
-                f"({sort_column} = ? AND "
+            tie_sql = (
                 "(t.occurred_at < ? OR "
                 "(t.occurred_at = ? AND t.created_at < ?) OR "
-                "(t.occurred_at = ? AND t.created_at = ? AND t.id < ?))))"
+                "(t.occurred_at = ? AND t.created_at = ? AND t.id < ?))"
             )
-            params.extend(
-                [
-                    cursor_data["value"],
-                    cursor_data["value"],
-                    cursor_data["occurred_at"],
-                    cursor_data["occurred_at"],
-                    cursor_data["created_at"],
-                    cursor_data["occurred_at"],
-                    cursor_data["created_at"],
-                    cursor_data["id"],
-                ]
-            )
+            tie_params = [
+                cursor_data["occurred_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["id"],
+            ]
+            if cursor_data["value_is_null"]:
+                filters.append(f"(({sort_column}) IS NULL AND {tie_sql})")
+                params.extend(tie_params)
+            else:
+                filters.append(
+                    f"((({sort_column}) IS NOT NULL AND "
+                    f"(({sort_column}) {primary_op} ? OR "
+                    f"(({sort_column}) = ? AND {tie_sql}))) "
+                    f"OR ({sort_column}) IS NULL)"
+                )
+                params.extend(
+                    [cursor_data["value"], cursor_data["value"], *tie_params]
+                )
     raw_limit = max(limit * 6, limit + 20)
     params.append(raw_limit + 1)
 
@@ -3813,6 +3871,7 @@ def _build_transactions_page_snapshot(
         f"""
         SELECT
             t.id,
+            {sort_column} AS _sort_value,
             t.external_id AS external_id,
             t.occurred_at,
             t.confirmed_at,
@@ -4173,16 +4232,34 @@ def build_transactions_dashboard_snapshot(
         params,
     ).fetchall()
     transactions = _activity_transaction_rows_to_ui(conn, rows)
-    candidate_refs = _dashboard_non_conflicted_candidates(list(candidates or []))
+    all_candidate_refs = _dashboard_non_conflicted_candidates(
+        list(candidates or [])
+    )
     by_id = {str(tx["id"]): tx for tx in transactions}
+    # The candidate legs sent back to the renderer are the exact candidate
+    # population used by the aggregate. Keeping one bounded population avoids
+    # rendering bars whose legs cannot be expressed by candidate_txids when the
+    # user clicks them. Filter to the active dashboard window before applying
+    # the cap so older candidates cannot crowd current candidates out. The
+    # uncapped total remains available for the workflow badge so overflow is
+    # explicit rather than silently lost.
+    eligible_candidate_refs = [
+        candidate
+        for candidate in all_candidate_refs
+        if str(candidate.get("in_id") or "") in by_id
+        and str(candidate.get("out_id") or "") in by_id
+    ]
+    candidate_refs = eligible_candidate_refs[:MAX_UI_DASHBOARD_CANDIDATES]
     candidate_flow_by_id: dict[str, str] = {}
     candidate_pairs: dict[str, list[dict[str, Any]]] = {"transfers": [], "swaps": []}
     for candidate in candidate_refs:
         in_id = str(candidate.get("in_id") or "")
         out_id = str(candidate.get("out_id") or "")
-        if in_id not in by_id or out_id not in by_id:
-            continue
-        flow = "transfers" if _dashboard_candidate_type(candidate) == "transfer" else "swaps"
+        flow = (
+            "transfers"
+            if _dashboard_candidate_type(candidate) == "transfer"
+            else "swaps"
+        )
         candidate_flow_by_id[in_id] = flow
         candidate_flow_by_id[out_id] = flow
         candidate_pairs[flow].append(candidate)
@@ -4298,7 +4375,7 @@ def build_transactions_dashboard_snapshot(
             for key, value in candidate.items()
             if key in candidate_payload_fields
         }
-        for candidate in candidate_refs[:MAX_UI_DASHBOARD_CANDIDATES]
+        for candidate in candidate_refs
     ]
     return {
         "period": period,
@@ -4315,7 +4392,9 @@ def build_transactions_dashboard_snapshot(
         "buckets": list(buckets_by_key.values()),
         "candidates": compact_candidates,
         "swapCandidateTotal": sum(
-            1 for candidate in candidate_refs if _dashboard_candidate_type(candidate) == "swap"
+            1
+            for candidate in all_candidate_refs
+            if _dashboard_candidate_type(candidate) == "swap"
         ),
     }
 

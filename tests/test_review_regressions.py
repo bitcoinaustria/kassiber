@@ -55,6 +55,7 @@ from kassiber.core.report_context import ReportContext
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
+    MAX_UI_DASHBOARD_CANDIDATES,
     _tax_free_wallet_summaries,
     _transaction_pair_display_meta,
     build_capital_gains_snapshot,
@@ -10520,6 +10521,49 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(with_fees["count"], 1)
         self.assertEqual(with_fees["txs"][0]["id"], "public-spend")
 
+        amount_first = build_transactions_snapshot(
+            conn,
+            {"limit": 2, "sort": "amount", "order": "desc"},
+        )
+        self.assertEqual(
+            [row["id"] for row in amount_first["txs"]],
+            ["liquid-row", "failed-import"],
+        )
+        amount_second = build_transactions_snapshot(
+            conn,
+            {
+                "limit": 2,
+                "sort": "amount",
+                "order": "desc",
+                "cursor": amount_first["nextCursor"],
+            },
+        )
+        self.assertEqual(
+            [row["id"] for row in amount_second["txs"]],
+            ["internal-receipt", "public-spend"],
+        )
+
+        fiat_ids = []
+        fiat_cursor = None
+        while True:
+            fiat_page = build_transactions_snapshot(
+                conn,
+                {
+                    "limit": 1,
+                    "sort": "fiat-value",
+                    "order": "asc",
+                    **({"cursor": fiat_cursor} if fiat_cursor else {}),
+                },
+            )
+            fiat_ids.extend(row["id"] for row in fiat_page["txs"])
+            fiat_cursor = fiat_page["nextCursor"]
+            if not fiat_cursor:
+                break
+        self.assertEqual(
+            fiat_ids,
+            ["public-spend", "liquid-row", "failed-import", "internal-receipt"],
+        )
+
         incoming_page = build_transactions_snapshot(
             conn,
             {
@@ -10617,6 +10661,25 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.commit()
 
+        candidates = [
+            {
+                "in_id": f"outside-window-in-{index}",
+                "out_id": f"outside-window-out-{index}",
+                "in_asset": "BTC",
+                "out_asset": "BTC",
+                "candidate_type": "swap",
+            }
+            for index in range(10)
+        ] + [
+            {
+                "in_id": f"aggregate-{index * 2:04d}",
+                "out_id": f"aggregate-{index * 2 + 1:04d}",
+                "in_asset": "BTC",
+                "out_asset": "BTC",
+                "candidate_type": "swap",
+            }
+            for index in range(MAX_UI_DASHBOARD_CANDIDATES + 1)
+        ]
         dashboard = build_transactions_dashboard_snapshot(
             conn,
             {
@@ -10625,12 +10688,39 @@ class ReviewRegressionTest(unittest.TestCase):
                 "until": "2024-12-31T23:59:59Z",
                 "timezone": "UTC",
             },
-            candidates=[],
+            candidates=candidates,
         )
 
         self.assertEqual(dashboard["history"]["count"], 750)
         self.assertEqual(dashboard["counts"]["all"], 750)
-        self.assertEqual(dashboard["summary"]["incoming"]["count"], 750)
+        self.assertEqual(dashboard["summary"]["incoming"]["count"], 238)
+        self.assertEqual(
+            dashboard["summary"]["swaps"]["count"],
+            MAX_UI_DASHBOARD_CANDIDATES,
+        )
+        self.assertEqual(
+            len(dashboard["candidates"]),
+            MAX_UI_DASHBOARD_CANDIDATES,
+        )
+        self.assertEqual(
+            dashboard["swapCandidateTotal"],
+            MAX_UI_DASHBOARD_CANDIDATES + 11,
+        )
+        self.assertTrue(
+            all(
+                not candidate["in_id"].startswith("outside-window-")
+                for candidate in dashboard["candidates"]
+            )
+        )
+        visible_candidate_ids = {
+            transaction_id
+            for candidate in dashboard["candidates"]
+            for transaction_id in (candidate["in_id"], candidate["out_id"])
+        }
+        bucket_swap_legs = sum(
+            bucket["stats"]["swaps"]["count"] for bucket in dashboard["buckets"]
+        )
+        self.assertEqual(bucket_swap_legs, len(visible_candidate_ids))
         self.assertEqual(len(dashboard["buckets"]), 12)
         self.assertNotIn("txs", dashboard)
 
