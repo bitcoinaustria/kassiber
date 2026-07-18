@@ -127,6 +127,7 @@ import {
   type FlowChartSelection,
   type JournalEventsData,
   type TableQuickFilter,
+  type TransactionTableFilterState,
 } from "./model";
 
 type LoansList = {
@@ -169,19 +170,6 @@ function loanRoleBadgeClassName(role: string): string {
   return "border-amber-500/40 text-amber-700 dark:text-amber-400";
 }
 
-type TableSortKey = "date" | "amount";
-type TableSortDirection = "asc" | "desc";
-type TableSortState = {
-  key: TableSortKey;
-  direction: TableSortDirection;
-} | null;
-export type TransactionTableFilterState = {
-  status: string;
-  flow: string;
-  paymentMethod: string;
-  fee: FeeFilter;
-  sort: TableSortState;
-};
 
 const EMPTY_TRANSACTION_ID_FILTER: string[] = [];
 
@@ -211,15 +199,16 @@ const TransactionsTable = ({
   quickFilter,
   breakdownSelection,
   transactionIdFilter = EMPTY_TRANSACTION_ID_FILTER,
-  fullRecords = records,
+  onTransactionIdFilterChange,
+  transactionSetRecords = records,
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
-  resetTableFiltersToken,
   isRefreshing,
   hasMoreRecords = false,
   isLoadingMoreRecords = false,
   onLoadMoreRecords,
+  filterState,
   onFilterStateChange,
   deepLinkedTransactionId,
   deepLinkedTransactionTab = "details",
@@ -237,16 +226,17 @@ const TransactionsTable = ({
   quickFilter: TableQuickFilter | null;
   breakdownSelection: BreakdownSelection | null;
   transactionIdFilter?: string[];
-  fullRecords?: Transaction[];
+  onTransactionIdFilterChange: (ids: string[]) => void;
+  transactionSetRecords?: Transaction[];
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
-  resetTableFiltersToken: number;
   isRefreshing?: boolean;
   hasMoreRecords?: boolean;
   isLoadingMoreRecords?: boolean;
   onLoadMoreRecords?: () => void;
-  onFilterStateChange?: (state: TransactionTableFilterState) => void;
+  filterState: TransactionTableFilterState;
+  onFilterStateChange: (state: TransactionTableFilterState) => void;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
   isExpanded?: boolean;
@@ -255,13 +245,34 @@ const TransactionsTable = ({
   const { t } = useTranslation("transactions");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = React.useState<string>("all");
-  const [flowFilter, setFlowFilter] = React.useState<string>("all");
-  const [paymentMethodFilter, setPaymentMethodFilter] =
-    React.useState<string>("all");
-  const [feeFilter, setFeeFilter] = React.useState<FeeFilter>("all");
-  const [tableSort, setTableSort] = React.useState<TableSortState>(null);
-  const [isHydrated, setIsHydrated] = React.useState(false);
+  const {
+    status: statusFilter,
+    flow: flowFilter,
+    paymentMethod: paymentMethodFilter,
+    fee: feeFilter,
+    sort: tableSort,
+  } = filterState;
+  const patchTableFilter = React.useCallback(
+    (patch: Partial<TransactionTableFilterState>) =>
+      onFilterStateChange({ ...filterState, ...patch }),
+    [filterState, onFilterStateChange],
+  );
+  const setStatusFilter = React.useCallback(
+    (status: string) => patchTableFilter({ status }),
+    [patchTableFilter],
+  );
+  const setFlowFilter = React.useCallback(
+    (flow: string) => patchTableFilter({ flow }),
+    [patchTableFilter],
+  );
+  const setPaymentMethodFilter = React.useCallback(
+    (paymentMethod: string) => patchTableFilter({ paymentMethod }),
+    [patchTableFilter],
+  );
+  const setFeeFilter = React.useCallback(
+    (fee: FeeFilter) => patchTableFilter({ fee }),
+    [patchTableFilter],
+  );
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [detailTransaction, setDetailTransaction] =
@@ -712,104 +723,22 @@ const TransactionsTable = ({
     paymentMethodFilter !== "all" ||
     feeFilter !== "all";
   const clearTransactionIdFilter = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      params.delete("txids");
-      const nextQuery = params.toString();
-      void navigate({
-        to: nextQuery
-          ? `${window.location.pathname}?${nextQuery}`
-          : window.location.pathname,
-      });
-    }
-  }, [navigate]);
+    onTransactionIdFilterChange([]);
+  }, [onTransactionIdFilterChange]);
 
   const clearFilters = () => {
     onChartSelectionChange(null);
     onQuickFilterChange(null);
     onBreakdownSelectionChange(null);
     clearTransactionIdFilter();
-    setStatusFilter("all");
-    setFlowFilter("all");
-    setPaymentMethodFilter("all");
-    setFeeFilter("all");
-  };
-
-  React.useEffect(() => {
-    if (resetTableFiltersToken === 0) return;
-    setStatusFilter("all");
-    setFlowFilter("all");
-    setPaymentMethodFilter("all");
-    setFeeFilter("all");
-  }, [resetTableFiltersToken]);
-
-  React.useEffect(() => {
-    onFilterStateChange?.({
-      status: statusFilter,
-      flow: flowFilter,
-      paymentMethod: paymentMethodFilter,
-      fee: feeFilter,
-      sort: tableSort,
+    onFilterStateChange({
+      status: "all",
+      flow: "all",
+      paymentMethod: "all",
+      fee: "all",
+      sort: null,
     });
-  }, [
-    feeFilter,
-    flowFilter,
-    onFilterStateChange,
-    paymentMethodFilter,
-    statusFilter,
-    tableSort,
-  ]);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-
-    const nextStatus = params.get("status");
-    if (
-      nextStatus &&
-      (nextStatus === "all" ||
-        allTransactionStatuses.includes(nextStatus as TransactionStatus))
-    ) {
-      setStatusFilter(nextStatus);
-    }
-
-    const nextFlow = params.get("flow");
-    if (
-      nextFlow &&
-      (nextFlow === "all" ||
-        allTransactionFlows.includes(nextFlow as TransactionFlow))
-    ) {
-      setFlowFilter(nextFlow);
-    }
-
-    const nextPayment = params.get("payment");
-    if (
-      nextPayment &&
-      (nextPayment === "all" ||
-        allPaymentMethods.includes(
-          nextPayment as (typeof allPaymentMethods)[number],
-        ))
-    ) {
-      setPaymentMethodFilter(nextPayment);
-    }
-
-    const nextFees = params.get("fees");
-    if (nextFees === "with-fees" || nextFees === "true" || nextFees === "1") {
-      setFeeFilter("with-fees");
-    } else if (nextFees === "all") {
-      setFeeFilter("all");
-    }
-
-    if (params.get("sort") === "amount" || params.get("sort") === "date") {
-      const sortKey = params.get("sort") === "date" ? "date" : "amount";
-      const nextOrder = params.get("order");
-      if (nextOrder === "asc" || nextOrder === "desc") {
-        setTableSort({ key: sortKey, direction: nextOrder });
-      }
-    }
-
-    setIsHydrated(true);
-  }, []);
+  };
 
   React.useEffect(() => {
     const pending = pendingDetailLinkRef.current;
@@ -851,21 +780,23 @@ const TransactionsTable = ({
         ? ArrowUp
         : ArrowUpDown;
   const toggleDateSort = React.useCallback(() => {
-    setTableSort((current) => {
-      if (current?.key !== "date") return { key: "date", direction: "asc" };
-      if (current.direction === "asc") return { key: "date", direction: "desc" };
-      return { key: "date", direction: "asc" };
-    });
-  }, []);
+    const sort =
+      tableSort?.key !== "date"
+        ? { key: "date", direction: "asc" } as const
+        : tableSort.direction === "asc"
+          ? { key: "date", direction: "desc" } as const
+          : { key: "date", direction: "asc" } as const;
+    patchTableFilter({ sort });
+  }, [patchTableFilter, tableSort]);
   const toggleAmountSort = React.useCallback(() => {
-    setTableSort((current) => {
-      if (current?.key !== "amount") return { key: "amount", direction: "desc" };
-      if (current.direction === "desc") {
-        return { key: "amount", direction: "asc" };
-      }
-      return null;
-    });
-  }, []);
+    const sort =
+      tableSort?.key !== "amount"
+        ? { key: "amount", direction: "desc" } as const
+        : tableSort.direction === "desc"
+          ? { key: "amount", direction: "asc" } as const
+          : null;
+    patchTableFilter({ sort });
+  }, [patchTableFilter, tableSort]);
   const scrollTableIntoView = React.useCallback(() => {
     if (typeof window === "undefined") return;
     const table = tableRef.current;
@@ -976,12 +907,11 @@ const TransactionsTable = ({
     const selectedTransactionIds = new Set(transactionIdFilter);
     const isTxidFilterActive = selectedTransactionIds.size > 0;
 
-    // When the transaction ID filter (cluster events) is active, also search the
-    // full (unfiltered) records for matching transactions — they may be outside the
-    // current period filter.  If found in the full set, include them; otherwise fall
-    // back to the period-filtered records for the normal scoped lookup.
-    const lookupRecords = isTxidFilterActive && fullRecords !== records
-      ? fullRecords
+    // Exact cluster selections can include transactions outside the broad period.
+    // Search the complete transaction set returned for that selection before
+    // applying the remaining explicit table filters.
+    const lookupRecords = isTxidFilterActive && transactionSetRecords !== records
+      ? transactionSetRecords
       : records;
 
     const filtered = lookupRecords.filter((txn) => {
@@ -1090,7 +1020,7 @@ const TransactionsTable = ({
     });
   }, [
     records,
-    fullRecords,
+    transactionSetRecords,
     transactionIdFilter,
     getDraft,
     chartSelection,
@@ -1278,60 +1208,6 @@ const TransactionsTable = ({
       lastAutoLoadRowCountRef.current = null;
     }
   }, [filteredTransactions.length, isLoadingMoreRecords]);
-
-  React.useEffect(() => {
-    if (!isHydrated || typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    params.delete("q");
-    params.delete("page");
-    params.delete("pageSize");
-    params.delete("date");
-
-    if (statusFilter !== "all") {
-      params.set("status", statusFilter);
-    } else {
-      params.delete("status");
-    }
-
-    if (flowFilter !== "all") {
-      params.set("flow", flowFilter);
-    } else {
-      params.delete("flow");
-    }
-
-    if (paymentMethodFilter !== "all") {
-      params.set("payment", paymentMethodFilter);
-    } else {
-      params.delete("payment");
-    }
-
-    if (feeFilter === "with-fees") {
-      params.set("fees", feeFilter);
-    } else {
-      params.delete("fees");
-    }
-
-    if (tableSort) {
-      params.set("sort", tableSort.key);
-      params.set("order", tableSort.direction);
-    } else {
-      params.delete("sort");
-      params.delete("order");
-    }
-
-    const nextQuery = params.toString();
-    const nextUrl = nextQuery
-      ? `${window.location.pathname}?${nextQuery}`
-      : window.location.pathname;
-    window.history.replaceState(null, "", nextUrl);
-  }, [
-    statusFilter,
-    flowFilter,
-    paymentMethodFilter,
-    feeFilter,
-    tableSort,
-    isHydrated,
-  ]);
 
   const activeFilterCount = [
     chartSelection,

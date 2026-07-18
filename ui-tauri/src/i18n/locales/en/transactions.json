@@ -3,6 +3,10 @@
     "unavailable": {
       "title": "Transactions unavailable",
       "body": "Kassiber could not read real transactions for the current book."
+    },
+    "resolveError": {
+      "title": "Could not open transaction",
+      "body": "Kassiber could not load the full transaction details. Select the transaction again to retry."
     }
   },
   "status": {

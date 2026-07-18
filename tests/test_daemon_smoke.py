@@ -1168,6 +1168,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("status", ready["data"]["supported_kinds"])
             self.assertIn("ui.overview.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transactions.dashboard", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.extremes", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.resolve", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.search", ready["data"]["supported_kinds"])

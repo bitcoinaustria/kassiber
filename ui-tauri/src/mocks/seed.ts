@@ -282,6 +282,8 @@ export interface Tx {
   internal?: boolean;
   balanceBtc?: number;
   costBasisEur?: number;
+  /** Compact overview activity marker; resolve before opening full detail. */
+  summaryOnly?: boolean;
 }
 
 export interface FiatSnapshot {

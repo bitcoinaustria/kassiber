@@ -160,6 +160,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
+    "ui.transactions.dashboard",
     "ui.transactions.metadata.update",
     "ui.transactions.resolve",
     "ui.transactions.graph",

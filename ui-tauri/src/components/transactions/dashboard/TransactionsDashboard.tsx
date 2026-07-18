@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useDaemonMutation } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
 import {
@@ -33,28 +34,30 @@ import {
   mockNewTransactionWalletSourceOptions,
   type NewTransactionDraft,
 } from "@/components/transactions";
-import {
-  TransactionsTable,
-  type TransactionTableFilterState,
-} from "./TransactionsTable";
+import { TransactionsTable } from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
   availablePeriodKeysForRecords,
+  availablePeriodKeysForHistory,
   buildCandidateFlowOverrides,
+  buildTransactionListFilterArgs,
+  DEFAULT_TRANSACTION_TABLE_FILTER_STATE,
   dashboardRecordsFromTxs,
-  flowChartSelectionDateWindow,
-  flowChartSelectionServerFlow,
   initialPeriodFromUrl,
   recordsForPeriod,
   resolveAutoPeriodForRecords,
   sortTransactionsByDateDesc,
-  transactionListPeriodFilter,
+  serializeTransactionFilterParams,
   type FlowChartSelection,
   type PeriodKey,
   type ResolvedPeriodKey,
   type SwapCandidateReference,
   type TableQuickFilter,
   type BreakdownSelection,
+  type TransactionFilterState,
+  type TransactionScopeParams,
+  transactionPeriodDateWindow,
+  type TransactionDashboardSnapshot,
 } from "./model";
 
 interface TransactionsExportResult {
@@ -84,9 +87,7 @@ const TransactionsDashboard = ({
   focusedTransaction,
   deepLinkedTransactionId,
   deepLinkedTransactionTab,
-  deepLinkedWallet,
-  deepLinkedQuickFilter,
-  deepLinkedTransactionIds = [],
+  scopeParams,
   onWalletScopeChange,
   onTableFilterArgsChange,
 }: {
@@ -103,13 +104,12 @@ const TransactionsDashboard = ({
   focusedTransaction?: TransactionsList["txs"][number] | null;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
-  deepLinkedWallet?: string | null;
-  deepLinkedQuickFilter?: TableQuickFilter | null;
-  deepLinkedTransactionIds?: string[];
+  scopeParams: TransactionScopeParams;
   onWalletScopeChange?: (wallet: string | null) => void;
   onTableFilterArgsChange?: (args: Record<string, unknown>) => void;
 }) => {
   const { t } = useTranslation("transactions");
+  const navigate = useNavigate();
   const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
   const storedBookChartPeriod = useUiStore((state) =>
     bookKey ? state.bookChartPeriods[bookKey] : undefined,
@@ -117,35 +117,45 @@ const TransactionsDashboard = ({
   const setStoredBookChartPeriod = useUiStore(
     (state) => state.setBookChartPeriod,
   );
-  const [period, setPeriod] = React.useState<PeriodKey>(() =>
-    initialPeriodFromUrl(
-      transactionPeriodFromSharedPeriod(storedBookChartPeriod),
-    ),
+  const initialPeriod =
+    scopeParams.period ??
+    initialPeriodFromUrl(transactionPeriodFromSharedPeriod(storedBookChartPeriod));
+  const [filterState, patchFilterState] = React.useReducer(
+    (state: TransactionFilterState, patch: Partial<TransactionFilterState>) => ({
+      ...state,
+      ...patch,
+    }),
+    {
+      period: initialPeriod,
+      flowChartSelection: scopeParams.flowChartSelection,
+      quickFilter: scopeParams.quick,
+      breakdownSelection: scopeParams.breakdownSelection,
+      transactionIds: scopeParams.transactionIds,
+      table: scopeParams.table,
+    },
+  );
+  const {
+    period,
+    flowChartSelection,
+    quickFilter,
+    breakdownSelection,
+    transactionIds,
+    table: tableFilterState,
+  } = filterState;
+  const setFlowChartSelection = React.useCallback(
+    (value: FlowChartSelection | null) => patchFilterState({ flowChartSelection: value }),
+    [],
+  );
+  const setQuickFilter = React.useCallback(
+    (value: TableQuickFilter | null) => patchFilterState({ quickFilter: value }),
+    [],
+  );
+  const setBreakdownSelection = React.useCallback(
+    (value: BreakdownSelection | null) => patchFilterState({ breakdownSelection: value }),
+    [],
   );
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
-  const [flowChartSelection, setFlowChartSelection] =
-    React.useState<FlowChartSelection | null>(null);
-  // Seed the table filters from a Wallet Detail deep link so "Show all" /
-  // "Needs review" land pre-filtered to the wallet.
-  const [quickFilter, setQuickFilter] = React.useState<TableQuickFilter | null>(
-    deepLinkedQuickFilter ?? null,
-  );
-  const [breakdownSelection, setBreakdownSelection] =
-    React.useState<BreakdownSelection | null>(
-      deepLinkedWallet
-        ? { dimension: "wallet", key: deepLinkedWallet, match: "leg" }
-        : null,
-    );
   const [tableExpanded, setTableExpanded] = React.useState(false);
-  const [tableFilterState, setTableFilterState] =
-    React.useState<TransactionTableFilterState>({
-      status: "all",
-      flow: "all",
-      paymentMethod: "all",
-      fee: "all",
-      sort: null,
-    });
-  const [resetTableFiltersToken, setResetTableFiltersToken] = React.useState(0);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -153,7 +163,7 @@ const TransactionsDashboard = ({
   const dataMode = useUiStore((s) => s.dataMode);
   const currency = useCurrency();
   const { isSyncing } = useWalletSyncAction();
-  const showRefreshSkeleton = isSyncing || isDataRefreshing;
+  const baseRefreshSkeleton = isSyncing || isDataRefreshing;
   const addNotification = useUiStore((s) => s.addNotification);
   const previousBookKey = React.useRef(bookKey);
   const skipNextPeriodPersist = React.useRef(false);
@@ -265,36 +275,69 @@ const TransactionsDashboard = ({
     () => sortTransactionsByDateDesc(records),
     [records],
   );
-  // Offer only the period tabs the loaded transactions can actually chart.
-  // Deriving these from the full history bounds (rather than the loaded rows)
-  // let long-range tabs (5/10/15-year, "all") render silently truncated charts
-  // on books larger than the workbench page cap, since the charts render from
-  // the capped `records`. Gating on `records` keeps offered tabs and charted
-  // data consistent; showing the full span for large books needs daemon-side
-  // period aggregates, not an in-memory slice of the newest rows.
+  // The aggregate endpoint owns full-history bounds in real mode, so long-range
+  // tabs never imply that a capped client page represents the whole book.
+  // Mock mode keeps deriving the options from its in-memory records.
+  const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
+    () => resolveAutoPeriodForRecords(records, period),
+    [period, records],
+  );
+  const dashboardWindow = React.useMemo(
+    () => transactionPeriodDateWindow(resolvedPeriod),
+    [resolvedPeriod],
+  );
+  const dashboardWallet =
+    breakdownSelection?.dimension === "wallet" &&
+    breakdownSelection.match === "leg"
+      ? breakdownSelection.key
+      : null;
+  const dashboardQuery = useDaemon<TransactionDashboardSnapshot>(
+    "ui.transactions.dashboard",
+    {
+      period: resolvedPeriod,
+      ...(dashboardWindow ?? {}),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      ...(dashboardWallet ? { wallet: dashboardWallet } : {}),
+    },
+    { enabled: dataMode !== "mock" },
+  );
+  const dashboardSnapshot =
+    dashboardQuery.data?.kind === "ui.transactions.dashboard"
+      ? dashboardQuery.data.data
+      : null;
+  const showRefreshSkeleton = baseRefreshSkeleton || dashboardQuery.isFetching;
   const availablePeriods = React.useMemo(
-    () => availablePeriodKeysForRecords(records),
-    [records],
+    () =>
+      dashboardSnapshot
+        ? availablePeriodKeysForHistory(
+            dashboardSnapshot.history.earliest,
+            dashboardSnapshot.history.latest,
+          )
+        : availablePeriodKeysForRecords(records),
+    [dashboardSnapshot, records],
   );
   const periodOptions = React.useMemo<PeriodKey[]>(
     () => ["auto", ...availablePeriods],
     [availablePeriods],
   );
-  const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
-    () => resolveAutoPeriodForRecords(records, period),
-    [period, records],
-  );
+  const effectiveCandidateRefs =
+    dashboardSnapshot?.candidates ?? pairingCandidateRefs;
   // In daemon-backed (real/regtest) mode the New Transaction picker must not
   // offer fabricated MOCK wallet names; derive single-wallet labels from the
   // loaded book instead (skipping synthesized "A → B" transfer strings).
   const realWalletSourceOptions = React.useMemo(() => {
     const labels = new Set<string>();
-    for (const record of records) {
-      const label = record.wallet;
+    for (const label of dashboardSnapshot?.history.walletOptions ?? []) {
       if (label && !label.includes("→")) labels.add(label);
     }
+    if (labels.size === 0) {
+      for (const record of records) {
+        const label = record.wallet;
+        if (label && !label.includes("→")) labels.add(label);
+      }
+    }
     return [...labels, "External"];
-  }, [records]);
+  }, [dashboardSnapshot, records]);
   const periodRecords = React.useMemo(
     () =>
       resolvedPeriod === "all"
@@ -313,12 +356,16 @@ const TransactionsDashboard = ({
           record.explorerId === focusedTransaction.explorerId),
     ) ?? null;
   }, [focusedTransaction, tableSourceRecords]);
+  // Real table pages are already scoped by the canonical daemon request. A
+  // second client-side period pass would erase exact txid/chart-bucket results
+  // that intentionally override the broad period (the original empty-table
+  // failure). Mock mode still needs the in-memory period behavior.
   const tablePeriodRecords = React.useMemo(
     () =>
-      resolvedPeriod === "all"
+      dataMode !== "mock" || resolvedPeriod === "all"
         ? sortTransactionsByDateDesc(tableSourceRecords)
         : recordsForPeriod(tableSourceRecords, resolvedPeriod),
-    [resolvedPeriod, tableSourceRecords],
+    [dataMode, resolvedPeriod, tableSourceRecords],
   );
   const tableRecords = React.useMemo(() => {
     if (
@@ -329,33 +376,40 @@ const TransactionsDashboard = ({
     }
     return [focusedRecord, ...tablePeriodRecords];
   }, [focusedRecord, tablePeriodRecords]);
-  const visibleTableRecords = React.useMemo(() => {
-    return tableRecords;
-  }, [tableRecords]);
   const tableCandidateFlows = React.useMemo(
-    () =>
-      buildCandidateFlowOverrides(visibleTableRecords, pairingCandidateRefs),
-    [visibleTableRecords, pairingCandidateRefs],
+    () => buildCandidateFlowOverrides(tableRecords, effectiveCandidateRefs),
+    [tableRecords, effectiveCandidateRefs],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
     // Period controls the data window only. Keep the user's active chart,
     // quick, breakdown, and table filters when that window changes.
-    setPeriod(nextPeriod);
+    patchFilterState({ period: nextPeriod });
   }, []);
+  React.useEffect(() => {
+    patchFilterState({
+      ...(scopeParams.period ? { period: scopeParams.period } : {}),
+      flowChartSelection: scopeParams.flowChartSelection,
+      quickFilter: scopeParams.quick,
+      breakdownSelection: scopeParams.breakdownSelection,
+      transactionIds: scopeParams.transactionIds,
+      table: scopeParams.table,
+    });
+  }, [scopeParams]);
   React.useEffect(() => {
     if (previousBookKey.current === bookKey) return;
     previousBookKey.current = bookKey;
     skipNextPeriodPersist.current = true;
-    setPeriod(
-      initialPeriodFromUrl(
+    patchFilterState({
+      period:
+        scopeParams.period ??
         transactionPeriodFromSharedPeriod(storedBookChartPeriod),
-      ),
-    );
-    setFlowChartSelection(null);
-    setQuickFilter(null);
-    setBreakdownSelection(null);
-    setResetTableFiltersToken((token) => token + 1);
-  }, [bookKey, storedBookChartPeriod]);
+      flowChartSelection: null,
+      quickFilter: null,
+      breakdownSelection: null,
+      transactionIds: [],
+      table: { ...DEFAULT_TRANSACTION_TABLE_FILTER_STATE },
+    });
+  }, [bookKey, scopeParams.period, storedBookChartPeriod]);
 
   React.useEffect(() => {
     if (!bookKey) return;
@@ -376,7 +430,7 @@ const TransactionsDashboard = ({
     );
   }, [availablePeriods, handlePeriodChange, period]);
   const resetTableFilters = React.useCallback(() => {
-    setResetTableFiltersToken((token) => token + 1);
+    patchFilterState({ table: { ...DEFAULT_TRANSACTION_TABLE_FILTER_STATE } });
   }, []);
 
   // Keep the parent's wallet scope (which server-scopes the ui.transactions.list
@@ -394,62 +448,24 @@ const TransactionsDashboard = ({
   }, [breakdownSelection, onWalletScopeChange]);
 
   React.useEffect(() => {
-    const args: Record<string, unknown> = {};
-    const periodFilter = transactionListPeriodFilter(
-      resolvedPeriod,
-      deepLinkedTransactionIds,
+    onTableFilterArgsChange?.(
+      buildTransactionListFilterArgs({
+        period: resolvedPeriod,
+        currency,
+        transactionIds,
+        flowChartSelection,
+        quickFilter,
+        breakdownSelection,
+        tableFilterState,
+        pairingCandidateRefs: effectiveCandidateRefs,
+      }),
     );
-    if (periodFilter) args.period = periodFilter;
-    if (deepLinkedTransactionIds.length > 0) {
-      args.txids = deepLinkedTransactionIds;
-    }
-
-    if (flowChartSelection) {
-      const window = flowChartSelectionDateWindow(flowChartSelection);
-      if (window) {
-        args.since = window.since;
-        args.until = window.until;
-        delete args.period;
-      }
-      const serverFlow = flowChartSelectionServerFlow(flowChartSelection);
-      if (serverFlow) args.flow = serverFlow;
-      if (flowChartSelection.mode === "external" && !flowChartSelection.segment) {
-        args.quick = "external_flow";
-      }
-    }
-
-    if (quickFilter) args.quick = quickFilter;
-    if (breakdownSelection?.dimension === "network") {
-      args.payment_method = breakdownSelection.key;
-    }
-    if (
-      breakdownSelection?.dimension === "wallet" &&
-      breakdownSelection.match !== "leg" &&
-      !breakdownSelection.key.includes("→") &&
-      !breakdownSelection.key.includes("->")
-    ) {
-      args.wallet = breakdownSelection.key;
-    }
-
-    if (tableFilterState.status !== "all") args.status = tableFilterState.status;
-    if (tableFilterState.flow !== "all") args.flow = tableFilterState.flow;
-    if (tableFilterState.paymentMethod !== "all") {
-      args.payment_method = tableFilterState.paymentMethod;
-    }
-    if (tableFilterState.fee === "with-fees") args.withFees = true;
-    if (tableFilterState.sort?.key === "date") {
-      args.sort = "occurred-at";
-      args.order = tableFilterState.sort.direction;
-    } else if (tableFilterState.sort?.key === "amount") {
-      args.sort = "amount";
-      args.order = tableFilterState.sort.direction;
-    }
-
-    onTableFilterArgsChange?.(args);
   }, [
     breakdownSelection,
-    deepLinkedTransactionIds,
+    currency,
+    transactionIds,
     flowChartSelection,
+    effectiveCandidateRefs,
     onTableFilterArgsChange,
     quickFilter,
     resolvedPeriod,
@@ -458,14 +474,16 @@ const TransactionsDashboard = ({
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    params.set("period", period);
-    const nextQuery = params.toString();
+    const nextQuery = serializeTransactionFilterParams(
+      window.location.search,
+      filterState,
+    );
     const nextUrl = nextQuery
       ? `${window.location.pathname}?${nextQuery}`
       : window.location.pathname;
-    window.history.replaceState(null, "", nextUrl);
-  }, [period]);
+    if (`${window.location.pathname}${window.location.search}` === nextUrl) return;
+    void navigate({ to: nextUrl, replace: true });
+  }, [filterState, navigate]);
 
   React.useLayoutEffect(() => {
     if (!tableExpanded || typeof window === "undefined") return;
@@ -590,8 +608,9 @@ const TransactionsDashboard = ({
           onBreakdownSelectionChange={setBreakdownSelection}
           onTableFiltersReset={resetTableFilters}
           chartSelection={flowChartSelection}
-          pairingCandidateRefs={pairingCandidateRefs}
-          swapCandidateTotal={swapCandidateTotal}
+          pairingCandidateRefs={effectiveCandidateRefs}
+          swapCandidateTotal={dashboardSnapshot?.swapCandidateTotal ?? swapCandidateTotal}
+          dashboardSnapshot={dashboardSnapshot}
           isRefreshing={showRefreshSkeleton}
         />
       )}
@@ -604,8 +623,8 @@ const TransactionsDashboard = ({
         )}
       >
         <TransactionsTable
-          records={visibleTableRecords}
-          fullRecords={tableSourceRecords}
+          records={tableRecords}
+          transactionSetRecords={tableSourceRecords}
           hideSensitive={hideSensitive}
           currency={currency}
           nowRate={nowRate}
@@ -615,16 +634,17 @@ const TransactionsDashboard = ({
           chartSelection={flowChartSelection}
           quickFilter={quickFilter}
           breakdownSelection={breakdownSelection}
-          transactionIdFilter={deepLinkedTransactionIds}
+          transactionIdFilter={transactionIds}
+          onTransactionIdFilterChange={(ids) => patchFilterState({ transactionIds: ids })}
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}
-          resetTableFiltersToken={resetTableFiltersToken}
           isRefreshing={showRefreshSkeleton}
           hasMoreRecords={hasMoreTransactions}
           isLoadingMoreRecords={isLoadingMoreTransactions}
           onLoadMoreRecords={onLoadMoreTransactions}
-          onFilterStateChange={setTableFilterState}
+          filterState={tableFilterState}
+          onFilterStateChange={(table) => patchFilterState({ table })}
           deepLinkedTransactionId={deepLinkedTransactionId}
           deepLinkedTransactionTab={deepLinkedTransactionTab}
           isExpanded={tableExpanded}

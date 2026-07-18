@@ -40,6 +40,7 @@ import {
 import {
   buildCandidateFlowOverrides,
   buildFlowChartRows,
+  dashboardFlowChartRows,
   flowAxisDomain,
   flowBucketLabel,
   flowChartConfig,
@@ -68,6 +69,7 @@ import {
   type ResolvedPeriodKey,
   type SwapCandidateReference,
   type TableQuickFilter,
+  type TransactionDashboardSnapshot,
 } from "./model";
 
 function formatMetricValue(
@@ -190,6 +192,7 @@ const TransactionWorkbench = ({
   chartSelection,
   pairingCandidateRefs,
   swapCandidateTotal,
+  dashboardSnapshot,
   isRefreshing,
 }: {
   period: ResolvedPeriodKey;
@@ -203,6 +206,7 @@ const TransactionWorkbench = ({
   chartSelection: FlowChartSelection | null;
   pairingCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
+  dashboardSnapshot?: TransactionDashboardSnapshot | null;
   isRefreshing?: boolean;
 }) => {
   const { t } = useTranslation("transactions");
@@ -224,8 +228,8 @@ const TransactionWorkbench = ({
     flowById: candidateFlowOverrides,
   } = candidateFlows;
   const externalRecords = records.filter((txn) => !pairingCandidateIds.has(txn.id));
-  const incoming = sumByFlow(externalRecords, "incoming");
-  const outgoing = sumByFlow(externalRecords, "outgoing");
+  const localIncoming = sumByFlow(externalRecords, "incoming");
+  const localOutgoing = sumByFlow(externalRecords, "outgoing");
   const baseTransfers = sumByFlow(externalRecords, "transfer");
   const markedSwaps = sumByFlow(records, "swap");
   const transferCandidateTotals = transferCandidates.reduce(
@@ -236,7 +240,7 @@ const TransactionWorkbench = ({
     }),
     { count: 0, eur: 0, btc: 0 },
   );
-  const transfers = {
+  const localTransfers = {
     count: baseTransfers.count + transferCandidateTotals.count,
     eur: baseTransfers.eur + transferCandidateTotals.eur,
     btc: baseTransfers.btc + transferCandidateTotals.btc,
@@ -250,20 +254,34 @@ const TransactionWorkbench = ({
     { count: 0, eur: 0, btc: 0 },
   );
   const knownSwapCandidateCount =
-    swapCandidateTotal === undefined
+    dashboardSnapshot
+      ? dashboardSnapshot.swapCandidateTotal
+      : swapCandidateTotal === undefined
       ? swapCandidateTotals.count
       : swapCandidateTotal;
   const swapCandidateCountForTotal = knownSwapCandidateCount ?? 0;
-  const swaps = {
+  const localSwaps = {
     count: markedSwaps.count + swapCandidateCountForTotal,
     eur: markedSwaps.eur + swapCandidateTotals.eur,
     btc: markedSwaps.btc + swapCandidateTotals.btc,
   };
+  const incoming = dashboardSnapshot?.summary.incoming ?? localIncoming;
+  const outgoing = dashboardSnapshot?.summary.outgoing ?? localOutgoing;
+  const transfers = dashboardSnapshot?.summary.transfers ?? localTransfers;
+  const swaps = dashboardSnapshot?.summary.swaps ?? localSwaps;
+  const markedSwapCount =
+    dashboardSnapshot?.summary.markedSwapCount ?? markedSwaps.count;
   const netEur = incoming.eur - outgoing.eur;
   const netBtc = incoming.btc - outgoing.btc;
-  const reviewCount = records.filter((txn) => txn.status === "review").length;
-  const pendingCount = records.filter((txn) => txn.status === "pending").length;
-  const failedCount = records.filter((txn) => txn.status === "failed").length;
+  const reviewCount =
+    dashboardSnapshot?.summary.review ??
+    records.filter((txn) => txn.status === "review").length;
+  const pendingCount =
+    dashboardSnapshot?.summary.pending ??
+    records.filter((txn) => txn.status === "pending").length;
+  const failedCount =
+    dashboardSnapshot?.summary.failed ??
+    records.filter((txn) => txn.status === "failed").length;
   const chartRecords =
     chartMode === "external"
       ? externalRecords.filter(
@@ -272,13 +290,18 @@ const TransactionWorkbench = ({
             ["incoming", "outgoing"].includes(transactionFlow(txn)),
         )
       : records;
-  const chartRows = buildFlowChartRows(
-    chartRecords,
-    period,
-    currency,
-    candidateFlowOverrides,
-    chartMetric,
-  );
+  const chartRows = dashboardSnapshot
+    ? dashboardFlowChartRows(dashboardSnapshot, currency, chartMetric, chartMode)
+    : buildFlowChartRows(
+        chartRecords,
+        period,
+        currency,
+        candidateFlowOverrides,
+        chartMetric,
+      );
+  const chartTransactionCount = dashboardSnapshot
+    ? dashboardSnapshot.counts[chartMode]
+    : chartRecords.length;
   const activeChartRows = chartRows.filter((row) => flowPointTotal(row) > 0);
   const visibleChartRows = activeChartRows.length ? activeChartRows : chartRows;
   const yDomain = flowAxisDomain(visibleChartRows, chartMetric);
@@ -509,14 +532,14 @@ const TransactionWorkbench = ({
       meta:
         knownSwapCandidateCount === null
           ? t("workbench.meta.unpairedUnknown")
-          : knownSwapCandidateCount > 0 && markedSwaps.count > 0
+          : knownSwapCandidateCount > 0 && markedSwapCount > 0
           ? t("workbench.meta.unpairedAndPaired", {
               unpaired: knownSwapCandidateCount,
-              paired: markedSwaps.count,
+              paired: markedSwapCount,
             })
           : knownSwapCandidateCount > 0
           ? t("workbench.meta.unpaired", { count: knownSwapCandidateCount })
-          : t("workbench.meta.paired", { count: markedSwaps.count }),
+          : t("workbench.meta.paired", { count: markedSwapCount }),
       icon: RefreshCw,
       tone:
         knownSwapCandidateCount === null || knownSwapCandidateCount > 0
@@ -632,7 +655,7 @@ const TransactionWorkbench = ({
               ) : (
                 <p className="text-xs text-muted-foreground">
                   {t(`workbench.chart.subtitle${bucketTitleSuffix}`, {
-                    count: chartRecords.length,
+                    count: chartTransactionCount,
                     buckets: activeChartRows.length,
                   })}
                 </p>

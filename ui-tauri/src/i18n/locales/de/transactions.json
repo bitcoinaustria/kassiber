@@ -3,6 +3,10 @@
     "unavailable": {
       "title": "Transaktionen nicht verfügbar",
       "body": "Kassiber konnte keine echten Transaktionen für das aktuelle Buch lesen."
+    },
+    "resolveError": {
+      "title": "Transaktion konnte nicht geöffnet werden",
+      "body": "Kassiber konnte die vollständigen Transaktionsdetails nicht laden. Wähle die Transaktion erneut aus, um es noch einmal zu versuchen."
     }
   },
   "status": {

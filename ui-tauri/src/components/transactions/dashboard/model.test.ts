@@ -8,6 +8,7 @@ import {
   buildCandidateFlowOverrides,
   buildFlowChartRows,
   buildSwapCandidates,
+  buildTransactionListFilterArgs,
   buildTransferCandidates,
   bucketTransactionDate,
   candidateReferenceReviewType,
@@ -20,11 +21,13 @@ import {
   matchesFlowChartSelection,
   readTransactionDetailParams,
   readTransactionScopeParams,
+  serializeTransactionFilterParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
   resolveAutoPeriodForRecords,
   toDashboardTransaction,
   transactionListPeriodFilter,
+  transactionPeriodDateWindow,
   transactionFlowWithCandidateOverrides,
   upsertAttachmentRecords,
   type AttachmentRecord,
@@ -105,6 +108,20 @@ describe("transaction dashboard chart selection", () => {
         wallet: "Satoshi-Liquid -> Satoshi-Onchain-Multi",
         quick: "missing_price",
         transactionIds: [],
+        period: null,
+        flowChartSelection: null,
+        breakdownSelection: {
+          dimension: "wallet",
+          key: "Satoshi-Liquid -> Satoshi-Onchain-Multi",
+          match: "leg",
+        },
+        table: {
+          status: "all",
+          flow: "all",
+          paymentMethod: "all",
+          fee: "all",
+          sort: null,
+        },
       });
     } finally {
       vi.unstubAllGlobals();
@@ -123,6 +140,16 @@ describe("transaction dashboard chart selection", () => {
         wallet: null,
         quick: "review_queue",
         transactionIds: ["tx-one", "tx-two"],
+        period: null,
+        flowChartSelection: null,
+        breakdownSelection: null,
+        table: {
+          status: "all",
+          flow: "all",
+          paymentMethod: "all",
+          fee: "all",
+          sort: null,
+        },
       });
     } finally {
       vi.unstubAllGlobals();
@@ -135,6 +162,227 @@ describe("transaction dashboard chart selection", () => {
     ).toBeNull();
     expect(transactionListPeriodFilter("1year", [])).toBe("1year");
     expect(transactionListPeriodFilter("all", [])).toBeNull();
+  });
+
+  it("builds exact cluster requests without leaking the broad period", () => {
+    expect(
+      buildTransactionListFilterArgs({
+        period: "30days",
+        transactionIds: ["older-chart-event"],
+        flowChartSelection: null,
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState: {
+          status: "all",
+          flow: "all",
+          paymentMethod: "all",
+          fee: "all",
+          sort: null,
+        },
+      }),
+    ).toEqual({ txids: ["older-chart-event"] });
+  });
+
+  it("uses one exact local-calendar window for charts and list requests", () => {
+    const now = new Date(2024, 2, 31, 12, 30);
+    const window = transactionPeriodDateWindow("3months", now);
+    expect(window).toEqual({
+      since: new Date(2023, 11, 31, 0, 0, 0, 0).toISOString(),
+      until: new Date(2024, 2, 31, 23, 59, 59, 999).toISOString(),
+    });
+    expect(
+      buildTransactionListFilterArgs({
+        period: "3months",
+        transactionIds: [],
+        flowChartSelection: null,
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState: {
+          status: "all",
+          flow: "all",
+          paymentMethod: "all",
+          fee: "all",
+          sort: null,
+        },
+        now,
+      }),
+    ).toEqual(window);
+  });
+
+  it("clamps partial edge buckets to the chart period's exact window", () => {
+    const now = new Date(2026, 6, 18, 12, 30);
+    const tableFilterState = {
+      status: "all",
+      flow: "all",
+      paymentMethod: "all",
+      fee: "all" as const,
+      sort: null,
+    };
+    expect(
+      buildTransactionListFilterArgs({
+        period: "1year",
+        transactionIds: [],
+        flowChartSelection: {
+          id: "1year:2025-07:incoming:external",
+          period: "1year",
+          bucketKey: "2025-07",
+          bucketLabel: "Jul 25",
+          segment: "incoming",
+          mode: "external",
+        },
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState,
+        now,
+      }),
+    ).toMatchObject({
+      since: new Date(2025, 6, 18, 0, 0, 0, 0).toISOString(),
+      until: new Date(2025, 7, 1, 0, 0, 0, -1).toISOString(),
+    });
+    expect(
+      buildTransactionListFilterArgs({
+        period: "30days",
+        transactionIds: [],
+        flowChartSelection: {
+          id: "1year:2026-07:outgoing:external",
+          period: "1year",
+          bucketKey: "2026-07",
+          bucketLabel: "Jul 26",
+          segment: "outgoing",
+          mode: "external",
+        },
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState,
+        now,
+      }),
+    ).toMatchObject({
+      since: new Date(2026, 6, 1).toISOString(),
+      until: new Date(2026, 6, 18, 23, 59, 59, 999).toISOString(),
+    });
+  });
+
+  it("requests the backend amount order for the displayed currency", () => {
+    const base = {
+      period: "all" as const,
+      transactionIds: [],
+      flowChartSelection: null,
+      quickFilter: null,
+      breakdownSelection: null,
+      tableFilterState: {
+        status: "all",
+        flow: "all",
+        paymentMethod: "all",
+        fee: "all" as const,
+        sort: { key: "amount" as const, direction: "asc" as const },
+      },
+    };
+    expect(buildTransactionListFilterArgs({ ...base, currency: "btc" })).toMatchObject({
+      sort: "amount",
+      order: "asc",
+    });
+    expect(buildTransactionListFilterArgs({ ...base, currency: "eur" })).toMatchObject({
+      sort: "fiat-value",
+      order: "asc",
+    });
+  });
+
+  it("round-trips the controlled filter state through URL parameters", () => {
+    const state = {
+      period: "1year" as const,
+      flowChartSelection: null,
+      quickFilter: "review_queue" as const,
+      breakdownSelection: {
+        dimension: "wallet" as const,
+        key: "Cold Storage",
+        match: "leg" as const,
+      },
+      transactionIds: ["tx-one", "tx-two"],
+      table: {
+        status: "review",
+        flow: "outgoing",
+        paymentMethod: "Lightning",
+        fee: "with-fees" as const,
+        sort: { key: "amount" as const, direction: "desc" as const },
+      },
+    };
+    const search = serializeTransactionFilterParams("?tx=detail", state);
+    vi.stubGlobal("window", { location: { search: `?${search}` } });
+    expect(readTransactionScopeParams()).toMatchObject({
+      wallet: "Cold Storage",
+      quick: "review_queue",
+      transactionIds: ["tx-one", "tx-two"],
+      period: "1year",
+      table: state.table,
+    });
+    expect(new URLSearchParams(search).get("tx")).toBe("detail");
+  });
+
+  it("preserves a chart filter's own period when the visible period changes", () => {
+    const search = serializeTransactionFilterParams("", {
+      period: "30days",
+      flowChartSelection: {
+        id: "5years:2024-Q1:swaps:all",
+        period: "5years",
+        bucketKey: "2024-Q1",
+        bucketLabel: "Q1 2024",
+        segment: "swaps",
+        mode: "all",
+      },
+      quickFilter: null,
+      breakdownSelection: null,
+      transactionIds: [],
+      table: {
+        status: "all",
+        flow: "all",
+        paymentMethod: "all",
+        fee: "all",
+        sort: null,
+      },
+    });
+    const parsed = readTransactionScopeParams(search);
+    expect(parsed.period).toBe("30days");
+    expect(parsed.flowChartSelection).toMatchObject({
+      period: "5years",
+      bucketKey: "2024-Q1",
+      segment: "swaps",
+    });
+  });
+
+  it("keeps transaction request filter precedence explicit", () => {
+    expect(
+      buildTransactionListFilterArgs({
+        period: "1year",
+        transactionIds: [],
+        flowChartSelection: {
+          id: "bucket-1",
+          period: "1year",
+          bucketKey: "2026-04",
+          bucketLabel: "Apr 26",
+          segment: "incoming",
+          mode: "external",
+        },
+        quickFilter: "missing_price",
+        breakdownSelection: { dimension: "network", key: "Lightning" },
+        tableFilterState: {
+          status: "review",
+          flow: "outgoing",
+          paymentMethod: "On-chain",
+          fee: "with-fees",
+          sort: { key: "amount", direction: "desc" },
+        },
+      }),
+    ).toEqual({
+      since: new Date(2026, 3, 1).toISOString(),
+      until: new Date(2026, 4, 1, 0, 0, 0, -1).toISOString(),
+      flow: "outgoing",
+      quick: "missing_price",
+      payment_method: "On-chain",
+      status: "review",
+      withFees: true,
+      sort: "amount",
+      order: "desc",
+    });
   });
 
   it("maps chart buckets to daemon date windows", () => {
@@ -423,7 +671,7 @@ describe("transaction dashboard chart selection", () => {
     ).toBe(false);
   });
 
-  it("does not push candidate-backed chart segments into daemon flow filters", () => {
+  it("pushes every chart segment into the matching daemon flow filter", () => {
     const baseSelection: FlowChartSelection = {
       id: "all:all:transfers:all",
       period: "all",
@@ -433,14 +681,14 @@ describe("transaction dashboard chart selection", () => {
       mode: "all",
     };
 
-    expect(flowChartSelectionServerFlow(baseSelection)).toBeNull();
+    expect(flowChartSelectionServerFlow(baseSelection)).toBe("transfer");
     expect(
       flowChartSelectionServerFlow({
         ...baseSelection,
         id: "all:all:swaps:all",
         segment: "swaps",
       }),
-    ).toBeNull();
+    ).toBe("swap");
     expect(
       flowChartSelectionServerFlow({
         ...baseSelection,
@@ -455,6 +703,43 @@ describe("transaction dashboard chart selection", () => {
         segment: "outgoing",
       }),
     ).toBe("outgoing");
+  });
+
+  it("includes candidate legs when server-filtering a candidate-backed bar", () => {
+    expect(
+      buildTransactionListFilterArgs({
+        period: "all",
+        transactionIds: [],
+        flowChartSelection: {
+          id: "all:all:swaps:all",
+          period: "all",
+          bucketKey: null,
+          bucketLabel: "All",
+          segment: "swaps",
+          mode: "all",
+        },
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState: {
+          status: "all",
+          flow: "all",
+          paymentMethod: "all",
+          fee: "all",
+          sort: null,
+        },
+        pairingCandidateRefs: [
+          {
+            in_id: "swap-in",
+            out_id: "swap-out",
+            in_asset: "LBTC",
+            out_asset: "BTC",
+          },
+        ],
+      }),
+    ).toEqual({
+      flow: "swap",
+      candidate_txids: ["swap-in", "swap-out"],
+    });
   });
 
   it("treats transfer candidate legs as transfers in table chart filters", () => {

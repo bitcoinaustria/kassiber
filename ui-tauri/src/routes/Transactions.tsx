@@ -4,10 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { TransactionsDashboard } from "@/components/transactions/dashboard/TransactionsDashboard";
 import {
-  candidateReferenceReviewType,
   readTransactionDetailParams,
   readTransactionScopeParams,
-  type SwapCandidateReference,
 } from "@/components/transactions/dashboard/model";
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon, useDaemonInfinite } from "@/daemon/client";
@@ -18,20 +16,11 @@ import {
 import { MOCK_OVERVIEW } from "@/mocks/seed";
 import { isDaemonDataMode, useUiStore } from "@/store/ui";
 
-interface SuggestEnvelope {
-  candidates: SwapCandidateReference[];
-  counts?: {
-    total?: number;
-  };
-}
-
 interface OverviewSnapshot {
   priceEur?: number | null;
 }
 
 const TRANSACTIONS_PAGE_LIMIT = 100;
-const TRANSACTIONS_WORKBENCH_LIMIT = 500;
-const TRANSACTIONS_WORKBENCH_PAGE_CAP = 4;
 
 function sameDaemonArgs(
   left: Record<string, unknown>,
@@ -56,12 +45,12 @@ export function Transactions() {
   // When a wallet deep link is active (Wallet Detail "Show all" / related
   // links), scope the daemon queries to that wallet instead of filtering the
   // fetched page client-side. Otherwise a wallet whose transactions are older
-  // than the global page/workbench limits would render an empty or truncated
+  // than the current table page would render an empty or truncated
   // table. The daemon `wallet` filter matches by wallet_id / label, so it
   // returns the wallet's complete history (including its transfers).
   //
-  // This is plain React state (seeded from the deep-link param) so the
-  // dropdown/clear mutate it directly and the queries refetch reliably.
+  // This route state mirrors the canonical dashboard controller so query-key
+  // changes refetch immediately while the router URL catches up.
   const [walletScope, setWalletScope] = React.useState<string | null>(
     scopeParams.wallet ?? null,
   );
@@ -72,8 +61,8 @@ export function Transactions() {
   // Transactions link, browser back/forward, or a different wallet deep link —
   // don't remount this route, so re-sync the query scope from the URL whenever
   // its `wallet` param changes (the mount-time seed alone would go stale). A
-  // dropdown pick changes `walletScope` without touching the URL, so this won't
-  // clobber it (scopeParams.wallet is unchanged → effect doesn't fire).
+  // local controller changes also update it directly, so this effect is only
+  // responsible for external/browser navigation.
   React.useEffect(() => {
     setWalletScope(scopeParams.wallet ?? null);
   }, [scopeParams.wallet]);
@@ -101,29 +90,6 @@ export function Transactions() {
   const hasNextTransactionsPage = transactionsQuery.hasNextPage;
   const isFetchingNextTransactionsPage = transactionsQuery.isFetchingNextPage;
   const fetchNextTransactionsPage = transactionsQuery.fetchNextPage;
-  const workbenchQuery = useDaemonInfinite<TransactionsList>(
-    "ui.transactions.list",
-    {
-      limit: TRANSACTIONS_WORKBENCH_LIMIT,
-      ...(walletScope ? { wallet: walletScope } : {}),
-    },
-    (lastPage) => lastPage.data?.nextCursor ?? undefined,
-  );
-  const workbenchPageCount = workbenchQuery.data?.pages.length ?? 0;
-  React.useEffect(() => {
-    if (
-      workbenchQuery.hasNextPage &&
-      !workbenchQuery.isFetchingNextPage &&
-      workbenchPageCount < TRANSACTIONS_WORKBENCH_PAGE_CAP
-    ) {
-      void workbenchQuery.fetchNextPage();
-    }
-  }, [
-    workbenchQuery.fetchNextPage,
-    workbenchQuery.hasNextPage,
-    workbenchQuery.isFetchingNextPage,
-    workbenchPageCount,
-  ]);
   const focusedTransaction = useDaemon<{
     transaction?: TransactionsList["txs"][number] | null;
   }>(
@@ -132,30 +98,8 @@ export function Transactions() {
     { enabled: Boolean(detailParams.transactionId) },
   );
   const overview = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
-  const swapQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest");
   const firstPage = transactionsQuery.data?.pages[0];
-  const workbenchPages =
-    workbenchQuery.data?.pages
-      .map((page) => page.data)
-      .filter((page): page is TransactionsList => Boolean(page)) ?? [];
-  const workbenchData = React.useMemo<TransactionsList | null>(() => {
-    if (!workbenchPages.length) return null;
-    const latest = workbenchPages[workbenchPages.length - 1];
-    return {
-      ...latest,
-      txs: workbenchPages.flatMap((page) => page.txs),
-      hasMore: Boolean(latest.hasMore),
-      nextCursor: latest.nextCursor ?? null,
-    };
-  }, [workbenchPages]);
   const hasLiveTransactions =
-    Boolean(
-      workbenchQuery.data?.pages.some(
-        (page) => page.kind === "ui.transactions.list",
-      ),
-    ) &&
-    Boolean(workbenchData);
-  const hasLiveTableTransactions =
     firstPage?.kind === "ui.transactions.list" && Boolean(firstPage.data);
   const liveTransactions = React.useMemo<TransactionsList | null>(() => {
     const pages =
@@ -178,21 +122,23 @@ export function Transactions() {
     isFetchingNextTransactionsPage,
   ]);
   const transactions: TransactionsList =
-    hasLiveTransactions && workbenchData
-      ? workbenchData
-      : daemonBacked
-        ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
-        : MOCK_TRANSACTIONS;
+    liveTransactions
+      ? liveTransactions
+      : hasLiveTransactions && firstPage?.data
+        ? firstPage.data
+        : daemonBacked
+          ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
+          : MOCK_TRANSACTIONS;
   const tableTransactions: TransactionsList =
     liveTransactions ??
-    (hasLiveTableTransactions ? firstPage?.data : null) ??
+    (hasLiveTransactions ? firstPage?.data : null) ??
     (daemonBacked
       ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
       : transactions);
   const hasMoreTransactions = Boolean(hasNextTransactionsPage);
   const shouldShowLiveSkeleton =
     daemonBacked &&
-    workbenchQuery.isLoading &&
+    transactionsQuery.isLoading &&
     !hasLiveTransactions;
 
   if (shouldShowLiveSkeleton) {
@@ -204,8 +150,8 @@ export function Transactions() {
       <ScreenNotice
         title={t("route.unavailable.title")}
         body={
-          workbenchQuery.error instanceof Error
-            ? workbenchQuery.error.message
+          transactionsQuery.error instanceof Error
+            ? transactionsQuery.error.message
             : t("route.unavailable.body")
         }
       />
@@ -222,39 +168,14 @@ export function Transactions() {
         : daemonBacked
           ? null
           : MOCK_OVERVIEW.priceEur;
-  const hasLiveSwapSuggestions =
-    swapQuery.data?.kind === "ui.transfers.suggest" &&
-    Boolean(swapQuery.data.data);
-  const pairingCandidateRefs =
-    hasLiveSwapSuggestions && swapQuery.data?.data
-      ? swapQuery.data.data.candidates
-      : hasLiveTransactions
-        ? []
-      : undefined;
-  const swapCandidateTotal =
-    hasLiveSwapSuggestions && swapQuery.data?.data
-      ? swapQuery.data.data.candidates.filter(
-          (candidate) => candidateReferenceReviewType(candidate) === "swap",
-        ).length
-      : hasLiveTransactions
-        ? null
-        : undefined;
-
   return (
     <TransactionsDashboard
-      // Re-seed the dashboard's filter state (breakdownSelection / quickFilter)
-      // when the URL scope changes on a same-route navigation. A dropdown pick
-      // mutates client state without touching the URL, so the key is stable and
-      // the dashboard is not remounted in that case.
-      key={`${scopeParams.wallet ?? ""}::${scopeParams.quick ?? ""}`}
       transactions={transactions}
       tableTransactions={tableTransactions}
       nowRate={nowRate}
-      pairingCandidateRefs={pairingCandidateRefs}
-      swapCandidateTotal={swapCandidateTotal}
       isDataRefreshing={
         hasLiveTransactions &&
-        (workbenchQuery.isFetching || transactionsQuery.isFetching) &&
+        transactionsQuery.isFetching &&
         !isFetchingNextTransactionsPage
       }
       hasMoreTransactions={hasMoreTransactions}
@@ -267,9 +188,7 @@ export function Transactions() {
       focusedTransaction={focusedTransaction.data?.data?.transaction ?? null}
       deepLinkedTransactionId={detailParams.transactionId}
       deepLinkedTransactionTab={detailParams.tab}
-      deepLinkedWallet={scopeParams.wallet}
-      deepLinkedQuickFilter={scopeParams.quick}
-      deepLinkedTransactionIds={scopeParams.transactionIds}
+      scopeParams={scopeParams}
       onWalletScopeChange={setWalletScope}
       onTableFilterArgsChange={updateTableFilterArgs}
     />
