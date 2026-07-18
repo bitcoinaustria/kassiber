@@ -73,10 +73,10 @@ def assign_historical_dates(
 ) -> dict[str, str]:
     """Spread ``stable_keys`` across ``[window_start, window_end]`` deterministically.
 
-    Keys are sorted, then placed at evenly-spaced slots across the window with a
-    per-key seeded jitter (bounded to its slot) and a per-key business-hours
-    timestamp. The mapping is a pure function of ``(seed, key)`` given a stable
-    key set, so re-runs are idempotent. Returns ``{key: iso8601}``.
+    Each key gets a hash-derived offset across the window and a hash-derived
+    business-hours timestamp. The assignment depends only on the fixed window,
+    seed, and key, so adding or removing other keys cannot re-date existing
+    records. Returns ``{key: iso8601}``.
     """
     start = _parse_iso(window_start)
     end = _parse_iso(window_end)
@@ -84,18 +84,13 @@ def assign_historical_dates(
         raise ValueError("window_start must be strictly before window_end")
 
     keys = sorted({key for key in stable_keys if key})
-    count = len(keys)
-    if count == 0:
+    if not keys:
         return {}
 
-    span_seconds = (end - start).total_seconds()
-    slot = span_seconds / (2 * count)
+    span_seconds = int((end - start).total_seconds())
     result: dict[str, str] = {}
-    for index, key in enumerate(keys):
-        base = span_seconds * (index + 0.5) / count
-        # Deterministic jitter in [-slot, +slot] so rows are not perfectly even.
-        jitter = ((_key_hash(key, seed, "jitter") % 20_001) / 20_000.0 - 0.5) * 2 * slot
-        offset = max(0.0, min(span_seconds, base + jitter))
+    for key in keys:
+        offset = _key_hash(key, seed, "offset") % (span_seconds + 1)
         moment = start + timedelta(seconds=offset)
         # Business-hours time-of-day (06:00–17:59) so rows read like real sales.
         hour = 6 + (_key_hash(key, seed, "hour") % 12)

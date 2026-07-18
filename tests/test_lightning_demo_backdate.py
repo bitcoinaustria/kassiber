@@ -46,6 +46,11 @@ class AssignHistoricalDatesTests(unittest.TestCase):
         second = assign_historical_dates(list(reversed(keys)), WINDOW_START, WINDOW_END, seed=7)
         self.assertEqual(first, second)
 
+    def test_existing_key_is_stable_when_key_set_grows(self) -> None:
+        original = assign_historical_dates(["b"], WINDOW_START, WINDOW_END, seed=7)
+        expanded = assign_historical_dates(["a", "b"], WINDOW_START, WINDOW_END, seed=7)
+        self.assertEqual(expanded["b"], original["b"])
+
     def test_seed_changes_assignment(self) -> None:
         keys = [f"hash{i:02d}" for i in range(25)]
         a = assign_historical_dates(keys, WINDOW_START, WINDOW_END, seed=0)
@@ -308,6 +313,51 @@ class BackdateProfileScopeTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def _insert_main_invoice(self, data_root: Path, suffix: str, payment_hash: str) -> None:
+        now = "2026-06-30T00:00:00Z"
+        conn = open_db(data_root)
+        try:
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, confirmed_at, direction, asset, amount, kind,
+                    raw_json, payment_hash, created_at
+                ) VALUES(?, 'ws', 'p-main', 'w-main', ?, ?, ?, ?, 'inbound',
+                         'BTC', 1000, 'cln_invoice', '{}', ?, ?)
+                """,
+                (
+                    f"tx-{suffix}",
+                    f"ext-{suffix}",
+                    f"fp-{suffix}",
+                    now,
+                    now,
+                    payment_hash,
+                    now,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO lightning_node_records(
+                    id, workspace_id, profile_id, wallet_id, backend_name, node_id,
+                    record_type, external_id, occurred_at, amount_msat, currency,
+                    payment_hash, raw_json, first_seen_at, updated_at
+                ) VALUES(?, 'ws', 'p-main', 'w-main', 'cln', 'node', 'invoice', ?, ?,
+                         1000, 'bc', ?, '{}', ?, ?)
+                """,
+                (
+                    f"rec-{suffix}",
+                    f"rec-ext-{suffix}",
+                    now,
+                    payment_hash,
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def test_valid_labels_backdate_only_the_matching_profile(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kassiber-ln-backdate-") as tmp:
             root = Path(tmp)
@@ -330,6 +380,38 @@ class BackdateProfileScopeTests(unittest.TestCase):
             self.assertNotEqual(dates["rec-p-main"], "2026-06-30T00:00:00Z")
             self.assertEqual(dates["tx-p-other"], "2026-06-30T00:00:00Z")
             self.assertEqual(dates["rec-p-other"], "2026-06-30T00:00:00Z")
+
+    def test_incremental_rerun_preserves_existing_transaction_and_node_dates(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kassiber-ln-backdate-") as tmp:
+            root = Path(tmp)
+            data_root = root / "state"
+            self._seed_book(data_root)
+            scenario = self._write_scenario(root)
+
+            backdate_ln_records(
+                data_root,
+                str(scenario),
+                workspace_label="Books",
+                profile_label="Main",
+                seed=1,
+            )
+            original = self._dates(data_root)
+
+            # This hash sorts before the existing "hash-p-main" key. The old
+            # collection-sized slot algorithm moved the existing assignment.
+            self._insert_main_invoice(data_root, "new", "a-new-hash")
+            backdate_ln_records(
+                data_root,
+                str(scenario),
+                workspace_label="Books",
+                profile_label="Main",
+                seed=1,
+            )
+            expanded = self._dates(data_root)
+
+            self.assertEqual(expanded["tx-p-main"], original["tx-p-main"])
+            self.assertEqual(expanded["rec-p-main"], original["rec-p-main"])
+            self.assertEqual(expanded["tx-new"], expanded["rec-new"])
 
     def test_unresolved_requested_scope_raises_without_rewriting_profiles(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kassiber-ln-backdate-") as tmp:
