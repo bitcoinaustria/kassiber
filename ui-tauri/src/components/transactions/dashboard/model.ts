@@ -662,6 +662,18 @@ function initialPeriodFromUrl(fallback: PeriodKey = "1year"): PeriodKey {
   return normalizePeriodParam(params.get("period")) ?? fallback;
 }
 
+function transactionListPeriodFilter(
+  period: ResolvedPeriodKey,
+  exactTransactionIds: readonly string[],
+): ResolvedPeriodKey | null {
+  // A chart cluster is already an exact, finite scope. Combining it with the
+  // Transactions screen's broad period scope can discard every selected row
+  // before the client-side ID filter sees it (notably when the overview chart
+  // is anchored to the book's latest activity rather than today's date).
+  if (exactTransactionIds.length > 0 || period === "all") return null;
+  return period;
+}
+
 function periodLimit(period: ResolvedPeriodKey) {
   if (period === "30days") return 10;
   if (period === "3months") return 18;
@@ -1559,6 +1571,7 @@ export {
   sortTransactionsByDateDesc,
   sumByFlow,
   toDashboardTransaction,
+  transactionListPeriodFilter,
   transactionFlowWithCandidateOverrides,
   upsertAttachmentRecords,
   transactionRecords,

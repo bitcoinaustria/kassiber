@@ -24,6 +24,7 @@ import {
   replaceAttachmentRecord,
   resolveAutoPeriodForRecords,
   toDashboardTransaction,
+  transactionListPeriodFilter,
   transactionFlowWithCandidateOverrides,
   upsertAttachmentRecords,
   type AttachmentRecord,
@@ -126,6 +127,14 @@ describe("transaction dashboard chart selection", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("lets an exact chart cluster override the broad transaction period", () => {
+    expect(
+      transactionListPeriodFilter("30days", ["older-chart-event"]),
+    ).toBeNull();
+    expect(transactionListPeriodFilter("1year", [])).toBe("1year");
+    expect(transactionListPeriodFilter("all", [])).toBeNull();
   });
 
   it("maps chart buckets to daemon date windows", () => {

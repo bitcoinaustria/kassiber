@@ -48,6 +48,7 @@ import {
   recordsForPeriod,
   resolveAutoPeriodForRecords,
   sortTransactionsByDateDesc,
+  transactionListPeriodFilter,
   type FlowChartSelection,
   type PeriodKey,
   type ResolvedPeriodKey,
@@ -337,11 +338,9 @@ const TransactionsDashboard = ({
     [visibleTableRecords, pairingCandidateRefs],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
+    // Period controls the data window only. Keep the user's active chart,
+    // quick, breakdown, and table filters when that window changes.
     setPeriod(nextPeriod);
-    setFlowChartSelection(null);
-    setQuickFilter(null);
-    setBreakdownSelection(null);
-    setResetTableFiltersToken((token) => token + 1);
   }, []);
   React.useEffect(() => {
     if (previousBookKey.current === bookKey) return;
@@ -382,9 +381,9 @@ const TransactionsDashboard = ({
 
   // Keep the parent's wallet scope (which server-scopes the ui.transactions.list
   // queries) in lockstep with the wallet selection. Deriving it from
-  // breakdownSelection means EVERY clear path propagates — "Clear all", period
-  // change, chart / quick-filter resets — not just the dropdown's own clear, so
-  // the chip and the queried scope never disagree.
+  // breakdownSelection means every clear path propagates — "Clear all", book
+  // changes, and chart / quick-filter resets — not just the dropdown's own
+  // clear, so the chip and the queried scope never disagree.
   React.useEffect(() => {
     onWalletScopeChange?.(
       breakdownSelection?.dimension === "wallet" &&
@@ -396,7 +395,11 @@ const TransactionsDashboard = ({
 
   React.useEffect(() => {
     const args: Record<string, unknown> = {};
-    if (resolvedPeriod !== "all") args.period = resolvedPeriod;
+    const periodFilter = transactionListPeriodFilter(
+      resolvedPeriod,
+      deepLinkedTransactionIds,
+    );
+    if (periodFilter) args.period = periodFilter;
     if (deepLinkedTransactionIds.length > 0) {
       args.txids = deepLinkedTransactionIds;
     }
