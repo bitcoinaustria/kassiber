@@ -1983,6 +1983,11 @@ export function activityMarkerView(
 }
 
 const DEFAULT_ACTIVITY_MARKER_CLUSTER_TARGET = 36;
+const MAX_ACTIVITY_CLUSTER_CANDIDATES = 256;
+// A cluster becomes both an SVG fanout and an exact `txids` URL payload.
+// Chunk dense runs so neither surface grows without bound while every event
+// remains reachable through a neighboring cluster marker.
+export const MAX_ACTIVITY_MARKER_GROUP_SIZE = 64;
 
 function markerGroupToleranceBtc(balanceBtc: number) {
   return Math.max(Math.abs(balanceBtc) * 0.006, 0.00005);
@@ -2036,19 +2041,32 @@ export function clusterActivityMarkers(
   for (const marker of ordered) {
     const markerBalance = marker.markerBalanceBtc ?? marker.balanceBtc;
     const markerTime = marker.sortTimeMs;
-    const group = groups.find((candidate) => {
+    let group: TreasuryChartPoint[] | undefined;
+    let candidatesChecked = 0;
+    for (
+      let index = groups.length - 1;
+      index >= 0 && candidatesChecked < MAX_ACTIVITY_CLUSTER_CANDIDATES;
+      index -= 1, candidatesChecked += 1
+    ) {
+      const candidate = groups[index];
+      if (!candidate || candidate.length >= MAX_ACTIVITY_MARKER_GROUP_SIZE) {
+        continue;
+      }
       const anchor = candidate[0];
-      if (!anchor) return false;
+      if (!anchor) continue;
       const anchorBalance = anchor.markerBalanceBtc ?? anchor.balanceBtc;
       const sameAnchor = String(anchor.date) === String(marker.date);
       const nearbyDenseTime =
         densityBucketMs > 0 && Math.abs(markerTime - anchor.sortTimeMs) <= densityBucketMs;
-      return (
+      if (
         (sameAnchor || nearbyDenseTime) &&
         Math.abs(markerBalance - anchorBalance) <=
           markerGroupToleranceBtc(anchorBalance)
-      );
-    });
+      ) {
+        group = candidate;
+        break;
+      }
+    }
     if (group) {
       group.push(marker);
     } else {

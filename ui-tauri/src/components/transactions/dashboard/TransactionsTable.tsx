@@ -127,6 +127,7 @@ import {
   type FlowChartSelection,
   type JournalEventsData,
   type TableQuickFilter,
+  type TransactionTableFilterState,
 } from "./model";
 
 type LoansList = {
@@ -169,19 +170,7 @@ function loanRoleBadgeClassName(role: string): string {
   return "border-amber-500/40 text-amber-700 dark:text-amber-400";
 }
 
-type TableSortKey = "date" | "amount";
-type TableSortDirection = "asc" | "desc";
-type TableSortState = {
-  key: TableSortKey;
-  direction: TableSortDirection;
-} | null;
-export type TransactionTableFilterState = {
-  status: string;
-  flow: string;
-  paymentMethod: string;
-  fee: FeeFilter;
-  sort: TableSortState;
-};
+type TableSortState = TransactionTableFilterState["sort"];
 
 const EMPTY_TRANSACTION_ID_FILTER: string[] = [];
 
@@ -211,7 +200,7 @@ const TransactionsTable = ({
   quickFilter,
   breakdownSelection,
   transactionIdFilter = EMPTY_TRANSACTION_ID_FILTER,
-  fullRecords = records,
+  transactionSetRecords = records,
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
@@ -237,7 +226,7 @@ const TransactionsTable = ({
   quickFilter: TableQuickFilter | null;
   breakdownSelection: BreakdownSelection | null;
   transactionIdFilter?: string[];
-  fullRecords?: Transaction[];
+  transactionSetRecords?: Transaction[];
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
@@ -976,12 +965,11 @@ const TransactionsTable = ({
     const selectedTransactionIds = new Set(transactionIdFilter);
     const isTxidFilterActive = selectedTransactionIds.size > 0;
 
-    // When the transaction ID filter (cluster events) is active, also search the
-    // full (unfiltered) records for matching transactions — they may be outside the
-    // current period filter.  If found in the full set, include them; otherwise fall
-    // back to the period-filtered records for the normal scoped lookup.
-    const lookupRecords = isTxidFilterActive && fullRecords !== records
-      ? fullRecords
+    // Exact cluster selections can include transactions outside the broad period.
+    // Search the complete transaction set returned for that selection before
+    // applying the remaining explicit table filters.
+    const lookupRecords = isTxidFilterActive && transactionSetRecords !== records
+      ? transactionSetRecords
       : records;
 
     const filtered = lookupRecords.filter((txn) => {
@@ -1090,7 +1078,7 @@ const TransactionsTable = ({
     });
   }, [
     records,
-    fullRecords,
+    transactionSetRecords,
     transactionIdFilter,
     getDraft,
     chartSelection,

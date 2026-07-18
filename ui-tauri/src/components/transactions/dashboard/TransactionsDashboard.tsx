@@ -33,28 +33,24 @@ import {
   mockNewTransactionWalletSourceOptions,
   type NewTransactionDraft,
 } from "@/components/transactions";
-import {
-  TransactionsTable,
-  type TransactionTableFilterState,
-} from "./TransactionsTable";
+import { TransactionsTable } from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
   availablePeriodKeysForRecords,
   buildCandidateFlowOverrides,
+  buildTransactionListFilterArgs,
   dashboardRecordsFromTxs,
-  flowChartSelectionDateWindow,
-  flowChartSelectionServerFlow,
   initialPeriodFromUrl,
   recordsForPeriod,
   resolveAutoPeriodForRecords,
   sortTransactionsByDateDesc,
-  transactionListPeriodFilter,
   type FlowChartSelection,
   type PeriodKey,
   type ResolvedPeriodKey,
   type SwapCandidateReference,
   type TableQuickFilter,
   type BreakdownSelection,
+  type TransactionTableFilterState,
 } from "./model";
 
 interface TransactionsExportResult {
@@ -329,13 +325,9 @@ const TransactionsDashboard = ({
     }
     return [focusedRecord, ...tablePeriodRecords];
   }, [focusedRecord, tablePeriodRecords]);
-  const visibleTableRecords = React.useMemo(() => {
-    return tableRecords;
-  }, [tableRecords]);
   const tableCandidateFlows = React.useMemo(
-    () =>
-      buildCandidateFlowOverrides(visibleTableRecords, pairingCandidateRefs),
-    [visibleTableRecords, pairingCandidateRefs],
+    () => buildCandidateFlowOverrides(tableRecords, pairingCandidateRefs),
+    [tableRecords, pairingCandidateRefs],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
     // Period controls the data window only. Keep the user's active chart,
@@ -394,58 +386,16 @@ const TransactionsDashboard = ({
   }, [breakdownSelection, onWalletScopeChange]);
 
   React.useEffect(() => {
-    const args: Record<string, unknown> = {};
-    const periodFilter = transactionListPeriodFilter(
-      resolvedPeriod,
-      deepLinkedTransactionIds,
+    onTableFilterArgsChange?.(
+      buildTransactionListFilterArgs({
+        period: resolvedPeriod,
+        transactionIds: deepLinkedTransactionIds,
+        flowChartSelection,
+        quickFilter,
+        breakdownSelection,
+        tableFilterState,
+      }),
     );
-    if (periodFilter) args.period = periodFilter;
-    if (deepLinkedTransactionIds.length > 0) {
-      args.txids = deepLinkedTransactionIds;
-    }
-
-    if (flowChartSelection) {
-      const window = flowChartSelectionDateWindow(flowChartSelection);
-      if (window) {
-        args.since = window.since;
-        args.until = window.until;
-        delete args.period;
-      }
-      const serverFlow = flowChartSelectionServerFlow(flowChartSelection);
-      if (serverFlow) args.flow = serverFlow;
-      if (flowChartSelection.mode === "external" && !flowChartSelection.segment) {
-        args.quick = "external_flow";
-      }
-    }
-
-    if (quickFilter) args.quick = quickFilter;
-    if (breakdownSelection?.dimension === "network") {
-      args.payment_method = breakdownSelection.key;
-    }
-    if (
-      breakdownSelection?.dimension === "wallet" &&
-      breakdownSelection.match !== "leg" &&
-      !breakdownSelection.key.includes("→") &&
-      !breakdownSelection.key.includes("->")
-    ) {
-      args.wallet = breakdownSelection.key;
-    }
-
-    if (tableFilterState.status !== "all") args.status = tableFilterState.status;
-    if (tableFilterState.flow !== "all") args.flow = tableFilterState.flow;
-    if (tableFilterState.paymentMethod !== "all") {
-      args.payment_method = tableFilterState.paymentMethod;
-    }
-    if (tableFilterState.fee === "with-fees") args.withFees = true;
-    if (tableFilterState.sort?.key === "date") {
-      args.sort = "occurred-at";
-      args.order = tableFilterState.sort.direction;
-    } else if (tableFilterState.sort?.key === "amount") {
-      args.sort = "amount";
-      args.order = tableFilterState.sort.direction;
-    }
-
-    onTableFilterArgsChange?.(args);
   }, [
     breakdownSelection,
     deepLinkedTransactionIds,
@@ -604,8 +554,8 @@ const TransactionsDashboard = ({
         )}
       >
         <TransactionsTable
-          records={visibleTableRecords}
-          fullRecords={tableSourceRecords}
+          records={tableRecords}
+          transactionSetRecords={tableSourceRecords}
           hideSensitive={hideSensitive}
           currency={currency}
           nowRate={nowRate}

@@ -8,6 +8,7 @@ import {
   buildCandidateFlowOverrides,
   buildFlowChartRows,
   buildSwapCandidates,
+  buildTransactionListFilterArgs,
   buildTransferCandidates,
   bucketTransactionDate,
   candidateReferenceReviewType,
@@ -135,6 +136,61 @@ describe("transaction dashboard chart selection", () => {
     ).toBeNull();
     expect(transactionListPeriodFilter("1year", [])).toBe("1year");
     expect(transactionListPeriodFilter("all", [])).toBeNull();
+  });
+
+  it("builds exact cluster requests without leaking the broad period", () => {
+    expect(
+      buildTransactionListFilterArgs({
+        period: "30days",
+        transactionIds: ["older-chart-event"],
+        flowChartSelection: null,
+        quickFilter: null,
+        breakdownSelection: null,
+        tableFilterState: {
+          status: "all",
+          flow: "all",
+          paymentMethod: "all",
+          fee: "all",
+          sort: null,
+        },
+      }),
+    ).toEqual({ txids: ["older-chart-event"] });
+  });
+
+  it("keeps transaction request filter precedence explicit", () => {
+    expect(
+      buildTransactionListFilterArgs({
+        period: "1year",
+        transactionIds: [],
+        flowChartSelection: {
+          id: "bucket-1",
+          period: "1year",
+          bucketKey: "2026-04",
+          bucketLabel: "Apr 26",
+          segment: "incoming",
+          mode: "external",
+        },
+        quickFilter: "missing_price",
+        breakdownSelection: { dimension: "network", key: "Lightning" },
+        tableFilterState: {
+          status: "review",
+          flow: "outgoing",
+          paymentMethod: "On-chain",
+          fee: "with-fees",
+          sort: { key: "amount", direction: "desc" },
+        },
+      }),
+    ).toEqual({
+      since: new Date(2026, 3, 1).toISOString(),
+      until: new Date(2026, 4, 1, 0, 0, 0, -1).toISOString(),
+      flow: "outgoing",
+      quick: "missing_price",
+      payment_method: "On-chain",
+      status: "review",
+      withFees: true,
+      sort: "amount",
+      order: "desc",
+    });
   });
 
   it("maps chart buckets to daemon date windows", () => {

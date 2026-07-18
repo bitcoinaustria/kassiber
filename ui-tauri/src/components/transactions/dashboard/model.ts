@@ -85,6 +85,28 @@ type BreakdownSelection = {
   match?: "exact" | "leg";
 };
 
+type FeeFilter = "all" | "with-fees";
+type TransactionTableSortState = {
+  key: "date" | "amount";
+  direction: "asc" | "desc";
+} | null;
+type TransactionTableFilterState = {
+  status: string;
+  flow: string;
+  paymentMethod: string;
+  fee: FeeFilter;
+  sort: TransactionTableSortState;
+};
+
+type TransactionListFilterInput = {
+  period: ResolvedPeriodKey;
+  transactionIds: readonly string[];
+  flowChartSelection: FlowChartSelection | null;
+  quickFilter: TableQuickFilter | null;
+  breakdownSelection: BreakdownSelection | null;
+  tableFilterState: TransactionTableFilterState;
+};
+
 type FlowChartClickData = {
   payload?: FlowChartPoint;
   activePayload?: Array<{ payload?: FlowChartPoint }>;
@@ -672,6 +694,63 @@ function transactionListPeriodFilter(
   // is anchored to the book's latest activity rather than today's date).
   if (exactTransactionIds.length > 0 || period === "all") return null;
   return period;
+}
+
+function buildTransactionListFilterArgs({
+  period,
+  transactionIds,
+  flowChartSelection,
+  quickFilter,
+  breakdownSelection,
+  tableFilterState,
+}: TransactionListFilterInput): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  const periodFilter = transactionListPeriodFilter(period, transactionIds);
+  if (periodFilter) args.period = periodFilter;
+  if (transactionIds.length > 0) args.txids = transactionIds;
+
+  if (flowChartSelection) {
+    const window = flowChartSelectionDateWindow(flowChartSelection);
+    if (window) {
+      args.since = window.since;
+      args.until = window.until;
+      delete args.period;
+    }
+    const serverFlow = flowChartSelectionServerFlow(flowChartSelection);
+    if (serverFlow) args.flow = serverFlow;
+    if (flowChartSelection.mode === "external" && !flowChartSelection.segment) {
+      args.quick = "external_flow";
+    }
+  }
+
+  if (quickFilter) args.quick = quickFilter;
+  if (breakdownSelection?.dimension === "network") {
+    args.payment_method = breakdownSelection.key;
+  }
+  if (
+    breakdownSelection?.dimension === "wallet" &&
+    breakdownSelection.match !== "leg" &&
+    !breakdownSelection.key.includes("→") &&
+    !breakdownSelection.key.includes("->")
+  ) {
+    args.wallet = breakdownSelection.key;
+  }
+
+  if (tableFilterState.status !== "all") args.status = tableFilterState.status;
+  if (tableFilterState.flow !== "all") args.flow = tableFilterState.flow;
+  if (tableFilterState.paymentMethod !== "all") {
+    args.payment_method = tableFilterState.paymentMethod;
+  }
+  if (tableFilterState.fee === "with-fees") args.withFees = true;
+  if (tableFilterState.sort?.key === "date") {
+    args.sort = "occurred-at";
+    args.order = tableFilterState.sort.direction;
+  } else if (tableFilterState.sort?.key === "amount") {
+    args.sort = "amount";
+    args.order = tableFilterState.sort.direction;
+  }
+
+  return args;
 }
 
 function periodLimit(period: ResolvedPeriodKey) {
@@ -1327,8 +1406,6 @@ function flowAxisDomain(
   return [-maxAbs * 1.12, maxAbs * 1.12];
 }
 
-type FeeFilter = "all" | "with-fees";
-
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
 
@@ -1528,6 +1605,7 @@ export {
   availablePeriodKeysForRecords,
   breakdownSelectionLabel,
   bucketTransactionDate,
+  buildTransactionListFilterArgs,
   buildBreakdown,
   buildCandidateFlowOverrides,
   buildFlowChartRows,
@@ -1597,4 +1675,5 @@ export type {
   ResolvedPeriodKey,
   SwapCandidate,
   TableQuickFilter,
+  TransactionTableFilterState,
 };

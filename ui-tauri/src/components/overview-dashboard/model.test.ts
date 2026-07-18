@@ -24,6 +24,7 @@ import {
   linearAxisTicks,
   logAxisTicks,
   logSafeTreasuryPoints,
+  MAX_ACTIVITY_MARKER_GROUP_SIZE,
   latestPortfolioBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
@@ -629,6 +630,51 @@ describe("overview treasury chart", () => {
           .filter(Boolean),
       ),
     ).toHaveLength(64);
+  });
+
+  it("bounds each cluster payload without dropping activity events", () => {
+    const baseTime = Date.parse("2026-01-01T00:00:00Z");
+    const markers = Array.from(
+      { length: MAX_ACTIVITY_MARKER_GROUP_SIZE * 2 + 1 },
+      (_, index) => ({
+        date: "2026-01-01",
+        month: "Jan",
+        detailLabel: "Jan",
+        thisYear: 100_000,
+        balanceBtc: 28,
+        valueEur: 100_000,
+        costBasisEur: 80_000,
+        unrealizedEur: 20_000,
+        bitcoinPriceEur: 100_000,
+        avgCostEur: 80_000,
+        brushBalanceBtc: 28,
+        reserveValueEur: 100_000,
+        activityBtc: 0.01,
+        activityCount: 1,
+        activityValueEur: 1_000,
+        eventSize: 0.01,
+        eventFlow: "incoming" as const,
+        eventTransactionId: `tx-${index}`,
+        markerBalanceBtc: 28,
+        sortTimeMs: baseTime + index * 60_000,
+        isActivityEvent: true,
+      }),
+    ) satisfies TreasuryChartPoint[];
+
+    const clustered = clusterActivityMarkers(markers, { maxVisibleMarkers: 16 });
+    const groupedPoints = clustered.flatMap((point) =>
+      point.markerGroupedPoints ?? [point],
+    );
+
+    expect(clustered).toHaveLength(3);
+    expect(
+      Math.max(
+        ...clustered.map((point) => point.markerGroupedPoints?.length ?? 1),
+      ),
+    ).toBe(MAX_ACTIVITY_MARKER_GROUP_SIZE);
+    expect(groupedPoints.map((point) => point.eventTransactionId)).toHaveLength(
+      markers.length,
+    );
   });
 });
 
