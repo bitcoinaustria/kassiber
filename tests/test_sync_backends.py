@@ -2238,6 +2238,10 @@ class SyncBackendsTest(unittest.TestCase):
                     "lastblock": "bb" * 32,
                     "removed": [],
                 }
+            if method == "listtransactions":
+                return []
+            if method == "getbestblockhash":
+                return "bb" * 32
             if method == "listunspent":
                 return []
             raise AssertionError(f"Unexpected RPC call: {(method, params)!r}")
@@ -2324,6 +2328,10 @@ class SyncBackendsTest(unittest.TestCase):
                     "lastblock": "bb" * 32,
                     "removed": [],
                 }
+            if method == "listtransactions":
+                return []
+            if method == "getbestblockhash":
+                return "bb" * 32
             if method == "listunspent":
                 return []
             raise AssertionError(f"Unexpected RPC call: {(method, params)!r}")

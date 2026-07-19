@@ -134,6 +134,7 @@ def _create_replay_book(conn, data_root: Path, *, core_wallet: str, addresses: l
             "network": "regtest",
             "addresses": list(addresses),
         },
+        wallet_id=f"replay-{core_wallet}",
     )
     runtime_config = backend_config.merge_db_backends(
         conn,
