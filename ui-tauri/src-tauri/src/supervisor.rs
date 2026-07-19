@@ -180,6 +180,7 @@ fn is_sensitive_key(key: &str) -> bool {
         "api_key",
         "auth_header",
         "auth_response",
+        "blinding",
         "cookie",
         "descriptor",
         "mnemonic",
@@ -278,6 +279,9 @@ fn redact_sensitive_word(word: &str) -> (String, bool) {
         "api-key",
         "auth_header",
         "auth-header",
+        "blinding_key",
+        "blinding-key",
+        "blinding",
         "cookie",
         "descriptor",
         "mnemonic",
@@ -1820,11 +1824,12 @@ mod tests {
         let error = SupervisorError::new("internal", "failed")
             .details(json!({
                 "api_key": "sk-detail-secret",
+                "blinding_key": "slip77-detail-secret",
                 "mnemonic": "abandon abandon abandon",
                 "line": "token=btcpay-secret Bearer openai-secret descriptor=wpkh(xpub661MyMwAqRbcF12345678901234567890) recovery_phrase=legal winner thank"
             }))
             .with_stderr_tail(
-                "api_key=sk-stderr-secret Bearer stderr-secret passphrase_secret=correct seed_phrase=letter advice cage raw xpub661MyMwAqRbcF12345678901234567890".to_string(),
+                "api_key=sk-stderr-secret blinding=slip77-stderr-secret Bearer stderr-secret passphrase_secret=correct seed_phrase=letter advice cage raw xpub661MyMwAqRbcF12345678901234567890".to_string(),
             );
         let encoded = serde_json::to_string(&error.details).expect("details json");
         assert!(!encoded.contains("abandon"));
@@ -1833,6 +1838,8 @@ mod tests {
         assert!(!encoded.contains("letter"));
         assert!(!encoded.contains("advice"));
         assert!(!encoded.contains("sk-detail-secret"));
+        assert!(!encoded.contains("slip77-detail-secret"));
+        assert!(!encoded.contains("slip77-stderr-secret"));
         assert!(!encoded.contains("btcpay-secret"));
         assert!(!encoded.contains("openai-secret"));
         assert!(!encoded.contains("sk-stderr-secret"));
@@ -1893,6 +1900,7 @@ mod tests {
             r#"{"api_key":"btcpay-no-sk-prefix"}"#,
             r#"{'api_key': 'btcpay-no-sk-prefix'}"#,
             r#"{"token": "secret-value-here"}"#,
+            r#"{"blinding_key": "slip77-secret-value"}"#,
             r#"{"passphrase":"correct-horse-battery"}"#,
         ];
         for case in cases {
@@ -1905,6 +1913,7 @@ mod tests {
                 "sk-live-001",
                 "btcpay-no-sk-prefix",
                 "secret-value-here",
+                "slip77-secret-value",
                 "correct-horse-battery",
             ] {
                 assert!(

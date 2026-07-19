@@ -198,6 +198,18 @@ describe("typed app logs", () => {
     expect(redacted).not.toContain("xpub");
   });
 
+  it("floors blinding keys in messages and structured fields", () => {
+    const marker = "private-slip77-blinding-material";
+    const emitted = emitAppLog({
+      ...record({
+        blinding_key: { type: "text", value: marker },
+      }),
+      msg: `wallet blinding=${marker} {"blinding_key":"${marker}"}`,
+    });
+    expect(emitted.msg).not.toContain(marker);
+    expect(emitted.fields.blinding_key.value).toBe("[redacted]");
+  });
+
   it("exports a self-describing markdown snapshot and watermarks raw output", () => {
     const emitted = emitAppLog(
       record({

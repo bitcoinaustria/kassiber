@@ -1107,15 +1107,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   and `bootstrap_runtime` warns to stderr whenever the dotenv still contains
   secret-shaped entries while the DB is encrypted. URLs / kinds / chain /
   network stay in the dotenv (they are addresses, not credentials).
-- [ ] Tauri supervisor wiring — mostly shipped; one redaction gap remains. Done:
+- [x] Tauri supervisor wiring — shipped, including the final redaction gap. Done:
   startup passphrase modal (LockScreen → `daemon.unlock`), the stdin
   `auth_response.passphrase_secret` hand-off, the `auth_required`/`auth_response`
-  reveal relay, and redaction of every named field **except `blinding_key`**.
-  Remaining (security-relevant): add `blinding_key` (and the bare `blinding`
-  substring) to all three secret-floor redaction layers (`supervisor.rs`,
-  `kassiber/redaction.py`, `ui-tauri/src/lib/appLogs.ts`) plus a regression
-  test — `docs/reference/daemon.md` requires it but the reveal payload's
-  `blinding_key` currently passes through unredacted.
+  reveal relay, and redaction of every named secret field. `blinding_key` and
+  the bare `blinding` substring are covered in all three secret-floor layers
+  (`supervisor.rs`, `kassiber/redaction.py`, `ui-tauri/src/lib/appLogs.ts`) with
+  regression tests.
 - [ ] Cross-platform CI for SQLCipher: PyInstaller bundle smoke tests on
   macOS arm64/x86_64, Linux x86_64, Windows x86_64. The CLI-binary smoke matrix
   runs **macOS arm64 (macos-latest) + macOS x86_64 (macos-15-intel) + Linux

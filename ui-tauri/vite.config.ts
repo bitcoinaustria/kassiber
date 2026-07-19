@@ -377,10 +377,15 @@ export function redactBridgeText(value: string): string {
       redactNext = true;
       continue;
     }
-    const redacted = word.replace(
-      /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase(?:_secret)?|password|secret|token)\b([:=])([^\s,;"']+)/gi,
-      "$1$2[redacted]",
-    );
+    const redacted = word
+      .replace(
+        /("(?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase(?:_secret)?|password|recovery[_-]?phrase|secret|seed(?:[_-]?(?:phrase|words))?|token|xprv)"\s*:\s*)"[^"]*"/gi,
+        '$1"[redacted]"',
+      )
+      .replace(
+        /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase(?:_secret)?|password|secret|token)\b([:=])([^\s,;"']+)/gi,
+        "$1$2[redacted]",
+      );
     words.push(redacted);
   }
   return words.join(" ");

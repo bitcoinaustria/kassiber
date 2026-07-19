@@ -23,7 +23,7 @@ import traceback
 from collections import deque
 from datetime import datetime, timezone
 
-from .redaction import redact_operational_text, redact_secret_text
+from .redaction import is_sensitive_key, redact_operational_text, redact_secret_text
 from .time_utils import now_iso
 
 
@@ -116,7 +116,7 @@ def sanitize_exception(exc: BaseException) -> str:
     return sanitize_traceback_text(formatted)
 
 
-def _coerce_field(value) -> dict:
+def _coerce_field(value, *, field_name: str | None = None) -> dict:
     """Normalize one field into the wire `{"type", "value"}` shape.
 
     The secret-floor backstop runs on every string value regardless of its
@@ -127,6 +127,8 @@ def _coerce_field(value) -> dict:
     Anything not JSON-primitive is stringified (and floored) so snapshots stay
     wire-safe.
     """
+    if field_name is not None and is_sensitive_key(field_name):
+        return {"type": "text", "value": "[redacted]"}
     if isinstance(value, dict) and "type" in value and "value" in value:
         ftype = str(value["type"])
         fval = value["value"]
@@ -170,7 +172,11 @@ class LogRing:
         clean_fields = {}
         if fields:
             for key, value in fields.items():
-                clean_fields[str(key)] = _coerce_field(value)
+                field_name = str(key)
+                clean_fields[field_name] = _coerce_field(
+                    value,
+                    field_name=field_name,
+                )
         rid = request_id if request_id is not None else current_request_id.get()
         if rid and "request_id" not in clean_fields:
             clean_fields["request_id"] = {"type": "text", "value": str(rid)}

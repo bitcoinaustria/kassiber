@@ -32,12 +32,16 @@ describe("daemon bridge containment", () => {
 
   it("redacts bridge stderr text before it can become a dev error payload", () => {
     const redacted = redactBridgeText(
-      "api_key=sk-test-secret Bearer bridge-token token=btcpay-secret passphrase_secret=correct raw xpub661MyMwAqRbcF12345678901234567890 wpkh(xpub661MyMwAqRbcF09876543210987654321)",
+      'api_key=sk-test-secret Bearer bridge-token token=btcpay-secret passphrase_secret=correct blinding_key=slip77-secret blinding=bare-secret {"api_key":"json-api-secret","blinding_key":"json-blinding-secret"} raw xpub661MyMwAqRbcF12345678901234567890 wpkh(xpub661MyMwAqRbcF09876543210987654321)',
     );
     expect(redacted).not.toContain("sk-test-secret");
     expect(redacted).not.toContain("bridge-token");
     expect(redacted).not.toContain("btcpay-secret");
     expect(redacted).not.toContain("correct");
+    expect(redacted).not.toContain("slip77-secret");
+    expect(redacted).not.toContain("bare-secret");
+    expect(redacted).not.toContain("json-api-secret");
+    expect(redacted).not.toContain("json-blinding-secret");
     expect(redacted).not.toContain("xpub661MyMwAqRbcF12345678901234567890");
     expect(redacted).not.toContain("xpub661MyMwAqRbcF09876543210987654321");
     expect(redacted).toContain("[redacted]");
