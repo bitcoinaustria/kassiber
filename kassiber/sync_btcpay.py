@@ -240,6 +240,43 @@ def probe_btcpay_wallet(
     return {"checked": True, "rows_seen": len(page)}
 
 
+def probe_btcpay_instance(backend, opener=None):
+    """Validate BTCPay reachability and API-key store access.
+
+    Connection health checks do not know which store/payment-method route a
+    backend will eventually serve.  Keep that periodic probe narrower than
+    full setup discovery: fetch only the store catalog and never walk payment
+    methods or wallet history.
+    """
+
+    base = backend_value(backend, "url")
+    if not base:
+        raise AppError("BTCPay instance is missing 'url'", code="config_error")
+    token = backend_value(backend, "token")
+    if not token:
+        raise AppError(
+            "BTCPay instance is missing 'token' (api key)",
+            code="config_error",
+            hint="Enter a Greenfield API key for this BTCPay instance.",
+        )
+    timeout = backend_timeout(backend)
+    http_opener = opener or _backend_http_opener(backend)
+    stores_url = _build_stores_url(base)
+    stores = _http_get_json(
+        http_opener,
+        stores_url,
+        token,
+        timeout,
+        permission_hint="Grant the API key access to view stores.",
+    )
+    if not isinstance(stores, list):
+        raise AppError(
+            f"BTCPay response for {stores_url} was not a JSON array",
+            code="protocol_error",
+        )
+    return {"checked": True, "stores_seen": len(stores)}
+
+
 def discover_btcpay_wallet_sources(backend, opener=None):
     """Return stores and enabled on-chain payment methods for setup forms.
 

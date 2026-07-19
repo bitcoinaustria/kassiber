@@ -849,6 +849,13 @@ export const fixtures: Record<string, unknown> = {
     pairs: [
       {
         id: "pair:submarine",
+        component_id: "component:submarine",
+        component: {
+          id: "component:submarine",
+          source_count: 1,
+          sink_count: 1,
+          allocation_count: 1,
+        },
         out_transaction_id: "tx:phoenix-out",
         in_transaction_id: "tx:liquid-in",
         kind: "submarine-swap",
@@ -882,6 +889,8 @@ export const fixtures: Record<string, unknown> = {
           occurred_at: "2026-03-14T17:32:00Z",
           amount: 0.000995,
           amount_msat: 99_500_000,
+          full_amount: 0.000995,
+          full_amount_msat: 99_500_000,
         },
       },
       {

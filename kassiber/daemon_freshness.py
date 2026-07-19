@@ -285,8 +285,17 @@ def _apply_sync_failure_blocker(
     return updated
 
 
-def _journals_process_payload(conn: sqlite3.Connection) -> dict[str, Any]:
-    return process_journals(conn, None, None)
+def _journals_process_payload(
+    conn: sqlite3.Connection,
+    *,
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    return process_journals(
+        conn,
+        None,
+        None,
+        progress_observer=progress_observer,
+    )
 
 
 def _job_scope_refs(conn: sqlite3.Connection, job: Mapping[str, Any]) -> tuple[str, str]:

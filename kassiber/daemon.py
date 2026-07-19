@@ -186,7 +186,9 @@ from .db import (
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
+    safe_sqlite_error_details,
     set_setting,
+    sqlite_error_is_busy,
     resolve_exports_root,
     resolve_attachments_root,
 )
@@ -259,6 +261,7 @@ from .secrets.unlock_store import (
 )
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
+    probe_btcpay_instance,
     probe_btcpay_wallet,
     require_wallet_history_payment_method,
 )
@@ -345,6 +348,7 @@ SUPPORTED_KINDS = (
     "ui.backends.delete",
     "ui.backends.set_default",
     "ui.backends.bitcoinrpc.test",
+    "ui.backends.btcpay.test",
     "ui.backends.detect_core",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
@@ -627,6 +631,7 @@ _AI_SCREEN_ROUTES = frozenset(
         "/tax-events",
         "/swaps",
         "/transfers",
+        "/custody-gaps",
         "/quarantine",
         "/reconcile",
         "/egress",
@@ -1926,7 +1931,9 @@ def _ui_swap_matching_payload_from_conn(
     if kind == "ui.transfers.review_context":
         return build_swap_review_context_payload(conn, args)
     if kind == "ui.transfers.list":
-        return {"pairs": list_transaction_pairs(conn, workspace, profile)}
+        return _ui_exact_integer_payload(
+            {"pairs": list_transaction_pairs(conn, workspace, profile)}
+        )
     if kind == "ui.transfers.payouts.list":
         return {"payouts": list_direct_swap_payouts(conn, workspace, profile)}
     if kind == "ui.transfers.payouts.create":
@@ -4231,6 +4238,7 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
         "wallet",
         "report",
         "source_funds_case",
+        "custody_gap",
         "connection",
         "profile",
     }
@@ -13015,6 +13023,32 @@ def _test_btcpay_connection_payload(
     }
 
 
+def _test_btcpay_backend_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    timeout = args.get("timeout", 10)
+    if type(timeout) is not int or not 1 <= timeout <= 10:
+        raise AppError(
+            "ui.backends.btcpay.test timeout must be an integer between 1 and 10 seconds",
+            code="validation",
+            retryable=False,
+        )
+    backend, safe_backend = _resolve_btcpay_backend_for_setup(
+        ctx,
+        args,
+        create_if_inline=False,
+        reveal=True,
+    )
+    backend = {**backend, "timeout": timeout}
+    result = probe_btcpay_instance(backend)
+    return {
+        "backend": safe_backend["name"],
+        "ok": True,
+        "stores_seen": int(result["stores_seen"]),
+    }
+
+
 def _discover_btcpay_connection_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
@@ -14241,6 +14275,21 @@ def handle_request(
                 build_envelope(
                     "ui.backends.bitcoinrpc.test",
                     _test_bitcoinrpc_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.btcpay.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.btcpay.test",
+                    _test_btcpay_backend_payload(
                         ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
@@ -15612,9 +15661,23 @@ def handle_request(
                 ),
                 False,
             )
+        def _emit_journal_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.journals.process.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
         return (
             _with_request_id(
-                build_envelope("ui.journals.process", _journals_process_payload(ctx.conn)),
+                build_envelope(
+                    "ui.journals.process",
+                    _journals_process_payload(
+                        ctx.conn,
+                        progress_observer=_emit_journal_progress,
+                    ),
+                ),
                 request_id,
             ),
             False,
@@ -16269,26 +16332,51 @@ def run(
             except Exception as exc:
                 if ctx.conn is not None:
                     ctx.conn.rollback()
-                traceback.print_exc(file=sys.stderr)
-                sys.stderr.flush()
-                if logged:
-                    _REQUEST_LOGGER.error(
-                        "request crashed",
-                        exc_info=exc,
-                        extra={
-                            "kb_fields": {
-                                "kind": _kind_field(kind),
-                                "duration_ms": _elapsed_ms_field(started),
-                            }
-                        },
+                sqlite_details = safe_sqlite_error_details(exc)
+                if sqlite_error_is_busy(sqlite_details):
+                    if logged:
+                        _REQUEST_LOGGER.warning(
+                            "request failed",
+                            extra={
+                                "kb_fields": {
+                                    "kind": _kind_field(kind),
+                                    "duration_ms": _elapsed_ms_field(started),
+                                    "error_code": {
+                                        "type": "text",
+                                        "value": "database_busy",
+                                    },
+                                }
+                            },
+                        )
+                    response = _error_envelope(
+                        "database_busy",
+                        "The local database is busy with another Kassiber operation.",
+                        request_id=request.get("request_id"),
+                        details=sqlite_details,
+                        hint="Wait for the active operation to finish, then retry.",
+                        retryable=True,
                     )
-                response = _error_envelope(
-                    "internal_error",
-                    str(exc) or exc.__class__.__name__,
-                    request_id=request.get("request_id"),
-                    retryable=False,
-                    debug=sanitize_exception(exc),
-                )
+                else:
+                    traceback.print_exc(file=sys.stderr)
+                    sys.stderr.flush()
+                    if logged:
+                        _REQUEST_LOGGER.error(
+                            "request crashed",
+                            exc_info=exc,
+                            extra={
+                                "kb_fields": {
+                                    "kind": _kind_field(kind),
+                                    "duration_ms": _elapsed_ms_field(started),
+                                }
+                            },
+                        )
+                    response = _error_envelope(
+                        "internal_error",
+                        str(exc) or exc.__class__.__name__,
+                        request_id=request.get("request_id"),
+                        retryable=False,
+                        debug=sanitize_exception(exc),
+                    )
                 should_shutdown = False
             finally:
                 current_request_id.reset(rid_token)

@@ -7,6 +7,7 @@ import {
   normalizeExternalBrowserUrl,
   readBridgeNdjsonStream,
   regtestDemoDataRoot,
+  summarizeDaemonCompletionFields,
   summarizeEnvelopeFields,
   type DaemonStreamRecord,
 } from "./transport";
@@ -84,6 +85,30 @@ describe("bridge NDJSON stream reader", () => {
 });
 
 describe("daemon envelope logging summaries", () => {
+  it("keeps the original request kind when the terminal envelope is an error", () => {
+    const summary = summarizeDaemonCompletionFields(
+      { kind: "ui.journals.process", request_id: "journal-1" },
+      {
+        kind: "error",
+        schema_version: 1,
+        request_id: "journal-1",
+        error: {
+          code: "database_busy",
+          message: "The local database is busy.",
+          retryable: true,
+        },
+      },
+      3570.4,
+    );
+
+    expect(summary.kind).toEqual({ type: "text", value: "error" });
+    expect(summary.request_kind).toEqual({
+      type: "text",
+      value: "ui.journals.process",
+    });
+    expect(summary.duration_ms).toEqual({ type: "duration_ms", value: 3570 });
+  });
+
   it("marks failed wallet sync result rows as error-level with useful context", () => {
     const summary = summarizeEnvelopeFields({
       kind: "ui.wallets.sync",

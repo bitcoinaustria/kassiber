@@ -48,6 +48,7 @@ _UI_SRC_DIR = Path(__file__).resolve().parent.parent / "ui-tauri" / "src"
 _DESKTOP_MUTATION_KINDS = (
     "ui.backends.options",
     "ui.backends.public_defaults",
+    "ui.backends.btcpay.test",
     "ui.backends.electrum.test",
     "ui.transactions.metadata.update",
     "ui.onboarding.complete",

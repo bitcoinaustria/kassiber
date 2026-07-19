@@ -201,6 +201,7 @@ describe("connection health model", () => {
       checkableConnectionCount: 1,
       daemonEnabled: true,
       documentVisible: true,
+      maintenanceActive: false,
       networkStatus: "online" as const,
     };
 
@@ -216,6 +217,9 @@ describe("connection health model", () => {
     ).toBe(false);
     expect(
       canRunConnectionHealthChecks({ ...ready, documentVisible: false }),
+    ).toBe(false);
+    expect(
+      canRunConnectionHealthChecks({ ...ready, maintenanceActive: true }),
     ).toBe(false);
     expect(
       canRunConnectionHealthChecks({ ...ready, networkStatus: "offline" }),

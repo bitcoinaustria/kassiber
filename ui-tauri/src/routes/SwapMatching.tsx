@@ -141,9 +141,15 @@ import { cn } from "@/lib/utils";
 import {
   currentUiLocale,
   formatCount,
-  formatSats as formatLocaleSats,
 } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
+import {
+  formatPairHistoryAssetTotals,
+  formatPairHistoryMsatAsBtc,
+  groupPairedComponents,
+  pairHistoryExactInteger,
+  pairHistoryFeePercent,
+} from "./swapPairHistoryModel";
 
 const PAIR_KIND_OPTIONS = [
   "manual",
@@ -295,8 +301,14 @@ function formatBtc(value: number) {
   return `₿${btcFmt.format(value)}`;
 }
 
-function formatSats(msat: number) {
-  return formatLocaleSats(Math.round(msat / 1000));
+function formatSats(msat: CustodyExactInteger) {
+  const raw = pairHistoryExactInteger(msat);
+  const negative = raw < 0n;
+  const roundedSats = ((negative ? -raw : raw) + 500n) / 1000n;
+  const formatted = new Intl.NumberFormat(currentUiLocale(), {
+    maximumFractionDigits: 0,
+  }).format(roundedSats);
+  return `${negative ? "−" : ""}${formatted} sats`;
 }
 
 function formatTimestamp(value: string) {
@@ -319,9 +331,11 @@ function compactRecordId(value: string) {
 
 /** Accepts any leg-fee shape (candidate or persisted pair) — only the swapped
  *  outbound magnitude and the fee delta matter for the percentage. */
-function feePercent(fee: { swap_fee_msat: number; out_amount_msat: number }) {
-  if (!fee.out_amount_msat) return 0;
-  return (Math.abs(fee.swap_fee_msat) / fee.out_amount_msat) * 100;
+function feePercent(fee: {
+  swap_fee_msat: CustodyExactInteger;
+  out_amount_msat: CustodyExactInteger;
+}) {
+  return pairHistoryFeePercent(fee.swap_fee_msat, fee.out_amount_msat);
 }
 
 function candidatePairType(candidate: SwapCandidate) {
@@ -399,20 +413,29 @@ interface PairLeg {
   asset: string;
   occurred_at: string;
   amount: number;
-  amount_msat: number;
+  amount_msat: CustodyExactInteger;
   full_amount?: number;
-  full_amount_msat?: number;
+  full_amount_msat?: CustodyExactInteger;
+}
+
+interface PairComponentSummary {
+  id: string;
+  source_count: number;
+  sink_count: number;
+  allocation_count: number;
 }
 
 /** An already-paired swap/transfer (the inverse of a {@link SwapCandidate}). */
 interface PairedSwap {
   id: string;
+  component_id: string;
+  component: PairComponentSummary;
   out_transaction_id: string;
   in_transaction_id: string;
   kind: PairKind;
   policy: PairPolicy;
   notes: string | null;
-  swap_fee_msat: number | null;
+  swap_fee_msat: CustodyExactInteger | null;
   swap_fee_kind: string | null;
   confidence_at_pair: "exact" | "strong" | null;
   pair_source: string | null;
@@ -426,9 +449,6 @@ interface PairedSwap {
 interface PairsEnvelope {
   pairs: PairedSwap[];
 }
-
-/** msat → BTC (1 BTC = 100_000_000_000 msat); pairs carry only the msat fee. */
-const MSAT_PER_BTC = 100_000_000_000;
 
 // Persisted ``pair_source`` codes (handlers.py `_PAIR_SOURCE_VALUES`) → i18n
 // keys. Returns a literal key (so the typed `t()` accepts it) or null for an
@@ -1746,10 +1766,8 @@ function CustodyErrorList({
 
 /** A persisted pair's fee, shaped for {@link SwapFeeText} / {@link feePercent}. */
 function pairFee(pair: PairedSwap) {
-  const swapFeeMsat = pair.swap_fee_msat ?? 0;
   return {
-    swap_fee: swapFeeMsat / MSAT_PER_BTC,
-    swap_fee_msat: swapFeeMsat,
+    swap_fee_msat: pair.swap_fee_msat ?? 0,
     out_amount_msat: pair.out.amount_msat,
   };
 }
@@ -1786,6 +1804,7 @@ function PairedSwaps({
       ),
     [data, mode],
   );
+  const componentGroups = useMemo(() => groupPairedComponents(pairs), [pairs]);
 
   const title =
     mode === "transfers"
@@ -1895,7 +1914,29 @@ function PairedSwaps({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pairs.map((pair) => (
+                {componentGroups.map((group) => (
+                  <Fragment key={group.id}>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={6} className="py-2">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                          <Badge variant="secondary" className="font-mono text-[10px]">
+                            {group.sourceCount}→{group.sinkCount}
+                          </Badge>
+                          <span className="font-medium">
+                            {t("swap.paired.componentAllocations", {
+                              count: group.pairs.length,
+                            })}
+                          </span>
+                          <span className={cn("font-mono text-muted-foreground", blurClass(hideSensitive))}>
+                            {t("swap.paired.componentTotals", {
+                              source: formatPairHistoryAssetTotals(group.sourceTotals),
+                              sink: formatPairHistoryAssetTotals(group.sinkTotals),
+                            })}
+                          </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {group.pairs.map((pair) => (
                   <TableRow
                     key={pair.id}
                     className="cursor-pointer align-middle hover:bg-muted/35"
@@ -1912,6 +1953,8 @@ function PairedSwaps({
                         direction="out"
                         asset={pair.out.asset}
                         amount={pair.out.amount}
+                        fullAmount={pair.out.full_amount}
+                        showAllocation
                         wallet={pair.out.wallet}
                         walletKind={pair.out.wallet_kind}
                         timestamp={pair.out.occurred_at}
@@ -1927,6 +1970,8 @@ function PairedSwaps({
                         direction="in"
                         asset={pair.in.asset}
                         amount={pair.in.amount}
+                        fullAmount={pair.in.full_amount}
+                        showAllocation
                         wallet={pair.in.wallet}
                         walletKind={pair.in.wallet_kind}
                         timestamp={pair.in.occurred_at}
@@ -1952,6 +1997,8 @@ function PairedSwaps({
                       />
                     </TableCell>
                   </TableRow>
+                    ))}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -1960,7 +2007,16 @@ function PairedSwaps({
 
         {!isLoading && !isError && pairs.length > 0 ? (
           <div className="flex items-center border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
-            <span>{t("swap.paired.count", { count: pairs.length })}</span>
+            <span>
+              {t("swap.paired.componentSummary", {
+                components: t("swap.paired.componentCount", {
+                  count: componentGroups.length,
+                }),
+                allocations: t("swap.paired.allocationCount", {
+                  count: pairs.length,
+                }),
+              })}
+            </span>
           </div>
         ) : null}
       </div>
@@ -3504,6 +3560,8 @@ interface SwapLegInlineProps {
   direction: "out" | "in";
   asset: string;
   amount: number;
+  fullAmount?: number;
+  showAllocation?: boolean;
   wallet: string;
   walletKind: string;
   timestamp: string;
@@ -3515,12 +3573,15 @@ function SwapLegInline({
   direction,
   asset,
   amount,
+  fullAmount,
+  showAllocation = false,
   wallet,
   walletKind,
   timestamp,
   txId,
   hideSensitive,
 }: SwapLegInlineProps) {
+  const { t } = useTranslation("review");
   const rail = railForLeg(asset, walletKind);
   const walletName = displayWalletName(wallet, walletKind);
   return (
@@ -3548,6 +3609,13 @@ function SwapLegInline({
         >
           {formatBtc(amount)}
         </div>
+        {showAllocation ? (
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {fullAmount !== undefined && fullAmount !== amount
+              ? `${t("swap.paired.allocatedOf")} ${formatBtc(fullAmount)}`
+              : t("swap.paired.allocated")}
+          </div>
+        ) : null}
         <div className="mt-1 flex justify-end">
           <RailBadge rail={rail} asset={asset} />
         </div>
@@ -3560,7 +3628,10 @@ function SwapFeeText({
   candidate,
   hideSensitive,
 }: {
-  candidate: { swap_fee: number; swap_fee_msat: number; out_amount_msat: number };
+  candidate: {
+    swap_fee_msat: CustodyExactInteger;
+    out_amount_msat: CustodyExactInteger;
+  };
   hideSensitive: boolean;
 }) {
   const percent = feePercent(candidate);
@@ -3573,7 +3644,9 @@ function SwapFeeText({
   return (
     <div className="text-right">
       <div className={cn("text-sm font-semibold tabular-nums", tone, blurClass(hideSensitive))}>
-        {formatBtc(candidate.swap_fee)}
+        {formatPairHistoryMsatAsBtc(
+          pairHistoryExactInteger(candidate.swap_fee_msat),
+        )}
       </div>
       <div className={cn("mt-1 text-xs text-muted-foreground", blurClass(hideSensitive))}>
         {formatSats(candidate.swap_fee_msat)} · {percent.toFixed(2)}%
@@ -4189,7 +4262,7 @@ interface SwapLegDetailsProps {
   title: string;
   asset: string;
   amount: number;
-  amountMsat: number;
+  amountMsat: CustodyExactInteger;
   wallet: string;
   walletKind: string;
   timestamp: string;

@@ -1,7 +1,8 @@
 import * as React from "react";
 import { useIsMutating } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
-import { daemonMutationKey, useDaemonMutation } from "@/daemon/client";
+import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 
 const JOURNAL_PROCESSING_PROGRESS_ID = "journal-processing";
@@ -24,6 +25,31 @@ export type JournalProcessResult = {
   processed_at?: string;
   warnings?: JournalProcessWarning[];
 };
+
+type JournalProcessProgress = {
+  phase?: string;
+};
+
+function journalProcessPhaseKey(phase: string | undefined) {
+  switch (phase) {
+    case "writer_wait":
+      return "processing.phase.writerWait" as const;
+    case "preparing":
+      return "processing.phase.preparing" as const;
+    case "repairing":
+      return "processing.phase.repairing" as const;
+    case "pricing":
+      return "processing.phase.pricing" as const;
+    case "building":
+      return "processing.phase.building" as const;
+    case "storing":
+      return "processing.phase.storing" as const;
+    case "complete":
+      return "processing.phase.complete" as const;
+    default:
+      return "processing.phase.fallback" as const;
+  }
+}
 
 export function warningSummary(warnings: JournalProcessWarning[]) {
   const first = warnings[0]?.message ?? "Review required";
@@ -77,6 +103,7 @@ function journalProcessBody(
 export function useJournalProcessingAction(
   options: JournalProcessingActionOptions = {},
 ) {
+  const { t } = useTranslation("journals");
   const {
     entryLabel = "entries",
     notifyStart = false,
@@ -91,8 +118,30 @@ export function useJournalProcessingAction(
   const clearActiveMaintenanceProgress = useUiStore(
     (s) => s.clearActiveMaintenanceProgress,
   );
-  const processJournals =
-    useDaemonMutation<JournalProcessResult>("ui.journals.process");
+  const processJournals = useDaemonStreamMutation<
+    JournalProcessResult,
+    JournalProcessProgress
+  >("ui.journals.process", {
+    onProgress: (progress) => {
+      const now = new Date().toISOString();
+      const current = useUiStore.getState().activeMaintenanceProgress;
+      const phaseLabel = t(journalProcessPhaseKey(progress.phase));
+      setActiveMaintenanceProgress({
+        id: JOURNAL_PROCESSING_PROGRESS_ID,
+        title: t("processing.title"),
+        body: phaseLabel,
+        tone: "warning",
+        progress: {
+          indeterminate: true,
+          label: phaseLabel,
+        },
+        details: [t("processing.reportHint")],
+        active: true,
+        startedAt: current?.startedAt ?? now,
+        updatedAt: now,
+      });
+    },
+  });
   const mutationKey = daemonMutationKey(dataMode, "ui.journals.process");
   const activeJournalRuns = useIsMutating({ mutationKey });
   const isProcessingJournals =
@@ -103,8 +152,8 @@ export function useJournalProcessingAction(
     if (processJournals.isPending || activeJournalRuns > 0) {
       if (notifyAlreadyRunning) {
         addNotification({
-          title: "Journal processing already running",
-          body: "Kassiber is already refreshing the journal state.",
+          title: t("processing.alreadyTitle"),
+          body: t("processing.alreadyBody"),
           tone: "info",
           dedupeKey: "journal-processing",
         });
@@ -113,8 +162,8 @@ export function useJournalProcessingAction(
     }
     if (notifyStart) {
       addNotification({
-        title: "Journal processing started",
-        body: "Kassiber is rebuilding report-ready journal state.",
+        title: t("processing.startedTitle"),
+        body: t("processing.startedBody"),
         tone: "warning",
         dedupeKey: "journal-processing",
       });
@@ -122,14 +171,14 @@ export function useJournalProcessingAction(
     const startedAt = new Date().toISOString();
     setActiveMaintenanceProgress({
       id: JOURNAL_PROCESSING_PROGRESS_ID,
-      title: "Refreshing journals",
-      body: "Kassiber is rebuilding report-ready journal state.",
+      title: t("processing.title"),
+      body: t("processing.startedBody"),
       tone: "warning",
       progress: {
         indeterminate: true,
-        label: "Processing journals",
+        label: t("processing.phase.fallback"),
       },
-      details: ["Reports update when processing finishes"],
+      details: [t("processing.reportHint")],
       active: true,
       startedAt,
       updatedAt: startedAt,
@@ -138,7 +187,7 @@ export function useJournalProcessingAction(
       onSuccess: (envelope) => {
         const { body, tone } = journalProcessOutcome(envelope.data, entryLabel);
         addNotification({
-          title: "Journals processed",
+          title: t("processing.successTitle"),
           body,
           tone,
           dedupeKey: "journal-processing",
@@ -147,11 +196,11 @@ export function useJournalProcessingAction(
       },
       onError: (error) => {
         addNotification({
-          title: "Journal processing failed",
+          title: t("processing.failedTitle"),
           body:
             error instanceof Error
               ? error.message
-              : "Could not process journals.",
+              : t("processing.failedBody"),
           tone: "error",
           dedupeKey: "journal-processing",
         });
@@ -168,6 +217,7 @@ export function useJournalProcessingAction(
     notifyStart,
     processJournals,
     setActiveMaintenanceProgress,
+    t,
   ]);
 
   return {

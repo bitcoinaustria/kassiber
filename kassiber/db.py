@@ -53,6 +53,39 @@ DEFAULT_ATTACHMENTS_DIRNAME = "attachments"
 DEFAULT_SETTINGS_FILENAME = "settings.json"
 DEFAULT_DATA_ROOT = os.path.join(DEFAULT_STATE_ROOT, DEFAULT_DATA_DIRNAME)
 LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
+
+
+def safe_sqlite_error_details(exc: Exception) -> dict[str, object]:
+    """Return driver-neutral, non-sensitive SQLite diagnostics."""
+
+    error_name = getattr(exc, "sqlite_errorname", None)
+    error_code = getattr(exc, "sqlite_errorcode", None)
+    if not (
+        isinstance(error_name, str)
+        and error_name.startswith("SQLITE_")
+        and error_name.replace("_", "").isalnum()
+    ):
+        return {}
+    details: dict[str, object] = {
+        "error_class": f"{exc.__class__.__module__}.{exc.__class__.__qualname__}",
+        "sqlite_error_name": error_name,
+    }
+    if type(error_code) is int and error_code >= 0:
+        details["sqlite_error_code"] = error_code
+    return details
+
+
+def sqlite_error_is_busy(details: dict[str, object]) -> bool:
+    """Recognize base and extended BUSY/LOCKED codes across DB-API drivers."""
+
+    error_name = str(details.get("sqlite_error_name") or "")
+    if error_name.startswith(("SQLITE_BUSY", "SQLITE_LOCKED")):
+        return True
+    error_code = details.get("sqlite_error_code")
+    return type(error_code) is int and (error_code & 0xFF) in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"

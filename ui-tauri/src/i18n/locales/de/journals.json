@@ -1,4 +1,25 @@
 {
+  "processing": {
+    "title": "Journale werden aktualisiert",
+    "alreadyTitle": "Journalverarbeitung läuft bereits",
+    "alreadyBody": "Kassiber aktualisiert den Journalstatus bereits.",
+    "startedTitle": "Journalverarbeitung gestartet",
+    "startedBody": "Kassiber erstellt den berichtsfertigen Journalstatus neu.",
+    "successTitle": "Journale verarbeitet",
+    "failedTitle": "Journalverarbeitung fehlgeschlagen",
+    "failedBody": "Journale konnten nicht verarbeitet werden.",
+    "reportHint": "Berichte werden nach Abschluss der Verarbeitung aktualisiert",
+    "phase": {
+      "writerWait": "Warten auf den Datenbankzugriff",
+      "preparing": "Journaleingaben werden vorbereitet",
+      "repairing": "Überschneidende Quellen werden geprüft",
+      "pricing": "Zwischengespeicherte Preise werden angewendet",
+      "building": "Journaleinträge werden erstellt",
+      "storing": "Journalprojektion wird gespeichert",
+      "complete": "Journalprojektion wurde gespeichert",
+      "fallback": "Journale werden verarbeitet"
+    }
+  },
   "ledger": {
     "tabs": {
       "state": "Status",

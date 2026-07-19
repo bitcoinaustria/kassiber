@@ -1372,42 +1372,70 @@ def process_journals(
         [sqlite3.Connection, Mapping[str, Any], Any], Any
     ],
     auto_price: Callable[[sqlite3.Connection, Mapping[str, Any]], int],
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Build and store one complete journal projection in one core transaction."""
 
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    require_tax_processing_supported(profile)
-    sync_conflicts = int(
-        conn.execute(
-            "SELECT COUNT(*) FROM sync_conflicts "
-            "WHERE profile_id = ? AND status = 'open'",
-            (profile["id"],),
-        ).fetchone()[0]
-    )
-    if sync_conflicts:
-        raise AppError(
-            "journal processing is blocked by unresolved sync conflicts",
-            code="sync_conflicts_open",
-            hint=(
-                "Run `kassiber sync conflicts list` and resolve every "
-                "high-stakes conflict first."
-            ),
-            details={"profile_id": profile["id"], "open_conflicts": sync_conflicts},
-            retryable=False,
-        )
-    conn.execute("SAVEPOINT journals_process")
+    def progress(phase: str) -> None:
+        if progress_observer is not None:
+            progress_observer({"phase": phase})
+
+    owns_immediate_transaction = not conn.in_transaction
+    if owns_immediate_transaction:
+        # Reserve SQLite's single writer slot before any projection reads. A
+        # deferred transaction can otherwise take a WAL snapshot, then fail
+        # immediately with SQLITE_BUSY_SNAPSHOT when it upgrades after a
+        # background freshness writer commits; busy_timeout cannot repair that
+        # upgrade race.
+        progress("writer_wait")
+        conn.execute("BEGIN IMMEDIATE")
     try:
-        overlap_repair = repair_source_overlaps(conn, profile)
-        overlap_warning = source_overlap_warning(conn, profile, overlap_repair)
-        auto_priced = auto_price(conn, profile)
-        state = build_ledger_state(conn, profile)
-        stored = store_ledger_state(conn, profile, state)
-    except Exception:
-        conn.execute("ROLLBACK TO SAVEPOINT journals_process")
+        progress("preparing")
+        _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+        require_tax_processing_supported(profile)
+        sync_conflicts = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM sync_conflicts "
+                "WHERE profile_id = ? AND status = 'open'",
+                (profile["id"],),
+            ).fetchone()[0]
+        )
+        if sync_conflicts:
+            raise AppError(
+                "journal processing is blocked by unresolved sync conflicts",
+                code="sync_conflicts_open",
+                hint=(
+                    "Run `kassiber sync conflicts list` and resolve every "
+                    "high-stakes conflict first."
+                ),
+                details={
+                    "profile_id": profile["id"],
+                    "open_conflicts": sync_conflicts,
+                },
+                retryable=False,
+            )
+        conn.execute("SAVEPOINT journals_process")
+        try:
+            progress("repairing")
+            overlap_repair = repair_source_overlaps(conn, profile)
+            overlap_warning = source_overlap_warning(conn, profile, overlap_repair)
+            progress("pricing")
+            auto_priced = auto_price(conn, profile)
+            progress("building")
+            state = build_ledger_state(conn, profile)
+            progress("storing")
+            stored = store_ledger_state(conn, profile, state)
+        except Exception:
+            conn.execute("ROLLBACK TO SAVEPOINT journals_process")
+            conn.execute("RELEASE SAVEPOINT journals_process")
+            raise
         conn.execute("RELEASE SAVEPOINT journals_process")
+        conn.commit()
+        progress("complete")
+    except Exception:
+        if owns_immediate_transaction:
+            conn.rollback()
         raise
-    conn.execute("RELEASE SAVEPOINT journals_process")
-    conn.commit()
 
     custody_quantity = stored["custody_quantity"]
     result = {

@@ -645,6 +645,12 @@ def list_pair_reviews(
         conn, profile_id=profile_id, include_deleted=include_deleted
     ):
         entry = pair_to_dict(row)
+        entry["component"] = {
+            "id": row["component_id"],
+            "source_count": int(row["component_source_count"]),
+            "sink_count": int(row["component_sink_count"]),
+            "allocation_count": int(row["component_allocation_count"]),
+        }
         entry["out"] = {
             "transaction_id": row["out_transaction_id"],
             "external_id": row["out_external_id"] or "",
@@ -666,6 +672,8 @@ def list_pair_reviews(
             "occurred_at": row["in_occurred_at"],
             "amount": float(msat_to_btc(row["in_amount_msat"])),
             "amount_msat": int(row["in_amount_msat"]),
+            "full_amount": float(msat_to_btc(row["in_full_amount_msat"])),
+            "full_amount_msat": int(row["in_full_amount_msat"]),
         }
         output.append(entry)
     return output
