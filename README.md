@@ -110,6 +110,10 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   its own item in macOS Keychain, Windows Credential Manager, or Linux Secret
   Service for prompt-free one-shot commands. This is convenience, not recovery
   or a replacement for the SQLCipher passphrase.
+- **Operator work sessions** — a terminal-first per-user broker can hold one
+  in-memory, capability-scoped lease per encrypted project for a long or
+  until-lock CLI/agent session. The OS user is the principal; same-user
+  processes intentionally share the lease, while admin operations re-authenticate.
 - **Two surfaces, one daemon** — desktop GUI (Tauri 2 + React) for
   day-to-day work; CLI with deterministic JSON envelopes for scripting,
   automation, and power users; both backed by the same Python daemon.
@@ -311,6 +315,7 @@ overview.
   [AT glossary](docs/reference/i18n-glossary.md) ·
   [Daemon](docs/reference/daemon.md) ·
   [Machine output](docs/reference/machine-output.md) ·
+  [Operator broker](docs/reference/operator-broker.md) ·
   [Device & team sync](docs/reference/device-sync.md) ·
   [Prerelease binaries](docs/reference/prerelease-binaries.md) ·
   [Homebrew Cask](docs/reference/homebrew-cask.md)

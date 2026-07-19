@@ -267,6 +267,24 @@ is running with the unlocked DB, it can read every credential. The
 `backends reveal-token` enforces re-prompting for presence; it does not
 add a separate cryptographic tier.
 
+### Terminal operator broker
+
+Brokered unlock keeps a project's passphrase only in a per-user broker process
+for an explicit duration or until-lock session. It does not authenticate an
+individual agent: any process intentionally running as the same logged-in OS
+user can exercise the active lease's capabilities. Cross-user isolation comes
+from owner-only local IPC, peer user-id/SID validation, separate native
+credential namespaces, and per-project ownership locks.
+
+Brokered mode never reads the unattended CLI remembered-unlock item. Manual,
+brokered, and unattended modes are distinct and visible in `kassiber operator
+status`. Normal leases may grant read, operator, and accounting-decision work;
+admin operations require a fresh one-operation authorization. Broker death,
+logout, reboot, explicit lock, or lease expiry removes the in-memory grant.
+There is no exactly-once claim across a broker crash. See
+[docs/reference/operator-broker.md](docs/reference/operator-broker.md) for the
+protocol, platform primitives, queue semantics, and memory-zeroization limits.
+
 ## Safe-to-record CLI output
 
 Normal `backends ...` and `wallets ...` success output now follows a narrow
