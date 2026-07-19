@@ -25,6 +25,7 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .command_capabilities import daemon_capability
 from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
@@ -13365,6 +13366,20 @@ def handle_request(
                 "daemon request requires a non-empty string kind",
                 request_id=request_id,
                 details={"keys": sorted(str(key) for key in request)},
+                retryable=False,
+            ),
+            False,
+        )
+
+    try:
+        daemon_capability(kind)
+    except KeyError:
+        return (
+            _error_envelope(
+                "unsupported_kind",
+                f"daemon kind {kind!r} is not classified or supported",
+                request_id=request_id,
+                details={"kind": kind},
                 retryable=False,
             ),
             False,

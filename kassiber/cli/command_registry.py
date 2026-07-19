@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+from ..command_capabilities import Capability, cli_capability
 from ..envelope import derive_kind
 from ..errors import AppError
 
@@ -26,26 +27,6 @@ _NO_BOOTSTRAP_DATABASE_PATHS = {
     "daemon",
     "wallets.kinds",
     "wallets.ledger-template",
-}
-_READ_ONLY_TOP_LEVEL = {"health", "next-actions", "status"}
-_READ_ONLY_PATHS = {"wallets.preview-document"}
-_READ_ONLY_VERBS = {
-    "coverage",
-    "current",
-    "describe",
-    "events",
-    "get",
-    "identify",
-    "kinds",
-    "latest",
-    "list",
-    "pairs",
-    "quarantined",
-    "range",
-    "show",
-    "status",
-    "summary",
-    "verify",
 }
 _SECRET_DEST_FRAGMENTS = (
     "api_key",
@@ -74,16 +55,10 @@ def command_needs_database(args: argparse.Namespace) -> bool:
 
 
 def _effect_for_path(path: str) -> str:
+    capability = cli_capability(path)
     if path in {"chat", "daemon"}:
         return "interactive"
-    parts = path.split(".")
-    if (
-        path in _READ_ONLY_TOP_LEVEL
-        or path in _READ_ONLY_PATHS
-        or parts[-1] in _READ_ONLY_VERBS
-    ):
-        return "read_only"
-    return "mutating"
+    return "read_only" if capability is Capability.READ else "mutating"
 
 
 def _argument_metadata(action: argparse.Action) -> dict[str, Any] | None:
@@ -149,6 +124,7 @@ def _walk_parser(
     ]
     destinations = {argument["name"] for argument in arguments}
     top_level = path[0] if path else ""
+    capability = cli_capability(dotted_path)
     needs_database = not (
         top_level in _NO_BOOTSTRAP_DATABASE_PREFIXES
         or dotted_path in _NO_BOOTSTRAP_DATABASE_PATHS
@@ -160,6 +136,7 @@ def _walk_parser(
             "kind": dotted_path,
             "help": command_help or parser.description,
             "effect": _effect_for_path(dotted_path),
+            "capability": capability.value,
             "needs_database": needs_database,
             "supports_cursor": "cursor" in destinations,
             "supports_dry_run": "dry_run" in destinations,
