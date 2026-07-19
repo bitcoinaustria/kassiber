@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  DaemonRequestError,
   useDaemon,
   useDaemonMutation,
   useDaemonStreamMutation,
@@ -229,6 +230,9 @@ interface CoreDetectionCandidate {
   peers?: number | null;
   status?: string | null;
   pruned?: boolean | null;
+  pruneheight?: number | null;
+  earliest_retained_at?: string | null;
+  rescan_start_at?: string | null;
   ibd?: boolean | null;
   wallet_rpc?: CoreCapabilityPayload | null;
   block_filters?: CoreCapabilityPayload | null;
@@ -257,6 +261,9 @@ interface CoreProbeData {
   status?: string | null;
   pruned?: boolean | null;
   pruneheight?: number | null;
+  earliest_retained_at?: string | null;
+  birthday_covered?: boolean | null;
+  rescan_possible?: boolean | null;
   version?: number | null;
   ibd?: boolean | null;
   wallet_rpc?: CoreCapabilityPayload | null;
@@ -266,6 +273,27 @@ interface CoreProbeData {
     message?: string;
     hint?: string;
   };
+}
+
+type WalletCoreCoverageState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "available"; probe: CoreProbeData }
+  | { status: "birthday_required"; probe: CoreProbeData }
+  | { status: "verification_required"; probe: CoreProbeData }
+  | {
+      status: "blocked" | "error";
+      message: string;
+      code?: string;
+      details?: Record<string, unknown>;
+    };
+
+function daemonErrorDetails(error: unknown): Record<string, unknown> | undefined {
+  if (!(error instanceof DaemonRequestError)) return undefined;
+  const details = error.envelope.error?.details;
+  return details && typeof details === "object" && !Array.isArray(details)
+    ? (details as Record<string, unknown>)
+    : undefined;
 }
 
 function backendOptionLabel(backend: BackendOption): string {
@@ -670,6 +698,7 @@ const formDefaultsFor = (
     bip329File: "",
     bip329ExportMode: "stored",
     syncAfterCreate:
+      source.setupKind === "descriptor" ||
       source.setupKind === "file-wallet" ||
       source.setupKind === "bullbitcoin-wallet" ||
       source.setupKind === "address-list",
@@ -770,7 +799,13 @@ function coreReadinessMessages(
 ) {
   const messages: string[] = [];
   if (payload.pruned) {
-    messages.push(t("connections:add.core.prunedWarning"));
+    messages.push(
+      payload.earliest_retained_at
+        ? t("connections:add.core.prunedWarningWithDate", {
+            retained: payload.earliest_retained_at.slice(0, 10),
+          })
+        : t("connections:add.core.prunedWarning"),
+    );
   }
   if (payload.ibd) {
     messages.push(t("connections:add.core.initialBlockDownloadWarning"));
@@ -940,6 +975,11 @@ export function AddConnectionDialog({
   const testCore = useDaemonMutation<CoreProbeData>(
     "ui.backends.bitcoinrpc.test",
   );
+  const walletCoreProbe = useDaemonMutation<CoreProbeData>(
+    "ui.backends.bitcoinrpc.test",
+    { invalidateQueries: false },
+  );
+  const probeWalletCore = walletCoreProbe.mutateAsync;
   const [syncProgress, setSyncProgress] = React.useState<{
     wallet: string;
     processed: number;
@@ -1019,6 +1059,8 @@ export function AddConnectionDialog({
     | { ok: false; message: string; hint?: string | null }
     | null
   >(null);
+  const [walletCoreCoverage, setWalletCoreCoverage] =
+    React.useState<WalletCoreCoverageState>({ status: "idle" });
   const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
   const copyAddress = React.useCallback(async (address: string) => {
     try {
@@ -1293,6 +1335,7 @@ export function AddConnectionDialog({
     previewBip329.isPending ||
     importBip329.isPending ||
     exportBip329.isPending ||
+    walletCoreProbe.isPending ||
     syncWallet.isPending;
   const requiresBackend =
     setupKind === "descriptor" ||
@@ -1319,6 +1362,8 @@ export function AddConnectionDialog({
             ? t("add.submit.saving")
             : setupKind === "btcpay"
               ? t("add.submit.setupBtcpayAccount")
+              : setupKind === "descriptor" && form.syncAfterCreate
+                ? t("add.submit.createAndScan")
               : setupKind === "bullbitcoin-wallet" &&
                   form.bullWalletSetupMode === "existing_wallets"
                 ? t("add.submit.saveWalletMapping")
@@ -1348,6 +1393,7 @@ export function AddConnectionDialog({
     setBtcpayDiscovery(null);
     setCoreDetection(null);
     setCoreTestStatus(null);
+    setWalletCoreCoverage({ status: "idle" });
     setSyncProgress(null);
     setPurgedKeys(null);
   }, [selected, t]);
@@ -1385,6 +1431,7 @@ export function AddConnectionDialog({
     setPreviewAddresses(null);
     setPreviewError(null);
     setPurgedKeys(null);
+    setWalletCoreCoverage({ status: "idle" });
   }, [open, selected, t]);
 
   React.useEffect(() => {
@@ -1410,6 +1457,75 @@ export function AddConnectionDialog({
         : { ...current, backend: defaultBackendName };
     });
   }, [defaultBackendName, selectedBackendOptionKey, setupKind]);
+
+  React.useEffect(() => {
+    if (
+      (setupKind !== "descriptor" && setupKind !== "address-list") ||
+      selectedBackend?.kind !== "bitcoinrpc" ||
+      !selectedBackend.name
+    ) {
+      setWalletCoreCoverage({ status: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setWalletCoreCoverage({ status: "checking" });
+    const timer = window.setTimeout(() => {
+      void probeWalletCore({
+        backend: selectedBackend.name,
+        ...(form.birthday ? { birthday: form.birthday } : {}),
+      })
+        .then((envelope) => {
+          if (cancelled) return;
+          const probe = envelope.data;
+          if (!probe?.reachable) {
+            setWalletCoreCoverage({
+              status: "error",
+              message:
+                probe?.error?.message ?? t("add.core.coverageProbeFailed"),
+            });
+          } else if (probe.pruned && !form.birthday) {
+            setWalletCoreCoverage({ status: "birthday_required", probe });
+          } else if (probe.pruned && probe.rescan_possible !== true) {
+            setWalletCoreCoverage({ status: "verification_required", probe });
+          } else {
+            setWalletCoreCoverage({ status: "available", probe });
+          }
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          const code =
+            error instanceof DaemonRequestError
+              ? error.envelope.error?.code
+              : undefined;
+          setWalletCoreCoverage({
+            status:
+              code === "bitcoinrpc_pruned_below_birthday" ||
+              code === "bitcoinrpc_birthday_required"
+                ? "blocked"
+                : "error",
+            message:
+              error instanceof Error
+                ? error.message
+                : t("add.core.coverageProbeFailed"),
+            code,
+            details: daemonErrorDetails(error),
+          });
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    form.birthday,
+    selectedBackend?.kind,
+    selectedBackend?.name,
+    setupKind,
+    t,
+    probeWalletCore,
+  ]);
 
   React.useEffect(() => {
     if (setupKind !== "btcpay") return;
@@ -1628,6 +1744,23 @@ export function AddConnectionDialog({
           timeout: 10,
         };
 
+  const requireSelectedCoreCoverage = async () => {
+    if (selectedBackend?.kind !== "bitcoinrpc") return;
+    const envelope = await probeWalletCore({
+      backend: selectedBackend.name,
+      ...(form.birthday ? { birthday: form.birthday } : {}),
+    });
+    const probe = envelope.data;
+    if (!probe?.reachable) {
+      throw new Error(
+        probe?.error?.message ?? t("add.core.coverageProbeFailed"),
+      );
+    }
+    if (probe.pruned && !form.birthday) {
+      throw new Error(t("add.core.birthdayRequiredForPruned"));
+    }
+  };
+
   const validateSetupForm = (): Partial<Record<keyof SetupFormState, string>> => {
     const errors: Partial<Record<keyof SetupFormState, string>> = {};
     if (
@@ -1655,6 +1788,20 @@ export function AddConnectionDialog({
       if (addressBackendOptions.length > 0 && !form.backend.trim()) {
         errors.backend = t("add.validation.chooseBackend");
       }
+      if (form.birthday && Number.isNaN(Date.parse(form.birthday))) {
+        errors.birthday = t("add.validation.birthdayInvalid");
+      }
+      if (selectedBackend?.kind === "bitcoinrpc" && form.syncAfterCreate) {
+        if (walletCoreCoverage.status === "checking") {
+          errors.birthday = t("add.core.coverageChecking");
+        } else if (walletCoreCoverage.status === "birthday_required") {
+          errors.birthday = t("add.core.birthdayRequiredForPruned");
+        } else if (walletCoreCoverage.status === "blocked") {
+          errors.birthday = walletCoreCoverage.message;
+        } else if (walletCoreCoverage.status === "error") {
+          errors.backend = walletCoreCoverage.message;
+        }
+      }
     }
     if (setupKind === "descriptor") {
       if (!form.walletMaterial.trim()) {
@@ -1680,6 +1827,17 @@ export function AddConnectionDialog({
       }
       if (form.birthday && Number.isNaN(Date.parse(form.birthday))) {
         errors.birthday = t("add.validation.birthdayInvalid");
+      }
+      if (selectedBackend?.kind === "bitcoinrpc" && form.syncAfterCreate) {
+        if (walletCoreCoverage.status === "checking") {
+          errors.birthday = t("add.core.coverageChecking");
+        } else if (walletCoreCoverage.status === "birthday_required") {
+          errors.birthday = t("add.core.birthdayRequiredForPruned");
+        } else if (walletCoreCoverage.status === "blocked") {
+          errors.birthday = walletCoreCoverage.message;
+        } else if (walletCoreCoverage.status === "error") {
+          errors.backend = walletCoreCoverage.message;
+        }
       }
     }
     if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
@@ -1924,6 +2082,7 @@ export function AddConnectionDialog({
         openBackendSettings();
         return;
       } else if (setupKind === "descriptor") {
+        if (form.syncAfterCreate) await requireSelectedCoreCoverage();
         const gapLimit = Number.parseInt(form.gapLimit, 10);
         const isBareXpub =
           detectWalletMaterial(form.walletMaterial).kind === "bare-xpub";
@@ -1971,6 +2130,7 @@ export function AddConnectionDialog({
           tone: "success",
         });
       } else if (setupKind === "address-list") {
+        if (form.syncAfterCreate) await requireSelectedCoreCoverage();
         const parsed = parsedAddressList;
         await createWallet.mutateAsync({
           label,
@@ -1979,6 +2139,7 @@ export function AddConnectionDialog({
           chain: selected.chain,
           network: selected.network,
           addresses: parsed.valid,
+          birthday: form.birthday || undefined,
         });
         if (form.syncAfterCreate) {
           startSyncNotice(t("add.addressList.stillScanning", { label }));
@@ -2469,6 +2630,78 @@ export function AddConnectionDialog({
     </label>
   );
 
+  const renderWalletCoreCoverage = () => {
+    if (selectedBackend?.kind !== "bitcoinrpc") return null;
+    if (walletCoreCoverage.status === "idle") return null;
+    if (walletCoreCoverage.status === "checking") {
+      return (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          {t("add.core.coverageChecking")}
+        </div>
+      );
+    }
+    if (walletCoreCoverage.status === "birthday_required") {
+      const retained =
+        walletCoreCoverage.probe.earliest_retained_at?.slice(0, 10) ??
+        t("add.core.retainedDateUnknown");
+      return (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+          {t("add.core.coverageBirthdayRequired", { retained })}
+        </div>
+      );
+    }
+    if (walletCoreCoverage.status === "verification_required") {
+      const retained =
+        walletCoreCoverage.probe.earliest_retained_at?.slice(0, 10) ??
+        t("add.core.retainedDateUnknown");
+      return (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+          {t("add.core.coverageVerificationRequired", {
+            birthday: form.birthday,
+            retained,
+          })}
+        </div>
+      );
+    }
+    if (walletCoreCoverage.status === "available") {
+      const probe = walletCoreCoverage.probe;
+      if (!probe.pruned) {
+        return (
+          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-200">
+            {t("add.core.coverageFullHistory")}
+          </div>
+        );
+      }
+      const retained =
+        probe.earliest_retained_at?.slice(0, 10) ??
+        t("add.core.retainedDateUnknown");
+      return (
+        <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-200">
+          {t("add.core.coverageAvailablePruned", {
+            birthday: form.birthday,
+            retained,
+          })}
+        </div>
+      );
+    }
+    const retainedRaw = walletCoreCoverage.details?.earliest_retained_at;
+    const retained =
+      typeof retainedRaw === "string"
+        ? retainedRaw.slice(0, 10)
+        : t("add.core.retainedDateUnknown");
+    return (
+      <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+        {walletCoreCoverage.status === "blocked"
+          ? t("add.core.coverageBlocked", {
+              birthday: form.birthday || t("add.core.birthdayUnknown"),
+              retained,
+            })
+          : walletCoreCoverage.message}
+      </div>
+    );
+  };
+
   const bip329MatchLabel = (status: Bip329MatchStatus) => {
     switch (status) {
       case "exact":
@@ -2897,6 +3130,7 @@ export function AddConnectionDialog({
               onChange={(event) => updateForm("birthday", event.target.value)}
             />
           </SetupField>
+          {renderWalletCoreCoverage()}
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -2958,6 +3192,7 @@ export function AddConnectionDialog({
             </span>
           </div>
           {renderDescriptorPreview()}
+          {renderSyncAfterCreate(t("add.descriptor.scanAfter"))}
         </>
       );
     }
@@ -2973,6 +3208,26 @@ export function AddConnectionDialog({
             t("add.field.backend"),
             descriptorBackendOptions,
           )}
+          {selectedBackend?.kind === "bitcoinrpc" ? (
+            <>
+              <SetupField
+                id="connection-address-birthday"
+                label={t("add.descriptor.birthday")}
+                error={fieldErrors.birthday}
+                helper={t("add.descriptor.birthdayHelperCore")}
+              >
+                <Input
+                  id="connection-address-birthday"
+                  type="date"
+                  value={form.birthday}
+                  onChange={(event) =>
+                    updateForm("birthday", event.target.value)
+                  }
+                />
+              </SetupField>
+              {renderWalletCoreCoverage()}
+            </>
+          ) : null}
           <SetupField
             id="connection-address-list"
             label={t("add.addressList.addresses")}
@@ -4971,7 +5226,12 @@ export function AddConnectionDialog({
                 </p>
                 {coreTestStatus.pruned ? (
                   <p className="text-amber-700 dark:text-amber-300">
-                    {t("add.core.prunedWarning")}
+                    {coreTestStatus.earliest_retained_at
+                      ? t("add.core.prunedWarningWithDate", {
+                          retained:
+                            coreTestStatus.earliest_retained_at.slice(0, 10),
+                        })
+                      : t("add.core.prunedWarning")}
                   </p>
                 ) : null}
                 {coreTestStatus.ibd ? (

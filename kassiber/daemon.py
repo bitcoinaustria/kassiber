@@ -167,6 +167,7 @@ from .core.transaction_graph import build_transaction_graph_snapshot
 from .core.sync_backends import (
     ElectrumClient,
     bitcoinrpc_call,
+    bitcoinrpc_prune_coverage,
     detect_active_script_types,
 )
 from .backends import (
@@ -219,7 +220,7 @@ from .log_ring import (
     sanitize_exception,
 )
 from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
-from .time_utils import iso_to_unix, now_iso, timestamp_to_iso
+from .time_utils import iso_to_unix, now_iso
 from .util import parse_bool, parse_int, str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
@@ -12602,57 +12603,17 @@ def _bitcoinrpc_backend_for_probe(
     return backend
 
 
-def _bitcoinrpc_birthday_height(
-    backend: dict[str, Any],
-    birthday_ts: int,
-    tip_height: int,
-) -> int:
-    if birthday_ts <= 0:
-        return 0
-    low = 0
-    high = max(0, int(tip_height))
-    while low < high:
-        mid = (low + high) // 2
-        block_hash = bitcoinrpc_call(backend, "getblockhash", [mid])
-        header = bitcoinrpc_call(backend, "getblockheader", [block_hash])
-        if int(header.get("time") or 0) >= birthday_ts:
-            high = mid
-        else:
-            low = mid + 1
-    return low
-
-
-def _raise_if_pruned_below_birthday(
+def _bitcoinrpc_prune_coverage_payload(
     backend: dict[str, Any],
     blockchain_info: dict[str, Any],
     birthday_ts: int,
-) -> None:
-    if birthday_ts <= 0 or not blockchain_info.get("pruned"):
-        return
-    pruneheight = blockchain_info.get("pruneheight")
-    if pruneheight in (None, ""):
-        return
-    try:
-        normalized_pruneheight = int(pruneheight)
-        tip_height = int(blockchain_info.get("blocks") or 0)
-    except (TypeError, ValueError):
-        return
-    birthday_height = _bitcoinrpc_birthday_height(backend, birthday_ts, tip_height)
-    if normalized_pruneheight > birthday_height:
-        raise AppError(
-            "Bitcoin Core has pruned blocks below this wallet birthday",
-            code="bitcoinrpc_pruned_below_birthday",
-            hint=(
-                "Use an unpruned node, a node whose prune horizon still covers "
-                "the wallet birthday, or choose a newer wallet birthday."
-            ),
-            details={
-                "birthday": timestamp_to_iso(birthday_ts),
-                "birthday_height": birthday_height,
-                "pruneheight": normalized_pruneheight,
-            },
-            retryable=False,
-        )
+) -> dict[str, Any]:
+    return bitcoinrpc_prune_coverage(
+        backend,
+        birthday_ts,
+        blockchain_info=blockchain_info,
+        rpc_call=bitcoinrpc_call,
+    )
 
 
 def _bitcoinrpc_sync_status(
@@ -12740,7 +12701,11 @@ def _bitcoinrpc_probe_payload(
             code="bitcoinrpc_unexpected_response",
             retryable=True,
         )
-    _raise_if_pruned_below_birthday(backend, blockchain_info, birthday_ts)
+    coverage = _bitcoinrpc_prune_coverage_payload(
+        backend,
+        blockchain_info,
+        birthday_ts,
+    )
     core_chain = str(blockchain_info.get("chain") or "").strip()
     wallet_rpc = _bitcoinrpc_wallet_rpc_payload(backend)
     block_filters = _bitcoinrpc_block_filter_payload(backend)
@@ -12763,6 +12728,10 @@ def _bitcoinrpc_probe_payload(
         "peers": network_info.get("connections"),
         "pruned": bool(blockchain_info.get("pruned")),
         "pruneheight": blockchain_info.get("pruneheight"),
+        "earliest_retained_at": coverage.get("earliest_retained_at"),
+        "rescan_start_at": coverage.get("rescan_start_at"),
+        "birthday_covered": coverage.get("birthday_covered"),
+        "rescan_possible": coverage.get("rescan_possible"),
         "version": network_info.get("version"),
         "ibd": bool(blockchain_info.get("initialblockdownload")),
         "wallet_rpc": wallet_rpc,
@@ -12826,6 +12795,8 @@ def _detect_core_payload(args: dict[str, Any] | None = None) -> dict[str, Any]:
             "peers": probe.get("peers"),
             "status": probe.get("status"),
             "pruned": probe.get("pruned"),
+            "pruneheight": probe.get("pruneheight"),
+            "earliest_retained_at": probe.get("earliest_retained_at"),
             "ibd": probe.get("ibd"),
             "wallet_rpc": probe.get("wallet_rpc"),
             "block_filters": probe.get("block_filters"),

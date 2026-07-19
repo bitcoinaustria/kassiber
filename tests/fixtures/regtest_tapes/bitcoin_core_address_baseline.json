@@ -18,6 +18,18 @@
       "iswatchonly": true,
       "ismine": false
     },
+    "{\"method\":\"getdescriptorinfo\",\"params\":[\"addr(bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw)\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
+      "descriptor": "addr(bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw)#baseline"
+    },
+    "{\"method\":\"getblockchaininfo\",\"params\":[],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
+      "blocks": 102,
+      "pruned": false
+    },
+    "{\"method\":\"importdescriptors\",\"params\":[[{\"desc\":\"addr(bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw)#baseline\",\"label\":\"kassiber:replay-kassiber-wallet-1\",\"timestamp\":0}]],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": [
+      {
+        "success": true
+      }
+    ],
     "{\"method\":\"listtransactions\",\"params\":[\"*\",1000,0,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": [
       {
         "address": "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw",

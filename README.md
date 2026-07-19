@@ -246,8 +246,15 @@ re-enrolls it; no surface silently keeps using a stale passphrase.
 
 When syncing descriptor or xpub wallets through your own Bitcoin Core node,
 add a Core RPC backend (`--cookiefile` or `--username` / `--password`) and
-optionally set `--birthday YYYY-MM-DD` on the wallet to bound Core's
-watch-only descriptor rescan. The desktop setup can detect a local Core node
+set the wallet's real `--birthday YYYY-MM-DD` to bound Core's watch-only
+descriptor rescan. On a pruned node, Kassiber requires that birthday and checks
+Core's approximate retained horizon before asking Core to perform the
+authoritative import/rescan. Kassiber records complete-history coverage only
+after that rescan succeeds; watched targets without this attestation are
+re-imported instead of being trusted. If the required history has been pruned,
+use an unpruned Core node or archival backend; choosing an artificially recent
+birthday can omit transactions. Incremental refresh remains available after a
+successful attestation. The desktop setup can detect a local Core node
 from default cookie paths or `bitcoin.conf`; it reports wallet-RPC and BIP158
 filter-index availability, but Kassiber's current Core sync path is still
 watch-only descriptor import, not filter-first P2P sync.

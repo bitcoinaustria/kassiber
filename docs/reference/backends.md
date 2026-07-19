@@ -254,7 +254,31 @@ transaction kind.
 `bitcoinrpc` supports Bitcoin descriptor/xpub/address wallet refresh. For
 descriptor/xpub wallets Kassiber imports ranged watch-only descriptors into a
 dedicated Core wallet; that import is a backend mutation and may trigger Core's
-blocking rescan. Use a wallet `--birthday` date to bound the rescan when known.
+blocking rescan. Use the wallet's real `--birthday` date to bound that rescan.
+For a pruned node, a birthday is required before Kassiber imports new watch
+targets or starts a full rescan. The probe reports Core's approximate earliest
+retained date and the two-hour timestamp safety window, but it does not guess a
+rescan height from raw block timestamps: those timestamps are not monotonic and
+Core's cumulative max-time index is not exposed over RPC. The actual
+`importdescriptors` / `importmulti` rescan is authoritative. If Core reports
+that required blocks are unavailable, the operation fails closed and directs
+the user to an unpruned Core node or archival backend. Do not move the birthday
+forward merely to bypass that result, because doing so can silently omit older
+wallet activity.
+
+Kassiber writes a local history attestation only after Core successfully
+completes that import/rescan. Core watch membership alone is not enough: an
+import can leave a target watched even if its rescan failed. A missing or stale
+attestation therefore forces a re-import, including for already-watched address
+wallets. Once the attestation matches the backend, Core wallet, birthday, and
+target set, ordinary incremental refresh can continue without rescanning. A
+full rescan clears that fast path; descriptor range expansion, birthday/target
+changes, or recreation of Core's Kassiber watch wallet also require a new
+successful attestation. The desktop setup shows the retained horizon, requires
+a birthday when scanning a pruned node, and makes clear that Core verifies
+coverage during the scan. Creating the Kassiber wallet without scanning remains
+available.
+
 The desktop Core detector reads default cookie locations and local
 `bitcoin.conf` RPC settings, then probes reachability, peer/sync state, wallet
 RPC support, and BIP158 block-filter availability. Block filters are reported

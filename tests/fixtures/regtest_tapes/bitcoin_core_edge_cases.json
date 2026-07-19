@@ -24,6 +24,24 @@
       "iswatchonly": true,
       "ismine": false
     },
+    "{\"method\":\"getdescriptorinfo\",\"params\":[\"addr(bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc)\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
+      "descriptor": "addr(bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc)#edge-one"
+    },
+    "{\"method\":\"getdescriptorinfo\",\"params\":[\"addr(bcrt1qv4jxwefdvdshxefdv9jxgu3dw3mk7gfpl9er9m)\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
+      "descriptor": "addr(bcrt1qv4jxwefdvdshxefdv9jxgu3dw3mk7gfpl9er9m)#edge-two"
+    },
+    "{\"method\":\"getblockchaininfo\",\"params\":[],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
+      "blocks": 210,
+      "pruned": false
+    },
+    "{\"method\":\"importdescriptors\",\"params\":[[{\"desc\":\"addr(bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc)#edge-one\",\"label\":\"kassiber:replay-kassiber-wallet-edge\",\"timestamp\":0},{\"desc\":\"addr(bcrt1qv4jxwefdvdshxefdv9jxgu3dw3mk7gfpl9er9m)#edge-two\",\"label\":\"kassiber:replay-kassiber-wallet-edge\",\"timestamp\":0}]],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-edge\"}": [
+      {
+        "success": true
+      },
+      {
+        "success": true
+      }
+    ],
     "{\"method\":\"listtransactions\",\"params\":[\"*\",1000,0,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-edge\"}": [
       {
         "address": "bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc",

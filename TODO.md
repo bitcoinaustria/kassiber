@@ -284,7 +284,11 @@ same verification surface.
   bounded rescans, adds desktop local-Core detection and health probes
   (`ui.backends.detect_core`, `ui.backends.bitcoinrpc.test`) with
   `bitcoin.conf` parsing plus wallet-RPC / BIP158 capability reporting, and
-  wires the bilingual Add Connection flow for Core setup.
+  wires the bilingual Add Connection flow for Core setup. Pruned-node safety is
+  operation-aware: probes expose the approximate earliest retained date, Core
+  authoritatively verifies history during import/rescan, successful coverage is
+  attested locally, watched-but-unattested targets are re-imported, and only
+  attested wallets take the incremental fast path.
 - [x] Add the shared privacy-import substrate for future wallet importers:
   typed transaction-level privacy-boundary markers, generic privacy-hop tax
   quarantine, source-funds opaque-boundary warnings, and typed desktop
