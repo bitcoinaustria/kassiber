@@ -37,10 +37,8 @@ from ..projects import (
 from ..secrets.credentials import scan_dotenv_for_secrets
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
-from ..secrets.unlock_store import (
-    cli_remembered_unlock_enabled,
-    load_remembered_passphrase,
-)
+from ..operator.modes import remembered_unlock_allowed
+from ..secrets.unlock_store import load_remembered_passphrase
 from .repo import current_context_snapshot
 
 
@@ -182,7 +180,7 @@ def _open_db_with_resolved_passphrase(
         if exc.code != "passphrase_required":
             raise
 
-        if cli_remembered_unlock_enabled(data_root):
+        if remembered_unlock_allowed(data_root):
             remembered = load_remembered_passphrase(data_root)
             if remembered is not None:
                 try:

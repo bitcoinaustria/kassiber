@@ -20,6 +20,7 @@ from ..db import (
     resolve_effective_data_root,
 )
 from ..errors import AppError
+from ..operator.modes import set_unlock_mode, unlock_mode_status
 from .credentials import (
     migrate_dotenv_credentials,
     scan_dotenv_for_secrets,
@@ -122,6 +123,7 @@ def cmd_secrets_status(args: argparse.Namespace) -> dict:
     classification["dotenv_path"] = str(env_file)
     classification["dotenv_plaintext_secrets"] = plaintext_secrets
     classification["remembered_unlock"] = remembered_unlock_status(args.data_root)
+    classification["operator_unlock_mode"] = unlock_mode_status(args.data_root)
     if classification["encrypted"] and plaintext_secrets:
         classification["dotenv_warning"] = (
             "Encrypted database is in use but the bootstrap dotenv still "
@@ -336,6 +338,7 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
             enabled=True,
             legacy_quarantined=False,
         )
+        set_unlock_mode(args.data_root, "unattended")
     except OSError as exc:
         raise AppError(
             "CLI enrollment succeeded, but legacy quarantine state could not be cleared",
@@ -396,6 +399,7 @@ def cmd_secrets_forget_unlock(args: argparse.Namespace) -> dict:
             enabled=False,
             legacy_quarantined=False,
         )
+        set_unlock_mode(args.data_root, "manual")
     except OSError as exc:
         marker_error = str(exc)
 
