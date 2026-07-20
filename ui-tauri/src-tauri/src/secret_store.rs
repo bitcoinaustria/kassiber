@@ -259,6 +259,7 @@ pub const CLI_REMEMBERED_PASSPHRASE_SERVICE: &str = "Kassiber CLI Database Passp
 pub const DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE: &str = "Kassiber Desktop Biometric Passphrase";
 pub const DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE: &str = "Kassiber Desktop Biometric Invalidated";
 pub const OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE: &str = "Kassiber Operator Biometric Passphrase";
+const OPERATOR_BIOMETRIC_MARKER_SERVICE: &str = "Kassiber Operator Biometric Enrollment";
 const DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE: &str =
     "Kassiber Desktop Biometric Enrollment (Current Set)";
 const DESKTOP_APPLICATION_GATE_MARKER_SERVICE: &str =
@@ -685,7 +686,12 @@ pub fn operator_touch_id_store_passphrase(account: &str, passphrase: &[u8]) -> R
     )
     .map_err(security_framework_error_for_user)?;
     options.set_access_control(access_control);
-    set_generic_password_options(passphrase, options).map_err(security_framework_error_for_user)
+    set_generic_password_options(passphrase, options).map_err(security_framework_error_for_user)?;
+    if let Err(error) = NativeSecretStore.set(OPERATOR_BIOMETRIC_MARKER_SERVICE, account, b"1") {
+        let _ = operator_touch_id_delete_passphrase(account);
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -726,10 +732,11 @@ pub fn operator_touch_id_delete_passphrase(account: &str) -> Result<(), String> 
         OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
         account,
     )) {
-        Ok(()) => Ok(()),
-        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
-        Err(error) => Err(security_framework_error_for_user(error)),
+        Ok(()) => {}
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {}
+        Err(error) => return Err(security_framework_error_for_user(error)),
     }
+    NativeSecretStore.delete(OPERATOR_BIOMETRIC_MARKER_SERVICE, account)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -744,7 +751,14 @@ pub fn operator_touch_id_configured(account: &str) -> Result<bool, String> {
             "Touch ID operator unlock is only available in the macOS desktop app.".to_string(),
         );
     }
-    NativeSecretStore.exists(OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE, account)
+    operator_touch_id_configured_with_store(&NativeSecretStore, account)
+}
+
+fn operator_touch_id_configured_with_store(
+    store: &dyn SecretStore,
+    account: &str,
+) -> Result<bool, String> {
+    store.exists(OPERATOR_BIOMETRIC_MARKER_SERVICE, account)
 }
 
 fn validate_touch_id_account(account: &str) -> Result<(), String> {
@@ -1462,6 +1476,23 @@ mod tests {
             OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
             CLI_REMEMBERED_PASSPHRASE_SERVICE
         );
+        assert_ne!(
+            OPERATOR_BIOMETRIC_MARKER_SERVICE,
+            OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE
+        );
+    }
+
+    #[test]
+    fn operator_touch_id_status_uses_a_non_prompting_marker() {
+        let store = MockSecretStore::new(SecretStoreAvailability::Available {
+            identity_strength: IdentityStrength::Production,
+        });
+        let account = "operator-project";
+        assert!(!operator_touch_id_configured_with_store(&store, account).unwrap());
+        store
+            .set(OPERATOR_BIOMETRIC_MARKER_SERVICE, account, b"1")
+            .unwrap();
+        assert!(operator_touch_id_configured_with_store(&store, account).unwrap());
     }
 
     #[test]

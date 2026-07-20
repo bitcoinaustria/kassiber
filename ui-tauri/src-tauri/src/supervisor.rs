@@ -21,10 +21,6 @@ use tauri::{AppHandle, Emitter};
 // Packaged one-file Python sidecars can take longer than a development checkout
 // to start on cold launch, especially before the database unlock screen.
 const DAEMON_READY_TIMEOUT: Duration = Duration::from_secs(30);
-/// Per-record inactivity timeout for streaming kinds. The recv clock resets
-/// every time a delta arrives, so a long-running stream stays alive as long
-/// as the daemon keeps producing output within the window.
-const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 const LIFECYCLE_RING_CAPACITY: usize = 64;
 
@@ -575,21 +571,15 @@ impl DaemonSupervisor {
             return Err(error.with_stderr_tail(stderr_tail));
         }
 
-        // Streaming kinds use a per-record inactivity timeout. Production
-        // non-streaming work has no fixed supervisor deadline and waits for its
-        // exact terminal record; only tests install `invoke_timeout`.
-        let deadline = if streaming {
-            None
-        } else {
-            self.invoke_timeout.map(|timeout| Instant::now() + timeout)
-        };
+        // Accepted production work has no supervisor deadline. Long sync,
+        // import, journal, and export operations may be quiet while an atomic
+        // step runs, and returning `daemon_busy` would falsely look terminal
+        // while the mutation continued. Only tests install `invoke_timeout`.
+        let deadline = self.invoke_timeout.map(|timeout| Instant::now() + timeout);
 
         let result = loop {
-            let receive_timeout = if streaming {
-                Some(DAEMON_STREAM_INACTIVITY_TIMEOUT)
-            } else {
-                deadline.map(|value| value.saturating_duration_since(Instant::now()))
-            };
+            let receive_timeout =
+                deadline.map(|value| value.saturating_duration_since(Instant::now()));
             let received = if let Some(remaining) = receive_timeout {
                 rx.recv_timeout(remaining)
             } else {

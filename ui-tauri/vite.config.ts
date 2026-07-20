@@ -28,7 +28,6 @@ const DOCUMENT_IMPORT_STAGE_KIND = "internal.document_import.stage";
 const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
 const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
 const LEDGER_PREVIEW_EXTENSIONS = new Set([".csv", ".tsv", ".xlsx", ".xlsm"]);
-const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_ROOT = __dirname;
 const NODE_MODULES_REALPATH = (() => {
   const nodeModulesPath = path.resolve(UI_ROOT, "node_modules");
@@ -453,7 +452,6 @@ interface PendingBridgeRequest {
   onRecord?: (payload: Record<string, unknown>) => void;
   resolve: (payload: Record<string, unknown>) => void;
   reject: (error: Error) => void;
-  timeout: NodeJS.Timeout;
 }
 
 class DaemonBridgeSupervisor {
@@ -555,25 +553,17 @@ class DaemonBridgeSupervisor {
     const kind = typeof request.kind === "string" ? request.kind : "";
 
     return new Promise<Record<string, unknown>>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(requestId);
-        reject(new Error(`daemon bridge request ${requestId} timed out`));
-      }, BRIDGE_REQUEST_TIMEOUT_MS);
-      timeout.unref();
-
       this.pending.set(requestId, {
         kind,
         onRecord,
         resolve,
         reject,
-        timeout,
       });
 
       const line = `${JSON.stringify({ ...request, request_id: requestId })}\n`;
       child.stdin.write(line, (error) => {
         if (!error) return;
         this.pending.delete(requestId);
-        clearTimeout(timeout);
         reject(error);
       });
     });
@@ -671,7 +661,6 @@ class DaemonBridgeSupervisor {
     const kind = typeof payload.kind === "string" ? payload.kind : "";
     if (kind === pending.kind || kind === "error" || kind === "auth_required") {
       this.pending.delete(String(requestId));
-      clearTimeout(pending.timeout);
       pending.resolve(payload);
       return;
     }
@@ -681,7 +670,6 @@ class DaemonBridgeSupervisor {
 
   private failPending(error: Error) {
     for (const [requestId, pending] of this.pending) {
-      clearTimeout(pending.timeout);
       pending.reject(error);
       this.pending.delete(requestId);
     }
