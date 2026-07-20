@@ -117,8 +117,9 @@ The broker is one process per logged-in OS user.
 - Windows uses a local named pipe whose protected DACL grants the current user
   only; after connection the broker resolves the client process token and
   compares its user SID with the broker SID. Remote pipe clients are rejected,
-  and client reads poll `PeekNamedPipe` against a monotonic deadline before
-  entering `ReadFile`.
+  and overlapped `ReadFile` / `WriteFile` operations use a monotonic deadline
+  through `GetOverlappedResultEx`; timed-out operations are cancelled with
+  `CancelIoEx` while their buffers remain alive until cancellation completes.
 
 Runtime directories are created without following symlinks, must be owned by
 the current user, and allow no group/other access. Named-pipe creation is the
