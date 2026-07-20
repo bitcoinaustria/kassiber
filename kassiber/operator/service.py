@@ -184,7 +184,63 @@ class ProjectWorker:
                 if not self._queue:
                     return
                 operation = self._queue.popleft()
-            self._run_one(operation)
+            try:
+                self._run_one(operation)
+            except Exception as exc:
+                self._recover_unhandled_exception(operation, exc)
+
+    def _recover_unhandled_exception(
+        self,
+        operation: Operation,
+        exc: Exception,
+    ) -> None:
+        result = OperationResult(
+            1,
+            "",
+            sanitize_traceback_text(f"operator worker failed: {exc}\n"),
+        )
+        with self._service._lock:
+            lease = self._service._leases.get(self.project_identity)
+            if operation.state == "running" and lease is not None:
+                lease.running_operations = max(0, lease.running_operations - 1)
+            if operation.state not in {
+                "completed",
+                "failed",
+                "cancelled",
+                "result_unknown",
+            }:
+                self._service._finish_operation_locked(
+                    operation,
+                    "result_unknown",
+                    result,
+                )
+            _LOGGER.error(
+                "operator worker recovered from an internal failure",
+                extra={
+                    "kb_fields": {
+                        "project": self.project_id,
+                        "command": operation.command_path,
+                        "state": "result_unknown",
+                    }
+                },
+            )
+            if (
+                lease is not None
+                and (lease.revoked or lease.expired())
+                and lease.running_operations == 0
+            ):
+                try:
+                    self._service._drop_lease_locked(self.project_identity)
+                except Exception:
+                    _LOGGER.error(
+                        "operator worker could not finish revoked lease cleanup",
+                        extra={
+                            "kb_fields": {
+                                "project": self.project_id,
+                                "state": "result_unknown",
+                            }
+                        },
+                    )
 
     def _run_one(self, operation: Operation) -> None:
         with self._service._lock:
@@ -285,6 +341,7 @@ class ProjectWorker:
                 operation.changed.notify_all()
             passphrase = lease.passphrase
         runner_crashed = False
+        cleanup_error: Exception | None = None
         try:
             result = self._runner(operation, passphrase)
         except Exception as exc:
@@ -296,7 +353,20 @@ class ProjectWorker:
             )
         finally:
             operation.owner_handle_tokens = ()
-            inherited_owner.close()
+            try:
+                inherited_owner.close()
+            except Exception as exc:
+                cleanup_error = exc
+        if cleanup_error is not None:
+            runner_crashed = True
+            result = OperationResult(
+                1,
+                result.stdout,
+                result.stderr
+                + sanitize_traceback_text(
+                    f"operator ownership cleanup failed: {cleanup_error}\n"
+                ),
+            )
         result = OperationResult(
             result.exit_code,
             result.stdout,

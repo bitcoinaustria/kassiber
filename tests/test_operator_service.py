@@ -1071,6 +1071,45 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_owner_cleanup_failure_does_not_wedge_project_worker(self) -> None:
+        calls: list[str] = []
+
+        def runner(operation, _passphrase):
+            calls.append(operation.command_path)
+            return OperationResult(0, "", "")
+
+        first_child = mock.Mock(tokens=())
+        first_child.close.side_effect = OSError("passphrase=cleanup-secret")
+        second_child = mock.Mock(tokens=())
+        owner = mock.Mock()
+        owner.duplicate_for_child.side_effect = [first_child, second_child]
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            return_value=owner,
+        ):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                lease = next(iter(service._leases.values()))
+                first = service.submit(tmp, ["status"])
+                first_status = self._wait_terminal(service, first["operation_id"])
+                self.assertEqual(first_status["state"], "result_unknown")
+                self.assertNotIn("cleanup-secret", first_status["stderr"])
+                self.assertEqual(lease.running_operations, 0)
+
+                second = service.submit(tmp, ["health"])
+                second_status = self._wait_terminal(service, second["operation_id"])
+                self.assertEqual(second_status["state"], "completed")
+                self.assertEqual(calls, ["status", "health"])
+
+                service.lock(tmp)
+                self.assertEqual(set(lease.passphrase), {0})
+            finally:
+                service.close()
+
     def test_runner_exception_is_secret_floor_redacted(self) -> None:
         def runner(_operation, _passphrase):
             raise RuntimeError("blinding_key=private-value passphrase=hunter2")

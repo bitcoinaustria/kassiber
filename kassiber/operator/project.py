@@ -140,8 +140,15 @@ class ProjectOwnerChildHandles:
         if self._closed:
             return
         self._closed = True
+        first_error: Exception | None = None
         for handle in self._handles:
-            handle.close()
+            try:
+                handle.close()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
 
 def canonical_project(data_root: str | os.PathLike[str]) -> CanonicalProject:

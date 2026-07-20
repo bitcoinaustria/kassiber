@@ -11,7 +11,11 @@ from types import SimpleNamespace
 from unittest import mock
 
 from kassiber.errors import AppError
-from kassiber.operator.project import acquire_project_ownership, canonical_project
+from kassiber.operator.project import (
+    ProjectOwnerChildHandles,
+    acquire_project_ownership,
+    canonical_project,
+)
 from kassiber.operator.service import OperationResult, OperatorService
 from kassiber import daemon as daemon_runtime
 
@@ -37,6 +41,18 @@ def _competing_owner(data_root: str, output: multiprocessing.Queue) -> None:
 
 
 class OperatorProjectTest(unittest.TestCase):
+    def test_child_owner_close_attempts_every_handle(self) -> None:
+        first = mock.Mock()
+        first.close.side_effect = OSError("first close failed")
+        second = mock.Mock()
+        handles = ProjectOwnerChildHandles((1, 2), (first, second))
+
+        with self.assertRaisesRegex(OSError, "first close failed"):
+            handles.close()
+
+        first.close.assert_called_once_with()
+        second.close.assert_called_once_with()
+
     def test_symlink_aliases_share_existing_database_identity(self) -> None:
         if os.name == "nt":
             self.skipTest("symlink privileges vary on Windows")
