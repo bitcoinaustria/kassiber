@@ -3270,6 +3270,28 @@ class OperatorClientArgumentTest(unittest.TestCase):
         finally:
             wipe_prepared(prepared)
 
+    def test_inline_secret_fd_is_replaced_by_opaque_label(self) -> None:
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, b"inline-secret\n")
+        os.close(write_fd)
+        prepared = prepare_arguments(
+            ["backends", "create", f"--token-fd={read_fd}"]
+        )
+        try:
+            self.assertEqual(prepared.argv[:3], ["backends", "create", "--token-fd"])
+            label = prepared.argv[3]
+            self.assertTrue(label.startswith("broker-secret-"))
+            self.assertEqual(bytes(prepared.secrets[label]), b"inline-secret")
+            self.assertNotIn(str(read_fd), prepared.argv)
+        finally:
+            wipe_prepared(prepared)
+
+    def test_inline_secret_fd_rejects_malformed_descriptor(self) -> None:
+        with self.assertRaises(AppError) as raised:
+            prepare_arguments(["backends", "create", "--token-fd=not-an-fd"])
+
+        self.assertEqual(raised.exception.code, "operator_invalid_command")
+
     def test_duration_parser_has_no_arbitrary_session_cap(self) -> None:
         self.assertEqual(parse_duration("8h"), 28_800)
         self.assertEqual(parse_duration("30d"), 2_592_000)

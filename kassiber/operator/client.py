@@ -425,11 +425,26 @@ def prepare_arguments(
     try:
         while index < len(argv):
             token = argv[index]
+            flag, separator, inline_value = token.partition("=")
+            if (
+                separator
+                and flag.startswith("--")
+                and flag.endswith("-fd")
+            ):
+                label = f"broker-secret-{secrets.token_hex(16)}"
+                secret_values[label] = _read_secret_fd(
+                    _parse_secret_fd(inline_value)
+                )
+                prepared.extend((flag, label))
+                index += 1
+                continue
             if token.startswith("--") and token.endswith("-fd"):
                 if index + 1 >= len(argv):
                     raise AppError("secret fd flag requires a value", code="operator_invalid_command")
                 label = f"broker-secret-{secrets.token_hex(16)}"
-                secret_values[label] = _read_secret_fd(int(argv[index + 1]))
+                secret_values[label] = _read_secret_fd(
+                    _parse_secret_fd(argv[index + 1])
+                )
                 prepared.extend((token, label))
                 index += 2
                 continue
@@ -493,6 +508,24 @@ def _read_secret_fd(fd: int) -> bytearray:
             code="secret_input_error",
             retryable=False,
         ) from exc
+
+
+def _parse_secret_fd(value: str) -> int:
+    try:
+        fd = int(value)
+    except ValueError as exc:
+        raise AppError(
+            "secret fd flag requires an integer descriptor",
+            code="operator_invalid_command",
+            retryable=False,
+        ) from exc
+    if fd < 0:
+        raise AppError(
+            "secret fd flag requires a non-negative descriptor",
+            code="operator_invalid_command",
+            retryable=False,
+        )
+    return fd
 
 
 def _read_limited(handle: BinaryIO) -> bytearray:
