@@ -44,6 +44,16 @@ class _Connection:
         pass
 
 
+def _scoped(command: str) -> list[str]:
+    return [
+        command,
+        "--workspace",
+        "workspace-a",
+        "--profile",
+        "book-a",
+    ]
+
+
 class OperatorServiceTest(unittest.TestCase):
     def test_native_auth_restart_requires_a_fully_idle_broker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
@@ -477,7 +487,7 @@ class OperatorServiceTest(unittest.TestCase):
                 )
                 first = service.submit(tmp, ["status"])
                 self.assertTrue(first_started.wait(1))
-                second = service.submit(tmp, ["health"])
+                second = service.submit(tmp, _scoped("health"))
                 self.assertEqual(service.operation_status(second["operation_id"])["state"], "queued")
                 release_first.set()
                 first_result = self._wait(service, first["operation_id"])
@@ -511,7 +521,10 @@ class OperatorServiceTest(unittest.TestCase):
             try:
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 operation_ids = [
-                    service.submit(tmp, [command])["operation_id"]
+                    service.submit(
+                        tmp,
+                        [command] if command == "status" else _scoped(command),
+                    )["operation_id"]
                     for command in ("status", "health", "next-actions")
                 ]
                 for operation_id in operation_ids:
@@ -653,6 +666,10 @@ class OperatorServiceTest(unittest.TestCase):
                     "operator_scope_required",
                 )
                 assert_rejected_and_wiped(
+                    ["health"],
+                    "operator_scope_required",
+                )
+                assert_rejected_and_wiped(
                     ["status"],
                     "operator_protocol_error",
                     operation_id="invalid-operation-id",
@@ -749,7 +766,7 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 running = service.submit(tmp, ["status"])
                 self.assertTrue(started.wait(1))
-                queued = service.submit(tmp, ["health"])
+                queued = service.submit(tmp, _scoped("health"))
                 locked = service.lock(tmp)
                 self.assertEqual(locked["running_operations_finishing"], 1)
                 self.assertEqual(
@@ -757,7 +774,7 @@ class OperatorServiceTest(unittest.TestCase):
                     "cancelled",
                 )
                 with self.assertRaises(AppError) as raised:
-                    service.submit(tmp, ["next-actions"])
+                    service.submit(tmp, _scoped("next-actions"))
                 self.assertEqual(raised.exception.code, "interaction_required")
                 release.set()
                 self.assertEqual(
@@ -789,7 +806,7 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 running = service.submit(tmp, ["status"])
                 self.assertTrue(started.wait(1))
-                queued = service.submit(tmp, ["health"])
+                queued = service.submit(tmp, _scoped("health"))
                 lease = next(iter(service._leases.values()))
                 lease.expires_at_monotonic = time.monotonic() - 1
                 release.set()
@@ -885,7 +902,7 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"first-passphrase"), duration_seconds=None)
                 running = service.submit(tmp, ["status"])
                 self.assertTrue(started.wait(1))
-                stale = service.submit(tmp, ["health"])
+                stale = service.submit(tmp, _scoped("health"))
                 lease = next(iter(service._leases.values()))
                 lease.expires_at_monotonic = time.monotonic() - 1
 
@@ -904,7 +921,7 @@ class OperatorServiceTest(unittest.TestCase):
                     bytearray(b"second-passphrase"),
                     duration_seconds=None,
                 )
-                fresh = service.submit(tmp, ["health"])
+                fresh = service.submit(tmp, _scoped("health"))
                 self.assertEqual(
                     self._wait_terminal(service, fresh["operation_id"])["state"],
                     "completed",
@@ -946,7 +963,7 @@ class OperatorServiceTest(unittest.TestCase):
                 lease.expires_at_monotonic = time.monotonic() - 1
 
                 with self.assertRaises(AppError) as raised:
-                    service.submit(tmp, ["health"])
+                    service.submit(tmp, _scoped("health"))
                 self.assertEqual(raised.exception.code, "interaction_required")
                 self.assertEqual(
                     service.operation_status(stale["operation_id"])["state"],
@@ -959,7 +976,7 @@ class OperatorServiceTest(unittest.TestCase):
                     duration_seconds=None,
                 )
                 release_dequeued.set()
-                fresh = service.submit(tmp, ["health"])
+                fresh = service.submit(tmp, _scoped("health"))
                 self.assertEqual(
                     self._wait_terminal(service, fresh["operation_id"])["state"],
                     "completed",
@@ -1011,7 +1028,7 @@ class OperatorServiceTest(unittest.TestCase):
                 )
 
                 release_dequeued.set()
-                fresh = service.submit(tmp, ["health"])
+                fresh = service.submit(tmp, _scoped("health"))
                 self.assertEqual(
                     self._wait_terminal(service, fresh["operation_id"])["state"],
                     "completed",
@@ -1577,7 +1594,7 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 first = service.submit(tmp, ["status"])
                 self.assertTrue(started.wait(1))
-                queued = service.submit(tmp, ["health"])
+                queued = service.submit(tmp, _scoped("health"))
                 database.replace(database.with_suffix(".old"))
                 database.write_bytes(b"replacement")
                 release.set()
@@ -1668,7 +1685,7 @@ class OperatorServiceTest(unittest.TestCase):
 
                 self.assertEqual(completed["state"], "cancelled")
                 self.assertEqual(service.status(tmp)["lease"], "unlocked")
-                replacement = service.submit(tmp, ["health"])
+                replacement = service.submit(tmp, _scoped("health"))
                 self.assertEqual(
                     self._wait_terminal(service, replacement["operation_id"])[
                         "state"
@@ -1990,7 +2007,7 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 first = service.submit(tmp, ["status"])
                 self._wait_terminal(service, first["operation_id"])
-                second = service.submit(tmp, ["health"])
+                second = service.submit(tmp, _scoped("health"))
                 self._wait_terminal(service, second["operation_id"])
                 replay = service.submit(
                     tmp,
@@ -2076,7 +2093,7 @@ class OperatorServiceTest(unittest.TestCase):
                 self.assertEqual(service.status(tmp)["lease"], "locked")
 
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
-                second = service.submit(tmp, ["health"])
+                second = service.submit(tmp, _scoped("health"))
                 second_status = self._wait_terminal(service, second["operation_id"])
                 self.assertEqual(second_status["state"], "completed")
                 self.assertEqual(calls, ["status", "health"])

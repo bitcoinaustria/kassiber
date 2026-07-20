@@ -10,7 +10,9 @@ from unittest import mock
 
 from kassiber.cli.main import main
 from kassiber.cli.main import _verify_operator_child_open_database
+from kassiber.core import accounts as core_accounts
 from kassiber.core.runtime import _operator_expected_database_identity
+from kassiber.core.ui_snapshot import build_workspace_health_snapshot
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
@@ -18,6 +20,63 @@ from kassiber.operator.cli import route_brokered_command
 
 
 class OperatorCliTest(unittest.TestCase):
+    def test_manual_next_actions_preserves_new_project_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    ["--data-root", tmp, "--machine", "next-actions"]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(
+            payload["data"]["suggestions"][0]["id"],
+            "create_workspace_profile",
+        )
+
+    def test_scoped_health_ignores_another_clients_current_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            connection = open_db(tmp)
+            try:
+                first_workspace = core_accounts.create_workspace(
+                    connection,
+                    "First book set",
+                )
+                first_profile = core_accounts.create_profile(
+                    connection,
+                    first_workspace["id"],
+                    "First book",
+                    "EUR",
+                    "FIFO",
+                    "generic",
+                    365,
+                )
+                second_workspace = core_accounts.create_workspace(
+                    connection,
+                    "Second book set",
+                )
+                core_accounts.create_profile(
+                    connection,
+                    second_workspace["id"],
+                    "Second book",
+                    "EUR",
+                    "FIFO",
+                    "generic",
+                    365,
+                )
+
+                health = build_workspace_health_snapshot(
+                    connection,
+                    workspace_id=first_workspace["id"],
+                    profile_id=first_profile["id"],
+                )
+            finally:
+                connection.close()
+
+        self.assertEqual(health["workspace"]["id"], first_workspace["id"])
+        self.assertEqual(health["profile"]["id"], first_profile["id"])
+
     def test_brokered_chat_fails_before_direct_database_open(self) -> None:
         args = mock.Mock(
             command="chat",

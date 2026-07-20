@@ -930,7 +930,39 @@ def _wallet_utxo_source_filter(
 
 def _active_context_and_profile(
     conn: sqlite3.Connection,
+    *,
+    workspace_id: str | None = None,
+    profile_id: str | None = None,
 ) -> tuple[dict[str, str], sqlite3.Row | None]:
+    if workspace_id is not None or profile_id is not None:
+        if not workspace_id or not profile_id:
+            raise AppError(
+                "workspace and profile must be supplied together",
+                code="validation",
+            )
+        workspace = conn.execute(
+            "SELECT id, label FROM workspaces WHERE id = ?",
+            (workspace_id,),
+        ).fetchone()
+        profile = conn.execute(
+            "SELECT * FROM profiles WHERE id = ? AND workspace_id = ?",
+            (profile_id, workspace_id),
+        ).fetchone()
+        if workspace is None or profile is None:
+            raise AppError(
+                "the requested accounting scope was not found",
+                code="not_found",
+                retryable=False,
+            )
+        return (
+            {
+                "workspace_id": workspace["id"],
+                "workspace_label": workspace["label"],
+                "profile_id": profile["id"],
+                "profile_label": profile["label"],
+            },
+            profile,
+        )
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
         return context, None
@@ -6761,8 +6793,17 @@ def build_rates_coverage_snapshot(
     }
 
 
-def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
-    context, profile = _active_context_and_profile(conn)
+def build_workspace_health_snapshot(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str | None = None,
+    profile_id: str | None = None,
+) -> dict[str, Any]:
+    context, profile = _active_context_and_profile(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+    )
     if profile is None:
         return {
             "workspace": None,
@@ -7454,8 +7495,17 @@ def build_audit_changes_since_last_answer_snapshot(
     }
 
 
-def build_next_actions_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
-    health = build_workspace_health_snapshot(conn)
+def build_next_actions_snapshot(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str | None = None,
+    profile_id: str | None = None,
+) -> dict[str, Any]:
+    health = build_workspace_health_snapshot(
+        conn,
+        workspace_id=workspace_id,
+        profile_id=profile_id,
+    )
     suggestions: list[dict[str, Any]] = []
     if health["profile"] is None:
         suggestions.append(

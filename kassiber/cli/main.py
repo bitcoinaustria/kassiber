@@ -899,11 +899,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("init")
     sub.add_parser("status")
     add_operator_parser(sub)
-    sub.add_parser("health", help="Summarize active-project readiness and blockers")
-    sub.add_parser(
+    health = sub.add_parser(
+        "health",
+        help="Summarize active-project readiness and blockers",
+    )
+    _add_workspace_profile_args(health)
+    next_actions = sub.add_parser(
         "next-actions",
         help="Suggest the next safe actions for the active project",
     )
+    _add_workspace_profile_args(next_actions)
 
     commands = sub.add_parser(
         "commands",
@@ -3126,9 +3131,39 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "status":
         return cmd_status(conn, args)
     if args.command == "health":
-        return emit(args, build_workspace_health_snapshot(conn))
+        if bool(args.workspace) != bool(args.profile):
+            raise AppError(
+                "health requires --workspace and --profile together",
+                code="validation",
+            )
+        if not args.workspace:
+            return emit(args, build_workspace_health_snapshot(conn))
+        workspace, profile = resolve_scope(conn, args.workspace, args.profile)
+        return emit(
+            args,
+            build_workspace_health_snapshot(
+                conn,
+                workspace_id=workspace["id"],
+                profile_id=profile["id"],
+            ),
+        )
     if args.command == "next-actions":
-        return emit(args, build_next_actions_snapshot(conn))
+        if bool(args.workspace) != bool(args.profile):
+            raise AppError(
+                "next-actions requires --workspace and --profile together",
+                code="validation",
+            )
+        if not args.workspace:
+            return emit(args, build_next_actions_snapshot(conn))
+        workspace, profile = resolve_scope(conn, args.workspace, args.profile)
+        return emit(
+            args,
+            build_next_actions_snapshot(
+                conn,
+                workspace_id=workspace["id"],
+                profile_id=profile["id"],
+            ),
+        )
     if args.command == "commands":
         return emit(
             args,
