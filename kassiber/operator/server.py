@@ -262,6 +262,7 @@ class BrokerServer:
                         duration_seconds=duration,
                         capability=capability,
                         authentication_method="touch_id",
+                        expected_project_identity=binding.project_identity,
                         expected_database_identity=binding.database_identity,
                     )
                 )

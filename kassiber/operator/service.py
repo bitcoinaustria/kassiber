@@ -619,6 +619,7 @@ class OperatorService:
         duration_seconds: int | None,
         capability: Capability = Capability.ACCOUNTING_DECISIONS,
         authentication_method: str = "password",
+        expected_project_identity: str | None = None,
         expected_database_identity: str | None = None,
     ) -> dict[str, object]:
         if capability not in {
@@ -659,6 +660,15 @@ class OperatorService:
                 retryable=False,
             ) from exc
         project = canonical_project(data_root)
+        if (
+            expected_project_identity is not None
+            and project.identity != expected_project_identity
+        ):
+            raise AppError(
+                "native authentication targeted a different project file",
+                code="operator_project_replaced",
+                retryable=False,
+            )
         canonical_data_root = str(project.database.parent)
         alias = str(project.database)
         with self._project_transition(project.identity):
@@ -767,7 +777,10 @@ class OperatorService:
             else:
                 backoff.record_success()
             current_project = canonical_project(canonical_data_root)
-            if current_project.identity != project.identity:
+            if current_project.identity != project.identity or (
+                expected_project_identity is not None
+                and current_project.identity != expected_project_identity
+            ):
                 if acquired_here:
                     self._release_owner_or_retain(project.identity, owner)
                 raise AppError(

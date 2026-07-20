@@ -91,6 +91,31 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_native_unlock_rejects_project_replacement_before_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=_Connection(),
+        ) as open_database:
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    service.unlock(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        duration_seconds=None,
+                        authentication_method="touch_id",
+                        expected_project_identity="f" * 64,
+                    )
+
+                self.assertEqual(raised.exception.code, "operator_project_replaced")
+                open_database.assert_not_called()
+                self.assertEqual(service._leases, {})
+            finally:
+                service.close()
+
     def test_admin_cannot_be_granted_as_a_standing_lease(self) -> None:
         service = OperatorService(
             "generation",

@@ -290,7 +290,10 @@ class OperatorServerTest(unittest.TestCase):
             return_value="/canonical-project",
         ), mock.patch(
             "kassiber.operator.server.require_project_policy_binding",
-            return_value=mock.Mock(database_identity="d" * 32),
+            return_value=mock.Mock(
+                project_identity="p" * 64,
+                database_identity="d" * 32,
+            ),
         ):
             response = server._handle(
                 mock.Mock(),
@@ -304,6 +307,10 @@ class OperatorServerTest(unittest.TestCase):
         self.assertEqual(
             server.service.unlock.call_args.kwargs["authentication_method"],
             "touch_id",
+        )
+        self.assertEqual(
+            server.service.unlock.call_args.kwargs["expected_project_identity"],
+            "p" * 64,
         )
         self.assertEqual(
             server.service.unlock.call_args.kwargs["expected_database_identity"],
