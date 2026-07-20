@@ -83,10 +83,10 @@ description plus correlated daemon and AI records is more useful than a CLI
 diagnostics report. Support bundles are explicit exports from the Developer
 tools-gated Logs page. They are `.support.jsonl` files with a manifest,
 redaction report, recent redacted events, last-failure context, and redacted AI
-provenance. High-signal mode is the default and keeps operational values such
-as exact amounts, txids, addresses, labels, paths, URLs, and daemon error text
-readable for trusted maintainer debugging. Public-safe mode masks those values
-for public posting. Both modes still exclude or redact the secret floor: raw
+provenance. High-signal mode is the default and keeps addresses, labels, paths,
+URLs, and daemon error text readable for trusted maintainer debugging; amounts
+and txids remain pseudonymized in both tiers. Public-safe mode masks the other
+operational values for public posting. Both modes still exclude or redact the secret floor: raw
 daemon arguments, raw AI prompts, descriptors beyond script shape/derivation
 hints, private keys, recovery phrases, API keys, passwords, bearer tokens,
 cookies, raw config, database files, imported rows, and stack locals.
@@ -107,6 +107,15 @@ secret-bearing backend and wallet config values.
 This contract is intentionally narrow. Addresses, notes, file paths, backend
 labels, and other operational metadata may still be sensitive, and `--debug`
 output is explicitly outside this contract.
+
+Broker operation status is also machine-readable. Accepted work reports an
+opaque `operation_id` and `queued`, `running`, `completed`, `failed`,
+`cancelled`, or `result_unknown`. A non-interactive command without an active
+lease returns `interaction_required`; scoped brokered commands without their
+declared `--workspace`/`--profile` flags return `operator_scope_required`.
+Status exposes only the public project id, categorical authentication method,
+cumulative grant, expiry policy, default book identifiers, and queue/worker
+counts—not a database path, passphrase, native lookup identifier, or key.
 
 ## Output modes
 

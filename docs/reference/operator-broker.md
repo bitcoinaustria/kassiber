@@ -71,9 +71,9 @@ kassiber operator touch-id forget
 ```
 
 An explicitly started session defaults to `--until-lock`. A duration accepts
-human units such as `30m`, `8h`, and `2d`. The implementation accepts one
-minute through 365 days as a technical input bound; `--until-lock` is the
-deliberate unbounded-session policy, so there is no forced short-session cap.
+human units such as `30m`, `8h`, and `2d`. The minimum is one minute; there is
+no arbitrary maximum below the platform timestamp range. `--until-lock` is the
+preferred deliberate work-session policy and has no timer.
 The default cumulative grant is `accounting_decisions`, which includes `read`
 and `operator`, so a real review session can resolve quarantine. A narrower
 grant can be selected explicitly. `admin` is never a lease grant.
@@ -126,18 +126,23 @@ election connects to the winner; stale Unix socket files are removed only by
 the startup-lock holder after an ownership/permission check, and listener
 shutdown unlinks only the exact socket inode it created.
 
-On Linux, the broker also binds its lifetime to the launching logind session
-when libsystemd can resolve one and watches the per-user XDG runtime directory.
-Ending that login session or removing its runtime directory closes the broker
-and drops its leases. macOS and Windows logoff terminate the user process. On
-Linux systems without logind or an XDG runtime directory, Kassiber relies on
-normal user-process teardown; operators on unusual linger/no-PAM setups should
-explicitly run `kassiber operator lock`.
+On Linux, the broker watches logind's per-user state and the owner-only XDG
+runtime directory, including the directory's original device/inode identity.
+`closing`, `lingering`, or `offline` user state, removal, or replacement of the
+runtime directory closes the broker and drops its leases. `online` is kept
+alive because it is a valid logged-in but non-foreground user. macOS and
+Windows logoff terminate the user process. On Linux systems exposing neither
+logind nor an XDG runtime directory, broker startup fails with
+`operator_session_lifetime_unavailable`; manual mode remains available rather
+than claiming a logout guarantee the platform session cannot prove.
 
 Normal protocol records are length-prefixed JSON. Passphrases use a separate
 length-prefixed secret frame bound to a one-use random challenge; secret bytes
 are never members of a JSON object. Frames and command arguments are excluded
-from logs.
+from logs. The broker admits at most 64 connected clients at once and gives an
+accepted Unix client 30 seconds to finish an individual inbound protocol
+frame. Excess clients receive retryable `operator_client_limit` backpressure;
+an idle or partial client therefore cannot consume threads without bound.
 
 ## Canonical project identity and ownership
 
@@ -172,7 +177,11 @@ through that resolved root rather than returning to a catalog alias.
 
 The broker and desktop daemon take the same non-blocking project ownership
 locks before opening or retaining an unlocked runtime. One lock is keyed by
-stable canonical file identity and one by each admitted canonical path. The
+stable canonical file identity, one by each admitted canonical path, and one
+is stored locally beside the project database. The global owner namespace is
+stored below the OS account's persistent Kassiber runtime directory, is
+derived from the account database rather than caller environment variables,
+and deliberately ignores broker endpoint/runtime overrides. The
 identity lock follows a moved/hardlinked file; path locks prevent a replacement
 inode from becoming a concurrent project while the old lease remains
 addressable for explicit lock/revocation. Exactly one long-lived owner may
@@ -181,11 +190,13 @@ the existing supported owner or returns `project_in_use`; Kassiber never starts
 a silent competing daemon. Short-lived broker child commands run only through
 the owning project's serialized worker.
 
-Workspace/profile/book selection is made explicit at admission. Caller-supplied
-`--workspace` / `--profile` values win; otherwise the lease's current context
-snapshot is copied into the child argv. The child re-parses that pinned scope
-inside the selected project, so a later context change cannot retarget queued
-work.
+Workspace/profile/book selection is made explicit at admission. A brokered
+command whose CLI contract declares `--workspace` or `--profile` must supply
+each declared scope flag; missing scope fails with `operator_scope_required`.
+`context set` must supply at least one scope flag. The broker never borrows a
+mutable lease-global context as an authorization default. The child re-parses
+the pinned scope inside the selected project, so a later context change cannot
+retarget queued work.
 
 ## Capabilities
 
@@ -234,7 +245,9 @@ Every accepted operation has an opaque id and one of these states:
 
 The broker keeps at most the latest 256 terminal operation/result records in
 RAM, ordered by completion time and pruned on both admission and terminal
-transition. Queued and running records do not consume that terminal-result
+transition. It also keeps 1,024 bounded request-binding tombstones: replaying a
+recent evicted operation id returns `result_unknown` and can never execute the
+command again. Queued and running records do not consume the terminal-result
 budget. Reconnecting clients can query retained results or cancel queued work.
 A client disconnect does not cancel accepted work. Running cancellation is
 advertised only where a command has a cooperative cancellation contract;
@@ -252,8 +265,9 @@ any command-specific fd/stdin secrets cross inherited anonymous pipes, never
 argv, environment variables, or JSON. Unix uses an explicit inherited-fd list;
 Windows uses an explicit `STARTUPINFOEX` handle list and raw inherited handles.
 The child eagerly drains and caches its lease pipe after project binding and
-before command dispatch, including for no-bootstrap commands, so synchronous
-parent writes cannot deadlock ahead of a later command-specific secret pipe.
+before command dispatch. The parent feeds all secret pipes on a dedicated
+thread while concurrently draining child stdout/stderr, so platform pipe
+capacity cannot deadlock a later command-specific secret handoff.
 No-bootstrap children then authenticate and close the canonical database as a
 preflight, enforcing the queued durable database identity before even a
 credential-store-only or staged-backup handler can run.
@@ -277,6 +291,11 @@ Unproven nonzero exits from mutating/admin children are likewise
 cancels its queued work after the child exits; this also covers a rekey that
 succeeded before a later acknowledgement/invalidation failure, so status never
 advertises an unusable stale secret.
+
+Production Tauri and development-bridge calls likewise have no arbitrary
+accepted-operation timeout. They wait for the exact request-id terminal record
+or explicit process/transport failure; test-only supervisors may inject a
+deadline to exercise late-response handling.
 
 ## Logging and audit
 

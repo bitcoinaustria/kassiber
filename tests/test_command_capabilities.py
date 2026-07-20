@@ -51,6 +51,18 @@ class CommandCapabilityRegistryTest(unittest.TestCase):
             Capability.ACCOUNTING_DECISIONS,
         )
         self.assertIs(daemon_capability("ui.rates.latest"), Capability.OPERATOR)
+        self.assertIs(
+            daemon_capability("ui.reports.tax_summary"),
+            Capability.OPERATOR,
+        )
+        self.assertIs(
+            daemon_capability("ui.profiles.update"),
+            Capability.ACCOUNTING_DECISIONS,
+        )
+        self.assertIs(
+            cli_capability("profiles.set"),
+            Capability.ACCOUNTING_DECISIONS,
+        )
 
 
 if __name__ == "__main__":

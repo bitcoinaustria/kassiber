@@ -39,10 +39,10 @@ Kassiber has two intended secret boundaries:
    backend credentials, descriptors, xpubs, blinding keys, or reveal payloads
    out of SQLCipher.
 
-The unlocked Python daemon is the runtime trust boundary. Once it has an open
-database connection, it can read any DB-resident secret needed to fulfill an
-allowed request. Do not describe Kassiber secrets as encrypted while the daemon
-is running.
+The unlocked Python daemon or broker-owned project worker is the runtime trust
+boundary. Once either has the passphrase/open database, it can read any
+DB-resident secret needed for an allowed request. Do not describe Kassiber
+secrets as encrypted while either runtime is authorized.
 
 Out of scope for protection claims:
 
@@ -286,10 +286,11 @@ Desktop:
    per-data-root copy. Entitled builds let the protected Keychain enforce
    `biometryCurrentSet`; previews explicitly run LocalAuthentication before
    reading their desktop-only fallback. Passphrase rotation updates this copy.
-5. A one-shot CLI invocation resolves an explicit fd/cached passphrase first,
-   then the OS-store copy only when `cli_remembered_unlock` is true, then the
-   existing TTY prompt. A stale copy writes `remembered_unlock_stale` to stderr
-   and falls through instead of changing machine-mode stdout.
+5. A one-shot CLI invocation follows the selected project mode. Manual uses an
+   explicit fd or controlling-terminal prompt; brokered routes eligible work to
+   the per-user broker and never reads remembered unlock; unattended may read
+   the enrolled CLI OS-store copy. A stale unattended copy writes
+   `remembered_unlock_stale` to stderr without changing machine-mode stdout.
 
 ### Reveal Token/Descriptor
 

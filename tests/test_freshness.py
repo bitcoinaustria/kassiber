@@ -1925,7 +1925,7 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(captured, ["remembered-passphrase"])
         self.assertTrue(closed.wait(timeout=2))
 
-    def test_stop_worker_rebinds_event_after_join_timeout(self):
+    def test_stop_worker_retains_owner_state_after_join_timeout(self):
         original_event = threading.Event()
 
         class _HungWorker:
@@ -1948,13 +1948,55 @@ class FreshnessTest(unittest.TestCase):
         ctx.freshness_stop_event = original_event
         ctx.freshness_worker = worker
 
-        daemon_freshness._stop_freshness_background_worker(ctx)
+        with self.assertRaises(AppError) as raised:
+            daemon_freshness._stop_freshness_background_worker(ctx)
 
+        self.assertEqual(raised.exception.code, "project_operation_in_progress")
         self.assertEqual(worker.join_timeout, 2.0)
         self.assertTrue(original_event.is_set())
-        self.assertIsNone(ctx.freshness_worker)
-        self.assertIsNot(ctx.freshness_stop_event, original_event)
-        self.assertFalse(ctx.freshness_stop_event.is_set())
+        self.assertIs(ctx.freshness_worker, worker)
+        self.assertIs(ctx.freshness_stop_event, original_event)
+
+    def test_daemon_lock_does_not_release_owner_while_worker_is_alive(self):
+        class _HungWorker:
+            def join(self, timeout=None):
+                self.join_timeout = timeout
+
+            def is_alive(self):
+                return True
+
+        conn = self._db()
+        _seed_profile(conn)
+        owner = Mock()
+        ctx = daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="encrypted-data-root",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=_Out(),
+            freshness_stop_event=threading.Event(),
+            freshness_worker=_HungWorker(),
+            project_owner=owner,
+            db_passphrase="remembered-passphrase",
+        )
+
+        with self.assertRaises(AppError) as raised:
+            daemon_runtime.handle_request(
+                ctx,
+                {"request_id": "lock-1", "kind": "daemon.lock"},
+                ctx.out,
+            )
+
+        self.assertEqual(raised.exception.code, "project_operation_in_progress")
+        self.assertIs(ctx.conn, conn)
+        self.assertIs(ctx.project_owner, owner)
+        self.assertEqual(ctx.db_passphrase, "remembered-passphrase")
+        owner.release.assert_not_called()
+        conn.close()
 
     def test_daemon_lock_clears_remembered_background_passphrase(self):
         conn = self._db()

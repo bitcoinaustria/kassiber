@@ -21,7 +21,7 @@ The guiding principle:
 | Supervisor stderr tail + lifecycle ring ([`ui-tauri/src-tauri/src/supervisor.rs`](../../ui-tauri/src-tauri/src/supervisor.rs)) | Tauri (Rust) process | 16 KiB tail, 64 lifecycle records | daemon crashes and restarts |
 | Webview ring ([`ui-tauri/src/lib/appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts)) | Browser/Webview JS heap | 10,000 records / 4 MiB | nothing (it is the view) |
 
-The webview ring is the merge point. The desktop app polls
+The desktop webview ring is the merge point for desktop-owned buffers. The desktop app polls
 `ui.logs.snapshot` (a pre-unlock daemon kind — it works while the database
 is locked, which is exactly when you need it) and the
 `daemon_lifecycle_snapshot` Tauri command, and folds both into the webview
@@ -31,6 +31,10 @@ Python tracebacks, third-party library records, supervisor lifecycle
 events (spawn/exit/kill with the dying daemon's redacted stderr tail),
 webview transport records, console output, React errors, and unhandled
 promise rejections.
+
+The operator ring is intentionally not merged into the desktop webview. It is
+process-local security telemetry for the terminal broker, disappears with that
+broker, and has no durable or desktop export path.
 
 A hard crash of the whole app loses the buffers. That is the accepted
 price of RAM-only; the supervisor preserving the daemon's stderr tail

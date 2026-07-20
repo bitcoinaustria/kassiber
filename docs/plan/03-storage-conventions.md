@@ -109,7 +109,7 @@ encrypted project DB.
 - Prefer additive schema changes compatible with `CREATE TABLE IF NOT EXISTS`
   and lightweight compatibility migrations.
 
-Future project-mode connections should run:
+Project-mode connections run:
 
 ```sql
 PRAGMA journal_mode = WAL;
@@ -119,8 +119,7 @@ PRAGMA busy_timeout = 5000;
 PRAGMA temp_store = MEMORY;
 ```
 
-Current `open_db()` already guarantees schema bootstrap and `foreign_keys = ON`;
-WAL/busy-timeout rollout belongs with the project-bundle migration.
+Current `open_db()` guarantees schema bootstrap plus these connection pragmas.
 
 ## Bootstrap Ownership
 

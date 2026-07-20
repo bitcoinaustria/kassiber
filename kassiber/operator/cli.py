@@ -178,7 +178,8 @@ def route_brokered_command(
 
     from ..cli.command_registry import command_path
 
-    capability = cli_capability(command_path(args))
+    path = command_path(args)
+    capability = cli_capability(path)
     pinned_argv = _pin_project_arguments(list(argv), data_root)
     operator_auth_fd = getattr(args, "operator_auth_fd", None)
     admin_authentication: bytearray | None = None

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import logging
 import tempfile
 import threading
 import time
@@ -29,6 +30,7 @@ from kassiber.operator.service import (
     OperatorService,
 )
 from kassiber.operator.runner import run_cli_operation
+from kassiber.log_ring import LogRing, RingHandler
 from kassiber.secrets.migration import create_empty_encrypted_database
 from kassiber.secrets.sqlcipher import sqlcipher_available
 
@@ -39,6 +41,47 @@ class _Connection:
 
 
 class OperatorServiceTest(unittest.TestCase):
+    def test_lifecycle_telemetry_is_bounded_ram_only_and_public_safe(self) -> None:
+        ring = LogRing(max_records=3, max_bytes=4096)
+        logger = logging.getLogger("kassiber.operator")
+        previous_handlers = list(logger.handlers)
+        previous_level = logger.level
+        previous_propagate = logger.propagate
+        logger.handlers = [RingHandler(ring)]
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        try:
+            with tempfile.TemporaryDirectory() as tmp, mock.patch(
+                "kassiber.operator.service.open_db", return_value=_Connection()
+            ):
+                service = OperatorService(
+                    "generation",
+                    lambda *_args: OperationResult(0, "", ""),
+                )
+                try:
+                    service.unlock(
+                        tmp,
+                        bytearray(b"blinding_key=private-value"),
+                        duration_seconds=None,
+                    )
+                    accepted = service.submit(tmp, ["status"])
+                    self._wait_terminal(service, accepted["operation_id"])
+                    service.lock(tmp)
+                    records = ring.snapshot(limit=10)["records"]
+                    self.assertLessEqual(len(records), 3)
+                    rendered = repr(records)
+                    self.assertNotIn(tmp, rendered)
+                    self.assertNotIn("private-value", rendered)
+                    self.assertTrue(
+                        any("operator operation" in record["msg"] for record in records)
+                    )
+                finally:
+                    service.close()
+        finally:
+            logger.handlers = previous_handlers
+            logger.setLevel(previous_level)
+            logger.propagate = previous_propagate
+
     def test_fresh_database_authentication_does_not_require_a_lease(self) -> None:
         owner = mock.Mock()
         continuation_ran = False
@@ -226,6 +269,7 @@ class OperatorServiceTest(unittest.TestCase):
             retained = next(iter(service._leases.values())).passphrase
             service.lock(tmp)
             self.assertEqual(set(retained), {0})
+            self.assertFalse(service._workers)
             service.close()
 
     def test_lock_cancels_queued_work_but_running_work_finishes(self) -> None:
@@ -254,7 +298,7 @@ class OperatorServiceTest(unittest.TestCase):
                 )
                 with self.assertRaises(AppError) as raised:
                     service.submit(tmp, ["next-actions"])
-                self.assertEqual(raised.exception.code, "operator_locked")
+                self.assertEqual(raised.exception.code, "interaction_required")
                 release.set()
                 self.assertEqual(
                     self._wait(service, running["operation_id"])["state"],
@@ -372,7 +416,17 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 running = service.submit(tmp, ["status"])
                 self.assertTrue(started.wait(1))
-                queued = service.submit(tmp, ["journals", "process"])
+                queued = service.submit(
+                    tmp,
+                    [
+                        "journals",
+                        "process",
+                        "--workspace",
+                        "workspace-a",
+                        "--profile",
+                        "book-a",
+                    ],
+                )
                 lease = next(iter(service._leases.values()))
                 lease.capability = Capability.READ
                 release.set()
@@ -634,10 +688,12 @@ class OperatorServiceTest(unittest.TestCase):
                     "completed",
                 )
                 self.assertEqual(
-                    seen[0][:6],
+                    seen[0][:8],
                     [
                         "--data-root",
                         tmp,
+                        "transactions",
+                        "list",
                         "--workspace",
                         "workspace-a",
                         "--profile",
@@ -719,6 +775,7 @@ class OperatorServiceTest(unittest.TestCase):
                 self.assertEqual(raised.exception.code, "operator_project_replaced")
                 self.assertTrue(service.lock(tmp)["lease_existed"])
                 self.assertEqual(set(retained), {0})
+                self.assertFalse(service._workers)
             finally:
                 service.close()
 
@@ -934,6 +991,34 @@ class OperatorServiceTest(unittest.TestCase):
         finally:
             service.close()
 
+    def test_evicted_operation_id_is_not_reexecuted(self) -> None:
+        calls: list[str] = []
+
+        def runner(operation, _passphrase):
+            calls.append(operation.command_path)
+            return OperationResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ), mock.patch("kassiber.operator.service.MAX_RETAINED_RESULTS", 1):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                first = service.submit(tmp, ["status"])
+                self._wait_terminal(service, first["operation_id"])
+                second = service.submit(tmp, ["health"])
+                self._wait_terminal(service, second["operation_id"])
+                replay = service.submit(
+                    tmp,
+                    ["status"],
+                    operation_id=first["operation_id"],
+                )
+                self.assertEqual(replay["state"], "result_unknown")
+                self.assertEqual(replay["reason"], "result_not_retained")
+                self.assertEqual(calls, ["status", "health"])
+            finally:
+                service.close()
+
     def test_worker_crash_marks_result_unknown(self) -> None:
         def runner(_operation, _passphrase):
             raise RuntimeError("simulated crash after unknown commit point")
@@ -968,6 +1053,29 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_completed_child_stderr_is_secret_floor_redacted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(
+                    1,
+                    "",
+                    'warning {"blinding_key":"private-value"} token=btcpay-secret\n',
+                ),
+            )
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                accepted = service.submit(tmp, ["status"])
+                status = self._wait_terminal(service, accepted["operation_id"])
+                self.assertEqual(status["state"], "failed")
+                self.assertNotIn("private-value", status["stderr"])
+                self.assertNotIn("btcpay-secret", status["stderr"])
+                self.assertIn("[redacted]", status["stderr"])
+            finally:
+                service.close()
+
     def test_unproven_nonzero_mutation_is_unknown_but_read_failure_is_failed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.service.open_db", return_value=_Connection()
@@ -979,7 +1087,17 @@ class OperatorServiceTest(unittest.TestCase):
             try:
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 read = service.submit(tmp, ["status"])
-                mutation = service.submit(tmp, ["journals", "process"])
+                mutation = service.submit(
+                    tmp,
+                    [
+                        "journals",
+                        "process",
+                        "--workspace",
+                        "workspace-a",
+                        "--profile",
+                        "book-a",
+                    ],
+                )
                 self.assertEqual(
                     self._wait_terminal(service, read["operation_id"])["state"],
                     "failed",
@@ -1181,7 +1299,7 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
-    def test_scope_is_pinned_at_admission_even_if_context_later_changes(self) -> None:
+    def test_explicit_scope_is_pinned_at_admission(self) -> None:
         connection = mock.Mock()
         started = threading.Event()
         release = threading.Event()
@@ -1208,7 +1326,17 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 first = service.submit(tmp, ["status"])
                 self.assertTrue(started.wait(1))
-                queued = service.submit(tmp, ["transactions", "list"])
+                queued = service.submit(
+                    tmp,
+                    [
+                        "transactions",
+                        "list",
+                        "--workspace",
+                        "workspace-a",
+                        "--profile",
+                        "book-a",
+                    ],
+                )
                 lease = next(iter(service._leases.values()))
                 lease.workspace = "workspace-b"
                 lease.profile = "book-b"
@@ -1216,10 +1344,12 @@ class OperatorServiceTest(unittest.TestCase):
                 self._wait_terminal(service, first["operation_id"])
                 self._wait_terminal(service, queued["operation_id"])
                 self.assertEqual(
-                    seen[1][:6],
+                    seen[1][:8],
                     [
                         "--data-root",
                         tmp,
+                        "transactions",
+                        "list",
                         "--workspace",
                         "workspace-a",
                         "--profile",
@@ -1228,6 +1358,39 @@ class OperatorServiceTest(unittest.TestCase):
                 )
             finally:
                 release.set()
+                service.close()
+
+    def test_scoped_command_without_explicit_book_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                with self.assertRaises(AppError) as raised:
+                    service.submit(tmp, ["transactions", "list"])
+                self.assertEqual(raised.exception.code, "operator_scope_required")
+                self.assertEqual(
+                    raised.exception.details["missing"],
+                    ["workspace", "profile"],
+                )
+            finally:
+                service.close()
+
+    def test_missing_lease_precedes_scope_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    service.submit(tmp, ["transactions", "list"])
+                self.assertEqual(raised.exception.code, "interaction_required")
+            finally:
                 service.close()
 
     def test_context_workspace_change_does_not_inject_the_old_profile(self) -> None:
@@ -1354,10 +1517,11 @@ class OperatorClientArgumentTest(unittest.TestCase):
         finally:
             wipe_prepared(prepared)
 
-    def test_duration_parser_is_bounded(self) -> None:
+    def test_duration_parser_has_no_arbitrary_session_cap(self) -> None:
         self.assertEqual(parse_duration("8h"), 28_800)
         self.assertEqual(parse_duration("30d"), 2_592_000)
-        for invalid in ("59s", "0h", "8", "8w", "366d"):
+        self.assertEqual(parse_duration("5000d"), 432_000_000)
+        for invalid in ("59s", "0h", "8", "8w"):
             with self.subTest(invalid=invalid), self.assertRaises(AppError):
                 parse_duration(invalid)
 

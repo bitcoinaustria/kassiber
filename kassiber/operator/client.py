@@ -385,9 +385,9 @@ def parse_duration(value: str) -> int:
     except ValueError as exc:
         raise AppError("invalid operator duration", code="operator_invalid_duration") from exc
     seconds = amount * multipliers[text[-1]]
-    if not 60 <= seconds <= 365 * 24 * 3600:
+    if seconds < 60:
         raise AppError(
-            "operator duration must be between 1 minute and 365 days",
+            "operator duration must be at least 1 minute",
             code="operator_invalid_duration",
             retryable=False,
         )

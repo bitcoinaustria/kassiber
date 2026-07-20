@@ -9,7 +9,9 @@ from unittest import mock
 from kassiber.operator.server import (
     BrokerServer,
     _error_response,
-    _linux_logind_session_active,
+    _linux_logind_user_alive,
+    _linux_session_lifetime_is_valid,
+    _logind_user_state_is_alive,
     _login_session_runtime_is_valid,
     _login_session_runtime_root,
 )
@@ -128,17 +130,86 @@ class OperatorServerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.server.sys.platform", "linux"
         ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}):
-            root = _login_session_runtime_root()
-            self.assertEqual(root, Path(tmp).resolve())
-            self.assertTrue(_login_session_runtime_is_valid(root))
-        self.assertFalse(_login_session_runtime_is_valid(root))
+            runtime = _login_session_runtime_root()
+            self.assertEqual(runtime.root, Path(tmp).resolve())
+            self.assertTrue(_login_session_runtime_is_valid(runtime))
+        self.assertFalse(_login_session_runtime_is_valid(runtime))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX runtime identity test")
+    def test_linux_session_runtime_replacement_invalidates_session(self) -> None:
+        with tempfile.TemporaryDirectory() as parent, mock.patch(
+            "kassiber.operator.server.sys.platform", "linux"
+        ):
+            root = Path(parent) / "runtime"
+            root.mkdir(mode=0o700)
+            with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(root)}):
+                runtime = _login_session_runtime_root()
+                root.rmdir()
+                root.mkdir(mode=0o700)
+                self.assertFalse(_login_session_runtime_is_valid(runtime))
+
+    def test_linux_refuses_broker_without_logout_lifetime_primitive(self) -> None:
+        with mock.patch(
+            "kassiber.operator.server.sys.platform", "linux"
+        ), mock.patch(
+            "kassiber.operator.server._login_session_runtime_root",
+            return_value=None,
+        ), mock.patch(
+            "kassiber.operator.server._linux_logind_user_alive",
+            return_value=None,
+        ), mock.patch("kassiber.operator.server.listen") as listen:
+            with self.assertRaises(AppError) as raised:
+                BrokerServer()
+        self.assertEqual(
+            raised.exception.code,
+            "operator_session_lifetime_unavailable",
+        )
+        listen.assert_not_called()
+
+    def test_linux_logind_guard_fails_closed_after_query_loss(self) -> None:
+        self.assertFalse(
+            _linux_session_lifetime_is_valid(
+                None,
+                logind_observed=True,
+                logind_alive=None,
+            )
+        )
+
+    def test_linux_runtime_guard_can_cover_transient_logind_query_loss(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.server.sys.platform", "linux"
+        ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}):
+            runtime = _login_session_runtime_root()
+            self.assertTrue(
+                _linux_session_lifetime_is_valid(
+                    runtime,
+                    logind_observed=True,
+                    logind_alive=None,
+                )
+            )
 
     def test_non_linux_has_no_runtime_session_guard(self) -> None:
         with mock.patch("kassiber.operator.server.sys.platform", "darwin"):
             self.assertIsNone(_login_session_runtime_root())
 
-    def test_missing_logind_identity_is_not_misreported_as_inactive(self) -> None:
-        self.assertIsNone(_linux_logind_session_active(None))
+    def test_non_linux_has_no_logind_user_guard(self) -> None:
+        with mock.patch("kassiber.operator.server.sys.platform", "darwin"):
+            self.assertIsNone(_linux_logind_user_alive())
+
+    def test_missing_logind_user_record_is_not_misreported_as_logout(self) -> None:
+        systemd = mock.Mock()
+        systemd.sd_uid_get_state.return_value = -1
+        with mock.patch(
+            "kassiber.operator.server._load_systemd", return_value=systemd
+        ):
+            self.assertIsNone(_linux_logind_user_alive())
+
+    def test_logind_user_state_distinguishes_login_from_linger(self) -> None:
+        self.assertTrue(_logind_user_state_is_alive("online"))
+        self.assertTrue(_logind_user_state_is_alive("active"))
+        self.assertFalse(_logind_user_state_is_alive("closing"))
+        self.assertFalse(_logind_user_state_is_alive("lingering"))
+        self.assertFalse(_logind_user_state_is_alive("offline"))
 
 
 if __name__ == "__main__":

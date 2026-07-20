@@ -228,7 +228,7 @@ normal accounting review session with:
 kassiber operator mode brokered
 kassiber operator unlock --until-lock
 kassiber --machine status
-kassiber --machine reports summary
+kassiber --machine reports summary --workspace personal --profile main
 kassiber operator status
 kassiber operator lock
 ```
@@ -239,7 +239,9 @@ Use `--duration 8h` for a timed lease and
 always require a fresh passphrase through a prompt or `--operator-auth-fd`.
 Multiple same-user processes intentionally share a lease. Different OS users
 and projects have separate endpoints, credentials, leases, queues, and workers.
-Ordinary machine/non-interactive commands never prompt. See the
+Brokered commands that declare book selectors require explicit `--workspace`
+and `--profile` flags, so concurrent clients never borrow mutable current
+context. Ordinary machine/non-interactive commands never prompt. See the
 [operator broker reference](docs/reference/operator-broker.md) for the threat
 model, operation status/cancellation, and platform support.
 

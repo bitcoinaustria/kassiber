@@ -10,6 +10,7 @@ import secrets
 import signal
 import sys
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 from ..command_capabilities import Capability
@@ -22,17 +23,36 @@ from .runner import run_cli_operation
 from .service import OperatorService, _classify_argv, _wipe
 
 
+MAX_CLIENT_THREADS = 64
+
+
 class BrokerServer:
     def __init__(self) -> None:
+        session_runtime = _login_session_runtime_root()
+        logind_alive = _linux_logind_user_alive()
+        if sys.platform.startswith("linux") and (
+            logind_alive is False
+            or (logind_alive is None and session_runtime is None)
+        ):
+            raise AppError(
+                "a logout-bound operator broker is unavailable in this Linux session",
+                code="operator_session_lifetime_unavailable",
+                hint=(
+                    "Use manual mode, or start the broker from a login session with "
+                    "logind or an owner-only XDG_RUNTIME_DIR."
+                ),
+                retryable=False,
+            )
         self.generation = secrets.token_hex(16)
         self.service = OperatorService(self.generation, run_cli_operation)
         self.listener = listen()
         self._stopped = threading.Event()
-        self._session_runtime_root = _login_session_runtime_root()
-        self._logind_session_id = _linux_logind_session_id()
+        self._client_slots = threading.BoundedSemaphore(MAX_CLIENT_THREADS)
+        self._session_runtime = session_runtime
+        self._logind_user_observed = logind_alive is not None
         if (
-            self._session_runtime_root is not None
-            or self._logind_session_id is not None
+            self._session_runtime is not None
+            or self._logind_user_observed
         ):
             threading.Thread(
                 target=self._monitor_login_session,
@@ -50,12 +70,35 @@ class BrokerServer:
                 if self._stopped.is_set():
                     break
                 continue
+            if not self._client_slots.acquire(blocking=False):
+                try:
+                    with channel:
+                        channel.send_json(
+                            _error_response(
+                                AppError(
+                                    "the operator broker has too many connected clients",
+                                    code="operator_client_limit",
+                                    hint="Close an idle client or retry after an active request finishes.",
+                                    details={"limit": MAX_CLIENT_THREADS},
+                                    retryable=True,
+                                )
+                            )
+                        )
+                except (OSError, EOFError):
+                    pass
+                continue
             threading.Thread(
-                target=self._serve_channel,
+                target=self._serve_admitted_channel,
                 args=(channel,),
                 name="operator-client",
                 daemon=True,
             ).start()
+
+    def _serve_admitted_channel(self, channel: BrokerChannel) -> None:
+        try:
+            self._serve_channel(channel)
+        finally:
+            self._client_slots.release()
 
     def close(self) -> None:
         if self._stopped.is_set():
@@ -66,12 +109,16 @@ class BrokerServer:
 
     def _monitor_login_session(self) -> None:
         while not self._stopped.wait(2.0):
-            runtime_valid = (
-                self._session_runtime_root is None
-                or _login_session_runtime_is_valid(self._session_runtime_root)
+            logind_alive = (
+                _linux_logind_user_alive()
+                if self._logind_user_observed
+                else None
             )
-            logind_active = _linux_logind_session_active(self._logind_session_id)
-            if not runtime_valid or logind_active is False:
+            if not _linux_session_lifetime_is_valid(
+                self._session_runtime,
+                logind_observed=self._logind_user_observed,
+                logind_alive=logind_alive,
+            ):
                 self.close()
                 return
 
@@ -385,7 +432,14 @@ def _public_safe_details(value: object) -> object:
     return sanitize_traceback_text(str(value))
 
 
-def _login_session_runtime_root() -> Path | None:
+@dataclass(frozen=True)
+class _LoginSessionRuntime:
+    root: Path
+    device: int
+    inode: int
+
+
+def _login_session_runtime_root() -> _LoginSessionRuntime | None:
     """Return Linux's per-login-user runtime root when one is available."""
 
     if not sys.platform.startswith("linux"):
@@ -395,56 +449,74 @@ def _login_session_runtime_root() -> Path | None:
         return None
     try:
         root = Path(configured).resolve(strict=True)
-    except OSError:
-        return None
-    return root if _login_session_runtime_is_valid(root) else None
-
-
-def _login_session_runtime_is_valid(root: Path | None) -> bool:
-    if root is None:
-        return False
-    try:
         info = root.stat()
     except OSError:
+        return None
+    runtime = _LoginSessionRuntime(root, info.st_dev, info.st_ino)
+    return runtime if _login_session_runtime_is_valid(runtime) else None
+
+
+def _login_session_runtime_is_valid(runtime: _LoginSessionRuntime | None) -> bool:
+    if runtime is None:
         return False
-    return not hasattr(os, "getuid") or info.st_uid == os.getuid()
+    try:
+        info = runtime.root.stat()
+    except OSError:
+        return False
+    return (
+        (not hasattr(os, "getuid") or info.st_uid == os.getuid())
+        and info.st_dev == runtime.device
+        and info.st_ino == runtime.inode
+    )
 
 
-def _linux_logind_session_id() -> str | None:
-    """Resolve this process's logind session through libsystemd, when present."""
+def _linux_session_lifetime_is_valid(
+    runtime: _LoginSessionRuntime | None,
+    *,
+    logind_observed: bool,
+    logind_alive: bool | None,
+) -> bool:
+    if runtime is not None and not _login_session_runtime_is_valid(runtime):
+        return False
+    if logind_alive is False:
+        return False
+    if runtime is not None:
+        return True
+    return logind_observed and logind_alive is True
 
-    if not sys.platform.startswith("linux"):
+
+def _linux_logind_user_alive() -> bool | None:
+    """Return whether logind still sees an interactive login for this OS user."""
+
+    if not sys.platform.startswith("linux") or not hasattr(os, "getuid"):
         return None
     systemd = _load_systemd()
     if systemd is None:
         return None
-    get_session = systemd.sd_pid_get_session
-    get_session.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
-    get_session.restype = ctypes.c_int
+    get_state = systemd.sd_uid_get_state
+    get_state.argtypes = [ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p)]
+    get_state.restype = ctypes.c_int
     pointer = ctypes.c_void_p()
-    if get_session(0, ctypes.byref(pointer)) < 0 or not pointer.value:
+    result = get_state(os.getuid(), ctypes.byref(pointer))
+    if result < 0 or not pointer.value:
+        # A missing logind user record (for example on a non-systemd Linux
+        # host that still ships libsystemd) is not evidence of logout. The
+        # pinned XDG runtime-directory guard is the only supported fallback.
         return None
     try:
-        return ctypes.string_at(pointer).decode("utf-8")
+        state = ctypes.string_at(pointer).decode("utf-8")
     finally:
         libc = ctypes.CDLL(None)
         libc.free.argtypes = [ctypes.c_void_p]
         libc.free(pointer)
+    return _logind_user_state_is_alive(state)
 
 
-def _linux_logind_session_active(session_id: str | None) -> bool | None:
-    """Return false after logind ends the launch session; None means unavailable."""
-
-    if session_id is None:
-        return None
-    systemd = _load_systemd()
-    if systemd is None:
-        return None
-    is_active = systemd.sd_session_is_active
-    is_active.argtypes = [ctypes.c_char_p]
-    is_active.restype = ctypes.c_int
-    result = is_active(session_id.encode("utf-8"))
-    return result > 0 if result >= 0 else False
+def _logind_user_state_is_alive(state: str) -> bool:
+    # `online` is a valid logged-in but non-foreground user. `closing`,
+    # `lingering`, and `offline` have no live interactive login and must drop
+    # the in-memory authorization even if a user manager keeps running.
+    return state in {"online", "active"}
 
 
 def _load_systemd() -> ctypes.CDLL | None:

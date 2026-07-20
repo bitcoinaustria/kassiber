@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
 
 from .launcher import cli_child_command
 from .project import canonical_project
@@ -66,11 +67,35 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
         for fd in read_fds:
             os.close(fd)
         read_fds.clear()
-        for writer, secret in secret_writers:
-            _write_secret(writer, secret)
-            os.close(writer)
+        writers = tuple(secret_writers)
         secret_writers.clear()
+        writer_errors: list[BaseException] = []
+
+        def feed_secrets() -> None:
+            try:
+                for writer, secret in writers:
+                    _write_secret(writer, secret)
+            except BaseException as exc:
+                writer_errors.append(exc)
+            finally:
+                for writer, _secret in writers:
+                    try:
+                        os.close(writer)
+                    except OSError:
+                        pass
+
+        writer_thread = threading.Thread(
+            target=feed_secrets,
+            name="operator-secret-handoff",
+            daemon=True,
+        )
+        writer_thread.start()
+        # stdout/stderr must be drained while the child reaches its secret-fd
+        # reads; otherwise a large secret and a full output pipe can deadlock.
         stdout, stderr = process.communicate()
+        writer_thread.join()
+        if writer_errors:
+            raise writer_errors[0]
         return OperationResult(
             process.returncode,
             stdout.decode("utf-8", errors="replace"),

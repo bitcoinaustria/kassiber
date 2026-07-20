@@ -79,7 +79,7 @@ CLI_OPERATOR_PATHS = _paths(
     """
     projects.select chat backends.create backends.update backends.set-default
     backends.clear-default context.set workspaces.create profiles.create
-    profiles.set accounts.create wallets.create wallets.update
+    accounts.create wallets.create wallets.update
     wallets.import-json wallets.import-csv wallets.import-btcpay
     wallets.import-phoenix wallets.import-wasabi wallets.import-river
     wallets.import-bull wallets.import-bullbitcoin wallets.import-coinfinity
@@ -113,7 +113,7 @@ CLI_OPERATOR_PATHS = _paths(
 
 CLI_ACCOUNTING_DECISION_PATHS = _paths(
     """
-    metadata.exclude metadata.include metadata.records.excluded.set
+    profiles.set metadata.exclude metadata.include metadata.records.excluded.set
     metadata.records.excluded.clear metadata.records.history.revert
     journals.quarantine.clear journals.quarantine.resolve.price-override
     journals.quarantine.resolve.exclude loans.mark loans.unmark loans.link
@@ -151,17 +151,15 @@ DAEMON_READ_KINDS = _paths(
     status ui.logs.snapshot ui.egress.snapshot ui.overview.snapshot
     ui.workspace.overview.snapshot ui.transactions.list
     ui.transactions.dashboard ui.transactions.extremes ui.transactions.resolve
-    ui.transactions.graph ui.transactions.review_context
+    ui.transactions.graph
     ui.transactions.search ui.transactions.ledger_template
     ui.transactions.history ui.activity.history ui.activity.stale
     ui.attachments.list ui.attachments.open ui.wallets.list ui.wallets.utxos
     ui.privacy_hygiene.snapshot ui.wallets.identify ui.loans.list
     ui.backends.list ui.backends.options ui.backends.public_defaults
-    ui.backends.settings.list ui.reports.capital_gains ui.reports.summary
-    ui.reports.balance_sheet ui.reports.portfolio_summary
-    ui.reports.tax_summary ui.reports.balance_history
+    ui.backends.settings.list
     ui.reports.privacy_hygiene ui.reports.privacy_mirror
-    ui.reports.psbt_privacy ui.reports.exit_tax_preview
+    ui.reports.psbt_privacy
     ui.source_funds.preview ui.source_funds.cases.list
     ui.source_funds.sources.list ui.source_funds.links.list
     ui.source_funds.evidence.list ui.source_funds.coverage
@@ -169,14 +167,14 @@ DAEMON_READ_KINDS = _paths(
     ui.btcpay.provenance.links ui.transactions.commercial_context
     ui.documents.list ui.journals.snapshot ui.journals.events.list
     ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest
-    ui.transfers.review_context ui.transfers.list ui.transfers.payouts.list
+    ui.transfers.list ui.transfers.payouts.list
     ui.transfers.components.list ui.transfers.components.get
     ui.transfers.components.plan ui.custody.coverage.snapshot
     ui.custody.lineage.snapshot ui.custody.gaps.list
     ui.custody.gaps.review_context ui.custody.gaps.history
     ui.custody.review.plan ui.transfers.rules.list ui.saved_views.list
     ui.profiles.snapshot ui.rates.summary ui.rates.coverage
-    ui.report.blockers ui.audit.changes_since_last_answer
+    ui.audit.changes_since_last_answer
     ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
     ui.sync.status ui.sync.transports.list ui.sync.members.list
     ui.sync.devices.list ui.sync.conflicts.list ui.freshness.status
@@ -192,6 +190,11 @@ DAEMON_READ_KINDS = _paths(
 DAEMON_OPERATOR_KINDS = _paths(
     """
     ui.transactions.export_csv ui.transactions.export_xlsx
+    ui.reports.capital_gains ui.reports.summary ui.reports.balance_sheet
+    ui.reports.portfolio_summary ui.reports.tax_summary
+    ui.reports.balance_history ui.reports.exit_tax_preview
+    ui.transfers.review_context ui.transactions.review_context
+    ui.report.blockers
     ui.rates.latest ui.attachments.add ui.attachments.copy
     ui.attachments.rename ui.attachments.remove ui.wallets.identify_onchain
     ui.backends.create ui.backends.update ui.backends.set_default
@@ -211,7 +214,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.btcpay.provenance.sync ui.btcpay.provenance.suggest
     ui.documents.create ui.documents.attach ui.journals.process
     ui.saved_views.create ui.saved_views.delete ui.onboarding.complete
-    ui.profiles.create ui.profiles.rename ui.profiles.update
+    ui.profiles.create ui.profiles.rename
     ui.profiles.switch ui.rates.kraken_csv.import ui.rates.rebuild
     ui.maintenance.configure ui.maintenance.run ui.freshness.configure
     ui.freshness.run ui.freshness.cancel ui.freshness.pause
@@ -228,7 +231,7 @@ DAEMON_OPERATOR_KINDS = _paths(
 
 DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     """
-    ui.transactions.metadata.update
+    ui.profiles.update ui.transactions.metadata.update
     ui.transactions.history.revert ui.loans.link ui.loans.mark ui.loans.unmark
     ui.source_funds.cases.save ui.source_funds.links.review
     ui.source_funds.links.bulk_review ui.btcpay.provenance.review

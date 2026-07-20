@@ -24,6 +24,7 @@ class CanonicalProject:
     database: Path
     lock_path: Path
     alias_lock_path: Path
+    local_lock_path: Path
     identity: str
     public_id: str
 
@@ -72,7 +73,7 @@ class ProjectOwnerLease:
             raise
 
     def add_alias(self, project: CanonicalProject) -> None:
-        """Hold the path lock for another alias of the same database inode."""
+        """Hold every path-local lock for another alias of the same database."""
 
         if project.identity != self.project.identity:
             raise AppError(
@@ -80,9 +81,12 @@ class ProjectOwnerLease:
                 code="project_owner_mismatch",
                 retryable=False,
             )
-        if project.alias_lock_path in self._lock_paths:
-            return
-        handle = _open_owner_lock(project.alias_lock_path, project.public_id)
+        for lock_path in (project.alias_lock_path, project.local_lock_path):
+            if lock_path not in self._lock_paths:
+                self._add_lock(lock_path, project.public_id)
+
+    def _add_lock(self, lock_path: Path, project_id: str) -> None:
+        handle = _open_owner_lock(lock_path, project_id)
         try:
             if not _try_lock_handle(handle):
                 owner = _read_owner_record(handle)
@@ -90,7 +94,7 @@ class ProjectOwnerLease:
                     "another long-lived process owns this project path",
                     code="project_in_use",
                     details={
-                        "project": project.public_id,
+                        "project": project_id,
                         "owner": owner.get("owner", "unknown"),
                         "generation": owner.get("generation"),
                     },
@@ -109,7 +113,7 @@ class ProjectOwnerLease:
             handle.truncate(0)
             handle.write(record + b"\n")
             self._handles = (*self._handles, handle)
-            self._lock_paths.add(project.alias_lock_path)
+            self._lock_paths.add(lock_path)
         except Exception:
             try:
                 _unlock_handle(handle)
@@ -185,6 +189,7 @@ def canonical_project(data_root: str | os.PathLike[str]) -> CanonicalProject:
         database=database,
         lock_path=lock_root / f"identity-{identity}.lock",
         alias_lock_path=lock_root / f"path-{alias_digest}.lock",
+        local_lock_path=parent / OWNER_LOCK_FILENAME,
         identity=identity,
         public_id=identity[:16],
     )
@@ -202,9 +207,15 @@ def acquire_project_ownership(
         raise ValueError(f"invalid owner kind: {owner_kind}")
     handles: list[IO[bytes]] = []
     try:
-        # Identity preserves ownership across moves; the path lock prevents a
-        # replacement inode at the admitted path from becoming a second project.
-        for lock_path in (project.lock_path, project.alias_lock_path):
+        # Identity preserves ownership across moves; the global path lock and
+        # project-local lock prevent replacement or differing runtime-directory
+        # selections from creating a second owner at the admitted project.
+        lock_paths = (
+            project.lock_path,
+            project.alias_lock_path,
+            project.local_lock_path,
+        )
+        for lock_path in dict.fromkeys(lock_paths):
             handle = _open_owner_lock(lock_path, project.public_id)
             handles.append(handle)
             if not _try_lock_handle(handle):
@@ -238,7 +249,7 @@ def acquire_project_ownership(
             owner_kind,
             generation,
             tuple(handles),
-            {project.lock_path, project.alias_lock_path},
+            set(lock_paths),
         )
     except Exception:
         for handle in reversed(handles):
@@ -250,12 +261,20 @@ def acquire_project_ownership(
 
 
 def _owner_lock_root() -> Path:
-    from .protocol import operator_runtime_dir
+    # Ownership exclusion is a security invariant, so it must not follow the
+    # configurable broker endpoint/test rendezvous. The project-local lock is
+    # the primary cross-environment guard; this stable per-user namespace also
+    # preserves inode identity across path moves and hard-link aliases.
+    if os.name == "nt":
+        root = _windows_local_appdata() / "Kassiber" / "run" / "owners"
+    else:
+        import pwd
 
-    # The endpoint and owner locks deliberately share one private per-user
-    # runtime selection. An explicit runtime override defines an isolated test
-    # or recovery rendezvous for every participating process.
-    root = operator_runtime_dir() / "owners"
+        # Resolve the account home from the user database rather than HOME or
+        # XDG variables so every normal process for this UID rendezvouses in a
+        # persistent namespace that tmpfile cleanup cannot unlink mid-lease.
+        account_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        root = account_home / ".kassiber" / "run" / "operator-owners"
     if root.is_symlink():
         raise AppError(
             "the project owner lock directory may not be a symlink",
@@ -274,6 +293,28 @@ def _owner_lock_root() -> Path:
     if os.name != "nt":
         os.chmod(root, 0o700)
     return root.resolve(strict=True)
+
+
+def _windows_local_appdata() -> Path:
+    """Resolve Local AppData through the shell API, not caller environment."""
+
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(32768)
+    result = ctypes.windll.shell32.SHGetFolderPathW(
+        None,
+        0x001C,  # CSIDL_LOCAL_APPDATA
+        None,
+        0,
+        buffer,
+    )
+    if result != 0 or not buffer.value:
+        raise AppError(
+            "the stable project ownership directory is unavailable",
+            code="project_owner_lock_unavailable",
+            retryable=True,
+        )
+    return Path(buffer.value)
 
 
 def _open_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:

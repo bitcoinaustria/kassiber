@@ -16380,8 +16380,13 @@ def run(
             if should_shutdown:
                 return 0
     finally:
-        _stop_freshness_background_worker(ctx, reset_event=False)
+        worker_stopped = _stop_freshness_background_worker(
+            ctx,
+            reset_event=False,
+            require_stopped=False,
+        )
         _clear_unlocked_passphrase(ctx)
-        _release_daemon_project_owner(ctx)
+        if worker_stopped:
+            _release_daemon_project_owner(ctx)
 
     return 0

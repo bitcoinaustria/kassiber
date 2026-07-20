@@ -95,8 +95,55 @@ class OperatorProjectTest(unittest.TestCase):
             )
             second.release()
             if os.name != "nt":
-                for lock_path in (project.lock_path, project.alias_lock_path):
+                for lock_path in (
+                    project.lock_path,
+                    project.alias_lock_path,
+                    project.local_lock_path,
+                ):
                     self.assertEqual(lock_path.stat().st_mode & 0o777, 0o600)
+
+    def test_owner_exclusion_does_not_follow_broker_runtime_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            with mock.patch.dict(os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": first}):
+                lease = acquire_project_ownership(
+                    canonical_project(tmp),
+                    owner_kind="broker",
+                    generation="broker",
+                )
+            try:
+                with mock.patch.dict(os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": second}):
+                    with self.assertRaises(AppError) as raised:
+                        acquire_project_ownership(
+                            canonical_project(tmp),
+                            owner_kind="desktop",
+                            generation="desktop",
+                        )
+                self.assertEqual(raised.exception.code, "project_in_use")
+            finally:
+                lease.release()
+
+    @unittest.skipIf(os.name == "nt", "POSIX account-home lock namespace")
+    def test_owner_namespace_uses_account_home_not_runtime_environment(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            tempfile.TemporaryDirectory() as account,
+        ):
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            with mock.patch("pwd.getpwuid") as getpwuid, mock.patch.dict(
+                os.environ,
+                {
+                    "HOME": str(Path(tmp) / "caller-home"),
+                    "XDG_RUNTIME_DIR": str(Path(tmp) / "caller-runtime"),
+                    "KASSIBER_OPERATOR_RUNTIME_DIR": str(Path(tmp) / "override"),
+                },
+            ):
+                getpwuid.return_value = SimpleNamespace(pw_dir=account)
+                project = canonical_project(tmp)
+            self.assertEqual(
+                project.lock_path.parent,
+                Path(account) / ".kassiber" / "run" / "operator-owners",
+            )
 
     def test_broker_first_blocks_desktop_owner(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -18,6 +18,7 @@ from ..core.runtime import resolve_runtime_paths
 from ..db import database_instance_id, open_db, resolve_config_root
 from ..errors import AppError
 from ..log_ring import sanitize_traceback_text
+from ..redaction import redact_secret_text
 from ..secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
 from ..time_utils import now_iso
 from .modes import set_unlock_mode
@@ -31,6 +32,7 @@ from .project import (
 
 MAX_QUEUED_OPERATIONS = 64
 MAX_RETAINED_RESULTS = 256
+MAX_RETAINED_OPERATION_TOMBSTONES = 1024
 ADMIN_AUTH_TTL_SECONDS = 60.0
 _LOGGER = logging.getLogger("kassiber.operator")
 OperationRunner = Callable[["Operation", bytearray], "OperationResult"]
@@ -295,6 +297,11 @@ class ProjectWorker:
         finally:
             operation.owner_handle_tokens = ()
             inherited_owner.close()
+        result = OperationResult(
+            result.exit_code,
+            result.stdout,
+            redact_secret_text(result.stderr),
+        )
         with self._service._lock:
             current_lease = self._service._leases.get(self.project_identity)
             if current_lease is not None:
@@ -346,6 +353,9 @@ class OperatorService:
         self._leases: dict[str, ProjectLease] = {}
         self._workers: dict[str, ProjectWorker] = {}
         self._operations: OrderedDict[str, Operation] = OrderedDict()
+        self._operation_tombstones: OrderedDict[
+            str, tuple[str, tuple[str, ...]]
+        ] = OrderedDict()
         self._lease_aliases: dict[str, str] = {}
         self._auth_backoffs: dict[str, AuthAttemptBackoff] = {}
         self._sequence = 0
@@ -382,12 +392,27 @@ class OperatorService:
                 code="operator_invalid_authentication_method",
                 retryable=False,
             )
-        if duration_seconds is not None and not 60 <= duration_seconds <= 365 * 24 * 3600:
+        if duration_seconds is not None and duration_seconds < 60:
             raise AppError(
-                "operator lease duration must be between 1 minute and 365 days",
+                "operator lease duration must be at least 1 minute",
                 code="operator_invalid_duration",
                 retryable=False,
             )
+        try:
+            requested_expires_at = (
+                (datetime.now(timezone.utc) + timedelta(seconds=duration_seconds))
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+                if duration_seconds is not None
+                else None
+            )
+        except OverflowError as exc:
+            raise AppError(
+                "operator lease duration exceeds the timestamp range",
+                code="operator_invalid_duration",
+                retryable=False,
+            ) from exc
         project = canonical_project(data_root)
         canonical_data_root = str(project.database.parent)
         alias = str(project.database)
@@ -479,14 +504,7 @@ class OperatorService:
                 expires_at_monotonic=expires,
                 duration_seconds=duration_seconds,
                 authentication_method=authentication_method,
-                expires_at=(
-                    (datetime.now(timezone.utc) + timedelta(seconds=duration_seconds))
-                    .replace(microsecond=0)
-                    .isoformat()
-                    .replace("+00:00", "Z")
-                    if duration_seconds is not None
-                    else None
-                ),
+                expires_at=requested_expires_at,
                 workspace=(str(context.get("workspace_id")) or None)
                 if context.get("workspace_id")
                 else None,
@@ -756,6 +774,29 @@ class OperatorService:
                 retryable=False,
             )
         project = canonical_project(data_root)
+        try:
+            with self._lock:
+                admitted_identity = self._lease_identity_for_path_locked(project)
+                if admitted_identity != project.identity:
+                    raise AppError(
+                        "the database file changed while its operator lease is active",
+                        code="operator_project_replaced",
+                        hint=(
+                            "Lock the prior lease before operating on the "
+                            "replacement database."
+                        ),
+                        retryable=False,
+                    )
+                self._require_lease_locked(project)
+        except Exception:
+            for value in (secret_arguments or {}).values():
+                _wipe(value)
+            raise
+        _require_explicit_scope(
+            parsed,
+            command_path,
+            secret_arguments,
+        )
         canonical_data_root = str(project.database.parent)
         installs_backup = command_path == "backup.import" and bool(
             getattr(parsed, "install", False)
@@ -813,19 +854,9 @@ class OperatorService:
             lease.data_root = canonical_data_root
             lease.project = project
             self._lease_aliases[str(project.database)] = project.identity
-            explicit_workspace = getattr(parsed, "workspace", None)
-            explicit_profile = getattr(parsed, "profile", None)
-            if command_path == "context.set":
-                workspace = explicit_workspace
-                profile = explicit_profile
-            else:
-                workspace = explicit_workspace or lease.workspace
-                profile = explicit_profile or lease.profile
             pinned_argv = _pin_project_arguments(
                 argv,
                 canonical_data_root,
-                workspace=str(workspace) if workspace else None,
-                profile=str(profile) if profile else None,
             )
             if operation_id is not None:
                 if (
@@ -851,6 +882,24 @@ class OperatorService:
                             retryable=False,
                         )
                     return existing.public_status()
+                tombstone = self._operation_tombstones.get(operation_id)
+                if tombstone is not None:
+                    for value in (secret_arguments or {}).values():
+                        _wipe(value)
+                    bound_project, bound_argv = tombstone
+                    if bound_project != project.public_id or bound_argv != tuple(pinned_argv):
+                        raise AppError(
+                            "the operation id is already bound to another request",
+                            code="operator_operation_id_conflict",
+                            retryable=False,
+                        )
+                    self._operation_tombstones.move_to_end(operation_id)
+                    return {
+                        "operation_id": operation_id,
+                        "state": "result_unknown",
+                        "reason": "result_not_retained",
+                        "generation": self.generation,
+                    }
             if required is Capability.ADMIN:
                 if not admin_verified:
                     raise AppError(
@@ -1002,7 +1051,7 @@ class OperatorService:
                     self._drop_lease_locked(project.identity)
             raise AppError(
                 "this project has no active operator lease",
-                code="operator_locked",
+                code="interaction_required",
                 hint="Run `kassiber operator unlock` in a terminal.",
                 details={"project": project.public_id},
                 retryable=True,
@@ -1032,6 +1081,9 @@ class OperatorService:
         lease = self._leases.pop(project_id, None)
         if lease is None:
             return
+        worker = self._workers.pop(project_id, None)
+        if worker is not None:
+            worker.stop()
         _wipe(lease.passphrase)
         lease.owner.release()
         for alias, identity in list(self._lease_aliases.items()):
@@ -1131,18 +1183,40 @@ class OperatorService:
             else None
         )
         worker = self._workers.get(lease.project.identity)
+        queued = worker.queued if worker is not None else 0
+        worker_state = (
+            "running"
+            if lease.running_operations
+            else "queued"
+            if queued
+            else "idle"
+        )
         return {
             "project": lease.project.public_id,
             "lease": "unlocked",
             "capability": lease.capability.value,
+            "granted_capabilities": [
+                capability.value
+                for capability in (
+                    Capability.READ,
+                    Capability.OPERATOR,
+                    Capability.ACCOUNTING_DECISIONS,
+                )
+                if capability_allows(lease.capability, capability)
+            ],
             "authentication_method": lease.authentication_method,
             "unlocked_at": lease.unlocked_at,
             "duration_seconds": lease.duration_seconds,
             "expires_at": lease.expires_at,
             "remaining_seconds": remaining,
             "until_lock": lease.expires_at_monotonic is None,
-            "queued_operations": worker.queued if worker is not None else 0,
+            "queued_operations": queued,
             "running_operations": lease.running_operations,
+            "worker_state": worker_state,
+            "default_scope": {
+                "workspace": lease.workspace,
+                "profile": lease.profile,
+            },
         }
 
     def _prune_operations_locked(self) -> None:
@@ -1158,7 +1232,15 @@ class OperatorService:
             }
         ]
         for removable in terminal_ids[:-MAX_RETAINED_RESULTS]:
-            self._operations.pop(removable, None)
+            operation = self._operations.pop(removable, None)
+            if operation is not None:
+                self._operation_tombstones[removable] = (
+                    operation.project_id,
+                    tuple(operation.argv),
+                )
+                self._operation_tombstones.move_to_end(removable)
+        while len(self._operation_tombstones) > MAX_RETAINED_OPERATION_TOMBSTONES:
+            self._operation_tombstones.popitem(last=False)
 
     def _expire_leases(self) -> None:
         while not self._closed.wait(1.0):
@@ -1169,6 +1251,38 @@ class OperatorService:
 def _classify_argv(argv: list[str]) -> tuple[str, Capability]:
     _args, path, capability = _parse_argv(argv)
     return path, capability
+
+
+def _require_explicit_scope(
+    parsed: object,
+    command_path: str,
+    secret_arguments: dict[str, bytearray] | None,
+) -> None:
+    has_workspace = hasattr(parsed, "workspace")
+    has_profile = hasattr(parsed, "profile")
+    workspace = getattr(parsed, "workspace", None) if has_workspace else None
+    profile = getattr(parsed, "profile", None) if has_profile else None
+    if command_path == "context.set":
+        missing = [] if workspace or profile else ["workspace_or_profile"]
+    else:
+        missing = [
+            name
+            for name, declared, value in (
+                ("workspace", has_workspace, workspace),
+                ("profile", has_profile, profile),
+            )
+            if declared and not value
+        ]
+    if missing:
+        for value in (secret_arguments or {}).values():
+            _wipe(value)
+        raise AppError(
+            "brokered commands require explicit book scope",
+            code="operator_scope_required",
+            hint="Pass the command's --workspace and --profile flags explicitly.",
+            details={"command": command_path, "missing": missing},
+            retryable=False,
+        )
 
 
 def _parse_argv(
@@ -1205,22 +1319,15 @@ def _classification_argv(argv: list[str]) -> list[str]:
 def _pin_project_arguments(
     argv: list[str],
     data_root: str,
-    *,
-    workspace: str | None = None,
-    profile: str | None = None,
 ) -> list[str]:
     pinned = ["--data-root", data_root]
-    if workspace:
-        pinned.extend(("--workspace", workspace))
-    if profile:
-        pinned.extend(("--profile", profile))
     index = 0
     while index < len(argv):
         token = argv[index]
-        if token in {"--project", "--data-root", "--workspace", "--profile"}:
+        if token in {"--project", "--data-root"}:
             index += 2
             continue
-        if token.startswith(("--project=", "--data-root=", "--workspace=", "--profile=")):
+        if token.startswith(("--project=", "--data-root=")):
             index += 1
             continue
         pinned.append(token)

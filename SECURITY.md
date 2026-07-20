@@ -151,12 +151,12 @@ start or bundle Tor, so the user still needs an existing Tor service.
 ### At-rest encryption — passphrase-gated SQLCipher (V4.1)
 
 Each project database is optionally encrypted via SQLCipher 4, and each
-encrypted project has its own passphrase. After running `kassiber secrets init`
-for a selected project, every subsequent invocation against that project needs
-that project's passphrase: type it interactively, pass
-`--db-passphrase-fd <FD>` from a parent process, or explicitly enroll CLI
-remembered unlock with `kassiber secrets remember-unlock`. Unlocking one project
-does not unlock any other project.
+encrypted project has its own passphrase. After `kassiber secrets init`, select
+an explicit unlock mode for that project: `manual` prompts or uses
+`--db-passphrase-fd` per process, `brokered` uses a capability-scoped in-memory
+operator lease, and `unattended` opts into the separate CLI remembered-unlock
+credential. Brokered mode never falls through to remembered unlock. Unlocking
+one project does not unlock another.
 
 - `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — when encrypted, contents are
   protected by SQLCipher 4 with stock PBKDF2-HMAC-SHA512
@@ -295,11 +295,11 @@ There is no exactly-once claim across a broker crash; unproven nonzero exits
 from mutating children are reported as `result_unknown`. See
 [docs/reference/operator-broker.md](docs/reference/operator-broker.md) for the
 protocol, platform primitives, queue semantics, and memory-zeroization limits.
-On Linux the broker watches its resolved logind session (when available) and
-XDG runtime root so logout tears down leases even on systems with a lingering
-user manager; systems exposing neither mechanism rely on normal OS process
-teardown and should use an explicit lock before ending an unusual no-PAM
-session.
+On Linux the broker watches logind's per-user login state and the original
+device/inode identity of the XDG runtime root, so logout or runtime-directory
+replacement tears down leases even with a lingering user manager. Broker
+startup fails closed when neither mechanism can prove logout lifetime; manual
+mode remains available on such unusual no-PAM systems.
 
 ## Safe-to-record CLI output
 

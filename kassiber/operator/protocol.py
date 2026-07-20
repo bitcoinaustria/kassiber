@@ -21,6 +21,7 @@ PROTOCOL_VERSION = 1
 MAX_JSON_FRAME = 8 * 1024 * 1024
 MAX_SECRET_FRAME = 16 * 1024
 DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS = 30.0
+DEFAULT_UNIX_SERVER_IO_TIMEOUT_SECONDS = 30.0
 SOCKET_FILENAME = "operator-v1.sock"
 STARTUP_LOCK_FILENAME = "operator-v1.start.lock"
 _HEADER = struct.Struct("!cI")
@@ -164,6 +165,7 @@ class UnixBrokerListener:
         connection, _ = self._socket.accept()
         try:
             _verify_unix_peer(connection)
+            connection.settimeout(DEFAULT_UNIX_SERVER_IO_TIMEOUT_SECONDS)
         except Exception:
             connection.close()
             raise
