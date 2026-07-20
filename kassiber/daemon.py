@@ -3809,12 +3809,27 @@ def _select_project_payload(
                 _retry_retired_project_resources(ctx)
     finally:
         cleanup_error: Exception | None = None
+        target_owner_retained = False
         if target_conn is not None:
             try:
                 target_conn.close()
             except Exception as error:
                 cleanup_error = error
-        if transferred_owner is None and not target_owner_committed:
+                retained_owner = (
+                    target_owner
+                    if transferred_owner is None and not target_owner_committed
+                    else None
+                )
+                ctx.retired_project_resources.append(
+                    _RetiredProjectResource(target_conn, retained_owner)
+                )
+                target_conn = None
+                target_owner_retained = retained_owner is not None
+        if (
+            transferred_owner is None
+            and not target_owner_committed
+            and not target_owner_retained
+        ):
             try:
                 target_owner.release()
             except Exception as error:
