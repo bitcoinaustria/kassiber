@@ -11,6 +11,7 @@ import unittest
 from kassiber.db import open_db, resolve_database_path
 from kassiber.core import accounts as core_accounts
 from kassiber.operator.client import BrokerClient, PreparedArguments
+from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
 from kassiber.secrets.migration import create_empty_encrypted_database
 from kassiber.secrets.sqlcipher import sqlcipher_available
 
@@ -23,6 +24,7 @@ class OperatorIntegrationTest(unittest.TestCase):
             os.chmod(runtime, 0o700)
             environment = os.environ.copy()
             environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             environment["XDG_RUNTIME_DIR"] = runtime
             processes = [
                 subprocess.Popen(
@@ -35,7 +37,9 @@ class OperatorIntegrationTest(unittest.TestCase):
                 for _ in range(2)
             ]
             old_runtime = os.environ.get("KASSIBER_OPERATOR_RUNTIME_DIR")
+            old_test_gate = os.environ.get(TEST_RUNTIME_OVERRIDE_ENV)
             os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             try:
                 deadline = time.monotonic() + 5
                 while True:
@@ -59,6 +63,10 @@ class OperatorIntegrationTest(unittest.TestCase):
                     os.environ.pop("KASSIBER_OPERATOR_RUNTIME_DIR", None)
                 else:
                     os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = old_runtime
+                if old_test_gate is None:
+                    os.environ.pop(TEST_RUNTIME_OVERRIDE_ENV, None)
+                else:
+                    os.environ[TEST_RUNTIME_OVERRIDE_ENV] = old_test_gate
 
     def test_password_unlock_submit_status_and_lock(self) -> None:
         passphrase = bytearray(b"correct horse battery staple")
@@ -72,6 +80,7 @@ class OperatorIntegrationTest(unittest.TestCase):
             connection.close()
             environment = os.environ.copy()
             environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             environment["XDG_RUNTIME_DIR"] = runtime
             server = subprocess.Popen(
                 [sys.executable, "-m", "kassiber.operator.server"],
@@ -81,7 +90,9 @@ class OperatorIntegrationTest(unittest.TestCase):
                 env=environment,
             )
             old_runtime = os.environ.get("KASSIBER_OPERATOR_RUNTIME_DIR")
+            old_test_gate = os.environ.get(TEST_RUNTIME_OVERRIDE_ENV)
             os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             client = BrokerClient()
             try:
                 deadline = time.monotonic() + 5
@@ -147,6 +158,10 @@ class OperatorIntegrationTest(unittest.TestCase):
                     os.environ.pop("KASSIBER_OPERATOR_RUNTIME_DIR", None)
                 else:
                     os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = old_runtime
+                if old_test_gate is None:
+                    os.environ.pop(TEST_RUNTIME_OVERRIDE_ENV, None)
+                else:
+                    os.environ[TEST_RUNTIME_OVERRIDE_ENV] = old_test_gate
 
     def test_two_projects_and_multiple_books_remain_independent(self) -> None:
         first_passphrase = bytearray(b"first project passphrase")
@@ -182,6 +197,7 @@ class OperatorIntegrationTest(unittest.TestCase):
 
             environment = os.environ.copy()
             environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             environment["XDG_RUNTIME_DIR"] = runtime
             server = subprocess.Popen(
                 [sys.executable, "-m", "kassiber.operator.server"],
@@ -191,7 +207,9 @@ class OperatorIntegrationTest(unittest.TestCase):
                 env=environment,
             )
             old_runtime = os.environ.get("KASSIBER_OPERATOR_RUNTIME_DIR")
+            old_test_gate = os.environ.get(TEST_RUNTIME_OVERRIDE_ENV)
             os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             client = BrokerClient()
             try:
                 deadline = time.monotonic() + 5
@@ -272,6 +290,10 @@ class OperatorIntegrationTest(unittest.TestCase):
                     os.environ.pop("KASSIBER_OPERATOR_RUNTIME_DIR", None)
                 else:
                     os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = old_runtime
+                if old_test_gate is None:
+                    os.environ.pop(TEST_RUNTIME_OVERRIDE_ENV, None)
+                else:
+                    os.environ[TEST_RUNTIME_OVERRIDE_ENV] = old_test_gate
 
 
 if __name__ == "__main__":

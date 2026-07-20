@@ -25,6 +25,7 @@ DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS = 30.0
 DEFAULT_UNIX_SERVER_IO_TIMEOUT_SECONDS = 30.0
 SOCKET_FILENAME = "operator-v1.sock"
 STARTUP_LOCK_FILENAME = "operator-v1.start.lock"
+TEST_RUNTIME_OVERRIDE_ENV = "KASSIBER_OPERATOR_ALLOW_TEST_RUNTIME_DIR"
 _HEADER = struct.Struct("!cI")
 
 
@@ -189,11 +190,33 @@ class UnixBrokerListener:
 
 def operator_runtime_dir() -> Path:
     override = os.environ.get("KASSIBER_OPERATOR_RUNTIME_DIR")
-    if override:
+    # Source tests need isolated broker subprocesses. Packaged binaries never
+    # honor this escape hatch, and ordinary source runs ignore the path unless
+    # the explicit test gate accompanies it.
+    if (
+        override
+        and os.environ.get(TEST_RUNTIME_OVERRIDE_ENV) == "1"
+        and not getattr(sys, "frozen", False)
+    ):
         selected = Path(override).expanduser()
     else:
-        xdg = os.environ.get("XDG_RUNTIME_DIR")
-        selected = Path(xdg) / "kassiber" if xdg else Path.home() / ".kassiber" / "run"
+        import pwd
+
+        try:
+            account_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        except (KeyError, OSError) as exc:
+            raise AppError(
+                "the operator account home is unavailable",
+                code="operator_runtime_unavailable",
+                retryable=False,
+            ) from exc
+        if not account_home.is_absolute():
+            raise AppError(
+                "the operator account home is unsafe",
+                code="unsafe_operator_runtime_directory",
+                retryable=False,
+            )
+        selected = account_home / ".kassiber" / "run"
     _ensure_private_directory(selected)
     return selected.resolve(strict=True)
 

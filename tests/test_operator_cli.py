@@ -13,6 +13,7 @@ from kassiber.cli.main import _verify_operator_child_open_database
 from kassiber.core.runtime import _operator_expected_database_identity
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
 
 
 class OperatorCliTest(unittest.TestCase):
@@ -103,7 +104,10 @@ class OperatorCliTest(unittest.TestCase):
     def test_status_is_public_safe_and_does_not_start_broker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as runtime, mock.patch.dict(
             os.environ,
-            {"KASSIBER_OPERATOR_RUNTIME_DIR": runtime},
+            {
+                "KASSIBER_OPERATOR_RUNTIME_DIR": runtime,
+                TEST_RUNTIME_OVERRIDE_ENV: "1",
+            },
         ):
             os.chmod(runtime, 0o700)
             stdout = io.StringIO()

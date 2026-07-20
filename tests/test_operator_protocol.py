@@ -57,7 +57,11 @@ class OperatorProtocolTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Unix socket test")
     def test_listener_authenticates_same_user_and_round_trips(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-            os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": tmp}
+            os.environ,
+            {
+                "KASSIBER_OPERATOR_RUNTIME_DIR": tmp,
+                operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+            },
         ):
             os.chmod(tmp, 0o700)
             server = listen()
@@ -80,7 +84,11 @@ class OperatorProtocolTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Unix permission test")
     def test_permissive_runtime_directory_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-            os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": tmp}
+            os.environ,
+            {
+                "KASSIBER_OPERATOR_RUNTIME_DIR": tmp,
+                operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+            },
         ):
             os.chmod(tmp, 0o755)
             with self.assertRaises(AppError) as raised:
@@ -90,7 +98,11 @@ class OperatorProtocolTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Unix socket test")
     def test_owned_stale_socket_is_recovered(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-            os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": tmp}
+            os.environ,
+            {
+                "KASSIBER_OPERATOR_RUNTIME_DIR": tmp,
+                operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+            },
         ):
             os.chmod(tmp, 0o700)
             endpoint = Path(tmp) / "operator-v1.sock"
@@ -106,7 +118,11 @@ class OperatorProtocolTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Unix startup lock test")
     def test_startup_lock_prevents_a_second_listener_from_touching_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-            os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": tmp}
+            os.environ,
+            {
+                "KASSIBER_OPERATOR_RUNTIME_DIR": tmp,
+                operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+            },
         ):
             os.chmod(tmp, 0o700)
             server = listen()
@@ -121,7 +137,11 @@ class OperatorProtocolTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Unix inode test")
     def test_listener_close_does_not_unlink_a_replacement_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-            os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": tmp}
+            os.environ,
+            {
+                "KASSIBER_OPERATOR_RUNTIME_DIR": tmp,
+                operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+            },
         ):
             os.chmod(tmp, 0o700)
             server = listen()
@@ -137,6 +157,103 @@ class OperatorProtocolTest(unittest.TestCase):
                 replacement.close()
                 endpoint.unlink(missing_ok=True)
                 displaced.unlink(missing_ok=True)
+
+    @unittest.skipIf(os.name == "nt", "Unix stable endpoint test")
+    def test_production_environment_variation_cannot_split_broker_election(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            account = root / "account"
+            account.mkdir(mode=0o700)
+            environments = [
+                {
+                    "HOME": str(root / "caller-one"),
+                    "XDG_RUNTIME_DIR": str(root / "runtime-one"),
+                    "KASSIBER_OPERATOR_RUNTIME_DIR": str(root / "override-one"),
+                    operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "0",
+                },
+                {
+                    "HOME": str(root / "caller-two"),
+                    "XDG_RUNTIME_DIR": str(root / "runtime-two"),
+                    "KASSIBER_OPERATOR_RUNTIME_DIR": str(root / "override-two"),
+                    operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "0",
+                },
+            ]
+            with mock.patch(
+                "pwd.getpwuid",
+                return_value=mock.Mock(pw_dir=str(account)),
+            ), mock.patch.dict(os.environ, environments[0]):
+                server = listen()
+                try:
+                    with mock.patch.dict(os.environ, environments[1]):
+                        with self.assertRaises(AppError) as raised:
+                            listen()
+                        self.assertEqual(
+                            raised.exception.code,
+                            "operator_broker_running",
+                        )
+                        result: list[dict] = []
+
+                        def serve() -> None:
+                            with server.accept() as channel:
+                                result.append(channel.receive_json())
+                                channel.send_json({"winner": True})
+
+                        thread = threading.Thread(target=serve)
+                        thread.start()
+                        with connect() as channel:
+                            channel.send_json({"same_account": True})
+                            self.assertEqual(
+                                channel.receive_json(),
+                                {"winner": True},
+                            )
+                        thread.join(2)
+                        self.assertFalse(thread.is_alive())
+                        self.assertEqual(result, [{"same_account": True}])
+                finally:
+                    server.close()
+
+    @unittest.skipIf(os.name == "nt", "Unix test override gate")
+    def test_runtime_override_requires_explicit_nonfrozen_test_gate(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            tempfile.TemporaryDirectory() as override,
+        ):
+            account = Path(tmp) / "account"
+            account.mkdir(mode=0o700)
+            account_runtime = account / ".kassiber" / "run"
+            base_environment = {
+                "HOME": str(Path(tmp) / "caller-home"),
+                "XDG_RUNTIME_DIR": str(Path(tmp) / "caller-runtime"),
+                "KASSIBER_OPERATOR_RUNTIME_DIR": override,
+            }
+            with mock.patch(
+                "pwd.getpwuid",
+                return_value=mock.Mock(pw_dir=str(account)),
+            ), mock.patch.object(sys, "frozen", False, create=True):
+                with mock.patch.dict(
+                    os.environ,
+                    {
+                        **base_environment,
+                        operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "0",
+                    },
+                ):
+                    self.assertEqual(operator_runtime_dir(), account_runtime)
+                with mock.patch.dict(
+                    os.environ,
+                    {
+                        **base_environment,
+                        operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+                    },
+                ):
+                    self.assertEqual(operator_runtime_dir(), Path(override))
+                with mock.patch.object(sys, "frozen", True), mock.patch.dict(
+                    os.environ,
+                    {
+                        **base_environment,
+                        operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+                    },
+                ):
+                    self.assertEqual(operator_runtime_dir(), account_runtime)
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "SO_PEERCRED test")
     def test_cross_user_unix_peer_is_rejected(self) -> None:
@@ -556,7 +673,11 @@ class OperatorProtocolTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Unix timeout test")
     def test_ping_read_is_bounded_when_endpoint_accepts_but_never_replies(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-            os.environ, {"KASSIBER_OPERATOR_RUNTIME_DIR": tmp}
+            os.environ,
+            {
+                "KASSIBER_OPERATOR_RUNTIME_DIR": tmp,
+                operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
+            },
         ):
             os.chmod(tmp, 0o700)
             endpoint = Path(tmp) / "operator-v1.sock"
