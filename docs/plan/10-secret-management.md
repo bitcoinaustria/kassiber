@@ -18,7 +18,8 @@ macOS Touch ID credential uses a distinct production-entitled,
 current-biometry-only namespace; the broker starts the signed helper with an
 inherited pipe, and the helper verifies its production-signed bundled sidecar
 parent, including a Security.framework validation of the live process against
-the exact designated requirement, before returning the secret to broker
+the fixed sidecar filename/signing identifier, Team ID, and Developer ID
+Application certificate requirement, before returning the secret to broker
 memory. It never returns the secret to the CLI, and there is no unsigned-preview fallback. The
 authoritative security and lifecycle contract is the
 [operator broker reference](../reference/operator-broker.md).
