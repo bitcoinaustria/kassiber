@@ -1,4 +1,11 @@
-"""Shared local throttling for database passphrase verification attempts."""
+"""Shared retry-smoothing for database passphrase verification attempts.
+
+The deadline uses UTC epoch time because daemon and broker processes must share
+it across restarts.  It is not an adversarial rate-limit boundary: SQLCipher's
+KDF provides the brute-force cost, and the logged-in OS user can edit this
+state.  Loaded deadlines are clamped to the configured maximum so a backward
+clock correction or corrupt state cannot create an unbounded local lockout.
+"""
 
 from __future__ import annotations
 
@@ -35,6 +42,10 @@ class AuthAttemptBackoff:
                     self._locked_until = 0.0
                     self._persist_locked()
                 return
+            if retry_after > AUTH_BACKOFF_MAX_SECONDS:
+                retry_after = AUTH_BACKOFF_MAX_SECONDS
+                self._locked_until = now + retry_after
+                self._persist_locked()
         raise AppError(
             "too many failed passphrase attempts",
             code="local_auth_rate_limited",
