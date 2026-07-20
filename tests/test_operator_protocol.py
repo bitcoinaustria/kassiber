@@ -288,6 +288,151 @@ class OperatorProtocolTest(unittest.TestCase):
             server.close()
             thread.join(2)
 
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
+    def test_windows_client_closes_pipe_when_server_sid_lookup_fails(self) -> None:
+        errors: list[BaseException] = []
+        with mock.patch.object(
+            operator_protocol,
+            "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
+            0.05,
+        ):
+            server = listen()
+
+            def serve() -> None:
+                try:
+                    with server.accept() as channel:
+                        channel.receive_json()
+                except BaseException as exc:  # pragma: no cover - Windows CI
+                    errors.append(exc)
+
+            thread = threading.Thread(target=serve)
+            thread.start()
+            try:
+                with mock.patch.object(
+                    operator_protocol,
+                    "_windows_server_sid",
+                    side_effect=OSError("injected server SID lookup failure"),
+                ):
+                    with self.assertRaisesRegex(OSError, "injected server SID"):
+                        connect(timeout=5.0, io_timeout=1.0)
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertNotIsInstance(errors[0], TimeoutError)
+            finally:
+                server.close()
+                thread.join(2)
+
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
+    def test_windows_server_closes_pipe_when_client_sid_lookup_fails(self) -> None:
+        errors: list[BaseException] = []
+        server = listen()
+        client: BrokerChannel | None = None
+
+        def serve() -> None:
+            try:
+                server.accept()
+            except BaseException as exc:  # pragma: no cover - Windows CI
+                errors.append(exc)
+
+        with mock.patch.object(
+            operator_protocol,
+            "_windows_client_sid",
+            side_effect=OSError("injected client SID lookup failure"),
+        ):
+            thread = threading.Thread(target=serve)
+            thread.start()
+            try:
+                client = connect(timeout=5.0, io_timeout=0.1)
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertRegex(str(errors[0]), "injected client SID")
+                try:
+                    client.receive_json()
+                except (EOFError, OSError) as exc:
+                    self.assertNotIsInstance(exc, TimeoutError)
+                else:  # pragma: no cover - defensive Windows assertion
+                    self.fail("rejected named-pipe client remained connected")
+            finally:
+                if client is not None:
+                    client.close()
+                server.close()
+                thread.join(2)
+
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe close-race test")
+    def test_windows_listener_close_does_not_double_close_connected_handle(self) -> None:
+        server = listen()
+        server_handle = int(server._pending)
+        kernel32 = operator_protocol._kernel32
+        original_connect = kernel32.ConnectNamedPipe
+        original_result = kernel32.GetOverlappedResult
+        original_close = kernel32.CloseHandle
+        connect_issued = threading.Event()
+        connect_completed = threading.Event()
+        release_result = threading.Event()
+        close_count = 0
+        errors: list[BaseException] = []
+        client: BrokerChannel | None = None
+
+        def controlled_connect(handle: object, overlapped: object) -> int:
+            result = original_connect(handle, overlapped)
+            error = operator_protocol.ctypes.get_last_error()
+            connect_issued.set()
+            operator_protocol.ctypes.set_last_error(error)
+            return result
+
+        def controlled_result(
+            handle: object,
+            overlapped: object,
+            transferred: object,
+            wait: object,
+        ) -> int:
+            result = original_result(handle, overlapped, transferred, wait)
+            error = operator_protocol.ctypes.get_last_error()
+            connect_completed.set()
+            release_result.wait(5)
+            operator_protocol.ctypes.set_last_error(error)
+            return result
+
+        def counted_close(handle: object) -> int:
+            nonlocal close_count
+            value = getattr(handle, "value", handle)
+            if value == server_handle:
+                close_count += 1
+            return original_close(handle)
+
+        def accept_until_closed() -> None:
+            try:
+                server.accept()
+            except BaseException as exc:  # pragma: no cover - Windows CI
+                errors.append(exc)
+
+        with (
+            mock.patch.object(kernel32, "ConnectNamedPipe", side_effect=controlled_connect),
+            mock.patch.object(kernel32, "GetOverlappedResult", side_effect=controlled_result),
+            mock.patch.object(kernel32, "CloseHandle", side_effect=counted_close),
+        ):
+            thread = threading.Thread(target=accept_until_closed)
+            thread.start()
+            try:
+                self.assertTrue(connect_issued.wait(2))
+                client = connect(timeout=5.0, io_timeout=1.0)
+                self.assertTrue(connect_completed.wait(2))
+                server.close()
+                release_result.set()
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], OSError)
+                self.assertEqual(close_count, 1)
+            finally:
+                release_result.set()
+                if client is not None:
+                    client.close()
+                server.close()
+                thread.join(2)
+
     @unittest.skipIf(os.name == "nt", "Unix timeout test")
     def test_ping_read_is_bounded_when_endpoint_accepts_but_never_replies(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(

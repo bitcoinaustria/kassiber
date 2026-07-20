@@ -738,13 +738,16 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     None,
                 )
                 if handle != _INVALID_HANDLE_VALUE:
-                    if _windows_server_sid(handle) != _windows_current_sid():
+                    try:
+                        if _windows_server_sid(handle) != _windows_current_sid():
+                            raise AppError(
+                                "operator named-pipe server SID did not match",
+                                code="operator_peer_rejected",
+                                retryable=False,
+                            )
+                    except Exception:
                         _kernel32.CloseHandle(handle)
-                        raise AppError(
-                            "operator named-pipe server SID did not match",
-                            code="operator_peer_rejected",
-                            retryable=False,
-                        )
+                        raise
                     return cls(handle, io_timeout=io_timeout)
                 error = ctypes.get_last_error()
                 if error != _ERROR_PIPE_BUSY or time.monotonic() >= deadline:
@@ -972,8 +975,10 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                 if self._closed:
                     if self._pending == handle:
                         self._pending = _INVALID_HANDLE_VALUE
-                    _kernel32.CloseHandle(handle)
+                        _kernel32.CloseHandle(handle)
                     raise OSError("operator named-pipe listener is closed")
+                if self._pending != handle:
+                    raise OSError("operator named-pipe listener ownership changed")
                 self._pending = _INVALID_HANDLE_VALUE
             try:
                 pending = self._create_instance(first=False)
@@ -987,14 +992,17 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     _kernel32.CloseHandle(handle)
                     raise OSError("operator named-pipe listener is closed")
                 self._pending = pending
-            if _windows_client_sid(handle) != _windows_current_sid():
+            try:
+                if _windows_client_sid(handle) != _windows_current_sid():
+                    raise AppError(
+                        "operator named-pipe client SID did not match",
+                        code="operator_peer_rejected",
+                        retryable=False,
+                    )
+            except Exception:
                 _kernel32.DisconnectNamedPipe(handle)
                 _kernel32.CloseHandle(handle)
-                raise AppError(
-                    "operator named-pipe client SID did not match",
-                    code="operator_peer_rejected",
-                    retryable=False,
-                )
+                raise
             return BrokerChannel(
                 _WindowsPipeTransport(
                     handle,
