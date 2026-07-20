@@ -2043,6 +2043,164 @@ class OperatorServiceTest(unittest.TestCase):
                 release_continuation.set()
                 service.close()
 
+    def test_close_waits_for_an_authenticated_continuation(self) -> None:
+        continuation_entered = threading.Event()
+        release_continuation = threading.Event()
+        close_finished = threading.Event()
+        errors: list[BaseException] = []
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ), mock.patch(
+            "kassiber.operator.service.set_unlock_mode",
+            return_value="brokered",
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+
+            def continuation() -> None:
+                continuation_entered.set()
+                if not release_continuation.wait(2):
+                    raise AssertionError("timed out releasing continuation")
+
+            def authenticate() -> None:
+                try:
+                    service.authenticate_database(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        scope="operator_native_enrollment",
+                        continuation=continuation,
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+
+            def close_service() -> None:
+                try:
+                    service.close()
+                except BaseException as exc:
+                    errors.append(exc)
+                finally:
+                    close_finished.set()
+
+            auth_thread = threading.Thread(target=authenticate)
+            close_thread = threading.Thread(target=close_service)
+            try:
+                auth_thread.start()
+                self.assertTrue(continuation_entered.wait(1))
+                close_thread.start()
+                self.assertFalse(close_finished.wait(0.05))
+                release_continuation.set()
+                auth_thread.join(2)
+                close_thread.join(2)
+                self.assertFalse(auth_thread.is_alive())
+                self.assertFalse(close_thread.is_alive())
+                self.assertTrue(close_finished.is_set())
+                self.assertEqual(errors, [])
+                self.assertFalse(service._leases)
+                self.assertFalse(service._workers)
+            finally:
+                release_continuation.set()
+                service.close()
+
+    def test_close_during_unlock_prevents_lease_installation(self) -> None:
+        unlock_entered = threading.Event()
+        release_unlock = threading.Event()
+        close_finished = threading.Event()
+        errors: list[BaseException] = []
+
+        class BlockingConnection(_Connection):
+            pass
+
+        def opened(*_args, **_kwargs):
+            unlock_entered.set()
+            if not release_unlock.wait(2):
+                raise AssertionError("timed out releasing unlock")
+            return BlockingConnection()
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", side_effect=opened
+        ), mock.patch(
+            "kassiber.operator.service.set_unlock_mode",
+            return_value="brokered",
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+
+            def unlock() -> None:
+                try:
+                    service.unlock(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        duration_seconds=None,
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+
+            def close_service() -> None:
+                service.close()
+                close_finished.set()
+
+            unlock_thread = threading.Thread(target=unlock)
+            close_thread = threading.Thread(target=close_service)
+            try:
+                unlock_thread.start()
+                self.assertTrue(unlock_entered.wait(1))
+                close_thread.start()
+                self.assertFalse(close_finished.wait(0.05))
+                release_unlock.set()
+                unlock_thread.join(2)
+                close_thread.join(2)
+                self.assertFalse(unlock_thread.is_alive())
+                self.assertFalse(close_thread.is_alive())
+                self.assertTrue(close_finished.is_set())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], AppError)
+                self.assertEqual(errors[0].code, "operator_broker_stopped")
+                self.assertFalse(service._leases)
+                self.assertFalse(service._workers)
+            finally:
+                release_unlock.set()
+                service.close()
+
+    def test_close_allows_a_running_atomic_operation_to_finish(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+
+        def runner(_operation, _passphrase):
+            started.set()
+            if not release.wait(2):
+                raise AssertionError("timed out releasing running operation")
+            return OperationResult(0, "finished\n", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                retained = next(iter(service._leases.values())).passphrase
+                accepted = service.submit(tmp, ["status"])
+                self.assertTrue(started.wait(1))
+
+                service.close()
+                self.assertEqual(
+                    service.operation_status(accepted["operation_id"])["state"],
+                    "running",
+                )
+                release.set()
+                terminal = self._wait_terminal(service, accepted["operation_id"])
+                self.assertEqual(terminal["state"], "completed")
+                self.assertEqual(terminal["stdout"], "finished\n")
+                self.assertEqual(set(retained), {0})
+            finally:
+                release.set()
+                service.close()
+
     def test_blocked_scope_refresh_does_not_block_another_project(self) -> None:
         refresh_entered = threading.Event()
         release_refresh = threading.Event()

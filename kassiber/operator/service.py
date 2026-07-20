@@ -209,7 +209,10 @@ class ProjectWorker:
             "",
             sanitize_traceback_text(f"operator worker failed: {exc}\n"),
         )
-        with self._service._project_transition(self.project_identity):
+        with self._service._project_transition(
+            self.project_identity,
+            allow_closed=True,
+        ):
             with self._service._lock:
                 lease = self._service._leases.get(self.project_identity)
                 if operation.state == "running" and lease is not None:
@@ -243,7 +246,10 @@ class ProjectWorker:
                     self._service._drop_lease_locked(self.project_identity)
 
     def _run_one(self, operation: Operation) -> None:
-        with self._service._project_transition(self.project_identity):
+        with self._service._project_transition(
+            self.project_identity,
+            allow_closed=True,
+        ):
             with self._service._lock:
                 lease = self._service._leases.get(self.project_identity)
                 if operation.cancellation_requested:
@@ -391,7 +397,10 @@ class ProjectWorker:
             result.stdout,
             redact_secret_text(result.stderr),
         )
-        with self._service._project_transition(self.project_identity):
+        with self._service._project_transition(
+            self.project_identity,
+            allow_closed=True,
+        ):
             with self._service._lock:
                 current_lease = self._service._leases.get(self.project_identity)
                 if current_lease is not None:
@@ -474,8 +483,11 @@ class OperatorService:
         self._pending_owner_releases: deque[
             tuple[str, ProjectOwnerLease]
         ] = deque()
+        self._active_project_transitions = 0
         self._sequence = 0
         self._closed = threading.Event()
+        self._close_complete = threading.Event()
+        self._transition_condition = threading.Condition(self._lock)
         self._janitor = threading.Thread(
             target=self._expire_leases,
             name="operator-lease-expiry",
@@ -484,15 +496,24 @@ class OperatorService:
         self._janitor.start()
 
     @contextmanager
-    def _project_transition(self, project_identity: str) -> Iterator[None]:
+    def _project_transition(
+        self,
+        project_identity: str,
+        *,
+        allow_closed: bool = False,
+    ) -> Iterator[None]:
         """Hold a project-local gate without holding the service state lock."""
 
         with self._lock:
+            if self._closed.is_set() and not allow_closed:
+                raise _broker_stopped_error()
             gate = self._project_gates.setdefault(
                 project_identity,
                 _ProjectTransitionGate(),
             )
             gate.users += 1
+            if not allow_closed:
+                self._active_project_transitions += 1
         try:
             with gate.lock:
                 try:
@@ -502,6 +523,9 @@ class OperatorService:
         finally:
             with self._lock:
                 gate.users -= 1
+                if not allow_closed:
+                    self._active_project_transitions -= 1
+                    self._transition_condition.notify_all()
                 if (
                     gate.users == 0
                     and project_identity not in self._leases
@@ -679,7 +703,8 @@ class OperatorService:
             with self._lock:
                 current_previous = self._leases.get(project.identity)
                 lease_changed = current_previous is not previous
-                if not lease_changed:
+                service_stopped = self._closed.is_set()
+                if not lease_changed and not service_stopped:
                     if previous is not None:
                         _wipe(previous.passphrase)
                     self._leases[project.identity] = ProjectLease(
@@ -709,10 +734,12 @@ class OperatorService:
                             project.public_id,
                             self._runner,
                         )
-            if lease_changed:
+            if lease_changed or service_stopped:
                 _wipe(stored)
                 if acquired_here:
                     owner.release()
+                if service_stopped:
+                    raise _broker_stopped_error()
                 raise AppError(
                     "the operator lease changed during unlock",
                     code="operator_project_busy",
@@ -828,6 +855,8 @@ class OperatorService:
                             code="operator_project_replaced",
                             retryable=False,
                         )
+                    if self._closed.is_set():
+                        raise _broker_stopped_error()
                 return continuation() if continuation is not None else None
             finally:
                 if temporary_owner is not None:
@@ -1291,16 +1320,34 @@ class OperatorService:
             return operation.public_status(include_output=True)
 
     def close(self) -> None:
-        self._closed.set()
         with self._lock:
-            for project_id in list(self._leases):
-                self._revoke_lease_locked(
-                    project_id,
-                    reason="operator broker stopped",
-                )
-            for worker in self._workers.values():
-                worker.stop()
-        self._release_pending_owners()
+            if self._closed.is_set():
+                already_closing = True
+            else:
+                already_closing = False
+                self._closed.set()
+        if already_closing:
+            self._close_complete.wait()
+            return
+        first_error: BaseException | None = None
+        try:
+            with self._transition_condition:
+                while self._active_project_transitions:
+                    self._transition_condition.wait()
+                for project_id in list(self._leases):
+                    self._revoke_lease_locked(
+                        project_id,
+                        reason="operator broker stopped",
+                    )
+                for worker in self._workers.values():
+                    worker.stop()
+            self._release_pending_owners()
+        except BaseException as exc:
+            first_error = exc
+        finally:
+            self._close_complete.set()
+        if first_error is not None:
+            raise first_error
 
     def _require_lease_locked(self, project: CanonicalProject) -> ProjectLease:
         lease = self._leases.get(project.identity)
@@ -1574,7 +1621,7 @@ class OperatorService:
                     for project_id, _owner in self._pending_owner_releases
                 ]
             for project_id in dict.fromkeys((*expired, *pending)):
-                with self._project_transition(project_id):
+                with self._project_transition(project_id, allow_closed=True):
                     with self._lock:
                         lease = self._leases.get(project_id)
                         if lease is not None and lease.expired():
@@ -1614,6 +1661,14 @@ class OperatorService:
 def _classify_argv(argv: list[str]) -> tuple[str, Capability]:
     _args, path, capability = _parse_argv(argv)
     return path, capability
+
+
+def _broker_stopped_error() -> AppError:
+    return AppError(
+        "the operator broker is stopping",
+        code="operator_broker_stopped",
+        retryable=True,
+    )
 
 
 def _require_explicit_scope(
