@@ -149,6 +149,65 @@ describe("guidedComponentModel", () => {
     expect(satisfied.activationErrors).toEqual([]);
   });
 
+  it("serializes a reviewed conversion with per-leg valuations", () => {
+    const form = createInitialGuidedForm();
+    form.componentType = "swap";
+    form.conservationMode = "conversion";
+    form.conversionPolicy = "taxable_swap";
+    form.conversionReviewed = true;
+    const source = createGuidedLeg("source");
+    source.amountBtc = "1.0";
+    source.transactionRef = "tx-a";
+    source.valuationUnit = "eur_cents";
+    source.valuationAmount = "5000000";
+    const dest = createGuidedLeg("destination");
+    dest.amountBtc = "1.0";
+    dest.transactionRef = "tx-b";
+    dest.asset = "LBTC";
+    dest.valuationUnit = "eur_cents";
+    dest.valuationAmount = "5000000";
+    form.legs = [source, dest];
+
+    const spec = formToComponentSpec(form);
+    expect(spec.conservation_mode).toBe("conversion");
+    expect(spec.conversion_policy).toBe("taxable_swap");
+    expect(spec.conversion_reviewed).toBe(true);
+    const legs = spec.legs as Array<Record<string, unknown>>;
+    expect(legs[0]).toMatchObject({
+      valuation_unit: "eur_cents",
+      valuation_amount: "5000000",
+    });
+    expect(legs[1].asset).toBe("LBTC");
+
+    const preview = previewCustodyComponentBatch(formToDocument(form));
+    expect(preview.structuralErrors).toEqual([]);
+    expect(preview.activationErrors).toEqual([]);
+  });
+
+  it("flags an unreviewed conversion as needing review", () => {
+    const form = createInitialGuidedForm();
+    form.componentType = "swap";
+    form.conservationMode = "conversion";
+    form.conversionPolicy = "";
+    form.conversionReviewed = false;
+    const source = createGuidedLeg("source");
+    source.amountBtc = "1.0";
+    source.transactionRef = "tx-a";
+    source.valuationUnit = "eur_cents";
+    source.valuationAmount = "5000000";
+    const dest = createGuidedLeg("destination");
+    dest.amountBtc = "1.0";
+    dest.transactionRef = "tx-b";
+    dest.valuationUnit = "eur_cents";
+    dest.valuationAmount = "5000000";
+    form.legs = [source, dest];
+
+    const preview = previewCustodyComponentBatch(formToDocument(form));
+    expect(
+      preview.activationErrors.some((i) => i.code === "conversionReviewRequired"),
+    ).toBe(true);
+  });
+
   it("converts datetime-local values to RFC3339 UTC", () => {
     const converted = occurredAtToRfc3339("2024-01-15T12:00");
     expect(converted).toMatch(/Z$/);

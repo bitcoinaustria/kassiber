@@ -14,6 +14,10 @@
         "title": "Build a custody component",
         "description": "Describe how Bitcoin moved between your wallets — including any wallet history not imported into Kassiber — as source, destination, and fee legs. Kassiber checks that the amounts balance before you save.",
         "componentType": "Component type",
+        "conservationMode": "Conservation",
+        "conversionPolicy": "Conversion policy",
+        "conversionPolicyPlaceholder": "e.g. taxable_swap",
+        "conversionReviewed": "Reviewed conversion (required to activate)",
         "evidenceKind": "Evidence kind",
         "notes": "Notes",
         "notesPlaceholder": "What does this component record, and why?",
@@ -36,7 +40,11 @@
           "walletRefPlaceholder": "Wallet id or label",
           "untrackedWallet": "Untracked wallet label",
           "untrackedWalletPlaceholder": "e.g. Old migration wallet",
-          "occurredAt": "Occurred at"
+          "occurredAt": "Occurred at",
+          "valuationUnit": "Valuation unit",
+          "valuationUnitPlaceholder": "e.g. eur_cents",
+          "valuationAmount": "Valuation amount",
+          "valuationAmountPlaceholder": "Integer in the valuation unit"
         },
         "balance": {
           "sources": "Sources",

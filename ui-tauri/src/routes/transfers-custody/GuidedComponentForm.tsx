@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -204,7 +205,7 @@ export function GuidedComponentForm() {
         <CardDescription>{t("swap.components.form.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="guided-component-type">
               {t("swap.components.form.componentType")}
@@ -229,6 +230,31 @@ export function GuidedComponentForm() {
             </Select>
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="guided-conservation-mode">
+              {t("swap.components.form.conservationMode")}
+            </Label>
+            <Select
+              value={form.conservationMode}
+              onValueChange={(value) =>
+                patchForm({
+                  conservationMode: value as "quantity" | "conversion",
+                })
+              }
+            >
+              <SelectTrigger id="guided-conservation-mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="quantity">
+                  {t("swap.components.mode.quantity")}
+                </SelectItem>
+                <SelectItem value="conversion">
+                  {t("swap.components.mode.conversion")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="guided-evidence-kind">
               {t("swap.components.form.evidenceKind")}
             </Label>
@@ -241,6 +267,33 @@ export function GuidedComponentForm() {
             />
           </div>
         </div>
+        {form.conservationMode === "conversion" ? (
+          <div className="grid gap-4 rounded-md border border-cyan-500/30 bg-cyan-500/5 p-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="guided-conversion-policy">
+                {t("swap.components.form.conversionPolicy")}
+              </Label>
+              <Input
+                id="guided-conversion-policy"
+                value={form.conversionPolicy}
+                spellCheck={false}
+                placeholder={t("swap.components.form.conversionPolicyPlaceholder")}
+                onChange={(event) =>
+                  patchForm({ conversionPolicy: event.target.value })
+                }
+              />
+            </div>
+            <label className="flex items-end gap-2 pb-2 text-sm sm:items-center sm:pb-0">
+              <Checkbox
+                checked={form.conversionReviewed}
+                onCheckedChange={(checked) =>
+                  patchForm({ conversionReviewed: checked === true })
+                }
+              />
+              <span>{t("swap.components.form.conversionReviewed")}</span>
+            </label>
+          </div>
+        ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="guided-notes">{t("swap.components.form.notes")}</Label>
           <Textarea
@@ -273,6 +326,7 @@ export function GuidedComponentForm() {
               key={leg.key}
               leg={leg}
               canRemove={form.legs.length > 2}
+              conversionMode={form.conservationMode === "conversion"}
               onChange={(patch) => patchLeg(leg.key, patch)}
               onRemove={() => removeLeg(leg.key)}
             />
@@ -410,11 +464,13 @@ export function GuidedComponentForm() {
 function GuidedLegRow({
   leg,
   canRemove,
+  conversionMode,
   onChange,
   onRemove,
 }: {
   leg: GuidedLegForm;
   canRemove: boolean;
+  conversionMode: boolean;
   onChange: (patch: Partial<GuidedLegForm>) => void;
   onRemove: () => void;
 }) {
@@ -523,6 +579,30 @@ function GuidedLegRow({
           </div>
         ) : null}
       </div>
+
+      {conversionMode ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>{t("swap.components.form.leg.valuationUnit")}</Label>
+            <Input
+              value={leg.valuationUnit}
+              spellCheck={false}
+              placeholder={t("swap.components.form.leg.valuationUnitPlaceholder")}
+              onChange={(event) => onChange({ valuationUnit: event.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t("swap.components.form.leg.valuationAmount")}</Label>
+            <Input
+              inputMode="numeric"
+              value={leg.valuationAmount}
+              spellCheck={false}
+              placeholder={t("swap.components.form.leg.valuationAmountPlaceholder")}
+              onChange={(event) => onChange({ valuationAmount: event.target.value })}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {canRemove ? (
         <div className="flex justify-end">

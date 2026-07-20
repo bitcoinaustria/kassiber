@@ -14,6 +14,10 @@
         "title": "Verwahrungskomponente erstellen",
         "description": "Beschreibe, wie Bitcoin zwischen deinen Wallets bewegt wurde – auch über Wallet-Verläufe, die nicht in Kassiber importiert sind – als Quell-, Ziel- und Gebühren-Legs. Kassiber prüft vor dem Speichern, ob die Beträge ausgeglichen sind.",
         "componentType": "Komponententyp",
+        "conservationMode": "Erhaltung",
+        "conversionPolicy": "Umwandlungsrichtlinie",
+        "conversionPolicyPlaceholder": "z. B. taxable_swap",
+        "conversionReviewed": "Geprüfte Umwandlung (für Aktivierung erforderlich)",
         "evidenceKind": "Belegart",
         "notes": "Notizen",
         "notesPlaceholder": "Was hält diese Komponente fest, und warum?",
@@ -36,7 +40,11 @@
           "walletRefPlaceholder": "Wallet-ID oder Bezeichnung",
           "untrackedWallet": "Bezeichnung der nicht erfassten Wallet",
           "untrackedWalletPlaceholder": "z. B. Alte Migrations-Wallet",
-          "occurredAt": "Zeitpunkt"
+          "occurredAt": "Zeitpunkt",
+          "valuationUnit": "Bewertungseinheit",
+          "valuationUnitPlaceholder": "z. B. eur_cents",
+          "valuationAmount": "Bewertungsbetrag",
+          "valuationAmountPlaceholder": "Ganzzahl in der Bewertungseinheit"
         },
         "balance": {
           "sources": "Quellen",
