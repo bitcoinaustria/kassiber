@@ -362,7 +362,11 @@ class BrokerServer:
         admin_auth: bytearray | None = None
         admin_authorization = None
         try:
-            for label, challenge in challenges.items():
+            # JSON encoding sorts mapping keys for deterministic wire output.
+            # Receive in that same explicit order so multiple secret frames
+            # cannot be assigned to a different challenge after serialization.
+            for label in sorted(challenges):
+                challenge = challenges[label]
                 secret_arguments[label] = channel.receive_secret(challenge)
             if admin_challenge is not None:
                 admin_auth = channel.receive_secret(admin_challenge)

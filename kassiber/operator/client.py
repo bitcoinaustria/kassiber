@@ -264,7 +264,8 @@ class BrokerClient:
                 challenges = response.get("challenges")
                 if not isinstance(challenges, dict):
                     raise AppError("invalid broker secret challenge", code="operator_protocol_error")
-                for label, challenge in challenges.items():
+                for label in sorted(challenges):
+                    challenge = challenges[label]
                     secret = prepared.secrets.get(str(label))
                     if secret is None or not isinstance(challenge, str):
                         raise AppError("invalid broker secret challenge", code="operator_protocol_error")

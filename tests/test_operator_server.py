@@ -196,6 +196,49 @@ class OperatorServerTest(unittest.TestCase):
         server.service.submit.assert_not_called()
         self.assertEqual(set(authentication), {0})
 
+    def test_multiple_secret_frames_follow_serialized_label_order(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        server.service.submit.return_value = {
+            "operation_id": "generation.operation",
+            "state": "queued",
+        }
+        channel = mock.Mock()
+        first = bytearray(b"first-secret")
+        second = bytearray(b"second-secret")
+        channel.receive_secret.side_effect = [first, second]
+        labels = ["broker-secret-z", "broker-secret-a"]
+
+        with mock.patch(
+            "kassiber.operator.server._canonical_data_root",
+            return_value="/canonical-project",
+        ), mock.patch(
+            "kassiber.operator.server._classify_argv",
+            return_value=("backends.create", mock.Mock(value="operator")),
+        ):
+            response = server._handle_submit(
+                channel,
+                {
+                    "data_root": "/caller-project",
+                    "operation_id": "generation.operation",
+                    "argv": ["backends", "create"],
+                    "secret_labels": labels,
+                },
+            )
+
+        self.assertTrue(response["ok"])
+        challenges = channel.send_json.call_args.args[0]["challenges"]
+        self.assertEqual(
+            channel.receive_secret.call_args_list,
+            [
+                mock.call(challenges["broker-secret-a"]),
+                mock.call(challenges["broker-secret-z"]),
+            ],
+        )
+        submitted = server.service.submit.call_args.kwargs["secret_arguments"]
+        self.assertIs(submitted["broker-secret-a"], first)
+        self.assertIs(submitted["broker-secret-z"], second)
+
     def test_password_unlock_cannot_claim_touch_id_authentication(self) -> None:
         server = BrokerServer.__new__(BrokerServer)
         server.service = mock.Mock()
