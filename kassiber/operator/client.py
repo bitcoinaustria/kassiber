@@ -200,7 +200,7 @@ class BrokerClient:
                 operation_id=operation_id,
                 admin_authentication=admin_authentication,
             )
-        except (OSError, EOFError) as exc:
+        except (OSError, EOFError):
             try:
                 return self._submit_once(
                     data_root,
@@ -208,13 +208,36 @@ class BrokerClient:
                     operation_id=operation_id,
                     admin_authentication=admin_authentication,
                 )
-            except (OSError, EOFError) as retry_exc:
+            except (OSError, EOFError, AppError) as retry_exc:
+                try:
+                    status = self.operation_status(operation_id)
+                except (OSError, EOFError, AppError):
+                    status = {
+                        "operation_id": operation_id,
+                        "state": "result_unknown",
+                        "reason": "broker_status_unavailable",
+                    }
+                if status.get("state") in {
+                    "queued",
+                    "running",
+                    "completed",
+                    "failed",
+                    "cancelled",
+                }:
+                    return status
+                reason = status.get("reason")
+                if not isinstance(reason, str):
+                    reason = "submission_acknowledgement_lost"
                 raise AppError(
-                    "the broker connection closed after operation submission",
+                    "the broker could not prove the result of the submitted operation",
                     code="operator_submission_result_unknown",
-                    hint="Query the operation id instead of resubmitting the command.",
-                    details={"operation_id": operation_id},
-                    retryable=True,
+                    hint="Reconcile project state before retrying the operation.",
+                    details={
+                        "operation_id": operation_id,
+                        "state": "result_unknown",
+                        "reason": reason,
+                    },
+                    retryable=False,
                 ) from retry_exc
 
     def _submit_once(
