@@ -432,6 +432,46 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                 projects_module.DEFAULT_STATE_ROOT = old_state
                 projects_module.DEFAULT_DATA_ROOT = old_data
 
+    def test_shutdown_closes_current_connection_before_releasing_owner(self):
+        from kassiber import daemon as daemon_runtime
+
+        order: list[str] = []
+        connection = mock.Mock()
+        connection.close.side_effect = lambda: order.append("close")
+        owner = mock.Mock()
+        owner.release.side_effect = lambda: order.append("release")
+        ctx = mock.Mock(
+            conn=connection,
+            project_owner=owner,
+            retired_project_resources=[],
+        )
+
+        daemon_runtime._retire_current_project_resources(ctx)
+
+        self.assertEqual(order, ["close", "release"])
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.project_owner)
+        self.assertEqual(ctx.retired_project_resources, [])
+
+    def test_shutdown_retains_owner_when_current_connection_close_fails(self):
+        from kassiber import daemon as daemon_runtime
+
+        connection = mock.Mock()
+        connection.close.side_effect = OSError("close failed")
+        owner = mock.Mock()
+        ctx = mock.Mock(
+            conn=connection,
+            project_owner=owner,
+            retired_project_resources=[],
+        )
+
+        daemon_runtime._retire_current_project_resources(ctx)
+
+        owner.release.assert_not_called()
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.project_owner)
+        self.assertEqual(len(ctx.retired_project_resources), 1)
+
     def test_switch_stop_failure_prevents_catalog_persistence(self):
         from kassiber import daemon as daemon_runtime
         from kassiber import projects as projects_module

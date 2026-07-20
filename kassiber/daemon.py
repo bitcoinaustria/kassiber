@@ -3514,6 +3514,20 @@ def _retry_retired_project_resources(ctx: DaemonContext) -> None:
     ctx.retired_project_resources = remaining
 
 
+def _retire_current_project_resources(ctx: DaemonContext) -> None:
+    """Detach the current DB and release its owner only after close succeeds."""
+
+    connection = ctx.conn
+    owner = ctx.project_owner
+    ctx.conn = None
+    ctx.project_owner = None
+    if connection is not None or owner is not None:
+        ctx.retired_project_resources.append(
+            _RetiredProjectResource(connection, owner)
+        )
+        _retry_retired_project_resources(ctx)
+
+
 def _locked_envelope(scope: str, label: str, request_id: object) -> dict[str, Any]:
     return _with_request_id(
         build_envelope(
@@ -16530,6 +16544,6 @@ def run(
         _clear_unlocked_passphrase(ctx)
         _retry_retired_project_resources(ctx)
         if worker_stopped:
-            _release_daemon_project_owner(ctx)
+            _retire_current_project_resources(ctx)
 
     return 0
