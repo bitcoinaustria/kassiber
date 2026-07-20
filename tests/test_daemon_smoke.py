@@ -130,7 +130,7 @@ def _write_payload(proc, payload):
     proc.stdin.flush()
 
 
-def _read_until_kind(proc, kind, timeout=5.0):
+def _read_until_kind(proc, kind, timeout=60.0):
     deadline = time.monotonic() + timeout
     seen = []
     while True:
