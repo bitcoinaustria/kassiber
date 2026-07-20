@@ -73,13 +73,13 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
         read_fds.clear()
         writers = tuple(secret_writers)
         secret_writers.clear()
-        writer_errors: list[BaseException] = []
+        writer_errors: list[Exception] = []
         writer_error_lock = threading.Lock()
 
         def feed_secret(writer: int, secret: bytearray) -> None:
             try:
                 _write_secret(writer, secret)
-            except BaseException as exc:
+            except Exception as exc:
                 with writer_error_lock:
                     writer_errors.append(exc)
             finally:
