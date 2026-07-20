@@ -1542,8 +1542,9 @@ class OperatorService:
         with self._transition_condition:
             while self._close_in_progress:
                 self._transition_condition.wait()
-            if self._close_terminal_error is not None:
-                raise self._close_terminal_error
+            terminal_error = self._close_terminal_error
+            if terminal_error is not None:
+                raise terminal_error
             if self._close_complete.is_set() and not self._pending_owner_releases:
                 return
             self._close_in_progress = True
