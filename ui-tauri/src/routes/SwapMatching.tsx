@@ -468,6 +468,9 @@ function pairSourceLabelKey(source: string | null) {
 }
 
 const UNDO_WINDOW_MS = 20_000;
+// Default number of candidate rows rendered before "Load more"; the queue can
+// return hundreds, so the default view stays scannable instead of dumping all.
+const REVIEW_PAGE_SIZE = 25;
 
 type PairingReviewMode = "swaps" | "transfers";
 
@@ -1907,6 +1910,12 @@ function PairingReview({
     [data?.data?.candidates],
   );
   const counts = data?.data?.counts ?? { total: 0, exact: 0, strong: 0, conflicts: 0 };
+  const [visibleCount, setVisibleCount] = useState(REVIEW_PAGE_SIZE);
+  // Reset the visible window whenever the filters change so a narrowed queue
+  // starts from the top rather than keeping a large expanded count.
+  useEffect(() => {
+    setVisibleCount(REVIEW_PAGE_SIZE);
+  }, [confidence, method, routePair]);
 
   // Count of cluster members visible under the current filters/tab.
   // conflict_size is stamped server-side over the full candidate set, so
@@ -2156,6 +2165,12 @@ function PairingReview({
 
   const cursorCandidate = candidates[cursorIndex];
   const cursorKey = cursorCandidate ? candidateKey(cursorCandidate) : null;
+
+  // Render a capped window of the queue; always include the keyboard cursor row
+  // so navigation past the fold stays visible.
+  const renderCount = Math.max(visibleCount, cursorIndex + 1);
+  const visibleCandidates = candidates.slice(0, renderCount);
+  const hasMoreCandidates = candidates.length > visibleCandidates.length;
 
   const bindings = useMemo<Keybinding[]>(() => {
     return [
@@ -2579,7 +2594,7 @@ function PairingReview({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {candidates.map((candidate) => {
+                  {visibleCandidates.map((candidate) => {
                     const key = candidateKey(candidate);
                     const conflicted = candidate.conflict_size > 1;
                     const selectable = canSelectCandidate(candidate);
@@ -2714,14 +2729,27 @@ function PairingReview({
             </div>
           ) : null}
 
-          <div className="flex items-center border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
             <span>
               {t("swap.showing", {
-                from: candidates.length === 0 ? 0 : 1,
-                to: candidates.length,
+                from: visibleCandidates.length === 0 ? 0 : 1,
+                to: visibleCandidates.length,
                 total: counts.total,
               })}
             </span>
+            {hasMoreCandidates ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() =>
+                  setVisibleCount((count) => count + REVIEW_PAGE_SIZE)
+                }
+              >
+                {t("swap.loadMore")}
+              </Button>
+            ) : null}
           </div>
         </div>
       </Collapsible>

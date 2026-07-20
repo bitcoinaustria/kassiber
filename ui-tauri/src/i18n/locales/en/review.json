@@ -387,6 +387,7 @@
       "pairSelected": "Pair selected"
     },
     "showing": "Showing {{from}}-{{to}} of {{total}}",
+    "loadMore": "Load more",
     "preview": {
       "exactTitle": "Apply all exact matches",
       "rulesTitle": "Apply matching rules",

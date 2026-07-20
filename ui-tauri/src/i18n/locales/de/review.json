@@ -387,6 +387,7 @@
       "pairSelected": "Ausgewählte paaren"
     },
     "showing": "Zeige {{from}}-{{to}} von {{total}}",
+    "loadMore": "Mehr laden",
     "preview": {
       "exactTitle": "Alle exakten Treffer anwenden",
       "rulesTitle": "Passende Regeln anwenden",
