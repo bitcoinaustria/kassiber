@@ -36,6 +36,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   Eye,
   History as HistoryIcon,
   Loader2,
@@ -775,6 +777,23 @@ function CustodyComponentResolver() {
   const mutationPending =
     componentPlanMutation.isPending || componentApplyMutation.isPending;
 
+  // The list can hold many components; render a capped window of compact rows
+  // and expand a row's legs/allocations/audit only on demand.
+  const [componentVisibleCount, setComponentVisibleCount] =
+    useState(REVIEW_PAGE_SIZE);
+  const [expandedComponents, setExpandedComponents] = useState<Set<string>>(
+    new Set(),
+  );
+  const toggleComponentExpanded = (id: string) =>
+    setExpandedComponents((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const visibleComponents = components.slice(0, componentVisibleCount);
+  const hasMoreComponents = components.length > visibleComponents.length;
+
   const openRevisionEditor = (component: CustodyComponent) => {
     setEditingComponent(component);
   };
@@ -884,9 +903,10 @@ function CustodyComponentResolver() {
             </p>
           ) : (
             <div className="space-y-3">
-              {components.map((component) => {
+              {visibleComponents.map((component) => {
                 const issues = component.validation?.issues ?? [];
                 const pending = mutationPending && pendingComponentId === component.id;
+                const isExpanded = expandedComponents.has(component.id);
                 const legsById = new Map(
                   component.legs.map((leg) => [leg.id, leg] as const),
                 );
@@ -918,6 +938,22 @@ function CustodyComponentResolver() {
                         <div className="mt-1 font-mono text-xs text-muted-foreground">
                           {compactRecordId(component.id)}
                         </div>
+                        <button
+                          type="button"
+                          className="mt-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => toggleComponentExpanded(component.id)}
+                          aria-expanded={isExpanded}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="size-3.5" />
+                          ) : (
+                            <ChevronRight className="size-3.5" />
+                          )}
+                          {t("swap.components.legCount", {
+                            count: component.legs.length,
+                          })}
+                        </button>
+                        {isExpanded ? (
                         <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                           <Badge variant="outline">
                             {t("swap.components.audit.mode", {
@@ -965,6 +1001,7 @@ function CustodyComponentResolver() {
                             </>
                           ) : null}
                         </div>
+                        ) : null}
                         {component.notes ? (
                           <p className="mt-2 text-sm text-muted-foreground">{component.notes}</p>
                         ) : null}
@@ -1043,6 +1080,8 @@ function CustodyComponentResolver() {
                       </div>
                     </div>
 
+                    {isExpanded ? (
+                    <>
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {component.legs.map((leg) => (
                         <div key={leg.id} className="rounded-md bg-muted/50 p-2 text-xs">
@@ -1123,9 +1162,25 @@ function CustodyComponentResolver() {
                         </ul>
                       </div>
                     ) : null}
+                    </>
+                    ) : null}
                   </div>
                 );
               })}
+              {hasMoreComponents ? (
+                <div className="flex justify-center pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setComponentVisibleCount((count) => count + REVIEW_PAGE_SIZE)
+                    }
+                  >
+                    {t("swap.loadMore")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
         </CardContent>

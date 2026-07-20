@@ -83,6 +83,8 @@
       "loadFailed": "Verwahrungskomponenten konnten nicht geladen werden: {{error}}",
       "empty": "Noch keine Verwahrungskomponenten. Erstelle oben eine mit dem Formular.",
       "revision": "Revision {{count}}",
+      "legCount_one": "{{count}} Leg",
+      "legCount_other": "{{count}} Legs",
       "activate": "Aktivieren",
       "supersede": "Ablösen",
       "undo": "Rückgängig",

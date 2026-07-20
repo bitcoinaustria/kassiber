@@ -83,6 +83,8 @@
       "loadFailed": "Could not load custody components: {{error}}",
       "empty": "No custody components yet. Build one with the form above to start.",
       "revision": "revision {{count}}",
+      "legCount_one": "{{count}} leg",
+      "legCount_other": "{{count}} legs",
       "activate": "Activate",
       "supersede": "Supersede",
       "undo": "Undo",
