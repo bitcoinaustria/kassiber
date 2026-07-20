@@ -58,14 +58,20 @@ from kassiber.db import (
     DB_JOURNAL_MODE,
     DB_MMAP_SIZE_BYTES,
     open_db,
+    resolve_database_path,
 )
 from kassiber.errors import AppError
-from kassiber.secrets.migration import migrate_plaintext_to_encrypted
+from kassiber.secrets.migration import (
+    create_empty_encrypted_database,
+    migrate_plaintext_to_encrypted,
+)
+from kassiber.secrets.cli import cmd_secrets_change_passphrase
 from kassiber.secrets.passphrase import change_database_passphrase
 from kassiber.secrets.sqlcipher import (
     escape_passphrase,
     looks_like_plaintext_sqlite,
     open_encrypted,
+    sqlcipher_available,
 )
 
 
@@ -444,6 +450,69 @@ class ChangePassphraseTests(unittest.TestCase):
                 self.assertEqual(conn.execute("SELECT a FROM x").fetchone()[0], "abc")
             finally:
                 conn.close()
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
+    def test_operator_database_identity_mismatch_rejects_before_rekey(self):
+        with tempfile.TemporaryDirectory() as root:
+            db_path = resolve_database_path(root)
+            create_empty_encrypted_database(db_path, "first-pass")
+            connection = open_db(root, passphrase="first-pass")
+            connection.close()
+
+            with patch.dict(
+                os.environ,
+                {
+                    "KASSIBER_OPERATOR_CHILD": "1",
+                    "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY": "0" * 32,
+                },
+            ):
+                with self.assertRaises(AppError) as raised:
+                    change_database_passphrase(
+                        db_path,
+                        "first-pass",
+                        "second-pass",
+                    )
+            self.assertEqual(raised.exception.code, "operator_project_replaced")
+
+            old_connection = open_encrypted(db_path, "first-pass")
+            old_connection.close()
+            with self.assertRaises(AppError):
+                open_encrypted(db_path, "second-pass").close()
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
+    def test_cli_rotation_does_not_invalidate_native_auth_before_database_binding(self):
+        with tempfile.TemporaryDirectory() as root:
+            db_path = resolve_database_path(root)
+            create_empty_encrypted_database(db_path, "first-pass")
+            connection = open_db(root, passphrase="first-pass")
+            connection.close()
+
+            cases = (
+                (
+                    "first-pass",
+                    {
+                        "KASSIBER_OPERATOR_CHILD": "1",
+                        "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY": "0" * 32,
+                    },
+                ),
+                ("wrong-pass", {}),
+            )
+            for current_passphrase, environment in cases:
+                with self.subTest(current_passphrase=current_passphrase):
+                    args = SimpleNamespace(data_root=root, non_interactive=True)
+                    with patch.dict(os.environ, environment, clear=True), patch(
+                        "kassiber.secrets.cli._resolve_passphrase",
+                        side_effect=[current_passphrase, "second-passphrase"],
+                    ), patch(
+                        "kassiber.secrets.cli.mark_desktop_biometric_passphrase_stale"
+                    ) as desktop_invalidator, patch(
+                        "kassiber.secrets.cli.invalidate_operator_native_auth"
+                    ) as operator_invalidator:
+                        with self.assertRaises(AppError):
+                            cmd_secrets_change_passphrase(args)
+
+                    desktop_invalidator.assert_not_called()
+                    operator_invalidator.assert_not_called()
 
 
 def _make_tarinfo(name: str, *, type_: bytes = tarfile.REGTYPE, size: int = 0):

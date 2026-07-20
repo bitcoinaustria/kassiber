@@ -47,6 +47,7 @@ def _paths(value: str) -> frozenset[str]:
 CLI_READ_PATHS = _paths(
     """
     status health next-actions commands.describe projects.list projects.show
+    operator.status operator.operation.status operator.touch-id.status
     chats.list chats.show secrets.status sync.status sync.transport.list
     sync.gc.status sync.members.list sync.devices.list sync.conflicts.list
     backends.list backends.kinds backends.get context.show context.current
@@ -129,6 +130,8 @@ CLI_ACCOUNTING_DECISION_PATHS = _paths(
 CLI_ADMIN_PATHS = _paths(
     """
     daemon init projects.create chats.delete chats.clear chats.config
+    operator.unlock operator.lock operator.mode operator.operation.cancel
+    operator.touch-id.enroll operator.touch-id.forget
     secrets.init secrets.init-resume secrets.change-passphrase
     secrets.remember-unlock secrets.forget-unlock secrets.verify
     secrets.migrate-credentials backup.export backup.import sync.enable
@@ -172,7 +175,7 @@ DAEMON_READ_KINDS = _paths(
     ui.custody.lineage.snapshot ui.custody.gaps.list
     ui.custody.gaps.review_context ui.custody.gaps.history
     ui.custody.review.plan ui.transfers.rules.list ui.saved_views.list
-    ui.profiles.snapshot ui.rates.summary ui.rates.coverage ui.rates.latest
+    ui.profiles.snapshot ui.rates.summary ui.rates.coverage
     ui.report.blockers ui.audit.changes_since_last_answer
     ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
     ui.sync.status ui.sync.transports.list ui.sync.members.list
@@ -189,7 +192,7 @@ DAEMON_READ_KINDS = _paths(
 DAEMON_OPERATOR_KINDS = _paths(
     """
     ui.transactions.export_csv ui.transactions.export_xlsx
-    ui.transactions.metadata.update ui.attachments.add ui.attachments.copy
+    ui.rates.latest ui.attachments.add ui.attachments.copy
     ui.attachments.rename ui.attachments.remove ui.wallets.identify_onchain
     ui.backends.create ui.backends.update ui.backends.set_default
     ui.backends.bitcoinrpc.test ui.backends.btcpay.test
@@ -225,6 +228,7 @@ DAEMON_OPERATOR_KINDS = _paths(
 
 DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     """
+    ui.transactions.metadata.update
     ui.transactions.history.revert ui.loans.link ui.loans.mark ui.loans.unmark
     ui.source_funds.cases.save ui.source_funds.links.review
     ui.source_funds.links.bulk_review ui.btcpay.provenance.review

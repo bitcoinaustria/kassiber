@@ -5,6 +5,7 @@ import csv
 import functools
 import json
 import logging
+import os
 import sqlite3
 import sys
 import traceback
@@ -137,7 +138,14 @@ from ..core.ui_snapshot import (
     build_next_actions_snapshot,
     build_workspace_health_snapshot,
 )
-from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
+from ..core.runtime import (
+    bootstrap_runtime,
+    close_runtime,
+    emit_error,
+    prime_db_passphrase,
+    resolve_output_format,
+    resolve_runtime_paths,
+)
 from ..diagnostics import (
     collect_public_diagnostics,
     save_public_diagnostics_report,
@@ -166,7 +174,8 @@ from ..secrets.cli_input import (
     read_secret_from_args,
 )
 from ..secrets.prompt import read_passphrase_from_fd
-from ..secrets.sqlcipher import require_sqlcipher
+from ..secrets.sqlcipher import open_encrypted, require_sqlcipher
+from ..operator.cli import add_operator_parser, dispatch_operator, route_brokered_command
 from ..tax_policy import supported_tax_countries
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 from .chat import run_chat_command
@@ -877,11 +886,19 @@ def build_parser() -> argparse.ArgumentParser:
             "and close it after use; required for headless automation against an encrypted database."
         ),
     )
+    parser.add_argument(
+        "--operator-auth-fd",
+        type=int,
+        default=None,
+        metavar="FD",
+        help="Read fresh broker admin authentication from this fd",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+    add_operator_parser(sub)
     sub.add_parser("health", help="Summarize active-project readiness and blockers")
     sub.add_parser(
         "next-actions",
@@ -3093,6 +3110,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
+    if args.command == "operator":
+        return emit(args, dispatch_operator(args))
     if args.command == "daemon":
         return daemon_runtime.run(conn, args)
     if args.command == "chat":
@@ -5518,8 +5537,13 @@ def _configure_cli_logging(args: argparse.Namespace) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    if raw_argv == ["--operator-broker-server"]:
+        from ..operator.server import main as operator_server_main
+
+        return operator_server_main()
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_argv)
     args.non_interactive = bool(args.non_interactive or args.machine)
     _configure_cli_logging(args)
 
@@ -5532,14 +5556,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        if args.command == "projects":
+        if args.command in {"projects", "operator"}:
             dispatch(None, args)
             return 0
+        brokered_exit = route_brokered_command(args, raw_argv)
+        if brokered_exit is not None:
+            return brokered_exit
+        _verify_operator_child_project(args)
+        operator_child = os.environ.get("KASSIBER_OPERATOR_CHILD") == "1"
+        if operator_child:
+            prime_db_passphrase(args)
+        needs_db = command_needs_db(args)
+        if operator_child and not needs_db:
+            _verify_operator_child_database(args)
         runtime = bootstrap_runtime(
             args,
-            needs_db=command_needs_db(args),
+            needs_db=needs_db,
             persist_bootstrap=command_persists_bootstrap(args),
         )
+        if needs_db:
+            _verify_operator_child_open_database(runtime.conn)
         dispatch(runtime.conn, args)
         return 0
     except AppError as exc:
@@ -5578,3 +5614,83 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         if runtime is not None:
             close_runtime(runtime)
+
+
+def _verify_operator_child_project(args: argparse.Namespace) -> None:
+    """Fail closed if a queued worker's database path changed before open."""
+
+    expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY")
+    if expected is None:
+        return
+    if os.environ.get("KASSIBER_OPERATOR_CHILD") != "1":
+        raise AppError(
+            "operator project binding is only valid in a broker child",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    from ..operator.project import canonical_project
+
+    paths = resolve_runtime_paths(
+        getattr(args, "data_root", None),
+        getattr(args, "env_file", None),
+        getattr(args, "project", None),
+    )
+    project = canonical_project(paths.data_root)
+    if project.identity != expected:
+        raise AppError(
+            "the operator project changed before the database was opened",
+            code="operator_project_replaced",
+            details={"project": project.public_id},
+            retryable=False,
+        )
+
+
+def _verify_operator_child_open_database(conn: sqlite3.Connection | None) -> None:
+    """Bind the worker request to the database that SQLCipher actually opened."""
+
+    expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY")
+    if expected is None:
+        return
+    if conn is None:
+        raise AppError(
+            "operator child did not open its bound database",
+            code="operator_project_replaced",
+            retryable=False,
+        )
+    from ..db import database_instance_id
+
+    if database_instance_id(conn) != expected:
+        raise AppError(
+            "the operator child opened a different project database",
+            code="operator_project_replaced",
+            retryable=False,
+        )
+
+
+def _verify_operator_child_database(args: argparse.Namespace) -> None:
+    """Authenticate and durably bind a no-bootstrap worker before dispatch."""
+
+    expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY")
+    if expected is None:
+        raise AppError(
+            "operator child database binding is missing",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    passphrase = getattr(args, "_db_passphrase_cached", None)
+    if not isinstance(passphrase, str) or not passphrase:
+        raise AppError(
+            "operator child database passphrase is missing",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    from ..operator.project import canonical_project
+
+    paths = resolve_runtime_paths(
+        getattr(args, "data_root", None),
+        getattr(args, "env_file", None),
+        getattr(args, "project", None),
+    )
+    project = canonical_project(paths.data_root)
+    connection = open_encrypted(project.database, passphrase)
+    connection.close()

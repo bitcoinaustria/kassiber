@@ -1985,6 +1985,10 @@ class FreshnessTest(unittest.TestCase):
         self.assertIsNone(ctx.db_passphrase)
 
     def test_rekey_error_clears_remembered_background_passphrase(self):
+        def fail_after_binding(*_args, **kwargs):
+            kwargs["before_rekey"]()
+            raise AppError("rotation failed", code="rotation_failed")
+
         conn = self._db()
         _seed_profile(conn)
         ctx = daemon_runtime.DaemonContext(
@@ -2006,8 +2010,13 @@ class FreshnessTest(unittest.TestCase):
             patch.object(daemon_runtime, "_verify_passphrase_with_backoff", return_value=True),
             patch.object(
                 daemon_runtime,
+                "invalidate_operator_native_auth",
+                return_value="operator-generation",
+            ),
+            patch.object(
+                daemon_runtime,
                 "change_database_passphrase",
-                side_effect=AppError("rotation failed", code="rotation_failed"),
+                side_effect=fail_after_binding,
             ),
         ):
             with self.assertRaises(AppError):

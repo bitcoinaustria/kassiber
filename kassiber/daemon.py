@@ -8,6 +8,7 @@ import ipaddress
 import json
 import logging
 import math
+import os
 import queue
 import re
 import secrets
@@ -27,6 +28,12 @@ from urllib import request as urlrequest
 from . import __version__
 from .command_capabilities import daemon_capability
 from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
+from .operator.project import (
+    ProjectOwnerLease,
+    acquire_project_ownership,
+    canonical_project,
+)
+from .operator.native_auth import invalidate_operator_native_auth
 from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
@@ -1035,6 +1042,10 @@ class DaemonContext:
     select_project_on_open: bool = True
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
+    project_owner: ProjectOwnerLease | None = None
+    ownership_generation: str = field(
+        default_factory=lambda: f"desktop-{os.getpid()}-{secrets.token_hex(8)}"
+    )
     document_import_sessions: DocumentImportSessions = field(
         default_factory=DocumentImportSessions
     )
@@ -3399,20 +3410,32 @@ def _open_daemon_connection(
     require_existing_schema: bool = False,
 ) -> sqlite3.Connection:
     if ctx.conn is not None:
+        _ensure_daemon_project_owner(ctx)
         _remember_unlocked_passphrase(ctx, passphrase)
         _start_freshness_background_worker(ctx, passphrase=passphrase)
         return ctx.conn
-    conn = open_db(
-        ctx.data_root,
-        passphrase=passphrase,
-        require_existing_schema=require_existing_schema,
-    )
+    acquired_here = ctx.project_owner is None
+    owner = _ensure_daemon_project_owner(ctx)
+    canonical_data_root = str(owner.project.database.parent)
     try:
-        validate_project_migration_after_unlock(ctx.data_root, conn)
+        conn = open_db(
+            canonical_data_root,
+            passphrase=passphrase,
+            require_existing_schema=require_existing_schema,
+        )
+    except Exception:
+        if acquired_here:
+            _release_daemon_project_owner(ctx)
+        raise
+    try:
+        validate_project_migration_after_unlock(canonical_data_root, conn)
         merge_db_backends(conn, ctx.runtime_config)
     except Exception:
         conn.close()
+        if acquired_here:
+            _release_daemon_project_owner(ctx)
         raise
+    ctx.data_root = canonical_data_root
     ctx.conn = conn
     if ctx.project_id is not None:
         mark_project_opened(
@@ -3423,6 +3446,32 @@ def _open_daemon_connection(
     _remember_unlocked_passphrase(ctx, passphrase)
     _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
+
+
+def _ensure_daemon_project_owner(ctx: DaemonContext) -> ProjectOwnerLease:
+    project = canonical_project(ctx.data_root)
+    if ctx.project_owner is not None:
+        if ctx.project_owner.project.identity != project.identity:
+            raise AppError(
+                "the desktop daemon owns a different project",
+                code="project_owner_mismatch",
+                details={"project": project.public_id},
+                retryable=False,
+            )
+        return ctx.project_owner
+    ctx.project_owner = acquire_project_ownership(
+        project,
+        owner_kind="desktop",
+        generation=ctx.ownership_generation,
+    )
+    return ctx.project_owner
+
+
+def _release_daemon_project_owner(ctx: DaemonContext) -> None:
+    owner = ctx.project_owner
+    ctx.project_owner = None
+    if owner is not None:
+        owner.release()
 
 
 def _locked_envelope(scope: str, label: str, request_id: object) -> dict[str, Any]:
@@ -3473,13 +3522,19 @@ def _close_current_project_for_switch(ctx: DaemonContext) -> None:
     if ctx.conn is not None:
         ctx.conn.close()
         ctx.conn = None
+    _release_daemon_project_owner(ctx)
     _clear_unlocked_passphrase(ctx)
 
 
-def _set_ctx_project(ctx: DaemonContext, entry) -> None:
+def _set_ctx_project(
+    ctx: DaemonContext,
+    entry,
+    *,
+    data_root: str | None = None,
+) -> None:
     ctx.project_id = entry.id
     ctx.project_root = str(entry.root)
-    ctx.data_root = str(entry.data_root)
+    ctx.data_root = data_root or str(entry.data_root)
     ctx.select_project_on_open = True
     env_file = resolve_effective_env_file(None, ctx.data_root)
     ctx.runtime_config = load_runtime_config(env_file)
@@ -3491,10 +3546,10 @@ def _set_ctx_project(ctx: DaemonContext, entry) -> None:
 def _open_project_connection_for_switch(
     entry: Any,
     *,
+    data_root: str,
     passphrase: str | None,
     require_existing_schema: bool,
 ) -> tuple[sqlite3.Connection, dict[str, object]]:
-    data_root = str(entry.data_root)
     env_file = resolve_effective_env_file(None, data_root)
     runtime_config = load_runtime_config(env_file)
     conn = open_db(
@@ -3543,7 +3598,8 @@ def _select_project_payload(
         )
 
     passphrase = _passphrase_from_auth(args)
-    target_data_root = str(entry.data_root)
+    target_project = canonical_project(str(entry.data_root))
+    target_data_root = str(target_project.database.parent)
     target_encrypted = _data_root_database_is_encrypted(target_data_root)
     if target_encrypted:
         if not passphrase:
@@ -3562,7 +3618,12 @@ def _select_project_payload(
                 False,
             )
         verified = (
-            _verify_project_passphrase_with_backoff(entry, "unlock_project", passphrase)
+            _verify_project_passphrase_with_backoff(
+                entry,
+                "unlock_project",
+                passphrase,
+                data_root=target_data_root,
+            )
             if switching
             else _verify_passphrase_with_backoff(ctx, "unlock_project", passphrase)
         )
@@ -3579,18 +3640,40 @@ def _select_project_payload(
 
     require_existing_schema = bool(args.get("require_existing_project"))
     if switching:
-        target_conn, target_runtime_config = _open_project_connection_for_switch(
-            entry,
-            passphrase=passphrase if target_encrypted else None,
-            require_existing_schema=require_existing_schema,
+        transferred_owner = (
+            ctx.project_owner
+            if ctx.project_owner is not None
+            and ctx.project_owner.project.identity == target_project.identity
+            else None
         )
+        target_owner = transferred_owner or acquire_project_ownership(
+            target_project,
+            owner_kind="desktop",
+            generation=ctx.ownership_generation,
+        )
+        try:
+            target_conn, target_runtime_config = _open_project_connection_for_switch(
+                entry,
+                data_root=target_data_root,
+                passphrase=passphrase if target_encrypted else None,
+                require_existing_schema=require_existing_schema,
+            )
+        except Exception:
+            if transferred_owner is None:
+                target_owner.release()
+            raise
         try:
             entry = set_selected_project(entry.id, last_opened_at=now_iso())
         except Exception:
             target_conn.close()
+            if transferred_owner is None:
+                target_owner.release()
             raise
+        if transferred_owner is not None:
+            ctx.project_owner = None
         _close_current_project_for_switch(ctx)
-        _set_ctx_project(ctx, entry)
+        _set_ctx_project(ctx, entry, data_root=target_data_root)
+        ctx.project_owner = target_owner
         ctx.runtime_config = target_runtime_config
         ctx.conn = target_conn
         _remember_unlocked_passphrase(ctx, passphrase)
@@ -8249,12 +8332,17 @@ def _verify_project_passphrase_with_backoff(
     entry: Any,
     scope: str,
     passphrase: str,
+    *,
+    data_root: str | None = None,
 ) -> bool:
+    resolved_data_root = data_root or str(
+        canonical_project(str(entry.data_root)).database.parent
+    )
     backoff = AuthAttemptBackoff(
-        str(resolve_config_root(entry.data_root) / AUTH_BACKOFF_FILENAME)
+        str(resolve_config_root(resolved_data_root) / AUTH_BACKOFF_FILENAME)
     )
     backoff.check(scope)
-    verified = _verify_passphrase_for_data_root(str(entry.data_root), passphrase)
+    verified = _verify_passphrase_for_data_root(resolved_data_root, passphrase)
     if verified:
         backoff.record_success()
     else:
@@ -13302,6 +13390,7 @@ def handle_request(
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
+        _release_daemon_project_owner(ctx)
         _clear_unlocked_passphrase(ctx)
         return (
             _with_request_id(
@@ -13563,20 +13652,34 @@ def handle_request(
                 ),
                 False,
             )
-        desktop_stale_generation = mark_desktop_biometric_passphrase_stale(
-            ctx.data_root
-        )
-        if ctx.conn is not None:
-            _stop_freshness_background_worker(ctx, cancel_running=True)
-            ctx.conn.close()
-            ctx.conn = None
-            _clear_unlocked_passphrase(ctx)
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
-        result = change_database_passphrase(db_path, current, new_passphrase)
+        desktop_stale_generation = None
+        operator_stale_generation = None
+
+        def invalidate_native_credentials() -> None:
+            nonlocal desktop_stale_generation, operator_stale_generation
+            desktop_stale_generation = mark_desktop_biometric_passphrase_stale(
+                ctx.data_root
+            )
+            operator_stale_generation = invalidate_operator_native_auth(ctx.data_root)
+            if ctx.conn is not None:
+                _stop_freshness_background_worker(ctx, cancel_running=True)
+                ctx.conn.close()
+                ctx.conn = None
+                _clear_unlocked_passphrase(ctx)
+
+        result = change_database_passphrase(
+            db_path,
+            current,
+            new_passphrase,
+            before_rekey=invalidate_native_credentials,
+        )
         result["desktop_biometric_invalidated"] = (
             desktop_stale_generation is not None
         )
         result["desktop_biometric_stale_generation"] = desktop_stale_generation
+        result["operator_native_auth_invalidated"] = True
+        result["operator_native_auth_stale_generation"] = operator_stale_generation
         remembered_warning = refresh_remembered_passphrase_after_rotation(
             ctx.data_root,
             new_passphrase,
@@ -16109,6 +16212,7 @@ def run(
         freshness_stop_event=threading.Event(),
     )
     if conn is not None:
+        _ensure_daemon_project_owner(ctx)
         _remember_unlocked_passphrase(
             ctx,
             getattr(args, "_db_passphrase_cached", None),
@@ -16278,5 +16382,6 @@ def run(
     finally:
         _stop_freshness_background_worker(ctx, reset_event=False)
         _clear_unlocked_passphrase(ctx)
+        _release_daemon_project_owner(ctx)
 
     return 0

@@ -117,7 +117,11 @@ def _backup_sqlcipher_database(
     try:
         # Mirror the source key onto the destination so the backup
         # produces a SQLCipher-encrypted copy under the same passphrase.
-        dst = open_encrypted(dst_path, src_passphrase)
+        dst = open_encrypted(
+            dst_path,
+            src_passphrase,
+            enforce_operator_identity=False,
+        )
         try:
             src.backup(dst)
         finally:

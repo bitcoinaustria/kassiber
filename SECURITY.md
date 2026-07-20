@@ -275,15 +275,31 @@ individual agent: any process intentionally running as the same logged-in OS
 user can exercise the active lease's capabilities. Cross-user isolation comes
 from owner-only local IPC, peer user-id/SID validation, separate native
 credential namespaces, and per-project ownership locks.
+Those identity/path locks are acquired before database open and inherited by
+worker children, so broker death cannot release a project to a second owner
+while an orphan mutation still runs. On macOS the broker spawns the signed
+Touch ID helper with a broker-created inherited output pipe. The helper accepts
+the request only when its parent is the matching production-signed bundled CLI
+sidecar: it validates the bundle path and signing team, then uses
+Security.framework to check the live parent process against the sidecar's exact
+designated requirement. It exposes no caller-selected endpoint or general
+raw-secret return action.
 
 Brokered mode never reads the unattended CLI remembered-unlock item. Manual,
 brokered, and unattended modes are distinct and visible in `kassiber operator
 status`. Normal leases may grant read, operator, and accounting-decision work;
-admin operations require a fresh one-operation authorization. Broker death,
+admin operations require a fresh one-operation authorization that expires if
+the operation waits in the queue for more than 60 seconds. Broker death,
 logout, reboot, explicit lock, or lease expiry removes the in-memory grant.
-There is no exactly-once claim across a broker crash. See
+There is no exactly-once claim across a broker crash; unproven nonzero exits
+from mutating children are reported as `result_unknown`. See
 [docs/reference/operator-broker.md](docs/reference/operator-broker.md) for the
 protocol, platform primitives, queue semantics, and memory-zeroization limits.
+On Linux the broker watches its resolved logind session (when available) and
+XDG runtime root so logout tears down leases even on systems with a lingering
+user manager; systems exposing neither mechanism rely on normal OS process
+teardown and should use an explicit lock before ending an unusual no-PAM
+session.
 
 ## Safe-to-record CLI output
 

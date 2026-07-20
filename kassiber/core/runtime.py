@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 from dataclasses import dataclass
@@ -155,27 +156,41 @@ def _resolve_db_passphrase(args):
     return passphrase
 
 
+def prime_db_passphrase(args):
+    """Eagerly drain/cache an inherited operator passphrase pipe.
+
+    Broker parents write secret pipes synchronously. Every worker child drains
+    the lease pipe before command dispatch so a no-bootstrap command cannot
+    deadlock the parent while waiting for a later command-specific secret.
+    """
+
+    return _resolve_db_passphrase(args)
+
+
 def _open_db_with_resolved_passphrase(
     data_root,
     passphrase,
     *,
     allow_prompt,
     require_existing_schema=False,
+    expected_database_identity=None,
 ):
     """Open the database and return both the connection and passphrase used."""
 
     if passphrase is not None:
-        return (
-            open_db(
-                data_root,
-                passphrase=passphrase,
-                require_existing_schema=require_existing_schema,
-            ),
-            passphrase,
-        )
+        options = {
+            "passphrase": passphrase,
+            "require_existing_schema": require_existing_schema,
+        }
+        if expected_database_identity is not None:
+            options["expected_database_identity"] = expected_database_identity
+        return open_db(data_root, **options), passphrase
 
     try:
-        return open_db(data_root, require_existing_schema=require_existing_schema), None
+        options = {"require_existing_schema": require_existing_schema}
+        if expected_database_identity is not None:
+            options["expected_database_identity"] = expected_database_identity
+        return open_db(data_root, **options), None
     except AppError as exc:
         if exc.code != "passphrase_required":
             raise
@@ -184,12 +199,16 @@ def _open_db_with_resolved_passphrase(
             remembered = load_remembered_passphrase(data_root)
             if remembered is not None:
                 try:
+                    remembered_options = {
+                        "passphrase": remembered,
+                        "require_existing_schema": require_existing_schema,
+                    }
+                    if expected_database_identity is not None:
+                        remembered_options["expected_database_identity"] = (
+                            expected_database_identity
+                        )
                     return (
-                        open_db(
-                            data_root,
-                            passphrase=remembered,
-                            require_existing_schema=require_existing_schema,
-                        ),
+                        open_db(data_root, **remembered_options),
                         remembered,
                     )
                 except AppError as remembered_error:
@@ -203,12 +222,16 @@ def _open_db_with_resolved_passphrase(
 
         if allow_prompt:
             prompted = prompt_passphrase()
+            prompted_options = {
+                "passphrase": prompted,
+                "require_existing_schema": require_existing_schema,
+            }
+            if expected_database_identity is not None:
+                prompted_options["expected_database_identity"] = (
+                    expected_database_identity
+                )
             return (
-                open_db(
-                    data_root,
-                    passphrase=prompted,
-                    require_existing_schema=require_existing_schema,
-                ),
+                open_db(data_root, **prompted_options),
                 prompted,
             )
         raise
@@ -292,6 +315,9 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
                 paths.data_root,
                 passphrase,
                 allow_prompt=allow_prompt,
+                expected_database_identity=os.environ.get(
+                    "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+                ),
             )
             if resolved_passphrase is not None:
                 args._db_passphrase_cached = resolved_passphrase

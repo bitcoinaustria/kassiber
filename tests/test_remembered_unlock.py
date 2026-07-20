@@ -811,6 +811,13 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertEqual(payload["kind"], "status")
 
     def test_ambiguous_rotation_failure_keeps_desktop_stale_generation(self):
+        def fail_after_binding(*_args, **kwargs):
+            kwargs["before_rekey"]()
+            raise AppError(
+                "verification failed after rekey",
+                code="rekey_verification_failed",
+            )
+
         old_passphrase = "rotation-old-pass"
         new_passphrase = "rotation-new-pass"
         with tempfile.TemporaryDirectory() as root:
@@ -831,10 +838,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
                 return_value="macos",
             ), patch(
                 "kassiber.secrets.cli.change_database_passphrase",
-                side_effect=AppError(
-                    "verification failed after rekey",
-                    code="rekey_verification_failed",
-                ),
+                side_effect=fail_after_binding,
             ):
                 payload, returncode, _stderr = _run_cli(
                     data_root,

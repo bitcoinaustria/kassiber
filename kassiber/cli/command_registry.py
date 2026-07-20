@@ -19,6 +19,7 @@ _NO_BOOTSTRAP_DATABASE_PREFIXES = {
     "backup",
     "commands",
     "projects",
+    "operator",
     "secrets",
 }
 _NO_BOOTSTRAP_DATABASE_PATHS = {
@@ -31,6 +32,7 @@ _NO_BOOTSTRAP_DATABASE_PATHS = {
 _SECRET_DEST_FRAGMENTS = (
     "api_key",
     "auth_header",
+    "operator_auth",
     "passphrase",
     "password",
     "secret",

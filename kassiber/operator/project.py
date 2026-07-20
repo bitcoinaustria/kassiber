@@ -23,6 +23,7 @@ _OWNER_KINDS = frozenset({"broker", "desktop"})
 class CanonicalProject:
     database: Path
     lock_path: Path
+    alias_lock_path: Path
     identity: str
     public_id: str
 
@@ -32,23 +33,111 @@ class ProjectOwnerLease:
     project: CanonicalProject
     owner_kind: str
     generation: str
-    _handle: IO[bytes]
+    _handles: tuple[IO[bytes], ...]
+    _lock_paths: set[Path]
     _released: bool = False
 
     def release(self) -> None:
         if self._released:
             return
         self._released = True
+        # Closing (rather than issuing an explicit unlock) preserves the lock
+        # when a worker child inherited a duplicate of the same file object.
+        for handle in reversed(self._handles):
+            handle.close()
+
+    def duplicate_for_child(self) -> ProjectOwnerChildHandles:
+        """Duplicate every held lock into an inheritable child-only handle."""
+
+        duplicates: list[IO[bytes]] = []
+        tokens: list[int] = []
         try:
-            _unlock_handle(self._handle)
-        finally:
-            self._handle.close()
+            for handle in self._handles:
+                duplicate_fd = os.dup(handle.fileno())
+                duplicate = os.fdopen(duplicate_fd, "r+b", buffering=0)
+                duplicates.append(duplicate)
+                if os.name == "nt":
+                    import msvcrt
+
+                    token = int(msvcrt.get_osfhandle(duplicate.fileno()))
+                    os.set_handle_inheritable(token, True)
+                else:
+                    token = duplicate.fileno()
+                    os.set_inheritable(token, True)
+                tokens.append(token)
+            return ProjectOwnerChildHandles(tuple(tokens), tuple(duplicates))
+        except Exception:
+            for duplicate in duplicates:
+                duplicate.close()
+            raise
+
+    def add_alias(self, project: CanonicalProject) -> None:
+        """Hold the path lock for another alias of the same database inode."""
+
+        if project.identity != self.project.identity:
+            raise AppError(
+                "the project alias resolves to a different database",
+                code="project_owner_mismatch",
+                retryable=False,
+            )
+        if project.alias_lock_path in self._lock_paths:
+            return
+        handle = _open_owner_lock(project.alias_lock_path, project.public_id)
+        try:
+            if not _try_lock_handle(handle):
+                owner = _read_owner_record(handle)
+                raise AppError(
+                    "another long-lived process owns this project path",
+                    code="project_in_use",
+                    details={
+                        "project": project.public_id,
+                        "owner": owner.get("owner", "unknown"),
+                        "generation": owner.get("generation"),
+                    },
+                    retryable=True,
+                )
+            record = json.dumps(
+                {
+                    "schema_version": 1,
+                    "owner": self.owner_kind,
+                    "generation": self.generation,
+                    "pid": os.getpid(),
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+            handle.seek(0)
+            handle.truncate(0)
+            handle.write(record + b"\n")
+            self._handles = (*self._handles, handle)
+            self._lock_paths.add(project.alias_lock_path)
+        except Exception:
+            try:
+                _unlock_handle(handle)
+            finally:
+                handle.close()
+            raise
 
     def __enter__(self) -> ProjectOwnerLease:
         return self
 
     def __exit__(self, *_exc: object) -> None:
         self.release()
+
+
+@dataclass
+class ProjectOwnerChildHandles:
+    """Parent-side duplicates that are inherited by one worker child."""
+
+    tokens: tuple[int, ...]
+    _handles: tuple[IO[bytes], ...]
+    _closed: bool = False
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        for handle in self._handles:
+            handle.close()
 
 
 def canonical_project(data_root: str | os.PathLike[str]) -> CanonicalProject:
@@ -65,6 +154,7 @@ def canonical_project(data_root: str | os.PathLike[str]) -> CanonicalProject:
                 retryable=False,
             )
         _require_current_owner(info)
+        _require_windows_path_owner(database)
         identity_material = f"file:{info.st_dev}:{info.st_ino}"
     else:
         if parent.exists():
@@ -76,16 +166,25 @@ def canonical_project(data_root: str | os.PathLike[str]) -> CanonicalProject:
                     retryable=False,
                 )
             _require_current_owner(info)
+            _require_windows_path_owner(parent)
         identity_material = f"path:{database}"
-    principal = str(os.getuid()) if hasattr(os, "getuid") else os.environ.get("USERNAME", "")
+    if hasattr(os, "getuid"):
+        principal = str(os.getuid())
+    else:
+        from .protocol import _windows_current_sid
+
+        principal = _windows_current_sid()
     identity = hashlib.sha256(
         f"kassiber-operator-v1:{sys.platform}:{principal}:{identity_material}".encode(
             "utf-8"
         )
     ).hexdigest()
+    lock_root = _owner_lock_root()
+    alias_digest = hashlib.sha256(str(database).encode("utf-8")).hexdigest()
     return CanonicalProject(
         database=database,
-        lock_path=parent / OWNER_LOCK_FILENAME,
+        lock_path=lock_root / f"identity-{identity}.lock",
+        alias_lock_path=lock_root / f"path-{alias_digest}.lock",
         identity=identity,
         public_id=identity[:16],
     )
@@ -101,45 +200,26 @@ def acquire_project_ownership(
 
     if owner_kind not in _OWNER_KINDS:
         raise ValueError(f"invalid owner kind: {owner_kind}")
-    project.lock_path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_RDWR | os.O_CREAT
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
+    handles: list[IO[bytes]] = []
     try:
-        fd = os.open(project.lock_path, flags, 0o600)
-    except OSError as exc:
-        raise AppError(
-            "the project ownership lock is unavailable",
-            code="project_owner_lock_unavailable",
-            details={"project": project.public_id},
-            retryable=True,
-        ) from exc
-    handle = os.fdopen(fd, "r+b", buffering=0)
-    try:
-        info = os.fstat(handle.fileno())
-        if not stat.S_ISREG(info.st_mode):
-            raise AppError(
-                "the project ownership lock is unsafe",
-                code="unsafe_project_owner_lock",
-                details={"project": project.public_id},
-                retryable=False,
-            )
-        _require_current_owner(info)
-        if os.name != "nt":
-            os.fchmod(handle.fileno(), 0o600)
-        if not _try_lock_handle(handle):
-            owner = _read_owner_record(handle)
-            raise AppError(
-                "another long-lived process owns this project",
-                code="project_in_use",
-                hint="Lock the active broker lease or close the desktop project, then retry.",
-                details={
-                    "project": project.public_id,
-                    "owner": owner.get("owner", "unknown"),
-                    "generation": owner.get("generation"),
-                },
-                retryable=True,
-            )
+        # Identity preserves ownership across moves; the path lock prevents a
+        # replacement inode at the admitted path from becoming a second project.
+        for lock_path in (project.lock_path, project.alias_lock_path):
+            handle = _open_owner_lock(lock_path, project.public_id)
+            handles.append(handle)
+            if not _try_lock_handle(handle):
+                owner = _read_owner_record(handle)
+                raise AppError(
+                    "another long-lived process owns this project",
+                    code="project_in_use",
+                    hint="Lock the active broker lease or close the desktop project, then retry.",
+                    details={
+                        "project": project.public_id,
+                        "owner": owner.get("owner", "unknown"),
+                        "generation": owner.get("generation"),
+                    },
+                    retryable=True,
+                )
         record = json.dumps(
             {
                 "schema_version": 1,
@@ -149,12 +229,150 @@ def acquire_project_ownership(
             },
             sort_keys=True,
         ).encode("utf-8")
-        handle.seek(0)
-        handle.truncate(0)
-        handle.write(record + b"\n")
-        return ProjectOwnerLease(project, owner_kind, generation, handle)
+        for handle in handles:
+            handle.seek(0)
+            handle.truncate(0)
+            handle.write(record + b"\n")
+        return ProjectOwnerLease(
+            project,
+            owner_kind,
+            generation,
+            tuple(handles),
+            {project.lock_path, project.alias_lock_path},
+        )
+    except Exception:
+        for handle in reversed(handles):
+            try:
+                _unlock_handle(handle)
+            finally:
+                handle.close()
+        raise
+
+
+def _owner_lock_root() -> Path:
+    from .protocol import operator_runtime_dir
+
+    # The endpoint and owner locks deliberately share one private per-user
+    # runtime selection. An explicit runtime override defines an isolated test
+    # or recovery rendezvous for every participating process.
+    root = operator_runtime_dir() / "owners"
+    if root.is_symlink():
+        raise AppError(
+            "the project owner lock directory may not be a symlink",
+            code="unsafe_project_owner_lock",
+            retryable=False,
+        )
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = root.stat()
+    if not stat.S_ISDIR(info.st_mode):
+        raise AppError(
+            "the project owner lock path is not a directory",
+            code="unsafe_project_owner_lock",
+            retryable=False,
+        )
+    _require_current_owner(info)
+    if os.name != "nt":
+        os.chmod(root, 0o700)
+    return root.resolve(strict=True)
+
+
+def _open_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:
+    if os.name == "nt":
+        return _open_windows_owner_lock(lock_path, project_id)
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        raise AppError(
+            "the project ownership lock is unavailable",
+            code="project_owner_lock_unavailable",
+            details={"project": project_id},
+            retryable=True,
+        ) from exc
+    handle = os.fdopen(fd, "r+b", buffering=0)
+    try:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise AppError(
+                "the project ownership lock is unsafe",
+                code="unsafe_project_owner_lock",
+                details={"project": project_id},
+                retryable=False,
+            )
+        _require_current_owner(info)
+        _require_windows_path_owner(lock_path)
+        if os.name != "nt":
+            os.fchmod(handle.fileno(), 0o600)
+        return handle
     except Exception:
         handle.close()
+        raise
+
+
+def _open_windows_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:
+    """Open with share-mode zero so inherited duplicates preserve exclusion."""
+
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    create_file = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    handle = create_file(
+        str(lock_path),
+        0x80000000 | 0x40000000,  # GENERIC_READ | GENERIC_WRITE
+        0,  # no sharing: duplicate/inherited handles keep this reservation
+        None,
+        4,  # OPEN_ALWAYS
+        0x80,  # FILE_ATTRIBUTE_NORMAL
+        None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if handle == invalid_handle:
+        error = ctypes.get_last_error()
+        if error in {32, 33}:  # ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION
+            raise AppError(
+                "another long-lived process owns this project",
+                code="project_in_use",
+                details={"project": project_id, "owner": "unknown"},
+                retryable=True,
+            )
+        raise AppError(
+            "the project ownership lock is unavailable",
+            code="project_owner_lock_unavailable",
+            details={"project": project_id},
+            retryable=True,
+        )
+    try:
+        fd = msvcrt.open_osfhandle(int(handle), os.O_RDWR)
+    except Exception:
+        ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(handle)
+        raise
+    file_handle = os.fdopen(fd, "r+b", buffering=0)
+    try:
+        info = os.fstat(file_handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise AppError(
+                "the project ownership lock is unsafe",
+                code="unsafe_project_owner_lock",
+                details={"project": project_id},
+                retryable=False,
+            )
+        _require_windows_path_owner(lock_path)
+        return file_handle
+    except Exception:
+        file_handle.close()
         raise
 
 
@@ -167,16 +385,31 @@ def _require_current_owner(info: os.stat_result) -> None:
         )
 
 
+def _require_windows_path_owner(path: Path) -> None:
+    if os.name != "nt":
+        return
+    from .protocol import windows_path_owned_by_current_user
+
+    try:
+        owned = windows_path_owned_by_current_user(str(path))
+    except OSError as exc:
+        raise AppError(
+            "the project path owner could not be verified",
+            code="unsafe_project_owner",
+            retryable=False,
+        ) from exc
+    if not owned:
+        raise AppError(
+            "the project path is owned by another OS user",
+            code="unsafe_project_owner",
+            retryable=False,
+        )
+
+
 def _try_lock_handle(handle: IO[bytes]) -> bool:
     if os.name == "nt":
-        import msvcrt
-
-        try:
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            return True
-        except OSError:
-            return False
+        # Share-mode zero was acquired atomically by _open_windows_owner_lock.
+        return True
     import fcntl
 
     try:
@@ -188,13 +421,7 @@ def _try_lock_handle(handle: IO[bytes]) -> bool:
 
 def _unlock_handle(handle: IO[bytes]) -> None:
     if os.name == "nt":
-        import msvcrt
-
-        try:
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        except OSError:
-            pass
+        # Closing the last duplicate releases the share-mode reservation.
         return
     import fcntl
 

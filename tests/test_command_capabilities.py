@@ -45,6 +45,13 @@ class CommandCapabilityRegistryTest(unittest.TestCase):
             capability_allows(Capability.ACCOUNTING_DECISIONS, Capability.ADMIN)
         )
 
+    def test_semantically_mutating_daemon_kinds_are_not_read_or_note_only(self):
+        self.assertIs(
+            daemon_capability("ui.transactions.metadata.update"),
+            Capability.ACCOUNTING_DECISIONS,
+        )
+        self.assertIs(daemon_capability("ui.rates.latest"), Capability.OPERATOR)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -98,6 +98,11 @@ encrypted project DB.
 
 - SQLite remains the system of record.
 - Use stdlib `sqlite3`; no ORM.
+- Each initialized database has a durable random `database_instance_id` in its
+  settings table. The operator broker binds admitted work to the id read from
+  the opened connection and verifies it before migrations or command work in a
+  child. A byte-for-byte backup/restore remains the same logical database
+  instance; a newly initialized database receives a new id.
 - BTC amounts are integer msat.
 - Fiat columns are still `REAL` unless a future report-specific boundary
   deliberately uses integer cents.
@@ -224,5 +229,9 @@ where helpful. Avoid generic repository base classes.
 
 ## Observability
 
-Future project logs should live under the project directory. Logs must redact
-secret-bearing fields and avoid raw argv by default.
+Normal daemon, desktop, and operator-broker logs are bounded and RAM-only; they
+do not live under the project directory. Secret-floor redaction happens before
+ring insertion, and broker records omit raw argv, paths, endpoint names, and
+secrets. Only explicit user exports may write a redacted support artifact, as
+specified in [the logging reference](../reference/logging.md). An always-on
+project log remains a rejected design.

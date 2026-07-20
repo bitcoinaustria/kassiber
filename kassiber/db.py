@@ -51,6 +51,7 @@ DEFAULT_CONFIG_DIRNAME = "config"
 DEFAULT_EXPORTS_DIRNAME = "exports"
 DEFAULT_ATTACHMENTS_DIRNAME = "attachments"
 DEFAULT_SETTINGS_FILENAME = "settings.json"
+DATABASE_INSTANCE_ID_SETTING = "database_instance_id"
 DEFAULT_DATA_ROOT = os.path.join(DEFAULT_STATE_ROOT, DEFAULT_DATA_DIRNAME)
 LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 
@@ -2751,7 +2752,13 @@ def _preflight_schema_index_columns(conn):
             )
 
 
-def open_db(data_root, *, passphrase=None, require_existing_schema=False):
+def open_db(
+    data_root,
+    *,
+    passphrase=None,
+    require_existing_schema=False,
+    expected_database_identity=None,
+):
     """Open (and lazily migrate) the SQLite store rooted at `data_root`.
 
     Returns a connection with `row_factory = Row` and foreign keys
@@ -2800,10 +2807,13 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                     details={"database": str(db_path)},
                     retryable=False,
                 )
+            if expected_database_identity is not None:
+                require_database_instance_id(conn, expected_database_identity)
             _configure_connection_pragmas(conn)
             _preflight_schema_index_columns(conn)
             conn.executescript(SCHEMA)
             ensure_schema_compat(conn)
+            ensure_database_instance_id(conn)
             return conn
         except Exception:
             conn.close()
@@ -2832,14 +2842,84 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                 details={"database": str(db_path)},
                 retryable=False,
             )
+        if expected_database_identity is not None:
+            require_database_instance_id(conn, expected_database_identity)
         _configure_connection_pragmas(conn, encrypted=True)
         _preflight_schema_index_columns(conn)
         conn.executescript(SCHEMA)
         ensure_schema_compat(conn)
+        ensure_database_instance_id(conn)
         return conn
     except Exception:
         conn.close()
         raise
+
+
+def ensure_database_instance_id(conn) -> str:
+    """Return the durable random identity read from the database connection."""
+
+    row = conn.execute(
+        "SELECT value FROM settings WHERE key = ?",
+        (DATABASE_INSTANCE_ID_SETTING,),
+    ).fetchone()
+    value = row["value"] if row else None
+    if (
+        isinstance(value, str)
+        and len(value) == 32
+        and all(character in "0123456789abcdef" for character in value)
+    ):
+        return value
+    value = uuid.uuid4().hex
+    conn.execute(
+        """
+        INSERT INTO settings(key, value)
+        VALUES(?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (DATABASE_INSTANCE_ID_SETTING, value),
+    )
+    conn.commit()
+    return value
+
+
+def database_instance_id(conn) -> str:
+    """Read the validated project identity through an already-open connection."""
+
+    row = conn.execute(
+        "SELECT value FROM settings WHERE key = ?",
+        (DATABASE_INSTANCE_ID_SETTING,),
+    ).fetchone()
+    value = row["value"] if row else None
+    if not (
+        isinstance(value, str)
+        and len(value) == 32
+        and all(character in "0123456789abcdef" for character in value)
+    ):
+        raise AppError(
+            "database instance identity is missing or invalid",
+            code="invalid_project_database",
+            retryable=False,
+        )
+    return value
+
+
+def require_database_instance_id(conn, expected: str) -> None:
+    """Reject an opened connection before migration if it is not the lease DB."""
+
+    try:
+        actual = database_instance_id(conn)
+    except Exception as exc:
+        raise AppError(
+            "the opened database does not match the operator lease",
+            code="operator_project_replaced",
+            retryable=False,
+        ) from exc
+    if actual != expected:
+        raise AppError(
+            "the opened database does not match the operator lease",
+            code="operator_project_replaced",
+            retryable=False,
+        )
 
 
 def set_setting(conn, key, value):

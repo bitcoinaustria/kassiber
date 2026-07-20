@@ -21,6 +21,7 @@ from ..db import (
 )
 from ..errors import AppError
 from ..operator.modes import set_unlock_mode, unlock_mode_status
+from ..operator.native_auth import invalidate_operator_native_auth
 from .credentials import (
     migrate_dotenv_credentials,
     scan_dotenv_for_secrets,
@@ -72,6 +73,10 @@ def _resolve_passphrase(
     label: str,
     confirm: bool = False,
 ) -> str:
+    if fd_attr == "db_passphrase_fd":
+        cached = getattr(args, "_db_passphrase_cached", None)
+        if isinstance(cached, str) and cached:
+            return cached
     fd = getattr(args, fd_attr, None)
     if fd is not None:
         return read_passphrase_from_fd(int(fd))
@@ -219,10 +224,26 @@ def cmd_secrets_change_passphrase(args: argparse.Namespace) -> dict:
     )
     _enforce_min_length(new_passphrase)
 
-    desktop_stale_generation = mark_desktop_biometric_passphrase_stale(args.data_root)
-    result = change_database_passphrase(db_path, current, new_passphrase)
+    desktop_stale_generation = None
+    operator_stale_generation = None
+
+    def invalidate_native_credentials() -> None:
+        nonlocal desktop_stale_generation, operator_stale_generation
+        desktop_stale_generation = mark_desktop_biometric_passphrase_stale(
+            args.data_root
+        )
+        operator_stale_generation = invalidate_operator_native_auth(args.data_root)
+
+    result = change_database_passphrase(
+        db_path,
+        current,
+        new_passphrase,
+        before_rekey=invalidate_native_credentials,
+    )
     result["desktop_biometric_invalidated"] = desktop_stale_generation is not None
     result["desktop_biometric_stale_generation"] = desktop_stale_generation
+    result["operator_native_auth_invalidated"] = True
+    result["operator_native_auth_stale_generation"] = operator_stale_generation
     remembered_warning = refresh_remembered_passphrase_after_rotation(
         args.data_root,
         new_passphrase,

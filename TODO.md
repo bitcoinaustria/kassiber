@@ -1137,6 +1137,14 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Kassiber skill bundle for agents (moved to
   https://github.com/bitcoinaustria/kassiber-skill)
 - [ ] Optional server/REST mode, still local-first and opt-in
+- [x] Terminal-first operator unlock broker: explicit manual/brokered/unattended
+  modes, per-user authenticated IPC, per-project leases/ownership/FIFO workers,
+  authoritative capability admission, password authorization on all desktop
+  platforms, production-entitled macOS Touch ID, truthful operation states,
+  frozen-sidecar broker/worker launch smokes, inherited child ownership, and
+  RAM-only lifecycle telemetry. Windows Hello and Linux biometrics remain
+  intentionally deferred; native macOS/Windows execution remains a required
+  release-platform check rather than a claim made by Linux-only local tests.
 
 ## Open bugs and debt
 

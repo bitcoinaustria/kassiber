@@ -12,11 +12,12 @@ The guiding principle:
 > ever enters a buffer, and let the user decide — per export, per tier —
 > what leaves the process.**
 
-## The three buffers
+## The process-local buffers
 
 | Buffer | Lives in | Bound | Survives |
 | --- | --- | --- | --- |
 | Daemon ring ([`kassiber/log_ring.py`](../../kassiber/log_ring.py)) | Python daemon process | 5,000 records / 4 MiB | webview reloads, UI restarts |
+| Operator ring ([`kassiber/operator/service.py`](../../kassiber/operator/service.py)) | Per-login-user broker process | 5,000 records / 4 MiB | individual CLI/agent exits only |
 | Supervisor stderr tail + lifecycle ring ([`ui-tauri/src-tauri/src/supervisor.rs`](../../ui-tauri/src-tauri/src/supervisor.rs)) | Tauri (Rust) process | 16 KiB tail, 64 lifecycle records | daemon crashes and restarts |
 | Webview ring ([`ui-tauri/src/lib/appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts)) | Browser/Webview JS heap | 10,000 records / 4 MiB | nothing (it is the view) |
 
@@ -135,6 +136,12 @@ message.
 - **Background workers** — the freshness worker and AI chat worker stamp
   their own correlation ids; their failures are logged to the ring in
   addition to the envelopes they already emit.
+- **Operator broker** — unlock, lock, expiry, rejection, queue admission,
+  dispatch, cancellation, and crash/result-unknown state enter only the
+  broker's bounded Python ring. Fields contain opaque project ids, exact
+  capability/command codes, and categorical auth methods; they omit raw argv,
+  paths, endpoints, credentials, and secret frames. The ring dies with the
+  broker and has no generic export or durable activity table.
 - **Webview** — daemon transport round-trips (including `error.details`
   and `error.debug` excerpts), `window.onerror`, `unhandledrejection`,
   `console.error`/`console.warn` (with re-entrancy and duplicate-burst

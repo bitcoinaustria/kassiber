@@ -194,6 +194,7 @@ def open_encrypted(
     detect_types: int = 0,
     row_factory: Any | None = None,
     quiet_unlock_errors: bool = False,
+    enforce_operator_identity: bool = True,
 ) -> Any:
     """Open an encrypted SQLCipher database and return the keyed connection.
 
@@ -213,6 +214,8 @@ def open_encrypted(
         )
         with _suppress_c_stderr() if quiet_unlock_errors else nullcontext():
             verify_unlock(conn)
+        if enforce_operator_identity:
+            _verify_operator_database_identity(conn)
         if row_factory is not None:
             conn.row_factory = row_factory
         if foreign_keys:
@@ -221,6 +224,37 @@ def open_encrypted(
     except Exception:
         conn.close()
         raise
+
+
+def _verify_operator_database_identity(conn: Any) -> None:
+    """Bind raw SQLCipher opens in broker children before any mutation."""
+
+    if os.environ.get("KASSIBER_OPERATOR_CHILD") != "1":
+        return
+    expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY")
+    if expected is None:
+        raise AppError(
+            "operator child database binding is missing",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    try:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'database_instance_id'"
+        ).fetchone()
+    except Exception as exc:
+        raise AppError(
+            "the opened database does not match the operator lease",
+            code="operator_project_replaced",
+            retryable=False,
+        ) from exc
+    actual = row[0] if row else None
+    if actual != expected:
+        raise AppError(
+            "the opened database does not match the operator lease",
+            code="operator_project_replaced",
+            retryable=False,
+        )
 
 
 def rekey_connection(conn: Any, new_passphrase: str) -> None:

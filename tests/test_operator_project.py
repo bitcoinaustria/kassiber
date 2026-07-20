@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from kassiber.errors import AppError
-from kassiber.operator.project import (
-    OWNER_LOCK_FILENAME,
-    acquire_project_ownership,
-    canonical_project,
-)
+from kassiber.operator.project import acquire_project_ownership, canonical_project
+from kassiber.operator.service import OperationResult, OperatorService
+from kassiber import daemon as daemon_runtime
+
+
+class _Connection:
+    def close(self) -> None:
+        pass
 
 
 def _competing_owner(data_root: str, output: multiprocessing.Queue) -> None:
@@ -54,8 +61,9 @@ class OperatorProjectTest(unittest.TestCase):
                 generation="broker-generation",
             )
             try:
-                output: multiprocessing.Queue = multiprocessing.Queue()
-                process = multiprocessing.Process(
+                context = multiprocessing.get_context("spawn")
+                output: multiprocessing.Queue = context.Queue()
+                process = context.Process(
                     target=_competing_owner,
                     args=(tmp, output),
                 )
@@ -87,10 +95,209 @@ class OperatorProjectTest(unittest.TestCase):
             )
             second.release()
             if os.name != "nt":
-                self.assertEqual(
-                    Path(tmp, OWNER_LOCK_FILENAME).stat().st_mode & 0o777,
-                    0o600,
-                )
+                for lock_path in (project.lock_path, project.alias_lock_path):
+                    self.assertEqual(lock_path.stat().st_mode & 0o777, 0o600)
+
+    def test_broker_first_blocks_desktop_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = canonical_project(tmp)
+            broker = acquire_project_ownership(
+                project,
+                owner_kind="broker",
+                generation="broker",
+            )
+            ctx = SimpleNamespace(
+                data_root=tmp,
+                project_owner=None,
+                ownership_generation="desktop",
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    daemon_runtime._ensure_daemon_project_owner(ctx)
+                self.assertEqual(raised.exception.code, "project_in_use")
+                self.assertEqual(raised.exception.details["owner"], "broker")
+            finally:
+                broker.release()
+
+    def test_desktop_first_blocks_broker_unlock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ) as open_database:
+            project = canonical_project(tmp)
+            desktop = acquire_project_ownership(
+                project,
+                owner_kind="desktop",
+                generation="desktop",
+            )
+            service = OperatorService(
+                "broker",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                self.assertEqual(raised.exception.code, "project_in_use")
+                self.assertEqual(raised.exception.details["owner"], "desktop")
+                open_database.assert_not_called()
+            finally:
+                service.close()
+                desktop.release()
+
+    def test_broker_owner_blocks_daemon_before_database_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.daemon.open_db", return_value=_Connection()
+        ) as open_database:
+            broker = acquire_project_ownership(
+                canonical_project(tmp),
+                owner_kind="broker",
+                generation="broker",
+            )
+            ctx = SimpleNamespace(
+                conn=None,
+                data_root=tmp,
+                project_owner=None,
+                ownership_generation="desktop",
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    daemon_runtime._open_daemon_connection(ctx)
+                self.assertEqual(raised.exception.code, "project_in_use")
+                open_database.assert_not_called()
+            finally:
+                broker.release()
+
+    @unittest.skipIf(os.name == "nt", "POSIX symlink test")
+    def test_daemon_open_uses_the_owned_projects_canonical_root(self) -> None:
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as parent:
+            Path(root, "kassiber.sqlite3").write_bytes(b"database")
+            alias = Path(parent) / "project"
+            alias.symlink_to(root, target_is_directory=True)
+            connection = _Connection()
+            ctx = SimpleNamespace(
+                conn=None,
+                data_root=str(alias),
+                project_owner=None,
+                ownership_generation="desktop",
+                runtime_config={},
+                project_id=None,
+                select_project_on_open=False,
+            )
+            with mock.patch(
+                "kassiber.daemon.open_db",
+                return_value=connection,
+            ) as open_database, mock.patch(
+                "kassiber.daemon.validate_project_migration_after_unlock"
+            ), mock.patch(
+                "kassiber.daemon.merge_db_backends"
+            ), mock.patch(
+                "kassiber.daemon._remember_unlocked_passphrase"
+            ), mock.patch(
+                "kassiber.daemon._start_freshness_background_worker"
+            ):
+                try:
+                    opened = daemon_runtime._open_daemon_connection(ctx)
+                    self.assertIs(opened, connection)
+                    canonical_root = str(Path(root).resolve())
+                    self.assertEqual(
+                        open_database.call_args.args[0],
+                        canonical_root,
+                    )
+                    self.assertEqual(ctx.data_root, canonical_root)
+                finally:
+                    daemon_runtime._release_daemon_project_owner(ctx)
+
+    @unittest.skipIf(os.name == "nt", "pass_fds ownership test")
+    def test_inherited_owner_handles_exclude_a_second_owner_after_parent_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            lease = acquire_project_ownership(
+                project,
+                owner_kind="broker",
+                generation="broker",
+            )
+            inherited = lease.duplicate_for_child()
+            child = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(0.4)"],
+                pass_fds=inherited.tokens,
+            )
+            inherited.close()
+            lease.release()
+            try:
+                with self.assertRaises(AppError) as raised:
+                    acquire_project_ownership(
+                        project,
+                        owner_kind="desktop",
+                        generation="desktop",
+                    )
+                self.assertEqual(raised.exception.code, "project_in_use")
+            finally:
+                child.wait(timeout=2)
+            next_owner = acquire_project_ownership(
+                project,
+                owner_kind="desktop",
+                generation="desktop",
+            )
+            next_owner.release()
+
+    def test_move_preserves_identity_and_owner_exclusion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first"
+            second = Path(tmp) / "second"
+            first.mkdir()
+            second.mkdir()
+            database = first / "kassiber.sqlite3"
+            database.write_bytes(b"database")
+            project = canonical_project(first)
+            lease = acquire_project_ownership(
+                project,
+                owner_kind="broker",
+                generation="broker",
+            )
+            database.rename(second / "kassiber.sqlite3")
+            moved = canonical_project(second)
+            try:
+                self.assertEqual(project.identity, moved.identity)
+                with self.assertRaises(AppError) as raised:
+                    acquire_project_ownership(
+                        moved,
+                        owner_kind="desktop",
+                        generation="desktop",
+                    )
+                self.assertEqual(raised.exception.code, "project_in_use")
+            finally:
+                lease.release()
+
+    def test_path_lock_blocks_replacement_inode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            database = Path(tmp) / "kassiber.sqlite3"
+            database.write_bytes(b"first")
+            lease = acquire_project_ownership(
+                canonical_project(tmp),
+                owner_kind="broker",
+                generation="broker",
+            )
+            database.rename(Path(tmp) / "old.sqlite3")
+            database.write_bytes(b"replacement")
+            try:
+                with self.assertRaises(AppError) as raised:
+                    acquire_project_ownership(
+                        canonical_project(tmp),
+                        owner_kind="desktop",
+                        generation="desktop",
+                    )
+                self.assertEqual(raised.exception.code, "project_in_use")
+            finally:
+                lease.release()
+
+    def test_windows_owner_contract_uses_inheritable_share_mode_reservation(self) -> None:
+        source = (
+            Path(__file__).parents[1] / "kassiber" / "operator" / "project.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("CreateFileW", source)
+        self.assertIn("no sharing", source)
+        self.assertIn("os.dup", source)
+        self.assertIn("os.set_handle_inheritable", source)
 
 
 if __name__ == "__main__":

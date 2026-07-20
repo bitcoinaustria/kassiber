@@ -258,6 +258,7 @@ pub const LEGACY_SHARED_PASSPHRASE_SERVICE: &str = "Kassiber Database Passphrase
 pub const CLI_REMEMBERED_PASSPHRASE_SERVICE: &str = "Kassiber CLI Database Passphrase";
 pub const DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE: &str = "Kassiber Desktop Biometric Passphrase";
 pub const DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE: &str = "Kassiber Desktop Biometric Invalidated";
+pub const OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE: &str = "Kassiber Operator Biometric Passphrase";
 const DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE: &str =
     "Kassiber Desktop Biometric Enrollment (Current Set)";
 const DESKTOP_APPLICATION_GATE_MARKER_SERVICE: &str =
@@ -585,6 +586,7 @@ pub fn touch_id_store_passphrase(account: &str, passphrase: &str) -> Result<(), 
         return Err("database passphrase must not be empty".to_string());
     }
     touch_id_biometrics_available()?;
+    #[cfg(target_os = "macos")]
     let existing_marker = desktop_biometric_marker(account)?;
 
     #[cfg(target_os = "macos")]
@@ -664,6 +666,85 @@ pub fn touch_id_delete_passphrase(
     delete_desktop_passphrase_copies(account, enrollment == Some(TouchIdProtection::LegacyShared))?;
     delete_desktop_biometric_markers(account)?;
     NativeSecretStore.delete(DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE, account)
+}
+
+#[cfg(target_os = "macos")]
+pub fn operator_touch_id_store_passphrase(account: &str, passphrase: &[u8]) -> Result<(), String> {
+    use security_framework::access_control::{ProtectionMode, SecAccessControl};
+    use security_framework::passwords::{set_generic_password_options, AccessControlOptions};
+
+    validate_touch_id_account(account)?;
+    if passphrase.is_empty() {
+        return Err("database passphrase must not be empty".to_string());
+    }
+    touch_id_biometrics_available()?;
+    let mut options = protected_password_options(OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE, account);
+    let access_control = SecAccessControl::create_with_protection(
+        Some(ProtectionMode::AccessibleWhenUnlockedThisDeviceOnly),
+        AccessControlOptions::BIOMETRY_CURRENT_SET.bits(),
+    )
+    .map_err(security_framework_error_for_user)?;
+    options.set_access_control(access_control);
+    set_generic_password_options(passphrase, options).map_err(security_framework_error_for_user)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn operator_touch_id_store_passphrase(
+    _account: &str,
+    _passphrase: &[u8],
+) -> Result<(), String> {
+    Err("Touch ID operator unlock is only available in the macOS desktop app.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+pub fn operator_touch_id_get_passphrase(account: &str) -> Result<Option<Vec<u8>>, String> {
+    use security_framework::passwords::generic_password;
+
+    validate_touch_id_account(account)?;
+    touch_id_biometrics_available()?;
+    match generic_password(protected_password_options(
+        OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
+        account,
+    )) {
+        Ok(secret) => Ok(Some(secret)),
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(None),
+        Err(error) => Err(security_framework_error_for_user(error)),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn operator_touch_id_get_passphrase(_account: &str) -> Result<Option<Vec<u8>>, String> {
+    Err("Touch ID operator unlock is only available in the macOS desktop app.".to_string())
+}
+
+#[cfg(target_os = "macos")]
+pub fn operator_touch_id_delete_passphrase(account: &str) -> Result<(), String> {
+    use security_framework::passwords::delete_generic_password_options;
+
+    validate_touch_id_account(account)?;
+    match delete_generic_password_options(protected_password_options(
+        OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
+        account,
+    )) {
+        Ok(()) => Ok(()),
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
+        Err(error) => Err(security_framework_error_for_user(error)),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn operator_touch_id_delete_passphrase(_account: &str) -> Result<(), String> {
+    Err("Touch ID operator unlock is only available in the macOS desktop app.".to_string())
+}
+
+pub fn operator_touch_id_configured(account: &str) -> Result<bool, String> {
+    validate_touch_id_account(account)?;
+    if !cfg!(target_os = "macos") {
+        return Err(
+            "Touch ID operator unlock is only available in the macOS desktop app.".to_string(),
+        );
+    }
+    NativeSecretStore.exists(OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE, account)
 }
 
 fn validate_touch_id_account(account: &str) -> Result<(), String> {
@@ -850,11 +931,13 @@ const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
 const ERR_SEC_MISSING_ENTITLEMENT: i32 = -34_018;
 
 #[cfg(target_os = "macos")]
-fn protected_password_options(account: &str) -> security_framework::passwords::PasswordOptions {
+fn protected_password_options(
+    service: &str,
+    account: &str,
+) -> security_framework::passwords::PasswordOptions {
     use security_framework::passwords::PasswordOptions;
 
-    let mut options =
-        PasswordOptions::new_generic_password(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account);
+    let mut options = PasswordOptions::new_generic_password(service, account);
     options.use_protected_keychain();
     options
 }
@@ -867,7 +950,7 @@ fn store_biometry_current_set_passphrase(
     use security_framework::access_control::{ProtectionMode, SecAccessControl};
     use security_framework::passwords::{set_generic_password_options, AccessControlOptions};
 
-    let mut options = protected_password_options(account);
+    let mut options = protected_password_options(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account);
     let access_control = SecAccessControl::create_with_protection(
         Some(ProtectionMode::AccessibleWhenUnlockedThisDeviceOnly),
         AccessControlOptions::BIOMETRY_CURRENT_SET.bits(),
@@ -880,7 +963,10 @@ fn store_biometry_current_set_passphrase(
 fn read_biometry_current_set_passphrase(account: &str) -> Result<Option<Vec<u8>>, String> {
     use security_framework::passwords::generic_password;
 
-    match generic_password(protected_password_options(account)) {
+    match generic_password(protected_password_options(
+        DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE,
+        account,
+    )) {
         Ok(secret) => Ok(Some(secret)),
         Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {
             let _ = delete_desktop_biometric_markers(account);
@@ -899,7 +985,10 @@ fn read_biometry_current_set_passphrase(_account: &str) -> Result<Option<Vec<u8>
 fn delete_biometry_current_set_passphrase(account: &str) -> Result<(), String> {
     use security_framework::passwords::delete_generic_password_options;
 
-    match delete_generic_password_options(protected_password_options(account)) {
+    match delete_generic_password_options(protected_password_options(
+        DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE,
+        account,
+    )) {
         Ok(()) => Ok(()),
         Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
         Err(error) => Err(security_framework_error_for_user(error)),
@@ -1364,6 +1453,14 @@ mod tests {
         assert_ne!(
             CLI_REMEMBERED_PASSPHRASE_SERVICE,
             DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE
+        );
+        assert_ne!(
+            OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
+            DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE
+        );
+        assert_ne!(
+            OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
+            CLI_REMEMBERED_PASSPHRASE_SERVICE
         );
     }
 

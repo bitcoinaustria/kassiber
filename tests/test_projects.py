@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.core.runtime import resolve_runtime_paths
-from kassiber.db import DEFAULT_DB_FILENAME, open_db
+from kassiber.db import DATABASE_INSTANCE_ID_SETTING, DEFAULT_DB_FILENAME, open_db
 from kassiber.errors import AppError
 from kassiber.projects import (
     WORKSPACE_SPLIT_POLICY,
@@ -503,8 +503,13 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                     alpha_conn.execute("SELECT 1")
                 self.assertIn("closed database", str(closed.exception))
                 self.assertEqual(
-                    ctx.conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0],
-                    0,
+                    [
+                        row[0]
+                        for row in ctx.conn.execute(
+                            "SELECT key FROM settings ORDER BY key"
+                        ).fetchall()
+                    ],
+                    [DATABASE_INSTANCE_ID_SETTING],
                 )
             finally:
                 projects_module.DEFAULT_STATE_ROOT = old_state

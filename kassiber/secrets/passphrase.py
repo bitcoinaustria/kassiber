@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from ..errors import AppError
 from .sqlcipher import (
@@ -24,8 +25,15 @@ def change_database_passphrase(
     kdf_iter: int = KDF_ITER_DEFAULT,
     cipher_page_size: int = CIPHER_PAGE_SIZE_DEFAULT,
     compatibility: int = CIPHER_COMPATIBILITY,
+    before_rekey: Callable[[], None] | None = None,
 ) -> dict:
-    """Rotate the database key. Verifies new key by reopening fresh."""
+    """Rotate the database key. Verifies new key by reopening fresh.
+
+    ``before_rekey`` runs only after the current key has authenticated and any
+    operator-child database identity has been verified, but immediately before
+    the irreversible rekey.  Callers use this boundary to invalidate native
+    credentials without mutating them for the wrong/replaced database.
+    """
 
     require_sqlcipher()
     target = Path(db_path).expanduser()
@@ -50,6 +58,8 @@ def change_database_passphrase(
         compatibility=compatibility,
     )
     try:
+        if before_rekey is not None:
+            before_rekey()
         rekey_connection(conn, new_passphrase)
     finally:
         conn.close()

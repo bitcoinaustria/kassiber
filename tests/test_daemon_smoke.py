@@ -914,6 +914,10 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
             side_effect=OSError("settings are read-only"),
         ), mock.patch.object(
             daemon_module,
+            "change_database_passphrase",
+            side_effect=lambda *_args, **kwargs: kwargs["before_rekey"](),
+        ), mock.patch.object(
+            daemon_module,
             "_stop_freshness_background_worker",
         ) as stop_worker:
             with self.assertRaises(OSError):
@@ -924,6 +928,13 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
         self.assertIs(ctx.conn, connection)
 
     def test_ambiguous_rekey_failure_keeps_stale_generation(self):
+        def fail_after_binding(*_args, **kwargs):
+            kwargs["before_rekey"]()
+            raise AppError(
+                "verification failed after rekey",
+                code="rekey_verification_failed",
+            )
+
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"
             data_root.mkdir()
@@ -942,10 +953,7 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
             ), mock.patch.object(
                 daemon_module,
                 "change_database_passphrase",
-                side_effect=AppError(
-                    "verification failed after rekey",
-                    code="rekey_verification_failed",
-                ),
+                side_effect=fail_after_binding,
             ):
                 with self.assertRaises(AppError):
                     daemon_module.handle_request(ctx, self._request(), mock.Mock())

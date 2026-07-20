@@ -463,6 +463,24 @@ jobs:
             | "$sidecar" --data-root "$kraken_root" daemon \
             > "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl"
           grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
+
+          operator_root="$RUNNER_TEMP/kassiber-cli-sidecar-operator-smoke"
+          operator_runtime="$RUNNER_TEMP/kassiber-cli-sidecar-operator-runtime"
+          mkdir -p "$operator_runtime"
+          chmod 700 "$operator_runtime"
+          export KASSIBER_OPERATOR_RUNTIME_DIR="$operator_runtime"
+          printf '%s\n' 'packaged operator smoke passphrase' \
+            | "$sidecar" --data-root "$operator_root" --machine secrets init --new-passphrase-fd 0 \
+            >/dev/null
+          printf '%s\n' 'packaged operator smoke passphrase' \
+            | "$sidecar" --data-root "$operator_root" --machine operator unlock \
+                --passphrase-fd 0 --duration 1m \
+            > "$RUNNER_TEMP/cli-sidecar-operator-unlock.json"
+          grep '"lease":"unlocked"' "$RUNNER_TEMP/cli-sidecar-operator-unlock.json" >/dev/null
+          "$sidecar" --data-root "$operator_root" --machine status \
+            > "$RUNNER_TEMP/cli-sidecar-operator-worker.json"
+          grep '"kind":"status"' "$RUNNER_TEMP/cli-sidecar-operator-worker.json" >/dev/null
+          "$sidecar" --data-root "$operator_root" --machine operator lock >/dev/null
           grep '"bundled":true' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"pairs":2' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"rows":255181' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
