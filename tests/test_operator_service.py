@@ -204,6 +204,39 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_unlock_retains_owner_when_failed_open_release_needs_retry(self) -> None:
+        owner = mock.Mock()
+        owner.release.side_effect = [
+            OSError("release failed"),
+            OSError("still failed"),
+            None,
+        ]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            side_effect=AppError("wrong passphrase", code="unlock_failed"),
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            return_value=owner,
+        ):
+            service = OperatorService("generation", lambda *_args: mock.Mock())
+            try:
+                with self.assertRaisesRegex(OSError, "still failed"):
+                    service.unlock(
+                        tmp,
+                        bytearray(b"wrong-passphrase"),
+                        duration_seconds=None,
+                    )
+
+                self.assertEqual(owner.release.call_count, 2)
+                self.assertTrue(service._pending_owner_releases)
+
+                service._release_pending_owners()
+
+                self.assertEqual(owner.release.call_count, 3)
+                self.assertFalse(service._pending_owner_releases)
+            finally:
+                service.close()
+
     def test_fresh_auth_retains_owner_until_failed_connection_close_retries(self) -> None:
         connection = _Connection()
         connection.close = mock.Mock(

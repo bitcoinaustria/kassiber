@@ -748,18 +748,18 @@ class OperatorService:
                 if exc.code in {"unlock_failed", "passphrase_required"}:
                     backoff.record_failure()
                 if acquired_here and not owner_retained:
-                    owner.release()
+                    self._release_owner_or_retain(project.identity, owner)
                 raise
             except Exception:
                 if acquired_here and not owner_retained:
-                    owner.release()
+                    self._release_owner_or_retain(project.identity, owner)
                 raise
             else:
                 backoff.record_success()
             current_project = canonical_project(canonical_data_root)
             if current_project.identity != project.identity:
                 if acquired_here:
-                    owner.release()
+                    self._release_owner_or_retain(project.identity, owner)
                 raise AppError(
                     "the project changed during operator unlock",
                     code="operator_project_replaced",
@@ -783,7 +783,7 @@ class OperatorService:
                 )
             except Exception:
                 if acquired_here:
-                    owner.release()
+                    self._release_owner_or_retain(project.identity, owner)
                 raise
             stored = bytearray(passphrase)
             expires = (
@@ -828,7 +828,7 @@ class OperatorService:
             if lease_changed or service_stopped:
                 _wipe(stored)
                 if acquired_here:
-                    owner.release()
+                    self._release_owner_or_retain(project.identity, owner)
                 if service_stopped:
                     raise _broker_stopped_error()
                 raise AppError(
@@ -1734,6 +1734,23 @@ class OperatorService:
             self._pending_owner_releases.append(
                 _PendingProjectResource(project_identity, connection, owner)
             )
+
+    def _release_owner_or_retain(
+        self,
+        project_identity: str,
+        owner: ProjectOwnerLease,
+    ) -> None:
+        """Release an acquired owner or preserve it for a later retry."""
+
+        try:
+            owner.release()
+        except Exception:
+            self._retain_pending_project_resource(
+                project_identity,
+                connection=None,
+                owner=owner,
+            )
+            raise
 
     def _revoke_lease_locked(self, project_id: str, *, reason: str) -> None:
         lease = self._leases.get(project_id)
