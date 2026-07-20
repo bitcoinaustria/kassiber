@@ -586,6 +586,22 @@ export function SwapMatching() {
   const showHistory = () => setView("paired");
   const showReview = () => setView("review");
 
+  // Re-sync the active tab when the URL search changes while already mounted —
+  // e.g. the /custody-gaps → /swaps?tab=gaps redirect fired with this screen
+  // already on /swaps (the initial useState above only reads search at mount).
+  // A manual tab click does not change search, so it is never overridden.
+  useEffect(() => {
+    if (search.focus || search.method) {
+      setActiveTab("review");
+    } else if (
+      search.tab === "gaps" ||
+      search.tab === "components" ||
+      search.tab === "review"
+    ) {
+      setActiveTab(search.tab);
+    }
+  }, [search.tab, search.focus, search.method]);
+
   return (
     <div className={screenShellClassName}>
       <Tabs
@@ -619,6 +635,7 @@ export function SwapMatching() {
               </Tabs>
               {view === "review" ? (
                 <PairingReview
+                  key={reviewMode}
                   mode={reviewMode}
                   onShowHistory={showHistory}
                   focusTransactionId={
@@ -629,7 +646,11 @@ export function SwapMatching() {
                   }
                 />
               ) : (
-                <PairedSwaps mode={reviewMode} onBackToReview={showReview} />
+                <PairedSwaps
+                  key={reviewMode}
+                  mode={reviewMode}
+                  onBackToReview={showReview}
+                />
               )}
             </>
           ) : null}
@@ -726,6 +747,10 @@ function CustodyComponentResolver() {
   const [editingComponent, setEditingComponent] = useState<CustodyComponent | null>(
     null,
   );
+  // The embedded guided form submits through its own mutation observers, so
+  // `mutationPending` below cannot see its in-flight state; track it explicitly
+  // to keep the revise dialog from being dismissed mid-submit.
+  const [editorBusy, setEditorBusy] = useState(false);
 
   const componentQuery = useDaemon<CustodyComponentListEnvelope>(
     "ui.transfers.components.list",
@@ -1106,7 +1131,7 @@ function CustodyComponentResolver() {
       <Dialog
         open={editingComponent !== null}
         onOpenChange={(open) => {
-          if (!open && !mutationPending) closeRevisionEditor();
+          if (!open && !mutationPending && !editorBusy) closeRevisionEditor();
         }}
       >
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
@@ -1130,6 +1155,7 @@ function CustodyComponentResolver() {
               }}
               initialForm={componentToFormState(editingComponent)}
               onDone={closeRevisionEditor}
+              onBusyChange={setEditorBusy}
             />
           ) : null}
         </DialogContent>

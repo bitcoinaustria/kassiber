@@ -6,7 +6,7 @@
  * live with {@link previewCustodyComponentBatch}, and submits it through the
  * `ui.transfers.components.{plan,apply}` dry-run → commit flow.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Check, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
@@ -86,6 +86,9 @@ export interface GuidedComponentFormProps {
   edit?: { componentId: string; state: "draft" | "active" };
   /** Called after a successful revise (e.g. to close the editor). */
   onDone?: () => void;
+  /** Reports the form's submit-in-flight state (so a host dialog can block
+   *  dismissal mid-submit — this form uses its own mutation observers). */
+  onBusyChange?: (busy: boolean) => void;
   /** "card" wraps in a titled Card (create); "embedded" fits inside a dialog. */
   variant?: "card" | "embedded";
 }
@@ -104,6 +107,7 @@ export function GuidedComponentForm({
   initialForm,
   edit,
   onDone,
+  onBusyChange,
   variant = "card",
 }: GuidedComponentFormProps = {}) {
   const { t } = useTranslation("review");
@@ -123,6 +127,11 @@ export function GuidedComponentForm({
     "ui.transfers.components.apply",
   );
   const pending = planMutation.isPending || applyMutation.isPending;
+
+  useEffect(() => {
+    onBusyChange?.(pending);
+    return () => onBusyChange?.(false);
+  }, [pending, onBusyChange]);
 
   const preview = useMemo(() => previewCustodyComponentBatch(formToDocument(form)), [
     form,
@@ -154,7 +163,14 @@ export function GuidedComponentForm({
 
   const addLeg = () => patchForm({ legs: [...form.legs, createGuidedLeg("destination")] });
   const removeLeg = (key: string) =>
-    patchForm({ legs: form.legs.filter((leg) => leg.key !== key) });
+    // Drop any allocation edge that referenced the removed leg so no dangling
+    // edge (and its typed amount) is silently discarded on submit.
+    patchForm({
+      legs: form.legs.filter((leg) => leg.key !== key),
+      allocations: form.allocations.filter(
+        (allocation) => allocation.sourceKey !== key && allocation.sinkKey !== key,
+      ),
+    });
   const reset = () => {
     setForm(createInitialGuidedForm());
     setResult(null);
@@ -220,8 +236,11 @@ export function GuidedComponentForm({
         if (edit) {
           onDone?.();
         } else {
+          // Reset the form fields but keep the success summary visible (reset()
+          // would clear it in the same tick, so it would never render).
+          setForm(createInitialGuidedForm());
+          setActionError(null);
           setResult(applied.data.summary ?? null);
-          reset();
         }
       }
     } catch (error) {
@@ -657,6 +676,7 @@ function GuidedLegRow({
             <Label>{t("swap.components.form.leg.occurredAt")}</Label>
             <Input
               type="datetime-local"
+              step={1}
               value={leg.occurredAt}
               onChange={(event) => onChange({ occurredAt: event.target.value })}
             />

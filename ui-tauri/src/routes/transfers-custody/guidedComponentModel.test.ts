@@ -300,8 +300,13 @@ describe("guidedComponentModel", () => {
     const spec = formToComponentSpec(form);
     const legs = spec.legs as Array<Record<string, unknown>>;
     expect(legs[0]).toMatchObject({
+      // Original leg id preserved so revise can match the prior revision.
+      id: "L1",
       transaction_id: "tx-out",
       anchor_transaction_id: "tx-out",
+      // wallet_id preserved alongside transaction_id (daemon does not re-derive
+      // it on revise).
+      wallet_id: "w1",
       amount_btc: "1",
       rail: "bitcoin",
     });

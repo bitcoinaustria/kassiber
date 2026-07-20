@@ -43,6 +43,8 @@ export interface GuidedLegOrigin {
 export interface GuidedLegForm {
   /** Stable local id for React keys and allocation references. */
   key: string;
+  /** Original persisted leg id when loaded for revise; "" for new legs. */
+  originId: string;
   role: GuidedLegRole;
   /** Amount entered as a decimal BTC string; serialized as `amount_btc`. */
   amountBtc: string;
@@ -113,6 +115,7 @@ function nextKey(prefix: string): string {
 export function createGuidedLeg(role: GuidedLegRole): GuidedLegForm {
   return {
     key: nextKey("leg"),
+    originId: "",
     role,
     amountBtc: "",
     locationMode: "manual",
@@ -173,7 +176,9 @@ export function occurredAtToRfc3339(value: string): string {
 type JsonRecord = Record<string, unknown>;
 
 function legToSpec(leg: GuidedLegForm, mode: "quantity" | "conversion"): JsonRecord {
-  const spec: JsonRecord = { id: leg.key, role: leg.role };
+  // Preserve the original leg id when revising so the daemon can match legs to
+  // the prior revision (economic terms and per-leg evidence key on leg id).
+  const spec: JsonRecord = { id: leg.originId || leg.key, role: leg.role };
   const amount = trimmed(leg.amountBtc);
   if (amount) spec.amount_btc = amount;
 
@@ -184,13 +189,17 @@ function legToSpec(leg: GuidedLegForm, mode: "quantity" | "conversion"): JsonRec
   } else if (leg.locationMode === "origin" && leg.origin) {
     // Loaded from an existing component: emit the already-resolved location and
     // carried metadata directly (the daemon's revise contract), not aliases.
+    // Emit BOTH transaction_id and wallet_id when present — the daemon does not
+    // re-derive wallet_id from a transaction_id on revise, so dropping it would
+    // silently persist wallet_id=NULL and change wallet-keyed validation.
     const origin = leg.origin;
     if (origin.transactionId) {
       spec.transaction_id = origin.transactionId;
       spec.anchor_transaction_id =
         origin.anchorTransactionId ?? origin.transactionId;
-    } else if (origin.walletId) {
-      spec.wallet_id = origin.walletId;
+    }
+    if (origin.walletId) spec.wallet_id = origin.walletId;
+    if (!origin.transactionId) {
       const occurredAt = occurredAtToRfc3339(leg.occurredAt);
       if (occurredAt) spec.occurred_at = occurredAt;
     }
@@ -314,9 +323,11 @@ export function rfc3339ToDatetimeLocal(value: string | null | undefined): string
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
+  // Include seconds: a suspense leg must match its funding transaction's time
+  // to the second, so minute truncation here would break activation on revise.
   return (
     `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   );
 }
 
@@ -383,6 +394,7 @@ export function componentToFormState(
     const hasWallet = Boolean(leg.wallet_id);
     return {
       ...base,
+      originId: leg.id,
       amountBtc: msatToBtcInput(leg.amount_msat),
       asset: leg.asset || "BTC",
       valuationUnit: leg.valuation_unit ?? "",
