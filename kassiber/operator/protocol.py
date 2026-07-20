@@ -423,6 +423,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
     _OPEN_EXISTING = 3
     _GENERIC_READ = 0x80000000
     _GENERIC_WRITE = 0x40000000
+    _ERROR_ACCESS_DENIED = 5
     _ERROR_PIPE_CONNECTED = 535
     _ERROR_PIPE_BUSY = 231
     _ERROR_IO_PENDING = 997
@@ -931,10 +932,21 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     0,
                     ctypes.byref(attributes),
                 )
+                creation_error = (
+                    ctypes.get_last_error()
+                    if handle == _INVALID_HANDLE_VALUE
+                    else 0
+                )
             finally:
                 _kernel32.LocalFree(descriptor)
             if handle == _INVALID_HANDLE_VALUE:
-                _raise_windows("could not create operator named pipe")
+                if first and creation_error == _ERROR_ACCESS_DENIED:
+                    raise AppError(
+                        "the operator broker is already starting or running",
+                        code="operator_broker_running",
+                        retryable=False,
+                    )
+                raise OSError(creation_error, "could not create operator named pipe")
             return handle
 
         def accept(self) -> BrokerChannel:

@@ -288,6 +288,126 @@ class OperatorProtocolTest(unittest.TestCase):
             server.close()
             thread.join(2)
 
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe election test")
+    def test_windows_second_listener_loses_election_without_disturbing_first(self) -> None:
+        start = threading.Barrier(3)
+        listeners: list[operator_protocol._WindowsBrokerListener] = []
+        startup_errors: list[BaseException] = []
+        result: list[dict] = []
+
+        def create_listener() -> None:
+            start.wait()
+            try:
+                listeners.append(listen())
+            except BaseException as exc:  # pragma: no cover - Windows CI
+                startup_errors.append(exc)
+
+        starters = [threading.Thread(target=create_listener) for _ in range(2)]
+        for starter in starters:
+            starter.start()
+        start.wait()
+        for starter in starters:
+            starter.join(5)
+
+        try:
+            self.assertTrue(all(not starter.is_alive() for starter in starters))
+            self.assertEqual(len(listeners), 1)
+            self.assertEqual(len(startup_errors), 1)
+            self.assertIsInstance(startup_errors[0], AppError)
+            self.assertEqual(startup_errors[0].code, "operator_broker_running")
+            server = listeners[0]
+
+            def serve() -> None:
+                with server.accept() as channel:
+                    result.append(channel.receive_json())
+                    channel.send_json({"winner": True})
+
+            thread = threading.Thread(target=serve)
+            thread.start()
+            with connect(timeout=5.0, io_timeout=1.0) as channel:
+                channel.send_json({"still_running": True})
+                self.assertEqual(channel.receive_json(), {"winner": True})
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(result, [{"still_running": True}])
+        finally:
+            for listener in listeners:
+                listener.close()
+
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
+    def test_windows_client_rejects_mismatched_server_sid(self) -> None:
+        errors: list[BaseException] = []
+        with mock.patch.object(
+            operator_protocol,
+            "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
+            0.05,
+        ):
+            server = listen()
+
+            def serve() -> None:
+                try:
+                    with server.accept() as channel:
+                        channel.receive_json()
+                except BaseException as exc:  # pragma: no cover - Windows CI
+                    errors.append(exc)
+
+            thread = threading.Thread(target=serve)
+            thread.start()
+            try:
+                with mock.patch.object(
+                    operator_protocol,
+                    "_windows_server_sid",
+                    return_value="S-1-5-21-injected-other-user",
+                ):
+                    with self.assertRaises(AppError) as raised:
+                        connect(timeout=5.0, io_timeout=1.0)
+                self.assertEqual(raised.exception.code, "operator_peer_rejected")
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertNotIsInstance(errors[0], TimeoutError)
+            finally:
+                server.close()
+                thread.join(2)
+
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
+    def test_windows_server_rejects_mismatched_client_sid(self) -> None:
+        errors: list[BaseException] = []
+        server = listen()
+        client: BrokerChannel | None = None
+
+        def serve() -> None:
+            try:
+                server.accept()
+            except BaseException as exc:  # pragma: no cover - Windows CI
+                errors.append(exc)
+
+        with mock.patch.object(
+            operator_protocol,
+            "_windows_client_sid",
+            return_value="S-1-5-21-injected-other-user",
+        ):
+            thread = threading.Thread(target=serve)
+            thread.start()
+            try:
+                client = connect(timeout=5.0, io_timeout=0.1)
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], AppError)
+                self.assertEqual(errors[0].code, "operator_peer_rejected")
+                try:
+                    client.receive_json()
+                except (EOFError, OSError) as exc:
+                    self.assertNotIsInstance(exc, TimeoutError)
+                else:  # pragma: no cover - defensive Windows assertion
+                    self.fail("mismatched named-pipe client remained connected")
+            finally:
+                if client is not None:
+                    client.close()
+                server.close()
+                thread.join(2)
+
     @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
     def test_windows_client_closes_pipe_when_server_sid_lookup_fails(self) -> None:
         errors: list[BaseException] = []
