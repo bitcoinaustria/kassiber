@@ -14,9 +14,64 @@ from kassiber.core.runtime import _operator_expected_database_identity
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
+from kassiber.operator.cli import route_brokered_command
 
 
 class OperatorCliTest(unittest.TestCase):
+    def test_brokered_mode_does_not_bypass_queue_for_passphrase_fd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            read_fd, write_fd = os.pipe()
+            os.write(write_fd, b"database-passphrase")
+            os.close(write_fd)
+            args = mock.Mock(
+                command="status",
+                db_passphrase_fd=read_fd,
+                data_root=tmp,
+                env_file=None,
+                project=None,
+                operator_auth_fd=None,
+                non_interactive=True,
+            )
+            captured: dict[str, object] = {}
+
+            def submit(_client, data_root, prepared, *, admin_authentication):
+                captured["data_root"] = data_root
+                captured["argv"] = list(prepared.argv)
+                captured["secrets"] = {
+                    label: bytes(value) for label, value in prepared.secrets.items()
+                }
+                return {"operation_id": "generation.operation", "state": "queued"}
+
+            try:
+                with mock.patch(
+                    "kassiber.operator.cli.effective_unlock_mode",
+                    return_value="brokered",
+                ), mock.patch(
+                    "kassiber.cli.command_registry.command_path",
+                    return_value="status",
+                ), mock.patch(
+                    "kassiber.operator.cli.BrokerClient.submit",
+                    autospec=True,
+                    side_effect=submit,
+                ), mock.patch(
+                    "kassiber.operator.cli.BrokerClient.wait",
+                    return_value={"state": "completed", "exit_code": 0},
+                ):
+                    exit_code = route_brokered_command(
+                        args,
+                        ["--db-passphrase-fd", str(read_fd), "status"],
+                    )
+            finally:
+                try:
+                    os.close(read_fd)
+                except OSError:
+                    pass
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(captured["data_root"], tmp)
+        self.assertNotIn(str(read_fd), captured["argv"])
+        self.assertEqual(list(captured["secrets"].values()), [b"database-passphrase"])
+
     def test_worker_requires_project_binding_before_runtime_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
             os.environ,

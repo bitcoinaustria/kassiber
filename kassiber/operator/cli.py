@@ -170,8 +170,6 @@ def route_brokered_command(
         return None
     if args.command in _DIRECT_COMMANDS:
         return None
-    if getattr(args, "db_passphrase_fd", None) is not None:
-        return None
     from ..cli.command_registry import command_path
 
     path = command_path(args)
