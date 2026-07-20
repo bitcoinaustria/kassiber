@@ -144,6 +144,20 @@ class OperatorServerTest(unittest.TestCase):
         self.assertEqual(server.listener.close.call_count, 2)
         self.assertEqual(server.service.close.call_count, 2)
 
+    def test_close_still_attempts_service_when_listener_is_interrupted(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.listener = mock.Mock()
+        server.listener.close.side_effect = KeyboardInterrupt
+        server.service = mock.Mock()
+        server._stopped = threading.Event()
+        server._close_lock = threading.Lock()
+        server._listener_closed = False
+
+        with self.assertRaises(KeyboardInterrupt):
+            server.close()
+
+        server.service.close.assert_called_once_with()
+
     def test_admin_submission_requires_challenge_bound_fresh_auth(self) -> None:
         server = BrokerServer.__new__(BrokerServer)
         server.service = mock.Mock()

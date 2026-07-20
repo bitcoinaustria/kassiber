@@ -128,22 +128,26 @@ class BrokerServer:
     def close(self) -> None:
         with self._close_lock:
             self._stopped.set()
-            first_error: BaseException | None = None
-            if not self._listener_closed:
-                try:
-                    self.listener.close()
-                except BaseException as exc:
-                    first_error = exc
-                else:
-                    self._listener_closed = True
+            first_error: Exception | None = None
             try:
-                # OperatorService.close() deliberately retries transient owner
-                # release failures. Keep delegating after the listener has
-                # stopped so a later close can complete that cleanup.
-                self.service.close()
-            except BaseException as exc:
-                if first_error is None:
-                    first_error = exc
+                if not self._listener_closed:
+                    try:
+                        self.listener.close()
+                    except Exception as exc:
+                        first_error = exc
+                    else:
+                        self._listener_closed = True
+            finally:
+                try:
+                    # OperatorService.close() deliberately retries transient owner
+                    # release failures. Keep delegating after the listener has
+                    # stopped so a later close can complete that cleanup. The
+                    # finally also preserves this attempt for process-level
+                    # interrupts without treating those as operational errors.
+                    self.service.close()
+                except Exception as exc:
+                    if first_error is None:
+                        first_error = exc
             if first_error is not None:
                 raise first_error
 
