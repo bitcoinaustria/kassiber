@@ -579,6 +579,17 @@ class OperatorService:
                         retryable=False,
                     )
                 previous = self._leases.get(project.identity)
+                if previous is not None and (previous.revoked or previous.expired()):
+                    self._revoke_lease_locked(
+                        project.identity,
+                        reason=(
+                            "operator lease expired"
+                            if previous.expired()
+                            else "operator lease was revoked"
+                        ),
+                    )
+                    if previous.running_operations == 0:
+                        previous = None
                 if previous is not None and previous.running_operations > 0:
                     raise AppError(
                         "the project still has a running operator operation",
@@ -594,6 +605,7 @@ class OperatorService:
                     project.identity,
                     canonical_data_root,
                 )
+            self._release_pending_owners(project.identity)
             acquired_here = previous is None
             owner = (
                 previous.owner
@@ -1349,17 +1361,23 @@ class OperatorService:
             return
         worker = self._workers.pop(project_id, None)
         if worker is not None:
-            queued = worker.drain()
+            worker.drain()
             worker.stop()
-            for operation in queued:
-                if operation.state != "queued":
-                    continue
-                operation.cancellation_requested = True
-                self._finish_operation_locked(
-                    operation,
-                    "cancelled",
-                    OperationResult(1, "", "operator lease ended\n"),
-                )
+        # A worker removes an operation from its deque before it enters the
+        # project transition gate. Scan retained operations as well as draining
+        # the deque so expiry cannot strand that popped-but-not-running work and
+        # let it dispatch under a later lease.
+        for operation in list(self._operations.values()):
+            if operation.project_identity != project_id:
+                continue
+            if operation.state != "queued":
+                continue
+            operation.cancellation_requested = True
+            self._finish_operation_locked(
+                operation,
+                "cancelled",
+                OperationResult(1, "", "operator lease ended\n"),
+            )
         _wipe(lease.passphrase)
         self._pending_owner_releases.append((project_id, lease.owner))
         for alias, identity in list(self._lease_aliases.items()):
@@ -1403,7 +1421,7 @@ class OperatorService:
         if worker is not None:
             worker.drain()
         for operation in list(self._operations.values()):
-            if operation.project_id != lease.project.public_id:
+            if operation.project_identity != project_id:
                 continue
             if operation.state != "queued":
                 continue

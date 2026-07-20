@@ -615,6 +615,113 @@ class OperatorServiceTest(unittest.TestCase):
                 release.set()
                 service.close()
 
+    def test_expired_dequeued_operation_cannot_run_under_a_new_lease(self) -> None:
+        dequeued = threading.Event()
+        release_dequeued = threading.Event()
+        calls: list[str] = []
+        run_one = ProjectWorker._run_one
+
+        def pause_after_dequeue(worker, operation):
+            dequeued.set()
+            if not release_dequeued.wait(2):
+                raise AssertionError("timed out releasing dequeued operation")
+            return run_one(worker, operation)
+
+        def runner(operation, _passphrase):
+            calls.append(operation.command_path)
+            return OperationResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ), mock.patch.object(ProjectWorker, "_run_one", pause_after_dequeue):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(
+                    tmp,
+                    bytearray(b"first-passphrase"),
+                    duration_seconds=None,
+                )
+                stale = service.submit(tmp, ["status"])
+                self.assertTrue(dequeued.wait(1))
+                lease = next(iter(service._leases.values()))
+                lease.expires_at_monotonic = time.monotonic() - 1
+
+                with self.assertRaises(AppError) as raised:
+                    service.submit(tmp, ["health"])
+                self.assertEqual(raised.exception.code, "interaction_required")
+                self.assertEqual(
+                    service.operation_status(stale["operation_id"])["state"],
+                    "cancelled",
+                )
+
+                service.unlock(
+                    tmp,
+                    bytearray(b"second-passphrase"),
+                    duration_seconds=None,
+                )
+                release_dequeued.set()
+                fresh = service.submit(tmp, ["health"])
+                self.assertEqual(
+                    self._wait_terminal(service, fresh["operation_id"])["state"],
+                    "completed",
+                )
+                self.assertEqual(calls, ["health"])
+            finally:
+                release_dequeued.set()
+                service.close()
+
+    def test_direct_reunlock_cancels_dequeued_work_from_expired_lease(self) -> None:
+        dequeued = threading.Event()
+        release_dequeued = threading.Event()
+        calls: list[str] = []
+        run_one = ProjectWorker._run_one
+
+        def pause_after_dequeue(worker, operation):
+            dequeued.set()
+            if not release_dequeued.wait(2):
+                raise AssertionError("timed out releasing dequeued operation")
+            return run_one(worker, operation)
+
+        def runner(operation, _passphrase):
+            calls.append(operation.command_path)
+            return OperationResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ), mock.patch.object(ProjectWorker, "_run_one", pause_after_dequeue):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(
+                    tmp,
+                    bytearray(b"first-passphrase"),
+                    duration_seconds=None,
+                )
+                stale = service.submit(tmp, ["status"])
+                self.assertTrue(dequeued.wait(1))
+                lease = next(iter(service._leases.values()))
+                lease.expires_at_monotonic = time.monotonic() - 1
+
+                service.unlock(
+                    tmp,
+                    bytearray(b"second-passphrase"),
+                    duration_seconds=None,
+                )
+                self.assertEqual(
+                    service.operation_status(stale["operation_id"])["state"],
+                    "cancelled",
+                )
+
+                release_dequeued.set()
+                fresh = service.submit(tmp, ["health"])
+                self.assertEqual(
+                    self._wait_terminal(service, fresh["operation_id"])["state"],
+                    "completed",
+                )
+                self.assertEqual(calls, ["health"])
+            finally:
+                release_dequeued.set()
+                service.close()
+
     def test_queued_cancellation_is_immediately_terminal_and_wipes_secrets(self) -> None:
         started = threading.Event()
         release = threading.Event()
