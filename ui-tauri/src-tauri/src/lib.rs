@@ -26,7 +26,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "macos")]
-use std::{ffi::OsString, fs::File, os::fd::FromRawFd, os::unix::ffi::OsStringExt};
+use std::{
+    ffi::OsString,
+    fs::File,
+    os::fd::{AsRawFd, FromRawFd},
+    os::unix::ffi::OsStringExt,
+};
 use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, State, Url};
@@ -3098,10 +3103,10 @@ fn verify_running_operator_parent(parent_pid: i32, requirement_text: &str) -> Re
     let pid_key = unsafe { CFString::wrap_under_get_rule(kSecGuestAttributePid) };
     let pid_value = CFNumber::from(parent_pid);
     let attributes = CFDictionary::from_CFType_pairs(&[(pid_key, pid_value)]);
-    let mut running_code: SecCodeRef = ptr::null();
+    let mut running_code: SecCodeRef = ptr::null_mut();
     let guest_status = unsafe {
         SecCodeCopyGuestWithAttributes(
-            ptr::null(),
+            ptr::null_mut(),
             attributes.as_concrete_TypeRef(),
             0,
             &mut running_code,
@@ -3114,7 +3119,7 @@ fn verify_running_operator_parent(parent_pid: i32, requirement_text: &str) -> Re
     }
 
     let requirement_string = CFString::new(requirement_text);
-    let mut requirement: SecRequirementRef = ptr::null();
+    let mut requirement: SecRequirementRef = ptr::null_mut();
     let requirement_status = unsafe {
         SecRequirementCreateWithString(
             requirement_string.as_concrete_TypeRef(),
