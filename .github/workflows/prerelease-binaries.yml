@@ -468,7 +468,13 @@ jobs:
           operator_runtime="$RUNNER_TEMP/kassiber-cli-sidecar-operator-runtime"
           mkdir -p "$operator_runtime"
           chmod 700 "$operator_runtime"
-          export KASSIBER_OPERATOR_RUNTIME_DIR="$operator_runtime"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Frozen binaries intentionally ignore the source-test endpoint
+            # override. XDG_RUNTIME_DIR is the supported owner-only logout
+            # lifetime sentinel; the broker endpoint itself remains in the
+            # stable per-account namespace.
+            export XDG_RUNTIME_DIR="$operator_runtime"
+          fi
           printf '%s\n' 'packaged operator smoke passphrase' \
             | "$sidecar" --data-root "$operator_root" --machine secrets init --new-passphrase-fd 0 \
             >/dev/null
