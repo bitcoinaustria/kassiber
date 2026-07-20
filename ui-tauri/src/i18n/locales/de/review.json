@@ -10,6 +10,44 @@
     "components": {
       "title": "Verwahrungskomponenten",
       "description": "Löse lange Wallet-Migrations- und Konsolidierungsverläufe als atomare Verwahrungskomponenten. Eins-zu-viele-, Viele-zu-eins-, N:M-, On-chain-, Liquid- und Lightning-Legs können eine gemeinsame geprüfte Interpretation bilden, ohne importierte Transaktionen umzuschreiben.",
+      "form": {
+        "title": "Verwahrungskomponente erstellen",
+        "description": "Beschreibe, wie Bitcoin zwischen deinen Wallets bewegt wurde – auch über Wallet-Verläufe, die nicht in Kassiber importiert sind – als Quell-, Ziel- und Gebühren-Legs. Kassiber prüft vor dem Speichern, ob die Beträge ausgeglichen sind.",
+        "componentType": "Komponententyp",
+        "evidenceKind": "Belegart",
+        "notes": "Notizen",
+        "notesPlaceholder": "Was hält diese Komponente fest, und warum?",
+        "legsTitle": "Legs",
+        "legsHint": "Füge ein Leg pro Bewegung hinzu: wo die Bitcoin abgingen, wo sie ankamen, und etwaige Gebühren.",
+        "addLeg": "Leg hinzufügen",
+        "removeLeg": "Leg entfernen",
+        "leg": {
+          "role": "Rolle",
+          "amount": "Betrag (BTC)",
+          "location": "Ort",
+          "locationKind": {
+            "transaction": "Importierte Transaktion",
+            "wallet": "Importierte Wallet",
+            "untracked": "Nicht erfasste Wallet"
+          },
+          "transactionRef": "Transaktion",
+          "transactionRefPlaceholder": "Transaktions-ID oder externe ID",
+          "walletRef": "Wallet",
+          "walletRefPlaceholder": "Wallet-ID oder Bezeichnung",
+          "untrackedWallet": "Bezeichnung der nicht erfassten Wallet",
+          "untrackedWalletPlaceholder": "z. B. Alte Migrations-Wallet",
+          "occurredAt": "Zeitpunkt"
+        },
+        "balance": {
+          "sources": "Quellen",
+          "sinks": "Ziele + Gebühren",
+          "balanced": "Ausgeglichen",
+          "unbalanced": "Nicht ausgeglichen"
+        },
+        "saveDraft": "Als Entwurf speichern",
+        "activate": "Aktivieren",
+        "reset": "Neu beginnen"
+      },
       "bulkTitle": "Sammelauflösung für Komponenten",
       "bulkDescription": "Füge eine Komponente oder einen Stapel als JSON ein, prüfe die Erhaltung lokal und speichere alles als Entwurf oder aktiviere den vollständigen Stapel.",
       "atomicHint": "Die Sammelaktivierung ist atomar. Ist eine Komponente unvollständig oder nicht ausgeglichen, wird nichts aktiviert. Speichere Entwürfe, solange noch eine Wallet, Gebühr oder Zwischenstation fehlt.",

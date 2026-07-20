@@ -10,6 +10,44 @@
     "components": {
       "title": "Custody components",
       "description": "Resolve long wallet-migration and consolidation histories as atomic custody components. One-to-many, many-to-one, N:M, on-chain, Liquid, and Lightning legs can share one reviewed interpretation without rewriting the imported transactions.",
+      "form": {
+        "title": "Build a custody component",
+        "description": "Describe how Bitcoin moved between your wallets — including any wallet history not imported into Kassiber — as source, destination, and fee legs. Kassiber checks that the amounts balance before you save.",
+        "componentType": "Component type",
+        "evidenceKind": "Evidence kind",
+        "notes": "Notes",
+        "notesPlaceholder": "What does this component record, and why?",
+        "legsTitle": "Legs",
+        "legsHint": "Add one leg per movement: where the Bitcoin left, where it arrived, and any fee.",
+        "addLeg": "Add leg",
+        "removeLeg": "Remove leg",
+        "leg": {
+          "role": "Role",
+          "amount": "Amount (BTC)",
+          "location": "Location",
+          "locationKind": {
+            "transaction": "Imported transaction",
+            "wallet": "Imported wallet",
+            "untracked": "Untracked wallet"
+          },
+          "transactionRef": "Transaction",
+          "transactionRefPlaceholder": "Transaction id or external id",
+          "walletRef": "Wallet",
+          "walletRefPlaceholder": "Wallet id or label",
+          "untrackedWallet": "Untracked wallet label",
+          "untrackedWalletPlaceholder": "e.g. Old migration wallet",
+          "occurredAt": "Occurred at"
+        },
+        "balance": {
+          "sources": "Sources",
+          "sinks": "Destinations + fees",
+          "balanced": "Balanced",
+          "unbalanced": "Not balanced"
+        },
+        "saveDraft": "Save as draft",
+        "activate": "Activate",
+        "reset": "Start over"
+      },
       "bulkTitle": "Bulk component resolver",
       "bulkDescription": "Paste one component or a batch as JSON, preview conservation locally, then save every item as a draft or activate the complete batch.",
       "atomicHint": "Bulk activation is all-or-nothing. If any component is incomplete or does not conserve, nothing is activated. Save drafts while a wallet, fee, or intermediate hop is still missing.",

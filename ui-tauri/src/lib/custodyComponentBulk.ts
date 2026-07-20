@@ -134,7 +134,7 @@ function pow10(exponent: number): bigint {
 }
 
 /** Match the daemon's Decimal + ROUND_HALF_UP BTC-to-msat boundary exactly. */
-function decimalBtcToMsat(value: string): bigint | null {
+export function decimalBtcToMsat(value: string): bigint | null {
   if (value.length > 128) return null;
   const match = value
     .trim()
