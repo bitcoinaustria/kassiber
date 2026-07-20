@@ -24,6 +24,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import stat
 import tempfile
 import uuid
 from contextlib import contextmanager, suppress
@@ -2684,11 +2685,41 @@ def resolve_database_path(data_root):
     return legacy
 
 
+def validate_project_database_file(database):
+    """Return file metadata after rejecting ambiguous project database aliases."""
+
+    database = Path(database)
+    try:
+        info = database.stat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(info.st_mode):
+        raise AppError(
+            "the project database is not a regular file",
+            code="unsafe_project_database",
+            retryable=False,
+        )
+    if info.st_nlink != 1:
+        raise AppError(
+            "the project database has multiple filesystem links",
+            code="unsafe_project_database",
+            hint=(
+                "Remove every hard-link alias except the intended project database "
+                "path before unlocking or changing its unlock policy."
+            ),
+            details={"link_count": int(info.st_nlink)},
+            retryable=False,
+        )
+    return info
+
+
 def resolve_canonical_project_data_root(data_root):
-    """Return the alias-independent directory containing the project database."""
+    """Return the symlink-resolved directory containing a safe project database."""
 
     effective = resolve_effective_data_root(data_root)
-    return resolve_database_path(effective).expanduser().resolve(strict=False).parent
+    database = resolve_database_path(effective).expanduser().resolve(strict=False)
+    validate_project_database_file(database)
+    return database.parent
 
 
 CORE_SCHEMA_TABLES = frozenset({"settings", "workspaces", "profiles"})

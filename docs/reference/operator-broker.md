@@ -187,14 +187,18 @@ stable canonical file identity, one by each admitted canonical path, and one
 is stored locally beside the project database. The global owner namespace is
 stored below the OS account's persistent Kassiber runtime directory, is
 derived from the account database rather than caller environment variables,
-and deliberately ignores broker endpoint/runtime overrides. The
-identity lock follows a moved/hardlinked file; path locks prevent a replacement
-inode from becoming a concurrent project while the old lease remains
-addressable for explicit lock/revocation. Exactly one long-lived owner may
-hold a project. Starting desktop-first or broker-first either rendezvous with
-the existing supported owner or returns `project_in_use`; Kassiber never starts
-a silent competing daemon. Short-lived broker child commands run only through
-the owning project's serialized worker.
+and deliberately ignores broker endpoint/runtime overrides. The identity lock
+follows a moved file, while path locks prevent a replacement inode from
+becoming a concurrent project while the old lease remains addressable for
+explicit lock/revocation. Directory and database symlinks are resolved before
+policy or ownership decisions. A database with more than one filesystem hard
+link is rejected before unlock-mode, remembered-credential, broker, or desktop
+ownership routing; otherwise two path-scoped policy stores could disagree
+about the same encrypted file. Exactly one long-lived owner may hold a project.
+Starting desktop-first or broker-first either rendezvous with the existing
+supported owner or returns `project_in_use`; Kassiber never starts a silent
+competing daemon. Short-lived broker child commands run only through the
+owning project's serialized worker.
 
 Workspace/profile/book selection is made explicit at admission. A brokered
 command whose CLI contract declares `--workspace` or `--profile` must supply

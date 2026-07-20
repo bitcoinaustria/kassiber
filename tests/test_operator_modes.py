@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from kassiber.errors import AppError
 from kassiber.operator.modes import (
     configured_unlock_mode,
     effective_unlock_mode,
@@ -61,6 +62,29 @@ class OperatorModeTest(unittest.TestCase):
 
             set_unlock_mode(alias, "manual")
             self.assertEqual(configured_unlock_mode(project), "manual")
+
+    def test_hardlink_aliases_cannot_select_divergent_unlock_policies(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            first = Path(parent) / "first"
+            second = Path(parent) / "second"
+            first.mkdir()
+            second.mkdir()
+            database = first / "kassiber.sqlite3"
+            database.write_bytes(b"database")
+            os.link(database, second / "kassiber.sqlite3")
+
+            for data_root, mode in ((first, "brokered"), (second, "unattended")):
+                with self.subTest(data_root=data_root, mode=mode):
+                    with self.assertRaises(AppError) as raised:
+                        set_unlock_mode(data_root, mode)
+                    self.assertEqual(raised.exception.code, "unsafe_project_database")
+                    self.assertEqual(raised.exception.details, {"link_count": 2})
+
+            for data_root in (first, second):
+                with self.subTest(data_root=data_root, operation="remembered"):
+                    with self.assertRaises(AppError) as raised:
+                        set_cli_remembered_unlock_enabled(data_root, True)
+                    self.assertEqual(raised.exception.code, "unsafe_project_database")
 
     @mock.patch("kassiber.core.runtime.load_remembered_passphrase")
     def test_manual_runtime_does_not_read_credential_store(self, load) -> None:

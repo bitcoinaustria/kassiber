@@ -92,6 +92,23 @@ class OperatorProjectTest(unittest.TestCase):
                 canonical_project(alias).identity,
             )
 
+    def test_hardlink_aliases_are_rejected_before_project_ownership(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first"
+            second = Path(tmp) / "second"
+            first.mkdir()
+            second.mkdir()
+            database = first / "kassiber.sqlite3"
+            database.write_bytes(b"database")
+            os.link(database, second / "kassiber.sqlite3")
+
+            for data_root in (first, second):
+                with self.subTest(data_root=data_root):
+                    with self.assertRaises(AppError) as raised:
+                        canonical_project(data_root)
+                    self.assertEqual(raised.exception.code, "unsafe_project_database")
+                    self.assertEqual(raised.exception.details, {"link_count": 2})
+
     def test_competing_process_gets_public_safe_owner_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "kassiber.sqlite3").write_bytes(b"database")

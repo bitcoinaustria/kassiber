@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
-from ..db import resolve_database_path
+from ..db import resolve_database_path, validate_project_database_file
 from ..errors import AppError
 
 
@@ -163,14 +163,8 @@ def canonical_project(data_root: str | os.PathLike[str]) -> CanonicalProject:
 
     database = resolve_database_path(data_root).expanduser().resolve(strict=False)
     parent = database.parent.resolve(strict=False)
-    if database.exists():
-        info = database.stat()
-        if not stat.S_ISREG(info.st_mode):
-            raise AppError(
-                "the project database is not a regular file",
-                code="unsafe_project_database",
-                retryable=False,
-            )
+    info = validate_project_database_file(database)
+    if info is not None:
         _require_current_owner(info)
         _require_windows_path_owner(database)
         identity_material = f"file:{info.st_dev}:{info.st_ino}"
@@ -278,7 +272,8 @@ def _owner_lock_root() -> Path:
     # Ownership exclusion is a security invariant, so it must not follow the
     # configurable broker endpoint/test rendezvous. The project-local lock is
     # the primary cross-environment guard; this stable per-user namespace also
-    # preserves inode identity across path moves and hard-link aliases.
+    # preserves inode identity across path moves. Multi-link files are rejected
+    # before ownership because their path-scoped unlock policies could diverge.
     if os.name == "nt":
         root = _windows_local_appdata() / "Kassiber" / "run" / "owners"
     else:
