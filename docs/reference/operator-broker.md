@@ -142,8 +142,9 @@ Normal protocol records are length-prefixed JSON. Passphrases use a separate
 length-prefixed secret frame bound to a one-use random challenge; secret bytes
 are never members of a JSON object. Frames and command arguments are excluded
 from logs. The broker admits at most 64 connected clients at once and gives an
-accepted Unix client 30 seconds to finish an individual inbound protocol
-frame. Excess clients receive retryable `operator_client_limit` backpressure;
+accepted Unix or Windows client 30 seconds to finish an individual inbound
+protocol frame. Excess clients receive retryable `operator_client_limit`
+backpressure;
 an idle or partial client therefore cannot consume threads without bound.
 
 ## Canonical project identity and ownership
