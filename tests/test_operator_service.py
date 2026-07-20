@@ -1385,6 +1385,65 @@ class OperatorServiceTest(unittest.TestCase):
                 release.set()
                 service.close()
 
+    def test_admin_authentication_is_rechecked_after_owner_inheritance(self) -> None:
+        inheritance_started = threading.Event()
+        release_inheritance = threading.Event()
+        inherited_owner = mock.Mock()
+        calls: list[str] = []
+
+        def runner(operation, _passphrase):
+            calls.append(operation.command_path)
+            return OperationResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(
+                    tmp,
+                    bytearray(b"passphrase"),
+                    duration_seconds=None,
+                )
+                authorization = service.verify_admin(
+                    tmp,
+                    bytearray(b"passphrase"),
+                )
+                lease = next(iter(service._leases.values()))
+
+                def duplicate_owner():
+                    inheritance_started.set()
+                    if not release_inheritance.wait(2):
+                        raise AssertionError("timed out waiting to inherit owner")
+                    return inherited_owner
+
+                with mock.patch.object(
+                    lease.owner,
+                    "duplicate_for_child",
+                    side_effect=duplicate_owner,
+                ):
+                    queued = service.submit(
+                        tmp,
+                        ["secrets", "verify"],
+                        admin_authorization=authorization,
+                    )
+                    self.assertTrue(inheritance_started.wait(1))
+                    service._operations[
+                        queued["operation_id"]
+                    ].admin_authorized_until_monotonic = time.monotonic() - 1
+                    release_inheritance.set()
+                    completed = self._wait_terminal(
+                        service,
+                        queued["operation_id"],
+                    )
+
+                self.assertEqual(completed["state"], "cancelled")
+                self.assertEqual(calls, [])
+                inherited_owner.close.assert_called_once_with()
+            finally:
+                release_inheritance.set()
+                service.close()
+
     def test_terminal_transition_prunes_retained_results(self) -> None:
         service = OperatorService(
             "generation",

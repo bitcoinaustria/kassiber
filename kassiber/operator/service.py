@@ -371,11 +371,20 @@ class ProjectWorker:
                 return
             with self._service._lock:
                 current_lease = self._service._leases.get(self.project_identity)
+                admin_authorization_expired = (
+                    operation.capability is Capability.ADMIN
+                    and (
+                        operation.admin_authorized_until_monotonic is None
+                        or time.monotonic()
+                        > operation.admin_authorized_until_monotonic
+                    )
+                )
                 dispatch_rejected = (
                     current_lease is not lease
                     or lease.revoked
                     or lease.expired()
                     or operation.cancellation_requested
+                    or admin_authorization_expired
                 )
                 if dispatch_rejected:
                     self._service._finish_operation_locked(
@@ -384,7 +393,11 @@ class ProjectWorker:
                         OperationResult(
                             1,
                             "",
-                            "operator lease ended before the operation started\n",
+                            (
+                                "fresh admin authentication expired before dispatch\n"
+                                if admin_authorization_expired
+                                else "operator lease ended before the operation started\n"
+                            ),
                         ),
                     )
                 else:
