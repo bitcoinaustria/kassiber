@@ -87,8 +87,9 @@ class OperatorCliTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(captured["data_root"], tmp)
+        self.assertNotIn("--db-passphrase-fd", captured["argv"])
         self.assertNotIn(str(read_fd), captured["argv"])
-        self.assertEqual(list(captured["secrets"].values()), [b"database-passphrase"])
+        self.assertEqual(captured["secrets"], {})
 
     def test_worker_requires_project_binding_before_runtime_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(

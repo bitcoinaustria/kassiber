@@ -20,6 +20,7 @@ from .client import (
 )
 from .modes import effective_unlock_mode, unlock_mode_status
 from .native_auth import touch_id_status
+from .runner import strip_database_passphrase_arguments
 from .service import _wipe
 
 
@@ -199,6 +200,9 @@ def route_brokered_command(
         return None
     capability = cli_capability(path)
     pinned_argv = _pin_project_arguments(list(argv), data_root)
+    pinned_argv, _ignored_database_secrets = strip_database_passphrase_arguments(
+        pinned_argv
+    )
     operator_auth_fd = getattr(args, "operator_auth_fd", None)
     admin_authentication: bytearray | None = None
     prepared: PreparedArguments | None = None

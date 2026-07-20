@@ -1187,6 +1187,74 @@ class OperatorServiceTest(unittest.TestCase):
             self.assertIn("missing_backup", outcome[0].stdout)
 
     @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
+    @unittest.skipIf(os.name == "nt", "small POSIX pipe regression")
+    def test_worker_discards_caller_database_fd_before_lease_handoff(self) -> None:
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            passphrase = "x" * 5000
+            create_empty_encrypted_database(resolve_database_path(tmp), passphrase)
+            connection = open_db(tmp, passphrase=passphrase)
+            expected_database_identity = database_instance_id(connection)
+            connection.close()
+            project = canonical_project(tmp)
+            marker = "broker-secret-caller-database"
+            operation = Operation(
+                id="generation.database-pipe-order",
+                generation="generation",
+                project_id=project.public_id,
+                project_identity=project.identity,
+                database_identity=expected_database_identity,
+                data_root=str(project.database.parent),
+                argv=[
+                    "--data-root",
+                    str(project.database.parent),
+                    "--machine",
+                    "--db-passphrase-fd",
+                    marker,
+                    "status",
+                ],
+                command_path="status",
+                capability=Capability.READ,
+                secret_arguments={marker: bytearray(b"caller-secret")},
+            )
+
+            def small_secret_pipe() -> tuple[int, int, int]:
+                read_fd, write_fd = os.pipe()
+                fcntl.fcntl(write_fd, fcntl.F_SETPIPE_SZ, 4096)
+                return read_fd, write_fd, read_fd
+
+            outcome: list[OperationResult | BaseException] = []
+
+            def execute() -> None:
+                try:
+                    outcome.append(
+                        run_cli_operation(operation, bytearray(passphrase.encode()))
+                    )
+                except BaseException as exc:  # pragma: no cover - assertion below
+                    outcome.append(exc)
+
+            with mock.patch.object(
+                operator_runner,
+                "_secret_pipe",
+                side_effect=small_secret_pipe,
+            ):
+                thread = threading.Thread(target=execute, daemon=True)
+                thread.start()
+                thread.join(5)
+                if thread.is_alive():
+                    if operation.process is not None:
+                        operation.process.kill()
+                    thread.join(2)
+                    self.fail("operator child deadlocked on duplicate database pipes")
+
+            self.assertEqual(len(outcome), 1)
+            self.assertIsInstance(outcome[0], OperationResult)
+            assert isinstance(outcome[0], OperationResult)
+            self.assertEqual(outcome[0].exit_code, 0)
+            self.assertEqual(json.loads(outcome[0].stdout)["kind"], "status")
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
     @unittest.skipIf(os.name == "nt", "POSIX fd regression")
     def test_no_bootstrap_child_binds_database_before_dispatch(self) -> None:
         passphrase = "correct horse battery staple"

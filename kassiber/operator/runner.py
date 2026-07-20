@@ -14,7 +14,9 @@ from .service import Operation, OperationResult
 def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationResult:
     if canonical_project(operation.data_root).identity != operation.project_identity:
         raise RuntimeError("operator project changed before child launch")
-    argv = list(operation.argv)
+    argv, removed_database_secrets = strip_database_passphrase_arguments(
+        operation.argv
+    )
     read_fds: list[int] = []
     secret_writers: list[tuple[int, bytearray]] = []
     child_handles: list[int] = []
@@ -28,6 +30,8 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
             child_handles.extend(operation.owner_handle_tokens)
         argv = ["--db-passphrase-fd", str(db_token), *argv]
         for marker, secret in operation.secret_arguments.items():
+            if marker in removed_database_secrets and marker not in argv:
+                continue
             secret_fd, secret_writer, secret_token = _secret_pipe()
             read_fds.append(secret_fd)
             secret_writers.append((secret_writer, secret))
@@ -118,6 +122,33 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
                 os.close(writer)
             except OSError:
                 pass
+
+
+def strip_database_passphrase_arguments(
+    argv: list[str],
+) -> tuple[list[str], set[str]]:
+    """Remove caller DB unlock FDs so the broker lease is authoritative."""
+
+    prepared: list[str] = []
+    removed_values: set[str] = set()
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token == "--db-passphrase-fd":
+            if index + 1 < len(argv):
+                removed_values.add(argv[index + 1])
+                index += 2
+            else:
+                index += 1
+            continue
+        prefix = "--db-passphrase-fd="
+        if token.startswith(prefix):
+            removed_values.add(token[len(prefix) :])
+            index += 1
+            continue
+        prepared.append(token)
+        index += 1
+    return prepared, removed_values
 
 
 def _secret_pipe() -> tuple[int, int, int]:
