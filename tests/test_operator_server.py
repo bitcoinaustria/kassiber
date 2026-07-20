@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import tempfile
 import threading
 import unittest
@@ -15,11 +16,78 @@ from kassiber.operator.server import (
     _logind_user_state_is_alive,
     _login_session_runtime_is_valid,
     _login_session_runtime_root,
+    main,
 )
 from kassiber.errors import AppError
 
 
 class OperatorServerTest(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "POSIX signal handler contract")
+    def test_main_signal_handler_only_requests_stop_before_final_close(self) -> None:
+        server = mock.Mock()
+        handlers: dict[int, object] = {}
+
+        def register(signum: int, handler: object) -> None:
+            handlers[signum] = handler
+
+        def serve() -> None:
+            handler = handlers[signal.SIGTERM]
+            handler(signal.SIGTERM, None)  # type: ignore[operator]
+
+        server.serve_forever.side_effect = serve
+        with mock.patch(
+            "kassiber.operator.server.BrokerServer",
+            return_value=server,
+        ), mock.patch(
+            "kassiber.operator.server.signal.signal",
+            side_effect=register,
+        ):
+            self.assertEqual(main(), 0)
+
+        server.request_stop.assert_called_once_with()
+        server.close.assert_called_once_with()
+
+    def test_signal_stop_leaves_service_cleanup_for_final_close(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.listener = mock.Mock()
+        server.service = mock.Mock()
+        server._stopped = threading.Event()
+        server._close_lock = threading.Lock()
+        server._listener_closed = False
+
+        server.request_stop()
+
+        self.assertTrue(server._stopped.is_set())
+        server.listener.close.assert_called_once_with()
+        server.service.close.assert_not_called()
+
+        server.close()
+
+        server.listener.close.assert_called_once_with()
+        server.service.close.assert_called_once_with()
+
+    def test_reentrant_signal_stop_never_waits_on_active_close_lock(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.listener = mock.Mock()
+        server.service = mock.Mock()
+        server._stopped = threading.Event()
+        server._close_lock = threading.Lock()
+        server._listener_closed = False
+
+        server._close_lock.acquire()
+        try:
+            server.request_stop()
+        finally:
+            server._close_lock.release()
+
+        self.assertTrue(server._stopped.is_set())
+        server.listener.close.assert_not_called()
+        server.service.close.assert_not_called()
+
+        server.close()
+        server.listener.close.assert_called_once_with()
+        server.service.close.assert_called_once_with()
+
     def test_close_retries_service_cleanup_after_listener_is_closed(self) -> None:
         server = BrokerServer.__new__(BrokerServer)
         server.listener = mock.Mock()

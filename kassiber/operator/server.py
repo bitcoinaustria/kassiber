@@ -102,6 +102,28 @@ class BrokerServer:
         finally:
             self._client_slots.release()
 
+    def request_stop(self) -> None:
+        """Stop admission without re-entering full cleanup from a signal."""
+
+        self._stopped.set()
+        # Python signal handlers run on the main thread and may interrupt an
+        # in-progress close on that same thread. A blocking acquire would then
+        # deadlock; the active close already owns listener shutdown.
+        if not self._close_lock.acquire(blocking=False):
+            return
+        try:
+            if self._listener_closed:
+                return
+            try:
+                self.listener.close()
+            except Exception:
+                # Full close in main's finally block retries and reports the
+                # listener failure while still attempting service cleanup.
+                return
+            self._listener_closed = True
+        finally:
+            self._close_lock.release()
+
     def close(self) -> None:
         with self._close_lock:
             self._stopped.set()
@@ -555,7 +577,7 @@ def main() -> int:
     server = BrokerServer()
 
     def stop(_signum: int, _frame: object) -> None:
-        server.close()
+        server.request_stop()
 
     if os.name != "nt":
         signal.signal(signal.SIGTERM, stop)
