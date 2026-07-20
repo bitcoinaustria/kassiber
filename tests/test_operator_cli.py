@@ -18,6 +18,24 @@ from kassiber.operator.cli import route_brokered_command
 
 
 class OperatorCliTest(unittest.TestCase):
+    def test_brokered_chat_fails_before_direct_database_open(self) -> None:
+        args = mock.Mock(
+            command="chat",
+            data_root="/project",
+            env_file=None,
+            project=None,
+        )
+        with mock.patch(
+            "kassiber.operator.cli._selected_data_root",
+            return_value="/canonical-project",
+        ), mock.patch(
+            "kassiber.operator.cli.effective_unlock_mode",
+            return_value="brokered",
+        ), self.assertRaises(AppError) as raised:
+            route_brokered_command(args, ["chat"])
+
+        self.assertEqual(raised.exception.code, "operator_chat_not_supported")
+
     def test_brokered_mode_does_not_bypass_queue_for_passphrase_fd(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             read_fd, write_fd = os.pipe()

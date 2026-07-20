@@ -95,6 +95,13 @@ Interactive unlock may prompt on the controlling terminal. `--machine`,
 commands never open a surprise terminal or GUI prompt; they return the existing
 `interaction_required` error with an operator command in the hint.
 
+The CLI chat transport is a long-lived streaming daemon session and is not
+routed through the broker's finite-operation queue. `kassiber chat` therefore
+fails before opening the database while the project is in `brokered` mode. Use
+the brokered accounting commands directly, or explicitly lock the broker and
+select `manual` mode before starting CLI chat. This limitation does not weaken
+the existing in-app AI consent checks.
+
 On macOS, an enrolled operator-specific Keychain item may authorize an unlock
 after Touch ID through the signed desktop app's native LocalAuthentication
 path. The broker starts the helper with a broker-created inherited output pipe.

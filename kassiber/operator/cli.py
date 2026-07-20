@@ -168,6 +168,19 @@ def route_brokered_command(
 
     if os.environ.get("KASSIBER_OPERATOR_DIRECT") == "1":
         return None
+    if args.command == "chat":
+        data_root = _selected_data_root(args)
+        if effective_unlock_mode(data_root) == "brokered":
+            raise AppError(
+                "CLI chat is not available while this project is in brokered mode",
+                code="operator_chat_not_supported",
+                hint=(
+                    "Use brokered CLI commands directly, or lock the broker and "
+                    "select manual mode before starting `kassiber chat`."
+                ),
+                retryable=False,
+            )
+        return None
     if args.command in _DIRECT_COMMANDS:
         return None
     from ..cli.command_registry import command_path
