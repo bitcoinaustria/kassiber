@@ -10,18 +10,23 @@ right passphrase). The secrets commands work on the file directly.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
+import secrets as py_secrets
 import sys
 
 from ..backends import resolve_effective_env_file
 from ..db import (
+    database_instance_id,
     ensure_data_root,
+    open_db,
     resolve_database_path,
     resolve_effective_data_root,
 )
 from ..errors import AppError
-from ..operator.modes import set_unlock_mode, unlock_mode_status
+from ..operator.modes import unlock_mode_status
 from ..operator.native_auth import invalidate_operator_native_auth
+from ..operator.project import canonical_project
 from .credentials import (
     migrate_dotenv_credentials,
     scan_dotenv_for_secrets,
@@ -46,14 +51,16 @@ from .sqlcipher import (
 )
 from .unlock_store import (
     cli_legacy_unlock_quarantined,
+    cli_remembered_v2_enrolled,
     cli_remembered_unlock_enabled,
+    delete_legacy_cli_remembered_passphrase,
     delete_legacy_shared_passphrase,
     delete_remembered_passphrase,
+    disable_remembered_unlock,
+    enable_remembered_unlock_authenticated,
     mark_desktop_biometric_passphrase_stale,
     refresh_remembered_passphrase_after_rotation,
     remembered_unlock_status,
-    set_cli_remembered_unlock_enabled,
-    set_cli_unlock_state,
     store_remembered_passphrase,
 )
 
@@ -64,6 +71,19 @@ _MIN_PASSPHRASE_CHARS = 8
 def _resolve_db_path(args: argparse.Namespace) -> Path:
     data_root = ensure_data_root(resolve_effective_data_root(args.data_root))
     return resolve_database_path(data_root)
+
+
+def _operator_expected_database_identity() -> str | None:
+    if os.environ.get("KASSIBER_OPERATOR_CHILD") != "1":
+        return None
+    expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY")
+    if not expected:
+        raise AppError(
+            "operator child database binding is missing",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    return expected
 
 
 def _resolve_passphrase(
@@ -286,12 +306,30 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
         label="Database passphrase: ",
         confirm=False,
     )
-    conn = open_encrypted(db_path, passphrase)
-    conn.close()
-
-    cli_enabled_before = cli_remembered_unlock_enabled(args.data_root)
-    legacy_quarantined_before = cli_legacy_unlock_quarantined(args.data_root)
-    if not store_remembered_passphrase(args.data_root, passphrase):
+    admitted_project = canonical_project(args.data_root)
+    conn = open_db(
+        args.data_root,
+        passphrase=passphrase,
+        require_existing_schema=False,
+        expected_database_identity=_operator_expected_database_identity(),
+    )
+    try:
+        authenticated_database_identity = database_instance_id(conn)
+    finally:
+        conn.close()
+    if canonical_project(args.data_root).identity != admitted_project.identity:
+        raise AppError(
+            "the project changed during remembered-unlock enrollment",
+            code="operator_project_replaced",
+            retryable=False,
+        )
+    enrollment_id = py_secrets.token_hex(16)
+    if not store_remembered_passphrase(
+        args.data_root,
+        passphrase,
+        database_identity=authenticated_database_identity,
+        enrollment_id=enrollment_id,
+    ):
         raise AppError(
             "the OS credential store is unavailable or rejected the passphrase",
             code="remembered_unlock_unavailable",
@@ -302,12 +340,52 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
             details=remembered_unlock_status(args.data_root),
             retryable=True,
         )
-    try:
-        set_cli_remembered_unlock_enabled(args.data_root, True)
-    except OSError as exc:
-        credential_deleted = delete_remembered_passphrase(args.data_root)
+    prior_v2_deleted = (
+        delete_remembered_passphrase(args.data_root)
+        if cli_remembered_v2_enrolled(args.data_root)
+        else True
+    )
+    legacy_cli_deleted = delete_legacy_cli_remembered_passphrase(args.data_root)
+    legacy_shared_deleted = delete_legacy_shared_passphrase(args.data_root)
+    if not prior_v2_deleted or not legacy_cli_deleted or not legacy_shared_deleted:
+        credential_deleted = delete_remembered_passphrase(
+            args.data_root,
+            database_identity=authenticated_database_identity,
+            enrollment_id=enrollment_id,
+        )
         raise AppError(
-            "the passphrase was stored, but the CLI opt-in marker could not be written",
+            "a legacy unlock credential could not be removed",
+            code="remembered_unlock_legacy_cleanup_failed",
+            hint=(
+                "Remove the legacy Kassiber CLI/shared database passphrase in "
+                "the OS credential manager and retry enrollment."
+            ),
+            details={
+                "cli_credential_deleted": credential_deleted,
+                "prior_v2_credential_deleted": prior_v2_deleted,
+                "legacy_cli_credential_deleted": legacy_cli_deleted,
+                "legacy_shared_credential_deleted": legacy_shared_deleted,
+            },
+            retryable=True,
+        )
+
+    try:
+        enable_remembered_unlock_authenticated(
+            args.data_root,
+            database_identity=authenticated_database_identity,
+            enrollment_id=enrollment_id,
+            expected_project_identity=admitted_project.identity,
+        )
+    except Exception as exc:
+        credential_deleted = delete_remembered_passphrase(
+            args.data_root,
+            database_identity=authenticated_database_identity,
+            enrollment_id=enrollment_id,
+        )
+        if isinstance(exc, AppError):
+            raise
+        raise AppError(
+            "the passphrase was stored, but the CLI policy could not be enabled",
             code="remembered_unlock_settings_failed",
             hint=(
                 "Fix permissions on the managed config directory and retry enrollment."
@@ -321,54 +399,6 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
             retryable=True,
         ) from None
 
-    if not delete_legacy_shared_passphrase(args.data_root):
-        marker_restored = cli_enabled_before
-        marker_restore_error = None
-        credential_deleted = False
-        if not cli_enabled_before:
-            try:
-                set_cli_unlock_state(
-                    args.data_root,
-                    enabled=False,
-                    legacy_quarantined=legacy_quarantined_before,
-                )
-                marker_restored = True
-            except OSError as exc:
-                marker_restore_error = str(exc)
-            if marker_restored:
-                credential_deleted = delete_remembered_passphrase(args.data_root)
-        raise AppError(
-            "the legacy shared unlock credential could not be removed",
-            code="remembered_unlock_legacy_cleanup_failed",
-            hint=(
-                "Remove `Kassiber Database Passphrase` in the OS credential "
-                "manager and retry enrollment."
-            ),
-            details={
-                "cli_enabled_before": cli_enabled_before,
-                "marker_restored": marker_restored,
-                "marker_restore_error": marker_restore_error,
-                "cli_credential_deleted": credential_deleted,
-            },
-            retryable=True,
-        )
-
-    try:
-        set_cli_unlock_state(
-            args.data_root,
-            enabled=True,
-            legacy_quarantined=False,
-        )
-        set_unlock_mode(args.data_root, "unattended")
-    except OSError as exc:
-        raise AppError(
-            "CLI enrollment succeeded, but legacy quarantine state could not be cleared",
-            code="remembered_unlock_settings_failed",
-            hint="Fix permissions on the managed config directory and retry enrollment.",
-            details={"settings_error": str(exc)},
-            retryable=True,
-        ) from None
-
     return {
         "database": str(db_path),
         "remembered_unlock": remembered_unlock_status(args.data_root),
@@ -376,23 +406,36 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
 
 
 def cmd_secrets_forget_unlock(args: argparse.Namespace) -> dict:
+    require_sqlcipher()
+    passphrase = _resolve_passphrase(
+        args,
+        "db_passphrase_fd",
+        label="Fresh database passphrase: ",
+        confirm=False,
+    )
+    authenticated = open_db(
+        args.data_root,
+        passphrase=passphrase,
+        require_existing_schema=True,
+        expected_database_identity=_operator_expected_database_identity(),
+    )
+    authenticated.close()
     cli_owned_legacy = cli_remembered_unlock_enabled(
         args.data_root
     ) or cli_legacy_unlock_quarantined(args.data_root)
     deleted = delete_remembered_passphrase(args.data_root)
-    legacy_deleted = (
-        delete_legacy_shared_passphrase(args.data_root)
+    legacy_cli_deleted = (
+        delete_legacy_cli_remembered_passphrase(args.data_root)
         if cli_owned_legacy
         else True
     )
-    if not legacy_deleted:
+    legacy_shared_deleted = (
+        delete_legacy_shared_passphrase(args.data_root) if cli_owned_legacy else True
+    )
+    if not legacy_cli_deleted or not legacy_shared_deleted:
         quarantine_error = None
         try:
-            set_cli_unlock_state(
-                args.data_root,
-                enabled=False,
-                legacy_quarantined=True,
-            )
+            disable_remembered_unlock(args.data_root, legacy_quarantined=True)
         except OSError as exc:
             quarantine_error = str(exc)
         raise AppError(
@@ -406,7 +449,8 @@ def cmd_secrets_forget_unlock(args: argparse.Namespace) -> dict:
             details={
                 "cli_marker_cleared": quarantine_error is None,
                 "credential_deleted": deleted,
-                "legacy_credential_deleted": False,
+                "legacy_cli_credential_deleted": legacy_cli_deleted,
+                "legacy_shared_credential_deleted": legacy_shared_deleted,
                 "legacy_quarantined": quarantine_error is None,
                 "quarantine_error": quarantine_error,
             },
@@ -415,12 +459,7 @@ def cmd_secrets_forget_unlock(args: argparse.Namespace) -> dict:
 
     marker_error = None
     try:
-        set_cli_unlock_state(
-            args.data_root,
-            enabled=False,
-            legacy_quarantined=False,
-        )
-        set_unlock_mode(args.data_root, "manual")
+        disable_remembered_unlock(args.data_root, legacy_quarantined=False)
     except OSError as exc:
         marker_error = str(exc)
 
@@ -437,7 +476,8 @@ def cmd_secrets_forget_unlock(args: argparse.Namespace) -> dict:
                 "settings_error": marker_error,
                 "cli_marker_cleared": False,
                 "credential_deleted": deleted,
-                "legacy_credential_deleted": legacy_deleted,
+                "legacy_cli_credential_deleted": legacy_cli_deleted,
+                "legacy_shared_credential_deleted": legacy_shared_deleted,
             },
             retryable=True,
         ) from None
@@ -445,7 +485,8 @@ def cmd_secrets_forget_unlock(args: argparse.Namespace) -> dict:
     result = {
         "cli_marker_cleared": True,
         "credential_deleted": deleted,
-        "legacy_credential_deleted": legacy_deleted,
+        "legacy_cli_credential_deleted": legacy_cli_deleted,
+        "legacy_shared_credential_deleted": legacy_shared_deleted,
         "remembered_unlock": remembered_unlock_status(args.data_root),
     }
     if not deleted:

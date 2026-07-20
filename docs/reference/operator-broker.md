@@ -49,11 +49,23 @@ The selected mode is project-local, non-secret configuration and is shown by
   native OS credential store. It requires no continuing user presence and is
   never described as biometric or brokered authorization.
 
-Existing projects with the old `cli_remembered_unlock` marker and no mode
-setting are treated as legacy unattended configuration so an upgrade does not
-silently strand automation. The next explicit mode change writes the new
-setting. Selecting brokered mode disables remembered-unlock fallback for that
-project.
+Reusable modes and CLI remembered unlock are accepted only when adjacent
+managed settings are bound both to the current canonical filesystem identity
+and to the durable `database_instance_id` obtained through an authenticated
+database open. An old marker without that binding is reported categorically
+as `binding_state=missing` and is effectively manual until password
+re-enrollment. A moved/replaced database beside another project's settings is
+reported as `binding_state=mismatch`; no credential-store lookup occurs.
+Status remains usable and exposes no raw identities. Selecting brokered mode
+never falls through to remembered unlock.
+
+New CLI remembered credentials use a database-bound, random-enrollment account
+namespace. Enrollment atomically writes the binding, explicit unattended mode,
+marker, and enrollment generation only after password verification and v2
+credential storage. Path-keyed CLI and shared desktop/CLI legacy items are
+cleanup-only: Kassiber never tries or migrates them during status or automatic
+unlock. A copy/restore with the same database ID but a different file identity
+must be re-enrolled, which gives it an independent credential generation.
 
 ## User commands
 
@@ -179,7 +191,10 @@ configuration work.
 Unlock, fresh-auth continuations, retained lease state, scope refresh, and the
 desktop owner's database open use that same canonical root. The desktop
 project-switch path resolves and owns its target once, then verifies and opens
-through that resolved root rather than returning to a catalog alias.
+through that resolved root rather than returning to a catalog alias. It closes
+a retired connection before releasing that project's ownership lock. A close
+failure retains both resources for retry, so a second runtime cannot acquire
+the old project while its SQLite connection may still be live.
 
 The broker and desktop daemon take the same non-blocking project ownership
 locks before opening or retaining an unlocked runtime. One lock is keyed by

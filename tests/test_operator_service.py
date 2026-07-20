@@ -170,7 +170,7 @@ class OperatorServiceTest(unittest.TestCase):
         owner = mock.Mock()
         continuation_ran = False
 
-        def continuation() -> str:
+        def continuation(_database_identity: str) -> str:
             nonlocal continuation_ran
             continuation_ran = True
             owner.release.assert_not_called()
@@ -271,7 +271,13 @@ class OperatorServiceTest(unittest.TestCase):
                     canonical_root = str(Path(root).resolve())
                     self.assertEqual(result["mode"], "manual")
                     self.assertEqual(open_database.call_args.args[0], canonical_root)
-                    set_mode.assert_called_once_with(canonical_root, "manual")
+                    project_identity = canonical_project(canonical_root).identity
+                    set_mode.assert_called_once_with(
+                        canonical_root,
+                        "manual",
+                        database_identity=project_identity[:32],
+                        expected_project_identity=project_identity,
+                    )
                     owner.release.assert_called_once_with()
                 finally:
                     service.close()
@@ -2205,7 +2211,7 @@ class OperatorServiceTest(unittest.TestCase):
             "kassiber.operator.service.open_db", return_value=connection
         ), mock.patch(
             "kassiber.operator.service.database_instance_id",
-            return_value="database-identity",
+            return_value="d" * 32,
         ), mock.patch(
             "kassiber.operator.service.current_context_snapshot",
             return_value={"workspace_id": "workspace-a", "profile_id": "book-a"},
@@ -2481,7 +2487,7 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(first, bytearray(b"first"), duration_seconds=None)
                 service.unlock(second, bytearray(b"second"), duration_seconds=None)
 
-                def continuation() -> None:
+                def continuation(_database_identity: str) -> None:
                     continuation_entered.set()
                     if not release_continuation.wait(2):
                         raise AssertionError("timed out releasing continuation")
@@ -2532,7 +2538,7 @@ class OperatorServiceTest(unittest.TestCase):
             )
             service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
 
-            def continuation() -> None:
+            def continuation(_database_identity: str) -> None:
                 continuation_entered.set()
                 if not release_continuation.wait(2):
                     raise AssertionError("timed out releasing continuation")

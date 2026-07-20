@@ -856,7 +856,11 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
         ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
         with mock.patch.object(
             daemon_module,
-            "set_cli_unlock_state",
+            "cli_remembered_unlock_enabled",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "disable_remembered_unlock",
             side_effect=OSError("settings are read-only"),
         ), mock.patch.object(
             daemon_module,
@@ -864,9 +868,13 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
             return_value=True,
         ) as delete_cli, mock.patch.object(
             daemon_module,
+            "delete_legacy_cli_remembered_passphrase",
+            return_value=True,
+        ) as delete_legacy_cli, mock.patch.object(
+            daemon_module,
             "delete_legacy_shared_passphrase",
-            return_value=False,
-        ) as delete_legacy:
+            return_value=True,
+        ) as delete_legacy_shared:
             with self.assertRaises(AppError) as raised:
                 daemon_module.handle_request(
                     ctx,
@@ -875,10 +883,12 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
                 )
 
         delete_cli.assert_called_once_with(ctx.data_root)
-        delete_legacy.assert_called_once_with(ctx.data_root)
+        delete_legacy_cli.assert_called_once_with(ctx.data_root)
+        delete_legacy_shared.assert_called_once_with(ctx.data_root)
         self.assertEqual(raised.exception.code, "remembered_unlock_settings_failed")
         self.assertTrue(raised.exception.details["cli_credential_deleted"])
-        self.assertFalse(raised.exception.details["legacy_credential_deleted"])
+        self.assertTrue(raised.exception.details["legacy_cli_credential_deleted"])
+        self.assertTrue(raised.exception.details["legacy_shared_credential_deleted"])
 
     def test_cli_owned_legacy_delete_failure_quarantines_item(self):
         ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
@@ -892,11 +902,15 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
             return_value=True,
         ), mock.patch.object(
             daemon_module,
+            "delete_legacy_cli_remembered_passphrase",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
             "delete_legacy_shared_passphrase",
             return_value=False,
         ), mock.patch.object(
             daemon_module,
-            "set_cli_unlock_state",
+            "disable_remembered_unlock",
         ) as quarantine:
             with self.assertRaises(AppError) as raised:
                 daemon_module.handle_request(
@@ -907,7 +921,6 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
 
         quarantine.assert_called_once_with(
             ctx.data_root,
-            enabled=False,
             legacy_quarantined=True,
         )
         self.assertEqual(

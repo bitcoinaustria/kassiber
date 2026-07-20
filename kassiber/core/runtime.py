@@ -39,7 +39,10 @@ from ..secrets.credentials import scan_dotenv_for_secrets
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
 from ..operator.modes import remembered_unlock_allowed
-from ..secrets.unlock_store import load_remembered_passphrase
+from ..secrets.unlock_store import (
+    load_remembered_passphrase,
+    remembered_unlock_database_identity,
+)
 from .repo import current_context_snapshot
 
 
@@ -196,6 +199,18 @@ def _open_db_with_resolved_passphrase(
             raise
 
         if remembered_unlock_allowed(data_root):
+            remembered_database_identity = remembered_unlock_database_identity(
+                data_root
+            )
+            if (
+                expected_database_identity is not None
+                and expected_database_identity != remembered_database_identity
+            ):
+                raise AppError(
+                    "remembered unlock is bound to a different project database",
+                    code="operator_policy_binding_mismatch",
+                    retryable=False,
+                )
             remembered = load_remembered_passphrase(data_root)
             if remembered is not None:
                 try:
@@ -203,10 +218,9 @@ def _open_db_with_resolved_passphrase(
                         "passphrase": remembered,
                         "require_existing_schema": require_existing_schema,
                     }
-                    if expected_database_identity is not None:
-                        remembered_options["expected_database_identity"] = (
-                            expected_database_identity
-                        )
+                    remembered_options["expected_database_identity"] = (
+                        remembered_database_identity
+                    )
                     return (
                         open_db(data_root, **remembered_options),
                         remembered,

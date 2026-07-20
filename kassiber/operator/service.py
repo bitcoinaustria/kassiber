@@ -25,6 +25,7 @@ from ..redaction import redact_secret_text
 from ..secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
 from ..time_utils import now_iso
 from .modes import set_unlock_mode
+from .policy import bind_project_policy
 from .project import (
     CanonicalProject,
     ProjectOwnerLease,
@@ -706,7 +707,7 @@ class OperatorService:
                         opened_database_identity = database_instance_id(connection)
                         context = current_context_snapshot(connection)
                     else:
-                        opened_database_identity = project.identity
+                        opened_database_identity = project.identity[:32]
                         context = {}
                 finally:
                     connection.close()
@@ -722,12 +723,6 @@ class OperatorService:
                 raise
             else:
                 backoff.record_success()
-            try:
-                set_unlock_mode(canonical_data_root, "brokered")
-            except Exception:
-                if acquired_here:
-                    owner.release()
-                raise
             current_project = canonical_project(canonical_data_root)
             if current_project.identity != project.identity:
                 if acquired_here:
@@ -746,6 +741,17 @@ class OperatorService:
                     code="operator_project_replaced",
                     retryable=False,
                 )
+            try:
+                set_unlock_mode(
+                    canonical_data_root,
+                    "brokered",
+                    database_identity=opened_database_identity,
+                    expected_project_identity=project.identity,
+                )
+            except Exception:
+                if acquired_here:
+                    owner.release()
+                raise
             stored = bytearray(passphrase)
             expires = (
                 time.monotonic() + duration_seconds
@@ -816,7 +822,7 @@ class OperatorService:
     ) -> AdminAuthorization:
         project = canonical_project(data_root)
 
-        def issue_authorization() -> AdminAuthorization:
+        def issue_authorization(_database_identity: str) -> AdminAuthorization:
             with self._lock:
                 lease = self._require_lease_locked(project)
                 return AdminAuthorization(
@@ -844,7 +850,7 @@ class OperatorService:
         *,
         scope: str,
         require_lease: bool = True,
-        continuation: Callable[[], object] | None = None,
+        continuation: Callable[[str], object] | None = None,
     ) -> object | None:
         project = canonical_project(data_root)
         canonical_data_root = str(project.database.parent)
@@ -890,7 +896,7 @@ class OperatorService:
                         authenticated_database_identity = (
                             database_instance_id(connection)
                             if hasattr(connection, "execute")
-                            else project.identity
+                            else project.identity[:32]
                         )
                     finally:
                         connection.close()
@@ -930,7 +936,11 @@ class OperatorService:
                         )
                     if self._closed.is_set():
                         raise _broker_stopped_error()
-                return continuation() if continuation is not None else None
+                return (
+                    continuation(authenticated_database_identity)
+                    if continuation is not None
+                    else None
+                )
             finally:
                 if temporary_owner is not None:
                     temporary_owner.release()
@@ -944,8 +954,13 @@ class OperatorService:
         project = canonical_project(data_root)
         canonical_data_root = str(project.database.parent)
 
-        def apply_mode() -> str:
-            selected = set_unlock_mode(canonical_data_root, mode)
+        def apply_mode(authenticated_database_identity: str) -> str:
+            selected = set_unlock_mode(
+                canonical_data_root,
+                mode,
+                database_identity=authenticated_database_identity,
+                expected_project_identity=project.identity,
+            )
             if selected != "brokered":
                 with self._lock:
                     project_identity = self._lease_identity_for_path_locked(project)
@@ -976,9 +991,14 @@ class OperatorService:
         project = canonical_project(data_root)
         canonical_data_root = str(project.database.parent)
 
-        def configure() -> None:
+        def configure(authenticated_database_identity: str) -> None:
             from .native_auth import touch_id_delete, touch_id_store
 
+            bind_project_policy(
+                canonical_data_root,
+                authenticated_database_identity,
+                expected_project_identity=project.identity,
+            )
             if configured:
                 touch_id_store(canonical_data_root, secret)
             else:

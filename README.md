@@ -248,12 +248,14 @@ model, operation status/cancellation, and platform support.
 For deliberately unattended automation, select `kassiber operator mode
 unattended` and enroll with `kassiber secrets remember-unlock`. Enrollment
 verifies the passphrase, saves a CLI-only item in the native OS credential
-store, and sets a non-secret `cli_remembered_unlock` marker in managed
-`config/settings.json`. Brokered mode never falls back to that item. Existing
-projects with the legacy marker and no explicit mode continue as unattended
-until their mode is changed. Desktop and CLI use separate per-data-root
-credential entries and lifecycle controls, so neither surface silently enrolls
-or revokes the other. CLI credential reads are not biometric-gated; see
+store, and atomically binds the non-secret mode/marker to the authenticated
+database and its current canonical file identity in managed
+`config/settings.json`. Brokered mode never falls back to that item. An
+unbound legacy marker or a moved database beside stale settings is effectively
+manual until password re-enrollment; status reports only categorical
+`binding_state`. Desktop and CLI use separate credential entries and lifecycle
+controls, so neither surface silently enrolls or revokes the other. CLI
+credential reads are not biometric-gated; see
 [SECURITY.md](SECURITY.md) for the platform trust model. Headless machines and
 automation without an unlocked credential service can continue using
 `--db-passphrase-fd` in manual mode.

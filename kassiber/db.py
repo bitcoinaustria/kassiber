@@ -2643,6 +2643,21 @@ def update_managed_settings(data_root, *, updates=None, remove=()):
     return settings_path
 
 
+def mutate_managed_settings(data_root, mutator):
+    """Atomically replace managed settings using a lock-held transformation."""
+
+    settings_path = resolve_settings_path(data_root)
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    with _managed_settings_lock(settings_path):
+        payload = _read_managed_settings_path(settings_path)
+        updated = mutator(dict(payload))
+        if not isinstance(updated, dict):
+            raise TypeError("managed settings mutator must return a dictionary")
+        if updated != payload:
+            _atomic_write_managed_settings(settings_path, updated)
+    return settings_path
+
+
 def ensure_settings_file(data_root, env_file):
     """Create or refresh the managed `settings.json` state manifest."""
     settings_path = resolve_settings_path(data_root)

@@ -262,12 +262,13 @@ from .secrets.sqlcipher import open_encrypted, require_sqlcipher, sqlcipher_avai
 from .secrets.unlock_store import (
     cli_legacy_unlock_quarantined,
     cli_remembered_unlock_enabled,
+    delete_legacy_cli_remembered_passphrase,
     delete_legacy_shared_passphrase,
     delete_remembered_passphrase,
+    disable_remembered_unlock,
     mark_desktop_biometric_passphrase_stale,
     refresh_remembered_passphrase_after_rotation,
     remembered_unlock_status,
-    set_cli_unlock_state,
 )
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
@@ -13634,13 +13635,21 @@ def handle_request(
             ctx.data_root
         ) or cli_legacy_unlock_quarantined(ctx.data_root)
         cli_credential_deleted = delete_remembered_passphrase(ctx.data_root)
-        legacy_credential_deleted = delete_legacy_shared_passphrase(ctx.data_root)
-        if cli_owned_legacy and not legacy_credential_deleted:
+        legacy_cli_credential_deleted = (
+            delete_legacy_cli_remembered_passphrase(ctx.data_root)
+            if cli_owned_legacy
+            else True
+        )
+        legacy_shared_credential_deleted = (
+            delete_legacy_shared_passphrase(ctx.data_root)
+            if cli_owned_legacy
+            else True
+        )
+        if not legacy_cli_credential_deleted or not legacy_shared_credential_deleted:
             quarantine_error = None
             try:
-                set_cli_unlock_state(
+                disable_remembered_unlock(
                     ctx.data_root,
-                    enabled=False,
                     legacy_quarantined=True,
                 )
             except OSError as exc:
@@ -13656,7 +13665,8 @@ def handle_request(
                 details={
                     "cli_marker_cleared": quarantine_error is None,
                     "cli_credential_deleted": cli_credential_deleted,
-                    "legacy_credential_deleted": False,
+                    "legacy_cli_credential_deleted": legacy_cli_credential_deleted,
+                    "legacy_shared_credential_deleted": legacy_shared_credential_deleted,
                     "legacy_quarantined": quarantine_error is None,
                     "quarantine_error": quarantine_error,
                 },
@@ -13665,9 +13675,8 @@ def handle_request(
 
         marker_error = None
         try:
-            set_cli_unlock_state(
+            disable_remembered_unlock(
                 ctx.data_root,
-                enabled=False,
                 legacy_quarantined=False,
             )
         except OSError as exc:
@@ -13678,21 +13687,27 @@ def handle_request(
                 code="remembered_unlock_settings_failed",
                 hint=(
                     "Fix permissions on the managed config directory and retry."
-                    if cli_credential_deleted and legacy_credential_deleted
+                    if (
+                        cli_credential_deleted
+                        and legacy_cli_credential_deleted
+                        and legacy_shared_credential_deleted
+                    )
                     else "Fix config permissions, remove the remaining OS credential manually, and retry."
                 ),
                 details={
                     "settings_error": marker_error,
                     "cli_marker_cleared": False,
                     "cli_credential_deleted": cli_credential_deleted,
-                    "legacy_credential_deleted": legacy_credential_deleted,
+                    "legacy_cli_credential_deleted": legacy_cli_credential_deleted,
+                    "legacy_shared_credential_deleted": legacy_shared_credential_deleted,
                 },
                 retryable=True,
             ) from None
         result = {
             "cli_marker_cleared": True,
             "cli_credential_deleted": cli_credential_deleted,
-            "legacy_credential_deleted": legacy_credential_deleted,
+            "legacy_cli_credential_deleted": legacy_cli_credential_deleted,
+            "legacy_shared_credential_deleted": legacy_shared_credential_deleted,
             "remembered_unlock": remembered_unlock_status(ctx.data_root),
         }
         return (

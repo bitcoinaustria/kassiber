@@ -172,13 +172,21 @@ def route_brokered_command(
         return None
     if getattr(args, "db_passphrase_fd", None) is not None:
         return None
-    data_root = _selected_data_root(args)
-    if effective_unlock_mode(data_root) != "brokered":
-        return None
-
     from ..cli.command_registry import command_path
 
     path = command_path(args)
+    data_root = _selected_data_root(args)
+    try:
+        mode = effective_unlock_mode(data_root)
+    except AppError as exc:
+        if path == "secrets.forget-unlock" and exc.code in {
+            "operator_policy_binding_required",
+            "operator_policy_binding_mismatch",
+        }:
+            return None
+        raise
+    if mode != "brokered":
+        return None
     capability = cli_capability(path)
     pinned_argv = _pin_project_arguments(list(argv), data_root)
     operator_auth_fd = getattr(args, "operator_auth_fd", None)
