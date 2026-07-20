@@ -105,6 +105,11 @@ the existing in-app AI consent checks.
 On macOS, an enrolled operator-specific Keychain item may authorize an unlock
 after Touch ID through the signed desktop app's native LocalAuthentication
 path. The broker starts the helper with a broker-created inherited output pipe.
+The signed CLI binds broker handoff to the live launcher's verified bundle
+identifier, TeamIdentifier, and code-directory hash. Before the broker writes
+an enrollment passphrase, it dynamically verifies the spawned helper PID
+against that Developer ID requirement; checking only the mutable executable
+path is not sufficient.
 Before any get, store, delete, or status action, the helper verifies that its
 parent is the matching production-signed bundled Kassiber CLI sidecar. The
 helper checks the live parent process with macOS Security.framework against a

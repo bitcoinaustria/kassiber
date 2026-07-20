@@ -278,7 +278,10 @@ namespace has no unsigned-preview fallback. Windows Hello and Linux biometrics
 are deferred; password/fd authorization and the complete broker flow are
 supported there.
 The broker spawns the signed helper only for a pending Touch ID unlock. The
-helper verifies that its parent is the matching production-signed bundled CLI
+signed CLI pins the helper's verified bundle identifier, signing team, and
+code-directory hash, and the broker dynamically validates the spawned helper
+process before sending an enrollment passphrase. The helper verifies that its
+parent is the matching production-signed bundled CLI
 sidecar, including a Security.framework check of the live process against the
 sidecar's exact designated requirement, then writes the enrolled passphrase to
 a broker-created inherited pipe; it never returns the raw secret to the

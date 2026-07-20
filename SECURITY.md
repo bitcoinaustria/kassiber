@@ -278,8 +278,13 @@ credential namespaces, and per-project ownership locks.
 Those identity/path locks are acquired before database open and inherited by
 worker children, so broker death cannot release a project to a second owner
 while an orphan mutation still runs. On macOS the broker spawns the signed
-Touch ID helper with a broker-created inherited output pipe. The helper accepts
-the request only when its parent is the matching production-signed bundled CLI
+Touch ID helper with a broker-created inherited output pipe. The signed CLI and
+broker bind to the live launcher's
+verified bundle identifier, TeamIdentifier, and code-directory hash. The broker
+dynamically validates the spawned helper PID against that Developer ID
+requirement before writing an enrollment passphrase, closing the mutable-path
+check/use gap. The helper accepts the request only when its parent is the
+matching production-signed bundled CLI
 sidecar: it validates the bundle path and signing team, then uses
 Security.framework to check the live parent process against a fixed Developer
 ID Application requirement for the exact sidecar signing identifier and the
