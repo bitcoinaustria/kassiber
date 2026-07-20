@@ -628,6 +628,66 @@ class OperatorServiceTest(unittest.TestCase):
                 release.set()
                 service.close()
 
+    def test_janitor_survives_double_owner_release_failure(self) -> None:
+        failed_twice = threading.Event()
+        later_project_released = threading.Event()
+        first_release_attempts = 0
+
+        def release_first_owner() -> None:
+            nonlocal first_release_attempts
+            first_release_attempts += 1
+            if first_release_attempts <= 2:
+                if first_release_attempts == 2:
+                    failed_twice.set()
+                raise OSError("simulated owner release failure")
+
+        first_owner = mock.Mock()
+        first_owner.release.side_effect = release_first_owner
+        second_owner = mock.Mock()
+        second_owner.release.side_effect = later_project_released.set
+
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=_Connection(),
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            side_effect=[first_owner, second_owner],
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                service.unlock(
+                    first,
+                    bytearray(b"first-passphrase"),
+                    duration_seconds=None,
+                )
+                service.unlock(
+                    second,
+                    bytearray(b"second-passphrase"),
+                    duration_seconds=None,
+                )
+                first_project = canonical_project(first)
+                second_project = canonical_project(second)
+                with service._lock:
+                    first_lease = service._leases[first_project.identity]
+                    second_lease = service._leases[second_project.identity]
+                    first_lease.expires_at_monotonic = time.monotonic() - 1
+
+                self.assertTrue(failed_twice.wait(2.5))
+                self.assertTrue(service._janitor.is_alive())
+
+                with service._lock:
+                    second_lease.expires_at_monotonic = time.monotonic() - 1
+                self.assertTrue(later_project_released.wait(2.5))
+                with service._lock:
+                    self.assertNotIn(second_project.identity, service._leases)
+                self.assertEqual(set(second_lease.passphrase), {0})
+                self.assertTrue(service._janitor.is_alive())
+            finally:
+                service.close()
+
     def test_expired_worker_queue_cannot_revive_after_reunlock(self) -> None:
         started = threading.Event()
         release = threading.Event()

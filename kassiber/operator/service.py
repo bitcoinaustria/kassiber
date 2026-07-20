@@ -1745,41 +1745,53 @@ class OperatorService:
                     for project_id, _owner in self._pending_owner_releases
                 ]
             for project_id in dict.fromkeys((*expired, *pending)):
-                with self._project_transition(project_id, allow_closed=True):
-                    with self._lock:
-                        lease = self._leases.get(project_id)
-                        if lease is not None and lease.expired():
-                            lease.revoked = True
-                            _LOGGER.info(
-                                "operator lease expired",
+                public_project_id = project_id[:16]
+                try:
+                    with self._project_transition(project_id, allow_closed=True):
+                        with self._lock:
+                            lease = self._leases.get(project_id)
+                            if lease is not None:
+                                public_project_id = lease.project.public_id
+                            if lease is not None and lease.expired():
+                                lease.revoked = True
+                                _LOGGER.info(
+                                    "operator lease expired",
+                                    extra={
+                                        "kb_fields": {
+                                            "project": lease.project.public_id,
+                                            "running_operations_finishing": (
+                                                lease.running_operations
+                                            ),
+                                        }
+                                    },
+                                )
+                                self._revoke_lease_locked(
+                                    project_id,
+                                    reason="operator lease expired",
+                                )
+                        try:
+                            self._release_pending_owners(project_id)
+                        except Exception:
+                            _LOGGER.error(
+                                "operator lease expiry cleanup failed",
                                 extra={
                                     "kb_fields": {
-                                        "project": lease.project.public_id,
-                                        "running_operations_finishing": (
-                                            lease.running_operations
-                                        ),
+                                        "project": public_project_id,
                                     }
                                 },
                             )
-                            self._revoke_lease_locked(
-                                project_id,
-                                reason="operator lease expired",
-                            )
-                    try:
-                        self._release_pending_owners(project_id)
-                    except Exception:
-                        _LOGGER.error(
-                            "operator lease expiry cleanup failed",
-                            extra={
-                                "kb_fields": {
-                                    "project": (
-                                        lease.project.public_id
-                                        if lease is not None
-                                        else project_id[:16]
-                                    ),
-                                }
-                            },
-                        )
+                except Exception:
+                    # Project-transition cleanup retries a failed owner release.
+                    # Contain that retry too so one broken handle cannot kill the
+                    # sole janitor and leave unrelated passphrases past expiry.
+                    _LOGGER.error(
+                        "operator lease expiry cleanup failed",
+                        extra={
+                            "kb_fields": {
+                                "project": public_project_id,
+                            }
+                        },
+                    )
 
 
 def _classify_argv(argv: list[str]) -> tuple[str, Capability]:
