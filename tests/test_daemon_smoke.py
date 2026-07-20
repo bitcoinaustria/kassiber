@@ -2,7 +2,6 @@ import io
 import json
 import os
 import queue
-import select
 import shutil
 import sqlite3
 import subprocess
@@ -62,6 +61,7 @@ from .descriptor_fixtures import PUBLIC_MAINNET_ZPUB_FIXTURE
 
 
 ROOT = Path(__file__).resolve().parent.parent
+_DAEMON_STDOUT_EOF = object()
 
 
 def _start_daemon(data_root):
@@ -83,8 +83,7 @@ def _start_daemon(data_root):
 
 
 def _read_payload(proc):
-    assert proc.stdout is not None
-    payload = json.loads(proc.stdout.readline())
+    payload = json.loads(_read_daemon_line(proc))
     _remember_daemon_payload(proc, payload)
     return payload
 
@@ -109,16 +108,47 @@ def _remember_daemon_payload(proc, payload):
     proc._kassiber_seen_payloads = seen[-12:]
 
 
-def _read_payload_timeout(proc, timeout=5.0):
+def _daemon_stdout_queue(proc):
     assert proc.stdout is not None
-    ready, _, _ = select.select([proc.stdout.fileno()], [], [], timeout)
-    if not ready:
+    output_queue = getattr(proc, "_kassiber_stdout_queue", None)
+    if output_queue is not None:
+        return output_queue
+    output_queue = queue.Queue()
+
+    def read_stdout() -> None:
+        try:
+            for line in proc.stdout:
+                output_queue.put(line)
+        finally:
+            output_queue.put(_DAEMON_STDOUT_EOF)
+
+    reader = threading.Thread(target=read_stdout, daemon=True)
+    proc._kassiber_stdout_queue = output_queue
+    proc._kassiber_stdout_reader = reader
+    reader.start()
+    return output_queue
+
+
+def _read_daemon_line(proc, timeout=None):
+    output_queue = _daemon_stdout_queue(proc)
+    try:
+        line = output_queue.get(timeout=timeout)
+    except queue.Empty as exc:
         seen = getattr(proc, "_kassiber_seen_payloads", [])
         raise AssertionError(
             f"daemon did not emit a payload within {timeout:.1f}s; "
             f"last payloads: {seen!r}"
+        ) from exc
+    if line is _DAEMON_STDOUT_EOF:
+        output_queue.put(_DAEMON_STDOUT_EOF)
+        raise AssertionError(
+            f"daemon stdout closed before the expected payload; code={proc.poll()}"
         )
-    payload = json.loads(proc.stdout.readline())
+    return line
+
+
+def _read_payload_timeout(proc, timeout=5.0):
+    payload = json.loads(_read_daemon_line(proc, timeout))
     _remember_daemon_payload(proc, payload)
     return payload
 
@@ -130,7 +160,7 @@ def _write_payload(proc, payload):
     proc.stdin.flush()
 
 
-def _read_until_kind(proc, kind, timeout=60.0):
+def _read_until_kind(proc, kind, timeout=5.0):
     deadline = time.monotonic() + timeout
     seen = []
     while True:
