@@ -370,6 +370,67 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_admin_authorization_is_single_use_and_bound_to_lease_epoch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                service.unlock(
+                    tmp,
+                    bytearray(b"passphrase"),
+                    duration_seconds=None,
+                )
+                stale = service.verify_admin(
+                    tmp,
+                    bytearray(b"passphrase"),
+                )
+                service.lock(tmp)
+                service.unlock(
+                    tmp,
+                    bytearray(b"passphrase"),
+                    duration_seconds=None,
+                )
+                with self.assertRaises(AppError) as stale_error:
+                    service.submit(
+                        tmp,
+                        ["secrets", "verify"],
+                        admin_authorization=stale,
+                    )
+                self.assertEqual(
+                    stale_error.exception.code,
+                    "operator_admin_auth_required",
+                )
+
+                fresh = service.verify_admin(
+                    tmp,
+                    bytearray(b"passphrase"),
+                )
+                accepted = service.submit(
+                    tmp,
+                    ["secrets", "verify"],
+                    admin_authorization=fresh,
+                )
+                self.assertEqual(
+                    self._wait_terminal(service, accepted["operation_id"])["state"],
+                    "completed",
+                )
+                with self.assertRaises(AppError) as reused_error:
+                    service.submit(
+                        tmp,
+                        ["secrets", "verify"],
+                        admin_authorization=fresh,
+                    )
+                self.assertEqual(
+                    reused_error.exception.code,
+                    "operator_admin_auth_required",
+                )
+            finally:
+                service.close()
+
     def test_rejected_submissions_wipe_every_staged_secret(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.service.open_db", return_value=_Connection()
@@ -980,6 +1041,10 @@ class OperatorServiceTest(unittest.TestCase):
                     bytearray(old_passphrase.encode()),
                     duration_seconds=None,
                 )
+                authorization = service.verify_admin(
+                    tmp,
+                    bytearray(old_passphrase.encode()),
+                )
                 accepted = service.submit(
                     tmp,
                     [
@@ -992,7 +1057,7 @@ class OperatorServiceTest(unittest.TestCase):
                     secret_arguments={
                         "broker-secret-new-passphrase": new_passphrase,
                     },
-                    admin_verified=True,
+                    admin_authorization=authorization,
                 )
                 completed = self._wait_terminal(service, accepted["operation_id"])
                 self.assertEqual(completed["state"], "completed", completed)
@@ -1238,10 +1303,14 @@ class OperatorServiceTest(unittest.TestCase):
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 first = service.submit(tmp, ["status"])
                 self.assertTrue(started.wait(1))
+                authorization = service.verify_admin(
+                    tmp,
+                    bytearray(b"passphrase"),
+                )
                 queued = service.submit(
                     tmp,
                     ["secrets", "verify"],
-                    admin_verified=True,
+                    admin_authorization=authorization,
                 )
                 service._operations[
                     queued["operation_id"]
@@ -1636,6 +1705,10 @@ class OperatorServiceTest(unittest.TestCase):
             )
             try:
                 service.unlock(tmp, bytearray(b"old-passphrase"), duration_seconds=None)
+                authorization = service.verify_admin(
+                    tmp,
+                    bytearray(b"old-passphrase"),
+                )
                 accepted = service.submit(
                     tmp,
                     [
@@ -1647,7 +1720,7 @@ class OperatorServiceTest(unittest.TestCase):
                     secret_arguments={
                         "broker-secret-test": bytearray(b"new-passphrase")
                     },
-                    admin_verified=True,
+                    admin_authorization=authorization,
                 )
                 self.assertEqual(
                     self._wait_terminal(service, accepted["operation_id"])["state"],
@@ -1686,7 +1759,6 @@ class OperatorServiceTest(unittest.TestCase):
                             "broker-secret-backup",
                         ],
                         secret_arguments={"broker-secret-backup": secret},
-                        admin_verified=True,
                     )
                 self.assertEqual(
                     raised.exception.code,
@@ -1725,7 +1797,6 @@ class OperatorServiceTest(unittest.TestCase):
                             "--target-data-root",
                             str(alias),
                         ],
-                        admin_verified=True,
                     )
                 self.assertEqual(
                     raised.exception.code,
@@ -1804,7 +1875,6 @@ class OperatorServiceTest(unittest.TestCase):
                     service.submit(
                         tmp,
                         ["backup", "import", "archive.kassiber", "--install"],
-                        admin_verified=True,
                     )
                 self.assertEqual(
                     raised.exception.code,

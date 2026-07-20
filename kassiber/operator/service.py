@@ -105,6 +105,7 @@ class ProjectLease:
     duration_seconds: int | None
     authentication_method: str
     expires_at: str | None
+    epoch: str = field(default_factory=lambda: secrets.token_urlsafe(24))
     workspace: str | None = None
     profile: str | None = None
     revoked: bool = False
@@ -115,6 +116,17 @@ class ProjectLease:
             self.expires_at_monotonic is not None
             and time.monotonic() >= self.expires_at_monotonic
         )
+
+
+@dataclass
+class AdminAuthorization:
+    """Single-use fresh authorization bound to one live project lease."""
+
+    project_identity: str
+    database_identity: str
+    lease_epoch: str
+    expires_at_monotonic: float
+    consumed: bool = field(default=False, repr=False)
 
 
 @dataclass
@@ -757,12 +769,33 @@ class OperatorService:
         )
         return self.status(canonical_data_root)
 
-    def verify_admin(self, data_root: str, secret: bytearray) -> None:
-        self.authenticate_database(
+    def verify_admin(
+        self,
+        data_root: str,
+        secret: bytearray,
+    ) -> AdminAuthorization:
+        project = canonical_project(data_root)
+
+        def issue_authorization() -> AdminAuthorization:
+            with self._lock:
+                lease = self._require_lease_locked(project)
+                return AdminAuthorization(
+                    project_identity=project.identity,
+                    database_identity=lease.database_identity,
+                    lease_epoch=lease.epoch,
+                    expires_at_monotonic=(
+                        time.monotonic() + ADMIN_AUTH_TTL_SECONDS
+                    ),
+                )
+
+        authorization = self.authenticate_database(
             data_root,
             secret,
             scope="operator_admin",
+            continuation=issue_authorization,
         )
+        assert isinstance(authorization, AdminAuthorization)
+        return authorization
 
     def authenticate_database(
         self,
@@ -1024,7 +1057,7 @@ class OperatorService:
         *,
         operation_id: str | None = None,
         secret_arguments: dict[str, bytearray] | None = None,
-        admin_verified: bool = False,
+        admin_authorization: AdminAuthorization | None = None,
     ) -> dict[str, object]:
         owned_secrets = secret_arguments if secret_arguments is not None else {}
         ownership_transferred = False
@@ -1039,7 +1072,7 @@ class OperatorService:
                 argv,
                 operation_id=operation_id,
                 secret_arguments=owned_secrets,
-                admin_verified=admin_verified,
+                admin_authorization=admin_authorization,
                 transfer_secret_ownership=transfer_secret_ownership,
             )
         finally:
@@ -1053,7 +1086,7 @@ class OperatorService:
         *,
         operation_id: str | None,
         secret_arguments: dict[str, bytearray],
-        admin_verified: bool,
+        admin_authorization: AdminAuthorization | None,
         transfer_secret_ownership: Callable[[], None],
     ) -> dict[str, object]:
         parsed, command_path, required = _parse_argv(argv)
@@ -1194,13 +1227,14 @@ class OperatorService:
                         "generation": self.generation,
                     }
             if required is Capability.ADMIN:
-                if not admin_verified:
-                    raise AppError(
-                        "admin commands require fresh authentication",
-                        code="operator_admin_auth_required",
-                        details={"command": command_path},
-                        retryable=False,
+                admin_authorized_until = (
+                    self._consume_admin_authorization_locked(
+                        admin_authorization,
+                        project=project,
+                        lease=lease,
+                        command_path=command_path,
                     )
+                )
             elif not capability_allows(lease.capability, required):
                 raise AppError(
                     "the operator lease does not grant this command",
@@ -1229,8 +1263,8 @@ class OperatorService:
                 capability=required,
                 secret_arguments=secret_arguments,
                 admin_authorized_until_monotonic=(
-                    time.monotonic() + ADMIN_AUTH_TTL_SECONDS
-                    if required is Capability.ADMIN and admin_verified
+                    admin_authorized_until
+                    if required is Capability.ADMIN
                     else None
                 ),
             )
@@ -1259,6 +1293,36 @@ class OperatorService:
                 },
             )
             return operation.public_status()
+
+    def _consume_admin_authorization_locked(
+        self,
+        authorization: AdminAuthorization | None,
+        *,
+        project: CanonicalProject,
+        lease: ProjectLease,
+        command_path: str,
+    ) -> float:
+        if authorization is not None:
+            already_consumed = authorization.consumed
+            authorization.consumed = True
+        else:
+            already_consumed = False
+        valid = (
+            authorization is not None
+            and not already_consumed
+            and time.monotonic() <= authorization.expires_at_monotonic
+            and authorization.project_identity == project.identity
+            and authorization.database_identity == lease.database_identity
+            and authorization.lease_epoch == lease.epoch
+        )
+        if not valid:
+            raise AppError(
+                "admin commands require fresh authentication for the active lease",
+                code="operator_admin_auth_required",
+                details={"command": command_path},
+                retryable=False,
+            )
+        return authorization.expires_at_monotonic
 
     def operation_status(
         self,

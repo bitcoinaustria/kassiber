@@ -321,12 +321,16 @@ class BrokerServer:
             )
         secret_arguments: dict[str, bytearray] = {}
         admin_auth: bytearray | None = None
+        admin_authorization = None
         try:
             for label, challenge in challenges.items():
                 secret_arguments[label] = channel.receive_secret(challenge)
             if admin_challenge is not None:
                 admin_auth = channel.receive_secret(admin_challenge)
-                self.service.verify_admin(data_root, admin_auth)
+                admin_authorization = self.service.verify_admin(
+                    data_root,
+                    admin_auth,
+                )
                 if admin_command_label is not None:
                     secret_arguments[admin_command_label] = bytearray(admin_auth)
             return _ok(
@@ -335,7 +339,7 @@ class BrokerServer:
                     argv,
                     operation_id=operation_id,
                     secret_arguments=secret_arguments,
-                    admin_verified=admin_auth is not None,
+                    admin_authorization=admin_authorization,
                 )
             )
         except Exception:

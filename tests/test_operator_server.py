@@ -26,6 +26,8 @@ class OperatorServerTest(unittest.TestCase):
             "operation_id": "generation.operation",
             "state": "queued",
         }
+        authorization = object()
+        server.service.verify_admin.return_value = authorization
         channel = mock.Mock()
         authentication = bytearray(b"fresh-admin-passphrase")
         channel.receive_secret.return_value = authentication
@@ -54,7 +56,10 @@ class OperatorServerTest(unittest.TestCase):
             "/canonical-project",
             authentication,
         )
-        self.assertTrue(server.service.submit.call_args.kwargs["admin_verified"])
+        self.assertIs(
+            server.service.submit.call_args.kwargs["admin_authorization"],
+            authorization,
+        )
         self.assertEqual(set(authentication), {0})
 
     def test_failed_admin_verification_never_submits(self) -> None:
