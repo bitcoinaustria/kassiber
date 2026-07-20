@@ -5619,10 +5619,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _verify_operator_child_project(args: argparse.Namespace) -> None:
     """Fail closed if a queued worker's database path changed before open."""
 
+    operator_child = os.environ.get("KASSIBER_OPERATOR_CHILD") == "1"
     expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY")
     if expected is None:
+        if operator_child:
+            raise AppError(
+                "operator child project binding is missing",
+                code="operator_project_binding_invalid",
+                retryable=False,
+            )
         return
-    if os.environ.get("KASSIBER_OPERATOR_CHILD") != "1":
+    if not operator_child:
         raise AppError(
             "operator project binding is only valid in a broker child",
             code="operator_project_binding_invalid",
@@ -5650,6 +5657,12 @@ def _verify_operator_child_open_database(conn: sqlite3.Connection | None) -> Non
 
     expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY")
     if expected is None:
+        if os.environ.get("KASSIBER_OPERATOR_CHILD") == "1":
+            raise AppError(
+                "operator child database binding is missing",
+                code="operator_project_binding_invalid",
+                retryable=False,
+            )
         return
     if conn is None:
         raise AppError(

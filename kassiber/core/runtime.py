@@ -315,9 +315,7 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
                 paths.data_root,
                 passphrase,
                 allow_prompt=allow_prompt,
-                expected_database_identity=os.environ.get(
-                    "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
-                ),
+                expected_database_identity=_operator_expected_database_identity(),
             )
             if resolved_passphrase is not None:
                 args._db_passphrase_cached = resolved_passphrase
@@ -339,6 +337,17 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
         if conn is not None:
             conn.close()
         raise
+
+
+def _operator_expected_database_identity() -> str | None:
+    expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY")
+    if os.environ.get("KASSIBER_OPERATOR_CHILD") == "1" and expected is None:
+        raise AppError(
+            "operator child database binding is missing",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    return expected
 
 
 def close_runtime(runtime):

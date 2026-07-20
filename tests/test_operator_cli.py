@@ -10,11 +10,55 @@ from unittest import mock
 
 from kassiber.cli.main import main
 from kassiber.cli.main import _verify_operator_child_open_database
+from kassiber.core.runtime import _operator_expected_database_identity
 from kassiber.db import open_db
 from kassiber.errors import AppError
 
 
 class OperatorCliTest(unittest.TestCase):
+    def test_worker_requires_project_binding_before_runtime_bootstrap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+            os.environ,
+            {"KASSIBER_OPERATOR_CHILD": "1"},
+            clear=True,
+        ):
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["--data-root", tmp, "--machine", "status"])
+
+        self.assertEqual(exit_code, 1)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(
+            payload["error"]["code"],
+            "operator_project_binding_invalid",
+        )
+
+    def test_worker_requires_database_binding_in_every_runtime_open(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"KASSIBER_OPERATOR_CHILD": "1"},
+            clear=True,
+        ):
+            with self.assertRaises(AppError) as raised:
+                _operator_expected_database_identity()
+        self.assertEqual(
+            raised.exception.code,
+            "operator_project_binding_invalid",
+        )
+
+    def test_worker_open_verification_requires_database_binding(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"KASSIBER_OPERATOR_CHILD": "1"},
+            clear=True,
+        ):
+            with self.assertRaises(AppError) as raised:
+                _verify_operator_child_open_database(None)
+        self.assertEqual(
+            raised.exception.code,
+            "operator_project_binding_invalid",
+        )
+
     def test_worker_rejects_the_database_connection_it_did_not_admit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
             os.environ,
