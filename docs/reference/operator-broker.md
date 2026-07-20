@@ -219,6 +219,15 @@ The first three grants are cumulative. Unknown commands and daemon kinds fail
 closed. Admin work always consumes a fresh, challenge-bound authorization for
 one operation and does not upgrade the lease.
 
+Backend connection setup is deliberately `operator` work, including creating
+or updating an endpoint and submitting a new caller-supplied token. This lets a
+granted work session connect and sync the project's accounting sources without
+another prompt. It does not authorize reading a token already stored in the
+project or deleting the backend: `backends reveal-token` and `backends delete`
+remain `admin`. Because every same-user process may exercise the standing
+grant, an operator lease should be granted only when routine import, sync, and
+connection-configuration changes are acceptable for that session.
+
 `backup import --install` is not brokerable. A queued destructive restore could
 otherwise retarget either its destination or global project symlink after
 validation, outside the inherited ownership handles. Backup import may still
