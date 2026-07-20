@@ -456,8 +456,6 @@
       "loaded": "{{count}} geladene Transaktionen werden angezeigt",
       "moreHint": "Weitere Transaktionen werden beim Scrollen automatisch geladen.",
       "loadingMore": "Weitere Transaktionen werden geladen…",
-      "loadMore": "Mehr laden",
-      "moreAvailable": "Weitere Transaktionen verfügbar",
       "scrollRegion": "Scrollbare Transaktionstabelle"
     }
   },

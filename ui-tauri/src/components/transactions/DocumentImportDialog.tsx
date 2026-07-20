@@ -493,6 +493,7 @@ export function DocumentImportDialog() {
           size="sm"
           className="h-8 gap-2 sm:h-9"
           aria-label={t("documentImport.triggerAria")}
+          disabled
         >
           <ScanText className="size-4" aria-hidden="true" />
           <span className="hidden sm:inline">{t("documentImport.trigger")}</span>

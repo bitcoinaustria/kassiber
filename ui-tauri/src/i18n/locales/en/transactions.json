@@ -456,8 +456,6 @@
       "loaded": "Showing {{count}} loaded transactions",
       "moreHint": "More transactions load automatically as you scroll.",
       "loadingMore": "Loading more transactions…",
-      "loadMore": "Load more",
-      "moreAvailable": "More transactions available",
       "scrollRegion": "Scrollable transaction table"
     }
   },

@@ -1855,17 +1855,7 @@ const TransactionsTable = ({
                         >
                           {isLoadingMoreRecords
                             ? t("table.virtual.loadingMore")
-                            : onLoadMoreRecords
-                              ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={onLoadMoreRecords}
-                                  >
-                                    {t("table.virtual.loadMore")}
-                                  </Button>
-                                )
-                              : t("table.virtual.moreAvailable")}
+                            : null}
                         </TableCell>
                       </tr>
                     );
@@ -2341,7 +2331,7 @@ const TransactionsTable = ({
         </table>
       </div>
 
-      <div className="grid items-center gap-3 border-t px-3 py-3 text-xs text-muted-foreground sm:grid-cols-[1fr_auto_1fr] sm:px-6 sm:text-sm">
+      <div className="border-t px-3 py-3 text-xs text-muted-foreground sm:px-6 sm:text-sm">
         <div className="flex flex-col gap-1">
           <span>
             {isRefreshing
@@ -2359,22 +2349,6 @@ const TransactionsTable = ({
           ) : null}
         </div>
 
-        <div className="flex justify-center">
-          {hasMoreRecords && onLoadMoreRecords ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={onLoadMoreRecords}
-              disabled={isLoadingMoreRecords}
-            >
-              {isLoadingMoreRecords
-                ? t("table.virtual.loadingMore")
-                : t("table.virtual.loadMore")}
-            </Button>
-          ) : null}
-        </div>
-        <div aria-hidden="true" />
       </div>
       </div>
       {isExpanded && expandedActionsHost

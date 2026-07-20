@@ -189,6 +189,7 @@ export function NewTransactionDialog({
           size="sm"
           className={pageHeaderActionClassName}
           aria-label={t("newDialog.triggerAria")}
+          disabled
         >
           <Plus className="size-4" aria-hidden="true" />
           <span className="hidden sm:inline">{t("newDialog.trigger")}</span>
