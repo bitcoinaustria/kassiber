@@ -120,7 +120,6 @@ def dispatch_operator(args: argparse.Namespace) -> dict[str, object]:
     if command == "unlock":
         if args.auth == "touch-id":
             _require_interactive_auth(args.non_interactive)
-            client.ensure_running()
             return client.unlock_touch_id(
                 data_root,
                 duration_seconds=(

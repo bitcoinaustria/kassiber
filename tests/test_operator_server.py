@@ -22,6 +22,26 @@ from kassiber.errors import AppError
 
 
 class OperatorServerTest(unittest.TestCase):
+    def test_native_auth_restart_stops_admission_after_response(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        server.service.prepare_idle_restart.return_value = {
+            "restart": "accepted",
+            "generation": "generation",
+        }
+        server.request_stop = mock.Mock()
+        channel = mock.MagicMock()
+        channel.receive_json.return_value = {
+            "version": 1,
+            "action": "restart_for_native_auth",
+        }
+
+        server._serve_channel(channel)
+
+        server.service.prepare_idle_restart.assert_called_once_with()
+        channel.send_json.assert_called_once()
+        server.request_stop.assert_called_once_with()
+
     @unittest.skipIf(os.name == "nt", "POSIX signal handler contract")
     def test_main_signal_handler_only_requests_stop_before_final_close(self) -> None:
         server = mock.Mock()

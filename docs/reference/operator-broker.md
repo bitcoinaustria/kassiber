@@ -127,6 +127,15 @@ from a clean locked state without creating a lease. That owner remains held
 through the authenticated mode change or credential-store action, including
 failure cleanup.
 
+The first CLI invocation in a login session may have started a broker without
+the signed app's native helper environment. A later signed-app Touch ID command
+atomically requests an idle broker handoff and starts a replacement that
+inherits the helper. The handoff is refused while any lease, operation,
+project transition, or ownership cleanup is active; lock active leases and
+wait for work to finish before retrying. No accepted operation is interrupted
+and terminal result caches are the only state discarded with the old broker
+generation.
+
 ## Endpoint and peer validation
 
 The broker is one process per logged-in OS user.

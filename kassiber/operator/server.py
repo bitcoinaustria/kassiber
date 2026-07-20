@@ -163,11 +163,16 @@ class BrokerServer:
                 return
 
     def _serve_channel(self, channel: BrokerChannel) -> None:
+        restart_after_response = False
         with channel:
             try:
                 request = channel.receive_json()
                 self._require_version(request)
                 response = self._handle(channel, request)
+                restart_after_response = (
+                    request.get("action") == "restart_for_native_auth"
+                    and response.get("ok") is True
+                )
             except EOFError:
                 return
             except AppError as exc:
@@ -181,6 +186,8 @@ class BrokerServer:
                     )
                 )
             channel.send_json(response)
+        if restart_after_response:
+            self.request_stop()
 
     def _handle(
         self,
@@ -189,7 +196,17 @@ class BrokerServer:
     ) -> dict[str, Any]:
         action = request.get("action")
         if action == "ping":
-            return _ok({"broker": "running", "generation": self.generation})
+            from .native_auth import native_auth_runtime_available
+
+            return _ok(
+                {
+                    "broker": "running",
+                    "generation": self.generation,
+                    "native_auth_available": native_auth_runtime_available(),
+                }
+            )
+        if action == "restart_for_native_auth":
+            return _ok(self.service.prepare_idle_restart())
         if action == "status":
             data_root = request.get("data_root")
             return _ok(

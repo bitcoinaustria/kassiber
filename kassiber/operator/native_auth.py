@@ -158,6 +158,16 @@ def touch_id_status(data_root: str) -> dict[str, object]:
     return {"available": False, "configured": False, "reason": "native_auth_failed"}
 
 
+def native_auth_runtime_available() -> bool:
+    """Report whether this broker inherited a usable native helper path."""
+
+    try:
+        _helper_path()
+    except AppError:
+        return False
+    return True
+
+
 def _run_no_secret(action: str, data_root: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
         [

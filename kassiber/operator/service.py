@@ -1550,6 +1550,33 @@ class OperatorService:
         if first_error is not None:
             raise first_error
 
+    def prepare_idle_restart(self) -> dict[str, object]:
+        """Atomically stop new work when a helper-capability handoff is safe."""
+
+        with self._transition_condition:
+            active_operation = any(
+                operation.state in {"queued", "running"}
+                for operation in self._operations.values()
+            )
+            if (
+                self._leases
+                or active_operation
+                or self._active_project_transitions
+                or self._pending_owner_releases
+                or self._close_in_progress
+            ):
+                raise AppError(
+                    "the operator broker is not idle enough to restart",
+                    code="operator_broker_busy",
+                    hint=(
+                        "Wait for active work and cleanup to finish, then lock all "
+                        "leases before retrying Touch ID."
+                    ),
+                    retryable=True,
+                )
+            self._closed.set()
+        return {"restart": "accepted", "generation": self.generation}
+
     def _require_lease_locked(self, project: CanonicalProject) -> ProjectLease:
         lease = self._leases.get(project.identity)
         if lease is None or lease.revoked or lease.expired():

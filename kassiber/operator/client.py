@@ -71,6 +71,41 @@ class BrokerClient:
             channel.send_json({"version": PROTOCOL_VERSION, "action": "ping"})
             return self._receive_data(channel)
 
+    def ensure_native_auth_running(self) -> dict[str, object]:
+        """Handoff a helper-less idle broker to this signed CLI invocation."""
+
+        broker = self.ensure_running()
+        if broker.get("native_auth_available") is True:
+            return broker
+        if sys.platform != "darwin" or not os.environ.get(
+            "KASSIBER_NATIVE_AUTH_HELPER"
+        ):
+            return broker
+
+        old_generation = broker.get("generation")
+        self._simple_request("restart_for_native_auth")
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            try:
+                running = self.ping()
+            except (OSError, EOFError, AppError):
+                break
+            if running.get("generation") != old_generation:
+                if running.get("native_auth_available") is True:
+                    return running
+                break
+            time.sleep(0.05)
+
+        replacement = self.ensure_running()
+        if replacement.get("native_auth_available") is not True:
+            raise AppError(
+                "the restarted operator broker cannot use native authentication",
+                code="native_auth_unavailable",
+                hint="Use password authentication or retry from the signed macOS app CLI.",
+                retryable=False,
+            )
+        return replacement
+
     def status(self, data_root: str | None) -> dict[str, object]:
         try:
             return self._simple_request("status", data_root=data_root)
@@ -112,7 +147,7 @@ class BrokerClient:
         duration_seconds: int | None,
         capability: str,
     ) -> dict[str, object]:
-        self.ensure_running()
+        self.ensure_native_auth_running()
         with connect() as channel:
             channel.send_json(
                 {
@@ -161,7 +196,7 @@ class BrokerClient:
         *,
         configured: bool,
     ) -> dict[str, object]:
-        self.ensure_running()
+        self.ensure_native_auth_running()
         with connect() as channel:
             channel.send_json(
                 {

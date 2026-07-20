@@ -45,6 +45,28 @@ class _Connection:
 
 
 class OperatorServiceTest(unittest.TestCase):
+    def test_native_auth_restart_requires_a_fully_idle_broker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=_Connection(),
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                with self.assertRaises(AppError) as raised:
+                    service.prepare_idle_restart()
+                self.assertEqual(raised.exception.code, "operator_broker_busy")
+                service.lock(tmp)
+                self.assertEqual(
+                    service.prepare_idle_restart()["restart"],
+                    "accepted",
+                )
+            finally:
+                service.close()
+
     def test_native_unlock_rejects_unexpected_database_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.service.open_db",
