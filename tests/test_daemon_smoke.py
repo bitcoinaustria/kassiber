@@ -11816,11 +11816,16 @@ class DaemonSmokeTest(unittest.TestCase):
                 with mock.patch.object(daemon_module, "handle_request", mutate_then_fail):
                     rc = daemon_module.run(conn, args, stdin=stdin, stdout=stdout)
                 self.assertEqual(rc, 0)
-                self.assertIsNone(
-                    conn.execute(
-                        "SELECT value FROM settings WHERE key = 'daemon-rollback-probe'"
-                    ).fetchone()
-                )
+                reopened = open_db(data_root)
+                try:
+                    self.assertIsNone(
+                        reopened.execute(
+                            "SELECT value FROM settings "
+                            "WHERE key = 'daemon-rollback-probe'"
+                        ).fetchone()
+                    )
+                finally:
+                    reopened.close()
             finally:
                 conn.close()
 
