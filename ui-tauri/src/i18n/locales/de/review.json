@@ -44,6 +44,17 @@
           "balanced": "Ausgeglichen",
           "unbalanced": "Nicht ausgeglichen"
         },
+        "allocations": {
+          "title": "Zuordnungen",
+          "hint": "Lege genau fest, wie viel jede Quelle zu jedem Ziel-, Gebühren- oder behaltenen Leg beiträgt. Erforderlich für Komponenten mit mehreren Quellen, Umwandlungen und Schwebeposten.",
+          "add": "Zuordnung hinzufügen",
+          "remove": "Zuordnung entfernen",
+          "source": "Von (Quelle)",
+          "sink": "Nach (Ziel / Gebühr)",
+          "amount": "Betrag (BTC)",
+          "selectLeg": "Leg auswählen",
+          "empty": "Noch keine Zuordnungen. Füge eine Kante pro Quelle → Ziel hinzu."
+        },
         "saveDraft": "Als Entwurf speichern",
         "activate": "Aktivieren",
         "reset": "Neu beginnen"
@@ -117,6 +128,7 @@
         "fee": "Gebühr",
         "external": "Extern",
         "retained": "Verwahrung behalten",
+        "suspense": "Schwebeposten",
         "unresolved": "Ungeklärt",
         "unknown": "Unbekannte Rolle: {{role}}"
       },

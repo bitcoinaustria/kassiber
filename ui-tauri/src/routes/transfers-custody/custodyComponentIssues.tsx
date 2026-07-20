@@ -250,6 +250,7 @@ export function custodyRoleLabel(t: TFunction<"review">, role: string) {
     fee: t("swap.components.role.fee"),
     external: t("swap.components.role.external"),
     retained: t("swap.components.role.retained"),
+    suspense: t("swap.components.role.suspense"),
     unresolved: t("swap.components.role.unresolved"),
   };
   return labels[role] ?? t("swap.components.role.unknown", { role });

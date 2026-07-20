@@ -44,6 +44,17 @@
           "balanced": "Balanced",
           "unbalanced": "Not balanced"
         },
+        "allocations": {
+          "title": "Allocations",
+          "hint": "Map exactly how much of each source funds each destination, fee, or retained leg. Required for multi-source, conversion, and suspense components.",
+          "add": "Add allocation",
+          "remove": "Remove allocation",
+          "source": "From (source)",
+          "sink": "To (destination / fee)",
+          "amount": "Amount (BTC)",
+          "selectLeg": "Select a leg",
+          "empty": "No allocations yet. Add one edge per source → destination flow."
+        },
         "saveDraft": "Save as draft",
         "activate": "Activate",
         "reset": "Start over"
@@ -117,6 +128,7 @@
         "fee": "Fee",
         "external": "External",
         "retained": "Retained custody",
+        "suspense": "Suspense",
         "unresolved": "Unresolved",
         "unknown": "Unknown role: {{role}}"
       },

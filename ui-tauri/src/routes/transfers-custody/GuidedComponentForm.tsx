@@ -7,6 +7,7 @@
  * `ui.transfers.components.{plan,apply}` dry-run → commit flow.
  */
 import { useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Check, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 
@@ -43,11 +44,13 @@ import {
   custodyRoleLabel,
 } from "./custodyComponentIssues";
 import {
+  createGuidedAllocation,
   createGuidedLeg,
   createInitialGuidedForm,
   formToDocument,
   isOwnedRole,
   isSinkRole,
+  type GuidedAllocationForm,
   type GuidedComponentFormState,
   type GuidedLegForm,
   type GuidedLegRole,
@@ -138,6 +141,32 @@ export function GuidedComponentForm() {
     setResult(null);
     setActionError(null);
   };
+
+  const addAllocation = () =>
+    patchForm({ allocations: [...form.allocations, createGuidedAllocation()] });
+  const patchAllocation = (key: string, patch: Partial<GuidedAllocationForm>) => {
+    setForm((prev) => ({
+      ...prev,
+      allocations: prev.allocations.map((allocation) =>
+        allocation.key === key ? { ...allocation, ...patch } : allocation,
+      ),
+    }));
+    setResult(null);
+    setActionError(null);
+  };
+  const removeAllocation = (key: string) =>
+    patchForm({
+      allocations: form.allocations.filter((allocation) => allocation.key !== key),
+    });
+
+  const sourceLegs = form.legs.filter((leg) => leg.role === "source");
+  const sinkLegs = form.legs.filter((leg) => isSinkRole(leg.role));
+  const hasSuspenseLeg = form.legs.some((leg) => leg.role === "suspense");
+  const showAllocations =
+    form.allocations.length > 0 ||
+    sourceLegs.length > 1 ||
+    hasSuspenseLeg ||
+    form.conservationMode === "conversion";
 
   const submit = async (activate: boolean) => {
     setResult(null);
@@ -249,6 +278,47 @@ export function GuidedComponentForm() {
             />
           ))}
         </div>
+
+        {showAllocations ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-medium">
+                  {t("swap.components.form.allocations.title")}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {t("swap.components.form.allocations.hint")}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={addAllocation}
+              >
+                <Plus />
+                {t("swap.components.form.allocations.add")}
+              </Button>
+            </div>
+            {form.allocations.length === 0 ? (
+              <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                {t("swap.components.form.allocations.empty")}
+              </p>
+            ) : (
+              form.allocations.map((allocation) => (
+                <AllocationRow
+                  key={allocation.key}
+                  allocation={allocation}
+                  legs={form.legs}
+                  sourceLegs={sourceLegs}
+                  sinkLegs={sinkLegs}
+                  onChange={(patch) => patchAllocation(allocation.key, patch)}
+                  onRemove={() => removeAllocation(allocation.key)}
+                />
+              ))
+            )}
+          </div>
+        ) : null}
 
         <div
           className={cn(
@@ -468,6 +538,92 @@ function GuidedLegRow({
           </Button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function legDisplayLabel(
+  t: TFunction<"review">,
+  leg: GuidedLegForm,
+  index: number,
+): string {
+  return `${index + 1} · ${custodyRoleLabel(t, leg.role)}`;
+}
+
+function AllocationRow({
+  allocation,
+  legs,
+  sourceLegs,
+  sinkLegs,
+  onChange,
+  onRemove,
+}: {
+  allocation: GuidedAllocationForm;
+  legs: GuidedLegForm[];
+  sourceLegs: GuidedLegForm[];
+  sinkLegs: GuidedLegForm[];
+  onChange: (patch: Partial<GuidedAllocationForm>) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation("review");
+  return (
+    <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+      <div className="space-y-1.5">
+        <Label>{t("swap.components.form.allocations.source")}</Label>
+        <Select
+          value={allocation.sourceKey}
+          onValueChange={(value) => onChange({ sourceKey: value })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={t("swap.components.form.allocations.selectLeg")} />
+          </SelectTrigger>
+          <SelectContent>
+            {sourceLegs.map((leg) => (
+              <SelectItem key={leg.key} value={leg.key}>
+                {legDisplayLabel(t, leg, legs.indexOf(leg))}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>{t("swap.components.form.allocations.sink")}</Label>
+        <Select
+          value={allocation.sinkKey}
+          onValueChange={(value) => onChange({ sinkKey: value })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={t("swap.components.form.allocations.selectLeg")} />
+          </SelectTrigger>
+          <SelectContent>
+            {sinkLegs.map((leg) => (
+              <SelectItem key={leg.key} value={leg.key}>
+                {legDisplayLabel(t, leg, legs.indexOf(leg))}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>{t("swap.components.form.allocations.amount")}</Label>
+        <Input
+          inputMode="decimal"
+          value={allocation.amountBtc}
+          spellCheck={false}
+          placeholder="0.00000000"
+          onChange={(event) => onChange({ amountBtc: event.target.value })}
+        />
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="text-muted-foreground"
+        onClick={onRemove}
+        aria-label={t("swap.components.form.allocations.remove")}
+      >
+        <Trash2 />
+      </Button>
     </div>
   );
 }

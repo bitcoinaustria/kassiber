@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { previewCustodyComponentBatch } from "@/lib/custodyComponentBulk";
 import {
+  createGuidedAllocation,
   createGuidedLeg,
   createInitialGuidedForm,
   formToComponentSpec,
@@ -98,6 +99,54 @@ describe("guidedComponentModel", () => {
     expect(
       cleared.structuralErrors.some((i) => i.code === "transactionlessTimeRequired"),
     ).toBe(false);
+  });
+
+  it("requires and satisfies N:M allocations by leg ordinal", () => {
+    const form = createInitialGuidedForm();
+    const s1 = createGuidedLeg("source");
+    s1.amountBtc = "0.5";
+    s1.transactionRef = "tx-a";
+    const s2 = createGuidedLeg("source");
+    s2.amountBtc = "0.5";
+    s2.transactionRef = "tx-b";
+    const dest = createGuidedLeg("destination");
+    dest.amountBtc = "0.99";
+    dest.transactionRef = "tx-c";
+    const fee = createGuidedLeg("fee");
+    fee.amountBtc = "0.01";
+    fee.transactionRef = "tx-a";
+    form.legs = [s1, s2, dest, fee];
+
+    // Two sources feeding an owned sink + a fee needs explicit allocations.
+    const missing = previewCustodyComponentBatch(formToDocument(form));
+    expect(missing.activationErrors.some((i) => i.code === "allocationsRequired")).toBe(
+      true,
+    );
+
+    const alloc = (source: string, sink: string, amountBtc: string) => {
+      const a = createGuidedAllocation();
+      a.sourceKey = source;
+      a.sinkKey = sink;
+      a.amountBtc = amountBtc;
+      return a;
+    };
+    form.allocations = [
+      alloc(s1.key, dest.key, "0.5"),
+      alloc(s2.key, dest.key, "0.49"),
+      alloc(s2.key, fee.key, "0.01"),
+    ];
+
+    const spec = formToComponentSpec(form);
+    const allocs = spec.allocations as Array<Record<string, unknown>>;
+    expect(allocs[0]).toMatchObject({
+      source_ordinal: 0,
+      sink_ordinal: 2,
+      source_amount_msat: "50000000000",
+      sink_amount_msat: "50000000000",
+    });
+    const satisfied = previewCustodyComponentBatch(formToDocument(form));
+    expect(satisfied.structuralErrors).toEqual([]);
+    expect(satisfied.activationErrors).toEqual([]);
   });
 
   it("converts datetime-local values to RFC3339 UTC", () => {
