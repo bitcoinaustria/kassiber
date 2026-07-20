@@ -76,6 +76,7 @@ class Operation:
     command_path: str
     capability: Capability
     secret_arguments: dict[str, bytearray] = field(repr=False)
+    admitted_lease_epoch: str | None = None
     admin_authorized_until_monotonic: float | None = None
     state: str = "queued"
     submitted_at: str = field(default_factory=now_iso)
@@ -288,7 +289,12 @@ class ProjectWorker:
                 lease = self._service._leases.get(self.project_identity)
                 if operation.cancellation_requested:
                     return
-                if lease is None or lease.revoked or lease.expired():
+                if (
+                    lease is None
+                    or lease.revoked
+                    or lease.expired()
+                    or operation.admitted_lease_epoch != lease.epoch
+                ):
                     self._service._finish_operation_locked(
                         operation,
                         "cancelled",
@@ -382,6 +388,7 @@ class ProjectWorker:
                 )
                 dispatch_rejected = (
                     current_lease is not lease
+                    or operation.admitted_lease_epoch != lease.epoch
                     or lease.revoked
                     or lease.expired()
                     or operation.cancellation_requested
@@ -1324,6 +1331,7 @@ class OperatorService:
                 command_path=command_path,
                 capability=required,
                 secret_arguments=secret_arguments,
+                admitted_lease_epoch=lease.epoch,
                 admin_authorized_until_monotonic=(
                     admin_authorized_until
                     if required is Capability.ADMIN

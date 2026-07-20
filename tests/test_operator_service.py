@@ -1391,6 +1391,48 @@ class OperatorServiceTest(unittest.TestCase):
                 release.set()
                 service.close()
 
+    def test_queued_operation_cannot_cross_a_refreshed_lease_epoch(self) -> None:
+        dequeued = threading.Event()
+        release = threading.Event()
+        calls: list[str] = []
+
+        def runner(operation, _passphrase):
+            calls.append(operation.command_path)
+            return OperationResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"first-passphrase"), duration_seconds=None)
+                worker = next(iter(service._workers.values()))
+                original_run_one = worker._run_one
+
+                def delayed_run(operation):
+                    dequeued.set()
+                    if not release.wait(2):
+                        raise AssertionError("timed out waiting for lease refresh")
+                    original_run_one(operation)
+
+                worker._run_one = delayed_run  # type: ignore[method-assign]
+                queued = service.submit(tmp, ["status"])
+                self.assertTrue(dequeued.wait(1))
+
+                service.unlock(
+                    tmp,
+                    bytearray(b"second-passphrase"),
+                    duration_seconds=None,
+                )
+                release.set()
+                completed = self._wait_terminal(service, queued["operation_id"])
+
+                self.assertEqual(completed["state"], "cancelled")
+                self.assertEqual(calls, [])
+            finally:
+                release.set()
+                service.close()
+
     def test_admin_authentication_is_rechecked_after_owner_inheritance(self) -> None:
         inheritance_started = threading.Event()
         release_inheritance = threading.Event()
