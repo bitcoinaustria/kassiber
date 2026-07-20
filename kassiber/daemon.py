@@ -3419,6 +3419,7 @@ def _open_daemon_connection(
     passphrase: str | None = None,
     require_existing_schema: bool = False,
 ) -> sqlite3.Connection:
+    _retry_retired_project_resources(ctx)
     if ctx.conn is not None:
         _ensure_daemon_project_owner(ctx)
         _remember_unlocked_passphrase(ctx, passphrase)

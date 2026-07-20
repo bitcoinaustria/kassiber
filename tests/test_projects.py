@@ -493,6 +493,69 @@ class DaemonProjectSwitchTests(unittest.TestCase):
         self.assertEqual(owner.release.call_count, 2)
         self.assertEqual(ctx.retired_project_resources, [])
 
+    def test_daemon_unlock_retries_retained_owner_before_reacquiring(self):
+        from kassiber import daemon as daemon_runtime
+
+        order: list[str] = []
+        release_attempts = 0
+
+        def release_old() -> None:
+            nonlocal release_attempts
+            release_attempts += 1
+            if release_attempts == 1:
+                raise OSError("release failed")
+            order.append("release-old")
+
+        old_owner = mock.Mock()
+        old_owner.release.side_effect = release_old
+        with tempfile.TemporaryDirectory() as tmp:
+            project = daemon_runtime.canonical_project(tmp)
+            new_owner = mock.Mock(project=project)
+            connection = mock.Mock()
+            ctx = mock.Mock(
+                conn=None,
+                project_owner=old_owner,
+                retired_project_resources=[],
+                data_root=tmp,
+                project_id=None,
+                runtime_config={},
+            )
+
+            with self.assertRaisesRegex(OSError, "release failed"):
+                daemon_runtime._release_daemon_project_owner(ctx)
+
+            def acquire(*_args, **_kwargs):
+                order.append("acquire-new")
+                return new_owner
+
+            with mock.patch.object(
+                daemon_runtime,
+                "acquire_project_ownership",
+                side_effect=acquire,
+            ), mock.patch.object(
+                daemon_runtime,
+                "open_db",
+                return_value=connection,
+            ), mock.patch.object(
+                daemon_runtime,
+                "validate_project_migration_after_unlock",
+            ), mock.patch.object(
+                daemon_runtime,
+                "merge_db_backends",
+            ), mock.patch.object(
+                daemon_runtime,
+                "_remember_unlocked_passphrase",
+            ), mock.patch.object(
+                daemon_runtime,
+                "_start_freshness_background_worker",
+            ):
+                opened = daemon_runtime._open_daemon_connection(ctx)
+
+        self.assertIs(opened, connection)
+        self.assertEqual(order, ["release-old", "acquire-new"])
+        self.assertEqual(ctx.retired_project_resources, [])
+        self.assertIs(ctx.project_owner, new_owner)
+
     def test_switch_stop_failure_prevents_catalog_persistence(self):
         from kassiber import daemon as daemon_runtime
         from kassiber import projects as projects_module
