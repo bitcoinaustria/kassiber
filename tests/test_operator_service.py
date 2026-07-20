@@ -43,6 +43,27 @@ class _Connection:
 
 
 class OperatorServiceTest(unittest.TestCase):
+    def test_admin_cannot_be_granted_as_a_standing_lease(self) -> None:
+        service = OperatorService(
+            "generation",
+            lambda *_args: OperationResult(0, "", ""),
+        )
+        try:
+            with self.assertRaises(AppError) as raised:
+                service.unlock(
+                    "/not-opened",
+                    bytearray(b"passphrase"),
+                    duration_seconds=None,
+                    capability=Capability.ADMIN,
+                )
+            self.assertEqual(
+                raised.exception.code,
+                "operator_invalid_lease_capability",
+            )
+            self.assertEqual(service._leases, {})
+        finally:
+            service.close()
+
     def test_auth_backoff_cache_is_bounded_and_lru(self) -> None:
         service = OperatorService(
             "generation",

@@ -19,6 +19,73 @@ from kassiber.errors import AppError
 
 
 class OperatorServerTest(unittest.TestCase):
+    def test_admin_submission_requires_challenge_bound_fresh_auth(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        server.service.submit.return_value = {
+            "operation_id": "generation.operation",
+            "state": "queued",
+        }
+        channel = mock.Mock()
+        authentication = bytearray(b"fresh-admin-passphrase")
+        channel.receive_secret.return_value = authentication
+
+        with mock.patch(
+            "kassiber.operator.server._canonical_data_root",
+            return_value="/canonical-project",
+        ):
+            response = server._handle_submit(
+                channel,
+                {
+                    "data_root": "/caller-project",
+                    "operation_id": "generation.operation",
+                    "argv": ["secrets", "verify"],
+                },
+            )
+
+        self.assertTrue(response["ok"])
+        continuation = channel.send_json.call_args.args[0]
+        self.assertEqual(continuation["continue"], "secrets")
+        self.assertIsNotNone(continuation["admin_challenge"])
+        channel.receive_secret.assert_called_once_with(
+            continuation["admin_challenge"]
+        )
+        server.service.verify_admin.assert_called_once_with(
+            "/canonical-project",
+            authentication,
+        )
+        self.assertTrue(server.service.submit.call_args.kwargs["admin_verified"])
+        self.assertEqual(set(authentication), {0})
+
+    def test_failed_admin_verification_never_submits(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        server.service.verify_admin.side_effect = AppError(
+            "wrong passphrase",
+            code="unlock_failed",
+        )
+        channel = mock.Mock()
+        authentication = bytearray(b"wrong-admin-passphrase")
+        channel.receive_secret.return_value = authentication
+
+        with mock.patch(
+            "kassiber.operator.server._canonical_data_root",
+            return_value="/canonical-project",
+        ):
+            with self.assertRaises(AppError) as raised:
+                server._handle_submit(
+                    channel,
+                    {
+                        "data_root": "/caller-project",
+                        "operation_id": "generation.operation",
+                        "argv": ["secrets", "verify"],
+                    },
+                )
+
+        self.assertEqual(raised.exception.code, "unlock_failed")
+        server.service.submit.assert_not_called()
+        self.assertEqual(set(authentication), {0})
+
     def test_password_unlock_cannot_claim_touch_id_authentication(self) -> None:
         server = BrokerServer.__new__(BrokerServer)
         server.service = mock.Mock()
