@@ -1,12 +1,14 @@
 {
   "swap": {
     "tabs": {
+      "review": "Prüfung",
+      "gaps": "Verwahrungslücken",
       "swaps": "Swaps",
       "transfers": "Bitcoin-Bewegungen",
-      "components": "Lücken schließen"
+      "components": "Komponenten"
     },
     "components": {
-      "title": "Verwahrungslücken schließen",
+      "title": "Verwahrungskomponenten",
       "description": "Löse lange Wallet-Migrations- und Konsolidierungsverläufe als atomare Verwahrungskomponenten. Eins-zu-viele-, Viele-zu-eins-, N:M-, On-chain-, Liquid- und Lightning-Legs können eine gemeinsame geprüfte Interpretation bilden, ohne importierte Transaktionen umzuschreiben.",
       "bulkTitle": "Sammelauflösung für Komponenten",
       "bulkDescription": "Füge eine Komponente oder einen Stapel als JSON ein, prüfe die Erhaltung lokal und speichere alles als Entwurf oder aktiviere den vollständigen Stapel.",

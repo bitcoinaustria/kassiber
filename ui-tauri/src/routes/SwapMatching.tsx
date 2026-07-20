@@ -150,6 +150,7 @@ import {
   pairHistoryExactInteger,
   pairHistoryFeePercent,
 } from "./swapPairHistoryModel";
+import { CustodyGapsContent } from "./CustodyGaps";
 
 const PAIR_KIND_OPTIONS = [
   "manual",
@@ -547,19 +548,42 @@ function railForLeg(
   return "onchain";
 }
 
-type PairingReviewTab = "swaps" | "transfers" | "components";
+type CustodySurfaceTab = "review" | "gaps" | "components";
 type PairingView = "review" | "paired";
 
+/**
+ * Transfers & Custody — the single custody surface.
+ *
+ * Merges the former standalone `/swaps` and `/custody-gaps` screens into three
+ * tabs: **Review** (the pairing candidate queue for Bitcoin moves and asset
+ * swaps, plus its settled History), **Custody gaps** (the guided missing-wallet
+ * bridge/residual workflow), and **Components** (versioned custody
+ * interpretations). The old top-level Bitcoin-moves/Swaps split is now a
+ * segmented control inside the Review tab so there is one queue, not two.
+ */
 export function SwapMatching() {
   const { t } = useTranslation("review");
   const search = useSearch({ strict: false }) as {
     focus?: string;
     method?: "ownership_graph";
+    tab?: string;
   };
-  const [activeTab, setActiveTab] = useState<PairingReviewTab>("transfers");
-  // Swaps/Transfers is the only tab strip. The settled "History" list isn't a
-  // second tab — it opens from a History card in the review-queue metrics and
-  // returns via a back control. The view is shared across both tabs.
+  // A `focus`/`method` deep link always targets the pairing queue; otherwise an
+  // explicit `?tab=` hint (used by the /custody-gaps redirect) selects the tab.
+  const deepLinkToReview = Boolean(search.focus || search.method);
+  const initialTab: CustodySurfaceTab = deepLinkToReview
+    ? "review"
+    : search.tab === "gaps"
+      ? "gaps"
+      : search.tab === "components"
+        ? "components"
+        : "review";
+  const [activeTab, setActiveTab] = useState<CustodySurfaceTab>(initialTab);
+  // Within Review, transfers vs swaps is a segmented control rather than a
+  // top-level tab. The settled "History" list isn't a tab either — it opens
+  // from a History card in the review-queue metrics and returns via a back
+  // control. The view is shared across both modes.
+  const [reviewMode, setReviewMode] = useState<PairingReviewMode>("transfers");
   const [view, setView] = useState<PairingView>("review");
   const showHistory = () => setView("paired");
   const showReview = () => setView("review");
@@ -568,38 +592,52 @@ export function SwapMatching() {
     <div className={screenShellClassName}>
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as PairingReviewTab)}
+        onValueChange={(value) => setActiveTab(value as CustodySurfaceTab)}
         className="space-y-3"
       >
         <div className={pageHeaderClassName}>
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-            <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
-            <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+            <TabsTrigger value="review">{t("swap.tabs.review")}</TabsTrigger>
+            <TabsTrigger value="gaps">{t("swap.tabs.gaps")}</TabsTrigger>
             <TabsTrigger value="components">{t("swap.tabs.components")}</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="transfers" className="mt-0">
-          {activeTab === "transfers" ? (
-            view === "review" ? (
-              <PairingReview
-                mode="transfers"
-                onShowHistory={showHistory}
-                focusTransactionId={search.focus}
-                initialMethod={search.method}
-              />
-            ) : (
-              <PairedSwaps mode="transfers" onBackToReview={showReview} />
-            )
+        <TabsContent value="review" className="mt-0 space-y-3">
+          {activeTab === "review" ? (
+            <>
+              <Tabs
+                value={reviewMode}
+                onValueChange={(value) => {
+                  setReviewMode(value as PairingReviewMode);
+                  setView("review");
+                }}
+              >
+                <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+                  <TabsTrigger value="transfers">
+                    {t("swap.tabs.transfers")}
+                  </TabsTrigger>
+                  <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              {view === "review" ? (
+                <PairingReview
+                  mode={reviewMode}
+                  onShowHistory={showHistory}
+                  focusTransactionId={
+                    reviewMode === "transfers" ? search.focus : undefined
+                  }
+                  initialMethod={
+                    reviewMode === "transfers" ? search.method : undefined
+                  }
+                />
+              ) : (
+                <PairedSwaps mode={reviewMode} onBackToReview={showReview} />
+              )}
+            </>
           ) : null}
         </TabsContent>
-        <TabsContent value="swaps" className="mt-0">
-          {activeTab === "swaps" ? (
-            view === "review" ? (
-              <PairingReview mode="swaps" onShowHistory={showHistory} />
-            ) : (
-              <PairedSwaps mode="swaps" onBackToReview={showReview} />
-            )
-          ) : null}
+        <TabsContent value="gaps" className="mt-0">
+          {activeTab === "gaps" ? <CustodyGapsContent /> : null}
         </TabsContent>
         <TabsContent value="components" className="mt-0">
           {activeTab === "components" ? <CustodyComponentResolver /> : null}

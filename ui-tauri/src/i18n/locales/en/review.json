@@ -1,12 +1,14 @@
 {
   "swap": {
     "tabs": {
+      "review": "Review",
+      "gaps": "Custody gaps",
       "swaps": "Swaps",
       "transfers": "Bitcoin moves",
-      "components": "Close gaps"
+      "components": "Components"
     },
     "components": {
-      "title": "Close custody gaps",
+      "title": "Custody components",
       "description": "Resolve long wallet-migration and consolidation histories as atomic custody components. One-to-many, many-to-one, N:M, on-chain, Liquid, and Lightning legs can share one reviewed interpretation without rewriting the imported transactions.",
       "bulkTitle": "Bulk component resolver",
       "bulkDescription": "Paste one component or a batch as JSON, preview conservation locally, then save every item as a draft or activate the complete batch.",

@@ -331,7 +331,6 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
-      { labelKey: "book.custodyGaps", icon: Route, href: "/custody-gaps" },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
     ],
