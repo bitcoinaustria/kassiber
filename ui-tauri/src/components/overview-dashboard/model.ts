@@ -828,10 +828,10 @@ export function initialYAutoFitFromUrl(): boolean {
 }
 
 export function initialActivityMarkerGroupingFromUrl(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   const params = new URLSearchParams(window.location.search);
   const value = params.get(ACTIVITY_MARKER_GROUPING_PARAM)?.toLowerCase();
-  return value !== "0" && value !== "false" && value !== "off";
+  return value === "1" || value === "true" || value === "on";
 }
 
 // A log scale has no place for zero: before the first funding the balance

@@ -136,7 +136,7 @@ export function useJournalProcessingAction(
           label: phaseLabel,
         },
         details: [t("processing.reportHint")],
-        active: true,
+        state: "running",
         startedAt: current?.startedAt ?? now,
         updatedAt: now,
       });
@@ -179,7 +179,7 @@ export function useJournalProcessingAction(
         label: t("processing.phase.fallback"),
       },
       details: [t("processing.reportHint")],
-      active: true,
+      state: "running",
       startedAt,
       updatedAt: startedAt,
     });

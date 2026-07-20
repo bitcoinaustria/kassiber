@@ -4,6 +4,7 @@ import type {
   NotificationTone,
 } from "@/store/ui";
 import { formatCount } from "@/lib/localeFormat";
+import type { FreshnessRunData } from "@/lib/syncResults";
 
 export type WalletSyncProgress = {
   job_id?: string;
@@ -89,7 +90,6 @@ const PHASE_PROGRESS_FRACTIONS: Record<string, number> = {
   auto_pair: 0.91,
   journal_refresh: 0.94,
   done: 1,
-  error: 1,
 };
 
 export interface SyncMilestone {
@@ -178,6 +178,9 @@ function computeProgressValue(
   progress: WalletSyncProgress,
   previousValue: number,
 ) {
+  if (progress.phase === "error") {
+    return clampProgress(previousValue);
+  }
   // A rate-limit backoff is a wait, not forward progress — hold the bar steady
   // (rather than nudging it) so the "waiting" state reads as paused, not stalled.
   if (progress.phase === "rate_limited") {
@@ -351,6 +354,39 @@ export function syncProgressNotification(
   };
 }
 
+export function failedSyncProgressForRun(
+  data: FreshnessRunData | undefined,
+  progressByJob: ReadonlyMap<string, WalletSyncProgress>,
+  fallback: WalletSyncProgress | null,
+): WalletSyncProgress {
+  const failedJob = (data?.completed ?? []).find((job) =>
+    ["error", "cancelled"].includes(job.status ?? ""),
+  );
+  const failedSource = (data?.sources ?? []).find(
+    (source) =>
+      source.status === "failed" || Boolean(source.blocking_reports),
+  );
+  const trackedProgress = failedJob?.id
+    ? progressByJob.get(failedJob.id)
+    : undefined;
+  const sourceProgress = failedSource
+    ? [...progressByJob.values()]
+        .reverse()
+        .find(
+          (progress) => progress.source_label === failedSource.source_label,
+        )
+    : undefined;
+
+  return (
+    trackedProgress ??
+    sourceProgress ??
+    fallback ?? {
+      source_label: failedJob?.source_label ?? failedSource?.source_label,
+      source_type: failedJob?.source_type ?? failedSource?.source_type,
+    }
+  );
+}
+
 function activeSyncTitle(progress: WalletSyncProgress) {
   if (progress.phase === "rate_limited") {
     return "Waiting out rate limit";
@@ -407,8 +443,31 @@ export function activeSyncMaintenanceProgress(
     tone: options.tone ?? "warning",
     progress: notification.progress,
     details,
-    active: true,
+    state: "running",
+    phase: progress.phase,
     startedAt: options.startedAt ?? now,
     updatedAt: now,
+  };
+}
+
+export function failedSyncMaintenanceProgress(
+  progress: WalletSyncProgress,
+  previousValue: number,
+  errorBody: string,
+  options: {
+    title: string;
+    startedAt?: string;
+    updatedAt?: string;
+  },
+): ActiveMaintenanceProgress {
+  return {
+    ...activeSyncMaintenanceProgress(progress, previousValue, {
+      tone: "error",
+      startedAt: options.startedAt,
+      updatedAt: options.updatedAt,
+    }),
+    title: options.title,
+    body: errorBody,
+    state: "failed",
   };
 }

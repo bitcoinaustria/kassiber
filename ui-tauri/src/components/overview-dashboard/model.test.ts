@@ -18,6 +18,7 @@ import {
   formatMarketRateValue,
   formatRelativeMarketRateTime,
   getDataForPeriod,
+  initialActivityMarkerGroupingFromUrl,
   initialTimePeriodFromUrl,
   isPointInPeriod,
   lastTreasuryLineValue,
@@ -725,6 +726,18 @@ describe("chart scale helpers", () => {
 
     vi.stubGlobal("window", { location: { search: "?period=30d" } });
     expect(initialTimePeriodFromUrl("5years")).toBe("30days");
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps nearby-event grouping off unless the URL explicitly enables it", () => {
+    vi.stubGlobal("window", { location: { search: "" } });
+    expect(initialActivityMarkerGroupingFromUrl()).toBe(false);
+
+    vi.stubGlobal("window", { location: { search: "?groupEvents=1" } });
+    expect(initialActivityMarkerGroupingFromUrl()).toBe(true);
+
+    vi.stubGlobal("window", { location: { search: "?groupEvents=0" } });
+    expect(initialActivityMarkerGroupingFromUrl()).toBe(false);
     vi.unstubAllGlobals();
   });
 

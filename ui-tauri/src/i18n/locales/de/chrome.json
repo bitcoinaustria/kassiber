@@ -339,9 +339,12 @@
     "defaultTitleRefresh": "Dein Buch wird aktualisiert",
     "body": "Erster Sync — deine Historie wird aus den konfigurierten Quellen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
     "bodyRefresh": "Aktualisierung aus deinen konfigurierten Quellen.",
+    "bodyFailed": "Die Aktualisierung wurde beendet, bevor alle Quellen fertig waren.",
     "preparing": "Quellenaktualisierung wird vorbereitet",
     "working": "Wird bearbeitet…",
     "keepUsing": "Du kannst Kassiber weiter nutzen, während das fertig wird.",
+    "failedHint": "Die fehlgeschlagene Quelle und Phase bleiben sichtbar, bis du diese Meldung schließt.",
+    "closeFailure": "Schließen",
     "continueInBackground": "Im Hintergrund fortsetzen"
   },
   "syncDot": {

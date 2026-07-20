@@ -64,7 +64,8 @@ export interface ActiveMaintenanceProgress {
   tone: NotificationTone;
   progress: NotificationProgress;
   details?: string[];
-  active: boolean;
+  state: "running" | "failed";
+  phase?: string;
   startedAt: string;
   updatedAt: string;
 }

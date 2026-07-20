@@ -1675,7 +1675,7 @@ const TransactionsTable = ({
             <col className="w-[130px]" />
             <col className="w-[48px]" />
           </colgroup>
-          <TableHeader className="sticky top-0 z-20 bg-card">
+          <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <TableHead
                 className="w-[34%] text-xs font-medium text-muted-foreground sm:text-sm"

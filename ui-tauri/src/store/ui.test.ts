@@ -91,7 +91,7 @@ describe("UI persistence", () => {
       body: "token=secret-progress",
       tone: "warning",
       progress: { value: 40, label: "token=secret-progress" },
-      active: true,
+      state: "running",
       startedAt,
       updatedAt: startedAt,
     });

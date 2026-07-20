@@ -339,9 +339,12 @@
     "defaultTitleRefresh": "Refreshing your book",
     "body": "First sync — building your history from your configured sources. This runs once and can take a few minutes.",
     "bodyRefresh": "Refreshing from your configured sources.",
+    "bodyFailed": "The refresh stopped before every source could finish.",
     "preparing": "Preparing source refresh",
     "working": "Working…",
     "keepUsing": "You can keep using Kassiber while this finishes.",
+    "failedHint": "The failed source and phase remain visible until you close this message.",
+    "closeFailure": "Close",
     "continueInBackground": "Continue in background"
   },
   "syncDot": {

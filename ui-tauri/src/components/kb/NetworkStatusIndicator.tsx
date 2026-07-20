@@ -376,7 +376,7 @@ export function NetworkStatusIndicator({
     Record<string, ConnectionHealthRecord>
   >({});
   const maintenanceActive = useUiStore(
-    (state) => Boolean(state.activeMaintenanceProgress?.active),
+    (state) => state.activeMaintenanceProgress?.state === "running",
   );
   const backendSettingsQuery = useDaemon<BackendSettingsData>(
     "ui.backends.settings.list",
@@ -481,7 +481,11 @@ export function NetworkStatusIndicator({
     // probes one at a time so later probes do not spend their supervisor
     // timeout waiting behind earlier network calls.
     for (const row of checkableRows) {
-      if (useUiStore.getState().activeMaintenanceProgress?.active) break;
+      if (
+        useUiStore.getState().activeMaintenanceProgress?.state === "running"
+      ) {
+        break;
+      }
       try {
         const envelope =
           row.probeKind === "electrum"

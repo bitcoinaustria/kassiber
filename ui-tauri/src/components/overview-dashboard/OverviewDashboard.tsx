@@ -81,7 +81,7 @@ export const OverviewDashboard = ({
       tone: "warning",
       progress: { indeterminate: true, label: "Refreshing BTC price" },
       details: ["Repricing transaction values"],
-      active: true,
+      state: "running",
       startedAt,
       updatedAt: startedAt,
     });

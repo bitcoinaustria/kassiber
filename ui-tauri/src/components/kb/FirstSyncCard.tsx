@@ -12,7 +12,7 @@
  * the top progress line (see `RouteTopProgressLine` in AppShell), from where the
  * book-refresh notification can re-open it.
  */
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { RouteProgressState } from "@/components/kb/progressIndicator";
@@ -28,6 +28,8 @@ interface FirstSyncCardProps {
   title?: string;
   /** First sync vs a later incremental refresh — only changes the copy. */
   isFirstSync?: boolean;
+  failed?: boolean;
+  failedPhase?: string;
   onDismiss: () => void;
 }
 
@@ -60,6 +62,8 @@ export function FirstSyncCard({
   progress,
   title,
   isFirstSync = true,
+  failed = false,
+  failedPhase,
   onDismiss,
 }: FirstSyncCardProps) {
   const { t } = useTranslation("chrome");
@@ -75,6 +79,14 @@ export function FirstSyncCard({
   // The milestone the bar currently sits in; everything before reads as done,
   // everything after as pending. (See firstSyncActiveMilestoneIndex.)
   const activeIndex = firstSyncActiveMilestoneIndex(fraction, isDeterminate);
+  const matchedFailedIndex = FIRST_SYNC_MILESTONES.findIndex(
+    (milestone) => milestone.phase === failedPhase,
+  );
+  const failedIndex = failed
+    ? matchedFailedIndex >= 0
+      ? matchedFailedIndex
+      : Math.min(activeIndex, FIRST_SYNC_MILESTONES.length - 1)
+    : -1;
   const statusLabel = progress?.label ?? t("firstSync.preparing");
   const { main: progressMain, detail: progressDetail } =
     splitSyncProgressLabel(statusLabel);
@@ -94,11 +106,22 @@ export function FirstSyncCard({
         className="relative pointer-events-auto w-full max-w-2xl rounded-[28px] border border-white/70 bg-muted/85 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100"
       >
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Loader2
-              className="h-5 w-5 animate-spin motion-reduce:animate-none"
-              aria-hidden="true"
-            />
+          <span
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+              failed
+                ? "bg-destructive/10 text-destructive"
+                : "bg-primary/10 text-primary",
+            )}
+          >
+            {failed ? (
+              <X className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <Loader2
+                className="h-5 w-5 animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+            )}
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-foreground">
@@ -108,7 +131,11 @@ export function FirstSyncCard({
                   : t("firstSync.defaultTitleRefresh"))}
             </h2>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              {isFirstSync ? t("firstSync.body") : t("firstSync.bodyRefresh")}
+              {failed
+                ? t("firstSync.bodyFailed")
+                : isFirstSync
+                  ? t("firstSync.body")
+                  : t("firstSync.bodyRefresh")}
             </p>
           </div>
         </div>
@@ -148,8 +175,9 @@ export function FirstSyncCard({
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
             <div
               className={cn(
-                "h-full rounded-full bg-primary/80",
-                isDeterminate
+                "h-full rounded-full",
+                failed ? "bg-destructive/80" : "bg-primary/80",
+                isDeterminate || failed
                   ? "transition-[width] duration-300 ease-out"
                   : "w-1/3 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
               )}
@@ -160,8 +188,10 @@ export function FirstSyncCard({
 
         <ul className="mt-4 space-y-2">
           {FIRST_SYNC_MILESTONES.map((milestone, index) => {
-            const done = isDeterminate && index < activeIndex;
-            const active = index === activeIndex;
+            const done =
+              isDeterminate && index < (failed ? failedIndex : activeIndex);
+            const milestoneFailed = failed && index === failedIndex;
+            const active = !failed && index === activeIndex;
             return (
               <li
                 key={milestone.phase}
@@ -170,7 +200,9 @@ export function FirstSyncCard({
                 <span
                   className={cn(
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
-                    done
+                    milestoneFailed
+                      ? "bg-destructive text-destructive-foreground"
+                      : done
                       ? "bg-primary/80 text-background"
                       : active
                         ? "text-primary"
@@ -178,7 +210,9 @@ export function FirstSyncCard({
                   )}
                   aria-hidden="true"
                 >
-                  {done ? (
+                  {milestoneFailed ? (
+                    <X className="h-3 w-3" />
+                  ) : done ? (
                     <Check className="h-3 w-3" />
                   ) : active ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -189,7 +223,9 @@ export function FirstSyncCard({
                 <span
                   className={cn(
                     "min-w-0 truncate",
-                    done
+                    milestoneFailed
+                      ? "font-medium text-destructive"
+                      : done
                       ? "text-muted-foreground line-through decoration-muted-foreground/40"
                       : active
                         ? "font-medium text-foreground"
@@ -205,7 +241,7 @@ export function FirstSyncCard({
 
         <div className="mt-5 flex flex-col items-center gap-2.5 border-t border-border/60 pt-4">
           <p className="text-center text-[11px] leading-snug text-muted-foreground">
-            {t("firstSync.keepUsing")}
+            {failed ? t("firstSync.failedHint") : t("firstSync.keepUsing")}
           </p>
           <Button
             type="button"
@@ -214,7 +250,9 @@ export function FirstSyncCard({
             className="rounded-full text-xs"
             onClick={onDismiss}
           >
-            {t("firstSync.continueInBackground")}
+            {failed
+              ? t("firstSync.closeFailure")
+              : t("firstSync.continueInBackground")}
           </Button>
         </div>
       </div>

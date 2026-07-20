@@ -45,8 +45,10 @@ export interface FreshnessSourceState {
 }
 
 export interface FreshnessJobSummary {
+  id?: string;
   job_type?: string;
   source_label?: string;
+  source_type?: string;
   status?: string;
   result?:
     | (Record<string, unknown> & {

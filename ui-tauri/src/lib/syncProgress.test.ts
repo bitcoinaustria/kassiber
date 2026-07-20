@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   activeSyncMaintenanceProgress,
   FIRST_SYNC_MILESTONES,
+  failedSyncMaintenanceProgress,
+  failedSyncProgressForRun,
   firstSyncActiveMilestoneIndex,
   formatSyncProgressBody,
   syncProgressNotification,
@@ -71,6 +73,17 @@ describe("sync progress notifications", () => {
       value: 85,
       indeterminate: false,
       label: "Refreshing configured sources",
+    });
+  });
+
+  it("holds progress at the failed phase instead of completing it", () => {
+    const progress = syncProgressNotification({ phase: "error" }, 46);
+
+    expect(progress.value).toBe(46);
+    expect(progress.progress).toEqual({
+      value: 46,
+      indeterminate: false,
+      label: "Refresh needs attention",
     });
   });
 
@@ -212,7 +225,63 @@ describe("sync progress notifications", () => {
         "300 / 600 scan targets checked",
         "42 imported · 258 unchanged",
       ],
-      active: true,
+      state: "running",
+    });
+  });
+
+  it("preserves the failed source and phase without completing the bar", () => {
+    const progress = failedSyncMaintenanceProgress(
+      {
+        source_label: "Cold",
+        source_type: "onchain_wallet",
+        phase: "backend_fetch",
+      },
+      36,
+      "Cold could not connect.",
+      {
+        title: "Book refresh failed",
+        startedAt: "2026-06-06T10:00:00.000Z",
+        updatedAt: "2026-06-06T10:01:00.000Z",
+      },
+    );
+
+    expect(progress).toMatchObject({
+      title: "Book refresh failed",
+      body: "Cold could not connect.",
+      tone: "error",
+      state: "failed",
+      phase: "backend_fetch",
+      progress: {
+        value: 46,
+        label: "Cold: Fetching source history",
+      },
+    });
+  });
+
+  it("keeps the failed job phase when a later job also emitted progress", () => {
+    const progress = failedSyncProgressForRun(
+      {
+        completed: [
+          { id: "failed-job", source_label: "Cold", status: "error" },
+          { id: "later-job", source_label: "Journals", status: "done" },
+        ],
+      },
+      new Map([
+        [
+          "failed-job",
+          { source_label: "Cold", phase: "backend_fetch" },
+        ],
+        [
+          "later-job",
+          { source_label: "Journals", phase: "journal_refresh" },
+        ],
+      ]),
+      { source_label: "Journals", phase: "journal_refresh" },
+    );
+
+    expect(progress).toEqual({
+      source_label: "Cold",
+      phase: "backend_fetch",
     });
   });
 });

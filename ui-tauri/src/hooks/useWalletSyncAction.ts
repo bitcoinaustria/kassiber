@@ -13,8 +13,10 @@ import {
 import {
   activeSyncMaintenanceProgress,
   BOOK_REFRESH_PROGRESS_ID,
+  failedSyncProgressForRun,
   STARTING_SYNC_PROGRESS_VALUE,
   startingSyncProgress,
+  failedSyncMaintenanceProgress,
   syncProgressNotification,
   type WalletSyncProgress,
 } from "@/lib/syncProgress";
@@ -54,11 +56,19 @@ export function useWalletSyncAction() {
   const noticeIdRef = React.useRef<string | null>(null);
   const startedAtRef = React.useRef<string | null>(null);
   const progressValueRef = React.useRef(STARTING_SYNC_PROGRESS_VALUE);
+  const lastProgressRef = React.useRef<WalletSyncProgress | null>(null);
+  const jobProgressRef = React.useRef(new Map<string, WalletSyncProgress>());
   const refreshBook = useDaemonStreamMutation<
     FreshnessRunData,
     WalletSyncProgress
   >("ui.freshness.run", {
     onProgress: (progress) => {
+      if (progress.phase !== "error" && progress.phase !== "done") {
+        lastProgressRef.current = progress;
+        if (progress.job_id) {
+          jobProgressRef.current.set(progress.job_id, progress);
+        }
+      }
       const noticeId = noticeIdRef.current;
       if (!noticeId) return;
       const previousValue = progressValueRef.current;
@@ -97,6 +107,8 @@ export function useWalletSyncAction() {
         }) > 0;
       if (refreshBook.isPending || otherSyncInFlight) return;
       progressValueRef.current = STARTING_SYNC_PROGRESS_VALUE;
+      lastProgressRef.current = null;
+      jobProgressRef.current.clear();
       const startedAt = new Date().toISOString();
       startedAtRef.current = startedAt;
       setActiveMaintenanceProgress({
@@ -114,7 +126,7 @@ export function useWalletSyncAction() {
           t("bookRefresh.autoPairIncluded"),
           t("bookRefresh.journalsIncluded"),
         ],
-        active: true,
+        state: "running",
         startedAt,
         updatedAt: startedAt,
       });
@@ -196,7 +208,28 @@ export function useWalletSyncAction() {
               // forever once the core sync and journals are clean.
               if (bookKey) markFirstSyncDone(bookKey);
             }
-            clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
+            if (needsAttention) {
+              const failedProgress = failedSyncProgressForRun(
+                envelope.data,
+                jobProgressRef.current,
+                lastProgressRef.current,
+              );
+              const now = new Date().toISOString();
+              setActiveMaintenanceProgress(
+                failedSyncMaintenanceProgress(
+                  failedProgress,
+                  progressValueRef.current,
+                  body,
+                  {
+                    title,
+                    startedAt: startedAtRef.current ?? now,
+                    updatedAt: now,
+                  },
+                ),
+              );
+            } else {
+              clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
+            }
             startedAtRef.current = null;
           },
           onError: (error) => {
@@ -217,18 +250,28 @@ export function useWalletSyncAction() {
                 target: "/logs",
               });
               noticeIdRef.current = null;
-              clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
-              startedAtRef.current = null;
-              return;
+            } else {
+              addNotification({
+                title: t("bookRefresh.failedTitle"),
+                body,
+                tone: "error",
+                dedupeKey: "book-refresh",
+                target: "/logs",
+              });
             }
-            addNotification({
-              title: t("bookRefresh.failedTitle"),
-              body,
-              tone: "error",
-              dedupeKey: "book-refresh",
-              target: "/logs",
-            });
-            clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
+            const now = new Date().toISOString();
+            setActiveMaintenanceProgress(
+              failedSyncMaintenanceProgress(
+                lastProgressRef.current ?? { phase: "error" },
+                progressValueRef.current,
+                body,
+                {
+                  title: t("bookRefresh.failedTitle"),
+                  startedAt: startedAtRef.current ?? now,
+                  updatedAt: now,
+                },
+              ),
+            );
             startedAtRef.current = null;
           },
         },

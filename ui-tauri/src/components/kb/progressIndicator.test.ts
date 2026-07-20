@@ -84,7 +84,7 @@ describe("route progress indicator label", () => {
           indeterminate: false,
           label: "Cold: Fetching source history · 300 / 600",
         },
-        active: true,
+        state: "running",
         startedAt: "2026-06-07T00:00:00Z",
         updatedAt: "2026-06-07T00:01:00Z",
       }),
@@ -93,5 +93,21 @@ describe("route progress indicator label", () => {
       label: "Refreshing book: Cold: Fetching source history · 300 / 600",
       value: 37.5,
     });
+  });
+
+  it("does not keep the route progress rail busy for retained failures", () => {
+    expect(
+      routeProgressFromActiveMaintenance({
+        id: "book-refresh",
+        title: "Book refresh failed",
+        body: "Cold could not connect.",
+        tone: "error",
+        progress: { value: 46, label: "Cold: Fetching source history" },
+        state: "failed",
+        phase: "backend_fetch",
+        startedAt: "2026-06-07T00:00:00Z",
+        updatedAt: "2026-06-07T00:01:00Z",
+      }),
+    ).toBeNull();
   });
 });

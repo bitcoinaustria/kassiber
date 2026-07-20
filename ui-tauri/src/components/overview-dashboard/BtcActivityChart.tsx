@@ -391,9 +391,9 @@ export const BtcActivityChart = ({
         params.delete(Y_AUTO_FIT_PARAM);
       }
       if (groupActivityMarkers) {
-        params.delete(ACTIVITY_MARKER_GROUPING_PARAM);
+        params.set(ACTIVITY_MARKER_GROUPING_PARAM, "1");
       } else {
-        params.set(ACTIVITY_MARKER_GROUPING_PARAM, "0");
+        params.delete(ACTIVITY_MARKER_GROUPING_PARAM);
       }
       const nextQuery = params.toString();
       const nextUrl = nextQuery

@@ -688,10 +688,14 @@ export function AppShell() {
   const bookKey = React.useMemo(() => bookIdentityKey(identity), [identity]);
   const bookRefreshActive =
     activeMaintenanceProgress?.id === BOOK_REFRESH_PROGRESS_ID &&
-    Boolean(activeMaintenanceProgress?.active);
+    activeMaintenanceProgress.state === "running";
+  const bookRefreshFailed =
+    activeMaintenanceProgress?.id === BOOK_REFRESH_PROGRESS_ID &&
+    activeMaintenanceProgress.state === "failed";
   // Show the full-screen sync card for ANY active book refresh (the first sync
   // OR a later incremental refresh), not only the very first one.
-  const syncCardEligible = bookRefreshActive && bookKey !== null;
+  const syncCardEligible =
+    (bookRefreshActive || bookRefreshFailed) && bookKey !== null;
   // Whether this is the book's very first sync — only switches the card's copy
   // ("setting up / building your history" vs a plain refresh).
   const isFirstSync = bookKey !== null && !firstSyncDone[bookKey];
@@ -705,22 +709,41 @@ export function AppShell() {
   const syncCardMinimized =
     bookKey !== null && Boolean(syncCardMinimizedMap[bookKey]);
   React.useEffect(() => {
-    // Once a book is no longer syncing, drop any "continue in background" choice
-    // so its next refresh starts expanded again.
-    if (!syncCardEligible && bookKey !== null && syncCardMinimizedMap[bookKey]) {
+    // A failure always returns to the foreground. Once a run is gone, also drop
+    // any "continue in background" choice so the next refresh starts expanded.
+    if (
+      (bookRefreshFailed || !syncCardEligible) &&
+      bookKey !== null &&
+      syncCardMinimizedMap[bookKey]
+    ) {
       restoreSyncCardStore(bookKey);
     }
-  }, [syncCardEligible, bookKey, syncCardMinimizedMap, restoreSyncCardStore]);
+  }, [
+    bookRefreshFailed,
+    syncCardEligible,
+    bookKey,
+    syncCardMinimizedMap,
+    restoreSyncCardStore,
+  ]);
   const showSyncCard = syncCardEligible && !syncCardMinimized;
   const minimizeSyncCard = React.useCallback(() => {
-    if (bookKey !== null) minimizeSyncCardStore(bookKey);
-  }, [bookKey, minimizeSyncCardStore]);
+    if (bookRefreshFailed) {
+      clearActiveMaintenanceProgress(BOOK_REFRESH_PROGRESS_ID);
+    } else if (bookKey !== null) {
+      minimizeSyncCardStore(bookKey);
+    }
+  }, [
+    bookKey,
+    bookRefreshFailed,
+    clearActiveMaintenanceProgress,
+    minimizeSyncCardStore,
+  ]);
   // The card already shows the title in its header, so feed it the raw phase
-  // label rather than the route-composed "Title: detail" string. Gated on
-  // `active` to match `shellProgress`, so a stale maintenance record can't leak
-  // a value in.
+  // label rather than the route-composed "Title: detail" string. Terminal
+  // failures remain available until explicitly dismissed.
   const syncCardProgress: RouteProgressState | null =
-    activeMaintenanceProgress?.active
+    activeMaintenanceProgress?.state === "running" ||
+    activeMaintenanceProgress?.state === "failed"
       ? {
           indeterminate: Boolean(
             activeMaintenanceProgress.progress.indeterminate,
@@ -1151,7 +1174,7 @@ export function AppShell() {
   );
 
   React.useEffect(() => {
-    if (!activeMaintenanceProgress?.active) return;
+    if (activeMaintenanceProgress?.state !== "running") return;
     if (activeProgressHasMatchingMutation(activeMaintenanceProgress.id)) return;
 
     const updatedAt = Date.parse(activeMaintenanceProgress.updatedAt);
@@ -1159,7 +1182,7 @@ export function AppShell() {
     const delayMs = Math.max(0, ACTIVE_PROGRESS_CLEAR_GRACE_MS - ageMs);
     const timeout = window.setTimeout(() => {
       const current = useUiStore.getState().activeMaintenanceProgress;
-      if (!current?.active) return;
+      if (current?.state !== "running") return;
       if (current.id !== activeMaintenanceProgress.id) return;
       if (activeProgressHasMatchingMutation(current.id)) return;
       clearActiveMaintenanceProgress(current.id);
@@ -1167,7 +1190,7 @@ export function AppShell() {
 
     return () => window.clearTimeout(timeout);
   }, [
-    activeMaintenanceProgress?.active,
+    activeMaintenanceProgress?.state,
     activeMaintenanceProgress?.id,
     activeMaintenanceProgress?.updatedAt,
     activeProgressHasMatchingMutation,
@@ -1772,6 +1795,8 @@ export function AppShell() {
                         progress={syncCardProgress}
                         title={activeMaintenanceProgress?.title}
                         isFirstSync={isFirstSync}
+                        failed={bookRefreshFailed}
+                        failedPhase={activeMaintenanceProgress?.phase}
                         onDismiss={minimizeSyncCard}
                       />
                     ) : null}

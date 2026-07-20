@@ -38,7 +38,7 @@ export function routeProgressFromNotifications(
 export function routeProgressFromActiveMaintenance(
   progress: ActiveMaintenanceProgress | null,
 ): RouteProgressState | null {
-  if (!progress?.active) return null;
+  if (progress?.state !== "running") return null;
   const title = compactProgressTitle(progress.title);
   const label = progress.progress.label?.trim();
   const detail = label || progress.body.trim() || "In progress";
