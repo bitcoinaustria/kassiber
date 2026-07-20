@@ -237,6 +237,57 @@ class OperatorProtocolTest(unittest.TestCase):
                 server.close()
                 thread.join(2)
 
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe saturation test")
+    def test_windows_listener_survives_more_than_32_connected_instances(self) -> None:
+        server = listen()
+        accepted: list[BrokerChannel] = []
+        clients: list[BrokerChannel] = []
+        errors: list[BaseException] = []
+
+        def accept_many() -> None:
+            try:
+                for _ in range(40):
+                    accepted.append(server.accept())
+            except BaseException as exc:  # pragma: no cover - Windows CI
+                errors.append(exc)
+
+        thread = threading.Thread(target=accept_many)
+        thread.start()
+        try:
+            for _ in range(40):
+                clients.append(connect(timeout=5.0, io_timeout=1.0))
+            thread.join(10)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(len(accepted), 40)
+
+            result: list[dict] = []
+
+            def serve_one_more() -> None:
+                try:
+                    with server.accept() as channel:
+                        result.append(channel.receive_json())
+                        channel.send_json({"ok": True})
+                except BaseException as exc:  # pragma: no cover - Windows CI
+                    errors.append(exc)
+
+            recovery = threading.Thread(target=serve_one_more)
+            recovery.start()
+            with connect(timeout=5.0, io_timeout=1.0) as channel:
+                channel.send_json({"after_saturation": True})
+                self.assertEqual(channel.receive_json(), {"ok": True})
+            recovery.join(5)
+            self.assertFalse(recovery.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(result, [{"after_saturation": True}])
+        finally:
+            for channel in clients:
+                channel.close()
+            for channel in accepted:
+                channel.close()
+            server.close()
+            thread.join(2)
+
     @unittest.skipIf(os.name == "nt", "Unix timeout test")
     def test_ping_read_is_bounded_when_endpoint_accepts_but_never_replies(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(

@@ -419,6 +419,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
     _PIPE_READMODE_BYTE = 0x00000000
     _PIPE_WAIT = 0x00000000
     _PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
+    _PIPE_UNLIMITED_INSTANCES = 255
     _OPEN_EXISTING = 3
     _GENERIC_READ = 0x80000000
     _GENERIC_WRITE = 0x40000000
@@ -921,7 +922,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     | _PIPE_READMODE_BYTE
                     | _PIPE_WAIT
                     | _PIPE_REJECT_REMOTE_CLIENTS,
-                    32,
+                    _PIPE_UNLIMITED_INSTANCES,
                     65536,
                     65536,
                     0,
@@ -937,6 +938,8 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
             with self._state_lock:
                 if self._closed:
                     raise OSError("operator named-pipe listener is closed")
+                if self._pending == _INVALID_HANDLE_VALUE:
+                    self._pending = self._create_instance(first=False)
                 handle = self._pending
             overlapped = _new_overlapped()
             try:
@@ -972,7 +975,12 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     _kernel32.CloseHandle(handle)
                     raise OSError("operator named-pipe listener is closed")
                 self._pending = _INVALID_HANDLE_VALUE
-            pending = self._create_instance(first=False)
+            try:
+                pending = self._create_instance(first=False)
+            except Exception:
+                _kernel32.DisconnectNamedPipe(handle)
+                _kernel32.CloseHandle(handle)
+                raise
             with self._state_lock:
                 if self._closed:
                     _kernel32.CloseHandle(pending)
