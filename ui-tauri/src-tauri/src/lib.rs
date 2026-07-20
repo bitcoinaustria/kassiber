@@ -2945,18 +2945,8 @@ fn run_operator_native_auth_helper() -> Option<i32> {
             }
             "store" => {
                 let secret_fd = helper_fd(&args, "--secret-fd")?;
-                let mut secret = Vec::new();
-                unsafe { File::from_raw_fd(secret_fd) }
-                    .take(16 * 1024 + 1)
-                    .read_to_end(&mut secret)
-                    .map_err(|error| format!("could not read native auth secret: {error}"))?;
-                if secret.len() > 16 * 1024 {
-                    secret.fill(0);
-                    return Err("native auth secret exceeds 16 KiB".to_string());
-                }
-                while matches!(secret.last(), Some(b'\n' | b'\r')) {
-                    secret.pop();
-                }
+                let mut secret =
+                    read_operator_native_auth_secret(unsafe { File::from_raw_fd(secret_fd) })?;
                 let result = operator_touch_id_store_passphrase(account, &secret);
                 secret.fill(0);
                 result?;
@@ -2981,6 +2971,20 @@ fn run_operator_native_auth_helper() -> Option<i32> {
             1
         }
     })
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn read_operator_native_auth_secret(reader: impl Read) -> Result<Vec<u8>, String> {
+    let mut secret = Vec::new();
+    if let Err(error) = reader.take(16 * 1024 + 1).read_to_end(&mut secret) {
+        secret.fill(0);
+        return Err(format!("could not read native auth secret: {error}"));
+    }
+    if secret.len() > 16 * 1024 {
+        secret.fill(0);
+        return Err("native auth secret exceeds 16 KiB".to_string());
+    }
+    Ok(secret)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -3205,22 +3209,32 @@ mod tests {
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, managed_settings_path, menu_action,
         menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
-        path_is_on_path, terminal_command_contents, terminal_command_path_hint,
-        touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
-        validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
-        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
-        MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS,
-        MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY,
-        MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY,
-        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
-        MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
-        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
-        TERMINAL_COMMAND_MARKER,
+        path_is_on_path, read_operator_native_auth_secret, terminal_command_contents,
+        terminal_command_path_hint, touch_id_managed_unlock_state, touch_id_scope_for_selected,
+        validated_attachment_file_path, validated_external_url, TerminalCommandFileState,
+        TerminalCommandPaths, ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS,
+        DOCUMENT_IMPORT_STAGE_KIND, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT,
+        MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS,
+        MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
+        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
+        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
+    use std::io::Cursor;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Url;
+
+    #[test]
+    fn operator_native_auth_pipe_preserves_normalized_secret_bytes() {
+        let secret = b"passphrase-with-significant-newline\n";
+        assert_eq!(
+            read_operator_native_auth_secret(Cursor::new(secret)).unwrap(),
+            secret,
+        );
+    }
 
     #[test]
     fn older_stale_generation_cannot_clear_a_newer_guard() {

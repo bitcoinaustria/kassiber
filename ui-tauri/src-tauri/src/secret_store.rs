@@ -674,7 +674,7 @@ pub fn operator_touch_id_store_passphrase(account: &str, passphrase: &[u8]) -> R
     use security_framework::access_control::{ProtectionMode, SecAccessControl};
     use security_framework::passwords::{set_generic_password_options, AccessControlOptions};
 
-    validate_touch_id_account(account)?;
+    validate_operator_touch_id_account(account)?;
     if passphrase.is_empty() {
         return Err("database passphrase must not be empty".to_string());
     }
@@ -706,7 +706,7 @@ pub fn operator_touch_id_store_passphrase(
 pub fn operator_touch_id_get_passphrase(account: &str) -> Result<Option<Vec<u8>>, String> {
     use security_framework::passwords::generic_password;
 
-    validate_touch_id_account(account)?;
+    validate_operator_touch_id_account(account)?;
     touch_id_biometrics_available()?;
     match generic_password(protected_password_options(
         OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
@@ -727,7 +727,7 @@ pub fn operator_touch_id_get_passphrase(_account: &str) -> Result<Option<Vec<u8>
 pub fn operator_touch_id_delete_passphrase(account: &str) -> Result<(), String> {
     use security_framework::passwords::delete_generic_password_options;
 
-    validate_touch_id_account(account)?;
+    validate_operator_touch_id_account(account)?;
     match delete_generic_password_options(protected_password_options(
         OPERATOR_BIOMETRIC_PASSPHRASE_SERVICE,
         account,
@@ -745,7 +745,7 @@ pub fn operator_touch_id_delete_passphrase(_account: &str) -> Result<(), String>
 }
 
 pub fn operator_touch_id_configured(account: &str) -> Result<bool, String> {
-    validate_touch_id_account(account)?;
+    validate_operator_touch_id_account(account)?;
     if !cfg!(target_os = "macos") {
         return Err(
             "Touch ID operator unlock is only available in the macOS desktop app.".to_string(),
@@ -764,6 +764,17 @@ fn operator_touch_id_configured_with_store(
 fn validate_touch_id_account(account: &str) -> Result<(), String> {
     if account.trim().is_empty() {
         return Err("Touch ID account is missing.".to_string());
+    }
+    Ok(())
+}
+
+fn validate_operator_touch_id_account(account: &str) -> Result<(), String> {
+    if account.len() != 64
+        || !account
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("Touch ID operator account is invalid.".to_string());
     }
     Ok(())
 }
@@ -1493,6 +1504,14 @@ mod tests {
             .set(OPERATOR_BIOMETRIC_MARKER_SERVICE, account, b"1")
             .unwrap();
         assert!(operator_touch_id_configured_with_store(&store, account).unwrap());
+    }
+
+    #[test]
+    fn operator_touch_id_account_is_a_lowercase_sha256_digest() {
+        assert!(validate_operator_touch_id_account(&"a".repeat(64)).is_ok());
+        assert!(validate_operator_touch_id_account(&"A".repeat(64)).is_err());
+        assert!(validate_operator_touch_id_account("short").is_err());
+        assert!(validate_operator_touch_id_account(&format!("{}\n", "a".repeat(64))).is_err());
     }
 
     #[test]
