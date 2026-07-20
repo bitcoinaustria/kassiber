@@ -144,7 +144,7 @@ class OperatorServerTest(unittest.TestCase):
             root.mkdir(mode=0o700)
             with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(root)}):
                 runtime = _login_session_runtime_root()
-                root.rmdir()
+                root.rename(Path(parent) / "displaced-runtime")
                 root.mkdir(mode=0o700)
                 self.assertFalse(_login_session_runtime_is_valid(runtime))
 
