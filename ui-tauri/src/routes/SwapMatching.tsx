@@ -1839,14 +1839,15 @@ function PairingReview({
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [saveViewName, setSaveViewName] = useState("");
   const [createRuleOpen, setCreateRuleOpen] = useState(false);
-  const [rulesExpanded, setRulesExpanded] = useState(false);
+  // "Advanced" disclosure: reveals the rules engine and enables multi-select
+  // bulk pairing. Off by default so the queue is a clean filter → scan → act.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [cursorIndex, setCursorIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [detailCandidate, setDetailCandidate] = useState<SwapCandidate | null>(null);
   const consumedFocusRef = useRef<string | null>(null);
   const savedViews = savedViewsQuery.data?.data?.views ?? [];
   const rules = rulesQuery.data?.data?.rules ?? [];
-  const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
 
   const filterIsDirty =
     confidence !== "all" ||
@@ -2290,7 +2291,13 @@ function PairingReview({
 
   return (
     <div className="min-w-0">
-      <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
+      <Collapsible
+        open={advancedOpen}
+        onOpenChange={(open) => {
+          setAdvancedOpen(open);
+          if (!open) setSelected(new Set());
+        }}
+      >
         <div className="overflow-hidden rounded-lg border bg-card">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
             <div className="min-w-0">
@@ -2354,68 +2361,62 @@ function PairingReview({
                 <span className="ml-1">{t("common:actions.refresh")}</span>
               </Button>
               <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className={pageHeaderActionClassName}>
+                <Button
+                  variant={advancedOpen ? "secondary" : "outline"}
+                  size="sm"
+                  className={pageHeaderActionClassName}
+                >
                   <SettingsIcon className="size-3.5" />
-                  <span>{t("swap.header.rules", { enabled: enabledRuleCount, total: rules.length })}</span>
+                  <span>{t("swap.header.advanced")}</span>
                 </Button>
               </CollapsibleTrigger>
             </div>
           </header>
 
-          <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-5 sm:divide-x sm:divide-y-0">
-            <SwapQueueMetric
-              label={t("swap.metric.candidates")}
-              ariaLabel={t("swap.metric.showAllAria", { label: t("swap.metric.candidates") })}
-              value={counts.total}
-              tone={counts.total ? "neutral" : "good"}
-              active={!filterIsDirty}
-              onClick={() => {
-                setConfidence("all");
-                setMethod("all");
-                if (routeFilterEnabled) setRoutePair("all");
-              }}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.exact")}
-              ariaLabel={t("swap.metric.filterAria", { label: t("swap.metric.exact") })}
-              value={counts.exact}
-              tone={counts.exact ? "good" : "neutral"}
-              active={confidence === "exact"}
-              onClick={() => setConfidence(confidence === "exact" ? "all" : "exact")}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.strong")}
-              ariaLabel={t("swap.metric.filterAria", { label: t("swap.metric.strong") })}
-              value={counts.strong}
-              tone={counts.strong ? "warning" : "neutral"}
-              active={confidence === "strong"}
-              onClick={() => setConfidence(confidence === "strong" ? "all" : "strong")}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.conflicts")}
-              value={counts.conflicts}
-              tone={counts.conflicts ? "alert" : "neutral"}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.history")}
-              ariaLabel={t("swap.metric.historyAria")}
-              value={historyCount}
-              icon={<HistoryIcon className="size-3.5" aria-hidden="true" />}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-3 py-2 text-xs text-muted-foreground sm:px-6">
+            <span>
+              <span className="font-semibold text-foreground tabular-nums">
+                {formatCount(counts.total)}
+              </span>{" "}
+              {t("swap.metric.candidates")}
+            </span>
+            <span className="tabular-nums">
+              {formatCount(counts.exact)} {t("swap.metric.exact")}
+            </span>
+            <span className="tabular-nums">
+              {formatCount(counts.strong)} {t("swap.metric.strong")}
+            </span>
+            {counts.conflicts > 0 ? (
+              <span className="tabular-nums text-rose-600 dark:text-rose-400">
+                {formatCount(counts.conflicts)} {t("swap.metric.conflicts")}
+              </span>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-7 px-2"
               onClick={onShowHistory}
-            />
+            >
+              <HistoryIcon className="size-3.5" aria-hidden="true" />
+              <span>
+                {t("swap.metric.history")} ({formatCount(historyCount)})
+              </span>
+            </Button>
           </div>
 
           <div className="grid gap-2 border-t px-2 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <label className="flex shrink-0 items-center gap-2">
-                <Checkbox
-                  checked={selectedCandidateCount > 0}
-                  onCheckedChange={handleSelectAll}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {t("swap.filters.select")}
-                </span>
-              </label>
+              {advancedOpen ? (
+                <label className="flex shrink-0 items-center gap-2">
+                  <Checkbox
+                    checked={selectedCandidateCount > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {t("swap.filters.select")}
+                  </span>
+                </label>
+              ) : null}
               <span className="shrink-0 text-xs text-muted-foreground">
                 {t("swap.filters.visible", { count: candidates.length })}
               </span>
@@ -2576,7 +2577,9 @@ function PairingReview({
               <Table className="min-w-[1180px] w-full table-fixed">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="w-[42px]"></TableHead>
+                    {advancedOpen ? (
+                      <TableHead className="w-[42px]"></TableHead>
+                    ) : null}
                     <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">
                       {t("swap.table.status")}
                     </TableHead>
@@ -2611,15 +2614,17 @@ function PairingReview({
                         )}
                         onClick={() => setDetailCandidate(candidate)}
                       >
-                        <TableCell>
-                          <Checkbox
-                            aria-label={t("swap.table.selectAria")}
-                            disabled={!selectable}
-                            checked={selectable && selected.has(key)}
-                            onClick={(event) => event.stopPropagation()}
-                            onCheckedChange={() => toggleSelected(key)}
-                          />
-                        </TableCell>
+                        {advancedOpen ? (
+                          <TableCell>
+                            <Checkbox
+                              aria-label={t("swap.table.selectAria")}
+                              disabled={!selectable}
+                              checked={selectable && selected.has(key)}
+                              onClick={(event) => event.stopPropagation()}
+                              onCheckedChange={() => toggleSelected(key)}
+                            />
+                          </TableCell>
+                        ) : null}
                         <TableCell className="whitespace-normal">
                           <SwapStatusCell
                             candidate={candidate}
@@ -2675,7 +2680,7 @@ function PairingReview({
             </div>
           )}
 
-          {selectedCandidateCount > 0 ? (
+          {advancedOpen && selectedCandidateCount > 0 ? (
             <div className="flex flex-wrap items-center gap-3 border-t bg-muted/25 px-3 py-3 text-sm sm:px-6">
               <span className="shrink-0 text-xs font-medium text-foreground">
                 {t("swap.bulk.selected", { count: selectedCandidateCount })}
@@ -2925,62 +2930,6 @@ function PairingReview({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function SwapQueueMetric({
-  label,
-  ariaLabel,
-  value,
-  tone = "neutral",
-  active = false,
-  onClick,
-  icon,
-}: {
-  label: string;
-  ariaLabel?: string;
-  value: number;
-  tone?: "neutral" | "good" | "warning" | "alert";
-  active?: boolean;
-  onClick?: () => void;
-  icon?: ReactNode;
-}) {
-  const toneClass = {
-    neutral: "text-muted-foreground",
-    good: "text-emerald-700 dark:text-emerald-300",
-    warning: "text-amber-700 dark:text-amber-300",
-    alert: "text-rose-700 dark:text-rose-300",
-  }[tone];
-  const className = cn(
-    "min-w-0 space-y-2 p-3 text-left sm:p-4",
-    onClick &&
-      "relative w-full cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-    active && "bg-primary/5 ring-1 ring-primary/30 ring-inset",
-  );
-  const content = (
-    <>
-      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        {icon}
-        {label}
-      </p>
-      <p className={cn("text-xl font-semibold tabular-nums", active ? "text-primary" : toneClass)}>
-        {formatCount(value)}
-      </p>
-    </>
-  );
-  if (!onClick) {
-    return <div className={className}>{content}</div>;
-  }
-  return (
-    <button
-      type="button"
-      className={className}
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={ariaLabel ?? label}
-    >
-      {content}
-    </button>
   );
 }
 

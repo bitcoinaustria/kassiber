@@ -316,7 +316,7 @@
     },
     "header": {
       "applyExact": "Apply exact {{count}}",
-      "rules": "Rules {{enabled}}/{{total}}"
+      "advanced": "Advanced"
     },
     "metric": {
       "candidates": "Candidates",
