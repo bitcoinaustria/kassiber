@@ -300,7 +300,6 @@ class ProjectWorker:
                     lease is None
                     or lease.revoked
                     or lease.expired()
-                    or operation.admitted_lease_epoch != lease.epoch
                 ):
                     self._service._finish_operation_locked(
                         operation,
@@ -315,6 +314,17 @@ class ProjectWorker:
                         lease.revoked = True
                         if lease.running_operations == 0:
                             self._service._drop_lease_locked(self.project_identity)
+                    return
+                if operation.admitted_lease_epoch != lease.epoch:
+                    self._service._finish_operation_locked(
+                        operation,
+                        "cancelled",
+                        OperationResult(
+                            1,
+                            "",
+                            "operator lease changed before the operation started\n",
+                        ),
+                    )
                     return
                 if (
                     operation.capability is not Capability.ADMIN

@@ -1574,7 +1574,15 @@ class OperatorServiceTest(unittest.TestCase):
                 completed = self._wait_terminal(service, queued["operation_id"])
 
                 self.assertEqual(completed["state"], "cancelled")
-                self.assertEqual(calls, [])
+                self.assertEqual(service.status(tmp)["lease"], "unlocked")
+                replacement = service.submit(tmp, ["health"])
+                self.assertEqual(
+                    self._wait_terminal(service, replacement["operation_id"])[
+                        "state"
+                    ],
+                    "completed",
+                )
+                self.assertEqual(calls, ["health"])
             finally:
                 release.set()
                 service.close()
