@@ -50,7 +50,11 @@ class OperatorNativeAuthTest(unittest.TestCase):
                 expected_identity="signed-helper",
             )
 
-        self.assertEqual(process.wait(timeout=2), 0)
+        try:
+            self.assertEqual(process.wait(timeout=2), 0)
+        finally:
+            if process.stderr is not None:
+                process.stderr.close()
 
     def test_helper_identity_detects_replacement_before_secret_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
