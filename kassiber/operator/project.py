@@ -41,11 +41,18 @@ class ProjectOwnerLease:
     def release(self) -> None:
         if self._released:
             return
-        self._released = True
         # Closing (rather than issuing an explicit unlock) preserves the lock
         # when a worker child inherited a duplicate of the same file object.
+        first_error: Exception | None = None
         for handle in reversed(self._handles):
-            handle.close()
+            try:
+                handle.close()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+        self._released = True
 
     def duplicate_for_child(self) -> ProjectOwnerChildHandles:
         """Duplicate every held lock into an inheritable child-only handle."""

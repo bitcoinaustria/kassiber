@@ -13,6 +13,7 @@ from unittest import mock
 from kassiber.errors import AppError
 from kassiber.operator.project import (
     ProjectOwnerChildHandles,
+    ProjectOwnerLease,
     acquire_project_ownership,
     canonical_project,
 )
@@ -41,6 +42,30 @@ def _competing_owner(data_root: str, output: multiprocessing.Queue) -> None:
 
 
 class OperatorProjectTest(unittest.TestCase):
+    def test_parent_owner_release_attempts_every_handle_and_can_retry(self) -> None:
+        first = mock.Mock()
+        second = mock.Mock()
+        second.close.side_effect = [OSError("second close failed"), None]
+        owner = ProjectOwnerLease(
+            project=mock.Mock(),
+            owner_kind="broker",
+            generation="generation",
+            _handles=(first, second),
+            _lock_paths=set(),
+        )
+
+        with self.assertRaisesRegex(OSError, "second close failed"):
+            owner.release()
+        first.close.assert_called_once_with()
+        second.close.assert_called_once_with()
+
+        owner.release()
+        self.assertEqual(first.close.call_count, 2)
+        self.assertEqual(second.close.call_count, 2)
+        owner.release()
+        self.assertEqual(first.close.call_count, 2)
+        self.assertEqual(second.close.call_count, 2)
+
     def test_child_owner_close_attempts_every_handle(self) -> None:
         first = mock.Mock()
         first.close.side_effect = OSError("first close failed")
