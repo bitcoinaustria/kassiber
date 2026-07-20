@@ -568,7 +568,7 @@ finally:
         self.assertNotEqual(result.returncode, 0)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["kind"], "error")
-        self.assertEqual(payload["error"]["code"], "passphrase_required")
+        self.assertEqual(payload["error"]["code"], "interaction_required")
         self.assertIn("--db-passphrase-fd", payload["error"]["hint"])
 
     def test_chat_timeout_validation_is_local(self):

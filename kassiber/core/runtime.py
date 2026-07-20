@@ -248,7 +248,15 @@ def _open_db_with_resolved_passphrase(
                 open_db(data_root, **prompted_options),
                 prompted,
             )
-        raise
+        raise AppError(
+            "database authorization requires local interaction",
+            code="interaction_required",
+            hint=(
+                "Run the command in a controlling terminal or pass the database "
+                "passphrase through --db-passphrase-fd."
+            ),
+            retryable=False,
+        ) from None
 
 
 def resolve_db_passphrase_for_bypass(

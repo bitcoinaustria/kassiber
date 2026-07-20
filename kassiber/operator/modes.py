@@ -47,7 +47,15 @@ def effective_unlock_mode(data_root) -> UnlockMode:
     configured = configured_unlock_mode(data_root)
     if configured is not None:
         if configured != "manual":
-            require_project_policy_binding(data_root)
+            try:
+                require_project_policy_binding(data_root)
+            except AppError as exc:
+                if exc.code not in {
+                    "operator_policy_binding_required",
+                    "operator_policy_binding_mismatch",
+                }:
+                    raise
+                return "manual"
         return configured
     return "manual"
 

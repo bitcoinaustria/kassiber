@@ -318,6 +318,20 @@ class RememberedUnlockStoreTests(unittest.TestCase):
             )
             self.assertEqual(self.keyring.get_calls, reads_before)
 
+            from kassiber.core.runtime import _open_db_with_resolved_passphrase
+
+            with patch(
+                "kassiber.core.runtime.open_db",
+                side_effect=AppError("locked", code="passphrase_required"),
+            ), self.assertRaises(AppError) as runtime_error:
+                _open_db_with_resolved_passphrase(
+                    destination,
+                    None,
+                    allow_prompt=False,
+                )
+            self.assertEqual(runtime_error.exception.code, "interaction_required")
+            self.assertEqual(self.keyring.get_calls, reads_before)
+
     def test_remembered_open_requires_the_bound_database_identity(self):
         from kassiber.core.runtime import _open_db_with_resolved_passphrase
 
@@ -574,7 +588,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
             reads_before = self.keyring.get_calls
             payload, returncode, _stderr = _run_cli(data_root, "status")
             self.assertEqual(returncode, 1)
-            self.assertEqual(payload["error"]["code"], "passphrase_required")
+            self.assertEqual(payload["error"]["code"], "interaction_required")
             self.assertEqual(self.keyring.get_calls, reads_before)
 
             enroll_fd = _passphrase_fd(old_passphrase)
@@ -681,7 +695,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
                 prompted_passphrase=new_passphrase,
             )
             self.assertEqual(returncode, 1)
-            self.assertEqual(payload["error"]["code"], "passphrase_required")
+            self.assertEqual(payload["error"]["code"], "interaction_required")
             self.assertIn("remembered_unlock_stale", stderr)
 
             # An explicit fd always wins, so the stale store is not consulted.
@@ -716,7 +730,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
 
             payload, returncode, _stderr = _run_cli(data_root, "status")
             self.assertEqual(returncode, 1)
-            self.assertEqual(payload["error"]["code"], "passphrase_required")
+            self.assertEqual(payload["error"]["code"], "interaction_required")
 
     def test_enrollment_rolls_back_when_legacy_cleanup_fails(self):
         passphrase = "legacy-cleanup-failure-passphrase"
@@ -760,7 +774,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
 
             payload, returncode, _stderr = _run_cli(data_root, "status")
             self.assertEqual(returncode, 1)
-            self.assertEqual(payload["error"]["code"], "passphrase_required")
+            self.assertEqual(payload["error"]["code"], "interaction_required")
 
     def test_enrollment_deletes_credential_when_marker_write_fails(self):
         passphrase = "marker-write-failure-passphrase"

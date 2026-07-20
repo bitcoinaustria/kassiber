@@ -154,12 +154,8 @@ class OperatorModeTest(unittest.TestCase):
             self.assertEqual(status["configured"], "unattended")
             self.assertEqual(status["effective"], "manual")
             self.assertEqual(status["binding_state"], "mismatch")
-            with self.assertRaises(AppError) as raised:
-                effective_unlock_mode(destination)
-            self.assertEqual(
-                raised.exception.code,
-                "operator_policy_binding_mismatch",
-            )
+            self.assertEqual(effective_unlock_mode(destination), "manual")
+            self.assertFalse(remembered_unlock_allowed(destination))
 
     @mock.patch("kassiber.core.runtime.load_remembered_passphrase")
     def test_manual_runtime_does_not_read_credential_store(self, load) -> None:
