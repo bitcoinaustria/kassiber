@@ -30,6 +30,7 @@ from kassiber.operator.service import (
     OperationResult,
     OperatorService,
     ProjectLease,
+    ProjectWorker,
 )
 from kassiber.operator.runner import run_cli_operation
 from kassiber.log_ring import LogRing, RingHandler
@@ -310,6 +311,48 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 release_first.set()
                 service.close()
+
+    def test_project_worker_is_created_once_and_stops_with_the_service(self) -> None:
+        workers: list[ProjectWorker] = []
+
+        def create_worker(*args, **kwargs):
+            worker = ProjectWorker(*args, **kwargs)
+            workers.append(worker)
+            return worker
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ), mock.patch(
+            "kassiber.operator.service.ProjectWorker",
+            side_effect=create_worker,
+        ) as worker_factory:
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                operation_ids = [
+                    service.submit(tmp, [command])["operation_id"]
+                    for command in ("status", "health", "next-actions")
+                ]
+                for operation_id in operation_ids:
+                    self.assertEqual(
+                        self._wait_terminal(service, operation_id)["state"],
+                        "completed",
+                    )
+                service.unlock(
+                    tmp,
+                    bytearray(b"passphrase"),
+                    duration_seconds=None,
+                )
+                self.assertEqual(worker_factory.call_count, 1)
+                self.assertEqual(len(workers), 1)
+                self.assertTrue(workers[0]._thread.is_alive())
+            finally:
+                service.close()
+            workers[0]._thread.join(1)
+            self.assertFalse(workers[0]._thread.is_alive())
 
     def test_admin_never_inherits_standing_lease(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(

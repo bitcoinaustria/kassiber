@@ -690,15 +690,13 @@ class OperatorService:
                         else None,
                     )
                     self._lease_aliases[alias] = project.identity
-                    self._workers.setdefault(
-                        project.identity,
-                        ProjectWorker(
+                    if project.identity not in self._workers:
+                        self._workers[project.identity] = ProjectWorker(
                             self,
                             project.identity,
                             project.public_id,
                             self._runner,
-                        ),
-                    )
+                        )
             if lease_changed:
                 _wipe(stored)
                 if acquired_here:
@@ -1195,15 +1193,15 @@ class OperatorService:
                     else None
                 ),
             )
-            worker = self._workers.setdefault(
-                project.identity,
-                ProjectWorker(
+            worker = self._workers.get(project.identity)
+            if worker is None:
+                worker = ProjectWorker(
                     self,
                     project.identity,
                     project.public_id,
                     self._runner,
-                ),
-            )
+                )
+                self._workers[project.identity] = worker
             worker.submit(operation)
             transfer_secret_ownership()
             self._operations[operation_id] = operation
