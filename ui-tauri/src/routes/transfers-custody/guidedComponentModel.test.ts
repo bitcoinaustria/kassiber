@@ -208,6 +208,41 @@ describe("guidedComponentModel", () => {
     ).toBe(true);
   });
 
+  it("activates a suspense component with an allocation from a source", () => {
+    const form = createInitialGuidedForm(); // manual_bridge, quantity, grade reviewed
+    const source = createGuidedLeg("source");
+    source.amountBtc = "1.0";
+    source.transactionRef = "tx-a";
+    const dest = createGuidedLeg("destination");
+    dest.amountBtc = "0.6";
+    dest.transactionRef = "tx-b";
+    const suspense = createGuidedLeg("suspense");
+    suspense.amountBtc = "0.4";
+    suspense.occurredAt = "2024-02-01T10:00";
+    form.legs = [source, dest, suspense];
+    const edge = (sink: string, amountBtc: string) => {
+      const a = createGuidedAllocation();
+      a.sourceKey = source.key;
+      a.sinkKey = sink;
+      a.amountBtc = amountBtc;
+      return a;
+    };
+    form.allocations = [edge(dest.key, "0.6"), edge(suspense.key, "0.4")];
+
+    const spec = formToComponentSpec(form);
+    const legs = spec.legs as Array<Record<string, unknown>>;
+    // A suspense leg carries no wallet/transaction anchor — only a time.
+    expect(legs[2].role).toBe("suspense");
+    expect(legs[2].transaction).toBeUndefined();
+    expect(legs[2].wallet).toBeUndefined();
+    expect(legs[2].untracked_wallet).toBeUndefined();
+    expect(legs[2].occurred_at).toBeDefined();
+
+    const preview = previewCustodyComponentBatch(formToDocument(form));
+    expect(preview.structuralErrors).toEqual([]);
+    expect(preview.activationErrors).toEqual([]);
+  });
+
   it("converts datetime-local values to RFC3339 UTC", () => {
     const converted = occurredAtToRfc3339("2024-01-15T12:00");
     expect(converted).toMatch(/Z$/);

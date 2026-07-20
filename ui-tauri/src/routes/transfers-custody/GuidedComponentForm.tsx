@@ -58,14 +58,13 @@ import {
   type GuidedLocationKind,
 } from "./guidedComponentModel";
 
-// Suspense legs need reviewed grade + explicit allocations; they are authored
-// through the advanced path, so the guided role picker offers the everyday set.
 const GUIDED_FORM_ROLES: readonly GuidedLegRole[] = [
   "source",
   "destination",
   "fee",
   "retained",
   "external",
+  "suspense",
 ];
 
 const LOCATION_KINDS: readonly GuidedLocationKind[] = [
@@ -475,7 +474,9 @@ function GuidedLegRow({
   onRemove: () => void;
 }) {
   const { t } = useTranslation("review");
+  const isSuspense = leg.role === "suspense";
   const showOccurredAt =
+    isSuspense ||
     leg.locationKind === "untracked" ||
     (leg.locationKind === "wallet" && isOwnedRole(leg.role));
 
@@ -510,30 +511,38 @@ function GuidedLegRow({
             onChange={(event) => onChange({ amountBtc: event.target.value })}
           />
         </div>
-        <div className="space-y-1.5">
-          <Label>{t("swap.components.form.leg.location")}</Label>
-          <Select
-            value={leg.locationKind}
-            onValueChange={(value) =>
-              onChange({ locationKind: value as GuidedLocationKind })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LOCATION_KINDS.map((kind) => (
-                <SelectItem key={kind} value={kind}>
-                  {t(`swap.components.form.leg.locationKind.${kind}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {!isSuspense ? (
+          <div className="space-y-1.5">
+            <Label>{t("swap.components.form.leg.location")}</Label>
+            <Select
+              value={leg.locationKind}
+              onValueChange={(value) =>
+                onChange({ locationKind: value as GuidedLocationKind })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOCATION_KINDS.map((kind) => (
+                  <SelectItem key={kind} value={kind}>
+                    {t(`swap.components.form.leg.locationKind.${kind}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
       </div>
 
+      {isSuspense ? (
+        <p className="text-xs text-muted-foreground">
+          {t("swap.components.form.leg.suspenseHint")}
+        </p>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2">
-        {leg.locationKind === "transaction" ? (
+        {!isSuspense && leg.locationKind === "transaction" ? (
           <div className="space-y-1.5 sm:col-span-2">
             <Label>{t("swap.components.form.leg.transactionRef")}</Label>
             <Input
@@ -544,7 +553,7 @@ function GuidedLegRow({
             />
           </div>
         ) : null}
-        {leg.locationKind === "wallet" ? (
+        {!isSuspense && leg.locationKind === "wallet" ? (
           <div className="space-y-1.5">
             <Label>{t("swap.components.form.leg.walletRef")}</Label>
             <Input
@@ -555,7 +564,7 @@ function GuidedLegRow({
             />
           </div>
         ) : null}
-        {leg.locationKind === "untracked" ? (
+        {!isSuspense && leg.locationKind === "untracked" ? (
           <div className="space-y-1.5">
             <Label>{t("swap.components.form.leg.untrackedWallet")}</Label>
             <Input

@@ -44,7 +44,8 @@
           "valuationUnit": "Bewertungseinheit",
           "valuationUnitPlaceholder": "z. B. eur_cents",
           "valuationAmount": "Bewertungsbetrag",
-          "valuationAmountPlaceholder": "Ganzzahl in der Bewertungseinheit"
+          "valuationAmountPlaceholder": "Ganzzahl in der Bewertungseinheit",
+          "suspenseHint": "Ein Schwebeposten hält Wert in der Schwebe – ohne Wallet oder Transaktion, nur mit Zeitpunkt. Füge unten eine Zuordnung von der speisenden Quelle hinzu."
         },
         "balance": {
           "sources": "Quellen",

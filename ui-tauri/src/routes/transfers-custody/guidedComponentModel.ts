@@ -154,29 +154,35 @@ function legToSpec(leg: GuidedLegForm, mode: "quantity" | "conversion"): JsonRec
   const amount = trimmed(leg.amountBtc);
   if (amount) spec.amount_btc = amount;
 
-  switch (leg.locationKind) {
-    case "transaction": {
-      const ref = trimmed(leg.transactionRef);
-      if (ref) spec.transaction = ref;
-      break;
-    }
-    case "wallet": {
-      const ref = trimmed(leg.walletRef);
-      if (ref) spec.wallet = ref;
-      break;
-    }
-    case "untracked": {
-      const ref = trimmed(leg.untrackedWallet);
-      if (ref) spec.untracked_wallet = ref;
-      break;
-    }
-  }
-
-  // Transaction anchors carry their own occurred_at; every other location needs
-  // an explicit one for owned legs, so surface it whenever the user set it.
-  if (leg.locationKind !== "transaction") {
+  if (leg.role === "suspense") {
+    // A suspense leg has no wallet/transaction anchor — only its own time.
     const occurredAt = occurredAtToRfc3339(leg.occurredAt);
     if (occurredAt) spec.occurred_at = occurredAt;
+  } else {
+    switch (leg.locationKind) {
+      case "transaction": {
+        const ref = trimmed(leg.transactionRef);
+        if (ref) spec.transaction = ref;
+        break;
+      }
+      case "wallet": {
+        const ref = trimmed(leg.walletRef);
+        if (ref) spec.wallet = ref;
+        break;
+      }
+      case "untracked": {
+        const ref = trimmed(leg.untrackedWallet);
+        if (ref) spec.untracked_wallet = ref;
+        break;
+      }
+    }
+
+    // Transaction anchors carry their own occurred_at; every other location
+    // needs an explicit one for owned legs, so surface it when the user set it.
+    if (leg.locationKind !== "transaction") {
+      const occurredAt = occurredAtToRfc3339(leg.occurredAt);
+      if (occurredAt) spec.occurred_at = occurredAt;
+    }
   }
 
   const asset = trimmed(leg.asset);

@@ -44,7 +44,8 @@
           "valuationUnit": "Valuation unit",
           "valuationUnitPlaceholder": "e.g. eur_cents",
           "valuationAmount": "Valuation amount",
-          "valuationAmountPlaceholder": "Integer in the valuation unit"
+          "valuationAmountPlaceholder": "Integer in the valuation unit",
+          "suspenseHint": "A suspense leg records value in limbo — no wallet or transaction, only a time. Add an allocation from its funding source below."
         },
         "balance": {
           "sources": "Sources",
