@@ -152,6 +152,10 @@ import {
   type CustodyValidationIssue,
 } from "./transfers-custody/custodyComponentIssues";
 import { GuidedComponentForm } from "./transfers-custody/GuidedComponentForm";
+import {
+  componentToFormState,
+  isGuidedEditableComponentType,
+} from "./transfers-custody/guidedComponentModel";
 
 const PAIR_KIND_OPTIONS = [
   "manual",
@@ -1359,77 +1363,95 @@ function CustodyComponentResolver() {
               {t("swap.components.revisionDialog.description")}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <Label htmlFor="custody-component-revision-json">
-              {t("swap.components.revisionDialog.jsonLabel")}
-            </Label>
-            <Textarea
-              id="custody-component-revision-json"
-              value={revisionDocument}
-              onChange={(event) => handleRevisionDocumentChange(event.target.value)}
-              disabled={mutationPending}
-              spellCheck={false}
-              aria-invalid={Boolean(revisionPreview?.structuralErrors.length)}
-              className="min-h-80 resize-y font-mono text-xs leading-5"
+          {editingComponent &&
+          isGuidedEditableComponentType(editingComponent.component_type) ? (
+            <GuidedComponentForm
+              key={editingComponent.id}
+              variant="embedded"
+              edit={{
+                componentId: editingComponent.id,
+                state: editingComponent.state === "active" ? "active" : "draft",
+              }}
+              initialForm={componentToFormState(editingComponent)}
+              onDone={closeRevisionEditor}
             />
-            <p className="text-xs text-muted-foreground">
-              {t("swap.components.revisionDialog.safetyHint")}
-            </p>
-            {revisionPreview ? (
-              <CustodyBatchPreviewPanel preview={revisionPreview} />
-            ) : null}
-            {revisionError ? (
-              <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                {revisionError}
+          ) : (
+            <>
+              <div className="space-y-3">
+                <Label htmlFor="custody-component-revision-json">
+                  {t("swap.components.revisionDialog.jsonLabel")}
+                </Label>
+                <Textarea
+                  id="custody-component-revision-json"
+                  value={revisionDocument}
+                  onChange={(event) =>
+                    handleRevisionDocumentChange(event.target.value)
+                  }
+                  disabled={mutationPending}
+                  spellCheck={false}
+                  aria-invalid={Boolean(revisionPreview?.structuralErrors.length)}
+                  className="min-h-80 resize-y font-mono text-xs leading-5"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("swap.components.revisionDialog.safetyHint")}
+                </p>
+                {revisionPreview ? (
+                  <CustodyBatchPreviewPanel preview={revisionPreview} />
+                ) : null}
+                {revisionError ? (
+                  <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                    {revisionError}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-          <DialogFooter className="flex-wrap sm:justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={mutationPending}
-              onClick={closeRevisionEditor}
-            >
-              {t("swap.components.revisionDialog.cancel")}
-            </Button>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={mutationPending}
-                onClick={previewRevisionDocument}
-              >
-                <Eye />
-                {t("swap.components.preview")}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={mutationPending}
-                onClick={() => void saveRevision(false)}
-              >
-                {mutationPending ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Plus />
-                )}
-                {t("swap.components.revisionDialog.saveDraft")}
-              </Button>
-              <Button
-                type="button"
-                disabled={mutationPending}
-                onClick={() => void saveRevision(true)}
-              >
-                {mutationPending ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Check />
-                )}
-                {t("swap.components.revisionDialog.saveActivate")}
-              </Button>
-            </div>
-          </DialogFooter>
+              <DialogFooter className="flex-wrap sm:justify-between">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={mutationPending}
+                  onClick={closeRevisionEditor}
+                >
+                  {t("swap.components.revisionDialog.cancel")}
+                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={mutationPending}
+                    onClick={previewRevisionDocument}
+                  >
+                    <Eye />
+                    {t("swap.components.preview")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={mutationPending}
+                    onClick={() => void saveRevision(false)}
+                  >
+                    {mutationPending ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Plus />
+                    )}
+                    {t("swap.components.revisionDialog.saveDraft")}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={mutationPending}
+                    onClick={() => void saveRevision(true)}
+                  >
+                    {mutationPending ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Check />
+                    )}
+                    {t("swap.components.revisionDialog.saveActivate")}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

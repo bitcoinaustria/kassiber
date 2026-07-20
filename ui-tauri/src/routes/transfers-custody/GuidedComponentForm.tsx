@@ -48,6 +48,7 @@ import {
   createGuidedAllocation,
   createGuidedLeg,
   createInitialGuidedForm,
+  formToComponentSpec,
   formToDocument,
   isOwnedRole,
   isSinkRole,
@@ -73,9 +74,20 @@ const LOCATION_KINDS: readonly GuidedLocationKind[] = [
   "untracked",
 ];
 
-interface BulkResolveResult {
+interface ComponentPlanResult {
   input_version: number;
-  summary: { count: number; active: number; draft: number };
+  summary?: { count: number; active: number; draft: number };
+}
+
+export interface GuidedComponentFormProps {
+  /** Preload state to edit/revise an existing component; omit to author new. */
+  initialForm?: GuidedComponentFormState;
+  /** When set, submitting revises this component instead of creating a batch. */
+  edit?: { componentId: string; state: "draft" | "active" };
+  /** Called after a successful revise (e.g. to close the editor). */
+  onDone?: () => void;
+  /** "card" wraps in a titled Card (create); "embedded" fits inside a dialog. */
+  variant?: "card" | "embedded";
 }
 
 function sumMsat(legs: GuidedLegForm[], predicate: (role: GuidedLegRole) => boolean) {
@@ -88,19 +100,26 @@ function sumMsat(legs: GuidedLegForm[], predicate: (role: GuidedLegRole) => bool
   return total;
 }
 
-export function GuidedComponentForm() {
+export function GuidedComponentForm({
+  initialForm,
+  edit,
+  onDone,
+  variant = "card",
+}: GuidedComponentFormProps = {}) {
   const { t } = useTranslation("review");
   const [form, setForm] = useState<GuidedComponentFormState>(
-    createInitialGuidedForm,
+    () => initialForm ?? createInitialGuidedForm(),
   );
-  const [result, setResult] = useState<BulkResolveResult["summary"] | null>(null);
+  const [result, setResult] = useState<
+    ComponentPlanResult["summary"] | null
+  >(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const planMutation = useDaemonMutation<BulkResolveResult>(
+  const planMutation = useDaemonMutation<ComponentPlanResult>(
     "ui.transfers.components.plan",
     { invalidateQueries: false },
   );
-  const applyMutation = useDaemonMutation<BulkResolveResult>(
+  const applyMutation = useDaemonMutation<ComponentPlanResult>(
     "ui.transfers.components.apply",
   );
   const pending = planMutation.isPending || applyMutation.isPending;
@@ -174,36 +193,44 @@ export function GuidedComponentForm() {
     const nextPreview = previewCustodyComponentBatch(formToDocument(form));
     if (nextPreview.structuralErrors.length > 0) return;
     if (activate && nextPreview.activationErrors.length > 0) return;
+    const spec = formToComponentSpec(form);
+    const planArgs = edit
+      ? { action: "revise", component_id: edit.componentId, spec, activate }
+      : buildCustodyBulkRequest(nextPreview, { activate });
     try {
-      const plan = await planMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, { activate }),
-      );
+      const plan = await planMutation.mutateAsync(planArgs);
       if (plan.data?.input_version === undefined) {
         setActionError(t("swap.components.backendError.unexpected"));
         return;
       }
-      const applied = await applyMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, {
-          activate,
-          expectedInputVersion: plan.data.input_version,
-        }),
-      );
+      const applyArgs = edit
+        ? {
+            action: "revise",
+            component_id: edit.componentId,
+            spec,
+            activate,
+            expected_input_version: plan.data.input_version,
+          }
+        : buildCustodyBulkRequest(nextPreview, {
+            activate,
+            expectedInputVersion: plan.data.input_version,
+          });
+      const applied = await applyMutation.mutateAsync(applyArgs);
       if (applied.data) {
-        setResult(applied.data.summary);
-        reset();
+        if (edit) {
+          onDone?.();
+        } else {
+          setResult(applied.data.summary ?? null);
+          reset();
+        }
       }
     } catch (error) {
       setActionError(custodyMutationError(t, error));
     }
   };
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("swap.components.form.title")}</CardTitle>
-        <CardDescription>{t("swap.components.form.description")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
+  const body = (
+    <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="guided-component-type">
@@ -445,17 +472,38 @@ export function GuidedComponentForm() {
             {pending ? <Loader2 className="animate-spin" /> : <Check />}
             {t("swap.components.form.activate")}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={pending}
-            onClick={reset}
-          >
-            <RotateCcw />
-            {t("swap.components.form.reset")}
-          </Button>
+          {edit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={pending}
+              onClick={() => onDone?.()}
+            >
+              {t("swap.components.revisionDialog.cancel")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={pending}
+              onClick={reset}
+            >
+              <RotateCcw />
+              {t("swap.components.form.reset")}
+            </Button>
+          )}
         </div>
-      </CardContent>
+    </div>
+  );
+
+  if (variant === "embedded") return body;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("swap.components.form.title")}</CardTitle>
+        <CardDescription>{t("swap.components.form.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>{body}</CardContent>
     </Card>
   );
 }
@@ -475,10 +523,15 @@ function GuidedLegRow({
 }) {
   const { t } = useTranslation("review");
   const isSuspense = leg.role === "suspense";
+  const isOrigin = !isSuspense && leg.locationMode === "origin";
+  const originNeedsTime =
+    isOrigin && Boolean(leg.origin?.walletId) && !leg.origin?.transactionId;
   const showOccurredAt =
     isSuspense ||
-    leg.locationKind === "untracked" ||
-    (leg.locationKind === "wallet" && isOwnedRole(leg.role));
+    originNeedsTime ||
+    (leg.locationMode === "manual" &&
+      (leg.locationKind === "untracked" ||
+        (leg.locationKind === "wallet" && isOwnedRole(leg.role))));
 
   return (
     <div className="space-y-3 rounded-lg border p-3">
@@ -511,7 +564,7 @@ function GuidedLegRow({
             onChange={(event) => onChange({ amountBtc: event.target.value })}
           />
         </div>
-        {!isSuspense ? (
+        {!isSuspense && leg.locationMode === "manual" ? (
           <div className="space-y-1.5">
             <Label>{t("swap.components.form.leg.location")}</Label>
             <Select
@@ -535,6 +588,28 @@ function GuidedLegRow({
         ) : null}
       </div>
 
+      {isOrigin ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 p-2 text-xs">
+          <span className="text-muted-foreground">
+            {leg.origin?.transactionId
+              ? t("swap.components.form.leg.originTransaction", {
+                  id: shortId(leg.origin.transactionId),
+                })
+              : t("swap.components.form.leg.originWallet", {
+                  id: shortId(leg.origin?.walletId ?? ""),
+                })}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => onChange({ locationMode: "manual", origin: null })}
+          >
+            {t("swap.components.form.leg.changeLocation")}
+          </Button>
+        </div>
+      ) : null}
+
       {isSuspense ? (
         <p className="text-xs text-muted-foreground">
           {t("swap.components.form.leg.suspenseHint")}
@@ -542,7 +617,7 @@ function GuidedLegRow({
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {!isSuspense && leg.locationKind === "transaction" ? (
+        {!isSuspense && leg.locationMode === "manual" && leg.locationKind === "transaction" ? (
           <div className="space-y-1.5 sm:col-span-2">
             <Label>{t("swap.components.form.leg.transactionRef")}</Label>
             <Input
@@ -553,7 +628,7 @@ function GuidedLegRow({
             />
           </div>
         ) : null}
-        {!isSuspense && leg.locationKind === "wallet" ? (
+        {!isSuspense && leg.locationMode === "manual" && leg.locationKind === "wallet" ? (
           <div className="space-y-1.5">
             <Label>{t("swap.components.form.leg.walletRef")}</Label>
             <Input
@@ -564,7 +639,7 @@ function GuidedLegRow({
             />
           </div>
         ) : null}
-        {!isSuspense && leg.locationKind === "untracked" ? (
+        {!isSuspense && leg.locationMode === "manual" && leg.locationKind === "untracked" ? (
           <div className="space-y-1.5">
             <Label>{t("swap.components.form.leg.untrackedWallet")}</Label>
             <Input
@@ -629,6 +704,11 @@ function GuidedLegRow({
       ) : null}
     </div>
   );
+}
+
+function shortId(value: string): string {
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
 function legDisplayLabel(

@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { previewCustodyComponentBatch } from "@/lib/custodyComponentBulk";
 import {
+  componentToFormState,
   createGuidedAllocation,
   createGuidedLeg,
   createInitialGuidedForm,
   formToComponentSpec,
   formToDocument,
+  msatToBtcInput,
   occurredAtToRfc3339,
+  type CustodyComponentInput,
   type GuidedComponentFormState,
 } from "./guidedComponentModel";
 
@@ -241,6 +244,82 @@ describe("guidedComponentModel", () => {
     const preview = previewCustodyComponentBatch(formToDocument(form));
     expect(preview.structuralErrors).toEqual([]);
     expect(preview.activationErrors).toEqual([]);
+  });
+
+  it("round-trips an existing component through the form for revise", () => {
+    const component: CustodyComponentInput = {
+      component_type: "manual_bridge",
+      conservation_mode: "quantity",
+      evidence_kind: "manual_migration_review",
+      evidence_grade: "reviewed",
+      conversion_policy: null,
+      conversion_reviewed: false,
+      notes: "migration",
+      legs: [
+        {
+          id: "L1",
+          role: "source",
+          asset: "BTC",
+          amount_msat: 100_000_000_000,
+          transaction_id: "tx-out",
+          anchor_transaction_id: "tx-out",
+          wallet_id: "w1",
+          occurred_at: null,
+          rail: "bitcoin",
+          exposure: "bitcoin",
+          conservation_unit: "msat",
+        },
+        {
+          id: "L2",
+          role: "destination",
+          asset: "BTC",
+          amount_msat: 99_000_000_000,
+          transaction_id: "tx-in",
+          wallet_id: "w2",
+          occurred_at: null,
+        },
+        {
+          id: "L3",
+          role: "fee",
+          asset: "BTC",
+          amount_msat: 1_000_000_000,
+          transaction_id: "tx-out",
+          wallet_id: "w1",
+          occurred_at: null,
+        },
+      ],
+      allocations: [],
+    };
+
+    const form = componentToFormState(component);
+    expect(form.legs[0].locationMode).toBe("origin");
+    expect(form.legs[0].origin?.transactionId).toBe("tx-out");
+    expect(form.legs[0].amountBtc).toBe("1");
+    expect(form.legs[1].amountBtc).toBe("0.99");
+
+    const spec = formToComponentSpec(form);
+    const legs = spec.legs as Array<Record<string, unknown>>;
+    expect(legs[0]).toMatchObject({
+      transaction_id: "tx-out",
+      anchor_transaction_id: "tx-out",
+      amount_btc: "1",
+      rail: "bitcoin",
+    });
+    // Resolved-location legs must NOT emit alias fields.
+    expect(legs[0].transaction).toBeUndefined();
+    expect(legs[0].wallet).toBeUndefined();
+
+    const preview = previewCustodyComponentBatch(formToDocument(form));
+    expect(preview.structuralErrors).toEqual([]);
+    expect(preview.activationErrors).toEqual([]);
+  });
+
+  it("formats exact msat as a lossless BTC input string", () => {
+    expect(msatToBtcInput(100_000_000_000)).toBe("1");
+    expect(msatToBtcInput(99_000_000_000)).toBe("0.99");
+    expect(msatToBtcInput(1)).toBe("0.00000000001");
+    expect(msatToBtcInput(0)).toBe("0");
+    expect(msatToBtcInput("250000000000")).toBe("2.5");
   });
 
   it("converts datetime-local values to RFC3339 UTC", () => {

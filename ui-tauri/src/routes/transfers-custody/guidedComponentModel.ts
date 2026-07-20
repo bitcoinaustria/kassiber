@@ -23,12 +23,33 @@ export type GuidedLegRole =
 
 export type GuidedLocationKind = "transaction" | "wallet" | "untracked";
 
+/**
+ * Resolved location + carried metadata for a leg loaded from an existing
+ * component. When {@link GuidedLegForm.locationMode} is `"origin"`, the leg is
+ * serialized from these already-resolved ids (matching the daemon's revise
+ * contract) instead of the alias fields.
+ */
+export interface GuidedLegOrigin {
+  transactionId?: string;
+  anchorTransactionId?: string;
+  walletId?: string;
+  rail?: string;
+  chain?: string;
+  network?: string;
+  exposure?: string;
+  conservationUnit?: string;
+}
+
 export interface GuidedLegForm {
   /** Stable local id for React keys and allocation references. */
   key: string;
   role: GuidedLegRole;
   /** Amount entered as a decimal BTC string; serialized as `amount_btc`. */
   amountBtc: string;
+  /** "manual" = author the location via the alias fields; "origin" = keep a
+   *  loaded component leg's resolved location. */
+  locationMode: "manual" | "origin";
+  origin: GuidedLegOrigin | null;
   locationKind: GuidedLocationKind;
   transactionRef: string;
   walletRef: string;
@@ -94,6 +115,8 @@ export function createGuidedLeg(role: GuidedLegRole): GuidedLegForm {
     key: nextKey("leg"),
     role,
     amountBtc: "",
+    locationMode: "manual",
+    origin: null,
     locationKind: "transaction",
     transactionRef: "",
     walletRef: "",
@@ -158,6 +181,24 @@ function legToSpec(leg: GuidedLegForm, mode: "quantity" | "conversion"): JsonRec
     // A suspense leg has no wallet/transaction anchor — only its own time.
     const occurredAt = occurredAtToRfc3339(leg.occurredAt);
     if (occurredAt) spec.occurred_at = occurredAt;
+  } else if (leg.locationMode === "origin" && leg.origin) {
+    // Loaded from an existing component: emit the already-resolved location and
+    // carried metadata directly (the daemon's revise contract), not aliases.
+    const origin = leg.origin;
+    if (origin.transactionId) {
+      spec.transaction_id = origin.transactionId;
+      spec.anchor_transaction_id =
+        origin.anchorTransactionId ?? origin.transactionId;
+    } else if (origin.walletId) {
+      spec.wallet_id = origin.walletId;
+      const occurredAt = occurredAtToRfc3339(leg.occurredAt);
+      if (occurredAt) spec.occurred_at = occurredAt;
+    }
+    if (origin.rail) spec.rail = origin.rail;
+    if (origin.chain) spec.chain = origin.chain;
+    if (origin.network) spec.network = origin.network;
+    if (origin.exposure) spec.exposure = origin.exposure;
+    if (origin.conservationUnit) spec.conservation_unit = origin.conservationUnit;
   } else {
     switch (leg.locationKind) {
       case "transaction": {
@@ -245,4 +286,148 @@ export function formToComponentSpec(form: GuidedComponentFormState): JsonRecord 
 /** Serialize to the `{ components: [...] }` document the batch APIs consume. */
 export function formToDocument(form: GuidedComponentFormState): string {
   return JSON.stringify({ components: [formToComponentSpec(form)] });
+}
+
+const MSAT_PER_BTC = 100_000_000_000n;
+
+/** Lossless exact-msat → BTC decimal string for a form amount input. */
+export function msatToBtcInput(value: CustodyExactInteger): string {
+  let msat: bigint;
+  try {
+    msat = BigInt(value);
+  } catch {
+    return "";
+  }
+  const negative = msat < 0n;
+  const abs = negative ? -msat : msat;
+  const whole = abs / MSAT_PER_BTC;
+  const fraction = (abs % MSAT_PER_BTC)
+    .toString()
+    .padStart(11, "0")
+    .replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+/** RFC3339 → `datetime-local` input value (`YYYY-MM-DDTHH:mm`), local time. */
+export function rfc3339ToDatetimeLocal(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
+/** Structural subset of a persisted custody component used for editing. */
+export interface CustodyComponentLegInput {
+  id: string;
+  role: string;
+  rail?: string | null;
+  chain?: string | null;
+  network?: string | null;
+  asset: string;
+  exposure?: string | null;
+  conservation_unit?: string | null;
+  amount_msat: CustodyExactInteger;
+  valuation_unit?: string | null;
+  valuation_amount?: CustodyExactInteger | null;
+  transaction_id: string | null;
+  anchor_transaction_id?: string | null;
+  wallet_id: string | null;
+  occurred_at: string | null;
+  notes?: string | null;
+}
+
+export interface CustodyComponentAllocationInput {
+  source_leg_id: string;
+  sink_leg_id: string;
+  source_amount_msat: CustodyExactInteger;
+  sink_amount_msat: CustodyExactInteger;
+}
+
+export interface CustodyComponentInput {
+  component_type: string;
+  conservation_mode: "quantity" | "conversion";
+  evidence_kind?: string | null;
+  evidence_grade?: string | null;
+  conversion_policy?: string | null;
+  conversion_reviewed?: boolean;
+  notes?: string | null;
+  legs: CustodyComponentLegInput[];
+  allocations: CustodyComponentAllocationInput[];
+}
+
+/** The guided form authors these component types; others are system-derived. */
+export function isGuidedEditableComponentType(componentType: string): boolean {
+  return componentType === "manual_bridge" || componentType === "swap";
+}
+
+function guidedRole(role: string): GuidedLegRole {
+  return (GUIDED_LEG_ROLES as readonly string[]).includes(role)
+    ? (role as GuidedLegRole)
+    : "external";
+}
+
+/** Reverse of {@link formToComponentSpec}: load an existing component to edit. */
+export function componentToFormState(
+  component: CustodyComponentInput,
+): GuidedComponentFormState {
+  const legIdToKey = new Map<string, string>();
+  const legs = component.legs.map((leg) => {
+    const base = createGuidedLeg(guidedRole(leg.role));
+    legIdToKey.set(leg.id, base.key);
+    const isSuspense = base.role === "suspense";
+    const hasTransaction = Boolean(leg.transaction_id);
+    const hasWallet = Boolean(leg.wallet_id);
+    return {
+      ...base,
+      amountBtc: msatToBtcInput(leg.amount_msat),
+      asset: leg.asset || "BTC",
+      valuationUnit: leg.valuation_unit ?? "",
+      valuationAmount:
+        leg.valuation_amount === null || leg.valuation_amount === undefined
+          ? ""
+          : String(leg.valuation_amount),
+      notes: leg.notes ?? "",
+      occurredAt: rfc3339ToDatetimeLocal(leg.occurred_at),
+      locationMode:
+        !isSuspense && (hasTransaction || hasWallet)
+          ? ("origin" as const)
+          : ("manual" as const),
+      origin:
+        !isSuspense && (hasTransaction || hasWallet)
+          ? {
+              transactionId: leg.transaction_id ?? undefined,
+              anchorTransactionId: leg.anchor_transaction_id ?? undefined,
+              walletId: leg.wallet_id ?? undefined,
+              rail: leg.rail ?? undefined,
+              chain: leg.chain ?? undefined,
+              network: leg.network ?? undefined,
+              exposure: leg.exposure ?? undefined,
+              conservationUnit: leg.conservation_unit ?? undefined,
+            }
+          : null,
+    } satisfies GuidedLegForm;
+  });
+
+  const allocations = component.allocations.map((allocation) => ({
+    key: nextKey("alloc"),
+    sourceKey: legIdToKey.get(allocation.source_leg_id) ?? "",
+    sinkKey: legIdToKey.get(allocation.sink_leg_id) ?? "",
+    amountBtc: msatToBtcInput(allocation.source_amount_msat),
+  }));
+
+  return {
+    componentType: component.component_type === "swap" ? "swap" : "manual_bridge",
+    conservationMode: component.conservation_mode,
+    evidenceKind: component.evidence_kind ?? "",
+    evidenceGrade: component.evidence_grade ?? "",
+    conversionPolicy: component.conversion_policy ?? "",
+    conversionReviewed: component.conversion_reviewed ?? false,
+    notes: component.notes ?? "",
+    legs,
+    allocations,
+  };
 }
