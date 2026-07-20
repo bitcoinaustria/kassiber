@@ -280,7 +280,8 @@ supported there.
 The broker spawns the signed helper only for a pending Touch ID unlock. The
 signed CLI pins the helper's verified bundle identifier, signing team, and
 code-directory hash, and the broker dynamically validates the spawned helper
-process before sending an enrollment passphrase. The helper verifies that its
+process while an inherited gate blocks Keychain access, then releases it before
+sending an enrollment passphrase. The helper verifies that its
 parent is the matching production-signed bundled CLI
 sidecar, including a Security.framework check of the live process against the
 sidecar's exact designated requirement, then writes the enrolled passphrase to

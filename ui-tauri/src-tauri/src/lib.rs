@@ -2922,6 +2922,7 @@ fn run_operator_native_auth_helper() -> Option<i32> {
     }
     let result = (|| -> Result<i32, String> {
         verify_operator_helper_parent()?;
+        wait_for_operator_broker_release(&args)?;
         let action = args
             .get(1)
             .map(String::as_str)
@@ -3011,6 +3012,28 @@ fn helper_fd(args: &[String], flag: &str) -> Result<i32, String> {
         .ok_or_else(|| format!("missing {flag}"))?
         .parse::<i32>()
         .map_err(|_| format!("invalid {flag}"))
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_operator_broker_release(args: &[String]) -> Result<(), String> {
+    let ready_fd = helper_fd(args, "--ready-fd")?;
+    let go_fd = helper_fd(args, "--go-fd")?;
+    if ready_fd <= 2 || go_fd <= 2 || ready_fd == go_fd {
+        return Err("native auth launch gate requires inherited pipes".to_string());
+    }
+    let mut ready = unsafe { File::from_raw_fd(ready_fd) };
+    ready
+        .write_all(b"R")
+        .map_err(|error| format!("could not signal native auth readiness: {error}"))?;
+    drop(ready);
+    let mut go = unsafe { File::from_raw_fd(go_fd) };
+    let mut signal = [0_u8; 1];
+    go.read_exact(&mut signal)
+        .map_err(|error| format!("could not receive native auth release: {error}"))?;
+    if signal != *b"G" {
+        return Err("native auth launch gate received an invalid release".to_string());
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

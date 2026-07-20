@@ -4,12 +4,14 @@ import tempfile
 import unittest
 import io
 import os
+import sys
 from unittest import mock
 from pathlib import Path
 
 from kassiber.errors import AppError
 from kassiber.operator.native_auth import (
     _helper_path,
+    _spawn_validated_helper,
     broker_touch_id_passphrase,
     invalidate_operator_native_auth,
     native_auth_helper_identity,
@@ -24,6 +26,32 @@ TEST_DATABASE_IDENTITY = "d" * 32
 
 
 class OperatorNativeAuthTest(unittest.TestCase):
+    def test_launch_gate_keeps_helper_alive_through_pid_validation(self) -> None:
+        script = (
+            "import os,sys;"
+            "ready=int(sys.argv[sys.argv.index('--ready-fd')+1]);"
+            "go=int(sys.argv[sys.argv.index('--go-fd')+1]);"
+            "os.write(ready,b'R');os.close(ready);"
+            "signal=os.read(go,1);os.close(go);"
+            "raise SystemExit(0 if signal==b'G' else 2)"
+        )
+
+        def validate(process, expected_identity):
+            self.assertIsNone(process.poll())
+            self.assertEqual(expected_identity, "signed-helper")
+
+        with mock.patch(
+            "kassiber.operator.native_auth._validate_spawned_helper",
+            side_effect=validate,
+        ):
+            process = _spawn_validated_helper(
+                [sys.executable, "-c", script],
+                inherited_fds=(),
+                expected_identity="signed-helper",
+            )
+
+        self.assertEqual(process.wait(timeout=2), 0)
+
     def test_helper_identity_detects_replacement_before_secret_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             helper = Path(tmp) / "Kassiber.app" / "Contents" / "MacOS" / "Kassiber"
@@ -72,6 +100,24 @@ class OperatorNativeAuthTest(unittest.TestCase):
                 },
             )
 
+    def test_touch_id_status_uses_the_live_validated_helper_gate(self) -> None:
+        process = mock.Mock()
+        process.stderr = io.BytesIO(b"")
+        process.wait.return_value = 4
+        process.poll.return_value = 4
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.native_auth._helper_path",
+            return_value=Path("/signed/helper"),
+        ), mock.patch(
+            "kassiber.operator.native_auth._spawn_validated_helper",
+            return_value=process,
+        ) as spawn_helper:
+            bind_project_policy(tmp, TEST_DATABASE_IDENTITY)
+            status = touch_id_status(tmp)
+
+        self.assertEqual(status, {"available": True, "configured": False})
+        self.assertIn("status", spawn_helper.call_args.args[0])
+
     def test_broker_touch_id_secret_uses_an_inherited_pipe(self) -> None:
         process = mock.Mock()
         process.stderr = io.BytesIO(b"")
@@ -87,40 +133,31 @@ class OperatorNativeAuthTest(unittest.TestCase):
             "kassiber.operator.native_auth._helper_path",
             return_value=Path("/signed/helper"),
         ), mock.patch(
-            "kassiber.operator.native_auth._validate_spawned_helper",
-        ), mock.patch(
-            "kassiber.operator.native_auth.subprocess.Popen",
+            "kassiber.operator.native_auth._spawn_validated_helper",
             side_effect=spawn,
-        ) as popen:
+        ) as spawn_helper:
             bind_project_policy(tmp, TEST_DATABASE_IDENTITY)
             secret = broker_touch_id_passphrase(tmp)
             try:
                 self.assertEqual(bytes(secret), b"touch-id-secret")
             finally:
                 secret[:] = b"\0" * len(secret)
-            command = popen.call_args.args[0]
+            command = spawn_helper.call_args.args[0]
             self.assertIn("broker-get", command)
             self.assertIn("--output-fd", command)
             self.assertNotIn(tmp, command)
 
     def test_store_validates_live_helper_before_writing_passphrase(self) -> None:
-        process = mock.Mock(pid=4242)
-        process.poll.return_value = None
-        process.wait.return_value = 1
-        process.stderr = io.BytesIO(b"")
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.native_auth._helper_path",
             return_value=Path("/signed/helper"),
         ), mock.patch(
-            "kassiber.operator.native_auth.subprocess.Popen",
-            return_value=process,
-        ), mock.patch(
-            "kassiber.operator.native_auth._validate_spawned_helper",
+            "kassiber.operator.native_auth._spawn_validated_helper",
             side_effect=AppError(
                 "invalid live helper",
                 code="native_auth_helper_mismatch",
             ),
-        ) as validate, mock.patch(
+        ) as spawn_helper, mock.patch(
             "kassiber.operator.native_auth._write_fd",
         ) as write_secret:
             bind_project_policy(tmp, TEST_DATABASE_IDENTITY)
@@ -132,7 +169,10 @@ class OperatorNativeAuthTest(unittest.TestCase):
                 )
 
         self.assertEqual(raised.exception.code, "native_auth_helper_mismatch")
-        validate.assert_called_once_with(process, "signed-helper")
+        self.assertEqual(
+            spawn_helper.call_args.kwargs["expected_identity"],
+            "signed-helper",
+        )
         write_secret.assert_not_called()
 
     def test_broker_touch_id_rejects_unbound_project_before_helper_lookup(self) -> None:
@@ -158,6 +198,9 @@ class OperatorNativeAuthTest(unittest.TestCase):
         self.assertIn('"broker-get" =>', helper)
         self.assertIn('"--output-fd"', helper)
         self.assertIn("verify_operator_helper_parent()?", helper)
+        self.assertIn("wait_for_operator_broker_release(&args)?", helper)
+        self.assertIn('helper_fd(args, "--ready-fd")?', source)
+        self.assertIn('helper_fd(args, "--go-fd")?', source)
         self.assertIn('Command::new("/usr/bin/codesign")', source)
         self.assertIn("TeamIdentifier=", source)
         self.assertIn("operator_sidecar_filename_for_arch", source)

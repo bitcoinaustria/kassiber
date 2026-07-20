@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import os
 import secrets
+import select
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -85,7 +86,7 @@ def broker_touch_id_passphrase(
     process: subprocess.Popen[bytes] | None = None
     value = bytearray()
     try:
-        process = subprocess.Popen(
+        process = _spawn_validated_helper(
             [
                 str(_helper_path(expected_helper_identity)),
                 "--operator-native-auth",
@@ -95,12 +96,9 @@ def broker_touch_id_passphrase(
                 "--output-fd",
                 str(write_fd),
             ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            pass_fds=(write_fd,),
+            inherited_fds=(write_fd,),
+            expected_identity=expected_helper_identity,
         )
-        _validate_spawned_helper(process, expected_helper_identity)
         os.close(write_fd)
         write_fd = -1
         value = _read_fd_limited(read_fd)
@@ -144,7 +142,7 @@ def touch_id_store(
     process: subprocess.Popen[bytes] | None = None
     try:
         os.set_inheritable(read_fd, True)
-        process = subprocess.Popen(
+        process = _spawn_validated_helper(
             [
                 str(helper),
                 "--operator-native-auth",
@@ -154,12 +152,9 @@ def touch_id_store(
                 "--secret-fd",
                 str(read_fd),
             ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            pass_fds=(read_fd,),
+            inherited_fds=(read_fd,),
+            expected_identity=expected_helper_identity,
         )
-        _validate_spawned_helper(process, expected_helper_identity)
         os.close(read_fd)
         read_fd = -1
         _write_fd(write_fd, passphrase)
@@ -246,19 +241,26 @@ def _run_no_secret(
     *,
     expected_helper_identity: str | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(
-        [
-            str(_helper_path(expected_helper_identity)),
-            "--operator-native-auth",
-            action,
-            "--account",
-            operator_touch_id_account(data_root),
-        ],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        check=False,
+    command = [
+        str(_helper_path(expected_helper_identity)),
+        "--operator-native-auth",
+        action,
+        "--account",
+        operator_touch_id_account(data_root),
+    ]
+    process = _spawn_validated_helper(
+        command,
+        inherited_fds=(),
+        expected_identity=expected_helper_identity,
     )
+    try:
+        stderr = process.stderr.read() if process.stderr is not None else b""
+        return_code = process.wait()
+        return subprocess.CompletedProcess(command, return_code, b"", stderr)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
 
 
 def _helper_path(expected_identity: str | None = None) -> Path:
@@ -404,6 +406,64 @@ def _validate_spawned_helper(
             code="native_auth_helper_mismatch",
             retryable=False,
         )
+
+
+def _spawn_validated_helper(
+    command: list[str],
+    *,
+    inherited_fds: tuple[int, ...],
+    expected_identity: str | None,
+) -> subprocess.Popen[bytes]:
+    """Hold the helper behind a pipe gate until its live PID is verified."""
+
+    ready_read, ready_write = os.pipe()
+    go_read, go_write = os.pipe()
+    process: subprocess.Popen[bytes] | None = None
+    try:
+        os.set_inheritable(ready_write, True)
+        os.set_inheritable(go_read, True)
+        gated_command = [
+            *command,
+            "--ready-fd",
+            str(ready_write),
+            "--go-fd",
+            str(go_read),
+        ]
+        process = subprocess.Popen(
+            gated_command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            pass_fds=(*inherited_fds, ready_write, go_read),
+        )
+        os.close(ready_write)
+        ready_write = -1
+        os.close(go_read)
+        go_read = -1
+        readable, _, _ = select.select([ready_read], [], [], 5.0)
+        if not readable or os.read(ready_read, 1) != b"R":
+            raise AppError(
+                "the native-auth helper did not reach its signed launch gate",
+                code="native_auth_failed",
+                retryable=False,
+            )
+        _validate_spawned_helper(process, expected_identity)
+        os.write(go_write, b"G")
+        os.close(go_write)
+        go_write = -1
+        return process
+    except BaseException:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.wait()
+        raise
+    finally:
+        for fd in (ready_read, ready_write, go_read, go_write):
+            if fd >= 0:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
 
 
 def _native_error(stderr: bytes) -> AppError:

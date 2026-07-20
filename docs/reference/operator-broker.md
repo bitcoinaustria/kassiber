@@ -109,7 +109,8 @@ The signed CLI binds broker handoff to the live launcher's verified bundle
 identifier, TeamIdentifier, and code-directory hash. Before the broker writes
 an enrollment passphrase, it dynamically verifies the spawned helper PID
 against that Developer ID requirement; checking only the mutable executable
-path is not sufficient.
+path is not sufficient. An inherited readiness/release gate keeps the helper
+alive and blocks every Keychain action until that live validation completes.
 Before any get, store, delete, or status action, the helper verifies that its
 parent is the matching production-signed bundled Kassiber CLI sidecar. The
 helper checks the live parent process with macOS Security.framework against a

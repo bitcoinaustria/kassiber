@@ -283,7 +283,8 @@ broker bind to the live launcher's
 verified bundle identifier, TeamIdentifier, and code-directory hash. The broker
 dynamically validates the spawned helper PID against that Developer ID
 requirement before writing an enrollment passphrase, closing the mutable-path
-check/use gap. The helper accepts the request only when its parent is the
+check/use gap. An inherited readiness/release gate blocks every Keychain action
+until the live helper check completes. The helper accepts the request only when its parent is the
 matching production-signed bundled CLI
 sidecar: it validates the bundle path and signing team, then uses
 Security.framework to check the live parent process against a fixed Developer
