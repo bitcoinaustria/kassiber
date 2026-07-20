@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,6 +43,24 @@ class OperatorModeTest(unittest.TestCase):
             set_unlock_mode(tmp, "manual")
             self.assertEqual(effective_unlock_mode(tmp), "manual")
             self.assertFalse(remembered_unlock_allowed(tmp))
+
+    @unittest.skipIf(os.name == "nt", "symlink creation is privilege-dependent")
+    def test_mode_and_remembered_state_share_canonical_project_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            project = Path(parent) / "project"
+            project.mkdir()
+            alias = Path(parent) / "alias"
+            alias.symlink_to(project, target_is_directory=True)
+
+            set_cli_remembered_unlock_enabled(alias, True)
+            self.assertEqual(effective_unlock_mode(project), "unattended")
+
+            set_unlock_mode(project, "brokered")
+            self.assertEqual(configured_unlock_mode(alias), "brokered")
+            self.assertFalse(remembered_unlock_allowed(alias))
+
+            set_unlock_mode(alias, "manual")
+            self.assertEqual(configured_unlock_mode(project), "manual")
 
     @mock.patch("kassiber.core.runtime.load_remembered_passphrase")
     def test_manual_runtime_does_not_read_credential_store(self, load) -> None:

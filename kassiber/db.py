@@ -2684,6 +2684,13 @@ def resolve_database_path(data_root):
     return legacy
 
 
+def resolve_canonical_project_data_root(data_root):
+    """Return the alias-independent directory containing the project database."""
+
+    effective = resolve_effective_data_root(data_root)
+    return resolve_database_path(effective).expanduser().resolve(strict=False).parent
+
+
 CORE_SCHEMA_TABLES = frozenset({"settings", "workspaces", "profiles"})
 
 

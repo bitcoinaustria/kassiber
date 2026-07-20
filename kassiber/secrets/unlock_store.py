@@ -15,7 +15,11 @@ from pathlib import Path
 import keyring
 from keyring.errors import PasswordDeleteError
 
-from ..db import load_managed_settings, update_managed_settings
+from ..db import (
+    load_managed_settings,
+    resolve_canonical_project_data_root,
+    update_managed_settings,
+)
 
 
 CLI_REMEMBERED_PASSPHRASE_SERVICE = "Kassiber CLI Database Passphrase"
@@ -58,22 +62,23 @@ def remembered_unlock_access_policy() -> str:
 def remembered_unlock_account(data_root) -> str:
     """Derive the desktop-compatible per-data-root credential account."""
 
-    selected = Path(data_root)
-    try:
-        return str(selected.resolve())
-    except (OSError, RuntimeError):
-        return str(selected)
+    return str(resolve_canonical_project_data_root(data_root))
 
 
 def cli_remembered_unlock_enabled(data_root) -> bool:
     """Return True only for the explicit non-secret CLI opt-in marker."""
 
-    return load_managed_settings(data_root).get(CLI_REMEMBERED_UNLOCK_SETTING) is True
+    canonical_root = resolve_canonical_project_data_root(data_root)
+    return (
+        load_managed_settings(canonical_root).get(CLI_REMEMBERED_UNLOCK_SETTING)
+        is True
+    )
 
 
 def set_cli_remembered_unlock_enabled(data_root, enabled: bool) -> None:
     """Set or clear the explicit CLI opt-in marker."""
 
+    data_root = resolve_canonical_project_data_root(data_root)
     if enabled:
         update_managed_settings(
             data_root,
@@ -89,7 +94,7 @@ def set_cli_remembered_unlock_enabled(data_root, enabled: bool) -> None:
 def cli_legacy_unlock_quarantined(data_root) -> bool:
     """Return whether a retained legacy item is owned but unusable by CLI."""
 
-    return load_managed_settings(data_root).get(
+    return load_managed_settings(resolve_canonical_project_data_root(data_root)).get(
         CLI_LEGACY_UNLOCK_QUARANTINED_SETTING
     ) is True
 
@@ -102,6 +107,7 @@ def set_cli_unlock_state(
 ) -> None:
     """Atomically update CLI opt-in and retained-legacy quarantine state."""
 
+    data_root = resolve_canonical_project_data_root(data_root)
     updates = {}
     remove = []
     if enabled:
@@ -258,7 +264,7 @@ def mark_desktop_biometric_passphrase_stale(data_root) -> str | None:
         return None
     generation = py_secrets.token_urlsafe(32)
     update_managed_settings(
-        data_root,
+        resolve_canonical_project_data_root(data_root),
         updates={DESKTOP_BIOMETRIC_STALE_SETTING: generation},
     )
     return generation
