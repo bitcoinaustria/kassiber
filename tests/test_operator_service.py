@@ -28,6 +28,7 @@ from kassiber.operator.service import (
     Operation,
     OperationResult,
     OperatorService,
+    ProjectLease,
 )
 from kassiber.operator.runner import run_cli_operation
 from kassiber.log_ring import LogRing, RingHandler
@@ -41,6 +42,41 @@ class _Connection:
 
 
 class OperatorServiceTest(unittest.TestCase):
+    def test_secret_buffers_are_omitted_from_internal_representations(self) -> None:
+        operation_secret = bytearray(b"operation-repr-secret")
+        lease_secret = bytearray(b"lease-repr-secret")
+        operation = Operation(
+            id="operation",
+            generation="generation",
+            project_id="public-project",
+            project_identity="project-identity",
+            database_identity="database-identity",
+            data_root="/redacted",
+            argv=["status"],
+            command_path="status",
+            capability=Capability.READ,
+            secret_arguments={"passphrase": operation_secret},
+        )
+        lease = ProjectLease(
+            data_root="/redacted",
+            project=mock.Mock(),
+            database_identity="database-identity",
+            passphrase=lease_secret,
+            capability=Capability.READ,
+            owner=mock.Mock(),
+            unlocked_at="2026-01-01T00:00:00Z",
+            expires_at_monotonic=None,
+            duration_seconds=None,
+            authentication_method="password",
+            expires_at=None,
+        )
+        try:
+            self.assertNotIn("operation-repr-secret", repr(operation))
+            self.assertNotIn("lease-repr-secret", repr(lease))
+        finally:
+            operation_secret[:] = b"\0" * len(operation_secret)
+            lease_secret[:] = b"\0" * len(lease_secret)
+
     def test_lifecycle_telemetry_is_bounded_ram_only_and_public_safe(self) -> None:
         ring = LogRing(max_records=3, max_bytes=4096)
         logger = logging.getLogger("kassiber.operator")

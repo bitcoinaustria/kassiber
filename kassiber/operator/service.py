@@ -56,7 +56,7 @@ class Operation:
     argv: list[str]
     command_path: str
     capability: Capability
-    secret_arguments: dict[str, bytearray]
+    secret_arguments: dict[str, bytearray] = field(repr=False)
     admin_authorized_until_monotonic: float | None = None
     state: str = "queued"
     submitted_at: str = field(default_factory=now_iso)
@@ -95,7 +95,7 @@ class ProjectLease:
     data_root: str
     project: CanonicalProject
     database_identity: str
-    passphrase: bytearray
+    passphrase: bytearray = field(repr=False)
     capability: Capability
     owner: ProjectOwnerLease
     unlocked_at: str
