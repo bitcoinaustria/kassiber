@@ -787,7 +787,12 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     code="operator_peer_rejected",
                     retryable=False,
                 )
-            return BrokerChannel(_WindowsPipeTransport(handle))
+            return BrokerChannel(
+                _WindowsPipeTransport(
+                    handle,
+                    io_timeout=DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS,
+                )
+            )
 
         def close(self) -> None:
             if self._closed:

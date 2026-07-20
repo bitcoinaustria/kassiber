@@ -161,6 +161,12 @@ class OperatorProtocolTest(unittest.TestCase):
         ):
             with self.subTest(primitive=primitive):
                 self.assertIn(primitive, text)
+        listener_accept = text.split("class _WindowsBrokerListener:", 1)[1]
+        listener_accept = listener_accept.split("        def close(self)", 1)[0]
+        self.assertIn(
+            "io_timeout=DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
+            listener_accept,
+        )
 
     @unittest.skipIf(os.name == "nt", "Unix timeout test")
     def test_ping_read_is_bounded_when_endpoint_accepts_but_never_replies(self) -> None:
