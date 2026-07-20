@@ -291,7 +291,7 @@ class OperatorProtocolTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows named-pipe timeout test")
     def test_windows_accepted_client_partial_frame_times_out(self) -> None:
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         with mock.patch.object(
             operator_protocol,
             "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
@@ -304,7 +304,7 @@ class OperatorProtocolTest(unittest.TestCase):
                 try:
                     with server.accept() as channel:
                         channel.receive_json()
-                except BaseException as exc:  # pragma: no cover - Windows CI
+                except Exception as exc:  # pragma: no cover - Windows CI
                     errors.append(exc)
 
             thread = threading.Thread(target=serve)
@@ -324,7 +324,7 @@ class OperatorProtocolTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows named-pipe timeout test")
     def test_windows_nonreading_client_does_not_block_server_write(self) -> None:
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         with mock.patch.object(
             operator_protocol,
             "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
@@ -337,7 +337,7 @@ class OperatorProtocolTest(unittest.TestCase):
                 try:
                     with server.accept() as channel:
                         channel.send_json({"payload": "x" * (1024 * 1024)})
-                except BaseException as exc:  # pragma: no cover - Windows CI
+                except Exception as exc:  # pragma: no cover - Windows CI
                     errors.append(exc)
 
             thread = threading.Thread(target=serve)
@@ -359,13 +359,13 @@ class OperatorProtocolTest(unittest.TestCase):
         server = listen()
         accepted: list[BrokerChannel] = []
         clients: list[BrokerChannel] = []
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
 
         def accept_many() -> None:
             try:
                 for _ in range(40):
                     accepted.append(server.accept())
-            except BaseException as exc:  # pragma: no cover - Windows CI
+            except Exception as exc:  # pragma: no cover - Windows CI
                 errors.append(exc)
 
         thread = threading.Thread(target=accept_many)
@@ -385,7 +385,7 @@ class OperatorProtocolTest(unittest.TestCase):
                     with server.accept() as channel:
                         result.append(channel.receive_json())
                         channel.send_json({"ok": True})
-                except BaseException as exc:  # pragma: no cover - Windows CI
+                except Exception as exc:  # pragma: no cover - Windows CI
                     errors.append(exc)
 
             recovery = threading.Thread(target=serve_one_more)
@@ -409,14 +409,14 @@ class OperatorProtocolTest(unittest.TestCase):
     def test_windows_second_listener_loses_election_without_disturbing_first(self) -> None:
         start = threading.Barrier(3)
         listeners: list[operator_protocol._WindowsBrokerListener] = []
-        startup_errors: list[BaseException] = []
+        startup_errors: list[Exception] = []
         result: list[dict] = []
 
         def create_listener() -> None:
             start.wait()
             try:
                 listeners.append(listen())
-            except BaseException as exc:  # pragma: no cover - Windows CI
+            except Exception as exc:  # pragma: no cover - Windows CI
                 startup_errors.append(exc)
 
         starters = [threading.Thread(target=create_listener) for _ in range(2)]
@@ -453,7 +453,7 @@ class OperatorProtocolTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
     def test_windows_client_rejects_mismatched_server_sid(self) -> None:
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         with mock.patch.object(
             operator_protocol,
             "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
@@ -465,7 +465,7 @@ class OperatorProtocolTest(unittest.TestCase):
                 try:
                     with server.accept() as channel:
                         channel.receive_json()
-                except BaseException as exc:  # pragma: no cover - Windows CI
+                except Exception as exc:  # pragma: no cover - Windows CI
                     errors.append(exc)
 
             thread = threading.Thread(target=serve)
@@ -489,14 +489,14 @@ class OperatorProtocolTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
     def test_windows_server_rejects_mismatched_client_sid(self) -> None:
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         server = listen()
         client: BrokerChannel | None = None
 
         def serve() -> None:
             try:
                 server.accept()
-            except BaseException as exc:  # pragma: no cover - Windows CI
+            except Exception as exc:  # pragma: no cover - Windows CI
                 errors.append(exc)
 
         with mock.patch.object(
@@ -527,7 +527,7 @@ class OperatorProtocolTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
     def test_windows_client_closes_pipe_when_server_sid_lookup_fails(self) -> None:
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         with mock.patch.object(
             operator_protocol,
             "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
@@ -539,7 +539,7 @@ class OperatorProtocolTest(unittest.TestCase):
                 try:
                     with server.accept() as channel:
                         channel.receive_json()
-                except BaseException as exc:  # pragma: no cover - Windows CI
+                except Exception as exc:  # pragma: no cover - Windows CI
                     errors.append(exc)
 
             thread = threading.Thread(target=serve)
@@ -562,14 +562,14 @@ class OperatorProtocolTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows named-pipe peer test")
     def test_windows_server_closes_pipe_when_client_sid_lookup_fails(self) -> None:
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         server = listen()
         client: BrokerChannel | None = None
 
         def serve() -> None:
             try:
                 server.accept()
-            except BaseException as exc:  # pragma: no cover - Windows CI
+            except Exception as exc:  # pragma: no cover - Windows CI
                 errors.append(exc)
 
         with mock.patch.object(
@@ -609,7 +609,7 @@ class OperatorProtocolTest(unittest.TestCase):
         connect_completed = threading.Event()
         release_result = threading.Event()
         close_count = 0
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         client: BrokerChannel | None = None
 
         def controlled_connect(handle: object, overlapped: object) -> int:
@@ -642,7 +642,7 @@ class OperatorProtocolTest(unittest.TestCase):
         def accept_until_closed() -> None:
             try:
                 server.accept()
-            except BaseException as exc:  # pragma: no cover - Windows CI
+            except Exception as exc:  # pragma: no cover - Windows CI
                 errors.append(exc)
 
         with (
