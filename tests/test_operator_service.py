@@ -45,6 +45,30 @@ class _Connection:
 
 
 class OperatorServiceTest(unittest.TestCase):
+    def test_native_unlock_rejects_unexpected_database_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=_Connection(),
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    service.unlock(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        duration_seconds=None,
+                        authentication_method="touch_id",
+                        expected_database_identity="f" * 32,
+                    )
+
+                self.assertEqual(raised.exception.code, "operator_project_replaced")
+                self.assertEqual(service._leases, {})
+            finally:
+                service.close()
+
     def test_admin_cannot_be_granted_as_a_standing_lease(self) -> None:
         service = OperatorService(
             "generation",

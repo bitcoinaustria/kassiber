@@ -12,6 +12,7 @@ from pathlib import Path
 from ..db import load_managed_settings, update_managed_settings
 from ..errors import AppError
 from .project import canonical_project
+from .policy import require_project_policy_binding
 from .service import _wipe
 
 
@@ -21,6 +22,9 @@ OPERATOR_NATIVE_AUTH_GENERATION_SETTING = "operator_native_auth_generation"
 def operator_touch_id_account(data_root: str) -> str:
     project = canonical_project(data_root)
     canonical_data_root = str(project.database.parent)
+    # Native credentials are usable only while the adjacent policy remains
+    # bound to this exact filesystem identity and an authenticated database ID.
+    require_project_policy_binding(canonical_data_root)
     generation = load_managed_settings(canonical_data_root).get(
         OPERATOR_NATIVE_AUTH_GENERATION_SETTING,
         "initial",
@@ -44,6 +48,7 @@ def invalidate_operator_native_auth(data_root: str) -> str:
 def broker_touch_id_passphrase(data_root: str) -> bytearray:
     """Broker-only bridge: the signed helper writes to a broker-created pipe."""
 
+    account = operator_touch_id_account(data_root)
     read_fd, write_fd = os.pipe()
     os.set_inheritable(write_fd, True)
     process: subprocess.Popen[bytes] | None = None
@@ -55,7 +60,7 @@ def broker_touch_id_passphrase(data_root: str) -> bytearray:
                 "--operator-native-auth",
                 "broker-get",
                 "--account",
-                operator_touch_id_account(data_root),
+                account,
                 "--output-fd",
                 str(write_fd),
             ],

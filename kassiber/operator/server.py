@@ -19,6 +19,7 @@ from ..log_ring import install_ring_logging, sanitize_traceback_text
 from ..redaction import is_sensitive_key
 from .protocol import PROTOCOL_VERSION, BrokerChannel, listen
 from .project import canonical_project
+from .policy import require_project_policy_binding
 from .runner import run_cli_operation
 from .service import OperatorService, _classify_argv, _wipe
 
@@ -233,6 +234,7 @@ class BrokerServer:
             from .native_auth import broker_touch_id_passphrase
 
             data_root = _canonical_data_root(_required_string(request, "data_root"))
+            binding = require_project_policy_binding(data_root)
             duration, capability = _lease_request_args(request)
             passphrase = broker_touch_id_passphrase(data_root)
             try:
@@ -243,6 +245,7 @@ class BrokerServer:
                         duration_seconds=duration,
                         capability=capability,
                         authentication_method="touch_id",
+                        expected_database_identity=binding.database_identity,
                     )
                 )
             finally:

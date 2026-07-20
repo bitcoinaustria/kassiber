@@ -265,6 +265,12 @@ class OperatorServerTest(unittest.TestCase):
         with mock.patch(
             "kassiber.operator.native_auth.broker_touch_id_passphrase",
             return_value=secret,
+        ), mock.patch(
+            "kassiber.operator.server._canonical_data_root",
+            return_value="/canonical-project",
+        ), mock.patch(
+            "kassiber.operator.server.require_project_policy_binding",
+            return_value=mock.Mock(database_identity="d" * 32),
         ):
             response = server._handle(
                 mock.Mock(),
@@ -278,6 +284,10 @@ class OperatorServerTest(unittest.TestCase):
         self.assertEqual(
             server.service.unlock.call_args.kwargs["authentication_method"],
             "touch_id",
+        )
+        self.assertEqual(
+            server.service.unlock.call_args.kwargs["expected_database_identity"],
+            "d" * 32,
         )
         self.assertEqual(set(secret), {0})
 

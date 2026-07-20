@@ -609,6 +609,7 @@ class OperatorService:
         duration_seconds: int | None,
         capability: Capability = Capability.ACCOUNTING_DECISIONS,
         authentication_method: str = "password",
+        expected_database_identity: str | None = None,
     ) -> dict[str, object]:
         if capability not in {
             Capability.READ,
@@ -714,6 +715,7 @@ class OperatorService:
                     canonical_data_root,
                     passphrase=_decode_secret(passphrase),
                     require_existing_schema=True,
+                    expected_database_identity=expected_database_identity,
                 )
                 try:
                     if hasattr(connection, "execute"):
@@ -722,6 +724,15 @@ class OperatorService:
                     else:
                         opened_database_identity = project.identity[:32]
                         context = {}
+                    if (
+                        expected_database_identity is not None
+                        and opened_database_identity != expected_database_identity
+                    ):
+                        raise AppError(
+                            "native authentication opened a different project database",
+                            code="operator_project_replaced",
+                            retryable=False,
+                        )
                 finally:
                     try:
                         connection.close()

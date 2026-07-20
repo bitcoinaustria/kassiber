@@ -7,17 +7,23 @@ import os
 from unittest import mock
 from pathlib import Path
 
+from kassiber.errors import AppError
 from kassiber.operator.native_auth import (
     broker_touch_id_passphrase,
     invalidate_operator_native_auth,
     operator_touch_id_account,
     touch_id_status,
 )
+from kassiber.operator.policy import bind_project_policy
+
+
+TEST_DATABASE_IDENTITY = "d" * 32
 
 
 class OperatorNativeAuthTest(unittest.TestCase):
     def test_rotation_generation_changes_opaque_native_account(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            bind_project_policy(tmp, TEST_DATABASE_IDENTITY)
             before = operator_touch_id_account(tmp)
             generation = invalidate_operator_native_auth(tmp)
             after = operator_touch_id_account(tmp)
@@ -29,6 +35,7 @@ class OperatorNativeAuthTest(unittest.TestCase):
 
     def test_touch_id_status_is_truthful_without_signed_macos_helper(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            bind_project_policy(tmp, TEST_DATABASE_IDENTITY)
             self.assertEqual(
                 touch_id_status(tmp),
                 {
@@ -56,6 +63,7 @@ class OperatorNativeAuthTest(unittest.TestCase):
             "kassiber.operator.native_auth.subprocess.Popen",
             side_effect=spawn,
         ) as popen:
+            bind_project_policy(tmp, TEST_DATABASE_IDENTITY)
             secret = broker_touch_id_passphrase(tmp)
             try:
                 self.assertEqual(bytes(secret), b"touch-id-secret")
@@ -65,6 +73,15 @@ class OperatorNativeAuthTest(unittest.TestCase):
             self.assertIn("broker-get", command)
             self.assertIn("--output-fd", command)
             self.assertNotIn(tmp, command)
+
+    def test_broker_touch_id_rejects_unbound_project_before_helper_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.native_auth.subprocess.Popen",
+        ) as popen, self.assertRaises(AppError) as raised:
+            broker_touch_id_passphrase(tmp)
+
+        self.assertEqual(raised.exception.code, "operator_policy_binding_required")
+        popen.assert_not_called()
 
     def test_signed_helper_requires_broker_parent_for_all_actions(self) -> None:
         source = (
