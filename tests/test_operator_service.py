@@ -1481,12 +1481,12 @@ class OperatorServiceTest(unittest.TestCase):
             service = OperatorService("generation", runner)
             try:
                 service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
-                first = service.submit(tmp, ["status"])
-                self.assertTrue(started.wait(1))
                 authorization = service.verify_admin(
                     tmp,
                     bytearray(b"passphrase"),
                 )
+                first = service.submit(tmp, ["status"])
+                self.assertTrue(started.wait(1))
                 queued = service.submit(
                     tmp,
                     ["secrets", "verify"],
@@ -3039,7 +3039,13 @@ class OperatorServiceTest(unittest.TestCase):
         active = 0
         max_active = 0
 
-        def opened(_data_root, *, passphrase, require_existing_schema):
+        def opened(
+            _data_root,
+            *,
+            passphrase,
+            require_existing_schema,
+            expected_database_identity=None,
+        ):
             nonlocal active, max_active
             if passphrase == "correct":
                 return _Connection()
