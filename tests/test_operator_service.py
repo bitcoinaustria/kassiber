@@ -3133,6 +3133,27 @@ class OperatorServiceTest(unittest.TestCase):
                 self.assertEqual(revoke.call_count, 1)
                 self.assertFalse(service._pending_owner_releases)
 
+    def test_close_interrupt_restores_state_and_retries_safe_cleanup(self) -> None:
+        service = OperatorService(
+            "generation",
+            lambda *_args: OperationResult(0, "", ""),
+        )
+        with mock.patch.object(
+            service,
+            "_release_pending_owners",
+            side_effect=[KeyboardInterrupt, None],
+        ) as release:
+            with self.assertRaises(KeyboardInterrupt):
+                service.close()
+
+            self.assertFalse(service._close_in_progress)
+            self.assertFalse(service._close_complete.is_set())
+
+            service.close()
+
+        self.assertEqual(release.call_count, 2)
+        self.assertTrue(service._close_complete.is_set())
+
     def test_concurrent_close_waiter_retries_failed_owner_release(self) -> None:
         first_release_entered = threading.Event()
         allow_first_failure = threading.Event()

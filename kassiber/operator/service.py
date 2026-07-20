@@ -7,6 +7,7 @@ import json
 import logging
 import secrets
 import subprocess
+import sys
 import threading
 import time
 from collections import OrderedDict, deque
@@ -1552,7 +1553,7 @@ class OperatorService:
             prepare_shutdown = not self._close_prepared
             if not self._closed.is_set():
                 self._closed.set()
-        first_error: BaseException | None = None
+        first_error: Exception | None = None
         try:
             if prepare_shutdown:
                 with self._transition_condition:
@@ -1567,16 +1568,23 @@ class OperatorService:
                         worker.stop()
                     self._close_prepared = True
             self._release_pending_owners()
-        except BaseException as exc:
+        except Exception as exc:
             first_error = exc
         finally:
+            # A process-level interrupt is not converted into an operational
+            # error, but it still participates in the shutdown state machine.
+            # sys.exception() exposes the propagating BaseException while this
+            # finally block restores the retry/terminal invariants.
+            active_error = (
+                first_error if first_error is not None else sys.exception()
+            )
             with self._transition_condition:
-                if first_error is None:
+                if active_error is None:
                     self._close_complete.set()
                 elif not self._close_prepared:
                     # Retrying partially applied lease/worker transitions would
                     # be unsafe. Repeated callers receive the original failure.
-                    self._close_terminal_error = first_error
+                    self._close_terminal_error = active_error
                 self._close_in_progress = False
                 self._transition_condition.notify_all()
         if first_error is not None:
