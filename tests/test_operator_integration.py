@@ -23,6 +23,7 @@ class OperatorIntegrationTest(unittest.TestCase):
             os.chmod(runtime, 0o700)
             environment = os.environ.copy()
             environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            environment["XDG_RUNTIME_DIR"] = runtime
             processes = [
                 subprocess.Popen(
                     [sys.executable, "-m", "kassiber.operator.server"],
@@ -71,6 +72,7 @@ class OperatorIntegrationTest(unittest.TestCase):
             connection.close()
             environment = os.environ.copy()
             environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            environment["XDG_RUNTIME_DIR"] = runtime
             server = subprocess.Popen(
                 [sys.executable, "-m", "kassiber.operator.server"],
                 stdin=subprocess.DEVNULL,
@@ -180,6 +182,7 @@ class OperatorIntegrationTest(unittest.TestCase):
 
             environment = os.environ.copy()
             environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            environment["XDG_RUNTIME_DIR"] = runtime
             server = subprocess.Popen(
                 [sys.executable, "-m", "kassiber.operator.server"],
                 stdin=subprocess.DEVNULL,
