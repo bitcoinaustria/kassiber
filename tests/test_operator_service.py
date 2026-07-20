@@ -1730,6 +1730,103 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_credential_mode_commands_revoke_lease_after_success(self) -> None:
+        for command in ("remember-unlock", "forget-unlock"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as tmp:
+                service = OperatorService(
+                    "generation",
+                    lambda *_args: OperationResult(0, "", ""),
+                )
+                with mock.patch(
+                    "kassiber.operator.service.open_db",
+                    return_value=_Connection(),
+                ):
+                    try:
+                        service.unlock(
+                            tmp,
+                            bytearray(b"passphrase"),
+                            duration_seconds=None,
+                        )
+                        retained = next(iter(service._leases.values())).passphrase
+                        authorization = service.verify_admin(
+                            tmp,
+                            bytearray(b"passphrase"),
+                        )
+                        accepted = service.submit(
+                            tmp,
+                            ["secrets", command],
+                            admin_authorization=authorization,
+                        )
+                        terminal = self._wait_terminal(
+                            service,
+                            accepted["operation_id"],
+                        )
+                        self.assertEqual(terminal["state"], "completed")
+                        self.assertEqual(service.status(tmp)["lease"], "locked")
+                        self.assertEqual(set(retained), {0})
+                    finally:
+                        service.close()
+
+    def test_credential_mode_partial_outcomes_revoke_and_drain_lease(self) -> None:
+        for command in ("remember-unlock", "forget-unlock"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as tmp:
+                started = threading.Event()
+                release = threading.Event()
+
+                def runner(operation, _passphrase):
+                    if operation.command_path == f"secrets.{command}":
+                        started.set()
+                        if not release.wait(2):
+                            raise AssertionError("timed out releasing credential command")
+                        return OperationResult(1, "", "partial credential update\n")
+                    return OperationResult(0, "", "")
+
+                service = OperatorService("generation", runner)
+                with mock.patch(
+                    "kassiber.operator.service.open_db",
+                    return_value=_Connection(),
+                ):
+                    try:
+                        service.unlock(
+                            tmp,
+                            bytearray(b"passphrase"),
+                            duration_seconds=None,
+                        )
+                        retained = next(iter(service._leases.values())).passphrase
+                        authorization = service.verify_admin(
+                            tmp,
+                            bytearray(b"passphrase"),
+                        )
+                        credential = service.submit(
+                            tmp,
+                            ["secrets", command],
+                            admin_authorization=authorization,
+                        )
+                        self.assertTrue(started.wait(1))
+                        queued = service.submit(tmp, ["status"])
+                        release.set()
+
+                        credential_terminal = self._wait_terminal(
+                            service,
+                            credential["operation_id"],
+                        )
+                        self.assertEqual(
+                            credential_terminal["state"],
+                            "result_unknown",
+                        )
+                        self.assertEqual(
+                            self._wait_terminal(
+                                service,
+                                queued["operation_id"],
+                            )["state"],
+                            "cancelled",
+                        )
+                        self.assertEqual(service.status(tmp)["lease"], "locked")
+                        self.assertEqual(set(retained), {0})
+                    finally:
+                        release.set()
+                        service.close()
+
     def test_cross_project_backup_install_is_rejected_before_admission(self) -> None:
         called = False
 

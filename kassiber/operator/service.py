@@ -38,6 +38,17 @@ MAX_CACHED_AUTH_BACKOFFS = 256
 ADMIN_AUTH_TTL_SECONDS = 60.0
 _LOGGER = logging.getLogger("kassiber.operator")
 OperationRunner = Callable[["Operation", bytearray], "OperationResult"]
+_LEASE_ENDING_COMMAND_REASONS = {
+    "secrets.change-passphrase": (
+        "database passphrase rotation ended the prior lease"
+    ),
+    "secrets.remember-unlock": (
+        "remembered unlock enrollment ended the prior brokered lease"
+    ),
+    "secrets.forget-unlock": (
+        "remembered unlock removal ended the prior brokered lease"
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -440,6 +451,14 @@ class ProjectWorker:
                 else:
                     state = "completed" if result.exit_code == 0 else "failed"
                 self._service._finish_operation_locked(operation, state, result)
+                lease_end_reason = _LEASE_ENDING_COMMAND_REASONS.get(
+                    operation.command_path
+                )
+                if lease_end_reason is not None:
+                    self._service._revoke_lease_locked(
+                        self.project_identity,
+                        reason=lease_end_reason,
+                    )
                 refresh_scope = (
                     operation.command_path == "context.set"
                     and state == "completed"
@@ -463,11 +482,6 @@ class ProjectWorker:
                         }
                     },
                 )
-                if operation.command_path == "secrets.change-passphrase":
-                    self._service._revoke_lease_locked(
-                        self.project_identity,
-                        reason="database passphrase rotation ended the prior lease",
-                    )
                 current_lease = self._service._leases.get(self.project_identity)
                 if (
                     current_lease is not None
