@@ -1478,6 +1478,80 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_transient_owner_release_logs_preserved_terminal_state(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+        recovered = threading.Event()
+        records: list[logging.LogRecord] = []
+
+        class CaptureHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+                if record.getMessage() == (
+                    "operator worker recovered from an internal failure"
+                ):
+                    recovered.set()
+
+        def runner(_operation, _passphrase):
+            started.set()
+            if not release.wait(2):
+                raise AssertionError("timed out releasing operation")
+            return OperationResult(0, "", "")
+
+        child = mock.Mock(tokens=())
+        owner = mock.Mock()
+        owner.duplicate_for_child.return_value = child
+        owner.release.side_effect = [OSError("transient close failure"), None]
+        logger = logging.getLogger("kassiber.operator")
+        previous_handlers = list(logger.handlers)
+        previous_level = logger.level
+        previous_propagate = logger.propagate
+        logger.handlers = [CaptureHandler()]
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        try:
+            with tempfile.TemporaryDirectory() as tmp, mock.patch(
+                "kassiber.operator.service.open_db", return_value=_Connection()
+            ), mock.patch(
+                "kassiber.operator.service.acquire_project_ownership",
+                return_value=owner,
+            ):
+                service = OperatorService("generation", runner)
+                try:
+                    service.unlock(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        duration_seconds=None,
+                    )
+                    accepted = service.submit(tmp, ["status"])
+                    self.assertTrue(started.wait(1))
+                    service.lock(tmp)
+                    release.set()
+                    terminal = self._wait_terminal(
+                        service,
+                        accepted["operation_id"],
+                    )
+                    self.assertEqual(terminal["state"], "completed")
+                    self.assertTrue(recovered.wait(1))
+                    recovery_record = next(
+                        record
+                        for record in records
+                        if record.getMessage()
+                        == "operator worker recovered from an internal failure"
+                    )
+                    self.assertEqual(
+                        recovery_record.kb_fields["state"],
+                        "completed",
+                    )
+                    self.assertEqual(owner.release.call_count, 2)
+                finally:
+                    release.set()
+                    service.close()
+        finally:
+            logger.handlers = previous_handlers
+            logger.setLevel(previous_level)
+            logger.propagate = previous_propagate
+
     def test_runner_exception_is_secret_floor_redacted(self) -> None:
         def runner(_operation, _passphrase):
             raise RuntimeError("blinding_key=private-value passphrase=hunter2")

@@ -234,7 +234,7 @@ class ProjectWorker:
                         "kb_fields": {
                             "project": self.project_id,
                             "command": operation.command_path,
-                            "state": "result_unknown",
+                            "state": operation.state,
                         }
                     },
                 )
