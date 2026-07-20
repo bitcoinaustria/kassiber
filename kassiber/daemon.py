@@ -1044,12 +1044,21 @@ class DaemonContext:
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
     project_owner: ProjectOwnerLease | None = None
+    retired_project_resources: list[_RetiredProjectResource] = field(
+        default_factory=list
+    )
     ownership_generation: str = field(
         default_factory=lambda: f"desktop-{os.getpid()}-{secrets.token_hex(8)}"
     )
     document_import_sessions: DocumentImportSessions = field(
         default_factory=DocumentImportSessions
     )
+
+
+@dataclass
+class _RetiredProjectResource:
+    connection: Any | None
+    owner: ProjectOwnerLease | None
 
 
 @dataclass(frozen=True)
@@ -3475,6 +3484,36 @@ def _release_daemon_project_owner(ctx: DaemonContext) -> None:
         owner.release()
 
 
+def _retry_retired_project_resources(ctx: DaemonContext) -> None:
+    """Close retired connections before releasing their exclusion locks."""
+
+    remaining: list[_RetiredProjectResource] = []
+    for resource in ctx.retired_project_resources:
+        if resource.connection is not None:
+            try:
+                resource.connection.close()
+            except Exception as close_error:
+                _REQUEST_LOGGER.error(
+                    "retired project connection cleanup failed",
+                    exc_info=close_error,
+                )
+                remaining.append(resource)
+                continue
+            resource.connection = None
+        if resource.owner is not None:
+            try:
+                resource.owner.release()
+            except Exception as release_error:
+                _REQUEST_LOGGER.error(
+                    "retired project ownership cleanup failed",
+                    exc_info=release_error,
+                )
+                remaining.append(resource)
+                continue
+            resource.owner = None
+    ctx.retired_project_resources = remaining
+
+
 def _locked_envelope(scope: str, label: str, request_id: object) -> dict[str, Any]:
     return _with_request_id(
         build_envelope(
@@ -3572,6 +3611,7 @@ def _select_project_payload(
     args: dict[str, Any],
     request_id: object,
 ) -> tuple[dict[str, Any], bool]:
+    _retry_retired_project_resources(ctx)
     project_id = args.get("project_id") or args.get("id")
     if not isinstance(project_id, str) or not project_id.strip():
         raise AppError(
@@ -3740,22 +3780,19 @@ def _select_project_payload(
                     exc_info=start_error,
                 )
 
-            if old_conn is not None and old_conn is not ctx.conn:
-                try:
-                    old_conn.close()
-                except Exception as close_error:
-                    _REQUEST_LOGGER.error(
-                        "retired project connection cleanup failed",
-                        exc_info=close_error,
-                    )
-            if old_owner is not None and old_owner is not target_owner:
-                try:
-                    old_owner.release()
-                except Exception as release_error:
-                    _REQUEST_LOGGER.error(
-                        "retired project ownership cleanup failed",
-                        exc_info=release_error,
-                    )
+            retired_connection = (
+                old_conn if old_conn is not None and old_conn is not ctx.conn else None
+            )
+            retired_owner = (
+                old_owner
+                if old_owner is not None and old_owner is not target_owner
+                else None
+            )
+            if retired_connection is not None or retired_owner is not None:
+                ctx.retired_project_resources.append(
+                    _RetiredProjectResource(retired_connection, retired_owner)
+                )
+                _retry_retired_project_resources(ctx)
     finally:
         cleanup_error: Exception | None = None
         if target_conn is not None:
@@ -16491,6 +16528,7 @@ def run(
             require_stopped=False,
         )
         _clear_unlocked_passphrase(ctx)
+        _retry_retired_project_resources(ctx)
         if worker_stopped:
             _release_daemon_project_owner(ctx)
 

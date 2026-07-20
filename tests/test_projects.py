@@ -613,6 +613,82 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                 projects_module.DEFAULT_STATE_ROOT = old_state
                 projects_module.DEFAULT_DATA_ROOT = old_data
 
+    def test_switch_retains_old_owner_until_failed_connection_close_retries(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                old_conn = mock.Mock()
+                old_conn.close.side_effect = [OSError("close failed"), None]
+                ctx = self._context(daemon_runtime, alpha, old_conn)
+                old_owner = mock.Mock()
+                old_owner.project = daemon_runtime.canonical_project(
+                    str(alpha.data_root)
+                )
+                ctx.project_owner = old_owner
+                target_owner = mock.Mock()
+                target_owner.project = daemon_runtime.canonical_project(
+                    str(beta.data_root)
+                )
+                target_conn = mock.Mock()
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "acquire_project_ownership",
+                    return_value=target_owner,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                    return_value=False,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                    return_value=(target_conn, {"target": True}),
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_start_freshness_background_worker",
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "set_selected_project",
+                    return_value=beta,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_status_payload",
+                    return_value={"project": "beta"},
+                ):
+                    response, _ = daemon_runtime._select_project_payload(
+                        ctx,
+                        {"project_id": beta.id},
+                        "switch",
+                    )
+
+                self.assertEqual(response["kind"], "ui.projects.select")
+                self.assertIs(ctx.conn, target_conn)
+                self.assertIs(ctx.project_owner, target_owner)
+                self.assertEqual(old_conn.close.call_count, 1)
+                old_owner.release.assert_not_called()
+                self.assertEqual(len(ctx.retired_project_resources), 1)
+
+                daemon_runtime._retry_retired_project_resources(ctx)
+
+                self.assertEqual(old_conn.close.call_count, 2)
+                old_owner.release.assert_called_once_with()
+                self.assertEqual(ctx.retired_project_resources, [])
+            finally:
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
     def test_switch_keeps_current_project_if_target_open_fails(self):
         try:
             from kassiber import daemon as daemon_runtime
