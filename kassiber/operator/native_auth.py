@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import secrets
 import subprocess
@@ -45,7 +46,11 @@ def invalidate_operator_native_auth(data_root: str) -> str:
     return generation
 
 
-def broker_touch_id_passphrase(data_root: str) -> bytearray:
+def broker_touch_id_passphrase(
+    data_root: str,
+    *,
+    expected_helper_identity: str | None = None,
+) -> bytearray:
     """Broker-only bridge: the signed helper writes to a broker-created pipe."""
 
     account = operator_touch_id_account(data_root)
@@ -56,7 +61,7 @@ def broker_touch_id_passphrase(data_root: str) -> bytearray:
     try:
         process = subprocess.Popen(
             [
-                str(_helper_path()),
+                str(_helper_path(expected_helper_identity)),
                 "--operator-native-auth",
                 "broker-get",
                 "--account",
@@ -101,8 +106,13 @@ def broker_touch_id_passphrase(data_root: str) -> bytearray:
     return value
 
 
-def touch_id_store(data_root: str, passphrase: bytearray) -> None:
-    helper = _helper_path()
+def touch_id_store(
+    data_root: str,
+    passphrase: bytearray,
+    *,
+    expected_helper_identity: str | None = None,
+) -> None:
+    helper = _helper_path(expected_helper_identity)
     read_fd, write_fd = os.pipe()
     process: subprocess.Popen[bytes] | None = None
     try:
@@ -140,8 +150,16 @@ def touch_id_store(data_root: str, passphrase: bytearray) -> None:
             process.wait()
 
 
-def touch_id_delete(data_root: str) -> None:
-    completed = _run_no_secret("delete", data_root)
+def touch_id_delete(
+    data_root: str,
+    *,
+    expected_helper_identity: str | None = None,
+) -> None:
+    completed = _run_no_secret(
+        "delete",
+        data_root,
+        expected_helper_identity=expected_helper_identity,
+    )
     if completed.returncode != 0:
         raise _native_error(completed.stderr)
 
@@ -168,10 +186,27 @@ def native_auth_runtime_available() -> bool:
     return True
 
 
-def _run_no_secret(action: str, data_root: str) -> subprocess.CompletedProcess[bytes]:
+def native_auth_helper_identity() -> str:
+    """Return a public-safe identity for the exact configured helper file."""
+
+    return _helper_identity(_helper_path())
+
+
+def validate_native_auth_helper_identity(expected_identity: str) -> None:
+    """Fail unless the currently configured helper matches the signed caller."""
+
+    _helper_path(expected_identity)
+
+
+def _run_no_secret(
+    action: str,
+    data_root: str,
+    *,
+    expected_helper_identity: str | None = None,
+) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
         [
-            str(_helper_path()),
+            str(_helper_path(expected_helper_identity)),
             "--operator-native-auth",
             action,
             "--account",
@@ -184,7 +219,7 @@ def _run_no_secret(action: str, data_root: str) -> subprocess.CompletedProcess[b
     )
 
 
-def _helper_path() -> Path:
+def _helper_path(expected_identity: str | None = None) -> Path:
     configured = os.environ.get("KASSIBER_NATIVE_AUTH_HELPER")
     if sys.platform != "darwin" or not configured:
         raise AppError(
@@ -200,7 +235,34 @@ def _helper_path() -> Path:
             code="native_auth_unavailable",
             retryable=False,
         )
+    if expected_identity is not None and not hmac.compare_digest(
+        _helper_identity(helper),
+        expected_identity,
+    ):
+        raise AppError(
+            "the broker native-auth helper does not match this signed CLI",
+            code="native_auth_helper_mismatch",
+            hint="Retry from the signed macOS app CLI after stopping idle broker work.",
+            retryable=True,
+        )
     return helper
+
+
+def _helper_identity(helper: Path) -> str:
+    digest = hashlib.sha256()
+    digest.update(b"kassiber-native-auth-helper-v1\0")
+    digest.update(os.fsencode(helper))
+    try:
+        with helper.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as exc:
+        raise AppError(
+            "the native authentication helper cannot be inspected",
+            code="native_auth_unavailable",
+            retryable=False,
+        ) from exc
+    return digest.hexdigest()
 
 
 def _native_error(stderr: bytes) -> AppError:

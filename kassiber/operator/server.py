@@ -196,13 +196,19 @@ class BrokerServer:
     ) -> dict[str, Any]:
         action = request.get("action")
         if action == "ping":
-            from .native_auth import native_auth_runtime_available
+            from .native_auth import native_auth_helper_identity
+
+            try:
+                native_auth_identity: str | None = native_auth_helper_identity()
+            except AppError:
+                native_auth_identity = None
 
             return _ok(
                 {
                     "broker": "running",
                     "generation": self.generation,
-                    "native_auth_available": native_auth_runtime_available(),
+                    "native_auth_available": native_auth_identity is not None,
+                    "native_auth_identity": native_auth_identity,
                 }
             )
         if action == "restart_for_native_auth":
@@ -248,12 +254,23 @@ class BrokerServer:
             finally:
                 _wipe(passphrase)
         if action == "unlock_touch_id":
-            from .native_auth import broker_touch_id_passphrase
+            from .native_auth import (
+                broker_touch_id_passphrase,
+                validate_native_auth_helper_identity,
+            )
 
             data_root = _canonical_data_root(_required_string(request, "data_root"))
+            native_auth_identity = _required_string(
+                request,
+                "native_auth_identity",
+            )
+            validate_native_auth_helper_identity(native_auth_identity)
             binding = require_project_policy_binding(data_root)
             duration, capability = _lease_request_args(request)
-            passphrase = broker_touch_id_passphrase(data_root)
+            passphrase = broker_touch_id_passphrase(
+                data_root,
+                expected_helper_identity=native_auth_identity,
+            )
             try:
                 return _ok(
                     self.service.unlock(
@@ -311,7 +328,14 @@ class BrokerServer:
             finally:
                 _wipe(authentication)
         if action == "touch_id_configure":
+            from .native_auth import validate_native_auth_helper_identity
+
             data_root = _canonical_data_root(_required_string(request, "data_root"))
+            native_auth_identity = _required_string(
+                request,
+                "native_auth_identity",
+            )
+            validate_native_auth_helper_identity(native_auth_identity)
             configured = request.get("configured")
             if not isinstance(configured, bool):
                 raise AppError(
@@ -335,6 +359,7 @@ class BrokerServer:
                         data_root,
                         authentication,
                         configured=configured,
+                        native_auth_identity=native_auth_identity,
                     )
                 )
             finally:

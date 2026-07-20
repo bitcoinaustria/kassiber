@@ -286,6 +286,8 @@ class OperatorServerTest(unittest.TestCase):
             "kassiber.operator.native_auth.broker_touch_id_passphrase",
             return_value=secret,
         ), mock.patch(
+            "kassiber.operator.native_auth.validate_native_auth_helper_identity",
+        ), mock.patch(
             "kassiber.operator.server._canonical_data_root",
             return_value="/canonical-project",
         ), mock.patch(
@@ -301,6 +303,7 @@ class OperatorServerTest(unittest.TestCase):
                     "action": "unlock_touch_id",
                     "data_root": "/public-placeholder",
                     "capability": "operator",
+                    "native_auth_identity": "signed-helper",
                 },
             )
         self.assertTrue(response["ok"])
@@ -329,14 +332,18 @@ class OperatorServerTest(unittest.TestCase):
         authentication = bytearray(b"fresh-passphrase")
         channel.receive_secret.return_value = authentication
 
-        response = server._handle(
-            channel,
-            {
-                "action": "touch_id_configure",
-                "data_root": "/public-placeholder",
-                "configured": True,
-            },
-        )
+        with mock.patch(
+            "kassiber.operator.native_auth.validate_native_auth_helper_identity",
+        ):
+            response = server._handle(
+                channel,
+                {
+                    "action": "touch_id_configure",
+                    "data_root": "/public-placeholder",
+                    "configured": True,
+                    "native_auth_identity": "signed-helper",
+                },
+            )
 
         self.assertTrue(response["ok"])
         challenge = channel.send_json.call_args.args[0]["challenge"]
@@ -345,22 +352,52 @@ class OperatorServerTest(unittest.TestCase):
             "/public-placeholder",
             authentication,
             configured=True,
+            native_auth_identity="signed-helper",
         )
         self.assertEqual(set(authentication), {0})
 
     def test_touch_id_configuration_rejects_non_boolean_state(self) -> None:
         server = BrokerServer.__new__(BrokerServer)
         server.service = mock.Mock()
-        with self.assertRaises(AppError) as raised:
+        with mock.patch(
+            "kassiber.operator.native_auth.validate_native_auth_helper_identity",
+        ), self.assertRaises(AppError) as raised:
             server._handle(
                 mock.Mock(),
                 {
                     "action": "touch_id_configure",
                     "data_root": "/public-placeholder",
                     "configured": "yes",
+                    "native_auth_identity": "signed-helper",
                 },
             )
         self.assertEqual(raised.exception.code, "operator_protocol_error")
+        server.service.configure_touch_id_authenticated.assert_not_called()
+
+    def test_touch_id_configuration_rejects_helper_mismatch_before_challenge(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        channel = mock.Mock()
+        with mock.patch(
+            "kassiber.operator.native_auth.validate_native_auth_helper_identity",
+            side_effect=AppError(
+                "helper mismatch",
+                code="native_auth_helper_mismatch",
+            ),
+        ), self.assertRaises(AppError) as raised:
+            server._handle(
+                channel,
+                {
+                    "action": "touch_id_configure",
+                    "data_root": "/public-placeholder",
+                    "configured": True,
+                    "native_auth_identity": "signed-helper",
+                },
+            )
+
+        self.assertEqual(raised.exception.code, "native_auth_helper_mismatch")
+        channel.send_json.assert_not_called()
+        channel.receive_secret.assert_not_called()
         server.service.configure_touch_id_authenticated.assert_not_called()
 
     def test_error_details_recursively_redact_secret_keys_and_values(self) -> None:

@@ -1071,6 +1071,7 @@ class OperatorService:
         secret: bytearray,
         *,
         configured: bool,
+        native_auth_identity: str,
     ) -> dict[str, object]:
         project = canonical_project(data_root)
         canonical_data_root = str(project.database.parent)
@@ -1084,9 +1085,16 @@ class OperatorService:
                 expected_project_identity=project.identity,
             )
             if configured:
-                touch_id_store(canonical_data_root, secret)
+                touch_id_store(
+                    canonical_data_root,
+                    secret,
+                    expected_helper_identity=native_auth_identity,
+                )
             else:
-                touch_id_delete(canonical_data_root)
+                touch_id_delete(
+                    canonical_data_root,
+                    expected_helper_identity=native_auth_identity,
+                )
 
         self.authenticate_database(
             canonical_data_root,

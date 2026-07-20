@@ -12,17 +12,19 @@ from kassiber.operator.client import (
 
 
 class OperatorClientSubmitTest(unittest.TestCase):
-    def test_signed_cli_restarts_an_idle_helperless_broker(self) -> None:
+    def test_signed_cli_restarts_an_idle_mismatched_helper_broker(self) -> None:
         client = BrokerClient()
         old = {
             "broker": "running",
             "generation": "old-generation",
-            "native_auth_available": False,
+            "native_auth_available": True,
+            "native_auth_identity": "untrusted-helper",
         }
         replacement = {
             "broker": "running",
             "generation": "new-generation",
             "native_auth_available": True,
+            "native_auth_identity": "signed-helper",
         }
         with mock.patch("kassiber.operator.client.sys.platform", "darwin"), mock.patch.dict(
             "kassiber.operator.client.os.environ",
@@ -31,7 +33,10 @@ class OperatorClientSubmitTest(unittest.TestCase):
             client,
             "ensure_running",
             side_effect=[old, replacement],
-        ) as ensure, mock.patch.object(
+        ) as ensure, mock.patch(
+            "kassiber.operator.native_auth.native_auth_helper_identity",
+            return_value="signed-helper",
+        ), mock.patch.object(
             client,
             "_simple_request",
             return_value={"restart": "accepted"},

@@ -74,11 +74,17 @@ class BrokerClient:
     def ensure_native_auth_running(self) -> dict[str, object]:
         """Handoff a helper-less idle broker to this signed CLI invocation."""
 
+        from .native_auth import native_auth_helper_identity
+
         broker = self.ensure_running()
-        if broker.get("native_auth_available") is True:
-            return broker
         if sys.platform != "darwin" or not os.environ.get(
             "KASSIBER_NATIVE_AUTH_HELPER"
+        ):
+            return broker
+        expected_identity = native_auth_helper_identity()
+        if (
+            broker.get("native_auth_available") is True
+            and broker.get("native_auth_identity") == expected_identity
         ):
             return broker
 
@@ -91,13 +97,19 @@ class BrokerClient:
             except (OSError, EOFError, AppError):
                 break
             if running.get("generation") != old_generation:
-                if running.get("native_auth_available") is True:
+                if (
+                    running.get("native_auth_available") is True
+                    and running.get("native_auth_identity") == expected_identity
+                ):
                     return running
                 break
             time.sleep(0.05)
 
         replacement = self.ensure_running()
-        if replacement.get("native_auth_available") is not True:
+        if (
+            replacement.get("native_auth_available") is not True
+            or replacement.get("native_auth_identity") != expected_identity
+        ):
             raise AppError(
                 "the restarted operator broker cannot use native authentication",
                 code="native_auth_unavailable",
@@ -147,7 +159,8 @@ class BrokerClient:
         duration_seconds: int | None,
         capability: str,
     ) -> dict[str, object]:
-        self.ensure_native_auth_running()
+        broker = self.ensure_native_auth_running()
+        native_auth_identity = _broker_native_auth_identity(broker)
         with connect() as channel:
             channel.send_json(
                 {
@@ -156,6 +169,7 @@ class BrokerClient:
                     "data_root": data_root,
                     "duration_seconds": duration_seconds,
                     "capability": capability,
+                    "native_auth_identity": native_auth_identity,
                 }
             )
             return self._receive_data(channel)
@@ -196,7 +210,8 @@ class BrokerClient:
         *,
         configured: bool,
     ) -> dict[str, object]:
-        self.ensure_native_auth_running()
+        broker = self.ensure_native_auth_running()
+        native_auth_identity = _broker_native_auth_identity(broker)
         with connect() as channel:
             channel.send_json(
                 {
@@ -204,6 +219,7 @@ class BrokerClient:
                     "action": "touch_id_configure",
                     "data_root": data_root,
                     "configured": configured,
+                    "native_auth_identity": native_auth_identity,
                 }
             )
             continuation = self._receive(channel)
@@ -378,6 +394,20 @@ class BrokerClient:
         if not isinstance(data, dict):
             raise AppError("invalid broker response", code="operator_protocol_error")
         return data
+
+
+def _broker_native_auth_identity(broker: dict[str, object]) -> str:
+    identity = broker.get("native_auth_identity")
+    if broker.get("native_auth_available") is not True or not isinstance(
+        identity, str
+    ):
+        raise AppError(
+            "the operator broker cannot use this signed native-auth helper",
+            code="native_auth_unavailable",
+            hint="Use password authentication or retry from the signed macOS app CLI.",
+            retryable=False,
+        )
+    return identity
 
 
 def prepare_arguments(

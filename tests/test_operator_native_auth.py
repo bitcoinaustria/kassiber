@@ -9,8 +9,10 @@ from pathlib import Path
 
 from kassiber.errors import AppError
 from kassiber.operator.native_auth import (
+    _helper_path,
     broker_touch_id_passphrase,
     invalidate_operator_native_auth,
+    native_auth_helper_identity,
     operator_touch_id_account,
     touch_id_status,
 )
@@ -21,6 +23,26 @@ TEST_DATABASE_IDENTITY = "d" * 32
 
 
 class OperatorNativeAuthTest(unittest.TestCase):
+    def test_helper_identity_detects_replacement_before_secret_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            helper = Path(tmp) / "Kassiber"
+            helper.write_bytes(b"signed-helper")
+            helper.chmod(0o700)
+            with mock.patch(
+                "kassiber.operator.native_auth.sys.platform",
+                "darwin",
+            ), mock.patch.dict(
+                os.environ,
+                {"KASSIBER_NATIVE_AUTH_HELPER": str(helper)},
+            ):
+                expected = native_auth_helper_identity()
+                helper.write_bytes(b"capture-helper")
+
+                with self.assertRaises(AppError) as raised:
+                    _helper_path(expected)
+
+        self.assertEqual(raised.exception.code, "native_auth_helper_mismatch")
+
     def test_rotation_generation_changes_opaque_native_account(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             bind_project_policy(tmp, TEST_DATABASE_IDENTITY)
