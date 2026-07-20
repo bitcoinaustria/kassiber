@@ -472,6 +472,27 @@ class DaemonProjectSwitchTests(unittest.TestCase):
         self.assertIsNone(ctx.project_owner)
         self.assertEqual(len(ctx.retired_project_resources), 1)
 
+    def test_daemon_lock_retains_owner_when_release_needs_retry(self):
+        from kassiber import daemon as daemon_runtime
+
+        owner = mock.Mock()
+        owner.release.side_effect = [OSError("release failed"), None]
+        ctx = mock.Mock(
+            project_owner=owner,
+            retired_project_resources=[],
+        )
+
+        with self.assertRaisesRegex(OSError, "release failed"):
+            daemon_runtime._release_daemon_project_owner(ctx)
+
+        self.assertIsNone(ctx.project_owner)
+        self.assertEqual(len(ctx.retired_project_resources), 1)
+
+        daemon_runtime._retry_retired_project_resources(ctx)
+
+        self.assertEqual(owner.release.call_count, 2)
+        self.assertEqual(ctx.retired_project_resources, [])
+
     def test_switch_stop_failure_prevents_catalog_persistence(self):
         from kassiber import daemon as daemon_runtime
         from kassiber import projects as projects_module
@@ -626,6 +647,83 @@ class DaemonProjectSwitchTests(unittest.TestCase):
 
                 self.assertEqual(target_conn.close.call_count, 2)
                 target_owner.release.assert_called_once_with()
+                self.assertEqual(ctx.retired_project_resources, [])
+            finally:
+                if alpha_conn is not None:
+                    alpha_conn.close()
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+    def test_switch_rollback_retains_target_owner_when_release_fails(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            alpha_conn = None
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                alpha_conn = open_db(str(alpha.data_root))
+                ctx = self._context(daemon_runtime, alpha, alpha_conn)
+                old_owner = mock.Mock()
+                old_owner.project = daemon_runtime.canonical_project(
+                    str(alpha.data_root)
+                )
+                ctx.project_owner = old_owner
+                target_owner = mock.Mock()
+                target_owner.project = daemon_runtime.canonical_project(
+                    str(beta.data_root)
+                )
+                target_owner.release.side_effect = [
+                    OSError("release failed"),
+                    None,
+                ]
+                target_conn = mock.Mock()
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "acquire_project_ownership",
+                    return_value=target_owner,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                    return_value=False,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                    return_value=(target_conn, {"target": True}),
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                    side_effect=AppError(
+                        "operation still running",
+                        code="project_operation_in_progress",
+                    ),
+                ):
+                    with self.assertRaises(AppError) as raised:
+                        daemon_runtime._select_project_payload(
+                            ctx,
+                            {"project_id": beta.id},
+                            "switch",
+                        )
+
+                self.assertEqual(
+                    raised.exception.code,
+                    "project_operation_in_progress",
+                )
+                target_conn.close.assert_called_once_with()
+                old_owner.release.assert_not_called()
+                self.assertEqual(target_owner.release.call_count, 1)
+                self.assertEqual(len(ctx.retired_project_resources), 1)
+
+                daemon_runtime._retry_retired_project_resources(ctx)
+
+                self.assertEqual(target_owner.release.call_count, 2)
                 self.assertEqual(ctx.retired_project_resources, [])
             finally:
                 if alpha_conn is not None:

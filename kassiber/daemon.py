@@ -3481,7 +3481,13 @@ def _release_daemon_project_owner(ctx: DaemonContext) -> None:
     owner = ctx.project_owner
     ctx.project_owner = None
     if owner is not None:
-        owner.release()
+        try:
+            owner.release()
+        except Exception:
+            ctx.retired_project_resources.append(
+                _RetiredProjectResource(None, owner)
+            )
+            raise
 
 
 def _retry_retired_project_resources(ctx: DaemonContext) -> None:
@@ -3833,6 +3839,9 @@ def _select_project_payload(
             try:
                 target_owner.release()
             except Exception as error:
+                ctx.retired_project_resources.append(
+                    _RetiredProjectResource(None, target_owner)
+                )
                 if cleanup_error is None:
                     cleanup_error = error
         if cleanup_error is not None:
