@@ -22,6 +22,7 @@ from kassiber.operator import runner as operator_runner
 from kassiber.operator.client import BrokerClient, parse_duration, prepare_arguments, wipe_prepared
 from kassiber.operator.launcher import broker_server_command, cli_child_command
 from kassiber.operator.project import canonical_project
+from kassiber.operator.protocol import MAX_JSON_FRAME
 from kassiber.command_capabilities import Capability
 from kassiber.operator.service import (
     MAX_CACHED_AUTH_BACKOFFS,
@@ -1352,6 +1353,91 @@ class OperatorServiceTest(unittest.TestCase):
                 OperationResult(0, "", ""),
             )
             self.assertEqual(len(service._operations), MAX_RETAINED_RESULTS)
+        finally:
+            service.close()
+
+    def test_oversized_result_has_a_small_truthful_status_contract(self) -> None:
+        oversized = "x" * (MAX_JSON_FRAME + 1)
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, oversized, ""),
+            )
+            try:
+                service.unlock(
+                    tmp,
+                    bytearray(b"passphrase"),
+                    duration_seconds=None,
+                )
+                accepted = service.submit(tmp, ["status"])
+                completed = self._wait_terminal(
+                    service,
+                    accepted["operation_id"],
+                )
+                self.assertEqual(completed["state"], "completed")
+                self.assertEqual(completed["exit_code"], 0)
+                self.assertFalse(completed["output_available"])
+                self.assertEqual(
+                    completed["output_error"]["code"],
+                    "operator_result_too_large",
+                )
+                self.assertNotIn("stdout", completed)
+                self.assertNotIn("stderr", completed)
+                retained = service._operations[accepted["operation_id"]]
+                self.assertEqual(retained.result, OperationResult(0, "", ""))
+                self.assertEqual(retained.retained_result_bytes, 0)
+                encoded = json.dumps(
+                    {"ok": True, "data": completed},
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+                self.assertLess(len(encoded), MAX_JSON_FRAME)
+            finally:
+                service.close()
+
+    def test_result_byte_budget_evicts_to_bounded_fingerprint_tombstones(
+        self,
+    ) -> None:
+        service = OperatorService(
+            "generation",
+            lambda *_args: OperationResult(0, "", ""),
+        )
+        sensitive_argument = "private-nonsecret-argument-" + ("z" * 4096)
+        try:
+            with mock.patch(
+                "kassiber.operator.service.MAX_RETAINED_RESULT_BYTES",
+                20,
+            ):
+                operations = []
+                for index in range(3):
+                    operation = Operation(
+                        id=f"generation.byte-budget.{index}",
+                        generation="generation",
+                        project_id="project",
+                        project_identity="identity",
+                        database_identity="database-identity",
+                        data_root="/unused",
+                        argv=["status", sensitive_argument, str(index)],
+                        command_path="status",
+                        capability=Capability.READ,
+                        secret_arguments={},
+                    )
+                    service._operations[operation.id] = operation
+                    service._finish_operation_locked(
+                        operation,
+                        "completed",
+                        OperationResult(0, "twelve-bytes", ""),
+                    )
+                    operations.append(operation)
+
+            self.assertEqual(list(service._operations), [operations[-1].id])
+            tombstone = service._operation_tombstones[operations[0].id]
+            self.assertEqual(tombstone[0], "project")
+            self.assertEqual(len(tombstone[1]), 64)
+            self.assertNotIn(sensitive_argument, repr(service._operation_tombstones))
         finally:
             service.close()
 

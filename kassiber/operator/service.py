@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import secrets
 import subprocess
@@ -29,13 +31,16 @@ from .project import (
     acquire_project_ownership,
     canonical_project,
 )
+from .protocol import MAX_JSON_FRAME
 
 
 MAX_QUEUED_OPERATIONS = 64
 MAX_RETAINED_RESULTS = 256
+MAX_RETAINED_RESULT_BYTES = 16 * 1024 * 1024
 MAX_RETAINED_OPERATION_TOMBSTONES = 1024
 MAX_CACHED_AUTH_BACKOFFS = 256
 ADMIN_AUTH_TTL_SECONDS = 60.0
+_OPERATION_STATUS_FRAME_HEADROOM = 64 * 1024
 _LOGGER = logging.getLogger("kassiber.operator")
 OperationRunner = Callable[["Operation", bytearray], "OperationResult"]
 _LEASE_ENDING_COMMAND_REASONS = {
@@ -76,6 +81,8 @@ class Operation:
     started_at: str | None = None
     finished_at: str | None = None
     result: OperationResult | None = None
+    output_error: dict[str, object] | None = None
+    retained_result_bytes: int = 0
     cancellation_requested: bool = False
     process: subprocess.Popen[bytes] | None = field(default=None, repr=False)
     owner_handle_tokens: tuple[int, ...] = field(default=(), repr=False)
@@ -97,7 +104,10 @@ class Operation:
         }
         if self.result is not None:
             payload["exit_code"] = self.result.exit_code
-            if include_output:
+            if self.output_error is not None:
+                payload["output_available"] = False
+                payload["output_error"] = dict(self.output_error)
+            elif include_output:
                 payload["stdout"] = self.result.stdout
                 payload["stderr"] = self.result.stderr
         return payload
@@ -501,7 +511,7 @@ class OperatorService:
         self._workers: dict[str, ProjectWorker] = {}
         self._operations: OrderedDict[str, Operation] = OrderedDict()
         self._operation_tombstones: OrderedDict[
-            str, tuple[str, tuple[str, ...]]
+            str, tuple[str, str]
         ] = OrderedDict()
         self._lease_aliases: dict[str, str] = {}
         self._auth_backoffs: OrderedDict[str, AuthAttemptBackoff] = OrderedDict()
@@ -1224,9 +1234,11 @@ class OperatorService:
                     return existing.public_status()
                 tombstone = self._operation_tombstones.get(operation_id)
                 if tombstone is not None:
-                    bound_project, bound_argv = tombstone
-                    if bound_project != project.public_id or bound_argv != tuple(
-                        pinned_argv
+                    bound_project, bound_fingerprint = tombstone
+                    if (
+                        bound_project != project.public_id
+                        or bound_fingerprint
+                        != _operation_request_fingerprint(pinned_argv)
                     ):
                         raise AppError(
                             "the operation id is already bound to another request",
@@ -1466,6 +1478,25 @@ class OperatorService:
         result: OperationResult | None,
     ) -> None:
         operation.state = state
+        operation.output_error = None
+        operation.retained_result_bytes = 0
+        if result is not None:
+            operation.retained_result_bytes = _result_bytes(result)
+            if _result_exceeds_protocol_frame(result):
+                operation.output_error = {
+                    "code": "operator_result_too_large",
+                    "message": (
+                        "The operation finished, but its output exceeded the "
+                        "broker response limit and was not retained."
+                    ),
+                    "hint": (
+                        "Narrow the request or use a file export; reconcile any "
+                        "mutation before retrying."
+                    ),
+                    "retryable": False,
+                }
+                result = OperationResult(result.exit_code, "", "")
+                operation.retained_result_bytes = 0
         operation.result = result
         operation.finished_at = now_iso()
         operation.process = None
@@ -1675,12 +1706,27 @@ class OperatorService:
                 "result_unknown",
             }
         ]
-        for removable in terminal_ids[:-MAX_RETAINED_RESULTS]:
+        retained_bytes = sum(
+            self._operations[operation_id].retained_result_bytes
+            for operation_id in terminal_ids
+        )
+        while terminal_ids and (
+            len(terminal_ids) > MAX_RETAINED_RESULTS
+            or (
+                retained_bytes > MAX_RETAINED_RESULT_BYTES
+                and len(terminal_ids) > 1
+            )
+        ):
+            removable = terminal_ids.pop(0)
             operation = self._operations.pop(removable, None)
             if operation is not None:
+                retained_bytes = max(
+                    0,
+                    retained_bytes - operation.retained_result_bytes,
+                )
                 self._operation_tombstones[removable] = (
                     operation.project_id,
-                    tuple(operation.argv),
+                    _operation_request_fingerprint(operation.argv),
                 )
                 self._operation_tombstones.move_to_end(removable)
         while len(self._operation_tombstones) > MAX_RETAINED_OPERATION_TOMBSTONES:
@@ -1747,6 +1793,28 @@ def _broker_stopped_error() -> AppError:
         code="operator_broker_stopped",
         retryable=True,
     )
+
+
+def _result_bytes(result: OperationResult) -> int:
+    return len(result.stdout.encode("utf-8")) + len(result.stderr.encode("utf-8"))
+
+
+def _result_exceeds_protocol_frame(result: OperationResult) -> bool:
+    encoded = json.dumps(
+        {"stderr": result.stderr, "stdout": result.stdout},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return len(encoded) > MAX_JSON_FRAME - _OPERATION_STATUS_FRAME_HEADROOM
+
+
+def _operation_request_fingerprint(argv: list[str]) -> str:
+    encoded = json.dumps(
+        argv,
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _require_explicit_scope(

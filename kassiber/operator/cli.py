@@ -217,6 +217,15 @@ def route_brokered_command(
             sys.stdout.write(stdout)
         if isinstance(stderr, str) and stderr:
             sys.stderr.write(stderr)
+        output_error = completed.get("output_error")
+        if isinstance(output_error, dict):
+            code = str(output_error.get("code") or "operator_output_unavailable")
+            message = str(
+                output_error.get("message")
+                or "The operator result output is unavailable."
+            )
+            sys.stderr.write(f"{code}: {message}\n")
+            return 1
         state = completed.get("state")
         exit_code = completed.get("exit_code")
         if state == "result_unknown":

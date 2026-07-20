@@ -258,12 +258,21 @@ Every accepted operation has an opaque id and one of these states:
 - `cancelled`
 - `result_unknown`
 
-The broker keeps at most the latest 256 terminal operation/result records in
-RAM, ordered by completion time and pruned on both admission and terminal
-transition. It also keeps 1,024 bounded request-binding tombstones: replaying a
-recent evicted operation id returns `result_unknown` and can never execute the
-command again. Queued and running records do not consume the terminal-result
-budget. Reconnecting clients can query retained results or cancel queued work.
+The broker keeps at most the latest 256 terminal operation/result records and
+16 MiB of retained result text in RAM, ordered by completion time and pruned on
+both admission and terminal transition. It also keeps 1,024 bounded
+request-binding tombstones containing only a project id and request
+fingerprint: replaying a recent evicted operation id returns `result_unknown`
+and can never execute the command again. Queued and running records do not
+consume the terminal-result budget. Reconnecting clients can query retained
+results or cancel queued work.
+
+An individual result that cannot fit safely in the 8 MiB IPC frame is not
+truncated into plausible machine output. Its operation keeps the truthful
+terminal state and exit code but returns `output_available: false` with the
+typed `operator_result_too_large` contract; stdout/stderr are discarded. The
+caller must narrow the query or use a file export, and must reconcile a
+mutation before retrying it.
 A client disconnect does not cancel accepted work. Running cancellation is
 advertised only where a command has a cooperative cancellation contract;
 otherwise cancel returns an accurate `not_cancellable` result.
