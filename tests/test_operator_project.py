@@ -41,6 +41,13 @@ def _competing_owner(data_root: str, output: multiprocessing.Queue) -> None:
         output.put(("acquired", {}))
 
 
+def _reported_locked_owner(owner: str) -> str:
+    # POSIX flock permits reading the already-open lock record after the lock
+    # attempt fails. Windows share-mode zero correctly prevents that second
+    # open, so the contender can prove exclusion but not read the owner label.
+    return "unknown" if os.name == "nt" else owner
+
+
 class OperatorProjectTest(unittest.TestCase):
     def test_parent_owner_release_attempts_every_handle_and_can_retry(self) -> None:
         first = mock.Mock()
@@ -131,7 +138,10 @@ class OperatorProjectTest(unittest.TestCase):
                 code, details = output.get(timeout=1)
                 self.assertEqual(code, "project_in_use")
                 self.assertEqual(details["project"], project.public_id)
-                self.assertEqual(details["owner"], "broker")
+                self.assertEqual(
+                    details["owner"],
+                    _reported_locked_owner("broker"),
+                )
                 self.assertNotIn(str(Path(tmp)), repr(details))
             finally:
                 lease.release()
@@ -220,7 +230,10 @@ class OperatorProjectTest(unittest.TestCase):
                 with self.assertRaises(AppError) as raised:
                     daemon_runtime._ensure_daemon_project_owner(ctx)
                 self.assertEqual(raised.exception.code, "project_in_use")
-                self.assertEqual(raised.exception.details["owner"], "broker")
+                self.assertEqual(
+                    raised.exception.details["owner"],
+                    _reported_locked_owner("broker"),
+                )
             finally:
                 broker.release()
 
@@ -242,7 +255,10 @@ class OperatorProjectTest(unittest.TestCase):
                 with self.assertRaises(AppError) as raised:
                     service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 self.assertEqual(raised.exception.code, "project_in_use")
-                self.assertEqual(raised.exception.details["owner"], "desktop")
+                self.assertEqual(
+                    raised.exception.details["owner"],
+                    _reported_locked_owner("desktop"),
+                )
                 open_database.assert_not_called()
             finally:
                 service.close()
@@ -311,7 +327,6 @@ class OperatorProjectTest(unittest.TestCase):
                 finally:
                     daemon_runtime._release_daemon_project_owner(ctx)
 
-    @unittest.skipIf(os.name == "nt", "pass_fds ownership test")
     def test_inherited_owner_handles_exclude_a_second_owner_after_parent_release(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
@@ -322,9 +337,16 @@ class OperatorProjectTest(unittest.TestCase):
                 generation="broker",
             )
             inherited = lease.duplicate_for_child()
+            popen_args: dict[str, object]
+            if os.name == "nt":
+                startup = subprocess.STARTUPINFO()
+                startup.lpAttributeList = {"handle_list": list(inherited.tokens)}
+                popen_args = {"startupinfo": startup, "close_fds": True}
+            else:
+                popen_args = {"pass_fds": inherited.tokens}
             child = subprocess.Popen(
                 [sys.executable, "-c", "import time; time.sleep(0.4)"],
-                pass_fds=inherited.tokens,
+                **popen_args,
             )
             inherited.close()
             lease.release()
