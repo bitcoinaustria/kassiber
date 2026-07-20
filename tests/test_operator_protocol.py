@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from kassiber.errors import AppError
+from kassiber.operator import protocol as operator_protocol
 from kassiber.operator.protocol import (
     BrokerChannel,
     _SocketTransport,
@@ -167,6 +168,39 @@ class OperatorProtocolTest(unittest.TestCase):
             "io_timeout=DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
             listener_accept,
         )
+
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe timeout test")
+    def test_windows_accepted_client_partial_frame_times_out(self) -> None:
+        errors: list[BaseException] = []
+        with mock.patch.object(
+            operator_protocol,
+            "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
+            0.05,
+        ):
+            server = listen()
+            client: BrokerChannel | None = None
+
+            def serve() -> None:
+                try:
+                    with server.accept() as channel:
+                        channel.receive_json()
+                except BaseException as exc:  # pragma: no cover - Windows CI
+                    errors.append(exc)
+
+            thread = threading.Thread(target=serve)
+            thread.start()
+            try:
+                client = connect(io_timeout=1.0)
+                client._transport.send_all(b"J")
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], TimeoutError)
+            finally:
+                if client is not None:
+                    client.close()
+                server.close()
+                thread.join(2)
 
     @unittest.skipIf(os.name == "nt", "Unix timeout test")
     def test_ping_read_is_bounded_when_endpoint_accepts_but_never_replies(self) -> None:
