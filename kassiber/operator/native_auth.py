@@ -8,6 +8,7 @@ import os
 import secrets
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..db import load_managed_settings, update_managed_settings
@@ -18,6 +19,31 @@ from .service import _wipe
 
 
 OPERATOR_NATIVE_AUTH_GENERATION_SETTING = "operator_native_auth_generation"
+_NATIVE_AUTH_IDENTIFIER = "at.bitcoinaustria.kassiber"
+
+
+@dataclass(frozen=True)
+class _CodeIdentity:
+    identifier: str
+    team: str
+    cdhash: str
+
+    @property
+    def opaque(self) -> str:
+        return hashlib.sha256(
+            (
+                "kassiber-native-auth-signature-v1:"
+                f"{self.identifier}:{self.team}:{self.cdhash}"
+            ).encode("ascii")
+        ).hexdigest()
+
+    @property
+    def requirement(self) -> str:
+        return (
+            f'anchor apple generic and identifier "{self.identifier}" '
+            f'and certificate leaf[subject.OU] = "{self.team}" '
+            "and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+        )
 
 
 def operator_touch_id_account(data_root: str) -> str:
@@ -74,6 +100,7 @@ def broker_touch_id_passphrase(
             stderr=subprocess.PIPE,
             pass_fds=(write_fd,),
         )
+        _validate_spawned_helper(process, expected_helper_identity)
         os.close(write_fd)
         write_fd = -1
         value = _read_fd_limited(read_fd)
@@ -132,6 +159,7 @@ def touch_id_store(
             stderr=subprocess.PIPE,
             pass_fds=(read_fd,),
         )
+        _validate_spawned_helper(process, expected_helper_identity)
         os.close(read_fd)
         read_fd = -1
         _write_fd(write_fd, passphrase)
@@ -187,9 +215,23 @@ def native_auth_runtime_available() -> bool:
 
 
 def native_auth_helper_identity() -> str:
-    """Return a public-safe identity for the exact configured helper file."""
+    """Return a public-safe identity for the signed configured helper."""
 
-    return _helper_identity(_helper_path())
+    return _signed_helper_identity(_configured_helper_path())
+
+
+def native_auth_caller_identity() -> str:
+    """Bind a CLI invocation to its live signed macOS launcher."""
+
+    helper = _signed_helper_code(_configured_helper_path())
+    parent = _inspect_code(str(os.getppid()), requirement=helper.requirement)
+    if parent != helper:
+        raise AppError(
+            "the native-auth helper does not match the live signed CLI launcher",
+            code="native_auth_helper_mismatch",
+            retryable=False,
+        )
+    return helper.opaque
 
 
 def validate_native_auth_helper_identity(expected_identity: str) -> None:
@@ -220,6 +262,21 @@ def _run_no_secret(
 
 
 def _helper_path(expected_identity: str | None = None) -> Path:
+    helper = _configured_helper_path()
+    actual_identity = _signed_helper_identity(helper)
+    if expected_identity is not None and not hmac.compare_digest(
+        actual_identity, expected_identity
+    ):
+        raise AppError(
+            "the broker native-auth helper does not match this signed CLI",
+            code="native_auth_helper_mismatch",
+            hint="Retry from the signed macOS app CLI after stopping idle broker work.",
+            retryable=True,
+        )
+    return helper
+
+
+def _configured_helper_path() -> Path:
     configured = os.environ.get("KASSIBER_NATIVE_AUTH_HELPER")
     if sys.platform != "darwin" or not configured:
         raise AppError(
@@ -235,34 +292,118 @@ def _helper_path(expected_identity: str | None = None) -> Path:
             code="native_auth_unavailable",
             retryable=False,
         )
-    if expected_identity is not None and not hmac.compare_digest(
-        _helper_identity(helper),
-        expected_identity,
-    ):
-        raise AppError(
-            "the broker native-auth helper does not match this signed CLI",
-            code="native_auth_helper_mismatch",
-            hint="Retry from the signed macOS app CLI after stopping idle broker work.",
-            retryable=True,
-        )
     return helper
 
 
-def _helper_identity(helper: Path) -> str:
-    digest = hashlib.sha256()
-    digest.update(b"kassiber-native-auth-helper-v1\0")
-    digest.update(os.fsencode(helper))
-    try:
-        with helper.open("rb") as stream:
-            while chunk := stream.read(1024 * 1024):
-                digest.update(chunk)
-    except OSError as exc:
+def _signed_helper_identity(helper: Path) -> str:
+    return _signed_helper_code(helper).opaque
+
+
+def _signed_helper_code(helper: Path) -> _CodeIdentity:
+    bundle = next(
+        (
+            ancestor
+            for ancestor in helper.parents
+            if ancestor.suffix.lower() == ".app"
+        ),
+        None,
+    )
+    expected = bundle / "Contents" / "MacOS" / "Kassiber" if bundle else None
+    if expected is None or helper != expected:
         raise AppError(
-            "the native authentication helper cannot be inspected",
+            "the native authentication helper is outside the Kassiber app bundle",
             code="native_auth_unavailable",
             retryable=False,
-        ) from exc
-    return digest.hexdigest()
+        )
+    return _inspect_code(str(helper))
+
+
+def _inspect_code(
+    target: str,
+    *,
+    requirement: str | None = None,
+) -> _CodeIdentity:
+    details = subprocess.run(
+        ["/usr/bin/codesign", "-dv", "--verbose=4", target],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if details.returncode != 0:
+        raise AppError(
+            "the native authentication helper has no valid code signature",
+            code="native_auth_unavailable",
+            retryable=False,
+        )
+    fields = _codesign_fields(details.stderr)
+    identity = _CodeIdentity(
+        identifier=fields.get("Identifier", ""),
+        team=fields.get("TeamIdentifier", ""),
+        cdhash=fields.get("CDHash", "").lower(),
+    )
+    if (
+        identity.identifier != _NATIVE_AUTH_IDENTIFIER
+        or len(identity.team) != 10
+        or not identity.team.isascii()
+        or not identity.team.isalnum()
+        or not identity.team.upper() == identity.team
+        or len(identity.cdhash) not in {40, 64}
+        or any(value not in "0123456789abcdef" for value in identity.cdhash)
+    ):
+        raise AppError(
+            "the native authentication helper has an unexpected signing identity",
+            code="native_auth_unavailable",
+            retryable=False,
+        )
+    required = requirement or identity.requirement
+    verified = subprocess.run(
+        [
+            "/usr/bin/codesign",
+            "--verify",
+            "--strict",
+            "--verbose=2",
+            f"-R={required}",
+            target,
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if verified.returncode != 0:
+        raise AppError(
+            "the native authentication helper failed dynamic signature validation",
+            code="native_auth_unavailable",
+            retryable=False,
+        )
+    return identity
+
+
+def _codesign_fields(stderr: bytes) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for raw_line in stderr.decode("utf-8", errors="replace").splitlines():
+        key, separator, value = raw_line.partition("=")
+        if separator and key in {"Identifier", "TeamIdentifier", "CDHash"}:
+            fields[key] = value.strip()
+    return fields
+
+
+def _validate_spawned_helper(
+    process: subprocess.Popen[bytes],
+    expected_identity: str | None,
+) -> None:
+    helper = _signed_helper_code(_helper_path(expected_identity))
+    running = _inspect_code(str(process.pid), requirement=helper.requirement)
+    if running != helper or (
+        expected_identity is not None
+        and not hmac.compare_digest(running.opaque, expected_identity)
+    ):
+        raise AppError(
+            "the running native-auth helper does not match the signed CLI",
+            code="native_auth_helper_mismatch",
+            retryable=False,
+        )
 
 
 def _native_error(stderr: bytes) -> AppError:

@@ -74,14 +74,14 @@ class BrokerClient:
     def ensure_native_auth_running(self) -> dict[str, object]:
         """Handoff a helper-less idle broker to this signed CLI invocation."""
 
-        from .native_auth import native_auth_helper_identity
+        from .native_auth import native_auth_caller_identity
 
         broker = self.ensure_running()
         if sys.platform != "darwin" or not os.environ.get(
             "KASSIBER_NATIVE_AUTH_HELPER"
         ):
             return broker
-        expected_identity = native_auth_helper_identity()
+        expected_identity = native_auth_caller_identity()
         if (
             broker.get("native_auth_available") is True
             and broker.get("native_auth_identity") == expected_identity

@@ -34,7 +34,7 @@ class OperatorClientSubmitTest(unittest.TestCase):
             "ensure_running",
             side_effect=[old, replacement],
         ) as ensure, mock.patch(
-            "kassiber.operator.native_auth.native_auth_helper_identity",
+            "kassiber.operator.native_auth.native_auth_caller_identity",
             return_value="signed-helper",
         ), mock.patch.object(
             client,
