@@ -326,7 +326,7 @@ class ProjectWorker:
                 with self._service._lock:
                     self._service._finish_operation_locked(
                         operation,
-                        "result_unknown",
+                        "failed",
                         OperationResult(
                             1,
                             "",

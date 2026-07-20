@@ -1412,6 +1412,31 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_owner_inheritance_failure_before_launch_is_failed(self) -> None:
+        runner = mock.Mock(return_value=OperationResult(0, "", ""))
+        owner = mock.Mock()
+        owner.duplicate_for_child.side_effect = OSError(
+            "passphrase=pre-launch-secret"
+        )
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            return_value=owner,
+        ):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                accepted = service.submit(tmp, ["status"])
+                terminal = self._wait_terminal(service, accepted["operation_id"])
+                self.assertEqual(terminal["state"], "failed")
+                self.assertEqual(terminal["exit_code"], 1)
+                self.assertNotIn("pre-launch-secret", terminal["stderr"])
+                runner.assert_not_called()
+            finally:
+                service.close()
+
     def test_owner_cleanup_failure_preserves_result_and_revokes_lease(self) -> None:
         calls: list[str] = []
 
