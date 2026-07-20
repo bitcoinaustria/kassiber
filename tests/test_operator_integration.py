@@ -77,6 +77,16 @@ class OperatorIntegrationTest(unittest.TestCase):
                 passphrase.decode(),
             )
             connection = open_db(tmp, passphrase=passphrase.decode())
+            workspace = core_accounts.create_workspace(connection, "Workspace A")
+            profile = core_accounts.create_profile(
+                connection,
+                workspace["id"],
+                "Book A",
+                "EUR",
+                "FIFO",
+                "generic",
+                365,
+            )
             connection.close()
             environment = os.environ.copy()
             environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
@@ -126,7 +136,16 @@ class OperatorIntegrationTest(unittest.TestCase):
                 accepted_second = second_client.submit(
                     tmp,
                     PreparedArguments(
-                        ["--data-root", tmp, "--machine", "health"],
+                        [
+                            "--data-root",
+                            tmp,
+                            "--machine",
+                            "health",
+                            "--workspace",
+                            workspace["id"],
+                            "--profile",
+                            profile["id"],
+                        ],
                         {},
                     ),
                     admin_authentication=None,
