@@ -895,6 +895,17 @@ class OperatorService:
                             )
                         self._drop_lease_locked(project.identity)
                         existing = None
+                if existing is not None and existing.running_operations > 0:
+                    raise AppError(
+                        "the project has a running operator operation",
+                        code="operator_project_busy",
+                        hint=(
+                            "Wait for the running operation to finish before "
+                            "performing fresh database authentication."
+                        ),
+                        details={"project": project.public_id},
+                        retryable=True,
+                    )
                 backoff = self._auth_backoff_locked(
                     project.identity,
                     canonical_data_root,

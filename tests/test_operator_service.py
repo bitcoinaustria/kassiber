@@ -1500,6 +1500,44 @@ class OperatorServiceTest(unittest.TestCase):
                 release.set()
                 service.close()
 
+    def test_fresh_auth_never_opens_database_during_same_project_work(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+
+        def runner(_operation, _passphrase):
+            started.set()
+            if not release.wait(2):
+                raise AssertionError("timed out waiting to finish operation")
+            return OperationResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=_Connection(),
+        ) as open_database:
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                service.submit(tmp, ["status"])
+                self.assertTrue(started.wait(1))
+                open_database.reset_mock()
+
+                with self.assertRaises(AppError) as admin_error:
+                    service.verify_admin(tmp, bytearray(b"passphrase"))
+                self.assertEqual(admin_error.exception.code, "operator_project_busy")
+
+                with self.assertRaises(AppError) as mode_error:
+                    service.authenticate_database(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        scope="operator_mode",
+                        require_lease=False,
+                    )
+                self.assertEqual(mode_error.exception.code, "operator_project_busy")
+                open_database.assert_not_called()
+            finally:
+                release.set()
+                service.close()
+
     def test_admin_authentication_is_rechecked_after_owner_inheritance(self) -> None:
         inheritance_started = threading.Event()
         release_inheritance = threading.Event()
