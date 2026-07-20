@@ -281,6 +281,75 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_rejected_submissions_wipe_every_staged_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+
+            def assert_rejected_and_wiped(
+                argv: list[str],
+                expected_code: str,
+                *,
+                operation_id: str | None = None,
+            ) -> None:
+                secret = bytearray(b"staged-secret")
+                arguments = {"broker-secret-test": secret}
+                with self.assertRaises(AppError) as raised:
+                    service.submit(
+                        tmp,
+                        argv,
+                        operation_id=operation_id,
+                        secret_arguments=arguments,
+                    )
+                self.assertEqual(raised.exception.code, expected_code)
+                self.assertEqual(set(secret), {0})
+                self.assertEqual(arguments, {})
+
+            try:
+                assert_rejected_and_wiped(
+                    ["--definitely-invalid"],
+                    "operator_invalid_command",
+                )
+                assert_rejected_and_wiped(
+                    ["operator", "status"],
+                    "operator_command_not_brokerable",
+                )
+
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                assert_rejected_and_wiped(
+                    ["transactions", "list"],
+                    "operator_scope_required",
+                )
+                assert_rejected_and_wiped(
+                    ["status"],
+                    "operator_protocol_error",
+                    operation_id="invalid-operation-id",
+                )
+                assert_rejected_and_wiped(
+                    ["secrets", "verify"],
+                    "operator_admin_auth_required",
+                )
+
+                lease = next(iter(service._leases.values()))
+                lease.capability = Capability.READ
+                assert_rejected_and_wiped(
+                    [
+                        "journals",
+                        "process",
+                        "--workspace",
+                        "workspace-a",
+                        "--profile",
+                        "book-a",
+                    ],
+                    "operator_capability_denied",
+                )
+            finally:
+                service.close()
+
     def test_generation_change_reports_result_unknown(self) -> None:
         service = OperatorService(
             "new-generation",

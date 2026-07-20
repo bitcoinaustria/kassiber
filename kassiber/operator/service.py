@@ -835,6 +835,36 @@ class OperatorService:
         secret_arguments: dict[str, bytearray] | None = None,
         admin_verified: bool = False,
     ) -> dict[str, object]:
+        owned_secrets = secret_arguments if secret_arguments is not None else {}
+        ownership_transferred = False
+
+        def transfer_secret_ownership() -> None:
+            nonlocal ownership_transferred
+            ownership_transferred = True
+
+        try:
+            return self._submit(
+                data_root,
+                argv,
+                operation_id=operation_id,
+                secret_arguments=owned_secrets,
+                admin_verified=admin_verified,
+                transfer_secret_ownership=transfer_secret_ownership,
+            )
+        finally:
+            if not ownership_transferred:
+                _wipe_secret_arguments(owned_secrets)
+
+    def _submit(
+        self,
+        data_root: str,
+        argv: list[str],
+        *,
+        operation_id: str | None,
+        secret_arguments: dict[str, bytearray],
+        admin_verified: bool,
+        transfer_secret_ownership: Callable[[], None],
+    ) -> dict[str, object]:
         parsed, command_path, required = _parse_argv(argv)
         if command_path.startswith("operator.") or command_path in {"daemon", "chat"}:
             raise AppError(
@@ -844,36 +874,28 @@ class OperatorService:
                 retryable=False,
             )
         project = canonical_project(data_root)
-        try:
-            with self._lock:
-                admitted_identity = self._lease_identity_for_path_locked(project)
-                if admitted_identity != project.identity:
-                    raise AppError(
-                        "the database file changed while its operator lease is active",
-                        code="operator_project_replaced",
-                        hint=(
-                            "Lock the prior lease before operating on the "
-                            "replacement database."
-                        ),
-                        retryable=False,
-                    )
-                self._require_lease_locked(project)
-        except Exception:
-            for value in (secret_arguments or {}).values():
-                _wipe(value)
-            raise
+        with self._lock:
+            admitted_identity = self._lease_identity_for_path_locked(project)
+            if admitted_identity != project.identity:
+                raise AppError(
+                    "the database file changed while its operator lease is active",
+                    code="operator_project_replaced",
+                    hint=(
+                        "Lock the prior lease before operating on the "
+                        "replacement database."
+                    ),
+                    retryable=False,
+                )
+            self._require_lease_locked(project)
         _require_explicit_scope(
             parsed,
             command_path,
-            secret_arguments,
         )
         canonical_data_root = str(project.database.parent)
         installs_backup = command_path == "backup.import" and bool(
             getattr(parsed, "install", False)
         )
         if installs_backup:
-            for value in (secret_arguments or {}).values():
-                _wipe(value)
             raise AppError(
                 "backup installation cannot run inside an operator worker",
                 code="operator_command_not_brokerable",
@@ -897,8 +919,6 @@ class OperatorService:
             )
             requested_project = canonical_project(requested_paths.data_root)
             if requested_project.identity != project.identity:
-                for value in (secret_arguments or {}).values():
-                    _wipe(value)
                 raise AppError(
                     "the command targets a different project than the operator lease",
                     code="operator_project_mismatch",
@@ -911,8 +931,6 @@ class OperatorService:
         with self._lock:
             admitted_identity = self._lease_identity_for_path_locked(project)
             if admitted_identity != project.identity:
-                for value in (secret_arguments or {}).values():
-                    _wipe(value)
                 raise AppError(
                     "the database file changed while its operator lease is active",
                     code="operator_project_replaced",
@@ -940,8 +958,6 @@ class OperatorService:
                     )
                 existing = self._operations.get(operation_id)
                 if existing is not None:
-                    for value in (secret_arguments or {}).values():
-                        _wipe(value)
                     if (
                         existing.project_id != project.public_id
                         or existing.argv != pinned_argv
@@ -954,10 +970,10 @@ class OperatorService:
                     return existing.public_status()
                 tombstone = self._operation_tombstones.get(operation_id)
                 if tombstone is not None:
-                    for value in (secret_arguments or {}).values():
-                        _wipe(value)
                     bound_project, bound_argv = tombstone
-                    if bound_project != project.public_id or bound_argv != tuple(pinned_argv):
+                    if bound_project != project.public_id or bound_argv != tuple(
+                        pinned_argv
+                    ):
                         raise AppError(
                             "the operation id is already bound to another request",
                             code="operator_operation_id_conflict",
@@ -1004,7 +1020,7 @@ class OperatorService:
                 argv=pinned_argv,
                 command_path=command_path,
                 capability=required,
-                secret_arguments=secret_arguments or {},
+                secret_arguments=secret_arguments,
                 admin_authorized_until_monotonic=(
                     time.monotonic() + ADMIN_AUTH_TTL_SECONDS
                     if required is Capability.ADMIN and admin_verified
@@ -1020,13 +1036,8 @@ class OperatorService:
                     self._runner,
                 ),
             )
-            try:
-                worker.submit(operation)
-            except Exception:
-                for value in operation.secret_arguments.values():
-                    _wipe(value)
-                operation.secret_arguments.clear()
-                raise
+            worker.submit(operation)
+            transfer_secret_ownership()
             self._operations[operation_id] = operation
             self._prune_operations_locked()
             _LOGGER.info(
@@ -1326,7 +1337,6 @@ def _classify_argv(argv: list[str]) -> tuple[str, Capability]:
 def _require_explicit_scope(
     parsed: object,
     command_path: str,
-    secret_arguments: dict[str, bytearray] | None,
 ) -> None:
     has_workspace = hasattr(parsed, "workspace")
     has_profile = hasattr(parsed, "profile")
@@ -1344,8 +1354,6 @@ def _require_explicit_scope(
             if declared and not value
         ]
     if missing:
-        for value in (secret_arguments or {}).values():
-            _wipe(value)
         raise AppError(
             "brokered commands require explicit book scope",
             code="operator_scope_required",
@@ -1419,3 +1427,9 @@ def _decode_secret(secret: bytearray) -> str:
 def _wipe(value: bytearray) -> None:
     for index in range(len(value)):
         value[index] = 0
+
+
+def _wipe_secret_arguments(arguments: dict[str, bytearray]) -> None:
+    for value in arguments.values():
+        _wipe(value)
+    arguments.clear()
