@@ -101,9 +101,15 @@ def broker_touch_id_passphrase(
         )
         os.close(write_fd)
         write_fd = -1
-        value = _read_fd_limited(read_fd)
+        _read_fd_limited(read_fd, value)
         stderr = process.stderr.read() if process.stderr is not None else b""
         return_code = process.wait()
+    except BaseException:
+        # A secret may already have crossed the pipe when process inspection
+        # or collection fails. Wipe the single caller-owned buffer before the
+        # original control-flow or operational exception escapes.
+        _wipe(value)
+        raise
     finally:
         if write_fd >= 0:
             os.close(write_fd)
@@ -475,8 +481,7 @@ def _native_error(stderr: bytes) -> AppError:
     )
 
 
-def _read_fd_limited(fd: int) -> bytearray:
-    value = bytearray()
+def _read_fd_limited(fd: int, value: bytearray) -> None:
     while True:
         chunk = os.read(fd, min(4096, 16 * 1024 + 1 - len(value)))
         if not chunk:
@@ -488,7 +493,6 @@ def _read_fd_limited(fd: int) -> bytearray:
                 "native authentication secret exceeds 16 KiB",
                 code="native_auth_failed",
             )
-    return value
 
 
 def _write_fd(fd: int, value: bytearray) -> None:
