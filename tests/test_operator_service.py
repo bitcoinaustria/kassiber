@@ -24,6 +24,7 @@ from kassiber.operator.launcher import broker_server_command, cli_child_command
 from kassiber.operator.project import canonical_project
 from kassiber.command_capabilities import Capability
 from kassiber.operator.service import (
+    MAX_CACHED_AUTH_BACKOFFS,
     MAX_RETAINED_RESULTS,
     Operation,
     OperationResult,
@@ -42,6 +43,30 @@ class _Connection:
 
 
 class OperatorServiceTest(unittest.TestCase):
+    def test_auth_backoff_cache_is_bounded_and_lru(self) -> None:
+        service = OperatorService(
+            "generation",
+            lambda *_args: OperationResult(0, "", ""),
+        )
+        try:
+            with service._lock:
+                for index in range(MAX_CACHED_AUTH_BACKOFFS + 1):
+                    service._auth_backoff_locked(
+                        f"project-{index}",
+                        f"/not-opened/project-{index}",
+                    )
+            self.assertEqual(
+                len(service._auth_backoffs),
+                MAX_CACHED_AUTH_BACKOFFS,
+            )
+            self.assertNotIn("project-0", service._auth_backoffs)
+            self.assertIn(
+                f"project-{MAX_CACHED_AUTH_BACKOFFS}",
+                service._auth_backoffs,
+            )
+        finally:
+            service.close()
+
     def test_secret_buffers_are_omitted_from_internal_representations(self) -> None:
         operation_secret = bytearray(b"operation-repr-secret")
         lease_secret = bytearray(b"lease-repr-secret")

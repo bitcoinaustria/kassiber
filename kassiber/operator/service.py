@@ -33,6 +33,7 @@ from .project import (
 MAX_QUEUED_OPERATIONS = 64
 MAX_RETAINED_RESULTS = 256
 MAX_RETAINED_OPERATION_TOMBSTONES = 1024
+MAX_CACHED_AUTH_BACKOFFS = 256
 ADMIN_AUTH_TTL_SECONDS = 60.0
 _LOGGER = logging.getLogger("kassiber.operator")
 OperationRunner = Callable[["Operation", bytearray], "OperationResult"]
@@ -427,7 +428,7 @@ class OperatorService:
             str, tuple[str, tuple[str, ...]]
         ] = OrderedDict()
         self._lease_aliases: dict[str, str] = {}
-        self._auth_backoffs: dict[str, AuthAttemptBackoff] = {}
+        self._auth_backoffs: OrderedDict[str, AuthAttemptBackoff] = OrderedDict()
         self._sequence = 0
         self._closed = threading.Event()
         self._janitor = threading.Thread(
@@ -512,14 +513,9 @@ class OperatorService:
                 )
             if previous is not None:
                 owner.add_alias(project)
-            backoff = self._auth_backoffs.setdefault(
+            backoff = self._auth_backoff_locked(
                 project.identity,
-                AuthAttemptBackoff(
-                    str(
-                        resolve_config_root(canonical_data_root)
-                        / AUTH_BACKOFF_FILENAME
-                    )
-                ),
+                canonical_data_root,
             )
             try:
                 backoff.check("operator_unlock")
@@ -650,14 +646,9 @@ class OperatorService:
                         generation=self.generation,
                     )
             try:
-                backoff = self._auth_backoffs.setdefault(
+                backoff = self._auth_backoff_locked(
                     project.identity,
-                    AuthAttemptBackoff(
-                        str(
-                            resolve_config_root(canonical_data_root)
-                            / AUTH_BACKOFF_FILENAME
-                        )
-                    ),
+                    canonical_data_root,
                 )
                 backoff.check(scope)
                 try:
@@ -1138,6 +1129,22 @@ class OperatorService:
                 retryable=True,
             )
         return lease
+
+    def _auth_backoff_locked(
+        self,
+        project_identity: str,
+        data_root: str,
+    ) -> AuthAttemptBackoff:
+        backoff = self._auth_backoffs.get(project_identity)
+        if backoff is None:
+            backoff = AuthAttemptBackoff(
+                str(resolve_config_root(data_root) / AUTH_BACKOFF_FILENAME)
+            )
+            self._auth_backoffs[project_identity] = backoff
+        self._auth_backoffs.move_to_end(project_identity)
+        while len(self._auth_backoffs) > MAX_CACHED_AUTH_BACKOFFS:
+            self._auth_backoffs.popitem(last=False)
+        return backoff
 
     def _finish_operation_locked(
         self,
