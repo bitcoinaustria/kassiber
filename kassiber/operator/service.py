@@ -8,9 +8,10 @@ import subprocess
 import threading
 import time
 from collections import OrderedDict, deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Callable, Iterator
 
 from ..command_capabilities import Capability, capability_allows, cli_capability
 from ..core.repo import current_context_snapshot
@@ -116,6 +117,14 @@ class ProjectLease:
         )
 
 
+@dataclass
+class _ProjectTransitionGate:
+    """Serialize state transitions for one canonical project identity."""
+
+    lock: threading.RLock = field(default_factory=threading.RLock)
+    users: int = 0
+
+
 class ProjectWorker:
     def __init__(
         self,
@@ -200,83 +209,92 @@ class ProjectWorker:
             "",
             sanitize_traceback_text(f"operator worker failed: {exc}\n"),
         )
-        with self._service._lock:
-            lease = self._service._leases.get(self.project_identity)
-            if operation.state == "running" and lease is not None:
-                lease.running_operations = max(0, lease.running_operations - 1)
-            if operation.state not in {
-                "completed",
-                "failed",
-                "cancelled",
-                "result_unknown",
-            }:
-                self._service._finish_operation_locked(
-                    operation,
+        with self._service._project_transition(self.project_identity):
+            with self._service._lock:
+                lease = self._service._leases.get(self.project_identity)
+                if operation.state == "running" and lease is not None:
+                    lease.running_operations = max(0, lease.running_operations - 1)
+                if operation.state not in {
+                    "completed",
+                    "failed",
+                    "cancelled",
                     "result_unknown",
-                    result,
-                )
-            _LOGGER.error(
-                "operator worker recovered from an internal failure",
-                extra={
-                    "kb_fields": {
-                        "project": self.project_id,
-                        "command": operation.command_path,
-                        "state": "result_unknown",
-                    }
-                },
-            )
-            if (
-                lease is not None
-                and (lease.revoked or lease.expired())
-                and lease.running_operations == 0
-            ):
-                try:
-                    self._service._drop_lease_locked(self.project_identity)
-                except Exception:
-                    _LOGGER.error(
-                        "operator worker could not finish revoked lease cleanup",
-                        extra={
-                            "kb_fields": {
-                                "project": self.project_id,
-                                "state": "result_unknown",
-                            }
-                        },
+                }:
+                    self._service._finish_operation_locked(
+                        operation,
+                        "result_unknown",
+                        result,
                     )
+                _LOGGER.error(
+                    "operator worker recovered from an internal failure",
+                    extra={
+                        "kb_fields": {
+                            "project": self.project_id,
+                            "command": operation.command_path,
+                            "state": "result_unknown",
+                        }
+                    },
+                )
+                if (
+                    lease is not None
+                    and (lease.revoked or lease.expired())
+                    and lease.running_operations == 0
+                ):
+                    self._service._drop_lease_locked(self.project_identity)
 
     def _run_one(self, operation: Operation) -> None:
-        with self._service._lock:
-            lease = self._service._leases.get(self.project_identity)
-            if operation.cancellation_requested:
-                return
-            if lease is None or lease.revoked or lease.expired():
-                self._service._finish_operation_locked(
-                    operation,
-                    "cancelled",
-                    OperationResult(
-                        1,
-                        "",
-                        "operator lease ended before the operation started\n",
-                    ),
-                )
-                if lease is not None:
-                    lease.revoked = True
-                    if lease.running_operations == 0:
-                        self._service._drop_lease_locked(self.project_identity)
-                return
-            if (
-                operation.capability is not Capability.ADMIN
-                and not capability_allows(lease.capability, operation.capability)
-            ):
-                self._service._finish_operation_locked(
-                    operation,
-                    "cancelled",
-                    OperationResult(
-                        1,
-                        "",
-                        "operator lease capability changed before dispatch\n",
-                    ),
-                )
-                return
+        with self._service._project_transition(self.project_identity):
+            with self._service._lock:
+                lease = self._service._leases.get(self.project_identity)
+                if operation.cancellation_requested:
+                    return
+                if lease is None or lease.revoked or lease.expired():
+                    self._service._finish_operation_locked(
+                        operation,
+                        "cancelled",
+                        OperationResult(
+                            1,
+                            "",
+                            "operator lease ended before the operation started\n",
+                        ),
+                    )
+                    if lease is not None:
+                        lease.revoked = True
+                        if lease.running_operations == 0:
+                            self._service._drop_lease_locked(self.project_identity)
+                    return
+                if (
+                    operation.capability is not Capability.ADMIN
+                    and not capability_allows(
+                        lease.capability,
+                        operation.capability,
+                    )
+                ):
+                    self._service._finish_operation_locked(
+                        operation,
+                        "cancelled",
+                        OperationResult(
+                            1,
+                            "",
+                            "operator lease capability changed before dispatch\n",
+                        ),
+                    )
+                    return
+                if operation.capability is Capability.ADMIN and (
+                    operation.admin_authorized_until_monotonic is None
+                    or time.monotonic()
+                    > operation.admin_authorized_until_monotonic
+                ):
+                    self._service._finish_operation_locked(
+                        operation,
+                        "cancelled",
+                        OperationResult(
+                            1,
+                            "",
+                            "fresh admin authentication expired before dispatch\n",
+                        ),
+                    )
+                    return
             try:
                 current_project = canonical_project(operation.data_root)
             except Exception:
@@ -285,62 +303,72 @@ class ProjectWorker:
                 current_project is None
                 or current_project.identity != operation.project_identity
             ):
-                self._service._finish_operation_locked(
-                    operation,
-                    "cancelled",
-                    OperationResult(
-                        1,
-                        "",
-                        "operator project changed before the operation started\n",
-                    ),
-                )
-                return
-            if operation.capability is Capability.ADMIN and (
-                operation.admin_authorized_until_monotonic is None
-                or time.monotonic() > operation.admin_authorized_until_monotonic
-            ):
-                self._service._finish_operation_locked(
-                    operation,
-                    "cancelled",
-                    OperationResult(
-                        1,
-                        "",
-                        "fresh admin authentication expired before dispatch\n",
-                    ),
-                )
+                with self._service._lock:
+                    self._service._finish_operation_locked(
+                        operation,
+                        "cancelled",
+                        OperationResult(
+                            1,
+                            "",
+                            "operator project changed before the operation started\n",
+                        ),
+                    )
                 return
             try:
                 inherited_owner = lease.owner.duplicate_for_child()
             except Exception as exc:
-                self._service._finish_operation_locked(
-                    operation,
-                    "result_unknown",
-                    OperationResult(
-                        1,
-                        "",
-                        sanitize_traceback_text(
-                            f"operator ownership inheritance failed: {exc}\n"
+                with self._service._lock:
+                    self._service._finish_operation_locked(
+                        operation,
+                        "result_unknown",
+                        OperationResult(
+                            1,
+                            "",
+                            sanitize_traceback_text(
+                                f"operator ownership inheritance failed: {exc}\n"
+                            ),
                         ),
-                    ),
-                )
+                    )
                 return
-            lease.running_operations += 1
-            operation.owner_handle_tokens = inherited_owner.tokens
-            operation.state = "running"
-            operation.started_at = now_iso()
-            _LOGGER.info(
-                "operator operation dispatched",
-                extra={
-                    "kb_fields": {
-                        "project": self.project_id,
-                        "command": operation.command_path,
-                        "state": "running",
-                    }
-                },
-            )
-            with operation.changed:
-                operation.changed.notify_all()
-            passphrase = lease.passphrase
+            with self._service._lock:
+                current_lease = self._service._leases.get(self.project_identity)
+                dispatch_rejected = (
+                    current_lease is not lease
+                    or lease.revoked
+                    or lease.expired()
+                    or operation.cancellation_requested
+                )
+                if dispatch_rejected:
+                    self._service._finish_operation_locked(
+                        operation,
+                        "cancelled",
+                        OperationResult(
+                            1,
+                            "",
+                            "operator lease ended before the operation started\n",
+                        ),
+                    )
+                else:
+                    lease.running_operations += 1
+                    operation.owner_handle_tokens = inherited_owner.tokens
+                    operation.state = "running"
+                    operation.started_at = now_iso()
+                    _LOGGER.info(
+                        "operator operation dispatched",
+                        extra={
+                            "kb_fields": {
+                                "project": self.project_id,
+                                "command": operation.command_path,
+                                "state": "running",
+                            }
+                        },
+                    )
+                    with operation.changed:
+                        operation.changed.notify_all()
+                    passphrase = lease.passphrase
+            if dispatch_rejected:
+                inherited_owner.close()
+                return
         runner_crashed = False
         cleanup_error: Exception | None = None
         try:
@@ -363,58 +391,70 @@ class ProjectWorker:
             result.stdout,
             redact_secret_text(result.stderr),
         )
-        with self._service._lock:
-            current_lease = self._service._leases.get(self.project_identity)
-            if current_lease is not None:
-                current_lease.running_operations = max(
-                    0, current_lease.running_operations - 1
-                )
-                if cleanup_error is not None:
-                    current_lease.revoked = True
-                    _LOGGER.error(
-                        "operator ownership cleanup failed; lease revoked",
-                        extra={
-                            "kb_fields": {
-                                "project": self.project_id,
-                                "command": operation.command_path,
-                            }
-                        },
+        with self._service._project_transition(self.project_identity):
+            with self._service._lock:
+                current_lease = self._service._leases.get(self.project_identity)
+                if current_lease is not None:
+                    current_lease.running_operations = max(
+                        0, current_lease.running_operations - 1
                     )
-            if runner_crashed or result.exit_code < 0:
-                state = "result_unknown"
-            elif result.exit_code != 0 and operation.capability is not Capability.READ:
-                state = "result_unknown"
-            else:
-                state = "completed" if result.exit_code == 0 else "failed"
-            self._service._finish_operation_locked(operation, state, result)
-            if (
-                operation.command_path == "context.set"
-                and state == "completed"
-                and current_lease is not None
-                and not current_lease.revoked
-            ):
-                self._service._refresh_scope_locked(current_lease)
-            _LOGGER.info(
-                "operator operation finished",
-                extra={
-                    "kb_fields": {
-                        "project": self.project_id,
-                        "command": operation.command_path,
-                        "state": state,
-                    }
-                },
-            )
-            if operation.command_path == "secrets.change-passphrase":
-                self._service._revoke_lease_locked(
-                    self.project_identity,
-                    reason="database passphrase rotation ended the prior lease",
+                    if cleanup_error is not None:
+                        current_lease.revoked = True
+                        _LOGGER.error(
+                            "operator ownership cleanup failed; lease revoked",
+                            extra={
+                                "kb_fields": {
+                                    "project": self.project_id,
+                                    "command": operation.command_path,
+                                }
+                            },
+                        )
+                if runner_crashed or result.exit_code < 0:
+                    state = "result_unknown"
+                elif (
+                    result.exit_code != 0
+                    and operation.capability is not Capability.READ
+                ):
+                    state = "result_unknown"
+                else:
+                    state = "completed" if result.exit_code == 0 else "failed"
+                self._service._finish_operation_locked(operation, state, result)
+                refresh_scope = (
+                    operation.command_path == "context.set"
+                    and state == "completed"
+                    and current_lease is not None
+                    and not current_lease.revoked
                 )
-            if (
-                current_lease is not None
-                and (current_lease.revoked or current_lease.expired())
-                and current_lease.running_operations == 0
-            ):
-                self._service._drop_lease_locked(self.project_identity)
+            if refresh_scope:
+                assert current_lease is not None
+                self._service._refresh_scope(
+                    self.project_identity,
+                    current_lease,
+                )
+            with self._service._lock:
+                _LOGGER.info(
+                    "operator operation finished",
+                    extra={
+                        "kb_fields": {
+                            "project": self.project_id,
+                            "command": operation.command_path,
+                            "state": state,
+                        }
+                    },
+                )
+                if operation.command_path == "secrets.change-passphrase":
+                    self._service._revoke_lease_locked(
+                        self.project_identity,
+                        reason="database passphrase rotation ended the prior lease",
+                    )
+                current_lease = self._service._leases.get(self.project_identity)
+                if (
+                    current_lease is not None
+                    and (current_lease.revoked or current_lease.expired())
+                    and current_lease.running_operations == 0
+                ):
+                    self._service._drop_lease_locked(self.project_identity)
+            self._service._release_pending_owners(self.project_identity)
 
 
 class OperatorService:
@@ -430,6 +470,10 @@ class OperatorService:
         ] = OrderedDict()
         self._lease_aliases: dict[str, str] = {}
         self._auth_backoffs: OrderedDict[str, AuthAttemptBackoff] = OrderedDict()
+        self._project_gates: dict[str, _ProjectTransitionGate] = {}
+        self._pending_owner_releases: deque[
+            tuple[str, ProjectOwnerLease]
+        ] = deque()
         self._sequence = 0
         self._closed = threading.Event()
         self._janitor = threading.Thread(
@@ -438,6 +482,35 @@ class OperatorService:
             daemon=True,
         )
         self._janitor.start()
+
+    @contextmanager
+    def _project_transition(self, project_identity: str) -> Iterator[None]:
+        """Hold a project-local gate without holding the service state lock."""
+
+        with self._lock:
+            gate = self._project_gates.setdefault(
+                project_identity,
+                _ProjectTransitionGate(),
+            )
+            gate.users += 1
+        try:
+            with gate.lock:
+                try:
+                    yield
+                finally:
+                    self._release_pending_owners(project_identity)
+        finally:
+            with self._lock:
+                gate.users -= 1
+                if (
+                    gate.users == 0
+                    and project_identity not in self._leases
+                    and not any(
+                        identity == project_identity
+                        for identity, _owner in self._pending_owner_releases
+                    )
+                ):
+                    self._project_gates.pop(project_identity, None)
 
     def unlock(
         self,
@@ -488,37 +561,52 @@ class OperatorService:
         project = canonical_project(data_root)
         canonical_data_root = str(project.database.parent)
         alias = str(project.database)
-        with self._lock:
-            replaced_identity = self._lease_aliases.get(alias)
-            if replaced_identity is not None and replaced_identity != project.identity:
-                raise AppError(
-                    "the database file changed while its prior operator lease is active",
-                    code="operator_project_replaced",
-                    hint="Lock the prior lease before unlocking the replacement database.",
-                    retryable=False,
-                )
-            previous = self._leases.get(project.identity)
-            if previous is not None and previous.running_operations > 0:
-                raise AppError(
-                    "the project still has a running operator operation",
-                    code="operator_project_busy",
-                    hint="Wait for the running operation to finish, then refresh the lease.",
-                    details={"project": project.public_id},
-                    retryable=True,
+        with self._project_transition(project.identity):
+            self._release_pending_owners(project.identity)
+            with self._lock:
+                replaced_identity = self._lease_aliases.get(alias)
+                if (
+                    replaced_identity is not None
+                    and replaced_identity != project.identity
+                ):
+                    raise AppError(
+                        "the database file changed while its prior operator lease is active",
+                        code="operator_project_replaced",
+                        hint=(
+                            "Lock the prior lease before unlocking the replacement "
+                            "database."
+                        ),
+                        retryable=False,
+                    )
+                previous = self._leases.get(project.identity)
+                if previous is not None and previous.running_operations > 0:
+                    raise AppError(
+                        "the project still has a running operator operation",
+                        code="operator_project_busy",
+                        hint=(
+                            "Wait for the running operation to finish, then refresh "
+                            "the lease."
+                        ),
+                        details={"project": project.public_id},
+                        retryable=True,
+                    )
+                backoff = self._auth_backoff_locked(
+                    project.identity,
+                    canonical_data_root,
                 )
             acquired_here = previous is None
-            owner = previous.owner if previous is not None else acquire_project_ownership(
+            owner = (
+                previous.owner
+                if previous is not None
+                else acquire_project_ownership(
                     project,
                     owner_kind="broker",
                     generation=self.generation,
                 )
-            if previous is not None:
-                owner.add_alias(project)
-            backoff = self._auth_backoff_locked(
-                project.identity,
-                canonical_data_root,
             )
             try:
+                if previous is not None:
+                    owner.add_alias(project)
                 backoff.check("operator_unlock")
                 connection = open_db(
                     canonical_data_root,
@@ -552,43 +640,74 @@ class OperatorService:
                 if acquired_here:
                     owner.release()
                 raise
+            current_project = canonical_project(canonical_data_root)
+            if current_project.identity != project.identity:
+                if acquired_here:
+                    owner.release()
+                raise AppError(
+                    "the project changed during operator unlock",
+                    code="operator_project_replaced",
+                    retryable=False,
+                )
+            if (
+                previous is not None
+                and previous.database_identity != opened_database_identity
+            ):
+                raise AppError(
+                    "operator unlock opened a different project database",
+                    code="operator_project_replaced",
+                    retryable=False,
+                )
             stored = bytearray(passphrase)
-            if previous is not None:
-                _wipe(previous.passphrase)
             expires = (
                 time.monotonic() + duration_seconds
                 if duration_seconds is not None
                 else None
             )
-            self._leases[project.identity] = ProjectLease(
-                data_root=canonical_data_root,
-                project=project,
-                database_identity=opened_database_identity,
-                passphrase=stored,
-                capability=capability,
-                owner=owner,
-                unlocked_at=now_iso(),
-                expires_at_monotonic=expires,
-                duration_seconds=duration_seconds,
-                authentication_method=authentication_method,
-                expires_at=requested_expires_at,
-                workspace=(str(context.get("workspace_id")) or None)
-                if context.get("workspace_id")
-                else None,
-                profile=(str(context.get("profile_id")) or None)
-                if context.get("profile_id")
-                else None,
-            )
-            self._lease_aliases[alias] = project.identity
-            self._workers.setdefault(
-                project.identity,
-                ProjectWorker(
-                    self,
-                    project.identity,
-                    project.public_id,
-                    self._runner,
-                ),
-            )
+            with self._lock:
+                current_previous = self._leases.get(project.identity)
+                lease_changed = current_previous is not previous
+                if not lease_changed:
+                    if previous is not None:
+                        _wipe(previous.passphrase)
+                    self._leases[project.identity] = ProjectLease(
+                        data_root=canonical_data_root,
+                        project=current_project,
+                        database_identity=opened_database_identity,
+                        passphrase=stored,
+                        capability=capability,
+                        owner=owner,
+                        unlocked_at=now_iso(),
+                        expires_at_monotonic=expires,
+                        duration_seconds=duration_seconds,
+                        authentication_method=authentication_method,
+                        expires_at=requested_expires_at,
+                        workspace=(str(context.get("workspace_id")) or None)
+                        if context.get("workspace_id")
+                        else None,
+                        profile=(str(context.get("profile_id")) or None)
+                        if context.get("profile_id")
+                        else None,
+                    )
+                    self._lease_aliases[alias] = project.identity
+                    self._workers.setdefault(
+                        project.identity,
+                        ProjectWorker(
+                            self,
+                            project.identity,
+                            project.public_id,
+                            self._runner,
+                        ),
+                    )
+            if lease_changed:
+                _wipe(stored)
+                if acquired_here:
+                    owner.release()
+                raise AppError(
+                    "the operator lease changed during unlock",
+                    code="operator_project_busy",
+                    retryable=True,
+                )
         _LOGGER.info(
             "operator lease unlocked",
             extra={
@@ -602,12 +721,8 @@ class OperatorService:
         return self.status(canonical_data_root)
 
     def verify_admin(self, data_root: str, secret: bytearray) -> None:
-        project = canonical_project(data_root)
-        canonical_data_root = str(project.database.parent)
-        with self._lock:
-            self._require_lease_locked(project)
         self.authenticate_database(
-            canonical_data_root,
+            data_root,
             secret,
             scope="operator_admin",
         )
@@ -623,34 +738,37 @@ class OperatorService:
     ) -> object | None:
         project = canonical_project(data_root)
         canonical_data_root = str(project.database.parent)
-        with self._lock:
+        with self._project_transition(project.identity):
+            self._release_pending_owners(project.identity)
             temporary_owner: ProjectOwnerLease | None = None
-            if require_lease:
-                self._require_lease_locked(project)
-            else:
-                existing = self._leases.get(project.identity)
-                if existing is not None and (
-                    existing.revoked or existing.expired()
-                ):
-                    if existing.running_operations:
-                        raise AppError(
-                            "the project still has a running operator operation",
-                            code="operator_project_busy",
-                            retryable=True,
-                        )
-                    self._drop_lease_locked(project.identity)
-                    existing = None
-                if existing is None:
-                    temporary_owner = acquire_project_ownership(
-                        project,
-                        owner_kind="broker",
-                        generation=self.generation,
-                    )
-            try:
+            with self._lock:
+                if require_lease:
+                    existing = self._require_lease_locked(project)
+                else:
+                    existing = self._leases.get(project.identity)
+                    if existing is not None and (
+                        existing.revoked or existing.expired()
+                    ):
+                        if existing.running_operations:
+                            raise AppError(
+                                "the project still has a running operator operation",
+                                code="operator_project_busy",
+                                retryable=True,
+                            )
+                        self._drop_lease_locked(project.identity)
+                        existing = None
                 backoff = self._auth_backoff_locked(
                     project.identity,
                     canonical_data_root,
                 )
+            self._release_pending_owners(project.identity)
+            if existing is None:
+                temporary_owner = acquire_project_ownership(
+                    project,
+                    owner_kind="broker",
+                    generation=self.generation,
+                )
+            try:
                 backoff.check(scope)
                 try:
                     connection = open_db(
@@ -679,17 +797,27 @@ class OperatorService:
                         code="operator_project_replaced",
                         retryable=False,
                     )
-                active_lease = self._leases.get(project.identity)
-                if (
-                    active_lease is not None
-                    and active_lease.database_identity
-                    != authenticated_database_identity
-                ):
-                    raise AppError(
-                        "fresh authentication opened a different project database",
-                        code="operator_project_replaced",
-                        retryable=False,
-                    )
+                with self._lock:
+                    if require_lease:
+                        active_lease = self._require_lease_locked(current_project)
+                        if active_lease is not existing:
+                            raise AppError(
+                                "the operator lease changed during authentication",
+                                code="operator_project_busy",
+                                retryable=True,
+                            )
+                    else:
+                        active_lease = self._leases.get(project.identity)
+                    if (
+                        active_lease is not None
+                        and active_lease.database_identity
+                        != authenticated_database_identity
+                    ):
+                        raise AppError(
+                            "fresh authentication opened a different project database",
+                            code="operator_project_replaced",
+                            retryable=False,
+                        )
                 return continuation() if continuation is not None else None
             finally:
                 if temporary_owner is not None:
@@ -707,11 +835,13 @@ class OperatorService:
         def apply_mode() -> str:
             selected = set_unlock_mode(canonical_data_root, mode)
             if selected != "brokered":
-                project_identity = self._lease_identity_for_path_locked(project)
-                self._revoke_lease_locked(
-                    project_identity,
-                    reason="operator mode ended the brokered lease",
-                )
+                with self._lock:
+                    project_identity = self._lease_identity_for_path_locked(project)
+                    self._revoke_lease_locked(
+                        project_identity,
+                        reason="operator mode ended the brokered lease",
+                    )
+                self._release_pending_owners(project.identity)
             return selected
 
         selected = self.authenticate_database(
@@ -754,16 +884,20 @@ class OperatorService:
     def lock(self, data_root: str) -> dict[str, object]:
         project = canonical_project(data_root)
         with self._lock:
-            project_identity = self._lease_identity_for_path_locked(project)
-            existed = project_identity in self._leases
-            running = 0
-            if existed:
-                lease = self._leases[project_identity]
-                running = lease.running_operations
-                self._revoke_lease_locked(
-                    project_identity,
-                    reason="operator lease was locked",
-                )
+            transition_identity = self._lease_identity_for_path_locked(project)
+        with self._project_transition(transition_identity):
+            with self._lock:
+                project_identity = self._lease_identity_for_path_locked(project)
+                existed = project_identity in self._leases
+                running = 0
+                if existed:
+                    lease = self._leases[project_identity]
+                    running = lease.running_operations
+                    self._revoke_lease_locked(
+                        project_identity,
+                        reason="operator lease was locked",
+                    )
+            self._release_pending_owners(project_identity)
         _LOGGER.info(
             "operator lease locked",
             extra={
@@ -782,22 +916,38 @@ class OperatorService:
         }
 
     def status(self, data_root: str | None = None) -> dict[str, object]:
+        project = canonical_project(data_root) if data_root is not None else None
+        if project is not None:
+            with self._lock:
+                transition_identity = self._lease_identity_for_path_locked(project)
+            with self._project_transition(transition_identity):
+                return self._project_status(project)
         with self._lock:
-            self._drop_expired_locked()
-            if data_root is None:
-                leases = [
-                    self._lease_status(lease)
-                    for lease in self._leases.values()
-                    if not lease.revoked
-                ]
-                return {
-                    "broker": "running",
-                    "generation": self.generation,
-                    "leases": leases,
-                }
-            project = canonical_project(data_root)
+            leases = [
+                self._lease_status(lease)
+                for lease in self._leases.values()
+                if not lease.revoked and not lease.expired()
+            ]
+            return {
+                "broker": "running",
+                "generation": self.generation,
+                "leases": leases,
+            }
+
+    def _project_status(self, project: CanonicalProject) -> dict[str, object]:
+        self._release_pending_owners(project.identity)
+        with self._lock:
             project_identity = self._lease_identity_for_path_locked(project)
             lease = self._leases.get(project_identity)
+            if lease is not None and lease.expired():
+                self._revoke_lease_locked(
+                    project_identity,
+                    reason="operator lease expired",
+                )
+                lease = None
+        self._release_pending_owners(project_identity)
+        with self._lock:
+            lease = self._leases.get(project_identity) if lease is not None else None
             if lease is None or lease.revoked:
                 return {
                     "broker": "running",
@@ -805,10 +955,20 @@ class OperatorService:
                     "project": project.public_id,
                     "lease": "locked",
                 }
-            if project_identity == project.identity:
-                lease.owner.add_alias(project)
+            should_add_alias = project_identity == project.identity
+        if should_add_alias:
+            lease.owner.add_alias(project)
+            with self._lock:
+                if self._leases.get(project_identity) is not lease or lease.revoked:
+                    return {
+                        "broker": "running",
+                        "generation": self.generation,
+                        "project": project.public_id,
+                        "lease": "locked",
+                    }
                 lease.project = project
                 self._lease_aliases[str(project.database)] = project.identity
+        with self._lock:
             payload = {
                 "broker": "running",
                 "generation": self.generation,
@@ -866,19 +1026,20 @@ class OperatorService:
                 retryable=False,
             )
         project = canonical_project(data_root)
-        with self._lock:
-            admitted_identity = self._lease_identity_for_path_locked(project)
-            if admitted_identity != project.identity:
-                raise AppError(
-                    "the database file changed while its operator lease is active",
-                    code="operator_project_replaced",
-                    hint=(
-                        "Lock the prior lease before operating on the "
-                        "replacement database."
-                    ),
-                    retryable=False,
-                )
-            self._require_lease_locked(project)
+        with self._project_transition(project.identity):
+            with self._lock:
+                admitted_identity = self._lease_identity_for_path_locked(project)
+                if admitted_identity != project.identity:
+                    raise AppError(
+                        "the database file changed while its operator lease is active",
+                        code="operator_project_replaced",
+                        hint=(
+                            "Lock the prior lease before operating on the "
+                            "replacement database."
+                        ),
+                        retryable=False,
+                    )
+                self._require_lease_locked(project)
         _require_explicit_scope(
             parsed,
             command_path,
@@ -920,6 +1081,22 @@ class OperatorService:
                     },
                     retryable=False,
                 )
+        with self._project_transition(project.identity):
+            self._release_pending_owners(project.identity)
+            with self._lock:
+                admitted_identity = self._lease_identity_for_path_locked(project)
+                if admitted_identity != project.identity:
+                    raise AppError(
+                        "the database file changed while its operator lease is active",
+                        code="operator_project_replaced",
+                        hint=(
+                            "Lock the prior lease before operating on the "
+                            "replacement database."
+                        ),
+                        retryable=False,
+                    )
+                alias_lease = self._require_lease_locked(project)
+            alias_lease.owner.add_alias(project)
         with self._lock:
             admitted_identity = self._lease_identity_for_path_locked(project)
             if admitted_identity != project.identity:
@@ -930,7 +1107,6 @@ class OperatorService:
                     retryable=False,
                 )
             lease = self._require_lease_locked(project)
-            lease.owner.add_alias(project)
             lease.data_root = canonical_data_root
             lease.project = project
             self._lease_aliases[str(project.database)] = project.identity
@@ -1114,6 +1290,7 @@ class OperatorService:
                 )
             for worker in self._workers.values():
                 worker.stop()
+        self._release_pending_owners()
 
     def _require_lease_locked(self, project: CanonicalProject) -> ProjectLease:
         lease = self._leases.get(project.identity)
@@ -1167,6 +1344,8 @@ class OperatorService:
             operation.changed.notify_all()
 
     def _drop_lease_locked(self, project_id: str) -> None:
+        """Detach a lease while locked; owner handles are released later."""
+
         lease = self._leases.pop(project_id, None)
         if lease is None:
             return
@@ -1184,10 +1363,38 @@ class OperatorService:
                     OperationResult(1, "", "operator lease ended\n"),
                 )
         _wipe(lease.passphrase)
-        lease.owner.release()
+        self._pending_owner_releases.append((project_id, lease.owner))
         for alias, identity in list(self._lease_aliases.items()):
             if identity == project_id:
                 self._lease_aliases.pop(alias, None)
+
+    def _release_pending_owners(
+        self,
+        project_identity: str | None = None,
+    ) -> None:
+        """Release detached owner handles without holding the service lock."""
+
+        with self._lock:
+            selected: list[tuple[str, ProjectOwnerLease]] = []
+            retained: deque[tuple[str, ProjectOwnerLease]] = deque()
+            while self._pending_owner_releases:
+                identity, owner = self._pending_owner_releases.popleft()
+                if project_identity is None or identity == project_identity:
+                    selected.append((identity, owner))
+                else:
+                    retained.append((identity, owner))
+            self._pending_owner_releases = retained
+        first_error: Exception | None = None
+        for identity, owner in selected:
+            try:
+                owner.release()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                with self._lock:
+                    self._pending_owner_releases.append((identity, owner))
+        if first_error is not None:
+            raise first_error
 
     def _revoke_lease_locked(self, project_id: str, *, reason: str) -> None:
         lease = self._leases.get(project_id)
@@ -1223,7 +1430,13 @@ class OperatorService:
             None,
         )
 
-    def _refresh_scope_locked(self, lease: ProjectLease) -> None:
+    def _refresh_scope(
+        self,
+        project_identity: str,
+        lease: ProjectLease,
+    ) -> None:
+        """Refresh context under the project gate, never the global lock."""
+
         try:
             connection = open_db(
                 lease.data_root,
@@ -1245,35 +1458,26 @@ class OperatorService:
                     }
                 },
             )
-            self._revoke_lease_locked(
-                lease.project.identity,
-                reason="operator scope could not be refreshed",
-            )
+            with self._lock:
+                if self._leases.get(project_identity) is lease:
+                    self._revoke_lease_locked(
+                        project_identity,
+                        reason="operator scope could not be refreshed",
+                    )
             return
-        lease.workspace = (
-            str(context.get("workspace_id")) if context.get("workspace_id") else None
-        )
-        lease.profile = (
-            str(context.get("profile_id")) if context.get("profile_id") else None
-        )
-
-    def _drop_expired_locked(self) -> None:
-        for project_id, lease in list(self._leases.items()):
-            if lease.expired():
-                lease.revoked = True
-                _LOGGER.info(
-                    "operator lease expired",
-                    extra={
-                        "kb_fields": {
-                            "project": lease.project.public_id,
-                            "running_operations_finishing": lease.running_operations,
-                        }
-                    },
-                )
-                self._revoke_lease_locked(
-                    project_id,
-                    reason="operator lease expired",
-                )
+        with self._lock:
+            if self._leases.get(project_identity) is not lease or lease.revoked:
+                return
+            lease.workspace = (
+                str(context.get("workspace_id"))
+                if context.get("workspace_id")
+                else None
+            )
+            lease.profile = (
+                str(context.get("profile_id"))
+                if context.get("profile_id")
+                else None
+            )
 
     def _lease_status(self, lease: ProjectLease) -> dict[str, object]:
         remaining = (
@@ -1344,7 +1548,51 @@ class OperatorService:
     def _expire_leases(self) -> None:
         while not self._closed.wait(1.0):
             with self._lock:
-                self._drop_expired_locked()
+                expired = [
+                    project_id
+                    for project_id, lease in self._leases.items()
+                    if lease.expired()
+                ]
+                pending = [
+                    project_id
+                    for project_id, _owner in self._pending_owner_releases
+                ]
+            for project_id in dict.fromkeys((*expired, *pending)):
+                with self._project_transition(project_id):
+                    with self._lock:
+                        lease = self._leases.get(project_id)
+                        if lease is not None and lease.expired():
+                            lease.revoked = True
+                            _LOGGER.info(
+                                "operator lease expired",
+                                extra={
+                                    "kb_fields": {
+                                        "project": lease.project.public_id,
+                                        "running_operations_finishing": (
+                                            lease.running_operations
+                                        ),
+                                    }
+                                },
+                            )
+                            self._revoke_lease_locked(
+                                project_id,
+                                reason="operator lease expired",
+                            )
+                    try:
+                        self._release_pending_owners(project_id)
+                    except Exception:
+                        _LOGGER.error(
+                            "operator lease expiry cleanup failed",
+                            extra={
+                                "kb_fields": {
+                                    "project": (
+                                        lease.project.public_id
+                                        if lease is not None
+                                        else project_id[:16]
+                                    ),
+                                }
+                            },
+                        )
 
 
 def _classify_argv(argv: list[str]) -> tuple[str, Capability]:
