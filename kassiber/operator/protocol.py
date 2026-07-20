@@ -10,9 +10,10 @@ import socket
 import stat
 import struct
 import sys
+import threading
 import time
 from pathlib import Path
-from typing import Any, BinaryIO, Protocol
+from typing import Any, BinaryIO, Callable, Protocol
 
 from ..errors import AppError
 
@@ -412,6 +413,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
     _TOKEN_USER = 1
     _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     _PIPE_ACCESS_DUPLEX = 0x00000003
+    _FILE_FLAG_OVERLAPPED = 0x40000000
     _FILE_FLAG_FIRST_PIPE_INSTANCE = 0x00080000
     _PIPE_TYPE_BYTE = 0x00000000
     _PIPE_READMODE_BYTE = 0x00000000
@@ -422,6 +424,11 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
     _GENERIC_WRITE = 0x40000000
     _ERROR_PIPE_CONNECTED = 535
     _ERROR_PIPE_BUSY = 231
+    _ERROR_IO_PENDING = 997
+    _WAIT_TIMEOUT = 258
+    _WAIT_OBJECT_0 = 0
+    _WINDOWS_IO_CHUNK_BYTES = 64 * 1024
+    _WINDOWS_CANCEL_DRAIN_MILLISECONDS = 1000
     _SDDL_REVISION_1 = 1
     _SE_FILE_OBJECT = 1
     _OWNER_SECURITY_INFORMATION = 0x00000001
@@ -431,6 +438,15 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
             ("nLength", wintypes.DWORD),
             ("lpSecurityDescriptor", wintypes.LPVOID),
             ("bInheritHandle", wintypes.BOOL),
+        ]
+
+    class _OVERLAPPED(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_size_t),
+            ("InternalHigh", ctypes.c_size_t),
+            ("Offset", wintypes.DWORD),
+            ("OffsetHigh", wintypes.DWORD),
+            ("hEvent", wintypes.HANDLE),
         ]
 
     _kernel32.GetCurrentProcess.restype = wintypes.HANDLE
@@ -463,6 +479,35 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
     ]
     _kernel32.ConnectNamedPipe.argtypes = [wintypes.HANDLE, wintypes.LPVOID]
     _kernel32.ConnectNamedPipe.restype = wintypes.BOOL
+    _kernel32.CreateEventW.argtypes = [
+        wintypes.LPVOID,
+        wintypes.BOOL,
+        wintypes.BOOL,
+        wintypes.LPCWSTR,
+    ]
+    _kernel32.CreateEventW.restype = wintypes.HANDLE
+    _kernel32.GetOverlappedResult.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(_OVERLAPPED),
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.BOOL,
+    ]
+    _kernel32.GetOverlappedResult.restype = wintypes.BOOL
+    _kernel32.GetOverlappedResultEx.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(_OVERLAPPED),
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.DWORD,
+        wintypes.BOOL,
+    ]
+    _kernel32.GetOverlappedResultEx.restype = wintypes.BOOL
+    _kernel32.CancelIoEx.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(_OVERLAPPED),
+    ]
+    _kernel32.CancelIoEx.restype = wintypes.BOOL
+    _kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    _kernel32.WaitForSingleObject.restype = wintypes.DWORD
     _kernel32.GetNamedPipeClientProcessId.argtypes = [
         wintypes.HANDLE,
         ctypes.POINTER(wintypes.ULONG),
@@ -485,15 +530,6 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
         wintypes.LPVOID,
     ]
     _kernel32.ReadFile.restype = wintypes.BOOL
-    _kernel32.PeekNamedPipe.argtypes = [
-        wintypes.HANDLE,
-        wintypes.LPVOID,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.DWORD),
-        ctypes.POINTER(wintypes.DWORD),
-        ctypes.POINTER(wintypes.DWORD),
-    ]
-    _kernel32.PeekNamedPipe.restype = wintypes.BOOL
     _kernel32.WriteFile.argtypes = [
         wintypes.HANDLE,
         wintypes.LPCVOID,
@@ -542,8 +578,44 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
     ]
     _advapi32.GetNamedSecurityInfoW.restype = wintypes.DWORD
 
+    _pending_windows_io_lock = threading.Lock()
+    _pending_windows_io: list[tuple[ctypes.Array[ctypes.c_char], _OVERLAPPED]] = []
+
     def _raise_windows(message: str) -> None:
         raise OSError(ctypes.get_last_error(), message)
+
+    def _new_overlapped() -> _OVERLAPPED:
+        event = _kernel32.CreateEventW(None, True, False, None)
+        if not event:
+            _raise_windows("CreateEventW for operator pipe failed")
+        overlapped = _OVERLAPPED()
+        overlapped.hEvent = event
+        return overlapped
+
+    def _reap_pending_windows_io() -> None:
+        with _pending_windows_io_lock:
+            retained = []
+            for buffer, overlapped in _pending_windows_io:
+                if (
+                    _kernel32.WaitForSingleObject(overlapped.hEvent, 0)
+                    == _WAIT_OBJECT_0
+                ):
+                    _kernel32.CloseHandle(overlapped.hEvent)
+                else:
+                    retained.append((buffer, overlapped))
+            _pending_windows_io[:] = retained
+
+    def _retain_pending_windows_io(
+        buffer: ctypes.Array[ctypes.c_char],
+        overlapped: _OVERLAPPED,
+    ) -> None:
+        # CancelIoEx is normally completed immediately for a local named pipe.
+        # If the kernel has not signalled completion after the bounded drain,
+        # retain both objects so their addresses remain valid and reap them on
+        # a later transport operation.  The client-serving thread never waits
+        # indefinitely for a peer that stopped reading.
+        with _pending_windows_io_lock:
+            _pending_windows_io.append((buffer, overlapped))
 
     def _windows_current_sid() -> str:
         process = _kernel32.GetCurrentProcess()
@@ -643,6 +715,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
         ) -> None:
             self.handle = handle
             self.io_timeout = io_timeout
+            self._closed = False
 
         @classmethod
         def connect(
@@ -660,7 +733,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     0,
                     None,
                     _OPEN_EXISTING,
-                    0,
+                    _FILE_FLAG_OVERLAPPED,
                     None,
                 )
                 if handle != _INVALID_HANDLE_VALUE:
@@ -677,6 +750,99 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                     raise OSError(error, "could not connect to operator named pipe")
                 _kernel32.WaitNamedPipeW(endpoint, 100)
 
+        def _close_handle(self) -> None:
+            if self._closed:
+                return
+            self._closed = True
+            _kernel32.CloseHandle(self.handle)
+
+        def _cancel_timed_out_io(
+            self,
+            buffer: ctypes.Array[ctypes.c_char],
+            overlapped: _OVERLAPPED,
+        ) -> None:
+            _kernel32.CancelIoEx(self.handle, ctypes.byref(overlapped))
+            self._close_handle()
+            if (
+                _kernel32.WaitForSingleObject(
+                    overlapped.hEvent,
+                    _WINDOWS_CANCEL_DRAIN_MILLISECONDS,
+                )
+                == _WAIT_OBJECT_0
+            ):
+                _kernel32.CloseHandle(overlapped.hEvent)
+            else:
+                _retain_pending_windows_io(buffer, overlapped)
+
+        def _overlapped_io(
+            self,
+            function: Callable[..., int],
+            buffer: ctypes.Array[ctypes.c_char],
+            size: int,
+            *,
+            deadline: float | None,
+            timeout_message: str,
+            failure_message: str,
+        ) -> int:
+            if self._closed:
+                raise EOFError("operator named pipe closed")
+            _reap_pending_windows_io()
+            overlapped = _new_overlapped()
+            transferred = wintypes.DWORD()
+            event_owned = True
+            try:
+                completed = function(
+                    self.handle,
+                    buffer,
+                    size,
+                    None,
+                    ctypes.byref(overlapped),
+                )
+                if completed:
+                    if not _kernel32.GetOverlappedResult(
+                        self.handle,
+                        ctypes.byref(overlapped),
+                        ctypes.byref(transferred),
+                        False,
+                    ):
+                        _raise_windows(failure_message)
+                    return transferred.value
+                error = ctypes.get_last_error()
+                if error != _ERROR_IO_PENDING:
+                    raise OSError(error, failure_message)
+                if deadline is None:
+                    finished = _kernel32.GetOverlappedResult(
+                        self.handle,
+                        ctypes.byref(overlapped),
+                        ctypes.byref(transferred),
+                        True,
+                    )
+                else:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        finished = False
+                        ctypes.set_last_error(_WAIT_TIMEOUT)
+                    else:
+                        timeout_ms = max(1, min(0xFFFFFFFE, int(remaining * 1000)))
+                        finished = _kernel32.GetOverlappedResultEx(
+                            self.handle,
+                            ctypes.byref(overlapped),
+                            ctypes.byref(transferred),
+                            timeout_ms,
+                            False,
+                        )
+                if not finished:
+                    error = ctypes.get_last_error()
+                    if error == _WAIT_TIMEOUT:
+                        event_owned = False
+                        self._cancel_timed_out_io(buffer, overlapped)
+                        raise TimeoutError(timeout_message)
+                    raise OSError(error, failure_message)
+                return transferred.value
+            finally:
+                if event_owned:
+                    _kernel32.CloseHandle(overlapped.hEvent)
+
         def recv_exact(self, size: int) -> bytes:
             chunks = bytearray()
             deadline = (
@@ -685,57 +851,52 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                 else None
             )
             while len(chunks) < size:
-                read_size = size - len(chunks)
-                if deadline is not None:
-                    available = wintypes.DWORD()
-                    while available.value == 0:
-                        if not _kernel32.PeekNamedPipe(
-                            self.handle,
-                            None,
-                            0,
-                            None,
-                            ctypes.byref(available),
-                            None,
-                        ):
-                            _raise_windows("PeekNamedPipe from operator pipe failed")
-                        if available.value:
-                            break
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
-                            raise TimeoutError("operator named-pipe read timed out")
-                        time.sleep(min(0.01, remaining))
-                    read_size = min(read_size, available.value)
+                read_size = min(size - len(chunks), _WINDOWS_IO_CHUNK_BYTES)
                 buffer = ctypes.create_string_buffer(read_size)
-                read = wintypes.DWORD()
-                if not _kernel32.ReadFile(
-                    self.handle, buffer, len(buffer), ctypes.byref(read), None
-                ):
-                    _raise_windows("ReadFile from operator pipe failed")
-                if read.value == 0:
+                read = self._overlapped_io(
+                    _kernel32.ReadFile,
+                    buffer,
+                    read_size,
+                    deadline=deadline,
+                    timeout_message="operator named-pipe read timed out",
+                    failure_message="ReadFile from operator pipe failed",
+                )
+                if read == 0:
                     raise EOFError("operator named pipe closed")
-                chunks.extend(buffer.raw[: read.value])
+                chunks.extend(buffer.raw[:read])
             return bytes(chunks)
 
         def send_all(self, payload: bytes) -> None:
+            deadline = (
+                time.monotonic() + self.io_timeout
+                if self.io_timeout is not None
+                else None
+            )
             offset = 0
             while offset < len(payload):
-                written = wintypes.DWORD()
-                chunk = payload[offset:]
-                buffer = ctypes.create_string_buffer(chunk)
-                if not _kernel32.WriteFile(
-                    self.handle, buffer, len(chunk), ctypes.byref(written), None
-                ):
-                    _raise_windows("WriteFile to operator pipe failed")
-                offset += written.value
+                chunk = payload[offset : offset + _WINDOWS_IO_CHUNK_BYTES]
+                buffer = ctypes.create_string_buffer(chunk, len(chunk))
+                written = self._overlapped_io(
+                    _kernel32.WriteFile,
+                    buffer,
+                    len(chunk),
+                    deadline=deadline,
+                    timeout_message="operator named-pipe write timed out",
+                    failure_message="WriteFile to operator pipe failed",
+                )
+                if written == 0:
+                    raise OSError("WriteFile to operator pipe wrote zero bytes")
+                offset += written
 
         def close(self) -> None:
-            _kernel32.CloseHandle(self.handle)
+            self._close_handle()
 
     class _WindowsBrokerListener:
         def __init__(self, endpoint: str) -> None:
             self.endpoint = endpoint
             self._first = True
             self._closed = False
+            self._state_lock = threading.Lock()
             self._pending = self._create_instance(first=True)
 
         def _create_instance(self, *, first: bool) -> wintypes.HANDLE:
@@ -750,7 +911,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                 ctypes.sizeof(_SECURITY_ATTRIBUTES), descriptor, False
             )
             try:
-                access = _PIPE_ACCESS_DUPLEX
+                access = _PIPE_ACCESS_DUPLEX | _FILE_FLAG_OVERLAPPED
                 if first:
                     access |= _FILE_FLAG_FIRST_PIPE_INSTANCE
                 handle = _kernel32.CreateNamedPipeW(
@@ -773,12 +934,51 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
             return handle
 
         def accept(self) -> BrokerChannel:
-            handle = self._pending
-            connected = _kernel32.ConnectNamedPipe(handle, None)
-            if not connected and ctypes.get_last_error() != _ERROR_PIPE_CONNECTED:
-                _kernel32.CloseHandle(handle)
-                _raise_windows("ConnectNamedPipe failed")
-            self._pending = self._create_instance(first=False)
+            with self._state_lock:
+                if self._closed:
+                    raise OSError("operator named-pipe listener is closed")
+                handle = self._pending
+            overlapped = _new_overlapped()
+            try:
+                connected = _kernel32.ConnectNamedPipe(
+                    handle,
+                    ctypes.byref(overlapped),
+                )
+                if not connected:
+                    error = ctypes.get_last_error()
+                    if error == _ERROR_IO_PENDING:
+                        transferred = wintypes.DWORD()
+                        if not _kernel32.GetOverlappedResult(
+                            handle,
+                            ctypes.byref(overlapped),
+                            ctypes.byref(transferred),
+                            True,
+                        ):
+                            _raise_windows("ConnectNamedPipe failed")
+                    elif error != _ERROR_PIPE_CONNECTED:
+                        raise OSError(error, "ConnectNamedPipe failed")
+            except Exception:
+                with self._state_lock:
+                    if self._pending == handle:
+                        self._pending = _INVALID_HANDLE_VALUE
+                        _kernel32.CloseHandle(handle)
+                raise
+            finally:
+                _kernel32.CloseHandle(overlapped.hEvent)
+            with self._state_lock:
+                if self._closed:
+                    if self._pending == handle:
+                        self._pending = _INVALID_HANDLE_VALUE
+                    _kernel32.CloseHandle(handle)
+                    raise OSError("operator named-pipe listener is closed")
+                self._pending = _INVALID_HANDLE_VALUE
+            pending = self._create_instance(first=False)
+            with self._state_lock:
+                if self._closed:
+                    _kernel32.CloseHandle(pending)
+                    _kernel32.CloseHandle(handle)
+                    raise OSError("operator named-pipe listener is closed")
+                self._pending = pending
             if _windows_client_sid(handle) != _windows_current_sid():
                 _kernel32.DisconnectNamedPipe(handle)
                 _kernel32.CloseHandle(handle)
@@ -795,10 +995,14 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
             )
 
         def close(self) -> None:
-            if self._closed:
-                return
-            self._closed = True
-            _kernel32.CloseHandle(self._pending)
+            with self._state_lock:
+                if self._closed:
+                    return
+                self._closed = True
+                pending = self._pending
+                self._pending = _INVALID_HANDLE_VALUE
+                if pending != _INVALID_HANDLE_VALUE:
+                    _kernel32.CloseHandle(pending)
 
 else:
     def _windows_current_sid() -> str:

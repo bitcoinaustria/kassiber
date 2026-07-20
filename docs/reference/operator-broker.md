@@ -146,6 +146,8 @@ accepted Unix or Windows client 30 seconds to finish an individual inbound
 protocol frame. Excess clients receive retryable `operator_client_limit`
 backpressure;
 an idle or partial client therefore cannot consume threads without bound.
+Windows named-pipe reads and writes use overlapped I/O with the same monotonic
+deadline; a peer that stops reading cannot pin a broker client slot indefinitely.
 
 ## Canonical project identity and ownership
 

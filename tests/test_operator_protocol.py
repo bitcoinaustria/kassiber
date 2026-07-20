@@ -156,8 +156,11 @@ class OperatorProtocolTest(unittest.TestCase):
             "GetNamedPipeClientProcessId",
             "GetNamedPipeServerProcessId",
             "GetNamedSecurityInfoW",
-            "PeekNamedPipe",
             "operator named-pipe read timed out",
+            "operator named-pipe write timed out",
+            "FILE_FLAG_OVERLAPPED",
+            "GetOverlappedResultEx",
+            "CancelIoEx",
             "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
         ):
             with self.subTest(primitive=primitive):
@@ -193,6 +196,38 @@ class OperatorProtocolTest(unittest.TestCase):
                 client = connect(io_timeout=1.0)
                 client._transport.send_all(b"J")
                 thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], TimeoutError)
+            finally:
+                if client is not None:
+                    client.close()
+                server.close()
+                thread.join(2)
+
+    @unittest.skipUnless(os.name == "nt", "Windows named-pipe timeout test")
+    def test_windows_nonreading_client_does_not_block_server_write(self) -> None:
+        errors: list[BaseException] = []
+        with mock.patch.object(
+            operator_protocol,
+            "DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS",
+            0.05,
+        ):
+            server = listen()
+            client: BrokerChannel | None = None
+
+            def serve() -> None:
+                try:
+                    with server.accept() as channel:
+                        channel.send_json({"payload": "x" * (1024 * 1024)})
+                except BaseException as exc:  # pragma: no cover - Windows CI
+                    errors.append(exc)
+
+            thread = threading.Thread(target=serve)
+            thread.start()
+            try:
+                client = connect(io_timeout=1.0)
+                thread.join(3)
                 self.assertFalse(thread.is_alive())
                 self.assertEqual(len(errors), 1)
                 self.assertIsInstance(errors[0], TimeoutError)
