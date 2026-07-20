@@ -160,6 +160,13 @@ class _ProjectTransitionGate:
     users: int = 0
 
 
+@dataclass
+class _PendingProjectResource:
+    project_identity: str
+    connection: object | None
+    owner: ProjectOwnerLease | None
+
+
 class ProjectWorker:
     def __init__(
         self,
@@ -537,9 +544,7 @@ class OperatorService:
         self._lease_aliases: dict[str, str] = {}
         self._auth_backoffs: OrderedDict[str, AuthAttemptBackoff] = OrderedDict()
         self._project_gates: dict[str, _ProjectTransitionGate] = {}
-        self._pending_owner_releases: deque[
-            tuple[str, ProjectOwnerLease]
-        ] = deque()
+        self._pending_owner_releases: deque[_PendingProjectResource] = deque()
         self._active_project_transitions = 0
         self._sequence = 0
         self._closed = threading.Event()
@@ -590,8 +595,8 @@ class OperatorService:
                     gate.users == 0
                     and project_identity not in self._leases
                     and not any(
-                        identity == project_identity
-                        for identity, _owner in self._pending_owner_releases
+                        resource.project_identity == project_identity
+                        for resource in self._pending_owner_releases
                     )
                 ):
                     self._project_gates.pop(project_identity, None)
@@ -700,6 +705,7 @@ class OperatorService:
                     generation=self.generation,
                 )
             )
+            owner_retained = False
             try:
                 if previous is not None:
                     owner.add_alias(project)
@@ -717,15 +723,24 @@ class OperatorService:
                         opened_database_identity = project.identity[:32]
                         context = {}
                 finally:
-                    connection.close()
+                    try:
+                        connection.close()
+                    except Exception:
+                        self._retain_pending_project_resource(
+                            project.identity,
+                            connection=connection,
+                            owner=owner if acquired_here else None,
+                        )
+                        owner_retained = acquired_here
+                        raise
             except AppError as exc:
                 if exc.code in {"unlock_failed", "passphrase_required"}:
                     backoff.record_failure()
-                if acquired_here:
+                if acquired_here and not owner_retained:
                     owner.release()
                 raise
             except Exception:
-                if acquired_here:
+                if acquired_here and not owner_retained:
                     owner.release()
                 raise
             else:
@@ -906,7 +921,16 @@ class OperatorService:
                             else project.identity[:32]
                         )
                     finally:
-                        connection.close()
+                        try:
+                            connection.close()
+                        except Exception:
+                            self._retain_pending_project_resource(
+                                project.identity,
+                                connection=connection,
+                                owner=temporary_owner,
+                            )
+                            temporary_owner = None
+                            raise
                 except AppError as exc:
                     if exc.code in {"unlock_failed", "passphrase_required"}:
                         backoff.record_failure()
@@ -950,7 +974,15 @@ class OperatorService:
                 )
             finally:
                 if temporary_owner is not None:
-                    temporary_owner.release()
+                    try:
+                        temporary_owner.release()
+                    except Exception:
+                        self._retain_pending_project_resource(
+                            project.identity,
+                            connection=None,
+                            owner=temporary_owner,
+                        )
+                        raise
 
     def set_mode_authenticated(
         self,
@@ -1592,7 +1624,9 @@ class OperatorService:
                 OperationResult(1, "", "operator lease ended\n"),
             )
         _wipe(lease.passphrase)
-        self._pending_owner_releases.append((project_id, lease.owner))
+        self._pending_owner_releases.append(
+            _PendingProjectResource(project_id, None, lease.owner)
+        )
         for alias, identity in list(self._lease_aliases.items()):
             if identity == project_id:
                 self._lease_aliases.pop(alias, None)
@@ -1604,26 +1638,53 @@ class OperatorService:
         """Release detached owner handles without holding the service lock."""
 
         with self._lock:
-            selected: list[tuple[str, ProjectOwnerLease]] = []
-            retained: deque[tuple[str, ProjectOwnerLease]] = deque()
+            selected: list[_PendingProjectResource] = []
+            retained: deque[_PendingProjectResource] = deque()
             while self._pending_owner_releases:
-                identity, owner = self._pending_owner_releases.popleft()
-                if project_identity is None or identity == project_identity:
-                    selected.append((identity, owner))
+                resource = self._pending_owner_releases.popleft()
+                if (
+                    project_identity is None
+                    or resource.project_identity == project_identity
+                ):
+                    selected.append(resource)
                 else:
-                    retained.append((identity, owner))
+                    retained.append(resource)
             self._pending_owner_releases = retained
         first_error: Exception | None = None
-        for identity, owner in selected:
+        for resource in selected:
+            if resource.connection is not None:
+                try:
+                    resource.connection.close()  # type: ignore[attr-defined]
+                except Exception as exc:
+                    if first_error is None:
+                        first_error = exc
+                    with self._lock:
+                        self._pending_owner_releases.append(resource)
+                    continue
+                resource.connection = None
+            if resource.owner is None:
+                continue
             try:
-                owner.release()
+                resource.owner.release()
             except Exception as exc:
                 if first_error is None:
                     first_error = exc
                 with self._lock:
-                    self._pending_owner_releases.append((identity, owner))
+                    self._pending_owner_releases.append(resource)
         if first_error is not None:
             raise first_error
+
+    def _retain_pending_project_resource(
+        self,
+        project_identity: str,
+        *,
+        connection: object | None,
+        owner: ProjectOwnerLease | None,
+    ) -> None:
+        with self._lock:
+            self._pending_owner_releases.append(
+                _PendingProjectResource(project_identity, connection, owner)
+            )
 
     def _revoke_lease_locked(self, project_id: str, *, reason: str) -> None:
         lease = self._leases.get(project_id)
@@ -1798,8 +1859,8 @@ class OperatorService:
                     if lease.expired()
                 ]
                 pending = [
-                    project_id
-                    for project_id, _owner in self._pending_owner_releases
+                    resource.project_identity
+                    for resource in self._pending_owner_releases
                 ]
             for project_id in dict.fromkeys((*expired, *pending)):
                 public_project_id = project_id[:16]

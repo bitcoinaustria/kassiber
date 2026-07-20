@@ -125,6 +125,73 @@ class OperatorServiceTest(unittest.TestCase):
             operation_secret[:] = b"\0" * len(operation_secret)
             lease_secret[:] = b"\0" * len(lease_secret)
 
+    def test_unlock_retains_owner_until_failed_verification_close_retries(self) -> None:
+        connection = _Connection()
+        connection.close = mock.Mock(
+            side_effect=[OSError("close failed"), OSError("still failed"), None]
+        )
+        owner = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=connection,
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            return_value=owner,
+        ):
+            service = OperatorService("generation", lambda *_args: mock.Mock())
+            try:
+                with self.assertRaisesRegex(OSError, "still failed"):
+                    service.unlock(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        duration_seconds=None,
+                    )
+
+                owner.release.assert_not_called()
+                self.assertTrue(service._pending_owner_releases)
+
+                service._release_pending_owners()
+
+                self.assertEqual(connection.close.call_count, 3)
+                owner.release.assert_called_once_with()
+                self.assertFalse(service._pending_owner_releases)
+            finally:
+                service.close()
+
+    def test_fresh_auth_retains_owner_until_failed_connection_close_retries(self) -> None:
+        connection = _Connection()
+        connection.close = mock.Mock(
+            side_effect=[OSError("close failed"), OSError("still failed"), None]
+        )
+        owner = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=connection,
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            return_value=owner,
+        ):
+            service = OperatorService("generation", lambda *_args: mock.Mock())
+            try:
+                with self.assertRaisesRegex(OSError, "still failed"):
+                    service.authenticate_database(
+                        tmp,
+                        bytearray(b"passphrase"),
+                        scope="operator_mode",
+                        require_lease=False,
+                    )
+
+                owner.release.assert_not_called()
+                self.assertTrue(service._pending_owner_releases)
+
+                service._release_pending_owners()
+
+                self.assertEqual(connection.close.call_count, 3)
+                owner.release.assert_called_once_with()
+                self.assertFalse(service._pending_owner_releases)
+            finally:
+                service.close()
+
     def test_lifecycle_telemetry_is_bounded_ram_only_and_public_safe(self) -> None:
         ring = LogRing(max_records=3, max_bytes=4096)
         logger = logging.getLogger("kassiber.operator")
