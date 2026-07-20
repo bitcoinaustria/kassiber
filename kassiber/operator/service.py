@@ -1379,7 +1379,17 @@ def _parse_argv(
             retryable=False,
         ) from exc
     path = command_path(args)
-    return args, path, cli_capability(path)
+    try:
+        capability = cli_capability(path)
+    except KeyError as exc:
+        raise AppError(
+            "the broker received an unclassified command",
+            code="operator_unclassified_command",
+            hint="Upgrade Kassiber or classify the command before brokered use.",
+            details={"command": path},
+            retryable=False,
+        ) from exc
+    return args, path, capability
 
 
 def _classification_argv(argv: list[str]) -> list[str]:

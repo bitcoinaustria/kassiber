@@ -350,6 +350,33 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_unclassified_command_is_a_public_safe_terminal_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.cli_capability",
+            side_effect=KeyError("private registry detail"),
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            secret = bytearray(b"staged-secret")
+            try:
+                with self.assertRaises(AppError) as raised:
+                    service.submit(
+                        tmp,
+                        ["status"],
+                        secret_arguments={"broker-secret-test": secret},
+                    )
+                self.assertEqual(
+                    raised.exception.code,
+                    "operator_unclassified_command",
+                )
+                self.assertFalse(raised.exception.retryable)
+                self.assertNotIn("private registry detail", str(raised.exception))
+                self.assertEqual(set(secret), {0})
+            finally:
+                service.close()
+
     def test_generation_change_reports_result_unknown(self) -> None:
         service = OperatorService(
             "new-generation",
