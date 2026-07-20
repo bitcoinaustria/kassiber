@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -19,6 +20,42 @@ from kassiber.errors import AppError
 
 
 class OperatorServerTest(unittest.TestCase):
+    def test_close_retries_service_cleanup_after_listener_is_closed(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.listener = mock.Mock()
+        server.service = mock.Mock()
+        server.service.close.side_effect = [
+            OSError("transient owner release failure"),
+            None,
+        ]
+        server._stopped = threading.Event()
+        server._close_lock = threading.Lock()
+        server._listener_closed = False
+
+        with self.assertRaisesRegex(OSError, "transient owner release failure"):
+            server.close()
+        server.close()
+
+        self.assertTrue(server._stopped.is_set())
+        server.listener.close.assert_called_once_with()
+        self.assertEqual(server.service.close.call_count, 2)
+
+    def test_close_still_attempts_service_when_listener_close_fails(self) -> None:
+        server = BrokerServer.__new__(BrokerServer)
+        server.listener = mock.Mock()
+        server.listener.close.side_effect = [OSError("listener failure"), None]
+        server.service = mock.Mock()
+        server._stopped = threading.Event()
+        server._close_lock = threading.Lock()
+        server._listener_closed = False
+
+        with self.assertRaisesRegex(OSError, "listener failure"):
+            server.close()
+        server.close()
+
+        self.assertEqual(server.listener.close.call_count, 2)
+        self.assertEqual(server.service.close.call_count, 2)
+
     def test_admin_submission_requires_challenge_bound_fresh_auth(self) -> None:
         server = BrokerServer.__new__(BrokerServer)
         server.service = mock.Mock()

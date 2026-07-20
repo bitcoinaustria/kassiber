@@ -47,6 +47,8 @@ class BrokerServer:
         self.service = OperatorService(self.generation, run_cli_operation)
         self.listener = listen()
         self._stopped = threading.Event()
+        self._close_lock = threading.Lock()
+        self._listener_closed = False
         self._client_slots = threading.BoundedSemaphore(MAX_CLIENT_THREADS)
         self._session_runtime = session_runtime
         self._logind_user_observed = logind_alive is not None
@@ -101,11 +103,26 @@ class BrokerServer:
             self._client_slots.release()
 
     def close(self) -> None:
-        if self._stopped.is_set():
-            return
-        self._stopped.set()
-        self.listener.close()
-        self.service.close()
+        with self._close_lock:
+            self._stopped.set()
+            first_error: BaseException | None = None
+            if not self._listener_closed:
+                try:
+                    self.listener.close()
+                except BaseException as exc:
+                    first_error = exc
+                else:
+                    self._listener_closed = True
+            try:
+                # OperatorService.close() deliberately retries transient owner
+                # release failures. Keep delegating after the listener has
+                # stopped so a later close can complete that cleanup.
+                self.service.close()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+            if first_error is not None:
+                raise first_error
 
     def _monitor_login_session(self) -> None:
         while not self._stopped.wait(2.0):
