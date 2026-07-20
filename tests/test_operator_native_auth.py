@@ -82,10 +82,13 @@ class OperatorNativeAuthTest(unittest.TestCase):
         self.assertIn("verify_operator_helper_parent()?", helper)
         self.assertIn('Command::new("/usr/bin/codesign")', source)
         self.assertIn("TeamIdentifier=", source)
-        self.assertIn('starts_with("kassiber-cli-")', source)
+        self.assertIn("operator_sidecar_filename_for_arch", source)
+        self.assertIn("parent_name != expected_parent_name", source)
+        self.assertIn("parent_identifier != expected_parent_name", source)
+        self.assertIn("1.2.840.113635.100.6.1.13", source)
         self.assertIn("SecCodeCopyGuestWithAttributes", source)
         self.assertIn("SecCodeCheckValidity", source)
-        self.assertIn("verified_codesign_requirement", source)
+        self.assertNotIn("verified_codesign_requirement", source)
 
 
 if __name__ == "__main__":

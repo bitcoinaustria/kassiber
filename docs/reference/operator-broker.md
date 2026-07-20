@@ -88,9 +88,11 @@ after Touch ID through the signed desktop app's native LocalAuthentication
 path. The broker starts the helper with a broker-created inherited output pipe.
 Before any get, store, delete, or status action, the helper verifies that its
 parent is the matching production-signed bundled Kassiber CLI sidecar. The
-helper checks the live parent process with macOS Security.framework against
-the sidecar's exact designated requirement, in addition to validating its
-bundle path and TeamIdentifier. It has no caller-selected socket or general
+helper checks the live parent process with macOS Security.framework against a
+fixed Developer ID Application requirement combining the exact
+architecture-specific sidecar signing identifier and the helper's verified
+TeamIdentifier. It also validates the bundle path and both static signatures.
+It has no caller-selected socket or general
 raw-secret "get" action and never returns the passphrase to the invoking CLI.
 Production-entitled builds use an item-level current-biometry policy. Unlike
 the separate desktop remembered-unlock feature, operator Touch ID has no

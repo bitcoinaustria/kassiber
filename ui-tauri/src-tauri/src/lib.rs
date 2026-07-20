@@ -3031,17 +3031,52 @@ fn verify_operator_helper_parent() -> Result<(), String> {
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or_default();
-    if !parent_path.starts_with(&sidecar_root) || !parent_name.starts_with("kassiber-cli-") {
+    let expected_parent_name = operator_sidecar_filename_for_arch(env::consts::ARCH)
+        .ok_or("native-auth helper does not support this macOS architecture")?;
+    if !parent_path.starts_with(&sidecar_root) || parent_name != expected_parent_name {
         return Err("native-auth helper parent is not the bundled Kassiber sidecar".to_string());
     }
-    let helper_team = verified_codesign_team(&helper_path)?;
-    let parent_team = verified_codesign_team(&parent_path)?;
+    let (_, helper_team) = verified_codesign_identity(&helper_path)?;
+    let (parent_identifier, parent_team) = verified_codesign_identity(&parent_path)?;
     if helper_team != parent_team {
         return Err("native-auth helper and broker signatures do not match".to_string());
     }
-    let requirement = verified_codesign_requirement(&parent_path)?;
+    if parent_identifier != expected_parent_name {
+        return Err("native-auth helper parent has an unexpected signing identifier".to_string());
+    }
+    let requirement = operator_sidecar_requirement(expected_parent_name, &helper_team)?;
     verify_running_operator_parent(parent_pid, &requirement)?;
     Ok(())
+}
+
+#[cfg(any(test, target_os = "macos"))]
+fn operator_sidecar_filename_for_arch(arch: &str) -> Option<&'static str> {
+    match arch {
+        "aarch64" => Some("kassiber-cli-aarch64-apple-darwin"),
+        "x86_64" => Some("kassiber-cli-x86_64-apple-darwin"),
+        _ => None,
+    }
+}
+
+#[cfg(any(test, target_os = "macos"))]
+fn operator_sidecar_requirement(identifier: &str, team: &str) -> Result<String, String> {
+    if identifier.is_empty()
+        || !identifier
+            .bytes()
+            .all(|value| value.is_ascii_alphanumeric() || matches!(value, b'-' | b'_' | b'.'))
+    {
+        return Err("native-auth sidecar signing identifier is invalid".to_string());
+    }
+    if team.len() != 10
+        || !team
+            .bytes()
+            .all(|value| value.is_ascii_uppercase() || value.is_ascii_digit())
+    {
+        return Err("native-auth helper has an invalid TeamIdentifier".to_string());
+    }
+    Ok(format!(
+        "anchor apple generic and identifier \"{identifier}\" and certificate leaf[subject.OU] = \"{team}\" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+    ))
 }
 
 #[cfg(target_os = "macos")]
@@ -3065,27 +3100,6 @@ fn operator_helper_parent_path(parent_pid: i32) -> Result<PathBuf, String> {
         buffer.pop();
     }
     Ok(PathBuf::from(OsString::from_vec(buffer)))
-}
-
-#[cfg(target_os = "macos")]
-fn verified_codesign_requirement(path: &Path) -> Result<String, String> {
-    let details = Command::new("/usr/bin/codesign")
-        .args(["-d", "-r-"])
-        .arg(path)
-        .output()
-        .map_err(|error| {
-            format!("could not inspect native-auth designated requirement: {error}")
-        })?;
-    if !details.status.success() {
-        return Err("native-auth designated requirement inspection failed".to_string());
-    }
-    let stderr = String::from_utf8_lossy(&details.stderr);
-    stderr
-        .lines()
-        .find_map(|line| line.strip_prefix("designated => "))
-        .filter(|requirement| !requirement.trim().is_empty())
-        .map(str::to_owned)
-        .ok_or_else(|| "native-auth sidecar has no designated requirement".to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -3148,7 +3162,7 @@ fn verify_running_operator_parent(parent_pid: i32, requirement_text: &str) -> Re
 }
 
 #[cfg(target_os = "macos")]
-fn verified_codesign_team(path: &Path) -> Result<String, String> {
+fn verified_codesign_identity(path: &Path) -> Result<(String, String), String> {
     let verified = Command::new("/usr/bin/codesign")
         .args(["--verify", "--strict"])
         .arg(path)
@@ -3166,12 +3180,19 @@ fn verified_codesign_team(path: &Path) -> Result<String, String> {
         return Err("native-auth code signature inspection failed".to_string());
     }
     let stderr = String::from_utf8_lossy(&details.stderr);
-    stderr
+    let identifier = stderr
+        .lines()
+        .find_map(|line| line.strip_prefix("Identifier="))
+        .filter(|identifier| !identifier.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| "native-auth code signature has no Identifier".to_string())?;
+    let team = stderr
         .lines()
         .find_map(|line| line.strip_prefix("TeamIdentifier="))
         .filter(|team| !team.is_empty() && *team != "not set")
         .map(str::to_owned)
-        .ok_or_else(|| "native-auth helper requires a production TeamIdentifier".to_string())
+        .ok_or_else(|| "native-auth helper requires a production TeamIdentifier".to_string())?;
+    Ok((identifier, team))
 }
 
 #[cfg(test)]
@@ -3322,6 +3343,34 @@ mod tests {
         assert!(contents.contains("Managed by Kassiber Settings"));
         assert!(contents.contains("--cli"));
         assert!(contents.contains("kassiber-ui"));
+    }
+
+    #[test]
+    fn operator_sidecar_identity_is_architecture_specific() {
+        assert_eq!(
+            super::operator_sidecar_filename_for_arch("aarch64"),
+            Some("kassiber-cli-aarch64-apple-darwin")
+        );
+        assert_eq!(
+            super::operator_sidecar_filename_for_arch("x86_64"),
+            Some("kassiber-cli-x86_64-apple-darwin")
+        );
+        assert_eq!(super::operator_sidecar_filename_for_arch("riscv64"), None);
+    }
+
+    #[test]
+    fn operator_sidecar_requirement_pins_identifier_team_and_distribution() {
+        let requirement =
+            super::operator_sidecar_requirement("kassiber-cli-aarch64-apple-darwin", "A1B2C3D4E5")
+                .expect("valid requirement");
+        assert!(requirement.contains("identifier \"kassiber-cli-aarch64-apple-darwin\""));
+        assert!(requirement.contains("certificate leaf[subject.OU] = \"A1B2C3D4E5\""));
+        assert!(requirement.contains("1.2.840.113635.100.6.1.13"));
+        assert!(super::operator_sidecar_requirement(
+            "kassiber-cli-aarch64-apple-darwin",
+            "unsafe-team",
+        )
+        .is_err());
     }
 
     #[test]

@@ -281,8 +281,9 @@ while an orphan mutation still runs. On macOS the broker spawns the signed
 Touch ID helper with a broker-created inherited output pipe. The helper accepts
 the request only when its parent is the matching production-signed bundled CLI
 sidecar: it validates the bundle path and signing team, then uses
-Security.framework to check the live parent process against the sidecar's exact
-designated requirement. It exposes no caller-selected endpoint or general
+Security.framework to check the live parent process against a fixed Developer
+ID Application requirement for the exact sidecar signing identifier and the
+helper's verified TeamIdentifier. It exposes no caller-selected endpoint or general
 raw-secret return action.
 
 Brokered mode never reads the unattended CLI remembered-unlock item. Manual,
