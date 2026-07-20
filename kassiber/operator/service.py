@@ -358,16 +358,6 @@ class ProjectWorker:
                 inherited_owner.close()
             except Exception as exc:
                 cleanup_error = exc
-        if cleanup_error is not None:
-            runner_crashed = True
-            result = OperationResult(
-                1,
-                result.stdout,
-                result.stderr
-                + sanitize_traceback_text(
-                    f"operator ownership cleanup failed: {cleanup_error}\n"
-                ),
-            )
         result = OperationResult(
             result.exit_code,
             result.stdout,
@@ -379,6 +369,17 @@ class ProjectWorker:
                 current_lease.running_operations = max(
                     0, current_lease.running_operations - 1
                 )
+                if cleanup_error is not None:
+                    current_lease.revoked = True
+                    _LOGGER.error(
+                        "operator ownership cleanup failed; lease revoked",
+                        extra={
+                            "kb_fields": {
+                                "project": self.project_id,
+                                "command": operation.command_path,
+                            }
+                        },
+                    )
             if runner_crashed or result.exit_code < 0:
                 state = "result_unknown"
             elif result.exit_code != 0 and operation.capability is not Capability.READ:

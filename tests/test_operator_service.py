@@ -1262,7 +1262,7 @@ class OperatorServiceTest(unittest.TestCase):
             finally:
                 service.close()
 
-    def test_owner_cleanup_failure_does_not_wedge_project_worker(self) -> None:
+    def test_owner_cleanup_failure_preserves_result_and_revokes_lease(self) -> None:
         calls: list[str] = []
 
         def runner(operation, _passphrase):
@@ -1287,17 +1287,19 @@ class OperatorServiceTest(unittest.TestCase):
                 lease = next(iter(service._leases.values()))
                 first = service.submit(tmp, ["status"])
                 first_status = self._wait_terminal(service, first["operation_id"])
-                self.assertEqual(first_status["state"], "result_unknown")
+                self.assertEqual(first_status["state"], "completed")
                 self.assertNotIn("cleanup-secret", first_status["stderr"])
                 self.assertEqual(lease.running_operations, 0)
+                self.assertEqual(set(lease.passphrase), {0})
+                self.assertEqual(service.status(tmp)["lease"], "locked")
 
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
                 second = service.submit(tmp, ["health"])
                 second_status = self._wait_terminal(service, second["operation_id"])
                 self.assertEqual(second_status["state"], "completed")
                 self.assertEqual(calls, ["status", "health"])
 
                 service.lock(tmp)
-                self.assertEqual(set(lease.passphrase), {0})
             finally:
                 service.close()
 
