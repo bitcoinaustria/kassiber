@@ -523,6 +523,9 @@ class OperatorService:
         self._sequence = 0
         self._closed = threading.Event()
         self._close_complete = threading.Event()
+        self._close_in_progress = False
+        self._close_prepared = False
+        self._close_terminal_error: BaseException | None = None
         self._transition_condition = threading.Condition(self._lock)
         self._janitor = threading.Thread(
             target=self._expire_leases,
@@ -1410,32 +1413,45 @@ class OperatorService:
             return operation.public_status(include_output=True)
 
     def close(self) -> None:
-        with self._lock:
-            if self._closed.is_set():
-                already_closing = True
-            else:
-                already_closing = False
+        with self._transition_condition:
+            while self._close_in_progress:
+                self._transition_condition.wait()
+            if self._close_terminal_error is not None:
+                raise self._close_terminal_error
+            if self._close_complete.is_set() and not self._pending_owner_releases:
+                return
+            self._close_in_progress = True
+            self._close_complete.clear()
+            prepare_shutdown = not self._close_prepared
+            if not self._closed.is_set():
                 self._closed.set()
-        if already_closing:
-            self._close_complete.wait()
-            return
         first_error: BaseException | None = None
         try:
-            with self._transition_condition:
-                while self._active_project_transitions:
-                    self._transition_condition.wait()
-                for project_id in list(self._leases):
-                    self._revoke_lease_locked(
-                        project_id,
-                        reason="operator broker stopped",
-                    )
-                for worker in self._workers.values():
-                    worker.stop()
+            if prepare_shutdown:
+                with self._transition_condition:
+                    while self._active_project_transitions:
+                        self._transition_condition.wait()
+                    for project_id in list(self._leases):
+                        self._revoke_lease_locked(
+                            project_id,
+                            reason="operator broker stopped",
+                        )
+                    for worker in self._workers.values():
+                        worker.stop()
+                    self._close_prepared = True
             self._release_pending_owners()
         except BaseException as exc:
             first_error = exc
         finally:
-            self._close_complete.set()
+            with self._transition_condition:
+                if first_error is None:
+                    self._close_complete.set()
+                elif not self._close_prepared:
+                    # Retrying partially applied lease/worker transitions would
+                    # be unsafe. Repeated callers receive the original failure.
+                    self._close_terminal_error = first_error
+                self._close_in_progress = False
+                self._transition_condition.notify_all()
         if first_error is not None:
             raise first_error
 

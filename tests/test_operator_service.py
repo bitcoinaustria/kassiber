@@ -2613,6 +2613,110 @@ class OperatorServiceTest(unittest.TestCase):
                 release.set()
                 service.close()
 
+    def test_close_retries_failed_owner_release_without_repreparing(self) -> None:
+        owner = mock.Mock()
+        owner.release.side_effect = [OSError("transient release failure"), None]
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=_Connection(),
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            return_value=owner,
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+            with mock.patch.object(
+                service,
+                "_revoke_lease_locked",
+                wraps=service._revoke_lease_locked,
+            ) as revoke:
+                with self.assertRaisesRegex(OSError, "transient release failure"):
+                    service.close()
+                self.assertEqual(owner.release.call_count, 1)
+                self.assertEqual(revoke.call_count, 1)
+
+                service.close()
+
+                self.assertEqual(owner.release.call_count, 2)
+                self.assertEqual(revoke.call_count, 1)
+                self.assertFalse(service._pending_owner_releases)
+
+    def test_concurrent_close_waiter_retries_failed_owner_release(self) -> None:
+        first_release_entered = threading.Event()
+        allow_first_failure = threading.Event()
+        second_close_finished = threading.Event()
+        release_attempts = 0
+        release_guard = threading.Lock()
+        errors: list[BaseException] = []
+
+        def release_owner() -> None:
+            nonlocal release_attempts
+            with release_guard:
+                release_attempts += 1
+                attempt = release_attempts
+            if attempt == 1:
+                first_release_entered.set()
+                if not allow_first_failure.wait(2):
+                    raise AssertionError("timed out releasing first close")
+                raise OSError("transient release failure")
+
+        owner = mock.Mock()
+        owner.release.side_effect = release_owner
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db",
+            return_value=_Connection(),
+        ), mock.patch(
+            "kassiber.operator.service.acquire_project_ownership",
+            return_value=owner,
+        ):
+            service = OperatorService(
+                "generation",
+                lambda *_args: OperationResult(0, "", ""),
+            )
+            service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+
+            def first_close() -> None:
+                try:
+                    service.close()
+                except BaseException as exc:
+                    errors.append(exc)
+
+            def second_close() -> None:
+                try:
+                    service.close()
+                except BaseException as exc:
+                    errors.append(exc)
+                finally:
+                    second_close_finished.set()
+
+            first_thread = threading.Thread(target=first_close)
+            second_thread = threading.Thread(target=second_close)
+            try:
+                first_thread.start()
+                self.assertTrue(first_release_entered.wait(1))
+                second_thread.start()
+                self.assertFalse(second_close_finished.wait(0.05))
+
+                allow_first_failure.set()
+                first_thread.join(2)
+                second_thread.join(2)
+
+                self.assertFalse(first_thread.is_alive())
+                self.assertFalse(second_thread.is_alive())
+                self.assertTrue(second_close_finished.is_set())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], OSError)
+                self.assertEqual(release_attempts, 2)
+                self.assertFalse(service._pending_owner_releases)
+            finally:
+                allow_first_failure.set()
+                service.close()
+
     def test_blocked_scope_refresh_does_not_block_another_project(self) -> None:
         refresh_entered = threading.Event()
         release_refresh = threading.Event()
