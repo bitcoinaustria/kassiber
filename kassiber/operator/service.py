@@ -1171,7 +1171,17 @@ class OperatorService:
             return
         worker = self._workers.pop(project_id, None)
         if worker is not None:
+            queued = worker.drain()
             worker.stop()
+            for operation in queued:
+                if operation.state != "queued":
+                    continue
+                operation.cancellation_requested = True
+                self._finish_operation_locked(
+                    operation,
+                    "cancelled",
+                    OperationResult(1, "", "operator lease ended\n"),
+                )
         _wipe(lease.passphrase)
         lease.owner.release()
         for alias, identity in list(self._lease_aliases.items()):

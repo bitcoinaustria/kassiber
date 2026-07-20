@@ -523,6 +523,55 @@ class OperatorServiceTest(unittest.TestCase):
                 release.set()
                 service.close()
 
+    def test_expired_worker_queue_cannot_revive_after_reunlock(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+        calls: list[str] = []
+
+        def runner(operation, _passphrase):
+            calls.append(operation.command_path)
+            if operation.command_path == "status":
+                started.set()
+                release.wait(2)
+            return OperationResult(0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"first-passphrase"), duration_seconds=None)
+                running = service.submit(tmp, ["status"])
+                self.assertTrue(started.wait(1))
+                stale = service.submit(tmp, ["health"])
+                lease = next(iter(service._leases.values()))
+                lease.expires_at_monotonic = time.monotonic() - 1
+
+                release.set()
+                self.assertEqual(
+                    self._wait_terminal(service, running["operation_id"])["state"],
+                    "completed",
+                )
+                self.assertEqual(
+                    self._wait_terminal(service, stale["operation_id"])["state"],
+                    "cancelled",
+                )
+
+                service.unlock(
+                    tmp,
+                    bytearray(b"second-passphrase"),
+                    duration_seconds=None,
+                )
+                fresh = service.submit(tmp, ["health"])
+                self.assertEqual(
+                    self._wait_terminal(service, fresh["operation_id"])["state"],
+                    "completed",
+                )
+                self.assertEqual(calls, ["status", "health"])
+            finally:
+                release.set()
+                service.close()
+
     def test_queued_cancellation_is_immediately_terminal_and_wipes_secrets(self) -> None:
         started = threading.Event()
         release = threading.Event()
