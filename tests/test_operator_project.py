@@ -278,6 +278,7 @@ class OperatorProjectTest(unittest.TestCase):
                 data_root=tmp,
                 project_owner=None,
                 ownership_generation="desktop",
+                retired_project_resources=[],
             )
             try:
                 with self.assertRaises(AppError) as raised:
@@ -302,6 +303,7 @@ class OperatorProjectTest(unittest.TestCase):
                 runtime_config={},
                 project_id=None,
                 select_project_on_open=False,
+                retired_project_resources=[],
             )
             with mock.patch(
                 "kassiber.daemon.open_db",
