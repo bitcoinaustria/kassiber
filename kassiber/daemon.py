@@ -3600,102 +3600,192 @@ def _select_project_payload(
     passphrase = _passphrase_from_auth(args)
     target_project = canonical_project(str(entry.data_root))
     target_data_root = str(target_project.database.parent)
-    target_encrypted = _data_root_database_is_encrypted(target_data_root)
-    if target_encrypted:
-        if not passphrase:
-            return (
-                _with_request_id(
-                    build_envelope(
-                        "auth_required",
-                        {
-                            "scope": "unlock_project",
-                            "label": f"Enter the SQLCipher passphrase for project {entry.name!r}.",
-                            "project": _project_payload(entry),
-                        },
+    transferred_owner = (
+        ctx.project_owner
+        if ctx.project_owner is not None
+        and ctx.project_owner.project.identity == target_project.identity
+        else None
+    )
+    target_owner = transferred_owner or acquire_project_ownership(
+        target_project,
+        owner_kind="desktop",
+        generation=ctx.ownership_generation,
+    )
+    target_owner_committed = transferred_owner is not None
+    target_conn: sqlite3.Connection | None = None
+    try:
+        # The ownership rendezvous must precede even a passphrase probe. A
+        # broker-owned target therefore fails with project_in_use without the
+        # desktop opening or authenticating against that database first.
+        target_encrypted = _data_root_database_is_encrypted(target_data_root)
+        if target_encrypted:
+            if not passphrase:
+                return (
+                    _with_request_id(
+                        build_envelope(
+                            "auth_required",
+                            {
+                                "scope": "unlock_project",
+                                "label": (
+                                    "Enter the SQLCipher passphrase for project "
+                                    f"{entry.name!r}."
+                                ),
+                                "project": _project_payload(entry),
+                            },
+                        ),
+                        request_id,
                     ),
-                    request_id,
-                ),
-                False,
+                    False,
+                )
+            verified = (
+                _verify_project_passphrase_with_backoff(
+                    entry,
+                    "unlock_project",
+                    passphrase,
+                    data_root=target_data_root,
+                )
+                if switching
+                else _verify_passphrase_with_backoff(
+                    ctx,
+                    "unlock_project",
+                    passphrase,
+                )
             )
-        verified = (
-            _verify_project_passphrase_with_backoff(
-                entry,
-                "unlock_project",
-                passphrase,
-                data_root=target_data_root,
-            )
-            if switching
-            else _verify_passphrase_with_backoff(ctx, "unlock_project", passphrase)
-        )
-        if not verified:
-            return (
-                _error_envelope(
-                    "local_auth_denied",
-                    "passphrase verification failed",
-                    request_id=request_id,
-                    retryable=True,
-                ),
-                False,
-            )
+            if not verified:
+                return (
+                    _error_envelope(
+                        "local_auth_denied",
+                        "passphrase verification failed",
+                        request_id=request_id,
+                        retryable=True,
+                    ),
+                    False,
+                )
 
-    require_existing_schema = bool(args.get("require_existing_project"))
-    if switching:
-        transferred_owner = (
-            ctx.project_owner
-            if ctx.project_owner is not None
-            and ctx.project_owner.project.identity == target_project.identity
-            else None
-        )
-        target_owner = transferred_owner or acquire_project_ownership(
-            target_project,
-            owner_kind="desktop",
-            generation=ctx.ownership_generation,
-        )
-        try:
+        require_existing_schema = bool(args.get("require_existing_project"))
+        if not switching:
+            prior_conn = ctx.conn
+            if transferred_owner is None:
+                ctx.project_owner = target_owner
+                target_owner_committed = True
+            try:
+                _open_daemon_connection(
+                    ctx,
+                    passphrase=passphrase if target_encrypted else None,
+                    require_existing_schema=require_existing_schema,
+                )
+            except Exception:
+                opened_conn = ctx.conn
+                ctx.conn = prior_conn
+                if opened_conn is not None and opened_conn is not prior_conn:
+                    opened_conn.close()
+                if transferred_owner is None:
+                    ctx.project_owner = None
+                    target_owner_committed = False
+                _clear_unlocked_passphrase(ctx)
+                raise
+            entry = get_project(entry.id)
+        else:
             target_conn, target_runtime_config = _open_project_connection_for_switch(
                 entry,
                 data_root=target_data_root,
                 passphrase=passphrase if target_encrypted else None,
                 require_existing_schema=require_existing_schema,
             )
-        except Exception:
-            if transferred_owner is None:
+            target_auth_backoff = AuthAttemptBackoff(
+                str(resolve_config_root(target_data_root) / AUTH_BACKOFF_FILENAME)
+            )
+            old_freshness_was_running = (
+                ctx.freshness_worker is not None
+                and ctx.freshness_worker.is_alive()
+            )
+            _stop_freshness_background_worker(ctx, cancel_running=True)
+            try:
+                entry = set_selected_project(entry.id, last_opened_at=now_iso())
+            except Exception:
+                if old_freshness_was_running:
+                    try:
+                        _start_freshness_background_worker(
+                            ctx,
+                            passphrase=ctx.db_passphrase,
+                        )
+                    except Exception as restart_error:
+                        _REQUEST_LOGGER.error(
+                            "freshness worker restart failed after project switch rollback",
+                            exc_info=restart_error,
+                        )
+                raise
+
+            old_conn = ctx.conn
+            old_owner = ctx.project_owner
+            ctx.document_import_sessions.clear()
+            ctx.project_id = entry.id
+            ctx.project_root = str(entry.root)
+            ctx.data_root = target_data_root
+            ctx.select_project_on_open = True
+            ctx.runtime_config = target_runtime_config
+            ctx.auth_backoff = target_auth_backoff
+            ctx.project_owner = target_owner
+            ctx.conn = target_conn
+            ctx.db_passphrase = passphrase if target_encrypted else None
+            target_conn = None
+            target_owner_committed = True
+
+            try:
+                _start_freshness_background_worker(ctx, passphrase=passphrase)
+            except Exception as start_error:
+                _REQUEST_LOGGER.error(
+                    "freshness worker failed to start after project switch",
+                    exc_info=start_error,
+                )
+
+            if old_conn is not None and old_conn is not ctx.conn:
+                try:
+                    old_conn.close()
+                except Exception as close_error:
+                    _REQUEST_LOGGER.error(
+                        "retired project connection cleanup failed",
+                        exc_info=close_error,
+                    )
+            if old_owner is not None and old_owner is not target_owner:
+                try:
+                    old_owner.release()
+                except Exception as release_error:
+                    _REQUEST_LOGGER.error(
+                        "retired project ownership cleanup failed",
+                        exc_info=release_error,
+                    )
+    finally:
+        cleanup_error: Exception | None = None
+        if target_conn is not None:
+            try:
+                target_conn.close()
+            except Exception as error:
+                cleanup_error = error
+        if transferred_owner is None and not target_owner_committed:
+            try:
                 target_owner.release()
-            raise
-        try:
-            entry = set_selected_project(entry.id, last_opened_at=now_iso())
-        except Exception:
-            target_conn.close()
-            if transferred_owner is None:
-                target_owner.release()
-            raise
-        if transferred_owner is not None:
-            ctx.project_owner = None
-        _close_current_project_for_switch(ctx)
-        _set_ctx_project(ctx, entry, data_root=target_data_root)
-        ctx.project_owner = target_owner
-        ctx.runtime_config = target_runtime_config
-        ctx.conn = target_conn
-        _remember_unlocked_passphrase(ctx, passphrase)
-        _start_freshness_background_worker(ctx, passphrase=passphrase)
-    elif target_encrypted:
-        _open_daemon_connection(
-            ctx,
-            passphrase=passphrase,
-            require_existing_schema=require_existing_schema,
-        )
-    else:
-        _open_daemon_connection(
-            ctx,
-            require_existing_schema=require_existing_schema,
-        )
+            except Exception as error:
+                if cleanup_error is None:
+                    cleanup_error = error
+        if cleanup_error is not None:
+            if sys.exc_info()[0] is None:
+                raise cleanup_error
+            _REQUEST_LOGGER.error(
+                "project switch rollback cleanup failed",
+                exc_info=(
+                    type(cleanup_error),
+                    cleanup_error,
+                    cleanup_error.__traceback__,
+                ),
+            )
 
     return (
         _with_request_id(
             build_envelope(
                 "ui.projects.select",
                 {
-                    "project": _project_payload(mark_project_opened(entry.id, data_root=ctx.data_root)),
+                    "project": _project_payload(entry),
                     "status": _status_payload(ctx),
                 },
             ),
