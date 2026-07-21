@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
 from kassiber.db import open_db, resolve_database_path
 from kassiber.core import accounts as core_accounts
@@ -18,6 +19,25 @@ from kassiber.secrets.sqlcipher import sqlcipher_available
 
 
 BROKER_START_TIMEOUT_SECONDS = 20.0
+BROKER_SERVER_COMMAND = [
+    sys.executable,
+    str(Path(__file__).with_name("operator_server_fixture.py")),
+]
+SOURCE_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _broker_environment(runtime: str) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+    environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
+    environment["XDG_RUNTIME_DIR"] = runtime
+    existing_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part
+        for part in (str(SOURCE_ROOT), existing_pythonpath)
+        if part
+    )
+    return environment
 
 
 def _wait_for_broker(
@@ -51,13 +71,10 @@ class OperatorIntegrationTest(unittest.TestCase):
     def test_simultaneous_startup_elects_one_broker(self) -> None:
         with tempfile.TemporaryDirectory() as runtime:
             os.chmod(runtime, 0o700)
-            environment = os.environ.copy()
-            environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
-            environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
-            environment["XDG_RUNTIME_DIR"] = runtime
+            environment = _broker_environment(runtime)
             processes = [
                 subprocess.Popen(
-                    [sys.executable, "-m", "kassiber.operator.server"],
+                    BROKER_SERVER_COMMAND,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
@@ -109,12 +126,9 @@ class OperatorIntegrationTest(unittest.TestCase):
                 365,
             )
             connection.close()
-            environment = os.environ.copy()
-            environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
-            environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
-            environment["XDG_RUNTIME_DIR"] = runtime
+            environment = _broker_environment(runtime)
             server = subprocess.Popen(
-                [sys.executable, "-m", "kassiber.operator.server"],
+                BROKER_SERVER_COMMAND,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
@@ -227,12 +241,9 @@ class OperatorIntegrationTest(unittest.TestCase):
                 scopes.append((workspace["id"], profile["id"]))
                 connection.close()
 
-            environment = os.environ.copy()
-            environment["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
-            environment[TEST_RUNTIME_OVERRIDE_ENV] = "1"
-            environment["XDG_RUNTIME_DIR"] = runtime
+            environment = _broker_environment(runtime)
             server = subprocess.Popen(
-                [sys.executable, "-m", "kassiber.operator.server"],
+                BROKER_SERVER_COMMAND,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
