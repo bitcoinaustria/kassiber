@@ -485,7 +485,11 @@ jobs:
                 | grep "$expected_commit"
               ;;
             Windows)
-              cmd.exe /d /c 'ui-tauri\src-tauri\bin\kassiber.cmd --version' \
+              # Invoke the .cmd directly: Git Bash runs it via cmd.exe with
+              # correct argument passing. An explicit `cmd.exe /d /c ...` is
+              # broken here because MSYS path conversion mangles /d and /c,
+              # leaving cmd interactive and the smoke silently failing.
+              ./ui-tauri/src-tauri/bin/kassiber.cmd --version \
                 | grep "$expected_commit"
               ;;
           esac
