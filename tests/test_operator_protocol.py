@@ -167,7 +167,11 @@ class OperatorProtocolTest(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Unix stable endpoint test")
     def test_production_environment_variation_cannot_split_broker_election(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        # macOS places its default temporary directory below a long
+        # /var/folders path while AF_UNIX endpoints are limited to 104 bytes.
+        # Keep this election test focused on environment independence; socket
+        # path-length handling is not what it is asserting.
+        with tempfile.TemporaryDirectory(prefix="kb-op-", dir="/tmp") as tmp:
             root = Path(tmp)
             account = root / "account"
             account.mkdir(mode=0o700)
@@ -244,7 +248,10 @@ class OperatorProtocolTest(unittest.TestCase):
                         operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "0",
                     },
                 ):
-                    self.assertEqual(operator_runtime_dir(), account_runtime)
+                    self.assertEqual(
+                        operator_runtime_dir(),
+                        account_runtime.resolve(),
+                    )
                 with mock.patch.dict(
                     os.environ,
                     {
@@ -252,7 +259,10 @@ class OperatorProtocolTest(unittest.TestCase):
                         operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
                     },
                 ):
-                    self.assertEqual(operator_runtime_dir(), Path(override))
+                    self.assertEqual(
+                        operator_runtime_dir(),
+                        Path(override).resolve(),
+                    )
                 with mock.patch.object(sys, "frozen", True), mock.patch.dict(
                     os.environ,
                     {
@@ -260,7 +270,10 @@ class OperatorProtocolTest(unittest.TestCase):
                         operator_protocol.TEST_RUNTIME_OVERRIDE_ENV: "1",
                     },
                 ):
-                    self.assertEqual(operator_runtime_dir(), account_runtime)
+                    self.assertEqual(
+                        operator_runtime_dir(),
+                        account_runtime.resolve(),
+                    )
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "SO_PEERCRED test")
     def test_cross_user_unix_peer_is_rejected(self) -> None:

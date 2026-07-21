@@ -210,7 +210,10 @@ class OperatorProjectTest(unittest.TestCase):
                 project = canonical_project(tmp)
             self.assertEqual(
                 project.lock_path.parent,
-                Path(account) / ".kassiber" / "run" / "operator-owners",
+                Path(account).resolve()
+                / ".kassiber"
+                / "run"
+                / "operator-owners",
             )
 
     def test_broker_first_blocks_desktop_owner(self) -> None:

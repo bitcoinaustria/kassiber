@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import logging
+import sys
 import tempfile
 import threading
 import time
@@ -1159,7 +1160,10 @@ class OperatorServiceTest(unittest.TestCase):
                 service.close()
 
     @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
-    @unittest.skipIf(os.name == "nt", "small POSIX pipe regression")
+    @unittest.skipUnless(
+        sys.platform.startswith("linux"),
+        "Linux small-pipe regression",
+    )
     def test_no_bootstrap_child_drains_lease_before_second_secret(self) -> None:
         import fcntl
 
@@ -1229,7 +1233,10 @@ class OperatorServiceTest(unittest.TestCase):
             self.assertIn("missing_backup", outcome[0].stdout)
 
     @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
-    @unittest.skipIf(os.name == "nt", "small POSIX pipe regression")
+    @unittest.skipUnless(
+        sys.platform.startswith("linux"),
+        "Linux small-pipe regression",
+    )
     def test_worker_discards_caller_database_fd_before_lease_handoff(self) -> None:
         import fcntl
 
@@ -1297,7 +1304,10 @@ class OperatorServiceTest(unittest.TestCase):
             self.assertEqual(json.loads(outcome[0].stdout)["kind"], "status")
 
     @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
-    @unittest.skipIf(os.name == "nt", "small POSIX pipe regression")
+    @unittest.skipUnless(
+        sys.platform.startswith("linux"),
+        "Linux small-pipe regression",
+    )
     def test_worker_feeds_multiple_large_command_secrets_concurrently(self) -> None:
         import fcntl
 
@@ -1535,7 +1545,7 @@ class OperatorServiceTest(unittest.TestCase):
                     seen[0][:8],
                     [
                         "--data-root",
-                        tmp,
+                        str(Path(tmp).resolve()),
                         "transactions",
                         "list",
                         "--workspace",
@@ -2665,7 +2675,7 @@ class OperatorServiceTest(unittest.TestCase):
                     seen[1][:8],
                     [
                         "--data-root",
-                        tmp,
+                        str(Path(tmp).resolve()),
                         "transactions",
                         "list",
                         "--workspace",
