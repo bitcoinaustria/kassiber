@@ -4858,6 +4858,19 @@ def cmd_init(conn, args):
 
 
 def cmd_status(conn, args):
+    initialized = bool(get_setting(conn, "app_version"))
+    if not initialized:
+        legacy_scope = conn.execute(
+            "SELECT EXISTS(SELECT 1 FROM workspaces LIMIT 1)"
+        ).fetchone()[0]
+        if not legacy_scope:
+            raise AppError(
+                "Kassiber is not initialized yet",
+                code="not_initialized",
+                hint="Run `kassiber init`, then run `kassiber status` again.",
+                details={"data_root": str(args.data_root)},
+                retryable=False,
+            )
     payload = show_status(conn, args.data_root)
     payload["default_backend"] = args.runtime_config["default_backend"]
     payload["env_file"] = args.runtime_config["env_file"]

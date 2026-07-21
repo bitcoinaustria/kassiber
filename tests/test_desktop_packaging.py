@@ -1,10 +1,13 @@
 import json
+import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+from kassiber.operator.native_auth import _MACOS_APP_EXECUTABLE_NAME
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +74,8 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("BUILD_CHANNEL:", workflow)
         self.assertIn('--channel "$BUILD_CHANNEL"', workflow)
         self.assertIn('"$cli" --version', workflow)
+        self.assertIn("error.code not_initialized", workflow)
+        self.assertIn('"$cli" --data-root "$status_root" --machine init', workflow)
         self.assertIn("Hosted Linux runners have no live logind user session", workflow)
         self.assertIn("--db-passphrase-fd 0 status", workflow)
         self.assertIn("--machine operator unlock", workflow)
@@ -83,6 +88,70 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("kassiber-cli-x86_64-pc-windows-msvc.exe", launcher)
         self.assertIn('"%KASSIBER_SIDECAR%" %*', launcher)
         self.assertNotIn("start ", launcher.lower())
+
+    def test_macos_bundle_launcher_executes_the_console_sidecar_without_appkit(self):
+        launcher = (ROOT / "ui-tauri/src-tauri/bin/kassiber").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("kassiber-cli-aarch64-apple-darwin", launcher)
+        self.assertIn("kassiber-cli-x86_64-apple-darwin", launcher)
+        self.assertIn(
+            f"app_executable=$contents_dir/MacOS/{_MACOS_APP_EXECUTABLE_NAME}",
+            launcher,
+        )
+        self.assertIn("KASSIBER_NATIVE_AUTH_HELPER", launcher)
+        self.assertIn('exec "$sidecar" "$@"', launcher)
+        self.assertNotIn('exec "$app_executable" --cli', launcher)
+
+    def test_macos_bundle_launcher_preserves_cli_context_and_arguments(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            contents = root / "Kassiber.app/Contents"
+            launcher = contents / "Resources/bin/kassiber"
+            sidecar = (
+                contents
+                / "Resources/binaries/kassiber-cli-aarch64-apple-darwin"
+            )
+            app_executable = contents / "MacOS/kassiber-ui"
+            scratch = root / "scratch"
+            launcher.parent.mkdir(parents=True)
+            sidecar.parent.mkdir(parents=True)
+            app_executable.parent.mkdir(parents=True)
+            scratch.mkdir()
+
+            shutil.copy2(ROOT / "ui-tauri/src-tauri/bin/kassiber", launcher)
+            sidecar.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$KASSIBER_NATIVE_AUTH_HELPER\" \"$PWD\" \"$#\"\n"
+                "printf '<%s>\\n' \"$@\"\n",
+                encoding="utf-8",
+            )
+            sidecar.chmod(0o755)
+            app_executable.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+            app_executable.chmod(0o755)
+
+            environment = os.environ.copy()
+            environment["TMPDIR"] = str(scratch)
+            completed = subprocess.run(
+                [str(launcher), "status", "--machine"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=environment,
+                cwd=root,
+            )
+
+            self.assertEqual(
+                completed.stdout.splitlines(),
+                [
+                    str(app_executable),
+                    str(scratch),
+                    "2",
+                    "<status>",
+                    "<--machine>",
+                ],
+            )
+            self.assertEqual(completed.stderr, "")
 
     def test_local_macos_installer_delegates_to_the_rust_manager(self):
         installer = (ROOT / "scripts/install-macos-desktop-cli.sh").read_text(

@@ -2,8 +2,9 @@
 # Kassiber desktop CLI launcher for package managers.
 #
 # Homebrew casks can symlink this file from the installed .app bundle into
-# brew's bin directory. Resolve that symlink first, then forward to the desktop
-# executable so it can dispatch to the bundled CLI sidecar with --cli.
+# brew's bin directory. Resolve that symlink first, then execute the console
+# sidecar directly. Running the GUI executable from a terminal can initialize
+# AppKit before Rust's main function and leak macOS XPC diagnostics to stderr.
 
 set -eu
 
@@ -23,11 +24,52 @@ while [ -L "$launcher" ]; do
 done
 
 launcher_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")" && pwd)
-app_executable=$launcher_dir/../../MacOS/kassiber-ui
+resource_dir=$(CDPATH= cd -- "$launcher_dir/.." && pwd)
+contents_dir=$(CDPATH= cd -- "$resource_dir/.." && pwd)
+app_executable=$contents_dir/MacOS/kassiber-ui
+architecture=$(uname -m 2>/dev/null || true)
+case "$architecture" in
+  arm64|aarch64)
+    sidecar_names="kassiber-cli-aarch64-apple-darwin kassiber-cli-x86_64-apple-darwin"
+    ;;
+  x86_64|amd64)
+    sidecar_names="kassiber-cli-x86_64-apple-darwin kassiber-cli-aarch64-apple-darwin"
+    ;;
+  *)
+    sidecar_names="kassiber-cli-aarch64-apple-darwin kassiber-cli-x86_64-apple-darwin"
+    ;;
+esac
+
+sidecar=
+for sidecar_name in $sidecar_names; do
+  for candidate in "$resource_dir/binaries/$sidecar_name" "$resource_dir/$sidecar_name"; do
+    if [ -x "$candidate" ]; then
+      sidecar=$candidate
+      break 2
+    fi
+  done
+done
 
 if [ ! -x "$app_executable" ]; then
   echo "kassiber: desktop executable not found at $app_executable" >&2
   exit 127
 fi
 
-exec "$app_executable" --cli "$@"
+if [ -z "$sidecar" ]; then
+  echo "kassiber: bundled CLI sidecar not found in $resource_dir" >&2
+  exit 127
+fi
+
+# Touch ID commands still need the signed desktop executable as their native
+# authentication helper even though ordinary CLI commands bypass AppKit.
+export KASSIBER_NATIVE_AUTH_HELPER=$app_executable
+
+# Match the Rust forwarder's writable working-directory guarantee for frozen
+# dependencies that may otherwise try to write relative startup files.
+scratch=${TMPDIR:-/tmp}
+if [ ! -d "$scratch" ] || [ ! -w "$scratch" ]; then
+  scratch=/tmp
+fi
+cd "$scratch"
+
+exec "$sidecar" "$@"

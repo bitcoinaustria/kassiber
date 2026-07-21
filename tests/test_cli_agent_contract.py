@@ -157,6 +157,30 @@ class CliAgentContractTests(unittest.TestCase):
             self.assertEqual(actions["kind"], "next-actions")
             self.assertIn("suggestions", actions["data"])
 
+    def test_status_explains_that_a_fresh_data_root_needs_initialization(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            missing, code, _stderr = _run(
+                "--data-root", str(data_root), "--machine", "status"
+            )
+
+            self.assertEqual(code, 1)
+            self.assertEqual(missing["kind"], "error")
+            self.assertEqual(missing["error"]["code"], "not_initialized")
+            self.assertEqual(missing["error"]["message"], "Kassiber is not initialized yet")
+            self.assertIn("kassiber init", missing["error"]["hint"])
+
+            initialized, code, _stderr = _run(
+                "--data-root", str(data_root), "--machine", "init"
+            )
+            self.assertEqual(code, 0, initialized)
+
+            status, code, _stderr = _run(
+                "--data-root", str(data_root), "--machine", "status"
+            )
+            self.assertEqual(code, 0, status)
+            self.assertEqual(status["kind"], "status")
+
     def test_paginated_payloads_receive_standard_page_metadata(self):
         envelope = build_envelope(
             "items.list",
