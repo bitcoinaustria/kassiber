@@ -12,7 +12,7 @@
     "egress": "Network Monitor",
     "sourceFunds": "Mittelherkunft",
     "custodyGaps": "Verwahrungslücken",
-    "swaps": "Übertragungen & Verwahrung",
+    "swaps": "Verwahrung",
     "activity": "Aktivität",
     "logs": "Protokoll",
     "exitTax": "Wegzugsbesteuerung",
@@ -24,7 +24,7 @@
   },
   "badge": {
     "quarantine": "Quarantäne: {{count}} zu prüfen",
-    "swaps": "Swaps & Übertragungen: {{count}} zu prüfen",
+    "swaps": "Verwahrung: {{count}} offene Fragen",
     "journals": "Journale müssen verarbeitet werden"
   },
   "openBook": {

@@ -12,7 +12,7 @@
     "egress": "Network Monitor",
     "sourceFunds": "Source Funds",
     "custodyGaps": "Custody Gaps",
-    "swaps": "Transfers & Custody",
+    "swaps": "Custody",
     "activity": "Activity",
     "logs": "Logs",
     "exitTax": "Exit Tax",
@@ -24,7 +24,7 @@
   },
   "badge": {
     "quarantine": "Quarantine: {{count}} awaiting review",
-    "swaps": "Swaps & transfers: {{count}} to review",
+    "swaps": "Custody: {{count}} open questions",
     "journals": "Journals need processing"
   },
   "openBook": {

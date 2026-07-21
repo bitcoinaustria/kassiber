@@ -115,7 +115,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import {
+  useDaemon,
+  useDaemonInfinite,
+  useDaemonMutation,
+} from "@/daemon/client";
 import {
   formatCustodyExactInteger,
   type CustodyExactInteger,
@@ -139,7 +143,19 @@ import {
   pairHistoryExactInteger,
   pairHistoryFeePercent,
 } from "./swapPairHistoryModel";
-import { CustodyGapsContent } from "./CustodyGaps";
+import {
+  CustodyCoverageTimeline,
+  CustodyGapCard,
+  CustodyLineageTimeline,
+} from "./CustodyGaps";
+import {
+  collectCustodyGapPages,
+  collectCustodyLineagePages,
+  type CustodyCoverageSnapshot,
+  type CustodyGapSnapshot,
+  type CustodyLineageSnapshot,
+} from "./custodyGapsModel";
+import { CustodyInbox } from "./transfers-custody/CustodyInbox";
 import {
   custodyBackendIssueText,
   custodyMutationError,
@@ -551,18 +567,25 @@ function railForLeg(
   return "onchain";
 }
 
-type CustodySurfaceTab = "review" | "gaps" | "components";
-type PairingView = "review" | "paired";
+type CustodySurfaceTab = "inbox" | "history" | "advanced";
+
+/** Legacy `?tab=` values (old deep links, the /custody-gaps redirect, saved
+ * bookmarks) map onto the three-tab inbox surface. */
+function resolveTab(tab: string | undefined): CustodySurfaceTab | null {
+  if (tab === "inbox" || tab === "review" || tab === "gaps") return "inbox";
+  if (tab === "history") return "history";
+  if (tab === "advanced" || tab === "components") return "advanced";
+  return null;
+}
 
 /**
- * Transfers & Custody — the single custody surface.
+ * Custody — the single custody surface.
  *
- * Merges the former standalone `/swaps` and `/custody-gaps` screens into three
- * tabs: **Review** (the pairing candidate queue for Bitcoin moves and asset
- * swaps, plus its settled History), **Custody gaps** (the guided missing-wallet
- * bridge/residual workflow), and **Components** (versioned custody
- * interpretations). The old top-level Bitcoin-moves/Swaps split is now a
- * segmented control inside the Review tab so there is one queue, not two.
+ * **Inbox** is the primary path: one ranked decision queue over custody-gap
+ * questions and pairing candidates, one plain-language card per question.
+ * **History** shows every settled pairing. **Advanced** hosts the expert
+ * tools (bulk review + rules, component authoring, gap records, coverage and
+ * lineage timelines) — none of which are required to close questions.
  */
 export function SwapMatching() {
   const { t } = useTranslation("review");
@@ -571,40 +594,25 @@ export function SwapMatching() {
     method?: "ownership_graph";
     tab?: string;
   };
-  // A `focus`/`method` deep link always targets the pairing queue; otherwise an
-  // explicit `?tab=` hint (used by the /custody-gaps redirect) selects the tab.
-  const deepLinkToReview = Boolean(search.focus || search.method);
-  const initialTab: CustodySurfaceTab = deepLinkToReview
-    ? "review"
-    : search.tab === "gaps"
-      ? "gaps"
-      : search.tab === "components"
-        ? "components"
-        : "review";
+  // A `focus`/`method` deep link always targets the inbox; otherwise an
+  // explicit `?tab=` hint selects the tab.
+  const deepLinkToInbox = Boolean(search.focus || search.method);
+  const initialTab: CustodySurfaceTab = deepLinkToInbox
+    ? "inbox"
+    : (resolveTab(search.tab) ?? "inbox");
   const [activeTab, setActiveTab] = useState<CustodySurfaceTab>(initialTab);
-  // Within Review, transfers vs swaps is a segmented control rather than a
-  // top-level tab. The settled "History" list isn't a tab either — it opens
-  // from a History card in the review-queue metrics and returns via a back
-  // control. The view is shared across both modes.
-  const [reviewMode, setReviewMode] = useState<PairingReviewMode>("transfers");
-  const [view, setView] = useState<PairingView>("review");
-  const showHistory = () => setView("paired");
-  const showReview = () => setView("review");
 
   // Re-sync the active tab when the URL search changes while already mounted —
-  // e.g. the /custody-gaps → /swaps?tab=gaps redirect fired with this screen
-  // already on /swaps (the initial useState above only reads search at mount).
-  // A manual tab click does not change search, so it is never overridden.
+  // e.g. the /custody-gaps redirect fired with this screen already on /swaps
+  // (the initial useState above only reads search at mount). A manual tab
+  // click does not change search, so it is never overridden.
   useEffect(() => {
     if (search.focus || search.method) {
-      setActiveTab("review");
-    } else if (
-      search.tab === "gaps" ||
-      search.tab === "components" ||
-      search.tab === "review"
-    ) {
-      setActiveTab(search.tab);
+      setActiveTab("inbox");
+      return;
     }
+    const resolved = resolveTab(search.tab);
+    if (resolved) setActiveTab(resolved);
   }, [search.tab, search.focus, search.method]);
 
   return (
@@ -616,57 +624,216 @@ export function SwapMatching() {
       >
         <div className={pageHeaderClassName}>
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-            <TabsTrigger value="review">{t("swap.tabs.review")}</TabsTrigger>
-            <TabsTrigger value="gaps">{t("swap.tabs.gaps")}</TabsTrigger>
-            <TabsTrigger value="components">{t("swap.tabs.components")}</TabsTrigger>
+            <TabsTrigger value="inbox">{t("swap.tabs.inbox")}</TabsTrigger>
+            <TabsTrigger value="history">{t("swap.tabs.history")}</TabsTrigger>
+            <TabsTrigger value="advanced">{t("swap.tabs.advanced")}</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="review" className="mt-0 space-y-3">
-          {activeTab === "review" ? (
-            <>
-              <Tabs
-                value={reviewMode}
-                onValueChange={(value) => {
-                  setReviewMode(value as PairingReviewMode);
-                  setView("review");
-                }}
-              >
-                <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-                  <TabsTrigger value="transfers">
-                    {t("swap.tabs.transfers")}
-                  </TabsTrigger>
-                  <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              {view === "review" ? (
-                <PairingReview
-                  key={reviewMode}
-                  mode={reviewMode}
-                  onShowHistory={showHistory}
-                  focusTransactionId={
-                    reviewMode === "transfers" ? search.focus : undefined
-                  }
-                  initialMethod={
-                    reviewMode === "transfers" ? search.method : undefined
-                  }
-                />
-              ) : (
-                <PairedSwaps
-                  key={reviewMode}
-                  mode={reviewMode}
-                  onBackToReview={showReview}
-                />
-              )}
-            </>
+        <TabsContent value="inbox" className="mt-0">
+          {activeTab === "inbox" ? (
+            <CustodyInbox focusTransactionId={search.focus} />
           ) : null}
         </TabsContent>
-        <TabsContent value="gaps" className="mt-0">
-          {activeTab === "gaps" ? <CustodyGapsContent /> : null}
+        <TabsContent value="history" className="mt-0">
+          {activeTab === "history" ? <PairedSwaps /> : null}
         </TabsContent>
-        <TabsContent value="components" className="mt-0">
-          {activeTab === "components" ? <CustodyComponentResolver /> : null}
+        <TabsContent value="advanced" className="mt-0">
+          {activeTab === "advanced" ? (
+            <AdvancedTools onShowHistory={() => setActiveTab("history")} />
+          ) : null}
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AdvancedSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} asChild>
+      <section className="overflow-hidden rounded-lg border bg-card">
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40">
+          <span>
+            <span className="block text-sm font-semibold">{title}</span>
+            <span className="block text-xs text-muted-foreground">
+              {description}
+            </span>
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="border-t p-3 sm:p-4">
+          {open ? children : null}
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
+  );
+}
+
+/** Expert record view: every gap the engine knows (all statuses), with the
+ * full review card incl. reopen/revise corrections and review history. */
+function CustodyGapRecords() {
+  const { t } = useTranslation("custodyGaps");
+  const gapsQuery = useDaemonInfinite<CustodyGapSnapshot>(
+    "ui.custody.gaps.list",
+    { limit: 100 },
+    (lastPage) => lastPage.data?.next_cursor ?? undefined,
+  );
+  const pages = (gapsQuery.data?.pages ?? [])
+    .map((page) => page.data)
+    .filter((page): page is CustodyGapSnapshot => Boolean(page));
+  const gaps = collectCustodyGapPages(pages);
+  if (gapsQuery.isLoading) {
+    return <p className="text-sm text-muted-foreground">{t("pagination.loading")}</p>;
+  }
+  if (!gaps.length) {
+    return <p className="text-sm text-muted-foreground">{t("empty.title")}</p>;
+  }
+  return (
+    <div className="space-y-3">
+      {gaps.map((gap) => (
+        <CustodyGapCard key={gap.gap_id} gap={gap} />
+      ))}
+      {gapsQuery.hasNextPage ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={gapsQuery.isFetchingNextPage}
+          onClick={() => void gapsQuery.fetchNextPage()}
+        >
+          {gapsQuery.isFetchingNextPage
+            ? t("pagination.loading")
+            : t("pagination.loadMore")}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function CustodyCoverageSection() {
+  const { t } = useTranslation("custodyGaps");
+  const coverageQuery = useDaemon<CustodyCoverageSnapshot>(
+    "ui.custody.coverage.snapshot",
+  );
+  if (coverageQuery.isLoading) {
+    return <p className="text-sm text-muted-foreground">{t("coverage.loading")}</p>;
+  }
+  if (!coverageQuery.data?.data) {
+    return (
+      <p className="text-sm text-muted-foreground">{t("coverage.unavailable")}</p>
+    );
+  }
+  return <CustodyCoverageTimeline snapshot={coverageQuery.data.data} />;
+}
+
+function CustodyLineageSection() {
+  const { t } = useTranslation("custodyGaps");
+  const lineageQuery = useDaemonInfinite<CustodyLineageSnapshot>(
+    "ui.custody.lineage.snapshot",
+    { limit: 100 },
+    (lastPage) => lastPage.data?.next_cursor ?? undefined,
+  );
+  const pages = (lineageQuery.data?.pages ?? [])
+    .map((page) => page.data)
+    .filter((page): page is CustodyLineageSnapshot => Boolean(page));
+  const snapshot = collectCustodyLineagePages(pages);
+  if (lineageQuery.isLoading) {
+    return <p className="text-sm text-muted-foreground">{t("lineage.loading")}</p>;
+  }
+  if (!snapshot) {
+    return (
+      <p className="text-sm text-muted-foreground">{t("lineage.unavailable")}</p>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <CustodyLineageTimeline snapshot={snapshot} />
+      {lineageQuery.hasNextPage ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={lineageQuery.isFetchingNextPage}
+          onClick={() => void lineageQuery.fetchNextPage()}
+        >
+          {lineageQuery.isFetchingNextPage
+            ? t("lineage.pagination.loading")
+            : t("lineage.pagination.loadMore")}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** The Advanced tab: expert tools stacked as closed disclosure sections so
+ * the tab itself stays calm. Nothing here is required to close questions. */
+function AdvancedTools({ onShowHistory }: { onShowHistory: () => void }) {
+  const { t } = useTranslation("review");
+  const [reviewMode, setReviewMode] = useState<PairingReviewMode>("transfers");
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">{t("swap.advanced.intro")}</p>
+      <AdvancedSection
+        title={t("swap.advanced.bulk.title")}
+        description={t("swap.advanced.bulk.description")}
+      >
+        <div className="space-y-3">
+          <Tabs
+            value={reviewMode}
+            onValueChange={(value) => setReviewMode(value as PairingReviewMode)}
+          >
+            <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+              <TabsTrigger value="transfers">
+                {t("swap.tabs.transfers")}
+              </TabsTrigger>
+              <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <PairingReview
+            key={reviewMode}
+            mode={reviewMode}
+            onShowHistory={onShowHistory}
+          />
+        </div>
+      </AdvancedSection>
+      <AdvancedSection
+        title={t("swap.advanced.components.title")}
+        description={t("swap.advanced.components.description")}
+      >
+        <CustodyComponentResolver />
+      </AdvancedSection>
+      <AdvancedSection
+        title={t("swap.advanced.gapRecords.title")}
+        description={t("swap.advanced.gapRecords.description")}
+      >
+        <CustodyGapRecords />
+      </AdvancedSection>
+      <AdvancedSection
+        title={t("swap.advanced.coverage.title")}
+        description={t("swap.advanced.coverage.description")}
+      >
+        <CustodyCoverageSection />
+      </AdvancedSection>
+      <AdvancedSection
+        title={t("swap.advanced.lineage.title")}
+        description={t("swap.advanced.lineage.description")}
+      >
+        <CustodyLineageSection />
+      </AdvancedSection>
     </div>
   );
 }
@@ -1241,8 +1408,10 @@ function PairedSwaps({
   mode,
   onBackToReview,
 }: {
-  mode: PairingReviewMode;
-  onBackToReview: () => void;
+  /** Restrict to one rail (the Advanced bulk-review "History" jump); the
+   * History tab passes no mode and shows every settled pairing. */
+  mode?: PairingReviewMode;
+  onBackToReview?: () => void;
 }) {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -1258,24 +1427,30 @@ function PairedSwaps({
   const pairs = useMemo(
     () =>
       (data?.data?.pairs ?? []).filter(
-        (pair) => pairReviewMode(pair) === mode,
+        (pair) => mode === undefined || pairReviewMode(pair) === mode,
       ),
     [data, mode],
   );
   const componentGroups = useMemo(() => groupPairedComponents(pairs), [pairs]);
 
   const title =
-    mode === "transfers"
-      ? t("swap.paired.transfersTitle")
-      : t("swap.paired.swapsTitle");
+    mode === undefined
+      ? t("swap.paired.historyTitle")
+      : mode === "transfers"
+        ? t("swap.paired.transfersTitle")
+        : t("swap.paired.swapsTitle");
   const description =
-    mode === "transfers"
-      ? t("swap.paired.transfersDescription")
-      : t("swap.paired.swapsDescription");
+    mode === undefined
+      ? t("swap.paired.historyDescription")
+      : mode === "transfers"
+        ? t("swap.paired.transfersDescription")
+        : t("swap.paired.swapsDescription");
   const emptyText =
-    mode === "transfers"
-      ? t("swap.paired.transfersEmpty")
-      : t("swap.paired.swapsEmpty");
+    mode === undefined
+      ? t("swap.paired.historyEmpty")
+      : mode === "transfers"
+        ? t("swap.paired.transfersEmpty")
+        : t("swap.paired.swapsEmpty");
 
   const handleSave = useCallback(
     async (pair: PairedSwap, kind: PairKind, policy: PairPolicy) => {
@@ -1315,15 +1490,17 @@ function PairedSwaps({
             <h1 className="text-base font-semibold">{title}</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(pageHeaderActionClassName, "shrink-0")}
-            onClick={onBackToReview}
-          >
-            <ArrowLeft className="size-3.5" aria-hidden="true" />
-            <span>{t("swap.paired.backToReview")}</span>
-          </Button>
+          {onBackToReview ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(pageHeaderActionClassName, "shrink-0")}
+              onClick={onBackToReview}
+            >
+              <ArrowLeft className="size-3.5" aria-hidden="true" />
+              <span>{t("swap.paired.backToReview")}</span>
+            </Button>
+          ) : null}
         </header>
 
         {actionError ? (

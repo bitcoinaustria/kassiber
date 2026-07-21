@@ -1,18 +1,5 @@
 {
-  "title": "Verwahrungslücken",
-  "description": "Prüfe Bitcoin, die möglicherweise beim selben Rechtsträger verblieben sind, obwohl sie eine nicht in Kassiber importierte Wallet-Historie durchlaufen haben.",
   "localOnly": "Lokal analysiert",
-  "summary": {
-    "needsReview": "Zu prüfen",
-    "detected": "Bekannte Lückeneinträge",
-    "unresolved": "Menge mit offener Verwahrungsprüfung",
-    "canonicalUnresolved": "Kanonische blockierende Menge",
-    "candidateResidual": "Nicht blockierender Kandidaten-Resthinweis",
-    "blockingIssueCount_one": "{{count}} blockierendes Problem",
-    "blockingIssueCount_other": "{{count}} blockierende Probleme",
-    "unquantified_one": "{{count}} weiteres blockierendes Problem hat keine exakte Menge.",
-    "unquantified_other": "{{count}} weitere blockierende Probleme haben keine exakte Menge."
-  },
   "coverage": {
     "title": "Zeitleiste importierter Wallet-Policies",
     "description": "Technische Scan-Abdeckung für in Kassiber importierte Wallet-Policies. Kassiber kann nicht wissen, ob alle Wallets des Rechtsträgers dieses Profils importiert wurden.",
@@ -72,10 +59,6 @@
       "reviewedDefault": "Geprüfter interner Verwahrungsnachweis",
       "verifiedDefault": "Verifizierter Wallet- oder Chain-Nachweis"
     }
-  },
-  "reviewQueue": {
-    "title": "Mögliche Rückflüsse aus fehlenden Wallets",
-    "description": "Vorschläge sind deterministisch und erstellen niemals automatisch eine Verwahrungsbrücke. Ein langer Zeitraum senkt die Sicherheit, blendet einen plausiblen langfristigen Rückfluss aber nicht aus."
   },
   "history": {
     "title": "Geprüfte Verwahrungshistorie",
@@ -267,23 +250,16 @@
     "return_exceeds_source": "Die vorgeschlagenen Rückflüsse übersteigen die Quellmenge; der Überschuss benötigt eine eigene Klassifizierung."
   },
   "empty": {
-    "title": "Keine bekannten Verwahrungslücken",
-    "body": "Kassiber hat in den derzeit importierten Nachweisen keine ungeklärte Verwahrungslücke gefunden. Ob niemals importierte Wallets existieren, kann Kassiber nicht feststellen."
+    "title": "Keine bekannten Verwahrungslücken"
   },
   "processing": {
-    "title": "Der Status der Verwahrungslücken benötigt eine Journalverarbeitung",
     "body": "Verarbeite das Journal, bevor die derzeit importierten Nachweise als unauffällig gelten."
   },
   "searchIncomplete": {
-    "title": "Die Vorschlagssuche hat eine Kapazitätsgrenze erreicht",
     "body": "Die sichtbaren Hinweise können unvollständig sein. Dies ist eine Einschränkung der beratenden Suche, kein Nachweis einer Veräußerung und für sich allein kein Steuerberichts-Blocker."
   },
   "blocking": {
     "title": "Bekannte Custody-Menge muss noch geprüft werden",
     "body": "{{count}} kanonischer Custody-Fall blockiert die endgültige Steuerbasis, obwohl derzeit kein Vorschlag für eine fehlende Wallet ihn automatisch lösen kann. Prüfe die Custody-Komponente oder die Quarantäne-Evidenz."
-  },
-  "unavailable": {
-    "title": "Verwahrungslücken nicht verfügbar",
-    "body": "Kassiber konnte die Übersicht der Verwahrungslücken nicht laden."
   }
 }

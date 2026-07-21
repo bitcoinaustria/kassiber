@@ -1,11 +1,11 @@
 {
   "swap": {
     "tabs": {
-      "review": "Review",
-      "gaps": "Custody gaps",
-      "swaps": "Swaps",
+      "inbox": "Inbox",
+      "history": "History",
+      "advanced": "Advanced",
       "transfers": "Bitcoin moves",
-      "components": "Components"
+      "swaps": "Swaps"
     },
     "components": {
       "title": "Custody components",
@@ -311,7 +311,10 @@
       "save": "Save changes",
       "unpairTitle": "Unpair these transactions?",
       "unpairBody": "The two legs go back to being unpaired and reappear in the review queue. Journal and tax deltas are recomputed on the next journal reprocess.",
-      "unpairConfirm": "Unpair"
+      "unpairConfirm": "Unpair",
+      "historyTitle": "Settled pairings",
+      "historyDescription": "Every confirmed transfer, Bitcoin move, and swap — grouped by custody component. Edit or unpair from here.",
+      "historyEmpty": "Nothing settled yet. Confirmed questions from the Inbox show up here."
     },
     "savedView": {
       "deleteAria": "Delete view {{name}}"
@@ -496,7 +499,117 @@
       "categoryNavigation": "Navigation",
       "categoryActions": "Actions"
     },
-    "dismissReason": "user dismissed from review queue"
+    "dismissReason": "user dismissed from review queue",
+    "inbox": {
+      "goalClear": "All clear — nothing blocks your reports.",
+      "goal_one": "{{count}} open question.",
+      "goal_other": "{{count}} open questions.",
+      "settled_one": "{{count}} settled",
+      "settled_other": "{{count}} settled",
+      "filter": {
+        "all": "All",
+        "blocking": "Blocks report",
+        "suggested": "Suggested"
+      },
+      "filterEmpty": "Nothing matches this filter.",
+      "hintsGroup_one": "{{count}} low-confidence hint — blocks nothing, review anytime",
+      "hintsGroup_other": "{{count}} low-confidence hints — block nothing, review anytime",
+      "line": {
+        "move": "{{out}} left {{from}} → {{in}} arrived {{to}}",
+        "residual": "Where did the remaining {{amount}} go?"
+      },
+      "type": {
+        "gap": "Missing wallet",
+        "transfer": "Transfer",
+        "layerTransition": "Bitcoin move",
+        "swap": "Swap",
+        "followUp": "Follow-up"
+      },
+      "suggestedBadge": "Suggested",
+      "competingBadge": "Competing evidence",
+      "blocksBadge": "Blocks report",
+      "whyTitle": "Why Kassiber thinks so",
+      "evidenceToggle": "Full evidence & review history",
+      "impactDisposals_one": "Resolving affects {{count}} later disposal.",
+      "impactDisposals_other": "Resolving affects {{count}} later disposals.",
+      "impactYears": "Re-opens tax years {{years}}.",
+      "actionFailed": "The action failed. Try again.",
+      "back": "Back",
+      "gap": {
+        "question": "Is this the same Bitcoin?",
+        "subtitle": "These coins look like they passed through a wallet you never imported. Kassiber can see the outflow and the return, but not the hop in between — so it asks instead of guessing.",
+        "unknownHop": "Unobserved wallet",
+        "feeNote": "Network fee · {{amount}}",
+        "residualNote": "Unexplained remainder · {{amount}}",
+        "yes": "Yes — it’s mine, connect it",
+        "no": "No — not my money",
+        "competingNote": "Another explanation competes for the same movement. Confirm only the one that matches what you actually did.",
+        "dismissTitle": "Not your money?",
+        "dismissBody": "The outflow keeps its presumed-disposal treatment. If new evidence appears later, this question reopens automatically.",
+        "dismissConfirm": "Confirm — not my money",
+        "connectedTitle": "Connected",
+        "connectedBody": "Kassiber recorded the reviewed bridge. Reprocess journals to update reports.",
+        "dismissedTitle": "Dismissed",
+        "dismissedBody": "This suggestion reopens automatically if the evidence changes."
+      },
+      "residual": {
+        "question": "Where did the remaining {{amount}} go?",
+        "subtitle": "{{out}} left, {{back}} came back, {{fee}} was the network fee. The rest needs one answer.",
+        "groupExternal": "It left my custody",
+        "groupMine": "Still mine",
+        "groupOpen": "Not sure yet",
+        "saveAnswer": "Save answer",
+        "savedTitle": "Answer saved",
+        "savedBody": "The remainder classification was recorded."
+      },
+      "candidate": {
+        "questionTransfer": "Is this your own transfer?",
+        "questionMove": "Is this one Bitcoin move?",
+        "questionSwap": "Is this one swap?",
+        "yesTransfer": "Yes — my transfer",
+        "yesMove": "Yes — one move",
+        "yesSwap": "Yes — one swap",
+        "no": "No — unrelated",
+        "pairing": "Recording…",
+        "feeNote": "Fee · {{amount}}",
+        "detailsToggle": "Details (kind & tax treatment)",
+        "competingNote_one": "{{count}} possible match shares one of these movements — confirm only the right one.",
+        "competingNote_other": "{{count}} possible matches share one of these movements — confirm only the right one.",
+        "pairedTitle": "Match recorded",
+        "pairedBody": "Reprocess journals to update reports.",
+        "dismissedTitle": "Dismissed",
+        "dismissedBody": "The candidate stays out of the queue unless new evidence changes it."
+      },
+      "done": {
+        "title": "All custody questions resolved",
+        "body": "Reports are no longer blocked by custody review. New questions appear here automatically when imports or syncs surface unexplained moves."
+      },
+      "blockingNote_one": "{{count}} blocks your reports ({{years}}).",
+      "blockingNote_other": "{{count}} block your reports ({{years}})."
+    },
+    "advanced": {
+      "intro": "Expert tools and technical evidence. Nothing here is required to close custody questions — the Inbox is the primary path.",
+      "bulk": {
+        "title": "Bulk review & rules",
+        "description": "Filters, multi-select pairing, auto-pair rules, and saved views over the candidate queue."
+      },
+      "components": {
+        "title": "Custody components",
+        "description": "Author and revise versioned custody interpretations leg by leg — the manual escape hatch for shapes the guided path refuses."
+      },
+      "gapRecords": {
+        "title": "Custody gap records",
+        "description": "Every known gap with its full review history, including reopen and revise corrections."
+      },
+      "coverage": {
+        "title": "Wallet coverage timeline",
+        "description": "Technical policy epochs and scan bounds of imported wallets — never clears a question."
+      },
+      "lineage": {
+        "title": "Custody lineage",
+        "description": "Every verified or reviewed custody move, with tax-basis eligibility per edge."
+      }
+    }
   },
   "reconcile": {
     "placeholder": "Paste one address or transaction id per line, for example:\nbc1qexampleaddress…\na1b2c3…  (64-char transaction id)",

@@ -4,14 +4,10 @@ import type { TFunction } from "i18next";
 import {
   ArrowRight,
   CheckCircle2,
-  Clock3,
-  Route,
-  ShieldCheck,
   TriangleAlert,
   WalletCards,
 } from "lucide-react";
 
-import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,16 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  useDaemon,
-  useDaemonInfinite,
-  useDaemonMutation,
-} from "@/daemon/client";
-import {
-  pageHeaderClassName,
-  screenPanelClassName,
-  screenShellClassName,
-} from "@/lib/screen-layout";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 import {
@@ -50,9 +37,6 @@ import {
   type ResidualClassificationPreview,
   bridgeCreateArgs,
   bridgePreviewArgs,
-  canShowNoKnownCustodyGaps,
-  collectCustodyGapPages,
-  collectCustodyLineagePages,
   custodyGapActionMode,
   formatCustodyMsat,
   reopenConfirmArgs,
@@ -1090,7 +1074,7 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
   );
 }
 
-function CustodyGapCard({ gap }: { gap: CustodyGap }) {
+export function CustodyGapCard({ gap }: { gap: CustodyGap }) {
   const { t, i18n } = useTranslation("custodyGaps");
   const [expanded, setExpanded] = useState(false);
   const hideSensitive = useUiStore((state) => state.hideSensitive);
@@ -1167,310 +1151,5 @@ function CustodyGapCard({ gap }: { gap: CustodyGap }) {
         {expanded ? <GapReviewDetails gapId={gap.gap_id} /> : null}
       </CardContent>
     </Card>
-  );
-}
-
-function CustodyGapsContent() {
-  const { t } = useTranslation("custodyGaps");
-  const hideSensitive = useUiStore((state) => state.hideSensitive);
-  const coverageQuery = useDaemon<CustodyCoverageSnapshot>(
-    "ui.custody.coverage.snapshot",
-  );
-  const lineageQuery = useDaemonInfinite<CustodyLineageSnapshot>(
-    "ui.custody.lineage.snapshot",
-    { limit: 100 },
-    (lastPage) => lastPage.data?.next_cursor ?? undefined,
-  );
-  const gapsQuery = useDaemonInfinite<CustodyGapSnapshot>(
-    "ui.custody.gaps.list",
-    { limit: 100 },
-    (lastPage) => lastPage.data?.next_cursor ?? undefined,
-  );
-  const pageEnvelopes = gapsQuery.data?.pages ?? [];
-  const pages = pageEnvelopes
-    .map((page) => page.data)
-    .filter((page): page is CustodyGapSnapshot => Boolean(page));
-  const snapshot = pages[0];
-  const gaps = collectCustodyGapPages(pages);
-  const lineagePages = (lineageQuery.data?.pages ?? [])
-    .map((page) => page.data)
-    .filter((page): page is CustodyLineageSnapshot => Boolean(page));
-  const lineageSnapshot = collectCustodyLineagePages(lineagePages);
-
-  if (gapsQuery.isLoading) return <ScreenSkeleton titleWidth="w-48" />;
-  if (gapsQuery.isError || !snapshot) {
-    const firstPage = pageEnvelopes[0];
-    return (
-      <div className={screenPanelClassName}>
-        <Card className="gap-2 py-5">
-          <CardHeader>
-            <CardTitle>{t("unavailable.title")}</CardTitle>
-            <CardDescription>
-              {gapsQuery.error instanceof Error
-                ? gapsQuery.error.message
-                : firstPage?.error?.message ?? t("unavailable.body")}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
-  const reviewGaps = gaps.filter(
-    (gap) => gap.status === "needs_review" || gap.status === "conflicting",
-  );
-  const canonicalIssueCount = snapshot.summary.canonical_issue_count ?? 0;
-  const canonicalAmounts = snapshot.summary.canonical_unresolved_by_asset ?? [];
-  const canonicalUnquantified =
-    snapshot.summary.canonical_unquantified_issue_count ?? 0;
-  const candidateAmounts = snapshot.summary.candidate_residual_by_asset ?? [];
-  const derivedStateCurrent = snapshot.summary.derived_state_current === true;
-  const searchComplete = snapshot.summary.search_complete !== false;
-  const canShowClear = canShowNoKnownCustodyGaps(snapshot, reviewGaps.length);
-
-  return (
-    <div className="space-y-3 sm:space-y-4">
-      <div className={pageHeaderClassName}>
-        <div>
-          <div className="flex items-center gap-2">
-            <Route className="size-5" aria-hidden="true" />
-            <h1 className="text-xl font-semibold">{t("title")}</h1>
-          </div>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            {t("description")}
-          </p>
-        </div>
-        <Badge variant="outline" className="w-fit gap-1.5">
-          <ShieldCheck className="size-3.5" /> {t("localOnly")}
-        </Badge>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="gap-2 py-4">
-          <CardContent className="flex items-center gap-3 px-4">
-            <TriangleAlert className="size-5 text-amber-600" />
-            <div>
-              <p className="text-2xl font-semibold">
-                {snapshot.summary.needs_review}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t("summary.needsReview")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardContent className="flex items-center gap-3 px-4">
-            <WalletCards className="size-5 text-muted-foreground" />
-            <div>
-              <p className="text-2xl font-semibold">{snapshot.summary.total}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("summary.detected")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardContent className="flex items-center gap-3 px-4">
-            <Clock3 className="size-5 text-muted-foreground" />
-            <div>
-              <p
-                className={cn(
-                  "text-base font-semibold",
-                  hideSensitive && "sensitive",
-                )}
-              >
-                {canonicalIssueCount > 0 ? (
-                  canonicalAmounts.length > 0 ? (
-                    canonicalAmounts.map((item) => (
-                      <span className="block" key={item.asset}>
-                        {formatCustodyMsat(item.amount_msat, item.asset)}
-                      </span>
-                    ))
-                  ) : (
-                    t("summary.blockingIssueCount", { count: canonicalIssueCount })
-                  )
-                ) : candidateAmounts.length > 0 ? (
-                  candidateAmounts.map((item) => (
-                    <span className="block" key={item.asset}>
-                      {formatCustodyMsat(item.amount_msat, item.asset)}
-                    </span>
-                  ))
-                ) : (
-                  formatCustodyMsat(0, "BTC")
-                )}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {canonicalIssueCount > 0
-                  ? t("summary.canonicalUnresolved")
-                  : t("summary.candidateResidual")}
-              </p>
-              {canonicalUnquantified > 0 ? (
-                <p className="text-xs text-amber-700">
-                  {t("summary.unquantified", { count: canonicalUnquantified })}
-                </p>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {!derivedStateCurrent ? (
-        <Card className="gap-3 border-amber-500/30 bg-amber-500/5 py-6">
-          <CardHeader className="px-5">
-            <CardTitle className="flex items-center gap-2">
-              <Clock3 className="size-5 text-amber-600" />
-              {t("processing.title")}
-            </CardTitle>
-            <CardDescription>{t("processing.body")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : null}
-
-      {!searchComplete ? (
-        <Card className="gap-3 border-amber-500/30 bg-amber-500/5 py-6">
-          <CardHeader className="px-5">
-            <CardTitle className="flex items-center gap-2">
-              <TriangleAlert className="size-5 text-amber-600" />
-              {t("searchIncomplete.title")}
-            </CardTitle>
-            <CardDescription>{t("searchIncomplete.body")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : null}
-
-      {coverageQuery.data?.data ? (
-        <CustodyCoverageTimeline snapshot={coverageQuery.data.data} />
-      ) : coverageQuery.isLoading ? (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("coverage.title")}</CardTitle>
-            <CardDescription>{t("coverage.loading")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("coverage.title")}</CardTitle>
-            <CardDescription>{t("coverage.unavailable")}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      {lineageSnapshot ? (
-        <>
-          <CustodyLineageTimeline snapshot={lineageSnapshot} />
-          {lineageQuery.hasNextPage ? (
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-xs text-muted-foreground">
-                {t("lineage.pagination.loaded", {
-                  loaded: lineageSnapshot.items.length,
-                  total: lineageSnapshot.summary.total_count,
-                })}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={lineageQuery.isFetchingNextPage}
-                onClick={() => void lineageQuery.fetchNextPage()}
-              >
-                {lineageQuery.isFetchingNextPage
-                  ? t("lineage.pagination.loading")
-                  : t("lineage.pagination.loadMore")}
-              </Button>
-            </div>
-          ) : null}
-        </>
-      ) : lineageQuery.isLoading ? (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("lineage.title")}</CardTitle>
-            <CardDescription>{t("lineage.loading")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <Card className="gap-2 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("lineage.title")}</CardTitle>
-            <CardDescription>{t("lineage.unavailable")}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      {reviewGaps.length ? (
-        <section
-          className="space-y-3"
-          aria-labelledby="custody-gaps-review-title"
-        >
-          <div>
-            <h2 id="custody-gaps-review-title" className="font-semibold">
-              {t("reviewQueue.title")}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {t("reviewQueue.description")}
-            </p>
-          </div>
-          {reviewGaps.map((gap) => (
-            <CustodyGapCard key={gap.gap_id} gap={gap} />
-          ))}
-        </section>
-      ) : derivedStateCurrent && canonicalIssueCount > 0 ? (
-        <Card className="gap-3 border-amber-500/30 bg-amber-500/5 py-6">
-          <CardHeader className="px-5">
-            <CardTitle className="flex items-center gap-2">
-              <TriangleAlert className="size-5 text-amber-600" />
-              {t("blocking.title")}
-            </CardTitle>
-            <CardDescription>
-              {t("blocking.body", { count: canonicalIssueCount })}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : canShowClear ? (
-        <Card className="items-center gap-3 py-10 text-center">
-          <CheckCircle2 className="size-8 text-emerald-600" />
-          <CardHeader className="max-w-xl px-5">
-            <CardTitle>{t("empty.title")}</CardTitle>
-            <CardDescription>{t("empty.body")}</CardDescription>
-          </CardHeader>
-        </Card>
-      ) : null}
-      {gapsQuery.hasNextPage ? (
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-xs text-muted-foreground">
-            {t("pagination.loaded", {
-              loaded: gaps.length,
-              total: snapshot.summary.total,
-            })}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={gapsQuery.isFetchingNextPage}
-            onClick={() => void gapsQuery.fetchNextPage()}
-          >
-            {gapsQuery.isFetchingNextPage
-              ? t("pagination.loading")
-              : t("pagination.loadMore")}
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-export { CustodyGapsContent };
-
-/**
- * Standalone Custody Gaps screen wrapper. The merged "Transfers & Custody"
- * surface renders {@link CustodyGapsContent} directly inside a tab (which
- * already sits inside the shared screen shell), so the shell padding lives here
- * for any standalone use rather than in the content component.
- */
-export function CustodyGaps() {
-  return (
-    <div className={screenShellClassName}>
-      <CustodyGapsContent />
-    </div>
   );
 }

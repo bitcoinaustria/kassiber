@@ -199,8 +199,8 @@ const PAGE_RESULTS: SearchResult[] = [
   {
     id: "page:swaps-transfers",
     category: "page",
-    title: "Transfers & Custody",
-    subtitle: "Review pairings, custody gaps, and custody components",
+    title: "Custody",
+    subtitle: "One inbox for transfers, swaps, and missing-wallet questions",
     keywords: [
       "swap",
       "swaps",
@@ -209,6 +209,7 @@ const PAGE_RESULTS: SearchResult[] = [
       "review",
       "pair",
       "custody",
+      "inbox",
       "gap",
       "gaps",
       "missing wallet",

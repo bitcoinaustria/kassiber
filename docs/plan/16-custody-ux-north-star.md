@@ -1,7 +1,10 @@
 # 16 — Custody UX north star: the Custody Inbox
 
-Status: design direction for the Transfers & Custody surface (supersedes the
-information architecture shipped in PR #455, keeps its daemon contracts).
+Status: implemented — the `/swaps` route now ships the Inbox | History |
+Advanced surface described below (`ui-tauri/src/routes/transfers-custody/
+CustodyInbox.tsx` + decision cards + `inboxModel.ts`); supersedes the
+information architecture shipped in PR #455 while keeping its daemon
+contracts.
 An interactive mockup of this design lives at
 [docs/plan/assets/custody-inbox.html](assets/custody-inbox.html) — open it
 directly in a browser (a working copy may also sit in the untracked

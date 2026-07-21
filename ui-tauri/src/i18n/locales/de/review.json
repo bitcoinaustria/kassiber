@@ -1,11 +1,11 @@
 {
   "swap": {
     "tabs": {
-      "review": "Prüfung",
-      "gaps": "Verwahrungslücken",
-      "swaps": "Swaps",
+      "inbox": "Offene Fragen",
+      "history": "Verlauf",
+      "advanced": "Erweitert",
       "transfers": "Bitcoin-Bewegungen",
-      "components": "Komponenten"
+      "swaps": "Swaps"
     },
     "components": {
       "title": "Verwahrungskomponenten",
@@ -311,7 +311,10 @@
       "save": "Änderungen speichern",
       "unpairTitle": "Diese Transaktionen entpaaren?",
       "unpairBody": "Die beiden Legs werden wieder ungepaart und erscheinen erneut in der Prüfungs-Warteschlange. Journal- und Steuer-Deltas werden beim nächsten Journal-Lauf neu berechnet.",
-      "unpairConfirm": "Paarung aufheben"
+      "unpairConfirm": "Paarung aufheben",
+      "historyTitle": "Erledigte Zuordnungen",
+      "historyDescription": "Jede bestätigte Übertragung, Bitcoin-Bewegung und jeder Swap — gruppiert nach Custody-Komponente. Hier bearbeiten oder trennen.",
+      "historyEmpty": "Noch nichts erledigt. Bestätigte Fragen aus den offenen Fragen erscheinen hier."
     },
     "savedView": {
       "deleteAria": "Ansicht {{name}} löschen"
@@ -496,7 +499,117 @@
       "categoryNavigation": "Navigation",
       "categoryActions": "Aktionen"
     },
-    "dismissReason": "vom Benutzer aus der Prüfungs-Warteschlange verworfen"
+    "dismissReason": "vom Benutzer aus der Prüfungs-Warteschlange verworfen",
+    "inbox": {
+      "goalClear": "Alles geklärt — nichts blockiert deine Berichte.",
+      "goal_one": "{{count}} offene Frage.",
+      "goal_other": "{{count}} offene Fragen.",
+      "settled_one": "{{count}} erledigt",
+      "settled_other": "{{count}} erledigt",
+      "filter": {
+        "all": "Alle",
+        "blocking": "Blockiert Bericht",
+        "suggested": "Vorgeschlagen"
+      },
+      "filterEmpty": "Nichts entspricht diesem Filter.",
+      "hintsGroup_one": "{{count}} vager Hinweis — blockiert nichts, jederzeit prüfbar",
+      "hintsGroup_other": "{{count}} vage Hinweise — blockieren nichts, jederzeit prüfbar",
+      "line": {
+        "move": "{{out}} aus {{from}} → {{in}} in {{to}}",
+        "residual": "Wohin sind die restlichen {{amount}} gegangen?"
+      },
+      "type": {
+        "gap": "Fehlende Wallet",
+        "transfer": "Übertragung",
+        "layerTransition": "Bitcoin-Bewegung",
+        "swap": "Swap",
+        "followUp": "Nachfrage"
+      },
+      "suggestedBadge": "Vorgeschlagen",
+      "competingBadge": "Widersprüchliche Nachweise",
+      "blocksBadge": "Blockiert Bericht",
+      "whyTitle": "Warum Kassiber das vermutet",
+      "evidenceToggle": "Alle Nachweise & Prüfverlauf",
+      "impactDisposals_one": "Die Klärung betrifft {{count}} spätere Veräußerung.",
+      "impactDisposals_other": "Die Klärung betrifft {{count}} spätere Veräußerungen.",
+      "impactYears": "Öffnet die Steuerjahre {{years}} neu.",
+      "actionFailed": "Die Aktion ist fehlgeschlagen. Versuch es erneut.",
+      "back": "Zurück",
+      "gap": {
+        "question": "Sind das dieselben Coins?",
+        "subtitle": "Diese Coins sind anscheinend durch eine Wallet gelaufen, die du nie importiert hast. Kassiber sieht den Abgang und die Rückkehr, aber nicht den Zwischenschritt — deshalb fragt es nach, statt zu raten.",
+        "unknownHop": "Nicht beobachtete Wallet",
+        "feeNote": "Netzwerkgebühr · {{amount}}",
+        "residualNote": "Ungeklärter Rest · {{amount}}",
+        "yes": "Ja — gehört mir, verbinden",
+        "no": "Nein — nicht mein Geld",
+        "competingNote": "Eine andere Erklärung konkurriert um dieselbe Bewegung. Bestätige nur die, die zu dem passt, was du tatsächlich gemacht hast.",
+        "dismissTitle": "Nicht dein Geld?",
+        "dismissBody": "Der Abgang behält seine Behandlung als vermutete Veräußerung. Tauchen später neue Nachweise auf, öffnet sich diese Frage automatisch wieder.",
+        "dismissConfirm": "Bestätigen — nicht mein Geld",
+        "connectedTitle": "Verbunden",
+        "connectedBody": "Kassiber hat die geprüfte Brücke erfasst. Verarbeite das Journal, um die Berichte zu aktualisieren.",
+        "dismissedTitle": "Verworfen",
+        "dismissedBody": "Dieser Vorschlag öffnet sich automatisch wieder, wenn sich die Nachweise ändern."
+      },
+      "residual": {
+        "question": "Wohin sind die restlichen {{amount}} gegangen?",
+        "subtitle": "{{out}} sind abgegangen, {{back}} kamen zurück, {{fee}} war die Netzwerkgebühr. Der Rest braucht eine Antwort.",
+        "groupExternal": "Hat meine Verwahrung verlassen",
+        "groupMine": "Noch meins",
+        "groupOpen": "Noch unklar",
+        "saveAnswer": "Antwort speichern",
+        "savedTitle": "Antwort gespeichert",
+        "savedBody": "Die Einordnung des Rests wurde erfasst."
+      },
+      "candidate": {
+        "questionTransfer": "Ist das deine eigene Übertragung?",
+        "questionMove": "Ist das eine einzige Bitcoin-Bewegung?",
+        "questionSwap": "Ist das ein einziger Swap?",
+        "yesTransfer": "Ja — meine Übertragung",
+        "yesMove": "Ja — eine Bewegung",
+        "yesSwap": "Ja — ein Swap",
+        "no": "Nein — unabhängig",
+        "pairing": "Wird erfasst…",
+        "feeNote": "Gebühr · {{amount}}",
+        "detailsToggle": "Details (Art & steuerliche Behandlung)",
+        "competingNote_one": "{{count}} möglicher Treffer teilt sich eine dieser Bewegungen — bestätige nur den richtigen.",
+        "competingNote_other": "{{count}} mögliche Treffer teilen sich eine dieser Bewegungen — bestätige nur den richtigen.",
+        "pairedTitle": "Zuordnung erfasst",
+        "pairedBody": "Verarbeite das Journal, um die Berichte zu aktualisieren.",
+        "dismissedTitle": "Verworfen",
+        "dismissedBody": "Der Kandidat bleibt aus der Warteschlange, solange sich die Nachweise nicht ändern."
+      },
+      "done": {
+        "title": "Alle Verwahrungsfragen geklärt",
+        "body": "Deine Berichte sind nicht mehr durch offene Verwahrungsprüfungen blockiert. Neue Fragen erscheinen hier automatisch, wenn Importe oder Syncs ungeklärte Bewegungen finden."
+      },
+      "blockingNote_one": "{{count}} blockiert deine Berichte ({{years}}).",
+      "blockingNote_other": "{{count}} blockieren deine Berichte ({{years}})."
+    },
+    "advanced": {
+      "intro": "Werkzeuge für Fortgeschrittene und technische Nachweise. Nichts davon ist nötig, um Verwahrungsfragen zu schließen — der Haupteinstieg sind die offenen Fragen.",
+      "bulk": {
+        "title": "Sammelprüfung & Regeln",
+        "description": "Filter, Mehrfachauswahl, automatische Paar-Regeln und gespeicherte Ansichten über die Kandidaten-Warteschlange."
+      },
+      "components": {
+        "title": "Custody-Komponenten",
+        "description": "Versionierte Verwahrungs-Interpretationen Leg für Leg erstellen und überarbeiten — der manuelle Weg für Fälle, die der geführte Pfad ablehnt."
+      },
+      "gapRecords": {
+        "title": "Verwahrungslücken-Protokoll",
+        "description": "Jede bekannte Lücke mit vollem Prüfverlauf, inklusive Wiedereröffnung und Überarbeitung."
+      },
+      "coverage": {
+        "title": "Zeitleiste der Wallet-Abdeckung",
+        "description": "Technische Policy-Epochen und Scan-Grenzen importierter Wallets — schließt nie eine Frage."
+      },
+      "lineage": {
+        "title": "Verwahrungslinie",
+        "description": "Jede verifizierte oder geprüfte Verwahrungsbewegung, mit steuerlicher Basisbereitschaft je Bewegung."
+      }
+    }
   },
   "reconcile": {
     "placeholder": "Füge eine Adresse oder Transaktions-ID pro Zeile ein, zum Beispiel:\nbc1qexampleaddress…\na1b2c3…  (64-stellige Transaktions-ID)",

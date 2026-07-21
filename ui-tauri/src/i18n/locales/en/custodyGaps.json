@@ -1,18 +1,5 @@
 {
-  "title": "Custody Gaps",
-  "description": "Review Bitcoin that may have remained under the same legal owner while passing through wallet history that is not imported into Kassiber.",
   "localOnly": "Analyzed locally",
-  "summary": {
-    "needsReview": "Need review",
-    "detected": "Known gap records",
-    "unresolved": "Quantity pending custody review",
-    "canonicalUnresolved": "Canonical blocking quantity",
-    "candidateResidual": "Nonblocking candidate residual hint",
-    "blockingIssueCount_one": "{{count}} blocking issue",
-    "blockingIssueCount_other": "{{count}} blocking issues",
-    "unquantified_one": "{{count}} additional blocking issue has no exact quantity.",
-    "unquantified_other": "{{count}} additional blocking issues have no exact quantity."
-  },
   "coverage": {
     "title": "Imported wallet policy timeline",
     "description": "Technical scan coverage for wallet policies imported into Kassiber. Kassiber cannot know whether every wallet owned by this profile's legal owner was imported.",
@@ -72,10 +59,6 @@
       "reviewedDefault": "Reviewed internal custody evidence",
       "verifiedDefault": "Verified wallet or chain evidence"
     }
-  },
-  "reviewQueue": {
-    "title": "Possible missing-wallet returns",
-    "description": "Suggestions are deterministic and never create a custody bridge automatically. Time reduces confidence but does not hide a plausible long-term return."
   },
   "history": {
     "title": "Reviewed custody history",
@@ -267,23 +250,16 @@
     "return_exceeds_source": "The proposed returns exceed the source quantity; the excess needs a separate classification."
   },
   "empty": {
-    "title": "No known custody gaps",
-    "body": "Kassiber found no unresolved custody gap in the currently imported evidence. It cannot determine whether wallets that were never imported exist."
+    "title": "No known custody gaps"
   },
   "processing": {
-    "title": "Custody gap status needs journal processing",
     "body": "Process the journal before treating the currently imported evidence as clear."
   },
   "searchIncomplete": {
-    "title": "Suggestion search reached a capacity limit",
     "body": "The visible hints may be incomplete. This is an advisory search limitation, not evidence of a disposal and not a tax-report blocker by itself."
   },
   "blocking": {
     "title": "Known custody quantity still needs review",
     "body": "{{count}} canonical custody issue blocks final tax basis, even though no current missing-wallet suggestion can resolve it automatically. Review the custody component or quarantine evidence."
-  },
-  "unavailable": {
-    "title": "Custody gaps unavailable",
-    "body": "Kassiber could not load the custody-gap snapshot."
   }
 }
