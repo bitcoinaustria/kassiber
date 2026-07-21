@@ -74,15 +74,21 @@ asks for one.
 
 The workflow currently builds:
 
-- CLI: macOS arm64, macOS x86_64, and Linux x86_64 one-file PyInstaller
-  binaries as `kassiber-cli-<platform>-<arch>.tar.gz` archives. The extracted
-  executable is still named `kassiber`. Linux is built on Ubuntu 22.04 to keep
-  the glibc floor aligned with the AppImage build.
+- CLI-only releases: macOS arm64, macOS x86_64, and Linux x86_64 one-file
+  PyInstaller binaries as `.tar.gz` archives, plus Windows x86_64 as a `.zip`.
+  The extracted executable is named `kassiber` (`kassiber.exe` on Windows).
+  These artifacts do not require the desktop app. Linux is built on Ubuntu
+  22.04 to keep the glibc floor aligned with the AppImage build.
 - Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
-  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, published with short
-  user-facing filenames. Each desktop preview includes a bundled one-file
-  Kassiber CLI sidecar for its target platform; the universal macOS app bundles
-  both arm64 and x86_64 CLI sidecars.
+  `.AppImage` plus `.deb`, and Windows `.msi` plus NSIS setup `.exe`, published
+  with short user-facing filenames. Each desktop preview includes the exact
+  one-file Kassiber CLI executable produced by the matching CLI-only matrix
+  leg; the universal macOS app bundles both arm64 and x86_64 variants.
+
+Tag pushes keep the existing safe default and publish as prereleases. A manual
+workflow run can select `release_channel=release` to publish the same verified
+artifact set as a stable GitHub release. The embedded `BUILD_INFO.json` reports
+the selected `prerelease` or `release` channel.
 
 Public release filenames intentionally omit the release version because the
 GitHub release tag already supplies it:
@@ -91,6 +97,8 @@ GitHub release tag already supplies it:
 kassiber-cli-linux-x64.tar.gz
 kassiber-cli-macos-arm64.tar.gz
 kassiber-cli-macos-x64.tar.gz
+kassiber-cli-windows-x64.zip
+kassiber-linux-x64.deb
 kassiber-linux-x64.AppImage
 kassiber-macos-universal.app.zip
 kassiber-macos-universal.dmg
@@ -117,7 +125,7 @@ desktop leg uses GitHub's `macos-latest` runner with Tauri's
 (`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
 target name `macos-universal` so users see one Mac GUI download.
 
-The sidecar build always collects pinned `bdkpython`. It collects pinned `lwk`
+The shared CLI build always collects pinned `bdkpython`. It collects pinned `lwk`
 where a native wheel exists. LWK 0.18.0 has no macOS x86_64 wheel, so the Intel
 sidecar deliberately omits it and routes Liquid descriptor observation through
 the named compatibility observer. macOS arm64, Linux x86_64, and Windows x86_64
@@ -131,6 +139,8 @@ For a local Apple Silicon build without Rosetta, use the arm64-only helper:
 ./scripts/build-macos-arm64-app.sh
 # skip the DMG if you only want the .app:
 BUNDLES=app ./scripts/build-macos-arm64-app.sh
+# additionally install/repair the user-local shell command:
+./scripts/build-macos-arm64-app.sh --install-cli
 ```
 
 It builds the PyInstaller sidecar as
@@ -139,6 +149,13 @@ the executable is arm64, and runs Tauri with
 `--target aarch64-apple-darwin --bundles app,dmg`. The result is a full
 unsigned desktop app and DMG under
 `ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
+With `--install-cli`, the helper first smokes the finished app bundle's
+`Contents/Resources/bin/kassiber` launcher and then installs a managed wrapper
+in `~/.local/bin` (or `~/bin` when that directory is already on PATH). It adds
+one marked PATH block to the current shell profile when needed. It never starts
+a daemon or background process; each invocation remains a normal one-shot CLI
+process. Without the flag, a local build does not modify the home directory.
+
 The helper defaults to Python 3.11 to match the GitHub Actions prerelease
 workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
 The Tauri package version is injected from `[project].version` in
@@ -188,10 +205,16 @@ to hand a build to someone else on Apple Silicon.
 Desktop artifacts are unsigned previews, but normal daemon calls use the
 bundled PyInstaller CLI sidecar and do not require a separate Python checkout.
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
-launcher without administrator privileges. The launcher forwards to the
-installed desktop executable with `--cli`, so the desktop bundle's sidecar is
-used from a normal terminal. The GUI executable also forwards `--cli ...`
-directly, for example:
+launcher without administrator privileges for direct-DMG and portable builds.
+It also maintains one marked shell-profile PATH block when needed. The launcher
+forwards to the installed desktop executable with `--cli`, so the desktop
+bundle's sidecar is used from a normal terminal. Native installers integrate
+the command themselves: Homebrew links the app resource launcher, Linux `.deb`
+installs `/usr/bin/kassiber`, and Windows MSI/NSIS packages add their bundled
+`bin` directory to PATH. Installer upgrades retain the stable command path and
+uninstall removes only the installer-owned PATH entry. Nothing autostarts.
+
+The GUI executable also forwards `--cli ...` directly, for example:
 
 ```bash
 ./kassiber-linux-x64.AppImage --cli status
@@ -204,35 +227,33 @@ arguments are also forwarded. Use the Settings-managed launcher, or pass
 `--cli ...` for any other executable name.
 
 macOS `.app` bundles also include `Contents/Resources/bin/kassiber`, a stable
-launcher that package managers can link directly. A future Homebrew tap should
-use Homebrew's `binary` stanza against that path; see
+launcher that the Homebrew cask links directly with its `binary` stanza; see
 [Homebrew Cask](homebrew-cask.md).
 
 `KASSIBER_PYTHON` remains available as an intentional debug override for daemon
 startup and installed-app CLI forwarding.
 
-There is no standalone Windows CLI artifact yet. Windows coverage is
-desktop-preview only, and the installed desktop executable can forward
-`--cli ...` to the bundled CLI sidecar.
+CLI-only archives are intentionally portable: extract them and place the
+`kassiber` executable in an existing PATH directory, or invoke it by path.
+They do not edit PATH or require a GUI. Package-manager distribution can wrap
+the same executable without changing the command contract.
 
 ## Commit Identity
 
-Every GitHub Actions run records the source ref and commit SHA. For tag
-prereleases, the tag itself is the source-of-truth link back to the commit.
-
-The desktop shell displays the build commit beside the version number. CLI
-binaries, artifact filenames, and `SHA256SUMS.txt` entries do not currently
-include or embed the source commit hash.
-
-The intended next hardening step is to include a small `BUILD_INFO.json` or
-`BUILD_INFO.txt` in every packaged artifact with at least:
+Every packaged CLI embeds `BUILD_INFO.json`, and every CLI-only archive includes
+a readable copy beside the executable. `kassiber --version` prints the package
+version plus the channel and abbreviated commit without opening the database.
+The desktop uses that exact executable as its sidecar, while its footer keeps
+the existing version/commit display. The build record contains:
 
 ```json
 {
   "commit": "${GITHUB_SHA}",
   "ref": "${GITHUB_REF_NAME}",
   "run_id": "${GITHUB_RUN_ID}",
-  "built_at": "<UTC timestamp>"
+  "built_at": "<UTC timestamp>",
+  "channel": "prerelease",
+  "version": "<package version>"
 }
 ```
 

@@ -146,9 +146,20 @@ plaintext fallback and no remember-unlock behavior.
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher
 under the user's bin directory (for example `~/.local/bin/kassiber`) that
-forwards to the installed desktop executable and its bundled CLI sidecar. If
-that directory is not on PATH, Settings shows the PATH line to add to the
-user's shell.
+forwards to the installed desktop executable and its bundled CLI sidecar. On
+macOS and Linux it adds one clearly marked block to the current shell profile
+when the user bin directory is not already on PATH; removal deletes only that
+managed block. Apps launched from a DMG or macOS App Translocation must first
+be moved to Applications so the launcher cannot point at a transient mount.
+
+Native packages own the command integration for stable upgrades: the Homebrew
+cask links the app's bundled launcher, Linux `.deb` installs
+`/usr/bin/kassiber`, and Windows MSI/NSIS installers expose the bundled `bin`
+directory on PATH and remove only their own entry during uninstall. Settings
+recognizes these package-managed commands instead of offering to overwrite
+them. AppImage and direct-DMG installs retain the user-local fallback. None of
+these paths starts Kassiber automatically; the GUI, daemon, and CLI run only
+when invoked.
 
 Package managers can link the bundled launcher at
 `Kassiber.app/Contents/Resources/bin/kassiber` instead. The first target is a

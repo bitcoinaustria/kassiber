@@ -122,8 +122,9 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Install
 
-**Desktop app** — download an unsigned prerelease binary for Apple Silicon
-macOS, Linux x86_64, or Windows x86_64 from the latest `v*` release. The bundle ships a CLI sidecar,
+**Desktop app** — download an unsigned prerelease binary for macOS, Linux
+x86_64, or Windows x86_64 from the latest `v*` release. The bundle ships the
+same CLI executable as the CLI-only downloads,
 so no separate Python install is needed. Settings can install a user-local
 `kassiber` terminal launcher without administrator privileges. Gatekeeper /
 SmartScreen first-launch handling lives in

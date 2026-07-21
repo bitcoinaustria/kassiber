@@ -695,7 +695,7 @@ class BdkDependencyContractTest(TestCase):
             "win_amd64",
         ):
             self.assertIn(f"bdkpython-3.0.0-cp313-cp313-{platform}.whl", lock)
-        self.assertGreaterEqual(workflow.count("--collect-submodules bdkpython"), 2)
+        self.assertEqual(workflow.count("--collect-submodules bdkpython"), 1)
         self.assertEqual(
             workflow.count("--collect-submodules bdkpython"),
             workflow.count("--copy-metadata bdkpython"),

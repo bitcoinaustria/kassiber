@@ -4,10 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: "Attach artifacts to a GitHub prerelease"
+        description: "Attach artifacts to a GitHub release"
         required: true
         default: false
         type: boolean
+      release_channel:
+        description: "Publish as a prerelease or stable release"
+        required: true
+        default: prerelease
+        type: choice
+        options:
+          - prerelease
+          - release
       tag_name:
         description: "Existing tag to publish to when publish_release is true"
         required: false
@@ -30,17 +38,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build ${{ matrix.os }} binary
+  build-cli:
+    name: Build ${{ matrix.label }} CLI
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-22.04
-          - macos-latest
-          - macos-15-intel
+        include:
+          - label: macOS arm64
+            os: macos-latest
+            target: macos-arm64
+            triple: aarch64-apple-darwin
+            exe_ext: ""
+            archive: tar
+          - label: macOS x86_64
+            os: macos-15-intel
+            target: macos-x64
+            triple: x86_64-apple-darwin
+            exe_ext: ""
+            archive: tar
+          - label: Linux x86_64
+            os: ubuntu-22.04
+            target: linux-x64
+            triple: x86_64-unknown-linux-gnu
+            exe_ext: ""
+            archive: tar
+          - label: Windows x86_64
+            os: windows-latest
+            target: windows-x64
+            triple: x86_64-pc-windows-msvc
+            exe_ext: ".exe"
+            archive: zip
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -61,22 +90,18 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
-      - name: Derive artifact target
-        id: target
+      - name: Write packaged build identity
         shell: bash
         run: |
           set -euo pipefail
-          case "$(uname -s)" in
-            Darwin) os_name="macos" ;;
-            Linux) os_name="linux" ;;
-            *) os_name="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
-          esac
-          case "$(uname -m)" in
-            arm64|aarch64) arch_name="arm64" ;;
-            x86_64|amd64) arch_name="x64" ;;
-            *) arch_name="$(uname -m | tr '[:upper:]' '[:lower:]')" ;;
-          esac
-          echo "target=${os_name}-${arch_name}" >> "$GITHUB_OUTPUT"
+          version="$(uv run --locked python -c 'import kassiber; print(kassiber.__version__)')"
+          uv run --locked python scripts/write_build_info.py \
+            --output build/BUILD_INFO.json \
+            --version "$version" \
+            --commit "$GITHUB_SHA" \
+            --ref "$GITHUB_REF_NAME" \
+            --run-id "$GITHUB_RUN_ID" \
+            --channel "${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || 'prerelease' }}"
 
       - name: Build one-file CLI binary
         shell: bash
@@ -97,6 +122,7 @@ jobs:
             --name kassiber \
             --paths . \
             --collect-data kassiber \
+            --add-data "build/BUILD_INFO.json:kassiber/data" \
             "${observer_collect_args[@]}" \
             --collect-submodules embit \
             --collect-data embit \
@@ -113,22 +139,55 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./dist/kassiber --help >/dev/null
-          ./dist/kassiber --data-root "$RUNNER_TEMP/kassiber-status-smoke" --machine status >/dev/null
+          cli="./dist/kassiber${{ matrix.exe_ext }}"
+          "$cli" --help >/dev/null
+          "$cli" --version | grep "${GITHUB_SHA:0:12}"
+          "$cli" --data-root "$RUNNER_TEMP/kassiber-status-smoke" --machine status >/dev/null
+
+          daemon_root="$RUNNER_TEMP/kassiber-daemon-smoke"
+          printf '{"request_id":"smoke-1","kind":"daemon.shutdown"}\n' \
+            | "$cli" --data-root "$daemon_root" daemon \
+            > "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl"
+          grep '"kind":"daemon.ready"' "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" >/dev/null
+          grep '"kind":"daemon.shutdown"' "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" >/dev/null
 
           kraken_root="$RUNNER_TEMP/kassiber-kraken-bundled-smoke"
           printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
-            | ./dist/kassiber --data-root "$kraken_root" daemon \
+            | "$cli" --data-root "$kraken_root" daemon \
             > "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl"
           grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"bundled":true' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"pairs":2' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"rows":255181' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
 
+          operator_root="$RUNNER_TEMP/kassiber-operator-smoke"
+          operator_runtime="$RUNNER_TEMP/kassiber-operator-runtime"
+          mkdir -p "$operator_runtime"
+          chmod 700 "$operator_runtime"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Frozen binaries intentionally ignore the source-test endpoint
+            # override. XDG_RUNTIME_DIR is the supported owner-only logout
+            # lifetime sentinel; the broker endpoint itself remains in the
+            # stable per-account namespace.
+            export XDG_RUNTIME_DIR="$operator_runtime"
+          fi
+          printf '%s\n' 'packaged operator smoke passphrase' \
+            | "$cli" --data-root "$operator_root" --machine secrets init --new-passphrase-fd 0 \
+            >/dev/null
+          printf '%s\n' 'packaged operator smoke passphrase' \
+            | "$cli" --data-root "$operator_root" --machine operator unlock \
+                --passphrase-fd 0 --duration 1m \
+            > "$RUNNER_TEMP/kassiber-operator-unlock.json"
+          grep '"lease":"unlocked"' "$RUNNER_TEMP/kassiber-operator-unlock.json" >/dev/null
+          "$cli" --data-root "$operator_root" --machine status \
+            > "$RUNNER_TEMP/kassiber-operator-worker.json"
+          grep '"kind":"status"' "$RUNNER_TEMP/kassiber-operator-worker.json" >/dev/null
+          "$cli" --data-root "$operator_root" --machine operator lock >/dev/null
+
           at_root="$RUNNER_TEMP/kassiber-at-smoke"
-          ./dist/kassiber --data-root "$at_root" --machine init >/dev/null
-          ./dist/kassiber --data-root "$at_root" --machine workspaces create Smoke >/dev/null
-          ./dist/kassiber \
+          "$cli" --data-root "$at_root" --machine init >/dev/null
+          "$cli" --data-root "$at_root" --machine workspaces create Smoke >/dev/null
+          "$cli" \
             --data-root "$at_root" \
             --machine \
             profiles create \
@@ -136,7 +195,7 @@ jobs:
             --tax-country at \
             --gains-algorithm MOVING_AVERAGE_AT \
             Austrian >/dev/null
-          ./dist/kassiber \
+          "$cli" \
             --data-root "$at_root" \
             --machine \
             wallets create \
@@ -151,7 +210,7 @@ jobs:
           2026-01-01T10:00:00Z,packaged-at-buy,inbound,BTC,0.10000000,0,80000,Packaged smoke acquisition
           2026-02-01T10:00:00Z,packaged-at-sell,outbound,BTC,0.05000000,0.0001,82000,Packaged smoke disposal
           CSV
-          ./dist/kassiber \
+          "$cli" \
             --data-root "$at_root" \
             --machine \
             wallets import-csv \
@@ -159,14 +218,14 @@ jobs:
             --profile Austrian \
             --wallet AustrianSmoke \
             --file "$at_csv" >/dev/null
-          ./dist/kassiber \
+          "$cli" \
             --data-root "$at_root" \
             --machine \
             journals process \
             --workspace Smoke \
             --profile Austrian >/dev/null
           xlsx_file="$RUNNER_TEMP/kassiber-at-smoke.xlsx"
-          ./dist/kassiber \
+          "$cli" \
             --data-root "$at_root" \
             --machine \
             reports export-austrian-e1kv-xlsx \
@@ -177,9 +236,9 @@ jobs:
           test -s "$xlsx_file"
 
           descriptor_root="$RUNNER_TEMP/kassiber-descriptor-smoke"
-          ./dist/kassiber --data-root "$descriptor_root" --machine init >/dev/null
-          ./dist/kassiber --data-root "$descriptor_root" --machine workspaces create Smoke >/dev/null
-          ./dist/kassiber \
+          "$cli" --data-root "$descriptor_root" --machine init >/dev/null
+          "$cli" --data-root "$descriptor_root" --machine workspaces create Smoke >/dev/null
+          "$cli" \
             --data-root "$descriptor_root" \
             --machine \
             profiles create \
@@ -187,7 +246,7 @@ jobs:
             --fiat-currency USD \
             --tax-country generic \
             Descriptor >/dev/null
-          ./dist/kassiber \
+          "$cli" \
             --data-root "$descriptor_root" \
             --machine \
             wallets create \
@@ -197,7 +256,7 @@ jobs:
             --kind descriptor \
             --descriptor 'wpkh([91790c21/84h/0h/0h]xpub6CpT4xRJntYQuFwkiZfSiK7jEtPM3e9nUfJKQ8ATWkgYJui4WS5HmzjD6C7avtwAFtmEyAusdFFxg2rZMs73SoSVkPQfEaQtrLGox92JNWn/0/*)' \
             --gap-limit 1 >/dev/null
-          ./dist/kassiber \
+          "$cli" \
             --data-root "$descriptor_root" \
             --machine \
             wallets derive \
@@ -206,29 +265,52 @@ jobs:
             --wallet DescriptorSmoke \
             --count 1 >/dev/null
 
-      - name: Package binary
+      - name: Package CLI-only release
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release
-          package_name="kassiber-cli-${{ steps.target.outputs.target }}"
+          package_name="kassiber-cli-${{ matrix.target }}"
           mkdir -p "release/${package_name}"
-          cp dist/kassiber "release/${package_name}/kassiber"
-          chmod 755 "release/${package_name}/kassiber"
-          tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
+          cp "dist/kassiber${{ matrix.exe_ext }}" "release/${package_name}/kassiber${{ matrix.exe_ext }}"
+          cp build/BUILD_INFO.json "release/${package_name}/BUILD_INFO.json"
+          chmod 755 "release/${package_name}/kassiber${{ matrix.exe_ext }}"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            (cd release && 7z a -tzip "${package_name}.zip" "${package_name}")
+          else
+            tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
+          fi
 
-      - name: Upload CLI artifact
+      - name: Upload CLI-only artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: kassiber-cli-${{ steps.target.outputs.target }}
+          name: kassiber-cli-release-${{ matrix.target }}
           path: |
             release/*.tar.gz
+            release/*.zip
           if-no-files-found: error
+
+      - name: Stage identical CLI as desktop sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sidecar
+          cp "dist/kassiber${{ matrix.exe_ext }}" \
+            "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          chmod 755 "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+
+      - name: Upload desktop sidecar
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kassiber-desktop-sidecar-${{ matrix.triple }}
+          path: sidecar/*
+          if-no-files-found: error
+          retention-days: 7
 
   build-desktop:
     name: Build ${{ matrix.label }} desktop preview
     needs:
-      - build-desktop-sidecar
+      - build-cli
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -245,7 +327,7 @@ jobs:
           - label: Linux
             os: ubuntu-22.04
             target: linux-x64
-            bundles: appimage
+            bundles: deb,appimage
             tauri_args: ""
             sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-unknown-linux-gnu
             sidecar_expected: 1
@@ -324,6 +406,30 @@ jobs:
         working-directory: ui-tauri
         run: pnpm tauri build ${{ matrix.tauri_args }} --bundles ${{ matrix.bundles }} --ci
 
+      - name: Smoke desktop terminal forwarding
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            macOS)
+              launcher="$(find ui-tauri/src-tauri/target -path '*/release/bundle/macos/*.app/Contents/Resources/bin/kassiber' -print -quit)"
+              test -n "$launcher"
+              "$launcher" --version | grep "${GITHUB_SHA:0:12}"
+              "$launcher" --help >/dev/null
+              ;;
+            Linux)
+              appimage="$(find ui-tauri/src-tauri/target -path '*/release/bundle/appimage/*.AppImage' -print -quit)"
+              test -n "$appimage"
+              chmod 755 "$appimage"
+              APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --cli --version \
+                | grep "${GITHUB_SHA:0:12}"
+              ;;
+            Windows)
+              cmd.exe /d /c 'ui-tauri\src-tauri\bin\kassiber.cmd --version' \
+                | grep "${GITHUB_SHA:0:12}"
+              ;;
+          esac
+
       - name: Package desktop artifacts
         shell: bash
         run: |
@@ -345,6 +451,10 @@ jobs:
                   artifact_name="kassiber-${{ matrix.target }}.dmg"
                   cp "$artifact" "release/${artifact_name}"
                   ;;
+                *.deb)
+                  artifact_name="kassiber-${{ matrix.target }}.deb"
+                  cp "$artifact" "release/${artifact_name}"
+                  ;;
                 *.exe)
                   artifact_name="kassiber-${{ matrix.target }}.exe"
                   cp "$artifact" "release/${artifact_name}"
@@ -357,7 +467,7 @@ jobs:
           done < <(
             find ui-tauri/src-tauri/target \
               -path "*/release/bundle/*" \
-              \( -name "*.AppImage" -o -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -print0
+              \( -name "*.AppImage" -o -name "*.app" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -print0
           )
           test -n "$(find release -type f -print -quit)"
 
@@ -369,182 +479,12 @@ jobs:
             release/*
           if-no-files-found: error
 
-  build-desktop-sidecar:
-    name: Build ${{ matrix.label }} desktop CLI sidecar
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: macOS arm64
-            os: macos-latest
-            triple: aarch64-apple-darwin
-            exe_ext: ""
-          - label: macOS x86_64
-            os: macos-15-intel
-            triple: x86_64-apple-darwin
-            exe_ext: ""
-          - label: Linux x86_64
-            os: ubuntu-22.04
-            triple: x86_64-unknown-linux-gnu
-            exe_ext: ""
-          - label: Windows x86_64
-            os: windows-latest
-            triple: x86_64-pc-windows-msvc
-            exe_ext: ".exe"
-
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.11"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
-        with:
-          enable-cache: true
-
-      - name: Sync dependencies
-        run: uv sync --locked
-
-      - name: Build one-file CLI sidecar
-        shell: bash
-        run: |
-          set -euo pipefail
-          observer_collect_args=(
-            --collect-submodules bdkpython
-            --collect-data bdkpython
-            --copy-metadata bdkpython
-          )
-          if uv run --locked python -c 'import lwk'; then
-            observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
-          fi
-          uv run --locked --with pyinstaller==6.20.0 pyinstaller \
-            --clean \
-            --noconfirm \
-            --onefile \
-            --name kassiber-cli \
-            --paths . \
-            --collect-data kassiber \
-            "${observer_collect_args[@]}" \
-            --collect-submodules embit \
-            --collect-data embit \
-            --collect-submodules rp2 \
-            --collect-data rp2 \
-            --collect-submodules prezzemolo \
-            --collect-submodules keyring.backends \
-            --copy-metadata keyring \
-            --hidden-import prezzemolo.avl_tree \
-            --hidden-import rp2.plugin.country.at \
-            scripts/kassiber_pyinstaller_entry.py
-
-      - name: Smoke CLI sidecar
-        shell: bash
-        run: |
-          set -euo pipefail
-          sidecar="./dist/kassiber-cli${{ matrix.exe_ext }}"
-          "$sidecar" --help >/dev/null
-
-          daemon_root="$RUNNER_TEMP/kassiber-cli-sidecar-smoke"
-          printf '{"request_id":"smoke-1","kind":"daemon.shutdown"}\n' \
-            | "$sidecar" --data-root "$daemon_root" daemon \
-            > "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
-          grep '"kind":"daemon.ready"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
-          grep '"kind":"daemon.shutdown"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
-
-          kraken_root="$RUNNER_TEMP/kassiber-cli-sidecar-kraken-bundled-smoke"
-          printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
-            | "$sidecar" --data-root "$kraken_root" daemon \
-            > "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl"
-          grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
-
-          operator_root="$RUNNER_TEMP/kassiber-cli-sidecar-operator-smoke"
-          operator_runtime="$RUNNER_TEMP/kassiber-cli-sidecar-operator-runtime"
-          mkdir -p "$operator_runtime"
-          chmod 700 "$operator_runtime"
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            # Frozen binaries intentionally ignore the source-test endpoint
-            # override. XDG_RUNTIME_DIR is the supported owner-only logout
-            # lifetime sentinel; the broker endpoint itself remains in the
-            # stable per-account namespace.
-            export XDG_RUNTIME_DIR="$operator_runtime"
-          fi
-          printf '%s\n' 'packaged operator smoke passphrase' \
-            | "$sidecar" --data-root "$operator_root" --machine secrets init --new-passphrase-fd 0 \
-            >/dev/null
-          printf '%s\n' 'packaged operator smoke passphrase' \
-            | "$sidecar" --data-root "$operator_root" --machine operator unlock \
-                --passphrase-fd 0 --duration 1m \
-            > "$RUNNER_TEMP/cli-sidecar-operator-unlock.json"
-          grep '"lease":"unlocked"' "$RUNNER_TEMP/cli-sidecar-operator-unlock.json" >/dev/null
-          "$sidecar" --data-root "$operator_root" --machine status \
-            > "$RUNNER_TEMP/cli-sidecar-operator-worker.json"
-          grep '"kind":"status"' "$RUNNER_TEMP/cli-sidecar-operator-worker.json" >/dev/null
-          "$sidecar" --data-root "$operator_root" --machine operator lock >/dev/null
-          grep '"bundled":true' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"pairs":2' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"rows":255181' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
-
-          descriptor_root="$RUNNER_TEMP/kassiber-cli-sidecar-descriptor-smoke"
-          "$sidecar" --data-root "$descriptor_root" --machine init >/dev/null
-          "$sidecar" --data-root "$descriptor_root" --machine workspaces create Smoke >/dev/null
-          "$sidecar" \
-            --data-root "$descriptor_root" \
-            --machine \
-            profiles create \
-            --workspace Smoke \
-            --fiat-currency USD \
-            --tax-country generic \
-            Descriptor >/dev/null
-          "$sidecar" \
-            --data-root "$descriptor_root" \
-            --machine \
-            wallets create \
-            --workspace Smoke \
-            --profile Descriptor \
-            --label DescriptorSmoke \
-            --kind descriptor \
-            --descriptor 'wpkh([91790c21/84h/0h/0h]xpub6CpT4xRJntYQuFwkiZfSiK7jEtPM3e9nUfJKQ8ATWkgYJui4WS5HmzjD6C7avtwAFtmEyAusdFFxg2rZMs73SoSVkPQfEaQtrLGox92JNWn/0/*)' \
-            --gap-limit 1 >/dev/null
-          "$sidecar" \
-            --data-root "$descriptor_root" \
-            --machine \
-            wallets derive \
-            --workspace Smoke \
-            --profile Descriptor \
-            --wallet DescriptorSmoke \
-            --count 1 >/dev/null
-
-      - name: Stage sidecar for desktop bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p sidecar
-          src="dist/kassiber-cli${{ matrix.exe_ext }}"
-          dst="sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
-          cp "$src" "$dst"
-          chmod 755 "$dst"
-
-      - name: Upload desktop sidecar
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: kassiber-desktop-sidecar-${{ matrix.triple }}
-          path: sidecar/*
-          if-no-files-found: error
-          retention-days: 7
-
   publish:
-    name: Publish prerelease
+    name: Publish release artifacts
     permissions:
       contents: write
     needs:
-      - build
+      - build-cli
       - build-desktop
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -558,7 +498,7 @@ jobs:
       - name: Download CLI release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: kassiber-cli-*
+          pattern: kassiber-cli-release-*
           path: release
           merge-multiple: true
 
@@ -575,9 +515,9 @@ jobs:
           set -euo pipefail
           test -n "$(find release -maxdepth 1 -type f -print -quit)"
 
-          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' -print -quit | grep -q .; then
+          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' -print -quit | grep -q .; then
             echo "Raw CLI sidecars must not be published as release assets." >&2
-            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' >&2
+            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' >&2
             exit 1
           fi
 
@@ -600,21 +540,23 @@ jobs:
                 printf "%s  %s\n" "$(sha256_file "$artifact")" "$(basename "$artifact")"
               done > release/SHA256SUMS.txt
 
-      - name: Create or update prerelease
+      - name: Create or update release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-          prerelease: true
+          prerelease: ${{ github.event_name != 'workflow_dispatch' || inputs.release_channel == 'prerelease' }}
           fail_on_unmatched_files: true
           body: |
-            Automated Kassiber prerelease artifacts.
+            Automated Kassiber release artifacts.
 
-            These artifacts are unsigned prerelease builds for CLI and desktop
-            preview testing. Desktop previews now bundle the Kassiber CLI
-            sidecar, so normal daemon calls do not require a separate Python
-            checkout, and the GUI executable can forward `--cli ...` to the
-            bundled CLI. Set `KASSIBER_PYTHON` only when intentionally
-            overriding the bundled sidecar for debugging.
+            These artifacts are currently unsigned CLI and desktop builds.
+            CLI-only archives are published for macOS, Linux, and Windows.
+            Desktop bundles use the exact same CLI executable, so normal daemon
+            calls do not require a separate Python checkout. Native desktop
+            installers integrate `kassiber` with the terminal; portable builds
+            can install a user-local launcher from Settings. Set
+            `KASSIBER_PYTHON` only when intentionally overriding the bundled
+            sidecar for debugging.
           files: |
             release/*
 

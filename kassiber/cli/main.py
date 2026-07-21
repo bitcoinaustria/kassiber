@@ -28,6 +28,7 @@ from ..ai.client import ai_client_for_locator
 from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
+from ..build_info import version_text
 from ..core import chat_history as core_chat_history
 from ..core import document_import as core_document_import
 from ..importers import (
@@ -823,6 +824,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
         description="Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=version_text(),
     )
     parser.add_argument(
         "--project",

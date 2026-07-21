@@ -53,6 +53,8 @@ const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
 const TERMINAL_COMMAND_NAME: &str = "kassiber";
 const TERMINAL_COMMAND_MARKER: &str =
     "Kassiber desktop CLI launcher. Managed by Kassiber Settings.";
+const TERMINAL_PATH_BLOCK_START: &str = "# >>> kassiber terminal command >>>";
+const TERMINAL_PATH_BLOCK_END: &str = "# <<< kassiber terminal command <<<";
 // Event name kept on the existing `kassiber:` colon-prefixed convention so the
 // channel can be reused for OS-level deep links (e.g. `kassiber://transaction/...`)
 // without colliding with their URL form.
@@ -1701,8 +1703,32 @@ fn terminal_command_filename() -> &'static str {
 
 fn terminal_command_status() -> Result<TerminalCommandStatus, String> {
     let paths = terminal_command_paths()?;
+    if let Some(command_path) = package_managed_terminal_command(&paths.target_path) {
+        return Ok(TerminalCommandStatus {
+            platform: paths.platform,
+            available: false,
+            installed: true,
+            managed: false,
+            needs_repair: false,
+            conflict: false,
+            path_on_path: true,
+            command: TERMINAL_COMMAND_NAME.to_string(),
+            bin_dir: command_path
+                .parent()
+                .unwrap_or(Path::new(""))
+                .to_string_lossy()
+                .into_owned(),
+            command_path: command_path.to_string_lossy().into_owned(),
+            target_path: paths.target_path.to_string_lossy().into_owned(),
+            path_hint: String::new(),
+            message: "The terminal command is installed and managed by your installer or package manager."
+                .to_string(),
+        });
+    }
     let existing = inspect_terminal_command(&paths)?;
-    let path_on_path = path_is_on_path(&paths.bin_dir);
+    let available = terminal_command_target_is_available(&paths.target_path);
+    let path_on_path =
+        path_is_on_path(&paths.bin_dir) || terminal_command_path_is_managed(&paths.bin_dir);
     let installed = matches!(existing, TerminalCommandFileState::Current);
     let managed = matches!(
         existing,
@@ -1710,10 +1736,11 @@ fn terminal_command_status() -> Result<TerminalCommandStatus, String> {
     );
     let needs_repair = matches!(existing, TerminalCommandFileState::ManagedStale);
     let conflict = matches!(existing, TerminalCommandFileState::Conflict);
-    let message = terminal_command_message(installed, needs_repair, conflict, path_on_path);
+    let message =
+        terminal_command_message(available, installed, needs_repair, conflict, path_on_path);
     Ok(TerminalCommandStatus {
         platform: paths.platform,
-        available: true,
+        available,
         installed,
         managed,
         needs_repair,
@@ -1726,6 +1753,36 @@ fn terminal_command_status() -> Result<TerminalCommandStatus, String> {
         path_hint: terminal_command_path_hint(&paths.bin_dir),
         message,
     })
+}
+
+fn first_existing_terminal_command(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .find(|candidate| candidate.is_file())
+        .cloned()
+}
+
+fn package_managed_terminal_command(target_path: &Path) -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    let candidates = target_path
+        .parent()
+        .map(|parent| vec![parent.join("bin").join("kassiber.cmd")])
+        .unwrap_or_default();
+    #[cfg(target_os = "macos")]
+    let candidates = vec![
+        PathBuf::from("/opt/homebrew/bin/kassiber"),
+        PathBuf::from("/usr/local/bin/kassiber"),
+    ];
+    #[cfg(target_os = "linux")]
+    let candidates = vec![
+        PathBuf::from("/usr/bin/kassiber"),
+        PathBuf::from("/usr/local/bin/kassiber"),
+    ];
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    let candidates = Vec::new();
+    #[cfg(not(target_os = "windows"))]
+    let _ = target_path;
+    first_existing_terminal_command(&candidates)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1778,9 +1835,15 @@ fn inspect_terminal_command(
 
 fn install_terminal_command() -> Result<(), String> {
     let paths = terminal_command_paths()?;
+    if !terminal_command_target_is_available(&paths.target_path) {
+        return Err(
+            "Move Kassiber out of the disk image and into Applications before installing the terminal command."
+                .to_string(),
+        );
+    }
     match inspect_terminal_command(&paths)? {
         TerminalCommandFileState::Missing => {}
-        TerminalCommandFileState::Current => return Ok(()),
+        TerminalCommandFileState::Current => {}
         TerminalCommandFileState::ManagedStale => {
             fs::remove_file(&paths.command_path)
                 .map_err(|error| format!("Could not replace terminal command: {error}"))?;
@@ -1793,31 +1856,40 @@ fn install_terminal_command() -> Result<(), String> {
         }
     }
 
-    fs::create_dir_all(&paths.bin_dir)
-        .map_err(|error| format!("Could not create terminal command directory: {error}"))?;
-    fs::write(
-        &paths.command_path,
-        terminal_command_contents(&paths.target_path),
-    )
-    .map_err(|error| format!("Could not write terminal command: {error}"))?;
-    set_terminal_command_permissions(&paths.command_path)
-        .map_err(|error| format!("Could not make terminal command executable: {error}"))?;
+    if !matches!(
+        inspect_terminal_command(&paths)?,
+        TerminalCommandFileState::Current
+    ) {
+        fs::create_dir_all(&paths.bin_dir)
+            .map_err(|error| format!("Could not create terminal command directory: {error}"))?;
+        fs::write(
+            &paths.command_path,
+            terminal_command_contents(&paths.target_path),
+        )
+        .map_err(|error| format!("Could not write terminal command: {error}"))?;
+        set_terminal_command_permissions(&paths.command_path)
+            .map_err(|error| format!("Could not make terminal command executable: {error}"))?;
+    }
+    ensure_terminal_command_path(&paths.bin_dir)?;
     Ok(())
 }
 
 fn remove_terminal_command() -> Result<(), String> {
     let paths = terminal_command_paths()?;
     match inspect_terminal_command(&paths)? {
-        TerminalCommandFileState::Missing => Ok(()),
+        TerminalCommandFileState::Missing => {}
         TerminalCommandFileState::Current | TerminalCommandFileState::ManagedStale => {
             fs::remove_file(&paths.command_path)
-                .map_err(|error| format!("Could not remove terminal command: {error}"))
+                .map_err(|error| format!("Could not remove terminal command: {error}"))?;
         }
-        TerminalCommandFileState::Conflict => Err(format!(
-            "{} is not managed by Kassiber, so it was left untouched.",
-            paths.command_path.display()
-        )),
+        TerminalCommandFileState::Conflict => {
+            return Err(format!(
+                "{} is not managed by Kassiber, so it was left untouched.",
+                paths.command_path.display()
+            ));
+        }
     }
+    remove_terminal_command_path(&paths.bin_dir)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1858,12 +1930,15 @@ fn shell_single_quote(value: &str) -> String {
 }
 
 fn terminal_command_message(
+    available: bool,
     installed: bool,
     needs_repair: bool,
     conflict: bool,
     path_on_path: bool,
 ) -> String {
-    if conflict {
+    if !available {
+        "Move Kassiber into Applications before installing the terminal command.".to_string()
+    } else if conflict {
         "A different command already exists at the install path.".to_string()
     } else if needs_repair {
         "The terminal command is managed by Kassiber but points at an older app path.".to_string()
@@ -1875,6 +1950,179 @@ fn terminal_command_message(
     } else {
         "Install the user-local terminal command to run kassiber from a shell.".to_string()
     }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn terminal_command_target_is_transient(target_path: &Path) -> bool {
+    let target = target_path.to_string_lossy();
+    target.starts_with("/Volumes/") || target.contains("/AppTranslocation/")
+}
+
+fn terminal_command_target_is_available(target_path: &Path) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        !terminal_command_target_is_transient(target_path)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = target_path;
+        true
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminal_command_profile_path(home: &Path, shell: Option<&Path>) -> PathBuf {
+    match shell
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+    {
+        Some("fish") => home
+            .join(".config")
+            .join("fish")
+            .join("conf.d")
+            .join("kassiber.fish"),
+        Some("zsh") => home.join(".zprofile"),
+        Some("bash") if home.join(".bash_profile").exists() => home.join(".bash_profile"),
+        Some("bash") => home.join(".profile"),
+        _ => {
+            #[cfg(target_os = "macos")]
+            return home.join(".zprofile");
+            #[cfg(not(target_os = "macos"))]
+            return home.join(".profile");
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminal_command_profile_block(bin_dir: &Path, fish: bool) -> String {
+    let quoted = shell_single_quote(&bin_dir.to_string_lossy());
+    if fish {
+        format!(
+            "{TERMINAL_PATH_BLOCK_START}\nif not contains -- {quoted} $PATH\n    set -gx PATH {quoted} $PATH\nend\n{TERMINAL_PATH_BLOCK_END}"
+        )
+    } else {
+        format!(
+            "{TERMINAL_PATH_BLOCK_START}\ncase \":$PATH:\" in\n  *:{quoted}:*) ;;\n  *) export PATH={quoted}:\"$PATH\" ;;\nesac\n{TERMINAL_PATH_BLOCK_END}"
+        )
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminal_command_profile_without_block(contents: &str) -> Result<String, String> {
+    let start = contents.find(TERMINAL_PATH_BLOCK_START);
+    let end = contents.find(TERMINAL_PATH_BLOCK_END);
+    match (start, end) {
+        (None, None) => Ok(contents.to_string()),
+        (Some(start), Some(end)) if end >= start => {
+            let end = end + TERMINAL_PATH_BLOCK_END.len();
+            let before = contents[..start].trim_end_matches('\n');
+            let after = contents[end..].trim_start_matches('\n');
+            Ok(match (before.is_empty(), after.is_empty()) {
+                (true, true) => String::new(),
+                (false, true) => format!("{before}\n"),
+                (true, false) => format!("{after}\n"),
+                (false, false) => format!("{before}\n\n{after}\n"),
+            })
+        }
+        _ => Err(
+            "The shell profile contains an incomplete Kassiber PATH block; repair it manually before continuing."
+                .to_string(),
+        ),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminal_command_profile_update(
+    profile: &Path,
+    bin_dir: &Path,
+    remove: bool,
+) -> Result<(), String> {
+    let existing = match fs::read_to_string(profile) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(format!("Could not read shell profile: {error}")),
+    };
+    let mut updated = terminal_command_profile_without_block(&existing)?;
+    if !remove {
+        let fish = profile.extension().and_then(|value| value.to_str()) == Some("fish");
+        if !updated.is_empty() && !updated.ends_with('\n') {
+            updated.push('\n');
+        }
+        if !updated.is_empty() {
+            updated.push('\n');
+        }
+        updated.push_str(&terminal_command_profile_block(bin_dir, fish));
+        updated.push('\n');
+    }
+    if let Some(parent) = profile.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Could not create shell profile directory: {error}"))?;
+    }
+    fs::write(profile, updated).map_err(|error| format!("Could not update shell profile: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn selected_terminal_command_profile() -> Result<PathBuf, String> {
+    let home = home_dir().ok_or_else(|| "Could not locate your home folder.".to_string())?;
+    let shell = env::var_os("SHELL").map(PathBuf::from);
+    Ok(terminal_command_profile_path(&home, shell.as_deref()))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminal_command_path_is_managed(bin_dir: &Path) -> bool {
+    let Ok(profile) = selected_terminal_command_profile() else {
+        return false;
+    };
+    fs::read_to_string(profile)
+        .map(|contents| {
+            contents.contains(&terminal_command_profile_block(bin_dir, false))
+                || contents.contains(&terminal_command_profile_block(bin_dir, true))
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn terminal_command_path_is_managed(_bin_dir: &Path) -> bool {
+    false
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ensure_terminal_command_path(bin_dir: &Path) -> Result<(), String> {
+    if path_is_on_path(bin_dir) {
+        return Ok(());
+    }
+    let profile = selected_terminal_command_profile()?;
+    terminal_command_profile_update(&profile, bin_dir, false)
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_terminal_command_path(_bin_dir: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn remove_terminal_command_path(bin_dir: &Path) -> Result<(), String> {
+    let home = home_dir().ok_or_else(|| "Could not locate your home folder.".to_string())?;
+    let profiles = [
+        home.join(".zprofile"),
+        home.join(".bash_profile"),
+        home.join(".profile"),
+        home.join(".config")
+            .join("fish")
+            .join("conf.d")
+            .join("kassiber.fish"),
+    ];
+    for profile in profiles {
+        if profile.exists() {
+            terminal_command_profile_update(&profile, bin_dir, true)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn remove_terminal_command_path(_bin_dir: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 fn terminal_command_path_hint(bin_dir: &Path) -> String {
@@ -2271,25 +2519,28 @@ pub fn run() {
     if let Some(code) = run_operator_native_auth_helper() {
         std::process::exit(code);
     }
-    let cli_args = desktop_cli_args();
+    if let Some(args) = desktop_cli_args() {
+        // Forward before constructing Tauri so `kassiber` stays a real CLI in
+        // headless shells, SSH sessions, package smokes, and CI. Resource
+        // discovery here uses only the native bundle layout and never starts
+        // the webview or desktop daemon.
+        std::process::exit(supervisor::run_cli(None, args));
+    }
     let mut builder = tauri::Builder::default();
 
     // Single-instance must come before the deep-link plugin so GUI/deep-link
     // relaunches are forwarded to the existing window instead of forking a new
-    // GUI process. CLI-mode launches intentionally skip the plugin: they run a
-    // short-lived sidecar command and exit, so they do not start a second
-    // desktop supervisor or hold a competing GUI daemon open.
+    // GUI process. CLI-mode launches have already exited above, so they do not
+    // start a second desktop supervisor or hold a competing GUI daemon open.
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
-        if cli_args.is_none() {
-            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
-            }));
-        }
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }));
     }
 
     builder
@@ -2297,10 +2548,6 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();
-            if let Some(args) = cli_args.as_ref() {
-                let code = supervisor::run_cli(resource_dir.as_deref(), args.clone());
-                std::process::exit(code);
-            }
             let (menu, menu_handles) = build_app_menu(app.handle())?;
             app.set_menu(menu)?;
             app.manage(menu_handles);
@@ -3233,16 +3480,17 @@ mod tests {
         is_supported_report_export_target, managed_settings_path, menu_action,
         menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
         path_is_on_path, read_operator_native_auth_secret, terminal_command_contents,
-        terminal_command_path_hint, touch_id_managed_unlock_state, touch_id_scope_for_selected,
-        validated_attachment_file_path, validated_external_url, TerminalCommandFileState,
-        TerminalCommandPaths, ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS,
-        DOCUMENT_IMPORT_STAGE_KIND, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT,
-        MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS,
-        MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
-        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
+        terminal_command_path_hint, terminal_command_target_is_transient,
+        touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
+        validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
+        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
+        MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS,
+        MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY,
+        MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY,
+        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
+        MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
+        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::io::Cursor;
@@ -3417,6 +3665,65 @@ mod tests {
         assert!(hint.contains("PATH"));
         #[cfg(not(target_os = "windows"))]
         assert!(hint.contains("export PATH="));
+    }
+
+    #[test]
+    fn transient_macos_locations_are_not_valid_launcher_targets() {
+        assert!(terminal_command_target_is_transient(Path::new(
+            "/Volumes/Kassiber/Kassiber.app/Contents/MacOS/kassiber-ui"
+        )));
+        assert!(terminal_command_target_is_transient(Path::new(
+            "/private/var/folders/x/AppTranslocation/y/Kassiber.app/Contents/MacOS/kassiber-ui"
+        )));
+        assert!(!terminal_command_target_is_transient(Path::new(
+            "/Applications/Kassiber.app/Contents/MacOS/kassiber-ui"
+        )));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn terminal_profile_update_is_idempotent_and_removes_only_managed_block() {
+        let root = unique_temp_dir("terminal-profile");
+        let profile = root.join(".profile");
+        let bin_dir = root.join(".local").join("bin");
+        fs::write(&profile, "export KEEP_ME=yes\n").expect("write profile");
+
+        super::terminal_command_profile_update(&profile, &bin_dir, false)
+            .expect("install PATH block");
+        super::terminal_command_profile_update(&profile, &bin_dir, false)
+            .expect("repair PATH block");
+        let installed = fs::read_to_string(&profile).expect("read installed profile");
+        assert_eq!(
+            installed.matches(super::TERMINAL_PATH_BLOCK_START).count(),
+            1
+        );
+        assert!(installed.contains("export KEEP_ME=yes"));
+        assert!(installed.contains(&bin_dir.to_string_lossy().to_string()));
+
+        super::terminal_command_profile_update(&profile, &bin_dir, true)
+            .expect("remove PATH block");
+        assert_eq!(
+            fs::read_to_string(&profile).expect("read cleaned profile"),
+            "export KEEP_ME=yes\n"
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn terminal_profile_selection_matches_common_shells() {
+        let root = unique_temp_dir("terminal-profile-shell");
+        assert_eq!(
+            super::terminal_command_profile_path(&root, Some(Path::new("/bin/zsh"))),
+            root.join(".zprofile")
+        );
+        assert_eq!(
+            super::terminal_command_profile_path(&root, Some(Path::new("/usr/bin/fish"))),
+            root.join(".config/fish/conf.d/kassiber.fish")
+        );
+        assert_eq!(
+            super::terminal_command_profile_path(&root, Some(Path::new("/bin/bash"))),
+            root.join(".profile")
+        );
     }
 
     #[test]

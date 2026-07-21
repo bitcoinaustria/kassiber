@@ -847,22 +847,27 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.5 Packaging, signing, distribution
 
-- [x] Automated unsigned prerelease CLI binaries for macOS and Linux via
-  GitHub Actions
+- [x] Automated unsigned CLI-only release archives for macOS, Linux, and
+  Windows via GitHub Actions
 - [x] Automated unsigned desktop preview artifacts for macOS, Linux, and
   Windows via GitHub Actions
 - [x] Bundle one-file Kassiber CLI sidecars into unsigned desktop preview
   artifacts so preview apps do not require an external Python checkout and can
   forward installed-app CLI calls via `--cli`
-- [ ] Add build metadata (`BUILD_INFO.json` or equivalent) to every
-  prerelease artifact with commit, ref, run id, and build timestamp
+- [x] Embed build metadata in the shared packaged CLI and include a readable
+  `BUILD_INFO.json` in CLI-only archives, with version, channel, commit, ref,
+  run id, and build timestamp; expose it through database-free `--version`
 - [ ] Decide whether production installers should keep the PyInstaller sidecar
   or switch to a `python-build-standalone` runtime tree
 - [x] Per-OS Tauri bundles produced as **unsigned** previews in CI (macOS
-  dmg/app, Linux AppImage, Windows msi/nsis via `pnpm tauri build --bundles`)
+  dmg/app, Linux deb/AppImage, Windows msi/nsis via `pnpm tauri build --bundles`)
+- [x] Cross-platform desktop terminal integration: native Homebrew/deb/Windows
+  installers own stable command paths, portable macOS/Linux builds offer an
+  explicit user-local Settings launcher, and local macOS builds support
+  `--install-cli`; no launcher path autostarts Kassiber
 - [ ] Production code-signing & distribution: Apple Developer ID + notarization
-  (macOS), Windows EV cert, GPG-signed `.deb` (Linux target is currently
-  AppImage, not `.deb`); flip `tauri.conf.json` `bundle.active` for production
+  (macOS), Windows EV cert, and GPG-signed `.deb`; flip `tauri.conf.json`
+  `bundle.active` for production
 - [ ] User-initiated update check only; no background polling
 
 ## Later backlog
