@@ -10,10 +10,39 @@ import unittest
 
 from kassiber.db import open_db, resolve_database_path
 from kassiber.core import accounts as core_accounts
+from kassiber.errors import AppError
 from kassiber.operator.client import BrokerClient, PreparedArguments
 from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
 from kassiber.secrets.migration import create_empty_encrypted_database
 from kassiber.secrets.sqlcipher import sqlcipher_available
+
+
+BROKER_START_TIMEOUT_SECONDS = 20.0
+
+
+def _wait_for_broker(
+    client: BrokerClient,
+    processes: list[subprocess.Popen[bytes]],
+) -> None:
+    deadline = time.monotonic() + BROKER_START_TIMEOUT_SECONDS
+    last_error: BaseException | None = None
+    while time.monotonic() < deadline:
+        try:
+            client.ping()
+            return
+        except (OSError, EOFError, AppError) as exc:
+            last_error = exc
+        process_states = [process.poll() for process in processes]
+        if all(state is not None for state in process_states):
+            raise AssertionError(
+                f"operator broker exited before rendezvous: {process_states}"
+            ) from last_error
+        time.sleep(0.05)
+    process_states = [process.poll() for process in processes]
+    raise AssertionError(
+        f"operator broker did not rendezvous within "
+        f"{BROKER_START_TIMEOUT_SECONDS:g}s: {process_states}"
+    ) from last_error
 
 
 @unittest.skipIf(os.name == "nt", "Unix broker process integration")
@@ -41,15 +70,7 @@ class OperatorIntegrationTest(unittest.TestCase):
             os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
             os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             try:
-                deadline = time.monotonic() + 5
-                while True:
-                    try:
-                        BrokerClient().ping()
-                        break
-                    except OSError:
-                        if time.monotonic() >= deadline:
-                            raise
-                        time.sleep(0.05)
+                _wait_for_broker(BrokerClient(), processes)
                 time.sleep(0.2)
                 self.assertEqual(sum(process.poll() is None for process in processes), 1)
             finally:
@@ -105,15 +126,7 @@ class OperatorIntegrationTest(unittest.TestCase):
             os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             client = BrokerClient()
             try:
-                deadline = time.monotonic() + 5
-                while True:
-                    try:
-                        client.ping()
-                        break
-                    except OSError:
-                        if time.monotonic() >= deadline:
-                            raise
-                        time.sleep(0.05)
+                _wait_for_broker(client, [server])
                 unlocked = client.unlock(
                     tmp,
                     passphrase,
@@ -231,15 +244,7 @@ class OperatorIntegrationTest(unittest.TestCase):
             os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
             client = BrokerClient()
             try:
-                deadline = time.monotonic() + 5
-                while True:
-                    try:
-                        client.ping()
-                        break
-                    except OSError:
-                        if time.monotonic() >= deadline:
-                            raise
-                        time.sleep(0.05)
+                _wait_for_broker(client, [server])
                 first_status = client.unlock(
                     first,
                     first_passphrase,
