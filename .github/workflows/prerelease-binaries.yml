@@ -57,6 +57,7 @@ env:
   HOMEBREW_TAP_REPOSITORY: bitcoinaustria/homebrew-kassiber
   HOMEBREW_TAP_BRANCH: main
   HOMEBREW_CASK_PATH: Casks/kassiber.rb
+  HOMEBREW_FORMULA_PATH: Formula/kassiber-cli.rb
 
 concurrency:
   group: prerelease-binaries-${{ github.ref }}
@@ -651,7 +652,7 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
-      - name: Render Homebrew cask
+      - name: Render Homebrew cask and CLI formula
         if: steps.homebrew-tap.outputs.enabled == 'true'
         shell: bash
         env:
@@ -660,20 +661,29 @@ jobs:
           set -euo pipefail
           tag_name="${RELEASE_TAG_NAME}"
           version="${tag_name#v}"
-          dmg_name="kassiber-macos-universal.dmg"
-          dmg_path="release/${dmg_name}"
-          cask_path="homebrew-tap/${HOMEBREW_CASK_PATH}"
 
-          test -f "$dmg_path"
-          sha256="$(awk -v name="$dmg_name" '$2 == name { print $1 }' release/SHA256SUMS.txt)"
-          test -n "$sha256"
+          release_sha256() {
+            local name="$1"
+            local sha256
+            test -f "release/${name}"
+            sha256="$(awk -v name="$name" '$2 == name { print $1 }' release/SHA256SUMS.txt)"
+            test -n "$sha256"
+            printf '%s' "$sha256"
+          }
 
-          python scripts/render_homebrew_cask.py \
+          python scripts/render_homebrew.py cask \
             --version "$version" \
-            --sha256 "$sha256" \
-            --output "$cask_path"
+            --sha256 "$(release_sha256 kassiber-macos-universal.dmg)" \
+            --output "homebrew-tap/${HOMEBREW_CASK_PATH}"
 
-      - name: Commit Homebrew cask update
+          python scripts/render_homebrew.py cli-formula \
+            --version "$version" \
+            --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
+            --sha256-macos-x64 "$(release_sha256 kassiber-cli-macos-x64.tar.gz)" \
+            --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
+            --output "homebrew-tap/${HOMEBREW_FORMULA_PATH}"
+
+      - name: Commit Homebrew tap update
         if: steps.homebrew-tap.outputs.enabled == 'true'
         shell: bash
         working-directory: homebrew-tap
@@ -685,12 +695,12 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$HOMEBREW_CASK_PATH"
+          git add "$HOMEBREW_CASK_PATH" "$HOMEBREW_FORMULA_PATH"
 
           if git diff --cached --quiet; then
-            echo "Homebrew cask already matches ${tag_name}; nothing to push."
+            echo "Homebrew tap already matches ${tag_name}; nothing to push."
             exit 0
           fi
 
-          git commit -m "Update Kassiber cask to ${tag_name}"
+          git commit -m "Update Kassiber cask and CLI formula to ${tag_name}"
           git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"

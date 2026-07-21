@@ -862,6 +862,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   or switch to a `python-build-standalone` runtime tree
 - [x] Per-OS Tauri bundles produced as **unsigned** previews in CI (macOS
   dmg/app, Linux deb/AppImage, Windows msi/nsis via `pnpm tauri build --bundles`)
+- [x] Publish Homebrew tap files from release runs: cask `kassiber` (desktop
+  app + linked terminal launcher) and formula `kassiber-cli` (GUI-free frozen
+  CLI for macOS arm64/x86_64 and Homebrew on Linux), rendered by
+  `scripts/render_homebrew.py` and pushed when `HOMEBREW_TAP_TOKEN` is set
 - [x] Cross-platform desktop terminal integration: native Homebrew/deb/Windows
   installers own stable command paths, portable macOS/Linux builds offer an
   explicit user-local Settings launcher, and local macOS builds support

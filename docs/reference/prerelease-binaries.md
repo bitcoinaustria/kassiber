@@ -116,9 +116,9 @@ SHA256SUMS.txt
 
 When the repository secret `HOMEBREW_TAP_TOKEN` is configured, successful
 release publishes also update `bitcoinaustria/homebrew-kassiber` with a cask
-for `kassiber-macos-universal.dmg`. See
-[Homebrew Cask](homebrew-cask.md) for the tap setup and immutability
-requirements.
+for `kassiber-macos-universal.dmg` and a `kassiber-cli` formula for the
+CLI-only archives. See [Homebrew](homebrew.md) for the tap setup and
+immutability requirements.
 
 Use `x64` for public filenames instead of `x86_64`. Bundled sidecar resource
 filenames are internal to the desktop package and use Rust target triples such
@@ -235,8 +235,8 @@ arguments are also forwarded. Use the Settings-managed launcher, or pass
 `--cli ...` for any other executable name.
 
 macOS `.app` bundles also include `Contents/Resources/bin/kassiber`, a stable
-launcher that the Homebrew cask links directly with its `binary` stanza; see
-[Homebrew Cask](homebrew-cask.md).
+launcher that the Homebrew cask links directly with its `binary` stanza. A
+`kassiber-cli` formula covers CLI-only installs; see [Homebrew](homebrew.md).
 
 `KASSIBER_PYTHON` remains available as an intentional debug override for daemon
 startup and installed-app CLI forwarding.

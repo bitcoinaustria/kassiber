@@ -365,7 +365,7 @@ overview.
   [Operator broker](docs/reference/operator-broker.md) ·
   [Device & team sync](docs/reference/device-sync.md) ·
   [Prerelease binaries](docs/reference/prerelease-binaries.md) ·
-  [Homebrew Cask](docs/reference/homebrew-cask.md)
+  [Homebrew](docs/reference/homebrew.md)
 - **Architecture & plans** · [Overview](docs/plan/00-overview.md) ·
   [Desktop stack ADR](docs/plan/01-stack-decision.md) ·
   [Desktop implementation](docs/plan/04-desktop-ui.md) ·

@@ -170,7 +170,8 @@ and replace one another cleanly because both intentionally provide the
 
 Package managers can link the bundled launcher at
 `Kassiber.app/Contents/Resources/bin/kassiber` instead. The first target is a
-project-owned Homebrew tap; see [Homebrew Cask](homebrew-cask.md).
+project-owned Homebrew tap; see [Homebrew](homebrew.md). The tap also carries
+a GUI-free `kassiber-cli` formula built from the CLI-only release archives.
 
 The GUI executable also works as a CLI forwarder when launched directly with
 `--cli ...`. Examples:
