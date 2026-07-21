@@ -95,8 +95,8 @@ macOS Apple Silicon, macOS Intel, and Linux. Manual workflow runs upload
 SHA-256 files to a GitHub prerelease. Linux CLI binaries are built on Ubuntu
 22.04 to match the AppImage portability floor. CLI archives use
 `kassiber-cli-<target>.tar.gz` filenames and contain an executable named
-`kassiber`. The workflow also builds unsigned desktop previews for universal
-macOS (`.app` zip / `.dmg`), Linux (`.AppImage`), and Windows (`.msi` plus
+`kassiber`. The workflow also builds unsigned desktop previews for Apple
+Silicon macOS (`.app` zip / `.dmg`), Linux (`.AppImage`), and Windows (`.msi` plus
 NSIS setup `.exe`) with `kassiber-desktop-<target>-...` filenames. Desktop
 previews bundle a one-file Kassiber CLI sidecar, so they do not expect an
 external Kassiber-capable Python environment for normal daemon calls. The GUI

@@ -74,17 +74,22 @@ asks for one.
 
 The workflow currently builds:
 
-- CLI-only releases: macOS arm64, macOS x86_64, and Linux x86_64 one-file
-  PyInstaller binaries as `.tar.gz` archives, Windows x86_64 as a `.zip`, and
-  Linux x86_64 additionally as a GUI-free `kassiber-cli` `.deb`. The extracted
+- CLI-only releases: macOS arm64 and Linux x86_64 one-file PyInstaller
+  binaries as `.tar.gz` archives, Windows x86_64 as a `.zip`, and Linux
+  x86_64 additionally as a GUI-free `kassiber-cli` `.deb`. The extracted
   executable is named `kassiber` (`kassiber.exe` on Windows). These artifacts
   do not require the desktop app. Linux is built on Ubuntu 22.04 to keep the
   glibc floor aligned with the AppImage build.
-- Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
-  `.AppImage` plus `.deb`, and Windows `.msi` plus NSIS setup `.exe`, published
-  with short user-facing filenames. Each desktop preview includes the exact
-  one-file Kassiber CLI executable produced by the matching CLI-only matrix
-  leg; the universal macOS app bundles both arm64 and x86_64 variants.
+- Desktop previews: a macOS arm64 `.app` zip plus `.dmg`, Linux `.AppImage`
+  plus `.deb`, and Windows `.msi` plus NSIS setup `.exe`, published with short
+  user-facing filenames. Each desktop preview includes the exact one-file
+  Kassiber CLI executable produced by the matching CLI-only matrix leg.
+
+macOS is Apple Silicon only. Intel macOS builds were dropped deliberately:
+they could not ship the pinned `lwk` wheel (no macOS x86_64 wheel exists), so
+they silently downgraded Liquid observation to the compatibility route, and
+half-capable builds are worse than an explicit platform floor. Intel Mac users
+can run from source.
 
 Tag pushes keep the existing safe default and publish as prereleases. A manual
 workflow run can select `release_channel=release` to publish the same verified
@@ -103,12 +108,11 @@ GitHub release tag already supplies it:
 kassiber-cli-linux-x64.tar.gz
 kassiber-cli-linux-x64.deb
 kassiber-cli-macos-arm64.tar.gz
-kassiber-cli-macos-x64.tar.gz
 kassiber-cli-windows-x64.zip
 kassiber-linux-x64.deb
 kassiber-linux-x64.AppImage
-kassiber-macos-universal.app.zip
-kassiber-macos-universal.dmg
+kassiber-macos-arm64.app.zip
+kassiber-macos-arm64.dmg
 kassiber-windows-x64.exe
 kassiber-windows-x64.msi
 SHA256SUMS.txt
@@ -116,7 +120,7 @@ SHA256SUMS.txt
 
 When the repository secret `HOMEBREW_TAP_TOKEN` is configured, successful
 release publishes also update `bitcoinaustria/homebrew-kassiber` with a cask
-for `kassiber-macos-universal.dmg` and a `kassiber-cli` formula for the
+for `kassiber-macos-arm64.dmg` and a `kassiber-cli` formula for the
 CLI-only archives. See [Homebrew](homebrew.md) for the tap setup and
 immutability requirements.
 
@@ -125,18 +129,13 @@ filenames are internal to the desktop package and use Rust target triples such
 as `kassiber-cli-aarch64-apple-darwin`; those raw sidecars are not release
 assets.
 
-The macOS CLI legs stay architecture-specific because PyInstaller universal2
-requires a universal2 Python interpreter or extra binary stitching. The macOS
-desktop leg uses GitHub's `macos-latest` runner with Tauri's
-`--target universal-apple-darwin`, after installing both Rust targets
-(`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
-target name `macos-universal` so users see one Mac GUI download.
+The macOS desktop leg uses GitHub's `macos-latest` runner with Tauri's
+`--target aarch64-apple-darwin` and bundles the single arm64 CLI sidecar.
 
-The shared CLI build always collects pinned `bdkpython`. It collects pinned `lwk`
-where a native wheel exists. LWK 0.18.0 has no macOS x86_64 wheel, so the Intel
-sidecar deliberately omits it and routes Liquid descriptor observation through
-the named compatibility observer. macOS arm64, Linux x86_64, and Windows x86_64
-smokes include both dependencies.
+The shared CLI build always collects pinned `bdkpython` and pinned `lwk`;
+every packaged platform (macOS arm64, Linux x86_64, Windows x86_64) ships
+both, so packaged builds never fall back to the compatibility observer for
+missing wheels.
 
 ### Local Apple Silicon build
 
@@ -286,6 +285,5 @@ host OS supports it, for example on macOS:
 ```bash
 cd ui-tauri
 pnpm install --frozen-lockfile
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-pnpm tauri build --target universal-apple-darwin --bundles app,dmg --ci
+pnpm tauri build --target aarch64-apple-darwin --bundles app,dmg --ci
 ```

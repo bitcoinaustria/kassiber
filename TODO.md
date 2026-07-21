@@ -64,11 +64,10 @@ same verification surface.
     Electrum/demo gates pass; the reference document names concrete manual
     observer functions, ingress paths, commit boundaries, packaging references,
     tests and honest initial compatibility routes.
-  - [x] Phase 1 — cross-platform packaging: retain universal macOS desktop and
-    Intel CLI/sidecar builds, collect BDK on both Mac architectures, and keep
-    the named Liquid compatibility observer outside macOS arm64, Linux x86-64,
-    and Windows AMD64 because LWK 0.18.0 publishes wheels only for those
-    platforms.
+  - [x] Phase 1 — cross-platform packaging: initially retained universal macOS
+    desktop and Intel CLI/sidecar builds with the Liquid compatibility observer
+    covering the missing Intel LWK wheel; superseded 2026-07 by arm64-only
+    macOS packaging so every packaged platform bundles both BDK and LWK.
   - [x] Phase 2 — watch-only boundary: introduce one shared descriptor
     capability/preflight layer for CLI, daemon, files, BSMS, bare xpub,
     Samourai and compatibility importers; always reject spending-private
@@ -864,7 +863,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   dmg/app, Linux deb/AppImage, Windows msi/nsis via `pnpm tauri build --bundles`)
 - [x] Publish Homebrew tap files from release runs: cask `kassiber` (desktop
   app + linked terminal launcher) and formula `kassiber-cli` (GUI-free frozen
-  CLI for macOS arm64/x86_64 and Homebrew on Linux), rendered by
+  CLI for macOS arm64 and Homebrew on Linux x86_64), rendered by
   `scripts/render_homebrew.py` and pushed when `HOMEBREW_TAP_TOKEN` is set
 - [x] Cross-platform desktop terminal integration: native Homebrew/deb/Windows
   installers own stable command paths, portable macOS/Linux builds offer an
@@ -1123,9 +1122,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   the bare `blinding` substring are covered in all three secret-floor layers
   (`supervisor.rs`, `kassiber/redaction.py`, `ui-tauri/src/lib/appLogs.ts`) with
   regression tests.
-- [x] Cross-platform prerelease SQLCipher/CLI bundle smoke: macOS arm64/x86_64,
-  Linux x86_64, and Windows x86_64 run in the prerelease workflow. This remains
-  tag/manual-dispatch coverage rather than a per-PR matrix.
+- [x] Cross-platform prerelease SQLCipher/CLI bundle smoke: macOS arm64,
+  Linux x86_64, and Windows x86_64 run in the prerelease workflow (Intel macOS
+  dropped 2026-07). Packaging-relevant PRs run the same matrix unpublished.
 - [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric
   reveal gate. macOS desktop builds now have the first half for database
   unlock: first lock-screen passphrase entry can enroll Touch ID for the next

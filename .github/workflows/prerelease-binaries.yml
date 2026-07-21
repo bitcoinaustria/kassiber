@@ -78,12 +78,6 @@ jobs:
             triple: aarch64-apple-darwin
             exe_ext: ""
             archive: tar
-          - label: macOS x86_64
-            os: macos-15-intel
-            target: macos-x64
-            triple: x86_64-apple-darwin
-            exe_ext: ""
-            archive: tar
           - label: Linux x86_64
             os: ubuntu-22.04
             target: linux-x64
@@ -386,13 +380,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: macOS universal
+          - label: macOS arm64
             os: macos-latest
-            target: macos-universal
+            target: macos-arm64
             bundles: app,dmg
-            tauri_args: --target universal-apple-darwin
-            sidecar_artifact_pattern: kassiber-desktop-sidecar-*-apple-darwin
-            sidecar_expected: 2
+            tauri_args: --target aarch64-apple-darwin
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-aarch64-apple-darwin
+            sidecar_expected: 1
           - label: Linux
             os: ubuntu-22.04
             target: linux-x64
@@ -428,10 +422,6 @@ jobs:
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
         with:
           toolchain: stable
-
-      - name: Install macOS universal Rust targets
-        if: matrix.target == 'macos-universal'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
@@ -675,13 +665,12 @@ jobs:
 
           python scripts/render_homebrew.py cask \
             --version "$version" \
-            --sha256 "$(release_sha256 kassiber-macos-universal.dmg)" \
+            --sha256 "$(release_sha256 kassiber-macos-arm64.dmg)" \
             --output "homebrew-tap/${HOMEBREW_CASK_PATH}"
 
           python scripts/render_homebrew.py cli-formula \
             --version "$version" \
             --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
-            --sha256-macos-x64 "$(release_sha256 kassiber-cli-macos-x64.tar.gz)" \
             --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
             --output "homebrew-tap/${HOMEBREW_FORMULA_PATH}"
 

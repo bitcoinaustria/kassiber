@@ -122,7 +122,8 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Install
 
-**Homebrew** (macOS; the formula also works with Homebrew on Linux x86_64) —
+**Homebrew** (Apple Silicon macOS; the formula also works with Homebrew on
+Linux x86_64) —
 the quickest route, and `brew upgrade` tracks new releases automatically:
 
 ```bash
@@ -134,8 +135,9 @@ brew install kassiber-cli      # CLI only, no GUI dependencies
 Install the cask or the formula, not both — each provides the `kassiber`
 command. Details in [docs/reference/homebrew.md](docs/reference/homebrew.md).
 
-**Desktop app** — download an unsigned prerelease binary for macOS, Linux
-x86_64, or Windows x86_64 from the latest `v*` release. The bundle ships the
+**Desktop app** — download an unsigned prerelease binary for Apple Silicon
+macOS, Linux x86_64, or Windows x86_64 from the latest `v*` release. The
+bundle ships the
 same CLI executable as the CLI-only downloads,
 so no separate Python install is needed. Settings can install a user-local
 `kassiber` terminal launcher without administrator privileges. Gatekeeper /

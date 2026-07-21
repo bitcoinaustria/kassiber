@@ -9,8 +9,11 @@ Kassiber publishes two Homebrew packages from a project-owned tap:
   the GUI and a working `kassiber` command with no further steps.
 - **Formula `kassiber-cli`** — the CLI-only frozen executable, with no desktop
   GUI dependencies. It installs the same one-file binary that the CLI-only
-  release archives ship (macOS arm64, macOS x86_64, and — for Homebrew on
-  Linux — Linux x86_64).
+  release archives ship (macOS arm64 and — for Homebrew on Linux — Linux
+  x86_64).
+
+Both packages are Apple Silicon only on macOS; the cask declares
+`depends_on arch: :arm64`. Intel Macs run Kassiber from source.
 
 The cask and the formula both provide the `kassiber` command. Homebrew has no
 cask<->formula conflict mechanism (`conflicts_with` only accepts same-type
@@ -42,7 +45,7 @@ release artifacts and skips the Homebrew update.
 For a tag publish or `workflow_dispatch` run with `publish_release=true`, the
 release job:
 
-1. Builds and uploads `kassiber-macos-universal.dmg` plus the
+1. Builds and uploads `kassiber-macos-arm64.dmg` plus the
    `kassiber-cli-*.tar.gz` archives.
 2. Generates `SHA256SUMS.txt`.
 3. Checks out `bitcoinaustria/homebrew-kassiber` when `HOMEBREW_TAP_TOKEN` is

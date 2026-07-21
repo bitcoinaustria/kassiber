@@ -29,16 +29,18 @@ def validated_sha256(sha256: str, artifact: str) -> str:
 
 def render_cask(version: str, sha256: str) -> str:
     cask_version = normalized_version(version)
-    dmg_sha256 = validated_sha256(sha256, "kassiber-macos-universal.dmg")
+    dmg_sha256 = validated_sha256(sha256, "kassiber-macos-arm64.dmg")
 
     return f'''cask "kassiber" do
   version "{cask_version}"
   sha256 "{dmg_sha256}"
 
-  url "{RELEASE_URL_BASE}/v#{{version}}/kassiber-macos-universal.dmg"
+  url "{RELEASE_URL_BASE}/v#{{version}}/kassiber-macos-arm64.dmg"
   name "Kassiber"
   desc "Local-first Bitcoin accounting suite"
   homepage "https://github.com/bitcoinaustria/kassiber"
+
+  depends_on arch: :arm64
 
   app "Kassiber.app"
   binary "#{{appdir}}/Kassiber.app/Contents/Resources/bin/kassiber",
@@ -63,12 +65,10 @@ end
 def render_cli_formula(
     version: str,
     sha256_macos_arm64: str,
-    sha256_macos_x64: str,
     sha256_linux_x64: str,
 ) -> str:
     formula_version = normalized_version(version)
     macos_arm64 = validated_sha256(sha256_macos_arm64, "kassiber-cli-macos-arm64.tar.gz")
-    macos_x64 = validated_sha256(sha256_macos_x64, "kassiber-cli-macos-x64.tar.gz")
     linux_x64 = validated_sha256(sha256_linux_x64, "kassiber-cli-linux-x64.tar.gz")
 
     return f'''class KassiberCli < Formula
@@ -81,10 +81,6 @@ def render_cli_formula(
     on_arm do
       url "{RELEASE_URL_BASE}/v#{{version}}/kassiber-cli-macos-arm64.tar.gz"
       sha256 "{macos_arm64}"
-    end
-    on_intel do
-      url "{RELEASE_URL_BASE}/v#{{version}}/kassiber-cli-macos-x64.tar.gz"
-      sha256 "{macos_x64}"
     end
   end
 
@@ -122,7 +118,7 @@ def main() -> int:
 
     cask = subparsers.add_parser("cask", help="Render Casks/kassiber.rb")
     cask.add_argument("--version", required=True, help="Release version, with or without v prefix")
-    cask.add_argument("--sha256", required=True, help="SHA-256 of kassiber-macos-universal.dmg")
+    cask.add_argument("--sha256", required=True, help="SHA-256 of kassiber-macos-arm64.dmg")
     cask.add_argument("--output", required=True, type=Path)
 
     formula = subparsers.add_parser("cli-formula", help="Render Formula/kassiber-cli.rb")
@@ -131,9 +127,6 @@ def main() -> int:
     )
     formula.add_argument(
         "--sha256-macos-arm64", required=True, help="SHA-256 of kassiber-cli-macos-arm64.tar.gz"
-    )
-    formula.add_argument(
-        "--sha256-macos-x64", required=True, help="SHA-256 of kassiber-cli-macos-x64.tar.gz"
     )
     formula.add_argument(
         "--sha256-linux-x64", required=True, help="SHA-256 of kassiber-cli-linux-x64.tar.gz"
@@ -147,7 +140,6 @@ def main() -> int:
         rendered = render_cli_formula(
             args.version,
             args.sha256_macos_arm64,
-            args.sha256_macos_x64,
             args.sha256_linux_x64,
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)

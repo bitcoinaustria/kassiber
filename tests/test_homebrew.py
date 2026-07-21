@@ -22,9 +22,10 @@ class HomebrewCaskRenderTest(unittest.TestCase):
         self.assertIn('version "0.22.9"', cask)
         self.assertIn(f'sha256 "{sha256}"', cask)
         self.assertIn(
-            'url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-macos-universal.dmg"',
+            'url "https://github.com/bitcoinaustria/kassiber/releases/download/v#{version}/kassiber-macos-arm64.dmg"',
             cask,
         )
+        self.assertIn("depends_on arch: :arm64", cask)
         self.assertIn('app "Kassiber.app"', cask)
         self.assertIn(
             'binary "#{appdir}/Kassiber.app/Contents/Resources/bin/kassiber",',
@@ -62,7 +63,6 @@ class HomebrewCliFormulaRenderTest(unittest.TestCase):
         kwargs = {
             "version": "v0.22.9",
             "sha256_macos_arm64": "a" * 64,
-            "sha256_macos_x64": "b" * 64,
             "sha256_linux_x64": "c" * 64,
         }
         kwargs.update(overrides)
@@ -77,7 +77,6 @@ class HomebrewCliFormulaRenderTest(unittest.TestCase):
         self.assertIn('license "AGPL-3.0-only"', formula)
         for artifact, sha256 in (
             ("kassiber-cli-macos-arm64.tar.gz", "a" * 64),
-            ("kassiber-cli-macos-x64.tar.gz", "b" * 64),
             ("kassiber-cli-linux-x64.tar.gz", "c" * 64),
         ):
             self.assertIn(
@@ -85,6 +84,9 @@ class HomebrewCliFormulaRenderTest(unittest.TestCase):
                 formula,
             )
             self.assertIn(f'sha256 "{sha256}"', formula)
+        # Intel macOS builds are intentionally dropped (arm64-only Macs).
+        self.assertNotIn("kassiber-cli-macos-x64", formula)
+        self.assertNotIn("on_intel", formula.split("on_linux")[0])
 
     def test_render_formula_installs_frozen_cli_and_warns_about_cask_overlap(self):
         renderer = load_renderer()
@@ -102,7 +104,7 @@ class HomebrewCliFormulaRenderTest(unittest.TestCase):
     def test_render_formula_validates_each_checksum(self):
         renderer = load_renderer()
 
-        for field in ("sha256_macos_arm64", "sha256_macos_x64", "sha256_linux_x64"):
+        for field in ("sha256_macos_arm64", "sha256_linux_x64"):
             with self.assertRaises(ValueError):
                 self.render(renderer, **{field: "not-a-sha"})
 
@@ -120,23 +122,26 @@ class PrereleaseWorkflowHomebrewTest(unittest.TestCase):
             encoding="utf-8"
         )
 
-    def test_prerelease_workflow_keeps_universal_macos_support(self):
+    def test_prerelease_workflow_is_arm64_only_on_macos(self):
         workflow = self.workflow_text()
 
-        for required in (
+        # macOS ships arm64-only: no Intel runner, no universal target, no
+        # second Apple sidecar.
+        for forbidden in (
             "macos-15-intel",
             "x86_64-apple-darwin",
             "universal-apple-darwin",
             "macos-universal",
+            "macos-x64",
         ):
-            self.assertIn(required, workflow)
-        self.assertIn("target: macos-universal", workflow)
-        self.assertIn("tauri_args: --target universal-apple-darwin", workflow)
+            self.assertNotIn(forbidden, workflow)
+        self.assertIn("target: macos-arm64", workflow)
+        self.assertIn("tauri_args: --target aarch64-apple-darwin", workflow)
         self.assertIn(
-            "sidecar_artifact_pattern: kassiber-desktop-sidecar-*-apple-darwin",
+            "sidecar_artifact_pattern: kassiber-desktop-sidecar-aarch64-apple-darwin",
             workflow,
         )
-        self.assertIn("release_sha256 kassiber-macos-universal.dmg", workflow)
+        self.assertIn("release_sha256 kassiber-macos-arm64.dmg", workflow)
         self.assertIn("triple: x86_64-unknown-linux-gnu", workflow)
         self.assertIn("triple: x86_64-pc-windows-msvc", workflow)
 
