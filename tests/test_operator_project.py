@@ -17,6 +17,7 @@ from kassiber.operator.project import (
     acquire_project_ownership,
     canonical_project,
 )
+from kassiber.operator.protocol import operator_runtime_dir
 from kassiber.operator.service import OperationResult, OperatorService
 from kassiber import daemon as daemon_runtime
 
@@ -215,6 +216,22 @@ class OperatorProjectTest(unittest.TestCase):
                 / "run"
                 / "operator-owners",
             )
+
+    @unittest.skipIf(os.name == "nt", "POSIX account-home runtime permissions")
+    def test_owner_namespace_keeps_shared_broker_runtime_private(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            tempfile.TemporaryDirectory() as account,
+            mock.patch(
+                "pwd.getpwuid",
+                return_value=SimpleNamespace(pw_dir=account),
+            ),
+        ):
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            canonical_project(tmp)
+            runtime = Path(account) / ".kassiber" / "run"
+            self.assertEqual(runtime.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(operator_runtime_dir(), runtime.resolve())
 
     def test_broker_first_blocks_desktop_owner(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

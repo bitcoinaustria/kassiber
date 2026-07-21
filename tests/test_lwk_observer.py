@@ -155,7 +155,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
             "macosx_11_0_arm64", "manylinux_2_17_x86_64.manylinux2014_x86_64", "win_amd64",
         ):
             self.assertIn(f"lwk-0.18.0-py3-none-{platform}.whl", lock)
-        self.assertGreaterEqual(workflow.count("--collect-submodules lwk"), 2)
+        self.assertEqual(workflow.count("--collect-submodules lwk"), 1)
         self.assertEqual(
             workflow.count("--collect-submodules lwk"),
             workflow.count("--copy-metadata lwk"),

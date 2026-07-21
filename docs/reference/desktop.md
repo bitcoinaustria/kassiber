@@ -146,13 +146,32 @@ plaintext fallback and no remember-unlock behavior.
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher
 under the user's bin directory (for example `~/.local/bin/kassiber`) that
-forwards to the installed desktop executable and its bundled CLI sidecar. If
-that directory is not on PATH, Settings shows the PATH line to add to the
-user's shell.
+forwards to the installed desktop executable and its bundled CLI sidecar. On
+macOS and Linux it adds one clearly marked block to the current shell profile
+when the user bin directory is not already on PATH; removal deletes only that
+managed block. Apps launched from a DMG or macOS App Translocation must first
+be moved to Applications so the launcher cannot point at a transient mount.
+
+Native packages own the command integration for stable upgrades: the Homebrew
+cask links the app's bundled launcher, Linux `.deb` installs
+`/usr/bin/kassiber`, and Windows MSI/NSIS installers expose the bundled `bin`
+directory on PATH and remove only their own entry during uninstall. Settings
+recognizes these package-managed commands instead of offering to overwrite
+them. AppImage and direct-DMG installs retain the user-local fallback. None of
+these paths starts Kassiber automatically; the GUI, daemon, and CLI run only
+when invoked.
+
+Windows installer scope is deliberate: MSI is the machine-wide/admin route and
+owns its system PATH entry, while NSIS installs for the current user and owns
+only that user's PATH entry. Linux desktop and CLI-only Debian packages conflict
+and replace one another cleanly because both intentionally provide the
+`/usr/bin/kassiber` command; the desktop package carries GTK/WebKit, while
+`kassiber-cli` does not.
 
 Package managers can link the bundled launcher at
 `Kassiber.app/Contents/Resources/bin/kassiber` instead. The first target is a
-project-owned Homebrew tap; see [Homebrew Cask](homebrew-cask.md).
+project-owned Homebrew tap; see [Homebrew](homebrew.md). The tap also carries
+a GUI-free `kassiber-cli` formula built from the CLI-only release archives.
 
 The GUI executable also works as a CLI forwarder when launched directly with
 `--cli ...`. Examples:

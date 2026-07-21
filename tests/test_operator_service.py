@@ -20,8 +20,21 @@ from kassiber.db import (
 )
 from kassiber.errors import AppError
 from kassiber.operator import runner as operator_runner
-from kassiber.operator.client import BrokerClient, parse_duration, prepare_arguments, wipe_prepared
-from kassiber.operator.launcher import broker_server_command, cli_child_command
+from kassiber.operator.client import (
+    FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
+    SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS,
+    WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
+    BrokerClient,
+    _broker_startup_timeout_seconds,
+    parse_duration,
+    prepare_arguments,
+    wipe_prepared,
+)
+from kassiber.operator.launcher import (
+    broker_server_command,
+    cli_child_command,
+    prepare_independent_child_environment,
+)
 from kassiber.operator.project import canonical_project
 from kassiber.operator.protocol import MAX_JSON_FRAME
 from kassiber.command_capabilities import Capability
@@ -3381,6 +3394,40 @@ class OperatorClientArgumentTest(unittest.TestCase):
             self.assertEqual(
                 broker_server_command(),
                 ["/bundle/kassiber-cli", "--operator-broker-server"],
+            )
+
+    def test_frozen_sidecar_children_reset_pyinstaller_runtime(self) -> None:
+        environment = {"EXISTING": "value"}
+        with mock.patch("kassiber.operator.launcher.sys.frozen", True, create=True):
+            prepare_independent_child_environment(environment)
+        self.assertEqual(environment["EXISTING"], "value")
+        self.assertEqual(environment["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+
+    def test_source_children_do_not_gain_pyinstaller_runtime_setting(self) -> None:
+        environment: dict[str, str] = {}
+        with mock.patch("kassiber.operator.launcher.sys.frozen", False, create=True):
+            prepare_independent_child_environment(environment)
+        self.assertNotIn("PYINSTALLER_RESET_ENVIRONMENT", environment)
+
+    def test_frozen_broker_allows_for_one_file_extraction(self) -> None:
+        with mock.patch(
+            "kassiber.operator.client.sys.frozen", True, create=True
+        ), mock.patch("kassiber.operator.client.os.name", "posix"):
+            self.assertEqual(
+                _broker_startup_timeout_seconds(),
+                FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
+            )
+        with mock.patch(
+            "kassiber.operator.client.sys.frozen", True, create=True
+        ), mock.patch("kassiber.operator.client.os.name", "nt"):
+            self.assertEqual(
+                _broker_startup_timeout_seconds(),
+                WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
+            )
+        with mock.patch("kassiber.operator.client.sys.frozen", False, create=True):
+            self.assertEqual(
+                _broker_startup_timeout_seconds(),
+                SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS,
             )
 
     def test_secret_fd_is_replaced_by_opaque_label(self) -> None:

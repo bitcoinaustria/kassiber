@@ -9,6 +9,26 @@ SIDECAR_NAME="kassiber-cli-${TARGET_TRIPLE}"
 BINARIES_DIR="$ROOT/ui-tauri/src-tauri/binaries"
 BUNDLES="${BUNDLES:-app,dmg}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
+INSTALL_CLI=0
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/build-macos-arm64-app.sh [--install-cli]
+
+Build the local ad-hoc-signed macOS arm64 app. --install-cli additionally
+installs a user-local managed `kassiber` command after the finished app bundle
+passes its launcher smoke tests.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --install-cli) INSTALL_CLI=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
 
 run() {
   echo
@@ -47,6 +67,10 @@ APP_VERSION="$(
 )"
 APP_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
 APP_DISPLAY_VERSION="dev"
+if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
+  SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD 2>/dev/null || date +%s)"
+  export SOURCE_DATE_EPOCH
+fi
 # macOS (BSD) mktemp only substitutes a trailing run of X's, so a
 # ".XXXXXX.json" template is NOT randomized — it yields a fixed filename that
 # fails with "File exists" if a previous run was killed before its cleanup trap
@@ -56,6 +80,13 @@ TAURI_VERSION_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-version.XXXXXX")"
 trap 'rm -rf "$TAURI_VERSION_DIR"' EXIT
 TAURI_VERSION_CONFIG="$TAURI_VERSION_DIR/version.json"
 printf '{ "version": "%s" }\n' "$APP_VERSION" > "$TAURI_VERSION_CONFIG"
+BUILD_INFO="$TAURI_VERSION_DIR/BUILD_INFO.json"
+run uv run --locked --python "$PYTHON_VERSION" python scripts/write_build_info.py \
+  --output "$BUILD_INFO" \
+  --version "$APP_VERSION" \
+  --commit "$APP_COMMIT" \
+  --ref "$(git symbolic-ref --quiet --short HEAD 2>/dev/null || printf detached)" \
+  --channel dev
 
 echo "Building Kassiber desktop for macOS arm64 only."
 echo "Package version: $APP_VERSION"
@@ -72,6 +103,7 @@ run uv run --locked --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinst
   --specpath build \
   --paths . \
   --collect-data kassiber \
+  --add-data "$BUILD_INFO:kassiber/data" \
   --collect-submodules bdkpython \
   --collect-data bdkpython \
   --copy-metadata bdkpython \
@@ -130,6 +162,18 @@ run pnpm --dir ui-tauri install --frozen-lockfile
 run env CI=true KASSIBER_BUILD_VERSION="$APP_DISPLAY_VERSION" KASSIBER_BUILD_COMMIT="$APP_COMMIT" \
   pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci --config "$TAURI_VERSION_CONFIG"
 
+APP_BUNDLE="$ROOT/ui-tauri/src-tauri/target/$TARGET_TRIPLE/release/bundle/macos/Kassiber.app"
+if [ -d "$APP_BUNDLE" ]; then
+  run "$APP_BUNDLE/Contents/Resources/bin/kassiber" --version
+  run "$APP_BUNDLE/Contents/Resources/bin/kassiber" --help
+  if [ "$INSTALL_CLI" -eq 1 ]; then
+    run "$ROOT/scripts/install-macos-desktop-cli.sh" "$APP_BUNDLE"
+  fi
+elif [ "$INSTALL_CLI" -eq 1 ]; then
+  echo "--install-cli requires the app bundle; include app in BUNDLES." >&2
+  exit 1
+fi
+
 cat <<EOF
 
 macOS arm64 desktop build complete.
@@ -139,4 +183,7 @@ Look under:
 
 The app bundle includes:
   binaries/$SIDECAR_NAME
+
+To install or repair the user-local terminal command on the next build:
+  ./scripts/build-macos-arm64-app.sh --install-cli
 EOF

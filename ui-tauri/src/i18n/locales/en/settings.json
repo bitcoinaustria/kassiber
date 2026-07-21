@@ -275,7 +275,7 @@
     "removedBodyFallback": "The command",
     "removeError": "Could not remove terminal command.",
     "inspectError": "Could not inspect terminal command.",
-    "intro": "Installs a user-local launcher for the bundled desktop CLI so you can run <0>kassiber</0> from your shell. No administrator privileges are required.",
+    "intro": "Installs a user-local launcher for the bundled desktop CLI and configures your shell PATH when needed, so you can run <0>kassiber</0> from a new terminal. Nothing starts automatically and no administrator privileges are required.",
     "repairAction": "Repair command",
     "reinstallAction": "Reinstall command",
     "installAction": "Install command",

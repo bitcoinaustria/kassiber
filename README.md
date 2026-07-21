@@ -122,12 +122,32 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Install
 
+**Homebrew** (Apple Silicon macOS; the formula also works with Homebrew on
+Linux x86_64) —
+the quickest route, and `brew upgrade` tracks new releases automatically:
+
+```bash
+brew tap bitcoinaustria/kassiber
+brew install --cask kassiber   # desktop app + kassiber terminal command
+brew install kassiber-cli      # CLI only, no GUI dependencies
+```
+
+Install the cask or the formula, not both — each provides the `kassiber`
+command. Details in [docs/reference/homebrew.md](docs/reference/homebrew.md).
+
 **Desktop app** — download an unsigned prerelease binary for Apple Silicon
-macOS, Linux x86_64, or Windows x86_64 from the latest `v*` release. The bundle ships a CLI sidecar,
+macOS, Linux x86_64, or Windows x86_64 from the latest `v*` release. The
+bundle ships the
+same CLI executable as the CLI-only downloads,
 so no separate Python install is needed. Settings can install a user-local
 `kassiber` terminal launcher without administrator privileges. Gatekeeper /
 SmartScreen first-launch handling lives in
 [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
+
+**CLI only** — use the portable macOS/Linux `.tar.gz`, Windows `.zip`, or the
+GUI-free Linux `kassiber-cli` Debian package from the same release. The frozen
+CLI is the same executable bundled inside the desktop app and does not require
+Python or desktop GUI libraries.
 
 **From source** (CLI use or development, Python `>=3.10`):
 
@@ -359,7 +379,7 @@ overview.
   [Operator broker](docs/reference/operator-broker.md) ·
   [Device & team sync](docs/reference/device-sync.md) ·
   [Prerelease binaries](docs/reference/prerelease-binaries.md) ·
-  [Homebrew Cask](docs/reference/homebrew-cask.md)
+  [Homebrew](docs/reference/homebrew.md)
 - **Architecture & plans** · [Overview](docs/plan/00-overview.md) ·
   [Desktop stack ADR](docs/plan/01-stack-decision.md) ·
   [Desktop implementation](docs/plan/04-desktop-ui.md) ·

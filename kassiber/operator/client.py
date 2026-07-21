@@ -11,15 +11,29 @@ from dataclasses import dataclass
 from typing import BinaryIO
 
 from ..errors import AppError
+from .launcher import broker_server_command, prepare_independent_child_environment
 from .protocol import PROTOCOL_VERSION, BrokerChannel, connect
 from .service import _wipe
-from .launcher import broker_server_command
 
 
 TERMINAL_OPERATION_STATES = frozenset(
     {"completed", "failed", "cancelled", "result_unknown"}
 )
 MAX_CLIENT_SECRET_BYTES = 16 * 1024
+SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS = 5.0
+# One-file builds must unpack a second independent runtime before the broker can
+# bind its endpoint. Windows Defender can make that second extraction much
+# slower than the same operation on macOS or Linux.
+FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS = 30.0
+WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS = 90.0
+
+
+def _broker_startup_timeout_seconds() -> float:
+    if not getattr(sys, "frozen", False):
+        return SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS
+    if os.name == "nt":
+        return WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS
+    return FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS
 
 
 @dataclass
@@ -36,6 +50,7 @@ class BrokerClient:
             pass
         environment = os.environ.copy()
         environment.pop("KASSIBER_OPERATOR_DIRECT", None)
+        prepare_independent_child_environment(environment)
         popen_args: dict[str, object] = {
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,
@@ -50,7 +65,7 @@ class BrokerClient:
         else:
             popen_args["start_new_session"] = True
         subprocess.Popen(broker_server_command(), **popen_args)
-        deadline = time.monotonic() + 5.0
+        deadline = time.monotonic() + _broker_startup_timeout_seconds()
         last_error: Exception | None = None
         while time.monotonic() < deadline:
             try:

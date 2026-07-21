@@ -31,8 +31,39 @@
     },
     "resources": [
       "binaries/",
-      "bin/"
+      "bin/",
+      "windows/update-path.ps1"
     ],
+    "linux": {
+      "deb": {
+        "provides": [
+          "kassiber-command"
+        ],
+        "conflicts": [
+          "kassiber-cli"
+        ],
+        "replaces": [
+          "kassiber-cli"
+        ],
+        "files": {
+          "/usr/bin/kassiber": "bin/kassiber-linux"
+        }
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/installer-hooks.nsh",
+        "installMode": "currentUser"
+      },
+      "wix": {
+        "fragmentPaths": [
+          "./windows/fragments/cli-path.wxs"
+        ],
+        "componentRefs": [
+          "KassiberCliPath"
+        ]
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

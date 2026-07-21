@@ -275,7 +275,7 @@
     "removedBodyFallback": "Der Befehl",
     "removeError": "Terminal-Befehl konnte nicht entfernt werden.",
     "inspectError": "Terminal-Befehl konnte nicht geprüft werden.",
-    "intro": "Installiert einen benutzerlokalen Starter für das mitgelieferte Desktop-CLI, damit du <0>kassiber</0> aus deiner Shell ausführen kannst. Es sind keine Administratorrechte erforderlich.",
+    "intro": "Installiert einen benutzerlokalen Starter für das mitgelieferte Desktop-CLI und richtet bei Bedarf den Shell-PATH ein, damit du <0>kassiber</0> in einem neuen Terminal ausführen kannst. Nichts startet automatisch und es sind keine Administratorrechte erforderlich.",
     "repairAction": "Befehl reparieren",
     "reinstallAction": "Befehl neu installieren",
     "installAction": "Befehl installieren",

@@ -470,12 +470,14 @@ fetch/apply decomposition is outside the chain-observer contract.
 
 ## Cross-platform packaging checkpoint
 
-Phase 1 retains `macos-15-intel`, both Apple sidecars, the universal Tauri
-target and the universal Homebrew artifact. BDK 3.0.0 ships wheels for both Mac
-architectures. LWK 0.18.0 ships only arm64 on macOS, so the dependency is
-platform-marked out on Intel and capability selection chooses the named Liquid
-compatibility observer before network access. Linux x86_64 and Windows x86_64
-continue to bundle both dependencies.
+Phase 1 retained `macos-15-intel`, both Apple sidecars, and the universal
+Tauri target, with the Intel sidecar platform-marked out of LWK 0.18.0 (no
+macOS x86_64 wheel) and routed through the named Liquid compatibility
+observer. That asymmetry is why Intel macOS packaging was dropped in 2026-07:
+macOS builds are now arm64-only, and every packaged platform (macOS arm64,
+Linux x86_64, Windows x86_64) bundles both BDK and LWK. The compatibility
+observer remains for configurations the lwk binding cannot represent and for
+source installs without the wheel.
 
 ## Production cleanup inventory
 

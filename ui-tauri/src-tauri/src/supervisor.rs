@@ -1090,7 +1090,11 @@ struct DaemonCommand {
 }
 
 pub fn run_cli(resource_dir: Option<&Path>, args: Vec<String>) -> i32 {
-    let command = kassiber_command(resource_dir, args);
+    let inferred_resource_dir = resource_dir
+        .is_none()
+        .then(resource_dir_before_tauri)
+        .flatten();
+    let command = kassiber_command(resource_dir.or(inferred_resource_dir.as_deref()), args);
     let mut process = Command::new(&command.program);
     process.args(&command.args).current_dir(&command.cwd);
     if let Ok(executable) = env::current_exe() {
@@ -1107,6 +1111,35 @@ pub fn run_cli(resource_dir: Option<&Path>, args: Vec<String>) -> i32 {
             1
         }
     }
+}
+
+fn resource_dir_before_tauri() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(app_dir) = env::var_os("APPDIR").filter(|value| !value.is_empty()) {
+        candidates.push(
+            PathBuf::from(app_dir)
+                .join("usr")
+                .join("lib")
+                .join("Kassiber"),
+        );
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    if let Ok(executable) = env::current_exe() {
+        if let Some(parent) = executable.parent() {
+            #[cfg(target_os = "macos")]
+            if let Some(contents) = parent.parent() {
+                candidates.push(contents.join("Resources"));
+            }
+            #[cfg(target_os = "windows")]
+            candidates.push(parent.to_path_buf());
+        }
+    }
+    #[cfg(target_os = "linux")]
+    candidates.push(PathBuf::from("/usr/lib/Kassiber"));
+
+    candidates
+        .into_iter()
+        .find(|candidate| bundled_sidecar(Some(candidate)).is_some())
 }
 
 impl DaemonCommand {

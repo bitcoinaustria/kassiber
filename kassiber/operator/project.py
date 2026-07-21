@@ -283,15 +283,24 @@ def _owner_lock_root() -> Path:
         # XDG variables so every normal process for this UID rendezvouses in a
         # persistent namespace that tmpfile cleanup cannot unlink mid-lease.
         account_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-        root = account_home / ".kassiber" / "run" / "operator-owners"
-    if root.is_symlink():
+        runtime_root = account_home / ".kassiber" / "run"
+        # The broker uses this parent directly and rejects group/world access.
+        # Owner-first project initialization must therefore create it as 0700.
+        _ensure_owner_lock_directory(runtime_root)
+        root = runtime_root / "operator-owners"
+    _ensure_owner_lock_directory(root)
+    return root.resolve(strict=True)
+
+
+def _ensure_owner_lock_directory(path: Path) -> None:
+    if path.is_symlink():
         raise AppError(
             "the project owner lock directory may not be a symlink",
             code="unsafe_project_owner_lock",
             retryable=False,
         )
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    info = root.stat()
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = path.stat()
     if not stat.S_ISDIR(info.st_mode):
         raise AppError(
             "the project owner lock path is not a directory",
@@ -300,8 +309,7 @@ def _owner_lock_root() -> Path:
         )
     _require_current_owner(info)
     if os.name != "nt":
-        os.chmod(root, 0o700)
-    return root.resolve(strict=True)
+        os.chmod(path, 0o700)
 
 
 def _windows_local_appdata() -> Path:
