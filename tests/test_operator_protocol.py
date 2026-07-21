@@ -24,6 +24,13 @@ from kassiber.operator.client import BrokerClient
 
 
 class OperatorProtocolTest(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows path-owner contract")
+    def test_windows_accepts_a_temp_path_owned_by_the_effective_account(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(
+                operator_protocol.windows_path_owned_by_current_user(tmp)
+            )
+
     def test_json_and_challenge_bound_secret_frames_are_distinct(self) -> None:
         left, right = socket.socketpair()
         sender = BrokerChannel(_SocketTransport(left))

@@ -457,6 +457,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
     _SDDL_REVISION_1 = 1
     _SE_FILE_OBJECT = 1
     _OWNER_SECURITY_INFORMATION = 0x00000001
+    _BUILTIN_ADMINISTRATORS_SID = "S-1-5-32-544"
 
     class _SECURITY_ATTRIBUTES(ctypes.Structure):
         _fields_ = [
@@ -582,6 +583,17 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
         ctypes.POINTER(wintypes.LPWSTR),
     ]
     _advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
+    _advapi32.ConvertStringSidToSidW.argtypes = [
+        wintypes.LPCWSTR,
+        ctypes.POINTER(wintypes.LPVOID),
+    ]
+    _advapi32.ConvertStringSidToSidW.restype = wintypes.BOOL
+    _advapi32.CheckTokenMembership.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPVOID,
+        ctypes.POINTER(wintypes.BOOL),
+    ]
+    _advapi32.CheckTokenMembership.restype = wintypes.BOOL
     _advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = (
         wintypes.BOOL
     )
@@ -669,6 +681,25 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
         finally:
             _kernel32.LocalFree(ctypes.cast(text, wintypes.LPVOID))
 
+    def _windows_current_token_is_member(sid: str) -> bool:
+        sid_pointer = wintypes.LPVOID()
+        if not _advapi32.ConvertStringSidToSidW(
+            sid,
+            ctypes.byref(sid_pointer),
+        ):
+            _raise_windows("ConvertStringSidToSidW failed")
+        is_member = wintypes.BOOL()
+        try:
+            if not _advapi32.CheckTokenMembership(
+                None,
+                sid_pointer,
+                ctypes.byref(is_member),
+            ):
+                _raise_windows("CheckTokenMembership failed")
+            return bool(is_member.value)
+        finally:
+            _kernel32.LocalFree(sid_pointer)
+
     def windows_path_owned_by_current_user(path: str) -> bool:
         owner = wintypes.LPVOID()
         descriptor = wintypes.LPVOID()
@@ -689,7 +720,19 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
             if not _advapi32.ConvertSidToStringSidW(owner, ctypes.byref(text)):
                 _raise_windows("ConvertSidToStringSidW for path owner failed")
             try:
-                return text.value == _windows_current_sid()
+                owner_sid = text.value
+                if owner_sid == _windows_current_sid():
+                    return True
+                # Elevated Windows accounts commonly create files owned by
+                # the built-in Administrators group.  Every administrator can
+                # already take ownership of local files, so accepting this
+                # well-known owner for an administrator does not broaden the
+                # boundary to ordinary same-machine users.  Do not accept
+                # arbitrary token groups such as BUILTIN\\Users.
+                return (
+                    owner_sid == _BUILTIN_ADMINISTRATORS_SID
+                    and _windows_current_token_is_member(owner_sid)
+                )
             finally:
                 _kernel32.LocalFree(ctypes.cast(text, wintypes.LPVOID))
         finally:

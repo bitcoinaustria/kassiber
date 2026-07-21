@@ -26,6 +26,7 @@ TEST_DATABASE_IDENTITY = "d" * 32
 
 
 class OperatorNativeAuthTest(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "macOS helper launch uses inherited POSIX fds")
     def test_launch_gate_keeps_helper_alive_through_pid_validation(self) -> None:
         script = (
             "import os,sys;"
