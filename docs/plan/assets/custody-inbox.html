@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kassiber — Custody Inbox (north-star mockup)</title>
+<style>
+  /* ── Kassiber tokens (mirrors ui-tauri/src/styles/globals.css) ─────────── */
+  :root {
+    --paper: #ffffff;
+    --paper-2: #ececec;
+    --ink: #222222;
+    --ink-2: #555555;
+    --ink-3: #8a8a8a;
+    --line: #dcdcdc;
+    --line-2: #c4c4c4;
+    --accent: #e3000f;
+    --ok: #047857;         /* emerald-700 */
+    --ok-bg: #ecfdf5;
+    --warn: #b45309;       /* amber-700 */
+    --warn-bg: #fffbeb;
+    --bad: #be123c;        /* rose-700 */
+    --bad-bg: #fff1f2;
+    --shadow-hard: 8px 8px 0 var(--ink);
+    --shadow-accent: 3px 3px 0 var(--accent);
+    --sans: "Blinker", system-ui, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .dark {
+    --paper: #161616;
+    --paper-2: #1f1f1f;
+    --ink: #f2f2f2;
+    --ink-2: #b5b5b5;
+    --ink-3: #7d7d7d;
+    --line: #333333;
+    --line-2: #454545;
+    --accent: #ff3341;
+    --ok: #34d399; --ok-bg: rgba(16,185,129,.12);
+    --warn: #fbbf24; --warn-bg: rgba(245,158,11,.12);
+    --bad: #fb7185; --bad-bg: rgba(244,63,94,.12);
+    --shadow-hard: 8px 8px 0 #000;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14.4px; } /* 16 * 0.9 app scale */
+  body {
+    font-family: var(--sans);
+    background: var(--paper-2);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  .mono { font-family: var(--mono); }
+  .cap {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+  /* ── shell ──────────────────────────────────────────────────────────────── */
+  .shell { display: flex; min-height: 100vh; }
+  aside {
+    width: 176px; flex: none; background: var(--paper);
+    border-right: 1px solid var(--line); padding: 14px 10px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .wordmark { font-weight: 800; font-size: 15px; letter-spacing: .02em; padding: 2px 8px 12px; }
+  .wordmark b { color: var(--accent); }
+  .navsec { padding: 12px 8px 4px; }
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 8px; font-size: 12.5px; color: var(--ink-2); width: 100%;
+    text-align: left;
+  }
+  .nav.active { background: var(--ink); color: var(--paper); }
+  .dark .nav.active { background: #f2f2f2; color: #161616; }
+  .navpill {
+    font-family: var(--mono); font-size: 10px; padding: 0 5px; line-height: 15px;
+    background: var(--bad-bg); color: var(--bad); border: 1px solid currentColor;
+  }
+  main { flex: 1; min-width: 0; padding: 16px 20px 40px; max-width: 1160px; }
+
+  /* ── page header ────────────────────────────────────────────────────────── */
+  .pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  h1 { font-size: 19px; font-weight: 700; }
+  .goal { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+  .goal b { color: var(--ink); }
+  .themebtn { border: 1px solid var(--line-2); height: 28px; padding: 0 10px; font-size: 12px; background: var(--paper); }
+
+  .progresswrap { display: flex; align-items: center; gap: 10px; margin: 10px 0 14px; }
+  .progress { flex: 1; height: 6px; background: var(--paper); border: 1px solid var(--line-2); }
+  .progress > div { height: 100%; background: var(--ink); transition: width .4s ease; }
+  .progresslabel { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line-2); margin-bottom: 14px; }
+  .tab {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    padding: 7px 14px; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab.active { color: var(--ink); border-color: var(--accent); }
+
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip {
+    border: 1px solid var(--line-2); background: var(--paper); font-size: 12px;
+    padding: 3px 10px; color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center;
+  }
+  .chip .n { font-family: var(--mono); font-size: 11px; }
+  .chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .dark .chip.active { background: #f2f2f2; color: #161616; }
+  .chip.blocking.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ── master-detail ──────────────────────────────────────────────────────── */
+  .split { display: grid; grid-template-columns: 340px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+
+  .queue { background: var(--paper); border: 1px solid var(--line); }
+  .qitem {
+    display: block; width: 100%; text-align: left; padding: 10px 12px;
+    border-bottom: 1px solid var(--line); position: relative;
+  }
+  .qitem:hover { background: var(--paper-2); }
+  .qitem.sel { background: var(--paper-2); }
+  .qitem.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+  .qitem.done { opacity: .45; }
+  .qline { font-size: 12.5px; line-height: 1.45; }
+  .qline b { font-weight: 600; }
+  .qmeta { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
+  .tag {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase;
+    padding: 1px 6px; border: 1px solid var(--line-2); color: var(--ink-3); background: var(--paper);
+  }
+  .tag.type { color: var(--ink-2); }
+  .tag.strong { color: var(--ok); border-color: currentColor; background: var(--ok-bg); }
+  .tag.exact { color: var(--ok); border-color: currentColor; background: var(--ok-bg); }
+  .tag.moderate { color: var(--warn); border-color: currentColor; background: var(--warn-bg); }
+  .tag.conflict { color: var(--bad); border-color: currentColor; background: var(--bad-bg); }
+  .tag.blocks { color: var(--bad); border-color: currentColor; background: var(--bad-bg); }
+  .tag.suggested { color: var(--accent); border-color: currentColor; }
+  .tag.followup { color: var(--warn); border-color: currentColor; background: var(--warn-bg); }
+  .qgroup {
+    width: 100%; text-align: left; padding: 8px 12px; font-size: 12px; color: var(--ink-3);
+    border-bottom: 1px solid var(--line); background: var(--paper);
+  }
+  .kbdhint { padding: 8px 12px; font-size: 10.5px; color: var(--ink-3); font-family: var(--mono); }
+  kbd { border: 1px solid var(--line-2); padding: 0 4px; font-size: 10px; background: var(--paper-2); }
+
+  /* ── decision card ──────────────────────────────────────────────────────── */
+  .card { background: var(--paper); border: 1px solid var(--ink); box-shadow: var(--shadow-hard); }
+  .dark .card { border-color: var(--line-2); }
+  .cardpad { padding: 18px 20px; }
+  .cardhead { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .q { font-size: 18px; font-weight: 700; margin: 6px 0 2px; }
+  .qsub { color: var(--ink-2); font-size: 12.5px; }
+
+  /* flow diagram */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 18px 0 6px; flex-wrap: wrap; }
+  .node {
+    border: 1px solid var(--ink); background: var(--paper); padding: 10px 12px; min-width: 128px;
+  }
+  .dark .node { border-color: var(--line-2); }
+  .node .who { font-weight: 700; font-size: 13px; }
+  .node .what { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+  .node.unknown { border-style: dashed; background: transparent; color: var(--ink-2); }
+  .node.unknown .who { color: var(--ink-2); }
+  .edge { flex: 1 1 70px; min-width: 70px; align-self: center; text-align: center; padding: 0 4px; position: relative; }
+  .edge .amt { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .edge .sub { font-size: 10px; color: var(--ink-3); font-family: var(--mono); }
+  .edge svg { display: block; width: 100%; height: 10px; margin: 3px 0; }
+  .edge line { stroke: var(--ink-3); stroke-width: 1.4; }
+  .edge .head { fill: var(--ink-3); }
+  .flownotes { display: flex; gap: 14px; margin: 8px 0 0; flex-wrap: wrap; }
+  .flownote { font-size: 11.5px; color: var(--ink-3); }
+  .flownote.warn { color: var(--warn); font-weight: 600; }
+
+  /* evidence + impact */
+  .why { margin-top: 16px; }
+  .why ul { list-style: none; margin-top: 6px; }
+  .why li { font-size: 13px; padding: 3px 0 3px 16px; position: relative; color: var(--ink-2); }
+  .why li::before { content: "—"; position: absolute; left: 0; color: var(--ink-3); }
+  .disclosure { margin-top: 6px; }
+  .disclosure > button { font-size: 11.5px; color: var(--ink-3); text-decoration: underline; text-underline-offset: 3px; }
+  .disclosure .body { display: none; margin-top: 8px; border-left: 2px solid var(--line-2); padding: 6px 10px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); line-height: 1.7; }
+  .disclosure.open .body { display: block; }
+  .impact {
+    margin-top: 14px; padding: 8px 10px; background: var(--warn-bg); color: var(--warn);
+    font-size: 12.5px; border: 1px solid currentColor;
+  }
+  .impact.calm { background: var(--paper-2); color: var(--ink-2); border-color: var(--line-2); }
+
+  /* choices (conflict / residual) */
+  .choices { margin-top: 14px; display: grid; gap: 8px; }
+  .choice {
+    display: flex; gap: 10px; align-items: flex-start; text-align: left;
+    border: 1px solid var(--line-2); padding: 10px 12px; background: var(--paper); width: 100%;
+  }
+  .choice:hover { border-color: var(--ink-2); }
+  .choice.sel { border-color: var(--ink); outline: 1px solid var(--ink); }
+  .choice .dot { width: 12px; height: 12px; border: 1.5px solid var(--ink-3); border-radius: 50%; margin-top: 2px; flex: none; }
+  .choice.sel .dot { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 2.5px var(--paper); }
+  .choice .t { font-size: 13px; font-weight: 600; }
+  .choice .d { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+  .choicegroup { margin-top: 10px; }
+  .choicegroup .cap { display: block; margin-bottom: 6px; }
+
+  /* actions */
+  .actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    height: 34px; padding: 0 16px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--ink); background: var(--paper); color: var(--ink);
+  }
+  .btn:hover { background: var(--paper-2); }
+  .btn.primary { background: var(--ink); color: var(--paper); box-shadow: var(--shadow-accent); }
+  .btn.primary:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 var(--accent); }
+  .dark .btn.primary { background: #f2f2f2; color: #161616; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.ghost { border-color: var(--line-2); color: var(--ink-2); font-weight: 400; }
+  .overflow { color: var(--ink-3); font-size: 18px; line-height: 1; padding: 6px 8px; }
+
+  /* inline confirm */
+  .confirm { display: none; margin-top: 16px; border-top: 1px dashed var(--line-2); padding-top: 14px; }
+  .confirm.open { display: block; }
+  .confirm h3 { font-size: 13px; font-weight: 700; }
+  .confirm ul { list-style: none; margin: 8px 0 12px; }
+  .confirm li { font-size: 12.5px; color: var(--ink-2); padding: 2px 0 2px 16px; position: relative; }
+  .confirm li::before { content: "→"; position: absolute; left: 0; color: var(--ink-3); }
+  .checkrow { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; margin-bottom: 12px; }
+  .checkrow input { margin-top: 2px; accent-color: var(--accent); }
+
+  /* toast */
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(6px);
+    background: var(--ink); color: var(--paper); font-size: 12.5px; padding: 9px 14px;
+    display: flex; gap: 14px; align-items: center; opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s; box-shadow: var(--shadow-accent);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+  #toast button { color: inherit; text-decoration: underline; text-underline-offset: 3px; font-size: 12.5px; }
+
+  /* done state */
+  .donecard { text-align: center; padding: 48px 20px; }
+  .donecard .big { font-size: 30px; }
+  .donecard h2 { font-size: 17px; margin-top: 10px; }
+  .donecard p { color: var(--ink-2); font-size: 13px; margin-top: 5px; }
+
+  /* history */
+  .timeline { background: var(--paper); border: 1px solid var(--line); }
+  .tl { display: flex; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); align-items: flex-start; }
+  .tl .when { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); width: 82px; flex: none; padding-top: 2px; }
+  .tl .what { flex: 1; font-size: 13px; }
+  .tl .what .sub { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+  .tl .act { font-size: 11.5px; color: var(--ink-3); text-decoration: underline; text-underline-offset: 3px; flex: none; }
+
+  /* advanced */
+  .advgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .advcard { background: var(--paper); border: 1px solid var(--line); padding: 14px; }
+  .advcard h3 { font-size: 13.5px; }
+  .advcard p { font-size: 12px; color: var(--ink-2); margin: 5px 0 10px; line-height: 1.5; }
+  .advnote { margin: 0 0 12px; font-size: 12px; color: var(--ink-3); }
+
+  .view { display: none; }
+  .view.active { display: block; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="wordmark">kassiber<b>.</b></div>
+    <div class="navsec cap">Main</div>
+    <button class="nav">Overview</button>
+    <button class="nav">Transactions</button>
+    <button class="nav">Wallets</button>
+    <button class="nav">Reports</button>
+    <div class="navsec cap">Review</div>
+    <button class="nav">Quarantine</button>
+    <button class="nav active">Custody <span class="navpill" id="navBadge">4</span></button>
+    <button class="nav">Source of funds</button>
+    <button class="nav">Journals</button>
+  </aside>
+
+  <main>
+    <div class="pagehead">
+      <div>
+        <div class="cap">Review · analyzed locally</div>
+        <h1>Custody</h1>
+        <div class="goal" id="goalLine"><b>4 open questions</b> — 2 block your 2024 report.</div>
+      </div>
+      <button class="themebtn" onclick="document.documentElement.classList.toggle('dark')">◐ theme</button>
+    </div>
+
+    <div class="progresswrap">
+      <div class="progress"><div id="bar" style="width:75%"></div></div>
+      <div class="progresslabel num" id="barLabel">12 / 16 resolved</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-view="inbox">Inbox</button>
+      <button class="tab" data-view="history">History</button>
+      <button class="tab" data-view="advanced">Advanced</button>
+    </div>
+
+    <!-- ═══════════ INBOX ═══════════ -->
+    <section class="view active" id="view-inbox">
+      <div class="chips" id="chips">
+        <button class="chip active" data-f="all">All <span class="n" id="cAll">4</span></button>
+        <button class="chip blocking" data-f="blocking">Blocks report <span class="n" id="cBlock">2</span></button>
+        <button class="chip" data-f="suggested">Suggested <span class="n" id="cSugg">2</span></button>
+        <button class="chip" data-f="low">Low confidence <span class="n">2</span></button>
+      </div>
+
+      <div class="split">
+        <div>
+          <div class="queue" id="queue"></div>
+          <div class="kbdhint"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>y</kbd> yes · <kbd>n</kbd> no</div>
+        </div>
+        <div id="detail"></div>
+      </div>
+    </section>
+
+    <!-- ═══════════ HISTORY ═══════════ -->
+    <section class="view" id="view-history">
+      <p class="advnote">Every settled decision in one audit trail — bridges, matches, dismissals, revisions. Nothing is ever deleted; corrections append.</p>
+      <div class="timeline">
+        <div class="tl"><div class="when">Jul 18 2026</div><div class="what">Confirmed match — <b>0.05 BTC</b> Lightning → Liquid swap (Phoenix → Aqua)<div class="sub">Exact payment-hash evidence · carrying-value</div></div><button class="act">Undo</button></div>
+        <div class="tl"><div class="when">Jul 02 2026</div><div class="what">Connected — <b>2.0 → 1.98 BTC</b> Ledger cold → Sparrow hot via unobserved wallet<div class="sub">Reviewed bridge, revision 2 · remainder 0.02 BTC classified: network fee + spent externally</div></div><button class="act">Reopen</button></div>
+        <div class="tl"><div class="when">Jun 21 2026</div><div class="what">Not my money — <b>0.8 BTC</b> outflow from River withdrawals<div class="sub">Dismissed · reopens automatically if new evidence appears</div></div><button class="act">Review</button></div>
+        <div class="tl"><div class="when">Jun 21 2026</div><div class="what">Component revised — Whirlpool boundary bridge <span class="tag" style="margin-left:4px">expert</span><div class="sub">manual_bridge · quantity conservation · authored by user · revision 3</div></div><button class="act">Detail</button></div>
+      </div>
+    </section>
+
+    <!-- ═══════════ ADVANCED ═══════════ -->
+    <section class="view" id="view-advanced">
+      <p class="advnote">Expert tools and technical evidence. Nothing here is required to close custody questions — the inbox is the primary path.</p>
+      <div class="advgrid">
+        <div class="advcard"><h3>Manual component builder</h3><p>Author custody components leg by leg — for N:M shapes, excess returns, and cross-rail cases the guided path refuses. Pre-seeded when opened from a question.</p><button class="btn ghost">Open builder</button></div>
+        <div class="advcard"><h3>Auto-pair rules</h3><p>2 rules active. Automatically confirm recurring exact-evidence matches (e.g. weekly Whirlpool cycles).</p><button class="btn ghost">Manage rules</button></div>
+        <div class="advcard"><h3>Bulk review</h3><p>Select and confirm many reviewed same-asset candidates at once, with a dry-run preview.</p><button class="btn ghost">Start bulk review</button></div>
+        <div class="advcard"><h3>Saved views</h3><p>Saved queue filters (confidence, method, route) for repeat workflows.</p><button class="btn ghost">Manage views</button></div>
+        <div class="advcard"><h3>Wallet coverage timeline</h3><p>Imported wallet policy epochs and derivation-branch scan bounds. Technical only — it never clears a question.</p><button class="btn ghost">Open timeline</button></div>
+        <div class="advcard"><h3>Custody lineage</h3><p>Every verified or reviewed custody move, with tax-basis eligibility per edge.</p><button class="btn ghost">Open lineage</button></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"><span id="toastMsg"></span><button onclick="undoLast()">Undo</button></div>
+
+<script>
+/* ── sample data (shapes mirror ui.custody.gaps.list / ui.transfers.suggest) ── */
+const items = [
+  {
+    id: "gap-1", kind: "gap", type: "Missing wallet",
+    line: '<b>10 BTC</b> left <b>Ledger cold</b> → <b>9.9 BTC</b> arrived <b>Sparrow hot</b> 2 days later',
+    conf: "strong", suggested: true, blocks: "2024",
+    q: "Is this the same Bitcoin?",
+    sub: "It looks like these coins passed through a wallet you never imported (a Whirlpool mixer).",
+    flow: { from: {who:"Ledger cold", what:"Jun 12 2026 · on-chain"}, mid: {who:"Unobserved wallet", what:"Whirlpool boundary"}, to: {who:"Sparrow hot", what:"Jun 14 2026 · on-chain"}, out: "10 BTC", back: "9.9 BTC", fee: "0.0004 BTC network fee", residual: "0.0996 BTC unexplained remainder" },
+    why: [
+      "Both sides sit on a known Whirlpool privacy boundary (structured evidence).",
+      "9.9 of 10 BTC returned within 2 days — 99% coverage.",
+      "No competing explanation comes close (score margin 210)."
+    ],
+    codes: "structured_privacy_boundary · structured_samourai_policy · amount_coverage_high · wallet_transition · promotion_eligible",
+    impact: "Resolving affects 3 later sales · re-opens tax years 2024–2025.",
+    consequences: [
+      "Carries the cost basis of 9.9 BTC from Ledger cold into Sparrow hot.",
+      "0.0996 BTC stays unexplained — you'll get one follow-up question.",
+      "Tax years 2024–2025 will be recomputed; filed report “AT 2024” is marked for amendment."
+    ],
+    yes: "Yes — it’s mine, connect it", no: "No — not my money",
+    followup: {
+      id: "gap-1r", kind: "residual", type: "Missing wallet",
+      line: 'Where did the remaining <b>0.0996 BTC</b> go?',
+      conf: null, suggested: false, blocks: "2024",
+      q: "Where did the remaining 0.0996 BTC go?",
+      sub: "10 BTC left, 9.9 BTC came back, 0.0004 BTC was the network fee. That leaves 0.0996 BTC.",
+      groups: [
+        { cap: "It left my custody", opts: [
+          ["external_payment","I spent it","Payment to someone else from inside the gap"],
+          ["external_disposal","I sold it","Disposed for fiat or another asset"],
+          ["external_gift","I gave it away","Gift — no proceeds"],
+          ["external_loss","It’s lost","Dust, fees I can’t reconstruct, or lost access"]]},
+        { cap: "Still mine", opts: [
+          ["retained_custody","Still in the unimported wallet","Kassiber keeps it as reviewed retained custody"]]},
+        { cap: "Not sure yet", opts: [
+          ["suspense_continuation","Leave open for now","Stays visible as an honest open remainder — nothing is guessed"]]}
+      ],
+      impact: "Your answer sets custody state only — tax meaning is derived later by your profile’s tax policy.",
+      yes: "Save answer"
+    }
+  },
+  {
+    id: "swap-1", kind: "pair", type: "Swap",
+    line: '<b>0.05 BTC</b> left <b>Phoenix (Lightning)</b> → <b>0.0496 L-BTC</b> arrived <b>Aqua (Liquid)</b> minutes later',
+    conf: "exact", suggested: true, blocks: null,
+    q: "Confirm this swap?",
+    sub: "The Lightning payment and the Liquid arrival share the same payment hash — this is cryptographic, not a guess.",
+    flow: { from: {who:"Phoenix", what:"Jul 19 2026 · Lightning"}, mid: null, to: {who:"Aqua", what:"Jul 19 2026 · Liquid"}, out: "0.05 BTC", back: "0.0496 L-BTC", fee: "0.0004 BTC swap fee (0.8%)", residual: null },
+    why: [
+      "Identical payment hash on both legs (reverse submarine swap).",
+      "Amounts match within the swap-fee tolerance.",
+    ],
+    codes: "payment_hash_exact · reverse_submarine_swap · fee_within_tolerance",
+    impact: null,
+    consequences: [
+      "Records one swap: Lightning out, Liquid in, 0.0004 BTC fee.",
+      "Both stay Bitcoin exposure — carrying-value treatment, no taxable event."
+    ],
+    yes: "Yes — one swap", no: "No — unrelated",
+  },
+  {
+    id: "gap-2", kind: "conflict", type: "Missing wallet",
+    line: '<b>1.2 BTC</b> left <b>River withdrawals</b> — two possible returns compete',
+    conf: "conflict", suggested: false, blocks: "2025",
+    q: "Which explanation is right?",
+    sub: "Two different inflows could be the return of this 1.2 BTC. They can’t both be — pick the one that matches what you did.",
+    options: [
+      ["a","0.6 + 0.59 BTC into Sparrow hot, Jul 3","Two-part return, 99% coverage · slightly ahead on evidence"],
+      ["b","1.19 BTC into Old mobile wallet, Jul 9","Single return 6 days later, 99% coverage"],
+      ["none","Neither — this money didn’t come back","Treats the outflow as leaving your custody"]
+    ],
+    impact: "Resolving affects 1 later sale · tax year 2025.",
+    consequences: ["Kassiber will build the reviewed connection for the return you pick.","The competing candidate is dismissed and reopens automatically if evidence changes."],
+    yes: "Continue with selection", no: null,
+  },
+  {
+    id: "tr-1", kind: "pair", type: "Transfer",
+    line: '<b>0.3 BTC</b> left <b>Kraken</b> → <b>0.2999 BTC</b> arrived <b>Cold storage</b> 20 min later',
+    conf: "strong", suggested: false, blocks: null,
+    q: "Is this your own transfer?",
+    sub: "Same amount minus network fee, 20 minutes apart. Kassiber can’t prove it on-chain, so it asks.",
+    flow: { from: {who:"Kraken", what:"Jul 10 2026 · exchange"}, mid: null, to: {who:"Cold storage", what:"Jul 10 2026 · on-chain"}, out: "0.3 BTC", back: "0.2999 BTC", fee: "0.0001 BTC network fee", residual: null },
+    why: ["Amounts match within fee tolerance (time + amount heuristic).","Destination is your imported cold-storage wallet."],
+    codes: "time_amount_heuristic · amount_coverage_high",
+    impact: null,
+    consequences: ["Records a self-transfer — cost basis moves with the coins, no taxable event."],
+    yes: "Yes — my transfer", no: "No — unrelated",
+  },
+];
+const lowHints = 2;
+
+let state = {
+  sel: "gap-1", filter: "all",
+  resolved: 12, total: 16,
+  done: {}, // id -> "yes"|"no"
+  pendingFollowup: null,
+  confirmOpen: false, checked: false, choice: null,
+  hintsOpen: false,
+  last: null,
+};
+
+const $ = (s) => document.querySelector(s);
+
+function visibleItems() {
+  let list = items.filter(i => !state.done[i.id]);
+  if (state.pendingFollowup) list = [state.pendingFollowup, ...list];
+  if (state.filter === "blocking") list = list.filter(i => i.blocks);
+  if (state.filter === "suggested") list = list.filter(i => i.suggested);
+  if (state.filter === "low") list = [];
+  return list;
+}
+
+function confTag(i) {
+  if (i.kind === "residual") return '<span class="tag followup">follow-up</span>';
+  if (i.conf === "exact") return '<span class="tag exact">exact evidence</span>';
+  if (i.conf === "strong") return '<span class="tag strong">strong</span>';
+  if (i.conf === "conflict") return '<span class="tag conflict">competing evidence</span>';
+  return '<span class="tag moderate">moderate</span>';
+}
+
+function renderQueue() {
+  const list = visibleItems();
+  const doneList = items.filter(i => state.done[i.id]);
+  let html = list.map(i => `
+    <button class="qitem ${state.sel===i.id?"sel":""}" onclick="select('${i.id}')">
+      <div class="qline">${i.line}</div>
+      <div class="qmeta">
+        <span class="tag type">${i.type}</span>
+        ${confTag(i)}
+        ${i.suggested ? '<span class="tag suggested">✦ suggested</span>' : ""}
+        ${i.blocks ? `<span class="tag blocks">blocks ${i.blocks}</span>` : ""}
+      </div>
+    </button>`).join("");
+  html += doneList.map(i => `
+    <div class="qitem done">
+      <div class="qline">${i.line}</div>
+      <div class="qmeta"><span class="tag">${state.done[i.id]==="yes"?"resolved":"dismissed"}</span></div>
+    </div>`).join("");
+  html += `<button class="qgroup" onclick="state.hintsOpen=!state.hintsOpen;render()">
+      ${state.hintsOpen ? "▾" : "▸"} ${lowHints} low-confidence hints — nothing blocks, review anytime
+    </button>`;
+  if (state.hintsOpen) html += `
+    <div class="qitem" style="opacity:.65"><div class="qline">0.02 BTC out of <b>Old mobile wallet</b>, no clear return</div>
+      <div class="qmeta"><span class="tag type">Search hint</span><span class="tag moderate">weak</span></div></div>
+    <div class="qitem" style="opacity:.65"><div class="qline">0.008 BTC into <b>Sparrow hot</b>, origin unknown</div>
+      <div class="qmeta"><span class="tag type">Search hint</span><span class="tag moderate">weak</span></div></div>`;
+  $("#queue").innerHTML = html;
+}
+
+function flowHTML(f) {
+  const arrow = `<svg viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="92" y2="5"/><polygon class="head" points="92,1 100,5 92,9"/></svg>`;
+  const dashed = `<svg viewBox="0 0 100 10" preserveAspectRatio="none"><line x1="0" y1="5" x2="92" y2="5" stroke-dasharray="5 4"/><polygon class="head" points="92,1 100,5 92,9"/></svg>`;
+  let h = `<div class="flow">
+    <div class="node"><div class="who">${f.from.who}</div><div class="what">${f.from.what}</div></div>
+    <div class="edge"><div class="amt num">− ${f.out}</div>${f.mid?dashed:arrow}<div class="sub">out</div></div>`;
+  if (f.mid) h += `
+    <div class="node unknown"><div class="who">？ ${f.mid.who}</div><div class="what">${f.mid.what}</div></div>
+    <div class="edge"><div class="amt num">+ ${f.back}</div>${dashed}<div class="sub">back</div></div>`;
+  else h += "";
+  h += `<div class="node"><div class="who">${f.to.who}</div><div class="what">${f.to.what}</div></div></div>`;
+  if (!f.mid) {
+    // simple 2-node flow: relabel middle edge amounts
+    h = h.replace(`<div class="amt num">− ${f.out}</div>`, `<div class="amt num">${f.out} → ${f.back}</div>`);
+    h = h.replace('<div class="sub">out</div>', '<div class="sub">one move</div>');
+  }
+  h += `<div class="flownotes">
+    ${f.fee ? `<div class="flownote">fee · <span class="num">${f.fee}</span></div>` : ""}
+    ${f.residual ? `<div class="flownote warn">⚠ <span class="num">${f.residual}</span></div>` : ""}
+  </div>`;
+  return h;
+}
+
+function detailHTML(i) {
+  if (!i) return doneHTML();
+  const isConflict = i.kind === "conflict";
+  const isResidual = i.kind === "residual";
+  let body = `
+    <div class="cardpad">
+      <div class="cardhead">
+        <div>
+          <div class="qmeta" style="margin:0 0 4px">
+            <span class="tag type">${i.type}</span>${confTag(i)}
+            ${i.suggested ? '<span class="tag suggested">✦ suggested</span>' : ""}
+          </div>
+          <div class="q">${i.q}</div>
+          <div class="qsub">${i.sub}</div>
+        </div>
+        <button class="overflow" title="Skip · open in expert builder · view raw evidence">⋮</button>
+      </div>`;
+
+  if (i.flow) body += flowHTML(i.flow);
+
+  if (isConflict) {
+    body += `<div class="choices">` + i.options.map(([v,t,d]) => `
+      <button class="choice ${state.choice===v?"sel":""}" onclick="state.choice='${v}';state.confirmOpen=false;render()">
+        <span class="dot"></span><span><span class="t">${t}</span><div class="d">${d}</div></span>
+      </button>`).join("") + `</div>`;
+  }
+
+  if (isResidual) {
+    body += i.groups.map(g => `
+      <div class="choicegroup"><span class="cap">${g.cap}</span><div class="choices" style="margin-top:0">` +
+      g.opts.map(([v,t,d]) => `
+        <button class="choice ${state.choice===v?"sel":""}" onclick="state.choice='${v}';render()">
+          <span class="dot"></span><span><span class="t">${t}</span><div class="d">${d}</div></span>
+        </button>`).join("") + `</div></div>`).join("");
+  }
+
+  if (i.why) body += `
+    <div class="why"><span class="cap">Why Kassiber thinks so</span>
+      <ul>${i.why.map(w=>`<li>${w}</li>`).join("")}</ul>
+      <div class="disclosure" id="disc">
+        <button onclick="this.parentElement.classList.toggle('open')">Full evidence & review history</button>
+        <div class="body">${i.codes}<br>input_version 4182 · fingerprint 9c41…e2 · no prior reviews</div>
+      </div>
+    </div>`;
+
+  if (i.impact) body += `<div class="impact ${isResidual?'calm':''}">${i.impact}</div>`;
+
+  // actions
+  const yesDisabled = (isConflict || isResidual) && !state.choice;
+  body += `<div class="actions">
+      <button class="btn primary" ${yesDisabled?"disabled":""} onclick="openConfirm('${i.id}')">${i.yes}</button>
+      ${i.no ? `<button class="btn" onclick="decide('${i.id}','no')">${i.no}</button>` : ""}
+      <button class="btn ghost" onclick="skip('${i.id}')">Skip for now</button>
+    </div>`;
+
+  // inline confirm
+  if (i.consequences) body += `
+    <div class="confirm ${state.confirmOpen?"open":""}">
+      <h3>Before you confirm — this will:</h3>
+      <ul>${i.consequences.map(c=>`<li>${c}</li>`).join("")}</ul>
+      <label class="checkrow"><input type="checkbox" ${state.checked?"checked":""} onchange="state.checked=this.checked;render(true)">
+        I reviewed this and the movement is mine.</label>
+      <div class="actions" style="margin-top:0">
+        <button class="btn primary" ${state.checked?"":"disabled"} onclick="decide('${i.id}','yes')">Confirm</button>
+        <button class="btn ghost" onclick="state.confirmOpen=false;render()">Back</button>
+      </div>
+    </div>`;
+  else if (isResidual) body += `
+    <div class="confirm ${state.confirmOpen?"open":""}">
+      <h3>Before you confirm — this will:</h3>
+      <ul><li>Records your answer as reviewed custody state (append-only, revisable).</li></ul>
+      <div class="actions" style="margin-top:0">
+        <button class="btn primary" onclick="decide('${i.id}','yes')">Confirm</button>
+        <button class="btn ghost" onclick="state.confirmOpen=false;render()">Back</button>
+      </div>
+    </div>`;
+
+  body += `</div>`;
+  return `<div class="card">${body}</div>`;
+}
+
+function doneHTML() {
+  return `<div class="card"><div class="donecard">
+    <div class="big">✓</div>
+    <h2>All custody questions resolved</h2>
+    <p>Your 2024 report is unblocked. New questions appear here automatically when future imports or syncs surface unexplained moves.</p>
+    <div class="actions" style="justify-content:center;margin-top:18px">
+      <button class="btn primary">Reprocess journals</button>
+      <button class="btn ghost" onclick="switchView('history')">View history</button>
+    </div>
+  </div></div>`;
+}
+
+function current() {
+  if (state.pendingFollowup && state.sel === state.pendingFollowup.id) return state.pendingFollowup;
+  return items.find(i => i.id === state.sel && !state.done[i.id]) || visibleItems()[0] || null;
+}
+
+function select(id) { state.sel = id; state.confirmOpen = false; state.checked = false; state.choice = null; render(); }
+function openConfirm(id) { state.confirmOpen = true; render(); }
+function skip(id) { advance(id); render(); }
+
+function decide(id, ans) {
+  const i = current();
+  state.done[id] = ans;
+  state.resolved += 1;
+  state.last = { id, item: i };
+  if (i && i.followup && ans === "yes") {
+    state.pendingFollowup = i.followup;
+    state.total += 1; // the follow-up question becomes its own resolvable item
+    state.sel = i.followup.id;
+  } else {
+    if (state.pendingFollowup && state.pendingFollowup.id === id) state.pendingFollowup = null;
+    advance(id);
+  }
+  state.confirmOpen = false; state.checked = false; state.choice = null;
+  toast(ans === "yes" ? "Connected — journals will reprocess." : "Dismissed — reopens automatically if evidence changes.");
+  render();
+}
+
+function advance(fromId) {
+  const list = visibleItems().filter(i => i.id !== fromId);
+  state.sel = list.length ? list[0].id : null;
+}
+
+function undoLast() {
+  if (!state.last) return;
+  delete state.done[state.last.id];
+  state.resolved -= 1;
+  if (state.last.item && state.last.item.followup && state.pendingFollowup
+      && state.pendingFollowup.id === state.last.item.followup.id) {
+    state.pendingFollowup = null;
+    state.total -= 1;
+  }
+  state.sel = state.last.id; state.last = null;
+  $("#toast").classList.remove("show");
+  render();
+}
+
+let toastTimer;
+function toast(msg) {
+  $("#toastMsg").textContent = msg + " · Undo (20 s)";
+  $("#toast").classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("#toast").classList.remove("show"), 6000);
+}
+
+function switchView(v) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
+  document.querySelectorAll(".view").forEach(s => s.classList.toggle("active", s.id === "view-" + v));
+}
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
+
+document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
+  state.filter = c.dataset.f;
+  document.querySelectorAll(".chip").forEach(x => x.classList.toggle("active", x === c));
+  const list = visibleItems();
+  if (!list.find(i => i.id === state.sel)) state.sel = list[0]?.id ?? null;
+  render();
+}));
+
+document.addEventListener("keydown", (e) => {
+  if (!$("#view-inbox").classList.contains("active")) return;
+  const list = visibleItems();
+  const idx = list.findIndex(i => i.id === state.sel);
+  if (e.key === "ArrowDown" && idx < list.length - 1) { select(list[idx+1].id); e.preventDefault(); }
+  if (e.key === "ArrowUp" && idx > 0) { select(list[idx-1].id); e.preventDefault(); }
+  if (e.key === "y" && current()) { state.confirmOpen ? null : openConfirm(current().id); }
+  if (e.key === "n" && current() && current().no) decide(current().id, "no");
+});
+
+function render(keepScroll) {
+  const open = items.filter(i => !state.done[i.id]).length + (state.pendingFollowup && !state.done[state.pendingFollowup.id] ? 1 : 0);
+  const blocking = items.filter(i => !state.done[i.id] && i.blocks).length;
+  $("#navBadge").textContent = open || "";
+  $("#navBadge").style.display = open ? "" : "none";
+  $("#goalLine").innerHTML = open
+    ? `<b>${open} open question${open>1?"s":""}</b> — ${blocking ? blocking + " block your 2024 report." : "none block your reports."}`
+    : `All clear — nothing blocks your reports.`;
+  $("#cAll").textContent = open;
+  $("#cBlock").textContent = blocking;
+  $("#cSugg").textContent = items.filter(i => !state.done[i.id] && i.suggested).length;
+  const pct = Math.round(100 * state.resolved / state.total);
+  $("#bar").style.width = pct + "%";
+  $("#barLabel").textContent = `${state.resolved} / ${state.total} resolved`;
+  renderQueue();
+  $("#detail").innerHTML = detailHTML(current());
+}
+render();
+</script>
+</body>
+</html>
