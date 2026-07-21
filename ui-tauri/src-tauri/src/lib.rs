@@ -3724,6 +3724,7 @@ mod tests {
         assert!(contents.contains("kassiber-ui"));
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn terminal_command_launcher_targets_bundled_console_launcher_without_cli_flag() {
         let target = Path::new("/Applications/Kassiber.app/Contents/Resources/bin/kassiber");
