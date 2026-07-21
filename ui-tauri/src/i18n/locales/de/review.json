@@ -501,11 +501,8 @@
     },
     "dismissReason": "vom Benutzer aus der Prüfungs-Warteschlange verworfen",
     "inbox": {
-      "goalClear": "Alles geklärt — nichts blockiert deine Berichte.",
-      "goal_one": "{{count}} offene Frage.",
-      "goal_other": "{{count}} offene Fragen.",
-      "settled_one": "{{count}} erledigt",
-      "settled_other": "{{count}} erledigt",
+      "goal_one": "{{count}} offene Frage",
+      "goal_other": "{{count}} offene Fragen",
       "filter": {
         "all": "Alle",
         "blocking": "Blockiert Bericht",
@@ -550,7 +547,8 @@
         "connectedTitle": "Verbunden",
         "connectedBody": "Kassiber hat die geprüfte Brücke erfasst. Verarbeite das Journal, um die Berichte zu aktualisieren.",
         "dismissedTitle": "Verworfen",
-        "dismissedBody": "Dieser Vorschlag öffnet sich automatisch wieder, wenn sich die Nachweise ändern."
+        "dismissedBody": "Dieser Vorschlag öffnet sich automatisch wieder, wenn sich die Nachweise ändern.",
+        "dismissing": "Wird verworfen…"
       },
       "residual": {
         "question": "Wohin sind die restlichen {{amount}} gegangen?",
@@ -585,7 +583,8 @@
         "body": "Deine Berichte sind nicht mehr durch offene Verwahrungsprüfungen blockiert. Neue Fragen erscheinen hier automatisch, wenn Importe oder Syncs ungeklärte Bewegungen finden."
       },
       "blockingNote_one": "{{count}} blockiert deine Berichte ({{years}}).",
-      "blockingNote_other": "{{count}} blockieren deine Berichte ({{years}})."
+      "blockingNote_other": "{{count}} blockieren deine Berichte ({{years}}).",
+      "confirmTitle": "Bevor du bestätigst — das passiert:"
     },
     "advanced": {
       "intro": "Werkzeuge für Fortgeschrittene und technische Nachweise. Nichts davon ist nötig, um Verwahrungsfragen zu schließen — der Haupteinstieg sind die offenen Fragen.",

@@ -9,10 +9,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, ChevronDown, ChevronRight, ShieldCheck, TriangleAlert } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  TriangleAlert,
+} from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -51,10 +55,6 @@ interface SuggestEnvelope {
   candidates: InboxCandidate[];
 }
 
-interface PairsEnvelope {
-  pairs: unknown[];
-}
-
 function QueueRow({
   item,
   selected,
@@ -65,8 +65,18 @@ function QueueRow({
   onSelect: () => void;
 }) {
   const { t } = useTranslation("review");
-  const { t: tGaps } = useTranslation("custodyGaps");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
+  // Exactly one quiet marker per row (or none): the strongest signal wins.
+  // Confidence and type live in the card's eyebrow, not in the queue.
+  const marker = itemBlocksReports(item)
+    ? { label: t("swap.inbox.blocksBadge"), tone: "alert" as const }
+    : itemHasCompetingEvidence(item)
+      ? { label: t("swap.inbox.competingBadge"), tone: "alert" as const }
+      : item.kind === "residual"
+        ? { label: t("swap.inbox.type.followUp"), tone: "muted" as const }
+        : itemIsSuggested(item)
+          ? { label: t("swap.inbox.suggestedBadge"), tone: "muted" as const }
+          : null;
   const line =
     item.kind === "residual"
       ? t("swap.inbox.line.residual", {
@@ -113,40 +123,21 @@ function QueueRow({
           aria-hidden="true"
         />
       ) : null}
-      <p className={cn("text-sm leading-snug", hideSensitive && "sensitive")}>
+      <p className={cn("text-[13px] leading-snug", hideSensitive && "sensitive")}>
         {line}
       </p>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {item.kind === "residual" ? (
-          <Badge variant="outline" className="text-[10px]">
-            {t("swap.inbox.type.followUp")}
-          </Badge>
-        ) : null}
-        {item.kind !== "candidate" ? (
-          <Badge variant="outline" className="text-[10px]">
-            {tGaps(`confidence.${item.gap.confidence}`)}
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-[10px]">
-            {item.candidate.confidence === "exact"
-              ? t("swap.confidence.exact")
-              : t("swap.confidence.strong")}
-          </Badge>
-        )}
-        {itemIsSuggested(item) ? (
-          <Badge className="text-[10px]">{t("swap.inbox.suggestedBadge")}</Badge>
-        ) : null}
-        {itemHasCompetingEvidence(item) ? (
-          <Badge variant="destructive" className="text-[10px]">
-            {t("swap.inbox.competingBadge")}
-          </Badge>
-        ) : null}
-        {itemBlocksReports(item) ? (
-          <Badge variant="destructive" className="text-[10px]">
-            {t("swap.inbox.blocksBadge")}
-          </Badge>
-        ) : null}
-      </div>
+      {marker ? (
+        <p
+          className={cn(
+            "mt-1 text-[10px] font-medium uppercase tracking-[0.14em]",
+            marker.tone === "alert"
+              ? "text-rose-600 dark:text-rose-400"
+              : "text-muted-foreground",
+          )}
+        >
+          {marker.label}
+        </p>
+      ) : null}
     </button>
   );
 }
@@ -173,8 +164,6 @@ export function CustodyInbox({
   const swapQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest", {
     candidate_type: "swap",
   });
-  const pairedQuery = useDaemon<PairsEnvelope>("ui.transfers.list");
-
   const gapPages = useMemo(
     () =>
       (gapsQuery.data?.pages ?? [])
@@ -231,17 +220,12 @@ export function CustodyInbox({
     void transferQuery.refetch();
     void swapQuery.refetch();
     void gapsQuery.refetch();
-    void pairedQuery.refetch();
   };
 
   if (gapsQuery.isLoading && transferQuery.isLoading) {
     return <ScreenSkeleton titleWidth="w-48" />;
   }
 
-  const settledCount =
-    (snapshot?.summary.resolved ?? 0) +
-    (snapshot?.summary.dismissed ?? 0) +
-    (pairedQuery.data?.data?.pairs?.length ?? 0);
   const years = blockedYears(items);
   const derivedStateCurrent = snapshot?.summary.derived_state_current === true;
   const searchComplete = snapshot?.summary.search_complete !== false;
@@ -261,41 +245,40 @@ export function CustodyInbox({
     },
   ];
 
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            {counts.open === 0
-              ? t("swap.inbox.goalClear")
-              : counts.blocking > 0
-                ? `${t("swap.inbox.goal", { count: counts.open })} ${t(
-                    "swap.inbox.blockingNote",
-                    { count: counts.blocking, years: years.join(", ") },
-                  )}`
-                : t("swap.inbox.goal", { count: counts.open })}
-            {settledCount > 0 ? (
-              <span className="text-muted-foreground/70">
-                {" · "}
-                {t("swap.inbox.settled", { count: settledCount })}
-              </span>
-            ) : null}
-          </p>
-        </div>
-        <Badge variant="outline" className="gap-1.5">
-          <ShieldCheck className="size-3.5" aria-hidden="true" />
-          {tGaps("localOnly")}
-        </Badge>
-      </div>
+  // At most one quiet status line — the strongest condition wins; never a
+  // stack of banner cards above the work.
+  const statusLine =
+    snapshot && !derivedStateCurrent
+      ? tGaps("processing.body")
+      : !searchComplete
+        ? tGaps("searchIncomplete.body")
+        : null;
 
-      {!derivedStateCurrent && snapshot ? (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-sm text-amber-800 dark:text-amber-200">
-          {tGaps("processing.body")}
-        </p>
+  return (
+    <div className="space-y-4">
+      {counts.open > 0 ? (
+        <div>
+          <h1 className="text-xl font-semibold">
+            {t("swap.inbox.goal", { count: counts.open })}
+          </h1>
+          {counts.blocking > 0 ? (
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {t("swap.inbox.blockingNote", {
+                count: counts.blocking,
+                years: years.join(", "),
+              })}
+            </p>
+          ) : null}
+        </div>
       ) : null}
-      {!searchComplete ? (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-sm text-amber-800 dark:text-amber-200">
-          {tGaps("searchIncomplete.body")}
+
+      {statusLine ? (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <TriangleAlert
+            className="mt-0.5 size-3.5 shrink-0 text-amber-600"
+            aria-hidden="true"
+          />
+          {statusLine}
         </p>
       ) : null}
 

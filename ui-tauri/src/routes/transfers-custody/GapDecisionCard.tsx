@@ -12,7 +12,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -34,13 +33,11 @@ import {
   type CustodyGap,
   type CustodyGapReviewHistory,
   type CustodyResidualClassification,
+  type FiledReportImpactPreview,
   type ResidualClassificationPreview,
 } from "../custodyGapsModel";
-import {
-  BridgePreviewPanel,
-  ResidualPreviewPanel,
-  ReviewHistoryPanel,
-} from "../CustodyGaps";
+import { ReviewHistoryPanel } from "../CustodyGaps";
+import { ConfirmSection } from "./ConfirmSection";
 import { FlowDiagram } from "./FlowDiagram";
 import { topReasonCodes } from "./inboxModel";
 
@@ -161,6 +158,18 @@ export function GapDecisionCard({
       cause instanceof Error ? cause.message : tGaps("actions.failed"),
     );
   };
+
+  // Filed-report impacts as plain caution sentences (no nested panels).
+  const impactNotes = (impacts: FiledReportImpactPreview[]) =>
+    impacts.flatMap((impact) => [
+      tGaps("filedImpact.report", {
+        kind: impact.report_kind.replaceAll("_", " "),
+        state: tGaps(`filedImpact.state.${impact.report_state}`),
+        start: impact.affected_period_start_year,
+        end: impact.affected_period_end_year,
+      }),
+      impact.amendment_warning,
+    ]);
 
   const planBridge = async () => {
     setActionError(null);
@@ -291,21 +300,20 @@ export function GapDecisionCard({
   return (
     <Card className="gap-4 py-5">
       <CardContent className="space-y-4 px-5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline">{t("swap.inbox.type.gap")}</Badge>
-          <Badge variant="outline">
-            {tGaps(`confidence.${gap.confidence}`)}
-          </Badge>
-          {gap.promotion_eligible ? (
-            <Badge>{t("swap.inbox.suggestedBadge")}</Badge>
-          ) : null}
-          {gap.status === "conflicting" ? (
-            <Badge variant="destructive">{t("swap.inbox.competingBadge")}</Badge>
-          ) : null}
-        </div>
-
         <div>
-          <h2 className="text-lg font-semibold">
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            {[
+              t("swap.inbox.type.gap"),
+              tGaps(`confidence.${gap.confidence}`),
+              gap.promotion_eligible ? t("swap.inbox.suggestedBadge") : null,
+              gap.status === "conflicting"
+                ? t("swap.inbox.competingBadge")
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          <h2 className="mt-1.5 text-xl font-semibold">
             {residualMode
               ? t("swap.inbox.residual.question", { amount: residualAmount })
               : t("swap.inbox.gap.question")}
@@ -399,10 +407,7 @@ export function GapDecisionCard({
             <ul className="space-y-1 text-sm text-muted-foreground">
               {topReasonCodes(gap).map((reason) => (
                 <li key={reason} className="flex gap-2">
-                  <CheckCircle2
-                    className="mt-0.5 size-4 shrink-0 text-emerald-600"
-                    aria-hidden="true"
-                  />
+                  <span aria-hidden="true">–</span>
                   <span>
                     {tGaps(`reasons.${reason}`, {
                       defaultValue: reason.replaceAll("_", " "),
@@ -429,13 +434,13 @@ export function GapDecisionCard({
         </Collapsible>
 
         {!residualMode && impactParts.length > 0 ? (
-          <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-sm text-amber-800 dark:text-amber-200">
-            {impactParts.join(" · ")}
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            {impactParts.join(" ")}
           </p>
         ) : null}
 
         {gap.status === "conflicting" ? (
-          <p className="rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm">
+          <p className="text-sm text-rose-700 dark:text-rose-300">
             {t("swap.inbox.gap.competingNote")}
           </p>
         ) : null}
@@ -475,45 +480,82 @@ export function GapDecisionCard({
         )}
 
         {pendingPlan?.action === "create" ? (
-          <BridgePreviewPanel
-            preview={pendingPlan.preview}
-            asset={gap.asset}
-            isCreating={reviewApply.isPending}
+          <ConfirmSection
+            heading={t("swap.inbox.confirmTitle")}
+            lines={[
+              tGaps("actions.previewAmounts", {
+                retained: formatCustodyMsat(
+                  pendingPlan.preview.retained_msat,
+                  gap.asset,
+                ),
+                residual: formatCustodyMsat(
+                  pendingPlan.preview.residual_msat,
+                  gap.asset,
+                ),
+                fee: formatCustodyMsat(pendingPlan.preview.fee_msat, gap.asset),
+              }),
+            ]}
+            notes={[
+              ...(pendingPlan.preview.warnings ?? []).map((warning) =>
+                tGaps(`warnings.${warning}`, {
+                  defaultValue: warning.replaceAll("_", " "),
+                }),
+              ),
+              ...impactNotes(pendingPlan.preview.filed_report_impacts),
+            ]}
+            checkboxLabel={tGaps("actions.explicitOwnershipConfirmation")}
+            confirmLabel={tGaps("actions.confirmBridge")}
+            pendingLabel={tGaps("actions.creating")}
+            isPending={reviewApply.isPending}
+            disabled={!pendingPlan.preview.activatable}
             onConfirm={confirmBridge}
+            onBack={() => setPendingPlan(null)}
+            backLabel={t("swap.inbox.back")}
           />
         ) : null}
         {pendingPlan?.action === "dismiss" ? (
-          <div className="space-y-3 rounded-md border p-3 text-sm">
-            <p className="font-medium">{t("swap.inbox.gap.dismissTitle")}</p>
-            <p className="text-muted-foreground">
-              {t("swap.inbox.gap.dismissBody")}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={confirmDismiss}
-                disabled={reviewApply.isPending}
-              >
-                {t("swap.inbox.gap.dismissConfirm")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setPendingPlan(null)}
-              >
-                {t("swap.inbox.back")}
-              </Button>
-            </div>
-          </div>
+          <ConfirmSection
+            heading={t("swap.inbox.gap.dismissTitle")}
+            lines={[t("swap.inbox.gap.dismissBody")]}
+            confirmLabel={t("swap.inbox.gap.dismissConfirm")}
+            pendingLabel={t("swap.inbox.gap.dismissing")}
+            isPending={reviewApply.isPending}
+            onConfirm={confirmDismiss}
+            onBack={() => setPendingPlan(null)}
+            backLabel={t("swap.inbox.back")}
+          />
         ) : null}
         {pendingPlan?.action === "classify_residual" ? (
-          <ResidualPreviewPanel
-            preview={pendingPlan.preview}
-            asset={gap.asset}
+          <ConfirmSection
+            heading={t("swap.inbox.confirmTitle")}
+            lines={[
+              tGaps("residual.previewAmount", {
+                amount: formatCustodyMsat(
+                  pendingPlan.preview.residual_msat,
+                  gap.asset,
+                ),
+                classification: tGaps(
+                  `residual.options.${pendingPlan.preview.classification}.label`,
+                ),
+              }),
+              tGaps(`residual.custodyState.${pendingPlan.preview.custody_state}`),
+              tGaps("residual.taxMeaningUnassigned"),
+            ]}
+            notes={[
+              ...(pendingPlan.preview.classification === "external_gift" ||
+              pendingPlan.preview.classification === "external_loss"
+                ? [tGaps("residual.giftLossTaxReview")]
+                : []),
+              ...impactNotes(pendingPlan.preview.filed_report_impacts),
+            ]}
+            checkboxLabel={tGaps("residual.confirmation")}
+            confirmLabel={tGaps("residual.confirm")}
+            pendingLabel={tGaps("residual.confirming")}
             isPending={reviewApply.isPending}
+            disabled={pendingPlan.preview.activatable !== true}
             onConfirm={confirmResidual}
+            onBack={() => setPendingPlan(null)}
+            backLabel={t("swap.inbox.back")}
           />
         ) : null}
       </CardContent>

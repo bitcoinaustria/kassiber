@@ -8,7 +8,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -146,23 +145,24 @@ export function PairDecisionCard({
   return (
     <Card className="gap-4 py-5">
       <CardContent className="space-y-4 px-5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline">{t(typeKey)}</Badge>
-          <Badge variant="outline">
-            {candidate.confidence === "exact"
-              ? t("swap.confidence.exact")
-              : t("swap.confidence.strong")}
-          </Badge>
-          {candidate.confidence === "exact" && candidate.conflict_size <= 1 ? (
-            <Badge>{t("swap.inbox.suggestedBadge")}</Badge>
-          ) : null}
-          {candidate.conflict_size > 1 ? (
-            <Badge variant="destructive">{t("swap.inbox.competingBadge")}</Badge>
-          ) : null}
-        </div>
-
         <div>
-          <h2 className="text-lg font-semibold">{t(questionKey)}</h2>
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            {[
+              t(typeKey),
+              candidate.confidence === "exact"
+                ? t("swap.confidence.exact")
+                : t("swap.confidence.strong"),
+              candidate.confidence === "exact" && candidate.conflict_size <= 1
+                ? t("swap.inbox.suggestedBadge")
+                : null,
+              candidate.conflict_size > 1
+                ? t("swap.inbox.competingBadge")
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          <h2 className="mt-1.5 text-xl font-semibold">{t(questionKey)}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {t(CANDIDATE_WHY_KEYS[candidate.method])}
           </p>
@@ -201,7 +201,7 @@ export function PairDecisionCard({
         />
 
         {candidate.conflict_size > 1 ? (
-          <p className="rounded-md border border-destructive/40 bg-destructive/5 p-2.5 text-sm">
+          <p className="text-sm text-rose-700 dark:text-rose-300">
             {t("swap.inbox.candidate.competingNote", {
               count: candidate.conflict_size,
             })}

@@ -501,11 +501,8 @@
     },
     "dismissReason": "user dismissed from review queue",
     "inbox": {
-      "goalClear": "All clear — nothing blocks your reports.",
-      "goal_one": "{{count}} open question.",
-      "goal_other": "{{count}} open questions.",
-      "settled_one": "{{count}} settled",
-      "settled_other": "{{count}} settled",
+      "goal_one": "{{count}} open question",
+      "goal_other": "{{count}} open questions",
       "filter": {
         "all": "All",
         "blocking": "Blocks report",
@@ -550,7 +547,8 @@
         "connectedTitle": "Connected",
         "connectedBody": "Kassiber recorded the reviewed bridge. Reprocess journals to update reports.",
         "dismissedTitle": "Dismissed",
-        "dismissedBody": "This suggestion reopens automatically if the evidence changes."
+        "dismissedBody": "This suggestion reopens automatically if the evidence changes.",
+        "dismissing": "Dismissing…"
       },
       "residual": {
         "question": "Where did the remaining {{amount}} go?",
@@ -585,7 +583,8 @@
         "body": "Reports are no longer blocked by custody review. New questions appear here automatically when imports or syncs surface unexplained moves."
       },
       "blockingNote_one": "{{count}} blocks your reports ({{years}}).",
-      "blockingNote_other": "{{count}} block your reports ({{years}})."
+      "blockingNote_other": "{{count}} block your reports ({{years}}).",
+      "confirmTitle": "Before you confirm — this will:"
     },
     "advanced": {
       "intro": "Expert tools and technical evidence. Nothing here is required to close custody questions — the Inbox is the primary path.",
