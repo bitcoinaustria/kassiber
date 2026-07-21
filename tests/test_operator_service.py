@@ -20,7 +20,15 @@ from kassiber.db import (
 )
 from kassiber.errors import AppError
 from kassiber.operator import runner as operator_runner
-from kassiber.operator.client import BrokerClient, parse_duration, prepare_arguments, wipe_prepared
+from kassiber.operator.client import (
+    FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
+    SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS,
+    BrokerClient,
+    _broker_startup_timeout_seconds,
+    parse_duration,
+    prepare_arguments,
+    wipe_prepared,
+)
 from kassiber.operator.launcher import (
     broker_server_command,
     cli_child_command,
@@ -3399,6 +3407,18 @@ class OperatorClientArgumentTest(unittest.TestCase):
         with mock.patch("kassiber.operator.launcher.sys.frozen", False, create=True):
             prepare_independent_child_environment(environment)
         self.assertNotIn("PYINSTALLER_RESET_ENVIRONMENT", environment)
+
+    def test_frozen_broker_allows_for_one_file_extraction(self) -> None:
+        with mock.patch("kassiber.operator.client.sys.frozen", True, create=True):
+            self.assertEqual(
+                _broker_startup_timeout_seconds(),
+                FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
+            )
+        with mock.patch("kassiber.operator.client.sys.frozen", False, create=True):
+            self.assertEqual(
+                _broker_startup_timeout_seconds(),
+                SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS,
+            )
 
     def test_secret_fd_is_replaced_by_opaque_label(self) -> None:
         read_fd, write_fd = os.pipe()
