@@ -217,32 +217,34 @@ jobs:
           assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"rows":255181'
 
           operator_root="$RUNNER_TEMP/kassiber-operator-smoke"
-          operator_runtime="$RUNNER_TEMP/kassiber-operator-runtime"
-          mkdir -p "$operator_runtime"
-          chmod 700 "$operator_runtime"
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            # Frozen binaries intentionally ignore the source-test endpoint
-            # override. XDG_RUNTIME_DIR is the supported owner-only logout
-            # lifetime sentinel; the broker endpoint itself remains in the
-            # stable per-account namespace.
-            export XDG_RUNTIME_DIR="$operator_runtime"
-          fi
           "$cli" --data-root "$operator_root" --machine init >/dev/null
           printf '%s\n' 'packaged operator smoke passphrase' \
             | "$cli" --data-root "$operator_root" --machine secrets init --new-passphrase-fd 0 \
             >/dev/null
-          if ! printf '%s\n' 'packaged operator smoke passphrase' \
-              | "$cli" --data-root "$operator_root" --machine operator unlock \
-                  --passphrase-fd 0 --duration 1m \
-              > "$RUNNER_TEMP/kassiber-operator-unlock.json"; then
-            cat "$RUNNER_TEMP/kassiber-operator-unlock.json" >&2
-            exit 1
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Hosted Linux runners have no live logind user session. Production
+            # Kassiber correctly refuses to retain an in-memory unlock there,
+            # so smoke the supported non-broker path. The Linux broker lifecycle
+            # is exercised separately by test_operator_integration.py with an
+            # owner-only logout sentinel.
+            printf '%s\n' 'packaged operator smoke passphrase' \
+              | "$cli" --data-root "$operator_root" --machine \
+                  --db-passphrase-fd 0 status \
+              > "$RUNNER_TEMP/kassiber-operator-worker.json"
+          else
+            if ! printf '%s\n' 'packaged operator smoke passphrase' \
+                | "$cli" --data-root "$operator_root" --machine operator unlock \
+                    --passphrase-fd 0 --duration 1m \
+                > "$RUNNER_TEMP/kassiber-operator-unlock.json"; then
+              cat "$RUNNER_TEMP/kassiber-operator-unlock.json" >&2
+              exit 1
+            fi
+            assert_json_value "$RUNNER_TEMP/kassiber-operator-unlock.json" data.lease unlocked
+            "$cli" --data-root "$operator_root" --machine status \
+              > "$RUNNER_TEMP/kassiber-operator-worker.json"
+            "$cli" --data-root "$operator_root" --machine operator lock >/dev/null
           fi
-          assert_json_value "$RUNNER_TEMP/kassiber-operator-unlock.json" data.lease unlocked
-          "$cli" --data-root "$operator_root" --machine status \
-            > "$RUNNER_TEMP/kassiber-operator-worker.json"
           assert_json_value "$RUNNER_TEMP/kassiber-operator-worker.json" kind status
-          "$cli" --data-root "$operator_root" --machine operator lock >/dev/null
 
           at_root="$RUNNER_TEMP/kassiber-at-smoke"
           "$cli" --data-root "$at_root" --machine init >/dev/null
