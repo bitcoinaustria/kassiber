@@ -110,6 +110,10 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   its own item in macOS Keychain, Windows Credential Manager, or Linux Secret
   Service for prompt-free one-shot commands. This is convenience, not recovery
   or a replacement for the SQLCipher passphrase.
+- **Operator work sessions** — a terminal-first per-user broker can hold one
+  in-memory, capability-scoped lease per encrypted project for a long or
+  until-lock CLI/agent session. The OS user is the principal; same-user
+  processes intentionally share the lease, while admin operations re-authenticate.
 - **Two surfaces, one daemon** — desktop GUI (Tauri 2 + React) for
   day-to-day work; CLI with deterministic JSON envelopes for scripting,
   automation, and power users; both backed by the same Python daemon.
@@ -214,24 +218,47 @@ empty state is “No known custody gaps” for current imported evidence—not a
 claim that every wallet ever owned was imported. Dismissals are bound to the
 reviewed evidence fingerprint, so materially changed evidence reopens them.
 
-For an encrypted project, enroll prompt-free CLI unlock once on a trusted local
-user account:
+Encrypted projects have three explicit terminal unlock modes. `manual` prompts
+or uses `--db-passphrase-fd` for each process; recommended `brokered` holds a
+capability-scoped passphrase lease only in a per-login-user broker; `unattended`
+is the separate native credential-store convenience for automation. Start a
+normal accounting review session with:
 
 ```bash
-kassiber secrets remember-unlock
+kassiber operator mode brokered
+kassiber operator unlock --until-lock
 kassiber --machine status
-kassiber --machine reports summary
-kassiber secrets forget-unlock
+kassiber --machine reports summary --workspace personal --profile main
+kassiber operator status
+kassiber operator lock
 ```
 
-Enrollment verifies the passphrase, saves a CLI-only item in the native OS credential store,
-and sets a non-secret `cli_remembered_unlock` marker in the managed
-`config/settings.json`. Desktop and CLI use separate per-data-root credential
-entries and lifecycle controls, so neither surface silently enrolls or revokes
-the other. CLI reads are
-not biometric-gated; see [SECURITY.md](SECURITY.md) for the platform trust model.
-Headless machines and automation without an unlocked credential service should
-continue using `--db-passphrase-fd`.
+Use `--duration 8h` for a timed lease and
+`--capability read|operator|accounting_decisions` to narrow it. The default is
+`accounting_decisions`, cumulative over `operator` and `read`; admin commands
+always require a fresh passphrase through a prompt or `--operator-auth-fd`.
+Multiple same-user processes intentionally share a lease. Different OS users
+and projects have separate endpoints, credentials, leases, queues, and workers.
+Brokered commands that declare book selectors require explicit `--workspace`
+and `--profile` flags, so concurrent clients never borrow mutable current
+context. Ordinary machine/non-interactive commands never prompt. See the
+[operator broker reference](docs/reference/operator-broker.md) for the threat
+model, operation status/cancellation, and platform support.
+
+For deliberately unattended automation, select `kassiber operator mode
+unattended` and enroll with `kassiber secrets remember-unlock`. Enrollment
+verifies the passphrase, saves a CLI-only item in the native OS credential
+store, and atomically binds the non-secret mode/marker to the authenticated
+database and its current canonical file identity in managed
+`config/settings.json`. Brokered mode never falls back to that item. An
+unbound legacy marker or a moved database beside stale settings is effectively
+manual until password re-enrollment; status reports only categorical
+`binding_state`. Desktop and CLI use separate credential entries and lifecycle
+controls, so neither surface silently enrolls or revokes the other. CLI
+credential reads are not biometric-gated; see
+[SECURITY.md](SECURITY.md) for the platform trust model. Headless machines and
+automation without an unlocked credential service can continue using
+`--db-passphrase-fd` in manual mode.
 `kassiber secrets status` reports the stable `access_policy` code for the
 platform boundary without reading a disabled CLI credential. If an OS store
 cannot remove a CLI-owned legacy item, `legacy_quarantined: true` keeps that
@@ -243,6 +270,24 @@ removes the desktop entry, CLI entry, and any migration-only legacy shared item.
 Changing the passphrase in the desktop refreshes both enrolled copies. A CLI
 rotation refreshes the CLI copy and invalidates desktop Touch ID until the user
 re-enrolls it; no surface silently keeps using a stale passphrase.
+
+Signed, production-entitled macOS app bundles can additionally enroll an
+operator-only current-biometry Keychain item with `kassiber operator touch-id
+enroll`, then use `kassiber operator unlock --auth touch-id`. This operator
+namespace has no unsigned-preview fallback. Windows Hello and Linux biometrics
+are deferred; password/fd authorization and the complete broker flow are
+supported there.
+The broker spawns the signed helper only for a pending Touch ID unlock. The
+signed CLI pins the helper's verified bundle identifier, signing team, and
+code-directory hash, and the broker dynamically validates the spawned helper
+process while an inherited gate blocks Keychain access, then releases it before
+sending an enrollment passphrase. The helper verifies that its
+parent is the matching production-signed bundled CLI
+sidecar, including a Security.framework check of the live process against the
+sidecar's exact designated requirement, then writes the enrolled passphrase to
+a broker-created inherited pipe; it never returns the raw secret to the
+invoking CLI or an invoker-selected endpoint. Successful brokered passphrase
+rotation locks the stale lease automatically.
 
 When syncing descriptor or xpub wallets through your own Bitcoin Core node,
 add a Core RPC backend (`--cookiefile` or `--username` / `--password`) and
@@ -311,6 +356,7 @@ overview.
   [AT glossary](docs/reference/i18n-glossary.md) ·
   [Daemon](docs/reference/daemon.md) ·
   [Machine output](docs/reference/machine-output.md) ·
+  [Operator broker](docs/reference/operator-broker.md) ·
   [Device & team sync](docs/reference/device-sync.md) ·
   [Prerelease binaries](docs/reference/prerelease-binaries.md) ·
   [Homebrew Cask](docs/reference/homebrew-cask.md)

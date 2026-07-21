@@ -12,15 +12,16 @@ The guiding principle:
 > ever enters a buffer, and let the user decide — per export, per tier —
 > what leaves the process.**
 
-## The three buffers
+## The process-local buffers
 
 | Buffer | Lives in | Bound | Survives |
 | --- | --- | --- | --- |
 | Daemon ring ([`kassiber/log_ring.py`](../../kassiber/log_ring.py)) | Python daemon process | 5,000 records / 4 MiB | webview reloads, UI restarts |
+| Operator ring ([`kassiber/operator/service.py`](../../kassiber/operator/service.py)) | Per-login-user broker process | 5,000 records / 4 MiB | individual CLI/agent exits only |
 | Supervisor stderr tail + lifecycle ring ([`ui-tauri/src-tauri/src/supervisor.rs`](../../ui-tauri/src-tauri/src/supervisor.rs)) | Tauri (Rust) process | 16 KiB tail, 64 lifecycle records | daemon crashes and restarts |
 | Webview ring ([`ui-tauri/src/lib/appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts)) | Browser/Webview JS heap | 10,000 records / 4 MiB | nothing (it is the view) |
 
-The webview ring is the merge point. The desktop app polls
+The desktop webview ring is the merge point for desktop-owned buffers. The desktop app polls
 `ui.logs.snapshot` (a pre-unlock daemon kind — it works while the database
 is locked, which is exactly when you need it) and the
 `daemon_lifecycle_snapshot` Tauri command, and folds both into the webview
@@ -30,6 +31,10 @@ Python tracebacks, third-party library records, supervisor lifecycle
 events (spawn/exit/kill with the dying daemon's redacted stderr tail),
 webview transport records, console output, React errors, and unhandled
 promise rejections.
+
+The operator ring is intentionally not merged into the desktop webview. It is
+process-local security telemetry for the terminal broker, disappears with that
+broker, and has no durable or desktop export path.
 
 A hard crash of the whole app loses the buffers. That is the accepted
 price of RAM-only; the supervisor preserving the daemon's stderr tail
@@ -135,6 +140,12 @@ message.
 - **Background workers** — the freshness worker and AI chat worker stamp
   their own correlation ids; their failures are logged to the ring in
   addition to the envelopes they already emit.
+- **Operator broker** — unlock, lock, expiry, rejection, queue admission,
+  dispatch, cancellation, and crash/result-unknown state enter only the
+  broker's bounded Python ring. Fields contain opaque project ids, exact
+  capability/command codes, and categorical auth methods; they omit raw argv,
+  paths, endpoints, credentials, and secret frames. The ring dies with the
+  broker and has no generic export or durable activity table.
 - **Webview** — daemon transport round-trips (including `error.details`
   and `error.debug` excerpts), `window.onerror`, `unhandledrejection`,
   `console.error`/`console.warn` (with re-entrancy and duplicate-burst

@@ -13,6 +13,7 @@ SENSITIVE_KEY_PARTS = (
     "auth_header",
     "auth-header",
     "auth_response",
+    "blinding",
     "cookie",
     "descriptor",
     "mnemonic",
@@ -44,7 +45,7 @@ _SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,
 _BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
 _ASSIGNED_SECRET_RE = re.compile(
-    r"(?P<key>\b(?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|"
+    r"(?P<key>\b(?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|"
     r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
     r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
     r"sp[_-]?descriptor|spscan|spspend|token)\b)"
@@ -54,7 +55,7 @@ _ASSIGNED_SECRET_RE = re.compile(
     re.IGNORECASE,
 )
 _JSON_SECRET_RE = re.compile(
-    r"(?P<prefix>['\"](?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|"
+    r"(?P<prefix>['\"](?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|"
     r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
     r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
     r"sp[_-]?descriptor|spscan|spspend|token)"

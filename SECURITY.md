@@ -151,12 +151,12 @@ start or bundle Tor, so the user still needs an existing Tor service.
 ### At-rest encryption — passphrase-gated SQLCipher (V4.1)
 
 Each project database is optionally encrypted via SQLCipher 4, and each
-encrypted project has its own passphrase. After running `kassiber secrets init`
-for a selected project, every subsequent invocation against that project needs
-that project's passphrase: type it interactively, pass
-`--db-passphrase-fd <FD>` from a parent process, or explicitly enroll CLI
-remembered unlock with `kassiber secrets remember-unlock`. Unlocking one project
-does not unlock any other project.
+encrypted project has its own passphrase. After `kassiber secrets init`, select
+an explicit unlock mode for that project: `manual` prompts or uses
+`--db-passphrase-fd` per process, `brokered` uses a capability-scoped in-memory
+operator lease, and `unattended` opts into the separate CLI remembered-unlock
+credential. Brokered mode never falls through to remembered unlock. Unlocking
+one project does not unlock another.
 
 - `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — when encrypted, contents are
   protected by SQLCipher 4 with stock PBKDF2-HMAC-SHA512
@@ -266,6 +266,47 @@ is running with the unlocked DB, it can read every credential. The
 `auth_required` round-trip for `wallets reveal-descriptor` and
 `backends reveal-token` enforces re-prompting for presence; it does not
 add a separate cryptographic tier.
+
+### Terminal operator broker
+
+Brokered unlock keeps a project's passphrase only in a per-user broker process
+for an explicit duration or until-lock session. It does not authenticate an
+individual agent: any process intentionally running as the same logged-in OS
+user can exercise the active lease's capabilities. Cross-user isolation comes
+from owner-only local IPC, peer user-id/SID validation, separate native
+credential namespaces, and per-project ownership locks.
+Those identity/path locks are acquired before database open and inherited by
+worker children, so broker death cannot release a project to a second owner
+while an orphan mutation still runs. On macOS the broker spawns the signed
+Touch ID helper with a broker-created inherited output pipe. The signed CLI and
+broker bind to the live launcher's
+verified bundle identifier, TeamIdentifier, and code-directory hash. The broker
+dynamically validates the spawned helper PID against that Developer ID
+requirement before writing an enrollment passphrase, closing the mutable-path
+check/use gap. An inherited readiness/release gate blocks every Keychain action
+until the live helper check completes. The helper accepts the request only when its parent is the
+matching production-signed bundled CLI
+sidecar: it validates the bundle path and signing team, then uses
+Security.framework to check the live parent process against a fixed Developer
+ID Application requirement for the exact sidecar signing identifier and the
+helper's verified TeamIdentifier. It exposes no caller-selected endpoint or general
+raw-secret return action.
+
+Brokered mode never reads the unattended CLI remembered-unlock item. Manual,
+brokered, and unattended modes are distinct and visible in `kassiber operator
+status`. Normal leases may grant read, operator, and accounting-decision work;
+admin operations require a fresh one-operation authorization that expires if
+the operation waits in the queue for more than 60 seconds. Broker death,
+logout, reboot, explicit lock, or lease expiry removes the in-memory grant.
+There is no exactly-once claim across a broker crash; unproven nonzero exits
+from mutating children are reported as `result_unknown`. See
+[docs/reference/operator-broker.md](docs/reference/operator-broker.md) for the
+protocol, platform primitives, queue semantics, and memory-zeroization limits.
+On Linux the broker watches logind's per-user login state and the original
+device/inode identity of the XDG runtime root, so logout or runtime-directory
+replacement tears down leases even with a lingering user manager. Broker
+startup fails closed when neither mechanism can prove logout lifetime; manual
+mode remains available on such unusual no-PAM systems.
 
 ## Safe-to-record CLI output
 

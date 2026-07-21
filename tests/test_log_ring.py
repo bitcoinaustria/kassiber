@@ -18,6 +18,8 @@ from kassiber.redaction import (
     _stable_hash,
     redact_operational_text,
     redact_operational_value,
+    redact_secret_text,
+    redact_secret_value,
 )
 
 # A real-shaped (all-hex) txid; the value never matters, only that it is 64 hex.
@@ -118,6 +120,27 @@ class LogRingSnapshotTest(unittest.TestCase):
 
 
 class SecretFloorTest(unittest.TestCase):
+    def test_blinding_key_redacted_in_text_structures_and_ring_fields(self):
+        marker = "private-slip77-blinding-material"
+        self.assertNotIn(marker, redact_secret_text(f"blinding_key={marker}"))
+        self.assertEqual(
+            redact_secret_value({"wallet_blinding_key": marker}),
+            {"wallet_blinding_key": "[redacted]"},
+        )
+
+        ring = LogRing()
+        ring.append(
+            "info",
+            "kassiber.test",
+            "kassiber/daemon.py",
+            1,
+            f"wallet blinding={marker}",
+            fields={"blinding_key": {"type": "text", "value": marker}},
+        )
+        record = ring.snapshot()["records"][0]
+        self.assertNotIn(marker, record["msg"])
+        self.assertEqual(record["fields"]["blinding_key"]["value"], "[redacted]")
+
     def test_descriptor_in_msg_redacted_at_insert(self):
         ring = LogRing()
         ring.append("info", "kassiber.test", "kassiber/daemon.py", 1, f"loaded wpkh({XPUB}/0/*)")

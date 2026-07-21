@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 from dataclasses import dataclass
@@ -37,9 +38,10 @@ from ..projects import (
 from ..secrets.credentials import scan_dotenv_for_secrets
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
+from ..operator.modes import remembered_unlock_allowed
 from ..secrets.unlock_store import (
-    cli_remembered_unlock_enabled,
     load_remembered_passphrase,
+    remembered_unlock_database_identity,
 )
 from .repo import current_context_snapshot
 
@@ -157,41 +159,70 @@ def _resolve_db_passphrase(args):
     return passphrase
 
 
+def prime_db_passphrase(args):
+    """Eagerly drain/cache an inherited operator passphrase pipe.
+
+    Broker parents write secret pipes synchronously. Every worker child drains
+    the lease pipe before command dispatch so a no-bootstrap command cannot
+    deadlock the parent while waiting for a later command-specific secret.
+    """
+
+    return _resolve_db_passphrase(args)
+
+
 def _open_db_with_resolved_passphrase(
     data_root,
     passphrase,
     *,
     allow_prompt,
     require_existing_schema=False,
+    expected_database_identity=None,
 ):
     """Open the database and return both the connection and passphrase used."""
 
     if passphrase is not None:
-        return (
-            open_db(
-                data_root,
-                passphrase=passphrase,
-                require_existing_schema=require_existing_schema,
-            ),
-            passphrase,
-        )
+        options = {
+            "passphrase": passphrase,
+            "require_existing_schema": require_existing_schema,
+        }
+        if expected_database_identity is not None:
+            options["expected_database_identity"] = expected_database_identity
+        return open_db(data_root, **options), passphrase
 
     try:
-        return open_db(data_root, require_existing_schema=require_existing_schema), None
+        options = {"require_existing_schema": require_existing_schema}
+        if expected_database_identity is not None:
+            options["expected_database_identity"] = expected_database_identity
+        return open_db(data_root, **options), None
     except AppError as exc:
         if exc.code != "passphrase_required":
             raise
 
-        if cli_remembered_unlock_enabled(data_root):
+        if remembered_unlock_allowed(data_root):
+            remembered_database_identity = remembered_unlock_database_identity(
+                data_root
+            )
+            if (
+                expected_database_identity is not None
+                and expected_database_identity != remembered_database_identity
+            ):
+                raise AppError(
+                    "remembered unlock is bound to a different project database",
+                    code="operator_policy_binding_mismatch",
+                    retryable=False,
+                )
             remembered = load_remembered_passphrase(data_root)
             if remembered is not None:
                 try:
+                    remembered_options = {
+                        "passphrase": remembered,
+                        "require_existing_schema": require_existing_schema,
+                    }
+                    remembered_options["expected_database_identity"] = (
+                        remembered_database_identity
+                    )
                     return (
-                        open_db(
-                            data_root,
-                            passphrase=remembered,
-                            require_existing_schema=require_existing_schema,
-                        ),
+                        open_db(data_root, **remembered_options),
                         remembered,
                     )
                 except AppError as remembered_error:
@@ -205,15 +236,27 @@ def _open_db_with_resolved_passphrase(
 
         if allow_prompt:
             prompted = prompt_passphrase()
+            prompted_options = {
+                "passphrase": prompted,
+                "require_existing_schema": require_existing_schema,
+            }
+            if expected_database_identity is not None:
+                prompted_options["expected_database_identity"] = (
+                    expected_database_identity
+                )
             return (
-                open_db(
-                    data_root,
-                    passphrase=prompted,
-                    require_existing_schema=require_existing_schema,
-                ),
+                open_db(data_root, **prompted_options),
                 prompted,
             )
-        raise
+        raise AppError(
+            "database authorization requires local interaction",
+            code="interaction_required",
+            hint=(
+                "Run the command in a controlling terminal or pass the database "
+                "passphrase through --db-passphrase-fd."
+            ),
+            retryable=False,
+        ) from None
 
 
 def resolve_db_passphrase_for_bypass(
@@ -294,6 +337,7 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
                 paths.data_root,
                 passphrase,
                 allow_prompt=allow_prompt,
+                expected_database_identity=_operator_expected_database_identity(),
             )
             if resolved_passphrase is not None:
                 args._db_passphrase_cached = resolved_passphrase
@@ -315,6 +359,17 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
         if conn is not None:
             conn.close()
         raise
+
+
+def _operator_expected_database_identity() -> str | None:
+    expected = os.environ.get("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY")
+    if os.environ.get("KASSIBER_OPERATOR_CHILD") == "1" and expected is None:
+        raise AppError(
+            "operator child database binding is missing",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    return expected
 
 
 def close_runtime(runtime):

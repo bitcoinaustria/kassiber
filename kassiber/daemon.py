@@ -8,6 +8,7 @@ import ipaddress
 import json
 import logging
 import math
+import os
 import queue
 import re
 import secrets
@@ -25,6 +26,14 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .command_capabilities import daemon_capability
+from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
+from .operator.project import (
+    ProjectOwnerLease,
+    acquire_project_ownership,
+    canonical_project,
+)
+from .operator.native_auth import invalidate_operator_native_auth
 from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
@@ -253,12 +262,13 @@ from .secrets.sqlcipher import open_encrypted, require_sqlcipher, sqlcipher_avai
 from .secrets.unlock_store import (
     cli_legacy_unlock_quarantined,
     cli_remembered_unlock_enabled,
+    delete_legacy_cli_remembered_passphrase,
     delete_legacy_shared_passphrase,
     delete_remembered_passphrase,
+    disable_remembered_unlock,
     mark_desktop_biometric_passphrase_stale,
     refresh_remembered_passphrase_after_rotation,
     remembered_unlock_status,
-    set_cli_unlock_state,
 )
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
@@ -678,10 +688,6 @@ PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
 PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET"
 MIN_DATABASE_PASSPHRASE_CHARS = 12
-AUTH_FAILURES_BEFORE_BACKOFF = 3
-AUTH_BACKOFF_BASE_SECONDS = 5.0
-AUTH_BACKOFF_MAX_SECONDS = 30.0
-AUTH_BACKOFF_FILENAME = "auth_backoff.json"
 
 
 class AiToolConsentState:
@@ -1013,101 +1019,6 @@ class DocumentImportSessions:
             self._sessions.pop(token, None)
 
 
-class AuthAttemptBackoff:
-    """Database-level throttling for passphrase verification attempts."""
-
-    def __init__(self, state_path: str | None = None) -> None:
-        self._lock = threading.Lock()
-        self._failures = 0
-        self._locked_until = 0.0
-        self._state_path = state_path
-
-    def check(self, scope: str) -> None:
-        now = time.time()
-        with self._lock:
-            self._load_locked()
-            retry_after = self._locked_until - now
-            if retry_after <= 0:
-                if self._locked_until:
-                    self._locked_until = 0.0
-                    self._persist_locked()
-                return
-        raise AppError(
-            "too many failed passphrase attempts",
-            code="local_auth_rate_limited",
-            details={
-                "scope": scope,
-                "throttle": "database",
-                "retry_after_seconds": max(1, int(retry_after + 0.999)),
-            },
-            hint="Wait before trying the passphrase again.",
-            retryable=True,
-        )
-
-    def record_success(self) -> None:
-        with self._lock:
-            self._failures = 0
-            self._locked_until = 0.0
-            self._persist_locked()
-
-    def record_failure(self) -> None:
-        now = time.time()
-        with self._lock:
-            self._load_locked()
-            self._failures += 1
-            if self._failures < AUTH_FAILURES_BEFORE_BACKOFF:
-                self._persist_locked()
-                return
-            delay = min(
-                AUTH_BACKOFF_MAX_SECONDS,
-                AUTH_BACKOFF_BASE_SECONDS
-                * 2 ** (self._failures - AUTH_FAILURES_BEFORE_BACKOFF),
-            )
-            self._locked_until = now + delay
-            self._persist_locked()
-
-    def _load_locked(self) -> None:
-        if not self._state_path:
-            return
-        try:
-            with open(self._state_path, encoding="utf-8") as handle:
-                payload = json.load(handle)
-        except FileNotFoundError:
-            return
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            return
-        self._failures = max(0, int(payload.get("failures", 0)))
-        self._locked_until = max(0.0, float(payload.get("locked_until", 0.0)))
-
-    def _persist_locked(self) -> None:
-        if not self._state_path:
-            return
-        try:
-            if self._failures <= 0 and self._locked_until <= 0:
-                try:
-                    Path(self._state_path).unlink()
-                except FileNotFoundError:
-                    pass
-                return
-            state_path = Path(self._state_path)
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = state_path.with_suffix(state_path.suffix + ".tmp")
-            tmp_path.write_text(
-                json.dumps(
-                    {
-                        "failures": self._failures,
-                        "locked_until": self._locked_until,
-                    },
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            tmp_path.replace(state_path)
-        except OSError:
-            return
-
-
 @dataclass(frozen=True)
 class _DaemonMainThreadTask:
     callback: Callable[[sqlite3.Connection], Any]
@@ -1132,9 +1043,22 @@ class DaemonContext:
     select_project_on_open: bool = True
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
+    project_owner: ProjectOwnerLease | None = None
+    retired_project_resources: list[_RetiredProjectResource] = field(
+        default_factory=list
+    )
+    ownership_generation: str = field(
+        default_factory=lambda: f"desktop-{os.getpid()}-{secrets.token_hex(8)}"
+    )
     document_import_sessions: DocumentImportSessions = field(
         default_factory=DocumentImportSessions
     )
+
+
+@dataclass
+class _RetiredProjectResource:
+    connection: Any | None
+    owner: ProjectOwnerLease | None
 
 
 @dataclass(frozen=True)
@@ -3495,21 +3419,34 @@ def _open_daemon_connection(
     passphrase: str | None = None,
     require_existing_schema: bool = False,
 ) -> sqlite3.Connection:
+    _retry_retired_project_resources(ctx)
     if ctx.conn is not None:
+        _ensure_daemon_project_owner(ctx)
         _remember_unlocked_passphrase(ctx, passphrase)
         _start_freshness_background_worker(ctx, passphrase=passphrase)
         return ctx.conn
-    conn = open_db(
-        ctx.data_root,
-        passphrase=passphrase,
-        require_existing_schema=require_existing_schema,
-    )
+    acquired_here = ctx.project_owner is None
+    owner = _ensure_daemon_project_owner(ctx)
+    canonical_data_root = str(owner.project.database.parent)
     try:
-        validate_project_migration_after_unlock(ctx.data_root, conn)
+        conn = open_db(
+            canonical_data_root,
+            passphrase=passphrase,
+            require_existing_schema=require_existing_schema,
+        )
+    except Exception:
+        if acquired_here:
+            _release_daemon_project_owner(ctx)
+        raise
+    try:
+        validate_project_migration_after_unlock(canonical_data_root, conn)
         merge_db_backends(conn, ctx.runtime_config)
     except Exception:
         conn.close()
+        if acquired_here:
+            _release_daemon_project_owner(ctx)
         raise
+    ctx.data_root = canonical_data_root
     ctx.conn = conn
     if ctx.project_id is not None:
         mark_project_opened(
@@ -3520,6 +3457,82 @@ def _open_daemon_connection(
     _remember_unlocked_passphrase(ctx, passphrase)
     _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
+
+
+def _ensure_daemon_project_owner(ctx: DaemonContext) -> ProjectOwnerLease:
+    project = canonical_project(ctx.data_root)
+    if ctx.project_owner is not None:
+        if ctx.project_owner.project.identity != project.identity:
+            raise AppError(
+                "the desktop daemon owns a different project",
+                code="project_owner_mismatch",
+                details={"project": project.public_id},
+                retryable=False,
+            )
+        return ctx.project_owner
+    ctx.project_owner = acquire_project_ownership(
+        project,
+        owner_kind="desktop",
+        generation=ctx.ownership_generation,
+    )
+    return ctx.project_owner
+
+
+def _release_daemon_project_owner(ctx: DaemonContext) -> None:
+    owner = ctx.project_owner
+    ctx.project_owner = None
+    if owner is not None:
+        try:
+            owner.release()
+        except Exception:
+            ctx.retired_project_resources.append(
+                _RetiredProjectResource(None, owner)
+            )
+            raise
+
+
+def _retry_retired_project_resources(ctx: DaemonContext) -> None:
+    """Close retired connections before releasing their exclusion locks."""
+
+    remaining: list[_RetiredProjectResource] = []
+    for resource in ctx.retired_project_resources:
+        if resource.connection is not None:
+            try:
+                resource.connection.close()
+            except Exception as close_error:
+                _REQUEST_LOGGER.error(
+                    "retired project connection cleanup failed",
+                    exc_info=close_error,
+                )
+                remaining.append(resource)
+                continue
+            resource.connection = None
+        if resource.owner is not None:
+            try:
+                resource.owner.release()
+            except Exception as release_error:
+                _REQUEST_LOGGER.error(
+                    "retired project ownership cleanup failed",
+                    exc_info=release_error,
+                )
+                remaining.append(resource)
+                continue
+            resource.owner = None
+    ctx.retired_project_resources = remaining
+
+
+def _retire_current_project_resources(ctx: DaemonContext) -> None:
+    """Detach the current DB and release its owner only after close succeeds."""
+
+    connection = ctx.conn
+    owner = ctx.project_owner
+    ctx.conn = None
+    ctx.project_owner = None
+    if connection is not None or owner is not None:
+        ctx.retired_project_resources.append(
+            _RetiredProjectResource(connection, owner)
+        )
+        _retry_retired_project_resources(ctx)
 
 
 def _locked_envelope(scope: str, label: str, request_id: object) -> dict[str, Any]:
@@ -3570,13 +3583,19 @@ def _close_current_project_for_switch(ctx: DaemonContext) -> None:
     if ctx.conn is not None:
         ctx.conn.close()
         ctx.conn = None
+    _release_daemon_project_owner(ctx)
     _clear_unlocked_passphrase(ctx)
 
 
-def _set_ctx_project(ctx: DaemonContext, entry) -> None:
+def _set_ctx_project(
+    ctx: DaemonContext,
+    entry,
+    *,
+    data_root: str | None = None,
+) -> None:
     ctx.project_id = entry.id
     ctx.project_root = str(entry.root)
-    ctx.data_root = str(entry.data_root)
+    ctx.data_root = data_root or str(entry.data_root)
     ctx.select_project_on_open = True
     env_file = resolve_effective_env_file(None, ctx.data_root)
     ctx.runtime_config = load_runtime_config(env_file)
@@ -3588,10 +3607,10 @@ def _set_ctx_project(ctx: DaemonContext, entry) -> None:
 def _open_project_connection_for_switch(
     entry: Any,
     *,
+    data_root: str,
     passphrase: str | None,
     require_existing_schema: bool,
 ) -> tuple[sqlite3.Connection, dict[str, object]]:
-    data_root = str(entry.data_root)
     env_file = resolve_effective_env_file(None, data_root)
     runtime_config = load_runtime_config(env_file)
     conn = open_db(
@@ -3613,6 +3632,7 @@ def _select_project_payload(
     args: dict[str, Any],
     request_id: object,
 ) -> tuple[dict[str, Any], bool]:
+    _retry_retired_project_resources(ctx)
     project_id = args.get("project_id") or args.get("id")
     if not isinstance(project_id, str) or not project_id.strip():
         raise AppError(
@@ -3640,76 +3660,209 @@ def _select_project_payload(
         )
 
     passphrase = _passphrase_from_auth(args)
-    target_data_root = str(entry.data_root)
-    target_encrypted = _data_root_database_is_encrypted(target_data_root)
-    if target_encrypted:
-        if not passphrase:
-            return (
-                _with_request_id(
-                    build_envelope(
-                        "auth_required",
-                        {
-                            "scope": "unlock_project",
-                            "label": f"Enter the SQLCipher passphrase for project {entry.name!r}.",
-                            "project": _project_payload(entry),
-                        },
+    target_project = canonical_project(str(entry.data_root))
+    target_data_root = str(target_project.database.parent)
+    transferred_owner = (
+        ctx.project_owner
+        if ctx.project_owner is not None
+        and ctx.project_owner.project.identity == target_project.identity
+        else None
+    )
+    target_owner = transferred_owner or acquire_project_ownership(
+        target_project,
+        owner_kind="desktop",
+        generation=ctx.ownership_generation,
+    )
+    target_owner_committed = transferred_owner is not None
+    target_conn: sqlite3.Connection | None = None
+    try:
+        # The ownership rendezvous must precede even a passphrase probe. A
+        # broker-owned target therefore fails with project_in_use without the
+        # desktop opening or authenticating against that database first.
+        target_encrypted = _data_root_database_is_encrypted(target_data_root)
+        if target_encrypted:
+            if not passphrase:
+                return (
+                    _with_request_id(
+                        build_envelope(
+                            "auth_required",
+                            {
+                                "scope": "unlock_project",
+                                "label": (
+                                    "Enter the SQLCipher passphrase for project "
+                                    f"{entry.name!r}."
+                                ),
+                                "project": _project_payload(entry),
+                            },
+                        ),
+                        request_id,
                     ),
-                    request_id,
-                ),
-                False,
+                    False,
+                )
+            verified = (
+                _verify_project_passphrase_with_backoff(
+                    entry,
+                    "unlock_project",
+                    passphrase,
+                    data_root=target_data_root,
+                )
+                if switching
+                else _verify_passphrase_with_backoff(
+                    ctx,
+                    "unlock_project",
+                    passphrase,
+                )
             )
-        verified = (
-            _verify_project_passphrase_with_backoff(entry, "unlock_project", passphrase)
-            if switching
-            else _verify_passphrase_with_backoff(ctx, "unlock_project", passphrase)
-        )
-        if not verified:
-            return (
-                _error_envelope(
-                    "local_auth_denied",
-                    "passphrase verification failed",
-                    request_id=request_id,
-                    retryable=True,
-                ),
-                False,
-            )
+            if not verified:
+                return (
+                    _error_envelope(
+                        "local_auth_denied",
+                        "passphrase verification failed",
+                        request_id=request_id,
+                        retryable=True,
+                    ),
+                    False,
+                )
 
-    require_existing_schema = bool(args.get("require_existing_project"))
-    if switching:
-        target_conn, target_runtime_config = _open_project_connection_for_switch(
-            entry,
-            passphrase=passphrase if target_encrypted else None,
-            require_existing_schema=require_existing_schema,
-        )
-        try:
-            entry = set_selected_project(entry.id, last_opened_at=now_iso())
-        except Exception:
-            target_conn.close()
-            raise
-        _close_current_project_for_switch(ctx)
-        _set_ctx_project(ctx, entry)
-        ctx.runtime_config = target_runtime_config
-        ctx.conn = target_conn
-        _remember_unlocked_passphrase(ctx, passphrase)
-        _start_freshness_background_worker(ctx, passphrase=passphrase)
-    elif target_encrypted:
-        _open_daemon_connection(
-            ctx,
-            passphrase=passphrase,
-            require_existing_schema=require_existing_schema,
-        )
-    else:
-        _open_daemon_connection(
-            ctx,
-            require_existing_schema=require_existing_schema,
-        )
+        require_existing_schema = bool(args.get("require_existing_project"))
+        if not switching:
+            prior_conn = ctx.conn
+            if transferred_owner is None:
+                ctx.project_owner = target_owner
+                target_owner_committed = True
+            try:
+                _open_daemon_connection(
+                    ctx,
+                    passphrase=passphrase if target_encrypted else None,
+                    require_existing_schema=require_existing_schema,
+                )
+            except Exception:
+                opened_conn = ctx.conn
+                ctx.conn = prior_conn
+                if opened_conn is not None and opened_conn is not prior_conn:
+                    opened_conn.close()
+                if transferred_owner is None:
+                    ctx.project_owner = None
+                    target_owner_committed = False
+                _clear_unlocked_passphrase(ctx)
+                raise
+            entry = get_project(entry.id)
+        else:
+            target_conn, target_runtime_config = _open_project_connection_for_switch(
+                entry,
+                data_root=target_data_root,
+                passphrase=passphrase if target_encrypted else None,
+                require_existing_schema=require_existing_schema,
+            )
+            target_auth_backoff = AuthAttemptBackoff(
+                str(resolve_config_root(target_data_root) / AUTH_BACKOFF_FILENAME)
+            )
+            old_freshness_was_running = (
+                ctx.freshness_worker is not None
+                and ctx.freshness_worker.is_alive()
+            )
+            _stop_freshness_background_worker(ctx, cancel_running=True)
+            try:
+                entry = set_selected_project(entry.id, last_opened_at=now_iso())
+            except Exception:
+                if old_freshness_was_running:
+                    try:
+                        _start_freshness_background_worker(
+                            ctx,
+                            passphrase=ctx.db_passphrase,
+                        )
+                    except Exception as restart_error:
+                        _REQUEST_LOGGER.error(
+                            "freshness worker restart failed after project switch rollback",
+                            exc_info=restart_error,
+                        )
+                raise
+
+            old_conn = ctx.conn
+            old_owner = ctx.project_owner
+            ctx.document_import_sessions.clear()
+            ctx.project_id = entry.id
+            ctx.project_root = str(entry.root)
+            ctx.data_root = target_data_root
+            ctx.select_project_on_open = True
+            ctx.runtime_config = target_runtime_config
+            ctx.auth_backoff = target_auth_backoff
+            ctx.project_owner = target_owner
+            ctx.conn = target_conn
+            ctx.db_passphrase = passphrase if target_encrypted else None
+            target_conn = None
+            target_owner_committed = True
+
+            try:
+                _start_freshness_background_worker(ctx, passphrase=passphrase)
+            except Exception as start_error:
+                _REQUEST_LOGGER.error(
+                    "freshness worker failed to start after project switch",
+                    exc_info=start_error,
+                )
+
+            retired_connection = (
+                old_conn if old_conn is not None and old_conn is not ctx.conn else None
+            )
+            retired_owner = (
+                old_owner
+                if old_owner is not None and old_owner is not target_owner
+                else None
+            )
+            if retired_connection is not None or retired_owner is not None:
+                ctx.retired_project_resources.append(
+                    _RetiredProjectResource(retired_connection, retired_owner)
+                )
+                _retry_retired_project_resources(ctx)
+    finally:
+        cleanup_error: Exception | None = None
+        target_owner_retained = False
+        if target_conn is not None:
+            try:
+                target_conn.close()
+            except Exception as error:
+                cleanup_error = error
+                retained_owner = (
+                    target_owner
+                    if transferred_owner is None and not target_owner_committed
+                    else None
+                )
+                ctx.retired_project_resources.append(
+                    _RetiredProjectResource(target_conn, retained_owner)
+                )
+                target_conn = None
+                target_owner_retained = retained_owner is not None
+        if (
+            transferred_owner is None
+            and not target_owner_committed
+            and not target_owner_retained
+        ):
+            try:
+                target_owner.release()
+            except Exception as error:
+                ctx.retired_project_resources.append(
+                    _RetiredProjectResource(None, target_owner)
+                )
+                if cleanup_error is None:
+                    cleanup_error = error
+        if cleanup_error is not None:
+            if sys.exc_info()[0] is None:
+                raise cleanup_error
+            _REQUEST_LOGGER.error(
+                "project switch rollback cleanup failed",
+                exc_info=(
+                    type(cleanup_error),
+                    cleanup_error,
+                    cleanup_error.__traceback__,
+                ),
+            )
 
     return (
         _with_request_id(
             build_envelope(
                 "ui.projects.select",
                 {
-                    "project": _project_payload(mark_project_opened(entry.id, data_root=ctx.data_root)),
+                    "project": _project_payload(entry),
                     "status": _status_payload(ctx),
                 },
             ),
@@ -8346,12 +8499,17 @@ def _verify_project_passphrase_with_backoff(
     entry: Any,
     scope: str,
     passphrase: str,
+    *,
+    data_root: str | None = None,
 ) -> bool:
+    resolved_data_root = data_root or str(
+        canonical_project(str(entry.data_root)).database.parent
+    )
     backoff = AuthAttemptBackoff(
-        str(resolve_config_root(entry.data_root) / AUTH_BACKOFF_FILENAME)
+        str(resolve_config_root(resolved_data_root) / AUTH_BACKOFF_FILENAME)
     )
     backoff.check(scope)
-    verified = _verify_passphrase_for_data_root(str(entry.data_root), passphrase)
+    verified = _verify_passphrase_for_data_root(resolved_data_root, passphrase)
     if verified:
         backoff.record_success()
     else:
@@ -13370,6 +13528,20 @@ def handle_request(
             False,
         )
 
+    try:
+        daemon_capability(kind)
+    except KeyError:
+        return (
+            _error_envelope(
+                "unsupported_kind",
+                f"daemon kind {kind!r} is not classified or supported",
+                request_id=request_id,
+                details={"kind": kind},
+                retryable=False,
+            ),
+            False,
+        )
+
     if kind == "daemon.shutdown":
         return (
             _with_request_id(
@@ -13385,6 +13557,7 @@ def handle_request(
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
+        _release_daemon_project_owner(ctx)
         _clear_unlocked_passphrase(ctx)
         return (
             _with_request_id(
@@ -13538,13 +13711,21 @@ def handle_request(
             ctx.data_root
         ) or cli_legacy_unlock_quarantined(ctx.data_root)
         cli_credential_deleted = delete_remembered_passphrase(ctx.data_root)
-        legacy_credential_deleted = delete_legacy_shared_passphrase(ctx.data_root)
-        if cli_owned_legacy and not legacy_credential_deleted:
+        legacy_cli_credential_deleted = (
+            delete_legacy_cli_remembered_passphrase(ctx.data_root)
+            if cli_owned_legacy
+            else True
+        )
+        legacy_shared_credential_deleted = (
+            delete_legacy_shared_passphrase(ctx.data_root)
+            if cli_owned_legacy
+            else True
+        )
+        if not legacy_cli_credential_deleted or not legacy_shared_credential_deleted:
             quarantine_error = None
             try:
-                set_cli_unlock_state(
+                disable_remembered_unlock(
                     ctx.data_root,
-                    enabled=False,
                     legacy_quarantined=True,
                 )
             except OSError as exc:
@@ -13560,7 +13741,8 @@ def handle_request(
                 details={
                     "cli_marker_cleared": quarantine_error is None,
                     "cli_credential_deleted": cli_credential_deleted,
-                    "legacy_credential_deleted": False,
+                    "legacy_cli_credential_deleted": legacy_cli_credential_deleted,
+                    "legacy_shared_credential_deleted": legacy_shared_credential_deleted,
                     "legacy_quarantined": quarantine_error is None,
                     "quarantine_error": quarantine_error,
                 },
@@ -13569,9 +13751,8 @@ def handle_request(
 
         marker_error = None
         try:
-            set_cli_unlock_state(
+            disable_remembered_unlock(
                 ctx.data_root,
-                enabled=False,
                 legacy_quarantined=False,
             )
         except OSError as exc:
@@ -13582,21 +13763,27 @@ def handle_request(
                 code="remembered_unlock_settings_failed",
                 hint=(
                     "Fix permissions on the managed config directory and retry."
-                    if cli_credential_deleted and legacy_credential_deleted
+                    if (
+                        cli_credential_deleted
+                        and legacy_cli_credential_deleted
+                        and legacy_shared_credential_deleted
+                    )
                     else "Fix config permissions, remove the remaining OS credential manually, and retry."
                 ),
                 details={
                     "settings_error": marker_error,
                     "cli_marker_cleared": False,
                     "cli_credential_deleted": cli_credential_deleted,
-                    "legacy_credential_deleted": legacy_credential_deleted,
+                    "legacy_cli_credential_deleted": legacy_cli_credential_deleted,
+                    "legacy_shared_credential_deleted": legacy_shared_credential_deleted,
                 },
                 retryable=True,
             ) from None
         result = {
             "cli_marker_cleared": True,
             "cli_credential_deleted": cli_credential_deleted,
-            "legacy_credential_deleted": legacy_credential_deleted,
+            "legacy_cli_credential_deleted": legacy_cli_credential_deleted,
+            "legacy_shared_credential_deleted": legacy_shared_credential_deleted,
             "remembered_unlock": remembered_unlock_status(ctx.data_root),
         }
         return (
@@ -13646,20 +13833,34 @@ def handle_request(
                 ),
                 False,
             )
-        desktop_stale_generation = mark_desktop_biometric_passphrase_stale(
-            ctx.data_root
-        )
-        if ctx.conn is not None:
-            _stop_freshness_background_worker(ctx, cancel_running=True)
-            ctx.conn.close()
-            ctx.conn = None
-            _clear_unlocked_passphrase(ctx)
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
-        result = change_database_passphrase(db_path, current, new_passphrase)
+        desktop_stale_generation = None
+        operator_stale_generation = None
+
+        def invalidate_native_credentials() -> None:
+            nonlocal desktop_stale_generation, operator_stale_generation
+            desktop_stale_generation = mark_desktop_biometric_passphrase_stale(
+                ctx.data_root
+            )
+            operator_stale_generation = invalidate_operator_native_auth(ctx.data_root)
+            if ctx.conn is not None:
+                _stop_freshness_background_worker(ctx, cancel_running=True)
+                ctx.conn.close()
+                ctx.conn = None
+                _clear_unlocked_passphrase(ctx)
+
+        result = change_database_passphrase(
+            db_path,
+            current,
+            new_passphrase,
+            before_rekey=invalidate_native_credentials,
+        )
         result["desktop_biometric_invalidated"] = (
             desktop_stale_generation is not None
         )
         result["desktop_biometric_stale_generation"] = desktop_stale_generation
+        result["operator_native_auth_invalidated"] = True
+        result["operator_native_auth_stale_generation"] = operator_stale_generation
         remembered_warning = refresh_remembered_passphrase_after_rotation(
             ctx.data_root,
             new_passphrase,
@@ -16192,6 +16393,7 @@ def run(
         freshness_stop_event=threading.Event(),
     )
     if conn is not None:
+        _ensure_daemon_project_owner(ctx)
         _remember_unlocked_passphrase(
             ctx,
             getattr(args, "_db_passphrase_cached", None),
@@ -16359,7 +16561,14 @@ def run(
             if should_shutdown:
                 return 0
     finally:
-        _stop_freshness_background_worker(ctx, reset_event=False)
+        worker_stopped = _stop_freshness_background_worker(
+            ctx,
+            reset_event=False,
+            require_stopped=False,
+        )
         _clear_unlocked_passphrase(ctx)
+        _retry_retired_project_resources(ctx)
+        if worker_stopped:
+            _retire_current_project_resources(ctx)
 
     return 0

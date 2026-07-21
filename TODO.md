@@ -614,8 +614,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] `progress` envelopes for sync/freshness kinds beyond the AI chat cancel
   path (`ui.wallets.sync.progress`, `ui.freshness.run.progress`,
   `ui.workspace.freshness.run.progress`, background `ui.freshness.progress`),
-  with supervisor streaming/non-streaming classification + non-fatal request
-  timeout
+  with supervisor streaming/non-streaming classification and exact request-id
+  completion without a production accepted-operation timeout
 - [ ] Generic mutation-safe cancellation + long-running handling for the
   non-sync mutating kinds: the generic `cancel` kind still returns "daemon
   cancellation is not wired yet" (`daemon.py`) and the serial main loop has no
@@ -623,11 +623,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   items in §1.4)
 - [ ] Worker pool with one SQLite connection per worker
 - [x] Smoke coverage for daemon ready/status/shutdown
-- [ ] Redaction audit in CI: redaction is already partially exercised in the
-  gate (`test_secrets_smoke`, `test_freshness`, and the Vitest
-  `appLogs`/`bridgeContainment` tests), but the dedicated Python redaction suite
-  `tests/test_log_ring.py` is not wired into `scripts/quality-gate.sh` and there
-  is no systematic secret-leak scan — add both
+- [ ] Redaction audit in CI: the quality gate already runs the Python
+  `test_log_ring` suite and Vitest `appLogs`/`bridgeContainment` coverage; the
+  remaining gap is a systematic generated-artifact secret-leak scan.
 
 ### 1.2 Tauri shell skeleton + typed IPC + first screen
 
@@ -1107,20 +1105,16 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   and `bootstrap_runtime` warns to stderr whenever the dotenv still contains
   secret-shaped entries while the DB is encrypted. URLs / kinds / chain /
   network stay in the dotenv (they are addresses, not credentials).
-- [ ] Tauri supervisor wiring — mostly shipped; one redaction gap remains. Done:
+- [x] Tauri supervisor wiring — shipped, including the final redaction gap. Done:
   startup passphrase modal (LockScreen → `daemon.unlock`), the stdin
   `auth_response.passphrase_secret` hand-off, the `auth_required`/`auth_response`
-  reveal relay, and redaction of every named field **except `blinding_key`**.
-  Remaining (security-relevant): add `blinding_key` (and the bare `blinding`
-  substring) to all three secret-floor redaction layers (`supervisor.rs`,
-  `kassiber/redaction.py`, `ui-tauri/src/lib/appLogs.ts`) plus a regression
-  test — `docs/reference/daemon.md` requires it but the reveal payload's
-  `blinding_key` currently passes through unredacted.
-- [ ] Cross-platform CI for SQLCipher: PyInstaller bundle smoke tests on
-  macOS arm64/x86_64, Linux x86_64, Windows x86_64. The CLI-binary smoke matrix
-  runs **macOS arm64 (macos-latest) + macOS x86_64 (macos-15-intel) + Linux
-  x86_64 (ubuntu-22.04)**; the remaining gap is **Windows x86_64** CLI-bundle
-  smoke (Windows currently builds only the desktop preview).
+  reveal relay, and redaction of every named secret field. `blinding_key` and
+  the bare `blinding` substring are covered in all three secret-floor layers
+  (`supervisor.rs`, `kassiber/redaction.py`, `ui-tauri/src/lib/appLogs.ts`) with
+  regression tests.
+- [x] Cross-platform prerelease SQLCipher/CLI bundle smoke: macOS arm64/x86_64,
+  Linux x86_64, and Windows x86_64 run in the prerelease workflow. This remains
+  tag/manual-dispatch coverage rather than a per-PR matrix.
 - [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric
   reveal gate. macOS desktop builds now have the first half for database
   unlock: first lock-screen passphrase entry can enroll Touch ID for the next
@@ -1139,6 +1133,14 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Kassiber skill bundle for agents (moved to
   https://github.com/bitcoinaustria/kassiber-skill)
 - [ ] Optional server/REST mode, still local-first and opt-in
+- [x] Terminal-first operator unlock broker: explicit manual/brokered/unattended
+  modes, per-user authenticated IPC, per-project leases/ownership/FIFO workers,
+  authoritative capability admission, password authorization on all desktop
+  platforms, production-entitled macOS Touch ID, truthful operation states,
+  frozen-sidecar broker/worker launch smokes, inherited child ownership, and
+  RAM-only lifecycle telemetry. Windows Hello and Linux biometrics remain
+  intentionally deferred; native macOS/Windows execution remains a required
+  release-platform check rather than a claim made by Linux-only local tests.
 
 ## Open bugs and debt
 

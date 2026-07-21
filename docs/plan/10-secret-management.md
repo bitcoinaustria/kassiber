@@ -9,6 +9,21 @@ the OS-store pilot. Desktop Touch ID and CLI remembered unlock are convenience
 layers over the SQLCipher passphrase, not new accounting-secret storage
 boundaries.
 
+The terminal operator broker is a third unlock *runtime*, not a third secret
+store. In brokered mode it retains a per-project passphrase only in the
+per-login-user broker's memory and supplies short-lived serialized CLI children
+through anonymous pipes; inherited owner handles keep exclusion alive if the
+broker dies before a child. It never reads the CLI remembered-unlock item. Its
+macOS Touch ID credential uses a distinct production-entitled,
+current-biometry-only namespace; the broker starts the signed helper with an
+inherited pipe, and the helper verifies its production-signed bundled sidecar
+parent, including a Security.framework validation of the live process against
+the fixed sidecar filename/signing identifier, Team ID, and Developer ID
+Application certificate requirement, before returning the secret to broker
+memory. It never returns the secret to the CLI, and there is no unsigned-preview fallback. The
+authoritative security and lifecycle contract is the
+[operator broker reference](../reference/operator-broker.md).
+
 ## Boundary Model
 
 Kassiber has two intended secret boundaries:
@@ -25,10 +40,10 @@ Kassiber has two intended secret boundaries:
    backend credentials, descriptors, xpubs, blinding keys, or reveal payloads
    out of SQLCipher.
 
-The unlocked Python daemon is the runtime trust boundary. Once it has an open
-database connection, it can read any DB-resident secret needed to fulfill an
-allowed request. Do not describe Kassiber secrets as encrypted while the daemon
-is running.
+The unlocked Python daemon or broker-owned project worker is the runtime trust
+boundary. Once either has the passphrase/open database, it can read any
+DB-resident secret needed for an allowed request. Do not describe Kassiber
+secrets as encrypted while either runtime is authorized.
 
 Out of scope for protection claims:
 
@@ -48,7 +63,7 @@ raw shell, raw filesystem, arbitrary CLI, or generic daemon-dispatch access.
 
 | Secret or sensitive artifact | Entry | Storage | Transport | Reveal | Logs/diagnostics | Backup/restore | Protection level | Gaps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd`, optional desktop Touch ID, optional CLI `remember-unlock` | normally not stored; independent per-data-root desktop and CLI entries in supported OS stores; legacy shared entry is migration-only | fd/prompt into CLI; CLI credential read only when `cli_remembered_unlock: true`; desktop uses item-level `biometryCurrentSet` when entitled and an explicit LocalAuthentication gate in previews | not revealed | diagnostics redacts passphrase-shaped args and details | required to open backed-up encrypted DB; OS-store copies are not portable backup material | SQLCipher at-rest perimeter only; remembered unlock is convenience | CLI reads are not biometric-gated; preview builds cannot claim item-level biometric protection |
+| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd`, optional broker lease, optional desktop Touch ID, optional CLI `remember-unlock`, optional operator Touch ID | normally not stored; brokered copies are RAM-only; independent per-data-root desktop, CLI, and operator-native entries use supported OS stores; legacy shared entry is migration-only | fd/prompt into CLI; challenge-bound broker secret frames and anonymous child pipes; CLI credential read only in unattended mode; desktop uses item-level `biometryCurrentSet` when entitled and an explicit LocalAuthentication gate in previews; operator Touch ID is entitled/current-biometry only and its signed helper verifies the live bundled sidecar process against a fixed Developer ID requirement for the exact sidecar identifier and helper TeamIdentifier before writing to a broker-created inherited pipe | not revealed | diagnostics and broker RAM logs redact passphrase-shaped args and details | required to open backed-up encrypted DB; RAM/OS-store copies are not portable backup material | SQLCipher at-rest perimeter only; broker and remembered unlock are convenience | same-user processes can intentionally exercise an active broker grant; managed-runtime zeroization is best effort; CLI reads are not biometric-gated |
 | Backup passphrase / age recipient material | backup CLI prompts/options | not stored by Kassiber | local CLI process | not revealed | diagnostics redaction applies to passphrase-shaped keys/text | user-supplied for each backup/import | external `age` or `pyrage` boundary | no recovery if lost |
 | Backend tokens/auth headers/cookies/basic-auth | backend create/update, dotenv migration | SQLCipher DB `backends` table; older dotenvs may still be migrated | daemon/CLI explicit backend flows | `backends.reveal_token` after passphrase round-trip, or explicit plaintext acknowledgement on plaintext DBs | safe backend views expose presence flags only; diagnostics aggregate credential presence | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | not migrated to OS stores in this PR |
 | Descriptors, xpubs, blinding keys | wallet create/update/import | SQLCipher DB wallet config today | daemon/CLI wallet flows | `wallets.reveal_descriptor` after passphrase round-trip, or explicit plaintext acknowledgement on plaintext DBs | safe wallet views expose state flags only; diagnostics redacts xpub/xprv patterns | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | still in generic wallet config blob |
@@ -272,10 +287,11 @@ Desktop:
    per-data-root copy. Entitled builds let the protected Keychain enforce
    `biometryCurrentSet`; previews explicitly run LocalAuthentication before
    reading their desktop-only fallback. Passphrase rotation updates this copy.
-5. A one-shot CLI invocation resolves an explicit fd/cached passphrase first,
-   then the OS-store copy only when `cli_remembered_unlock` is true, then the
-   existing TTY prompt. A stale copy writes `remembered_unlock_stale` to stderr
-   and falls through instead of changing machine-mode stdout.
+5. A one-shot CLI invocation follows the selected project mode. Manual uses an
+   explicit fd or controlling-terminal prompt; brokered routes eligible work to
+   the per-user broker and never reads remembered unlock; unattended may read
+   the enrolled CLI OS-store copy. A stale unattended copy writes
+   `remembered_unlock_stale` to stderr without changing machine-mode stdout.
 
 ### Reveal Token/Descriptor
 

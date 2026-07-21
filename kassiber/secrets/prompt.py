@@ -58,6 +58,16 @@ def read_passphrase_from_fd(fd: int) -> str:
         raise PassphraseInputError(
             f"--db-passphrase-fd expects a non-negative integer, got {fd!r}",
         )
+    if os.name == "nt" and os.environ.get("KASSIBER_OPERATOR_CHILD") == "1":
+        import msvcrt
+
+        try:
+            fd = msvcrt.open_osfhandle(fd, os.O_RDONLY)
+        except OSError as exc:
+            raise PassphraseInputError(
+                f"could not open inherited secret handle: {exc}",
+                hint="Make sure the broker passed an inheritable local handle.",
+            ) from None
     chunks: list[bytes] = []
     remaining = _MAX_PASSPHRASE_BYTES + 1
     try:

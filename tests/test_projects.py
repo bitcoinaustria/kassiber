@@ -7,9 +7,10 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from kassiber.core.runtime import resolve_runtime_paths
-from kassiber.db import DEFAULT_DB_FILENAME, open_db
+from kassiber.db import DATABASE_INSTANCE_ID_SETTING, DEFAULT_DB_FILENAME, open_db
 from kassiber.errors import AppError
 from kassiber.projects import (
     WORKSPACE_SPLIT_POLICY,
@@ -335,6 +336,634 @@ class LegacyProjectMigrationTests(unittest.TestCase):
 
 
 class DaemonProjectSwitchTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._owner_root = tempfile.TemporaryDirectory()
+        self._owner_root_patch = mock.patch(
+            "kassiber.operator.project._owner_lock_root",
+            return_value=Path(self._owner_root.name),
+        )
+        self._owner_root_patch.start()
+
+    def tearDown(self) -> None:
+        self._owner_root_patch.stop()
+        self._owner_root.cleanup()
+
+    @staticmethod
+    def _context(daemon_runtime, entry, connection):
+        return daemon_runtime.DaemonContext(
+            conn=connection,
+            data_root=str(entry.data_root),
+            runtime_config={
+                "env_file": str(entry.root / "config" / "backends.env"),
+                "default_backend": None,
+                "backends": {},
+            },
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(None),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=object(),
+            freshness_stop_event=threading.Event(),
+            project_id=entry.id,
+            project_root=str(entry.root),
+        )
+
+    def test_broker_owned_target_is_rejected_before_authentication_or_open(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            broker_owner = None
+            alpha_conn = None
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                alpha_conn = open_db(str(alpha.data_root))
+                ctx = self._context(daemon_runtime, alpha, alpha_conn)
+                broker_owner = daemon_runtime.acquire_project_ownership(
+                    daemon_runtime.canonical_project(str(beta.data_root)),
+                    owner_kind="broker",
+                    generation="broker-generation",
+                )
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                ) as encrypted, mock.patch.object(
+                    daemon_runtime,
+                    "_verify_project_passphrase_with_backoff",
+                ) as verify, mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                ) as open_target:
+                    with self.assertRaises(AppError) as raised:
+                        daemon_runtime._select_project_payload(
+                            ctx,
+                            {
+                                "project_id": beta.id,
+                                "auth_response": {
+                                    "passphrase_secret": "not-probed"
+                                },
+                            },
+                            "switch",
+                        )
+
+                self.assertEqual(raised.exception.code, "project_in_use")
+                encrypted.assert_not_called()
+                verify.assert_not_called()
+                open_target.assert_not_called()
+                self.assertIs(ctx.conn, alpha_conn)
+                self.assertEqual(ctx.project_id, alpha.id)
+                self.assertEqual(
+                    load_catalog(catalog_path(state_root))["selected_project_id"],
+                    alpha.id,
+                )
+            finally:
+                if broker_owner is not None:
+                    broker_owner.release()
+                if alpha_conn is not None:
+                    alpha_conn.close()
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+    def test_shutdown_closes_current_connection_before_releasing_owner(self):
+        from kassiber import daemon as daemon_runtime
+
+        order: list[str] = []
+        connection = mock.Mock()
+        connection.close.side_effect = lambda: order.append("close")
+        owner = mock.Mock()
+        owner.release.side_effect = lambda: order.append("release")
+        ctx = mock.Mock(
+            conn=connection,
+            project_owner=owner,
+            retired_project_resources=[],
+        )
+
+        daemon_runtime._retire_current_project_resources(ctx)
+
+        self.assertEqual(order, ["close", "release"])
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.project_owner)
+        self.assertEqual(ctx.retired_project_resources, [])
+
+    def test_shutdown_retains_owner_when_current_connection_close_fails(self):
+        from kassiber import daemon as daemon_runtime
+
+        connection = mock.Mock()
+        connection.close.side_effect = OSError("close failed")
+        owner = mock.Mock()
+        ctx = mock.Mock(
+            conn=connection,
+            project_owner=owner,
+            retired_project_resources=[],
+        )
+
+        daemon_runtime._retire_current_project_resources(ctx)
+
+        owner.release.assert_not_called()
+        self.assertIsNone(ctx.conn)
+        self.assertIsNone(ctx.project_owner)
+        self.assertEqual(len(ctx.retired_project_resources), 1)
+
+    def test_daemon_lock_retains_owner_when_release_needs_retry(self):
+        from kassiber import daemon as daemon_runtime
+
+        owner = mock.Mock()
+        owner.release.side_effect = [OSError("release failed"), None]
+        ctx = mock.Mock(
+            project_owner=owner,
+            retired_project_resources=[],
+        )
+
+        with self.assertRaisesRegex(OSError, "release failed"):
+            daemon_runtime._release_daemon_project_owner(ctx)
+
+        self.assertIsNone(ctx.project_owner)
+        self.assertEqual(len(ctx.retired_project_resources), 1)
+
+        daemon_runtime._retry_retired_project_resources(ctx)
+
+        self.assertEqual(owner.release.call_count, 2)
+        self.assertEqual(ctx.retired_project_resources, [])
+
+    def test_daemon_unlock_retries_retained_owner_before_reacquiring(self):
+        from kassiber import daemon as daemon_runtime
+
+        order: list[str] = []
+        release_attempts = 0
+
+        def release_old() -> None:
+            nonlocal release_attempts
+            release_attempts += 1
+            if release_attempts == 1:
+                raise OSError("release failed")
+            order.append("release-old")
+
+        old_owner = mock.Mock()
+        old_owner.release.side_effect = release_old
+        with tempfile.TemporaryDirectory() as tmp:
+            project = daemon_runtime.canonical_project(tmp)
+            new_owner = mock.Mock(project=project)
+            connection = mock.Mock()
+            ctx = mock.Mock(
+                conn=None,
+                project_owner=old_owner,
+                retired_project_resources=[],
+                data_root=tmp,
+                project_id=None,
+                runtime_config={},
+            )
+
+            with self.assertRaisesRegex(OSError, "release failed"):
+                daemon_runtime._release_daemon_project_owner(ctx)
+
+            def acquire(*_args, **_kwargs):
+                order.append("acquire-new")
+                return new_owner
+
+            with mock.patch.object(
+                daemon_runtime,
+                "acquire_project_ownership",
+                side_effect=acquire,
+            ), mock.patch.object(
+                daemon_runtime,
+                "open_db",
+                return_value=connection,
+            ), mock.patch.object(
+                daemon_runtime,
+                "validate_project_migration_after_unlock",
+            ), mock.patch.object(
+                daemon_runtime,
+                "merge_db_backends",
+            ), mock.patch.object(
+                daemon_runtime,
+                "_remember_unlocked_passphrase",
+            ), mock.patch.object(
+                daemon_runtime,
+                "_start_freshness_background_worker",
+            ):
+                opened = daemon_runtime._open_daemon_connection(ctx)
+
+        self.assertIs(opened, connection)
+        self.assertEqual(order, ["release-old", "acquire-new"])
+        self.assertEqual(ctx.retired_project_resources, [])
+        self.assertIs(ctx.project_owner, new_owner)
+
+    def test_switch_stop_failure_prevents_catalog_persistence(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            alpha_conn = None
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                alpha_conn = open_db(str(alpha.data_root))
+                ctx = self._context(daemon_runtime, alpha, alpha_conn)
+                old_owner = mock.Mock()
+                old_owner.project = daemon_runtime.canonical_project(
+                    str(alpha.data_root)
+                )
+                ctx.project_owner = old_owner
+                target_owner = mock.Mock()
+                target_owner.project = daemon_runtime.canonical_project(
+                    str(beta.data_root)
+                )
+                target_conn = mock.Mock()
+                order: list[str] = []
+
+                def open_target(*_args, **_kwargs):
+                    order.append("open")
+                    return target_conn, {"target": True}
+
+                def stop_current(*_args, **_kwargs):
+                    order.append("stop")
+                    raise AppError(
+                        "operation still running",
+                        code="project_operation_in_progress",
+                    )
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "acquire_project_ownership",
+                    return_value=target_owner,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                    return_value=False,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                    side_effect=open_target,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                    side_effect=stop_current,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "set_selected_project",
+                ) as persist:
+                    with self.assertRaises(AppError) as raised:
+                        daemon_runtime._select_project_payload(
+                            ctx,
+                            {"project_id": beta.id},
+                            "switch",
+                        )
+
+                self.assertEqual(
+                    raised.exception.code,
+                    "project_operation_in_progress",
+                )
+                self.assertEqual(order, ["open", "stop"])
+                persist.assert_not_called()
+                target_conn.close.assert_called_once_with()
+                target_owner.release.assert_called_once_with()
+                old_owner.release.assert_not_called()
+                self.assertIs(ctx.conn, alpha_conn)
+                self.assertEqual(ctx.project_id, alpha.id)
+                self.assertEqual(
+                    load_catalog(catalog_path(state_root))["selected_project_id"],
+                    alpha.id,
+                )
+            finally:
+                if alpha_conn is not None:
+                    alpha_conn.close()
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+    def test_switch_rollback_retains_target_owner_when_close_fails(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            alpha_conn = None
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                alpha_conn = open_db(str(alpha.data_root))
+                ctx = self._context(daemon_runtime, alpha, alpha_conn)
+                old_owner = mock.Mock()
+                old_owner.project = daemon_runtime.canonical_project(
+                    str(alpha.data_root)
+                )
+                ctx.project_owner = old_owner
+                target_owner = mock.Mock()
+                target_owner.project = daemon_runtime.canonical_project(
+                    str(beta.data_root)
+                )
+                target_conn = mock.Mock()
+                target_conn.close.side_effect = [OSError("close failed"), None]
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "acquire_project_ownership",
+                    return_value=target_owner,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                    return_value=False,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                    return_value=(target_conn, {"target": True}),
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                    side_effect=AppError(
+                        "operation still running",
+                        code="project_operation_in_progress",
+                    ),
+                ):
+                    with self.assertRaises(AppError) as raised:
+                        daemon_runtime._select_project_payload(
+                            ctx,
+                            {"project_id": beta.id},
+                            "switch",
+                        )
+
+                self.assertEqual(
+                    raised.exception.code,
+                    "project_operation_in_progress",
+                )
+                target_owner.release.assert_not_called()
+                old_owner.release.assert_not_called()
+                self.assertEqual(len(ctx.retired_project_resources), 1)
+
+                daemon_runtime._retry_retired_project_resources(ctx)
+
+                self.assertEqual(target_conn.close.call_count, 2)
+                target_owner.release.assert_called_once_with()
+                self.assertEqual(ctx.retired_project_resources, [])
+            finally:
+                if alpha_conn is not None:
+                    alpha_conn.close()
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+    def test_switch_rollback_retains_target_owner_when_release_fails(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            alpha_conn = None
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                alpha_conn = open_db(str(alpha.data_root))
+                ctx = self._context(daemon_runtime, alpha, alpha_conn)
+                old_owner = mock.Mock()
+                old_owner.project = daemon_runtime.canonical_project(
+                    str(alpha.data_root)
+                )
+                ctx.project_owner = old_owner
+                target_owner = mock.Mock()
+                target_owner.project = daemon_runtime.canonical_project(
+                    str(beta.data_root)
+                )
+                target_owner.release.side_effect = [
+                    OSError("release failed"),
+                    None,
+                ]
+                target_conn = mock.Mock()
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "acquire_project_ownership",
+                    return_value=target_owner,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                    return_value=False,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                    return_value=(target_conn, {"target": True}),
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                    side_effect=AppError(
+                        "operation still running",
+                        code="project_operation_in_progress",
+                    ),
+                ):
+                    with self.assertRaises(AppError) as raised:
+                        daemon_runtime._select_project_payload(
+                            ctx,
+                            {"project_id": beta.id},
+                            "switch",
+                        )
+
+                self.assertEqual(
+                    raised.exception.code,
+                    "project_operation_in_progress",
+                )
+                target_conn.close.assert_called_once_with()
+                old_owner.release.assert_not_called()
+                self.assertEqual(target_owner.release.call_count, 1)
+                self.assertEqual(len(ctx.retired_project_resources), 1)
+
+                daemon_runtime._retry_retired_project_resources(ctx)
+
+                self.assertEqual(target_owner.release.call_count, 2)
+                self.assertEqual(ctx.retired_project_resources, [])
+            finally:
+                if alpha_conn is not None:
+                    alpha_conn.close()
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+    def test_switch_persist_failure_restores_old_freshness_and_context(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            alpha_conn = None
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                alpha_conn = open_db(str(alpha.data_root))
+                ctx = self._context(daemon_runtime, alpha, alpha_conn)
+                ctx.db_passphrase = "old-passphrase"
+                ctx.freshness_worker = mock.Mock()
+                ctx.freshness_worker.is_alive.return_value = True
+                old_owner = mock.Mock()
+                old_owner.project = daemon_runtime.canonical_project(
+                    str(alpha.data_root)
+                )
+                ctx.project_owner = old_owner
+                target_owner = mock.Mock()
+                target_owner.project = daemon_runtime.canonical_project(
+                    str(beta.data_root)
+                )
+                target_conn = mock.Mock()
+                order: list[str] = []
+
+                def open_target(*_args, **_kwargs):
+                    order.append("open")
+                    return target_conn, {"target": True}
+
+                def stop_current(*_args, **_kwargs):
+                    order.append("stop")
+                    return True
+
+                def fail_persist(*_args, **_kwargs):
+                    order.append("persist")
+                    raise OSError("catalog is read-only")
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "acquire_project_ownership",
+                    return_value=target_owner,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                    return_value=False,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                    side_effect=open_target,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                    side_effect=stop_current,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "set_selected_project",
+                    side_effect=fail_persist,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_start_freshness_background_worker",
+                ) as restart:
+                    with self.assertRaisesRegex(OSError, "catalog is read-only"):
+                        daemon_runtime._select_project_payload(
+                            ctx,
+                            {"project_id": beta.id},
+                            "switch",
+                        )
+
+                self.assertEqual(order, ["open", "stop", "persist"])
+                restart.assert_called_once_with(
+                    ctx,
+                    passphrase="old-passphrase",
+                )
+                target_conn.close.assert_called_once_with()
+                target_owner.release.assert_called_once_with()
+                old_owner.release.assert_not_called()
+                self.assertIs(ctx.conn, alpha_conn)
+                self.assertEqual(ctx.project_id, alpha.id)
+                self.assertEqual(
+                    load_catalog(catalog_path(state_root))["selected_project_id"],
+                    alpha.id,
+                )
+            finally:
+                if alpha_conn is not None:
+                    alpha_conn.close()
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+    def test_switch_retains_old_owner_until_failed_connection_close_retries(self):
+        from kassiber import daemon as daemon_runtime
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                old_conn = mock.Mock()
+                old_conn.close.side_effect = [OSError("close failed"), None]
+                ctx = self._context(daemon_runtime, alpha, old_conn)
+                old_owner = mock.Mock()
+                old_owner.project = daemon_runtime.canonical_project(
+                    str(alpha.data_root)
+                )
+                ctx.project_owner = old_owner
+                target_owner = mock.Mock()
+                target_owner.project = daemon_runtime.canonical_project(
+                    str(beta.data_root)
+                )
+                target_conn = mock.Mock()
+
+                with mock.patch.object(
+                    daemon_runtime,
+                    "acquire_project_ownership",
+                    return_value=target_owner,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_data_root_database_is_encrypted",
+                    return_value=False,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_open_project_connection_for_switch",
+                    return_value=(target_conn, {"target": True}),
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_start_freshness_background_worker",
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "set_selected_project",
+                    return_value=beta,
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_status_payload",
+                    return_value={"project": "beta"},
+                ):
+                    response, _ = daemon_runtime._select_project_payload(
+                        ctx,
+                        {"project_id": beta.id},
+                        "switch",
+                    )
+
+                self.assertEqual(response["kind"], "ui.projects.select")
+                self.assertIs(ctx.conn, target_conn)
+                self.assertIs(ctx.project_owner, target_owner)
+                self.assertEqual(old_conn.close.call_count, 1)
+                old_owner.release.assert_not_called()
+                self.assertEqual(len(ctx.retired_project_resources), 1)
+
+                daemon_runtime._retry_retired_project_resources(ctx)
+
+                self.assertEqual(old_conn.close.call_count, 2)
+                old_owner.release.assert_called_once_with()
+                self.assertEqual(ctx.retired_project_resources, [])
+            finally:
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
     def test_switch_keeps_current_project_if_target_open_fails(self):
         try:
             from kassiber import daemon as daemon_runtime
@@ -503,8 +1132,13 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                     alpha_conn.execute("SELECT 1")
                 self.assertIn("closed database", str(closed.exception))
                 self.assertEqual(
-                    ctx.conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0],
-                    0,
+                    [
+                        row[0]
+                        for row in ctx.conn.execute(
+                            "SELECT key FROM settings ORDER BY key"
+                        ).fetchall()
+                    ],
+                    [DATABASE_INSTANCE_ID_SETTING],
                 )
             finally:
                 projects_module.DEFAULT_STATE_ROOT = old_state

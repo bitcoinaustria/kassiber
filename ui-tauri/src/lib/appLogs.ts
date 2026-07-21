@@ -139,14 +139,14 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
   ],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
-    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    /\b(api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|passphrase|password|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
     "$1$2[redacted]",
   ],
   // JSON-shaped assignments, e.g. a logged object `{"api_key":"sk-..."}`. The
   // pattern above stops at the key's closing quote, so the quoted value
   // survives without this; keep the key and redact the value in place.
   [
-    /("(?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)"\s*:\s*)"[^"]*"/gi,
+    /("(?:api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)"\s*:\s*)"[^"]*"/gi,
     '$1"[redacted]"',
   ],
 ];
@@ -630,6 +630,10 @@ function secretFloorFieldsAtInsert(
 ): Record<string, AppLogField> {
   let changed = false;
   const entries = Object.entries(fields).map(([name, field]) => {
+    if (name.toLowerCase().includes("blinding")) {
+      changed = true;
+      return [name, { type: "text", value: "[redacted]" }] as const;
+    }
     // Run the secret-shape backstop on every string value EXCEPT the declared
     // secret types: `redactField` masks those in both export tiers (and they
     // are only ever raw in the watermarked raw view), where the original is

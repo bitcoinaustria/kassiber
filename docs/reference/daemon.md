@@ -810,7 +810,9 @@ When the active project's `kassiber.sqlite3` is SQLCipher-encrypted, the daemon
 still bootstraps through the normal runtime path: it accepts
 `--db-passphrase-fd <FD>` for that selected project and falls back to an
 interactive prompt only if a controlling TTY is attached. The Tauri supervisor
-will eventually hand the passphrase via fd inheritance (tracked in `TODO.md`).
+uses the existing `auth_required` challenge and a secret-store bridge whose
+passphrase reply is consumed in daemon memory; terminal broker workers use
+inherited anonymous fds and never put the passphrase in daemon JSON.
 
 ## Reveal kinds (local-auth round-trip)
 

@@ -214,6 +214,7 @@ def migrate_plaintext_to_encrypted(
         kdf_iter=kdf_iter,
         cipher_page_size=cipher_page_size,
         compatibility=compatibility,
+        enforce_operator_identity=False,
     )
     try:
         post_user_version = new_conn.execute("PRAGMA user_version").fetchone()[0]
@@ -303,6 +304,7 @@ def create_empty_encrypted_database(
         kdf_iter=kdf_iter,
         cipher_page_size=cipher_page_size,
         compatibility=compatibility,
+        enforce_operator_identity=False,
     )
     try:
         conn.execute("CREATE TABLE IF NOT EXISTS kassiber_init_marker(x INTEGER)")

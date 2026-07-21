@@ -1461,7 +1461,8 @@ def _stop_freshness_background_worker(
     *,
     cancel_running: bool = False,
     reset_event: bool = True,
-) -> None:
+    require_stopped: bool = True,
+) -> bool:
     if cancel_running and ctx.conn is not None:
         try:
             ctx.conn.execute(
@@ -1479,11 +1480,22 @@ def _stop_freshness_background_worker(
     worker = ctx.freshness_worker
     if worker is not None:
         worker.join(timeout=2.0)
-    # The worker captured the old event, so a timed-out worker can drain while
-    # the next project/session gets a fresh stop event and worker slot.
+    if worker is not None and worker.is_alive():
+        if require_stopped:
+            raise AppError(
+                "a background freshness operation is still finishing",
+                code="project_operation_in_progress",
+                hint="Wait for the running operation to finish, then lock or switch projects again.",
+                details={"running_operations_finishing": 1},
+                retryable=True,
+            )
+        return False
+    # Never clear the worker slot or replace its stop event while a worker can
+    # still own a database connection for the current project.
     ctx.freshness_worker = None
     if reset_event:
         ctx.freshness_stop_event = threading.Event()
+    return True
 
 
 def _sync_results_from_freshness_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:

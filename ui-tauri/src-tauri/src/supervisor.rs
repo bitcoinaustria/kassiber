@@ -21,11 +21,6 @@ use tauri::{AppHandle, Emitter};
 // Packaged one-file Python sidecars can take longer than a development checkout
 // to start on cold launch, especially before the database unlock screen.
 const DAEMON_READY_TIMEOUT: Duration = Duration::from_secs(30);
-const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
-/// Per-record inactivity timeout for streaming kinds. The recv clock resets
-/// every time a delta arrives, so a long-running stream stays alive as long
-/// as the daemon keeps producing output within the window.
-const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 const LIFECYCLE_RING_CAPACITY: usize = 64;
 
@@ -62,12 +57,10 @@ pub struct DaemonSupervisor {
     lifecycle: Mutex<VecDeque<LifecycleRecord>>,
     next_lifecycle_id: AtomicU64,
     event_sink: SharedEventSink,
-    /// Per-request budget for non-streaming kinds. Exceeding it never kills the
-    /// daemon — it just fails the one slow request as `daemon_busy`. Read-style
-    /// calls are retryable; mutating calls are not, since they have already been
-    /// accepted on stdin and may still apply side effects later. A field (not the
-    /// bare const) so tests can shrink it.
-    invoke_timeout: Duration,
+    /// Production non-streaming work has no supervisor deadline: sync, import,
+    /// journal, and report jobs wait for their terminal daemon record. Tests may
+    /// install a short deadline to exercise legacy late-response handling.
+    invoke_timeout: Option<Duration>,
 }
 
 /// Daemon lifecycle event kept for the diagnostics screen. `detail` and
@@ -180,6 +173,7 @@ fn is_sensitive_key(key: &str) -> bool {
         "api_key",
         "auth_header",
         "auth_response",
+        "blinding",
         "cookie",
         "descriptor",
         "mnemonic",
@@ -278,6 +272,9 @@ fn redact_sensitive_word(word: &str) -> (String, bool) {
         "api-key",
         "auth_header",
         "auth-header",
+        "blinding_key",
+        "blinding-key",
+        "blinding",
         "cookie",
         "descriptor",
         "mnemonic",
@@ -346,7 +343,7 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
-            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            invoke_timeout: None,
         }
     }
 
@@ -361,7 +358,7 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
-            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            invoke_timeout: None,
         }
     }
 
@@ -369,7 +366,7 @@ impl DaemonSupervisor {
     /// without waiting the production budget.
     #[cfg(test)]
     fn with_invoke_timeout(mut self, invoke_timeout: Duration) -> Self {
-        self.invoke_timeout = invoke_timeout;
+        self.invoke_timeout = Some(invoke_timeout);
         self
     }
 
@@ -387,7 +384,7 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
-            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            invoke_timeout: None,
         }
     }
 
@@ -574,22 +571,21 @@ impl DaemonSupervisor {
             return Err(error.with_stderr_tail(stderr_tail));
         }
 
-        // For streaming kinds we use a per-record inactivity timeout so a slow
-        // model that keeps emitting tokens stays alive past the total-budget.
-        // Non-streaming kinds keep the original total deadline.
-        let deadline = if streaming {
-            None
-        } else {
-            Some(Instant::now() + self.invoke_timeout)
-        };
+        // Accepted production work has no supervisor deadline. Long sync,
+        // import, journal, and export operations may be quiet while an atomic
+        // step runs, and returning `daemon_busy` would falsely look terminal
+        // while the mutation continued. Only tests install `invoke_timeout`.
+        let deadline = self.invoke_timeout.map(|timeout| Instant::now() + timeout);
 
         let result = loop {
-            let remaining = if let Some(deadline) = deadline {
-                deadline.saturating_duration_since(Instant::now())
+            let receive_timeout =
+                deadline.map(|value| value.saturating_duration_since(Instant::now()));
+            let received = if let Some(remaining) = receive_timeout {
+                rx.recv_timeout(remaining)
             } else {
-                DAEMON_STREAM_INACTIVITY_TIMEOUT
+                rx.recv().map_err(|_| mpsc::RecvTimeoutError::Disconnected)
             };
-            let mut response = match rx.recv_timeout(remaining) {
+            let mut response = match received {
                 Ok(Ok(response)) => response,
                 Ok(Err(error)) => break Err(error.with_stderr_tail(process.stderr_tail())),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -1095,11 +1091,12 @@ struct DaemonCommand {
 
 pub fn run_cli(resource_dir: Option<&Path>, args: Vec<String>) -> i32 {
     let command = kassiber_command(resource_dir, args);
-    match Command::new(&command.program)
-        .args(&command.args)
-        .current_dir(&command.cwd)
-        .status()
-    {
+    let mut process = Command::new(&command.program);
+    process.args(&command.args).current_dir(&command.cwd);
+    if let Ok(executable) = env::current_exe() {
+        process.env("KASSIBER_NATIVE_AUTH_HELPER", executable);
+    }
+    match process.status() {
         Ok(status) => status.code().unwrap_or(1),
         Err(error) => {
             eprintln!(
@@ -1820,11 +1817,12 @@ mod tests {
         let error = SupervisorError::new("internal", "failed")
             .details(json!({
                 "api_key": "sk-detail-secret",
+                "blinding_key": "slip77-detail-secret",
                 "mnemonic": "abandon abandon abandon",
                 "line": "token=btcpay-secret Bearer openai-secret descriptor=wpkh(xpub661MyMwAqRbcF12345678901234567890) recovery_phrase=legal winner thank"
             }))
             .with_stderr_tail(
-                "api_key=sk-stderr-secret Bearer stderr-secret passphrase_secret=correct seed_phrase=letter advice cage raw xpub661MyMwAqRbcF12345678901234567890".to_string(),
+                "api_key=sk-stderr-secret blinding=slip77-stderr-secret Bearer stderr-secret passphrase_secret=correct seed_phrase=letter advice cage raw xpub661MyMwAqRbcF12345678901234567890".to_string(),
             );
         let encoded = serde_json::to_string(&error.details).expect("details json");
         assert!(!encoded.contains("abandon"));
@@ -1833,6 +1831,8 @@ mod tests {
         assert!(!encoded.contains("letter"));
         assert!(!encoded.contains("advice"));
         assert!(!encoded.contains("sk-detail-secret"));
+        assert!(!encoded.contains("slip77-detail-secret"));
+        assert!(!encoded.contains("slip77-stderr-secret"));
         assert!(!encoded.contains("btcpay-secret"));
         assert!(!encoded.contains("openai-secret"));
         assert!(!encoded.contains("sk-stderr-secret"));
@@ -1893,6 +1893,7 @@ mod tests {
             r#"{"api_key":"btcpay-no-sk-prefix"}"#,
             r#"{'api_key': 'btcpay-no-sk-prefix'}"#,
             r#"{"token": "secret-value-here"}"#,
+            r#"{"blinding_key": "slip77-secret-value"}"#,
             r#"{"passphrase":"correct-horse-battery"}"#,
         ];
         for case in cases {
@@ -1905,6 +1906,7 @@ mod tests {
                 "sk-live-001",
                 "btcpay-no-sk-prefix",
                 "secret-value-here",
+                "slip77-secret-value",
                 "correct-horse-battery",
             ] {
                 assert!(
@@ -2745,7 +2747,7 @@ for line in sys.stdin:
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
-            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
+            invoke_timeout: None,
         };
 
         let error = supervisor

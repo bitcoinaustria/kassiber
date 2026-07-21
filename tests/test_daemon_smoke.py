@@ -2,7 +2,6 @@ import io
 import json
 import os
 import queue
-import select
 import shutil
 import sqlite3
 import subprocess
@@ -62,6 +61,7 @@ from .descriptor_fixtures import PUBLIC_MAINNET_ZPUB_FIXTURE
 
 
 ROOT = Path(__file__).resolve().parent.parent
+_DAEMON_STDOUT_EOF = object()
 
 
 def _start_daemon(data_root):
@@ -83,8 +83,7 @@ def _start_daemon(data_root):
 
 
 def _read_payload(proc):
-    assert proc.stdout is not None
-    payload = json.loads(proc.stdout.readline())
+    payload = json.loads(_read_daemon_line(proc))
     _remember_daemon_payload(proc, payload)
     return payload
 
@@ -109,16 +108,47 @@ def _remember_daemon_payload(proc, payload):
     proc._kassiber_seen_payloads = seen[-12:]
 
 
-def _read_payload_timeout(proc, timeout=5.0):
+def _daemon_stdout_queue(proc):
     assert proc.stdout is not None
-    ready, _, _ = select.select([proc.stdout.fileno()], [], [], timeout)
-    if not ready:
+    output_queue = getattr(proc, "_kassiber_stdout_queue", None)
+    if output_queue is not None:
+        return output_queue
+    output_queue = queue.Queue()
+
+    def read_stdout() -> None:
+        try:
+            for line in proc.stdout:
+                output_queue.put(line)
+        finally:
+            output_queue.put(_DAEMON_STDOUT_EOF)
+
+    reader = threading.Thread(target=read_stdout, daemon=True)
+    proc._kassiber_stdout_queue = output_queue
+    proc._kassiber_stdout_reader = reader
+    reader.start()
+    return output_queue
+
+
+def _read_daemon_line(proc, timeout=None):
+    output_queue = _daemon_stdout_queue(proc)
+    try:
+        line = output_queue.get(timeout=timeout)
+    except queue.Empty as exc:
         seen = getattr(proc, "_kassiber_seen_payloads", [])
         raise AssertionError(
             f"daemon did not emit a payload within {timeout:.1f}s; "
             f"last payloads: {seen!r}"
+        ) from exc
+    if line is _DAEMON_STDOUT_EOF:
+        output_queue.put(_DAEMON_STDOUT_EOF)
+        raise AssertionError(
+            f"daemon stdout closed before the expected payload; code={proc.poll()}"
         )
-    payload = json.loads(proc.stdout.readline())
+    return line
+
+
+def _read_payload_timeout(proc, timeout=5.0):
+    payload = json.loads(_read_daemon_line(proc, timeout))
     _remember_daemon_payload(proc, payload)
     return payload
 
@@ -826,7 +856,11 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
         ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
         with mock.patch.object(
             daemon_module,
-            "set_cli_unlock_state",
+            "cli_remembered_unlock_enabled",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "disable_remembered_unlock",
             side_effect=OSError("settings are read-only"),
         ), mock.patch.object(
             daemon_module,
@@ -834,9 +868,13 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
             return_value=True,
         ) as delete_cli, mock.patch.object(
             daemon_module,
+            "delete_legacy_cli_remembered_passphrase",
+            return_value=True,
+        ) as delete_legacy_cli, mock.patch.object(
+            daemon_module,
             "delete_legacy_shared_passphrase",
-            return_value=False,
-        ) as delete_legacy:
+            return_value=True,
+        ) as delete_legacy_shared:
             with self.assertRaises(AppError) as raised:
                 daemon_module.handle_request(
                     ctx,
@@ -845,10 +883,12 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
                 )
 
         delete_cli.assert_called_once_with(ctx.data_root)
-        delete_legacy.assert_called_once_with(ctx.data_root)
+        delete_legacy_cli.assert_called_once_with(ctx.data_root)
+        delete_legacy_shared.assert_called_once_with(ctx.data_root)
         self.assertEqual(raised.exception.code, "remembered_unlock_settings_failed")
         self.assertTrue(raised.exception.details["cli_credential_deleted"])
-        self.assertFalse(raised.exception.details["legacy_credential_deleted"])
+        self.assertTrue(raised.exception.details["legacy_cli_credential_deleted"])
+        self.assertTrue(raised.exception.details["legacy_shared_credential_deleted"])
 
     def test_cli_owned_legacy_delete_failure_quarantines_item(self):
         ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
@@ -862,11 +902,15 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
             return_value=True,
         ), mock.patch.object(
             daemon_module,
+            "delete_legacy_cli_remembered_passphrase",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
             "delete_legacy_shared_passphrase",
             return_value=False,
         ), mock.patch.object(
             daemon_module,
-            "set_cli_unlock_state",
+            "disable_remembered_unlock",
         ) as quarantine:
             with self.assertRaises(AppError) as raised:
                 daemon_module.handle_request(
@@ -877,7 +921,6 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
 
         quarantine.assert_called_once_with(
             ctx.data_root,
-            enabled=False,
             legacy_quarantined=True,
         )
         self.assertEqual(
@@ -914,6 +957,10 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
             side_effect=OSError("settings are read-only"),
         ), mock.patch.object(
             daemon_module,
+            "change_database_passphrase",
+            side_effect=lambda *_args, **kwargs: kwargs["before_rekey"](),
+        ), mock.patch.object(
+            daemon_module,
             "_stop_freshness_background_worker",
         ) as stop_worker:
             with self.assertRaises(OSError):
@@ -924,6 +971,13 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
         self.assertIs(ctx.conn, connection)
 
     def test_ambiguous_rekey_failure_keeps_stale_generation(self):
+        def fail_after_binding(*_args, **kwargs):
+            kwargs["before_rekey"]()
+            raise AppError(
+                "verification failed after rekey",
+                code="rekey_verification_failed",
+            )
+
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"
             data_root.mkdir()
@@ -942,10 +996,7 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
             ), mock.patch.object(
                 daemon_module,
                 "change_database_passphrase",
-                side_effect=AppError(
-                    "verification failed after rekey",
-                    code="rekey_verification_failed",
-                ),
+                side_effect=fail_after_binding,
             ):
                 with self.assertRaises(AppError):
                     daemon_module.handle_request(ctx, self._request(), mock.Mock())
@@ -11765,11 +11816,16 @@ class DaemonSmokeTest(unittest.TestCase):
                 with mock.patch.object(daemon_module, "handle_request", mutate_then_fail):
                     rc = daemon_module.run(conn, args, stdin=stdin, stdout=stdout)
                 self.assertEqual(rc, 0)
-                self.assertIsNone(
-                    conn.execute(
-                        "SELECT value FROM settings WHERE key = 'daemon-rollback-probe'"
-                    ).fetchone()
-                )
+                reopened = open_db(data_root)
+                try:
+                    self.assertIsNone(
+                        reopened.execute(
+                            "SELECT value FROM settings "
+                            "WHERE key = 'daemon-rollback-probe'"
+                        ).fetchone()
+                    )
+                finally:
+                    reopened.close()
             finally:
                 conn.close()
 

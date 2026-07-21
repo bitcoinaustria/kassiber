@@ -58,6 +58,9 @@ def json_ready(value):
 _KIND_SUBCOMMAND_ATTRS = (
     "backends_command",
     "commands_command",
+    "operator_command",
+    "operator_operation_command",
+    "operator_touch_id_command",
     "context_command",
     "workspaces_command",
     "profiles_command",

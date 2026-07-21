@@ -3,6 +3,11 @@ mod secret_store;
 mod supervisor;
 
 use base64::Engine;
+#[cfg(target_os = "macos")]
+use secret_store::{
+    operator_touch_id_configured, operator_touch_id_delete_passphrase,
+    operator_touch_id_get_passphrase, operator_touch_id_store_passphrase,
+};
 use secret_store::{
     secret_store_policy_status, touch_id_delete_passphrase, touch_id_get_passphrase,
     touch_id_passphrase_status, touch_id_store_passphrase, TouchIdPassphraseStatus,
@@ -21,7 +26,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "macos")]
-use std::{fs::File, os::fd::AsRawFd};
+use std::{
+    ffi::OsString,
+    fs::File,
+    os::fd::{AsRawFd, FromRawFd},
+    os::unix::ffi::OsStringExt,
+};
 use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, State, Url};
@@ -2258,6 +2268,9 @@ fn default_browser_command(url: &str) -> Command {
 }
 
 pub fn run() {
+    if let Some(code) = run_operator_native_auth_helper() {
+        std::process::exit(code);
+    }
     let cli_args = desktop_cli_args();
     let mut builder = tauri::Builder::default();
 
@@ -2901,6 +2914,314 @@ fn desktop_cli_args() -> Option<Vec<String>> {
     None
 }
 
+#[cfg(target_os = "macos")]
+fn run_operator_native_auth_helper() -> Option<i32> {
+    let args: Vec<String> = env::args().skip(1).collect();
+    if args.first().map(String::as_str) != Some("--operator-native-auth") {
+        return None;
+    }
+    let result = (|| -> Result<i32, String> {
+        verify_operator_helper_parent()?;
+        wait_for_operator_broker_release(&args)?;
+        let action = args
+            .get(1)
+            .map(String::as_str)
+            .ok_or("missing native auth action")?;
+        let account = helper_flag(&args, "--account").ok_or("missing native auth account")?;
+        match action {
+            "broker-get" => {
+                let output_fd = helper_fd(&args, "--output-fd")?;
+                if output_fd <= 2 {
+                    return Err("native auth output must be an inherited pipe".to_string());
+                }
+                let Some(mut secret) = operator_touch_id_get_passphrase(account)? else {
+                    return Ok(4);
+                };
+                let write_result = unsafe { File::from_raw_fd(output_fd) }
+                    .write_all(&secret)
+                    .map_err(|error| format!("could not write native auth result: {error}"));
+                secret.fill(0);
+                write_result?;
+                Ok(0)
+            }
+            "store" => {
+                let secret_fd = helper_fd(&args, "--secret-fd")?;
+                let mut secret =
+                    read_operator_native_auth_secret(unsafe { File::from_raw_fd(secret_fd) })?;
+                let result = operator_touch_id_store_passphrase(account, &secret);
+                secret.fill(0);
+                result?;
+                Ok(0)
+            }
+            "delete" => {
+                operator_touch_id_delete_passphrase(account)?;
+                Ok(0)
+            }
+            "status" => Ok(if operator_touch_id_configured(account)? {
+                0
+            } else {
+                4
+            }),
+            _ => Err("unsupported native auth action".to_string()),
+        }
+    })();
+    Some(match result {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("kassiber native auth: {error}");
+            1
+        }
+    })
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn read_operator_native_auth_secret(reader: impl Read) -> Result<Vec<u8>, String> {
+    let mut secret = Vec::new();
+    if let Err(error) = reader.take(16 * 1024 + 1).read_to_end(&mut secret) {
+        secret.fill(0);
+        return Err(format!("could not read native auth secret: {error}"));
+    }
+    if secret.len() > 16 * 1024 {
+        secret.fill(0);
+        return Err("native auth secret exceeds 16 KiB".to_string());
+    }
+    Ok(secret)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_operator_native_auth_helper() -> Option<i32> {
+    if env::args().nth(1).as_deref() == Some("--operator-native-auth") {
+        eprintln!("kassiber native auth: Touch ID is unavailable on this platform");
+        Some(1)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn helper_flag<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|value| value == flag)
+        .and_then(|index| args.get(index + 1))
+        .map(String::as_str)
+}
+
+#[cfg(target_os = "macos")]
+fn helper_fd(args: &[String], flag: &str) -> Result<i32, String> {
+    helper_flag(args, flag)
+        .ok_or_else(|| format!("missing {flag}"))?
+        .parse::<i32>()
+        .map_err(|_| format!("invalid {flag}"))
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_operator_broker_release(args: &[String]) -> Result<(), String> {
+    let ready_fd = helper_fd(args, "--ready-fd")?;
+    let go_fd = helper_fd(args, "--go-fd")?;
+    if ready_fd <= 2 || go_fd <= 2 || ready_fd == go_fd {
+        return Err("native auth launch gate requires inherited pipes".to_string());
+    }
+    let mut ready = unsafe { File::from_raw_fd(ready_fd) };
+    ready
+        .write_all(b"R")
+        .map_err(|error| format!("could not signal native auth readiness: {error}"))?;
+    drop(ready);
+    let mut go = unsafe { File::from_raw_fd(go_fd) };
+    let mut signal = [0_u8; 1];
+    go.read_exact(&mut signal)
+        .map_err(|error| format!("could not receive native auth release: {error}"))?;
+    if signal != *b"G" {
+        return Err("native auth launch gate received an invalid release".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn verify_operator_helper_parent() -> Result<(), String> {
+    let parent_pid = unsafe { libc::getppid() };
+    let parent_path = operator_helper_parent_path(parent_pid)?
+        .canonicalize()
+        .map_err(|error| format!("could not resolve native-auth parent executable: {error}"))?;
+    let helper_path = env::current_exe()
+        .map_err(|error| format!("could not resolve native-auth helper: {error}"))?
+        .canonicalize()
+        .map_err(|error| format!("could not canonicalize native-auth helper: {error}"))?;
+    let bundle_root = helper_path
+        .ancestors()
+        .find(|path| path.extension().and_then(|value| value.to_str()) == Some("app"))
+        .ok_or("native-auth helper is not inside a signed app bundle")?;
+    let sidecar_root = bundle_root
+        .join("Contents")
+        .join("Resources")
+        .join("binaries");
+    let parent_name = parent_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    let expected_parent_name = operator_sidecar_filename_for_arch(env::consts::ARCH)
+        .ok_or("native-auth helper does not support this macOS architecture")?;
+    if !parent_path.starts_with(&sidecar_root) || parent_name != expected_parent_name {
+        return Err("native-auth helper parent is not the bundled Kassiber sidecar".to_string());
+    }
+    let (_, helper_team) = verified_codesign_identity(&helper_path)?;
+    let (parent_identifier, parent_team) = verified_codesign_identity(&parent_path)?;
+    if helper_team != parent_team {
+        return Err("native-auth helper and broker signatures do not match".to_string());
+    }
+    if parent_identifier != expected_parent_name {
+        return Err("native-auth helper parent has an unexpected signing identifier".to_string());
+    }
+    let requirement = operator_sidecar_requirement(expected_parent_name, &helper_team)?;
+    verify_running_operator_parent(parent_pid, &requirement)?;
+    Ok(())
+}
+
+#[cfg(any(test, target_os = "macos"))]
+fn operator_sidecar_filename_for_arch(arch: &str) -> Option<&'static str> {
+    match arch {
+        "aarch64" => Some("kassiber-cli-aarch64-apple-darwin"),
+        "x86_64" => Some("kassiber-cli-x86_64-apple-darwin"),
+        _ => None,
+    }
+}
+
+#[cfg(any(test, target_os = "macos"))]
+fn operator_sidecar_requirement(identifier: &str, team: &str) -> Result<String, String> {
+    if identifier.is_empty()
+        || !identifier
+            .bytes()
+            .all(|value| value.is_ascii_alphanumeric() || matches!(value, b'-' | b'_' | b'.'))
+    {
+        return Err("native-auth sidecar signing identifier is invalid".to_string());
+    }
+    if team.len() != 10
+        || !team
+            .bytes()
+            .all(|value| value.is_ascii_uppercase() || value.is_ascii_digit())
+    {
+        return Err("native-auth helper has an invalid TeamIdentifier".to_string());
+    }
+    Ok(format!(
+        "anchor apple generic and identifier \"{identifier}\" and certificate leaf[subject.OU] = \"{team}\" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn operator_helper_parent_path(parent_pid: i32) -> Result<PathBuf, String> {
+    unsafe extern "C" {
+        fn proc_pidpath(pid: i32, buffer: *mut libc::c_void, buffersize: u32) -> i32;
+    }
+    let mut buffer = vec![0_u8; 4096];
+    let length = unsafe {
+        proc_pidpath(
+            parent_pid,
+            buffer.as_mut_ptr().cast::<libc::c_void>(),
+            buffer.len() as u32,
+        )
+    };
+    if length <= 0 {
+        return Err("could not inspect native-auth parent process".to_string());
+    }
+    buffer.truncate(length as usize);
+    while buffer.last() == Some(&0) {
+        buffer.pop();
+    }
+    Ok(PathBuf::from(OsString::from_vec(buffer)))
+}
+
+#[cfg(target_os = "macos")]
+fn verify_running_operator_parent(parent_pid: i32, requirement_text: &str) -> Result<(), String> {
+    use core_foundation::base::{CFRelease, TCFType};
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use security_framework_sys::code_signing::{
+        kSecGuestAttributePid, SecCodeCheckValidity, SecCodeCopyGuestWithAttributes, SecCodeRef,
+        SecRequirementCreateWithString, SecRequirementRef,
+    };
+    use std::ptr;
+
+    let pid_key = unsafe { CFString::wrap_under_get_rule(kSecGuestAttributePid) };
+    let pid_value = CFNumber::from(parent_pid);
+    let attributes = CFDictionary::from_CFType_pairs(&[(pid_key, pid_value)]);
+    let mut running_code: SecCodeRef = ptr::null_mut();
+    let guest_status = unsafe {
+        SecCodeCopyGuestWithAttributes(
+            ptr::null_mut(),
+            attributes.as_concrete_TypeRef(),
+            0,
+            &mut running_code,
+        )
+    };
+    if guest_status != 0 || running_code.is_null() {
+        return Err(format!(
+            "could not resolve the running native-auth parent code ({guest_status})"
+        ));
+    }
+
+    let requirement_string = CFString::new(requirement_text);
+    let mut requirement: SecRequirementRef = ptr::null_mut();
+    let requirement_status = unsafe {
+        SecRequirementCreateWithString(
+            requirement_string.as_concrete_TypeRef(),
+            0,
+            &mut requirement,
+        )
+    };
+    if requirement_status != 0 || requirement.is_null() {
+        unsafe { CFRelease(running_code.cast()) };
+        return Err(format!(
+            "could not compile the native-auth sidecar requirement ({requirement_status})"
+        ));
+    }
+
+    let validity_status = unsafe { SecCodeCheckValidity(running_code, 0, requirement) };
+    unsafe {
+        CFRelease(requirement.cast());
+        CFRelease(running_code.cast());
+    }
+    if validity_status != 0 {
+        return Err(format!(
+            "running native-auth parent did not match the bundled sidecar requirement ({validity_status})"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn verified_codesign_identity(path: &Path) -> Result<(String, String), String> {
+    let verified = Command::new("/usr/bin/codesign")
+        .args(["--verify", "--strict"])
+        .arg(path)
+        .output()
+        .map_err(|error| format!("could not verify native-auth code signature: {error}"))?;
+    if !verified.status.success() {
+        return Err("native-auth code signature verification failed".to_string());
+    }
+    let details = Command::new("/usr/bin/codesign")
+        .args(["-dv", "--verbose=4"])
+        .arg(path)
+        .output()
+        .map_err(|error| format!("could not inspect native-auth code signature: {error}"))?;
+    if !details.status.success() {
+        return Err("native-auth code signature inspection failed".to_string());
+    }
+    let stderr = String::from_utf8_lossy(&details.stderr);
+    let identifier = stderr
+        .lines()
+        .find_map(|line| line.strip_prefix("Identifier="))
+        .filter(|identifier| !identifier.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| "native-auth code signature has no Identifier".to_string())?;
+    let team = stderr
+        .lines()
+        .find_map(|line| line.strip_prefix("TeamIdentifier="))
+        .filter(|team| !team.is_empty() && *team != "not set")
+        .map(str::to_owned)
+        .ok_or_else(|| "native-auth helper requires a production TeamIdentifier".to_string())?;
+    Ok((identifier, team))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -2911,22 +3232,32 @@ mod tests {
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, managed_settings_path, menu_action,
         menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
-        path_is_on_path, terminal_command_contents, terminal_command_path_hint,
-        touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
-        validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
-        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
-        MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS,
-        MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY,
-        MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY,
-        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
-        MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
-        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
-        TERMINAL_COMMAND_MARKER,
+        path_is_on_path, read_operator_native_auth_secret, terminal_command_contents,
+        terminal_command_path_hint, touch_id_managed_unlock_state, touch_id_scope_for_selected,
+        validated_attachment_file_path, validated_external_url, TerminalCommandFileState,
+        TerminalCommandPaths, ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS,
+        DOCUMENT_IMPORT_STAGE_KIND, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT,
+        MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS,
+        MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
+        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
+        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
+    use std::io::Cursor;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Url;
+
+    #[test]
+    fn operator_native_auth_pipe_preserves_normalized_secret_bytes() {
+        let secret = b"passphrase-with-significant-newline\n";
+        assert_eq!(
+            read_operator_native_auth_secret(Cursor::new(secret)).unwrap(),
+            secret,
+        );
+    }
 
     #[test]
     fn older_stale_generation_cannot_clear_a_newer_guard() {
@@ -3049,6 +3380,34 @@ mod tests {
         assert!(contents.contains("Managed by Kassiber Settings"));
         assert!(contents.contains("--cli"));
         assert!(contents.contains("kassiber-ui"));
+    }
+
+    #[test]
+    fn operator_sidecar_identity_is_architecture_specific() {
+        assert_eq!(
+            super::operator_sidecar_filename_for_arch("aarch64"),
+            Some("kassiber-cli-aarch64-apple-darwin")
+        );
+        assert_eq!(
+            super::operator_sidecar_filename_for_arch("x86_64"),
+            Some("kassiber-cli-x86_64-apple-darwin")
+        );
+        assert_eq!(super::operator_sidecar_filename_for_arch("riscv64"), None);
+    }
+
+    #[test]
+    fn operator_sidecar_requirement_pins_identifier_team_and_distribution() {
+        let requirement =
+            super::operator_sidecar_requirement("kassiber-cli-aarch64-apple-darwin", "A1B2C3D4E5")
+                .expect("valid requirement");
+        assert!(requirement.contains("identifier \"kassiber-cli-aarch64-apple-darwin\""));
+        assert!(requirement.contains("certificate leaf[subject.OU] = \"A1B2C3D4E5\""));
+        assert!(requirement.contains("1.2.840.113635.100.6.1.13"));
+        assert!(super::operator_sidecar_requirement(
+            "kassiber-cli-aarch64-apple-darwin",
+            "unsafe-team",
+        )
+        .is_err());
     }
 
     #[test]
