@@ -122,6 +122,18 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Install
 
+**Homebrew** (macOS; the formula also works with Homebrew on Linux x86_64) —
+the quickest route, and `brew upgrade` tracks new releases automatically:
+
+```bash
+brew tap bitcoinaustria/kassiber
+brew install --cask kassiber   # desktop app + kassiber terminal command
+brew install kassiber-cli      # CLI only, no GUI dependencies
+```
+
+Install the cask or the formula, not both — each provides the `kassiber`
+command. Details in [docs/reference/homebrew.md](docs/reference/homebrew.md).
+
 **Desktop app** — download an unsigned prerelease binary for macOS, Linux
 x86_64, or Windows x86_64 from the latest `v*` release. The bundle ships the
 same CLI executable as the CLI-only downloads,
@@ -134,17 +146,6 @@ SmartScreen first-launch handling lives in
 GUI-free Linux `kassiber-cli` Debian package from the same release. The frozen
 CLI is the same executable bundled inside the desktop app and does not require
 Python or desktop GUI libraries.
-
-**Homebrew** (macOS; formula also works with Homebrew on Linux x86_64):
-
-```bash
-brew tap bitcoinaustria/kassiber
-brew install --cask kassiber   # desktop app + kassiber terminal command
-brew install kassiber-cli      # CLI only, no GUI dependencies
-```
-
-Install the cask or the formula, not both — each provides the `kassiber`
-command. Details in [docs/reference/homebrew.md](docs/reference/homebrew.md).
 
 **From source** (CLI use or development, Python `>=3.10`):
 

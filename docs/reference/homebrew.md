@@ -91,6 +91,27 @@ still matters for users who install the `.dmg` directly or do not use
 Homebrew. Settings recognizes a Homebrew-managed `kassiber` command and does
 not offer to overwrite it.
 
+## Unsigned builds and Gatekeeper
+
+Homebrew's integrity model is the SHA-256 checksum in the rendered files, so
+installs and upgrades work without Apple code signing or notarization. What
+signing changes is Gatekeeper friction, and it differs per package:
+
+- **Cask**: Homebrew applies the macOS quarantine attribute to downloaded
+  apps by default, so the unsigned, un-notarized Kassiber.app triggers
+  Gatekeeper on first launch — and again after every upgrade, because each
+  upgrade installs a fresh quarantined copy. Users approve it via System
+  Settings -> Privacy & Security -> "Open Anyway" (macOS 15+ removed the
+  right-click-Open shortcut). Installing with
+  `brew install --cask --no-quarantine kassiber` skips the prompt at the
+  user's own discretion. Apple Developer ID signing plus notarization is the
+  eventual fix and is tracked separately in TODO.md.
+- **Formula**: the frozen CLI is downloaded by Homebrew itself, which does
+  not quarantine formula resources, and the arm64 binary carries the ad-hoc
+  signature PyInstaller applies. `kassiber-cli` therefore runs without any
+  Gatekeeper prompt, making it the lowest-friction macOS path until the
+  desktop app is notarized.
+
 ## Release discipline
 
 Only publish tap updates for immutable tags and release assets. Homebrew
