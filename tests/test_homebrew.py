@@ -156,5 +156,26 @@ class PrereleaseWorkflowHomebrewTest(unittest.TestCase):
         self.assertIn('git add "$HOMEBREW_CASK_PATH" "$HOMEBREW_FORMULA_PATH"', workflow)
 
 
+class HomebrewDocumentationTest(unittest.TestCase):
+    def test_install_docs_use_scoped_trust_commands(self):
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        reference = (root / "docs" / "reference" / "homebrew.md").read_text(
+            encoding="utf-8"
+        )
+
+        desktop_command = "brew install --cask bitcoinaustria/kassiber/kassiber"
+        cli_command = "brew install bitcoinaustria/kassiber/kassiber-cli"
+        self.assertIn(desktop_command, readme)
+        self.assertIn(cli_command, readme)
+        self.assertNotIn("brew tap bitcoinaustria/kassiber", readme)
+        self.assertIn(desktop_command, reference)
+        self.assertIn(cli_command, reference)
+        self.assertIn(
+            "brew install --cask --no-quarantine bitcoinaustria/kassiber/kassiber",
+            reference,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

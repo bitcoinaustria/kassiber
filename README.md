@@ -127,13 +127,18 @@ Linux x86_64) —
 the quickest route, and `brew upgrade` tracks new releases automatically:
 
 ```bash
-brew tap bitcoinaustria/kassiber
-brew install --cask kassiber   # desktop app + kassiber terminal command
-brew install kassiber-cli      # CLI only, no GUI dependencies
+brew install --cask bitcoinaustria/kassiber/kassiber  # desktop app + CLI
+brew install bitcoinaustria/kassiber/kassiber-cli     # CLI only, no GUI
 ```
 
 Install the cask or the formula, not both — each provides the `kassiber`
-command. Details in [docs/reference/homebrew.md](docs/reference/homebrew.md).
+command. The fully qualified names are intentional: Kassiber's project-owned
+tap is not an official Homebrew repository, and current Homebrew versions warn
+about untrusted third-party taps. Installing by fully qualified name adds the
+tap while trusting only the selected cask or formula. It does not trust every
+current and future package in the tap. This Homebrew trust check is separate
+from the unsigned desktop app's macOS Gatekeeper prompt. Details in
+[docs/reference/homebrew.md](docs/reference/homebrew.md).
 
 **Desktop app** — download an unsigned prerelease binary for Apple Silicon
 macOS, Linux x86_64, or Windows x86_64 from the latest `v*` release. The

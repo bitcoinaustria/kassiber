@@ -19,6 +19,41 @@ The cask and the formula both provide the `kassiber` command. Homebrew has no
 cask<->formula conflict mechanism (`conflicts_with` only accepts same-type
 targets), so both render a caveat telling users to install one or the other.
 
+## Install and trust
+
+Install one package by its fully qualified name:
+
+```bash
+# Desktop app plus the kassiber terminal command
+brew install --cask bitcoinaustria/kassiber/kassiber
+
+# Or: CLI only, without desktop GUI dependencies
+brew install bitcoinaustria/kassiber/kassiber-cli
+```
+
+The fully qualified form is deliberate. `bitcoinaustria/kassiber` is a
+project-owned third-party tap, not a repository maintained or reviewed by
+Homebrew. Homebrew 6 and later require explicit trust for non-official tap
+content because formula and cask definitions are executable Ruby. Installing a
+fully qualified cask or formula automatically adds the tap and trusts only that
+named item, which is Homebrew's recommended least-privilege flow.
+
+Running `brew tap bitcoinaustria/kassiber` by itself only adds the repository;
+it does not grant trust, so the resulting warning is expected. If the tap is
+already present, run one of the fully qualified install commands above. Do not
+disable Homebrew's tap-trust checks. Whole-tap trust is also unnecessary unless
+you deliberately want to trust every current and future item published there.
+See Homebrew's [Tap Trust](https://docs.brew.sh/Tap-Trust) documentation for the
+underlying security model.
+
+Tap trust and macOS Gatekeeper are separate checks:
+
+- Homebrew trust controls whether Homebrew may evaluate the tap's package
+  definition.
+- Gatekeeper checks the downloaded macOS application. Kassiber's current cask
+  is unsigned and unnotarized, so the desktop app still needs the first-launch
+  approval described below even after Homebrew trusts its cask.
+
 ## Tap setup
 
 The tap lives at
@@ -72,19 +107,17 @@ def install
 end
 ```
 
-With a tap in place, users can install the desktop app and terminal command:
+Users install the desktop app and terminal command with a scoped-trust command:
 
 ```bash
-brew tap bitcoinaustria/kassiber
-brew install --cask kassiber
+brew install --cask bitcoinaustria/kassiber/kassiber
 kassiber status
 ```
 
 Or the CLI only, without any desktop GUI dependencies:
 
 ```bash
-brew tap bitcoinaustria/kassiber
-brew install kassiber-cli
+brew install bitcoinaustria/kassiber/kassiber-cli
 kassiber status
 ```
 
@@ -106,9 +139,9 @@ signing changes is Gatekeeper friction, and it differs per package:
   upgrade installs a fresh quarantined copy. Users approve it via System
   Settings -> Privacy & Security -> "Open Anyway" (macOS 15+ removed the
   right-click-Open shortcut). Installing with
-  `brew install --cask --no-quarantine kassiber` skips the prompt at the
-  user's own discretion. Apple Developer ID signing plus notarization is the
-  eventual fix and is tracked separately in TODO.md.
+  `brew install --cask --no-quarantine bitcoinaustria/kassiber/kassiber`
+  skips the prompt at the user's own discretion. Apple Developer ID signing
+  plus notarization is the eventual fix and is tracked separately in TODO.md.
 - **Formula**: the frozen CLI is downloaded by Homebrew itself, which does
   not quarantine formula resources, and the arm64 binary carries the ad-hoc
   signature PyInstaller applies. `kassiber-cli` therefore runs without any
