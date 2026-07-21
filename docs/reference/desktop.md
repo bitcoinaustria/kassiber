@@ -161,6 +161,13 @@ them. AppImage and direct-DMG installs retain the user-local fallback. None of
 these paths starts Kassiber automatically; the GUI, daemon, and CLI run only
 when invoked.
 
+Windows installer scope is deliberate: MSI is the machine-wide/admin route and
+owns its system PATH entry, while NSIS installs for the current user and owns
+only that user's PATH entry. Linux desktop and CLI-only Debian packages conflict
+and replace one another cleanly because both intentionally provide the
+`/usr/bin/kassiber` command; the desktop package carries GTK/WebKit, while
+`kassiber-cli` does not.
+
 Package managers can link the bundled launcher at
 `Kassiber.app/Contents/Resources/bin/kassiber` instead. The first target is a
 project-owned Homebrew tap; see [Homebrew Cask](homebrew-cask.md).

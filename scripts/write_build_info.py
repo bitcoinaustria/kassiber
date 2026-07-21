@@ -5,8 +5,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def resolve_built_at(explicit: str | None) -> str:
+    if explicit:
+        return explicit
+    source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if source_date_epoch is not None:
+        try:
+            epoch = int(source_date_epoch)
+        except ValueError as exc:
+            raise ValueError("SOURCE_DATE_EPOCH must be an integer Unix timestamp") from exc
+        if epoch < 0:
+            raise ValueError("SOURCE_DATE_EPOCH must not be negative")
+        return datetime.fromtimestamp(epoch, timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def main() -> int:
@@ -20,7 +36,10 @@ def main() -> int:
     parser.add_argument("--built-at")
     args = parser.parse_args()
 
-    built_at = args.built_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    try:
+        built_at = resolve_built_at(args.built_at)
+    except ValueError as exc:
+        parser.error(str(exc))
     payload = {
         "schema_version": 1,
         "version": args.version,

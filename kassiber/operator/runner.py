@@ -6,7 +6,7 @@ import os
 import subprocess
 import threading
 
-from .launcher import cli_child_command
+from .launcher import cli_child_command, prepare_independent_child_environment
 from .project import canonical_project
 from .service import Operation, OperationResult
 
@@ -48,6 +48,7 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
         environment["KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"] = (
             operation.database_identity
         )
+        prepare_independent_child_environment(environment)
         popen_args: dict[str, object] = {
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.PIPE,

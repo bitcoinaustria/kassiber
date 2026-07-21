@@ -130,6 +130,11 @@ so no separate Python install is needed. Settings can install a user-local
 SmartScreen first-launch handling lives in
 [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
 
+**CLI only** — use the portable macOS/Linux `.tar.gz`, Windows `.zip`, or the
+GUI-free Linux `kassiber-cli` Debian package from the same release. The frozen
+CLI is the same executable bundled inside the desktop app and does not require
+Python or desktop GUI libraries.
+
 **From source** (CLI use or development, Python `>=3.10`):
 
 ```bash

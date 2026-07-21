@@ -517,6 +517,12 @@ struct TerminalCommandPaths {
     target_path: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TerminalCommandHelperAction {
+    Install,
+    Remove,
+}
+
 struct AppMenuHandles {
     assistant: MenuItem<tauri::Wry>,
     // Menu items that only make sense once the user has unlocked a workspace
@@ -1835,6 +1841,9 @@ fn inspect_terminal_command(
 
 fn install_terminal_command() -> Result<(), String> {
     let paths = terminal_command_paths()?;
+    if package_managed_terminal_command(&paths.target_path).is_some() {
+        return Ok(());
+    }
     if !terminal_command_target_is_available(&paths.target_path) {
         return Err(
             "Move Kassiber out of the disk image and into Applications before installing the terminal command."
@@ -2519,6 +2528,9 @@ pub fn run() {
     if let Some(code) = run_operator_native_auth_helper() {
         std::process::exit(code);
     }
+    if let Some(code) = run_terminal_command_helper() {
+        std::process::exit(code);
+    }
     if let Some(args) = desktop_cli_args() {
         // Forward before constructing Tauri so `kassiber` stays a real CLI in
         // headless shells, SSH sessions, package smokes, and CI. Resource
@@ -3161,6 +3173,48 @@ fn desktop_cli_args() -> Option<Vec<String>> {
     None
 }
 
+fn terminal_command_helper_action(
+    args: &[String],
+) -> Option<Result<TerminalCommandHelperAction, String>> {
+    let action = match args.first().map(String::as_str) {
+        Some("--install-terminal-command") => TerminalCommandHelperAction::Install,
+        Some("--remove-terminal-command") => TerminalCommandHelperAction::Remove,
+        _ => return None,
+    };
+    if args.len() != 1 {
+        return Some(Err(
+            "terminal-command helper flags do not accept additional arguments".to_string(),
+        ));
+    }
+    Some(Ok(action))
+}
+
+fn run_terminal_command_helper() -> Option<i32> {
+    let args: Vec<String> = env::args()
+        .skip(1)
+        .filter(|arg| !arg.starts_with("-psn_"))
+        .collect();
+    let action = terminal_command_helper_action(&args)?;
+    let result = action.and_then(|action| {
+        match action {
+            TerminalCommandHelperAction::Install => install_terminal_command(),
+            TerminalCommandHelperAction::Remove => remove_terminal_command(),
+        }?;
+        terminal_command_status()
+    });
+    Some(match result {
+        Ok(status) => {
+            println!("{}", status.message);
+            println!("Command: {}", status.command_path);
+            0
+        }
+        Err(error) => {
+            eprintln!("kassiber terminal command: {error}");
+            1
+        }
+    })
+}
+
 #[cfg(target_os = "macos")]
 fn run_operator_native_auth_helper() -> Option<i32> {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -3628,6 +3682,29 @@ mod tests {
         assert!(contents.contains("Managed by Kassiber Settings"));
         assert!(contents.contains("--cli"));
         assert!(contents.contains("kassiber-ui"));
+    }
+
+    #[test]
+    fn terminal_command_helper_flags_are_explicit_and_argument_free() {
+        assert_eq!(
+            super::terminal_command_helper_action(&["--install-terminal-command".to_string()]),
+            Some(Ok(super::TerminalCommandHelperAction::Install))
+        );
+        assert_eq!(
+            super::terminal_command_helper_action(&["--remove-terminal-command".to_string()]),
+            Some(Ok(super::TerminalCommandHelperAction::Remove))
+        );
+        assert!(matches!(
+            super::terminal_command_helper_action(&[
+                "--install-terminal-command".to_string(),
+                "unexpected".to_string(),
+            ]),
+            Some(Err(_))
+        ));
+        assert_eq!(
+            super::terminal_command_helper_action(&["--cli".to_string()]),
+            None
+        );
     }
 
     #[test]

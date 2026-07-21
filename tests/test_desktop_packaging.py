@@ -1,4 +1,7 @@
 import json
+import shutil
+import subprocess
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -18,6 +21,8 @@ class DesktopPackagingTest(unittest.TestCase):
             bundle["linux"]["deb"]["files"]["/usr/bin/kassiber"],
             "bin/kassiber-linux",
         )
+        self.assertEqual(bundle["linux"]["deb"]["conflicts"], ["kassiber-cli"])
+        self.assertEqual(bundle["linux"]["deb"]["replaces"], ["kassiber-cli"])
         self.assertEqual(bundle["windows"]["nsis"]["installMode"], "currentUser")
         self.assertIn("windows/update-path.ps1", bundle["resources"])
         self.assertIn(
@@ -56,6 +61,10 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("target: windows-x64", workflow)
         self.assertIn('archive: zip', workflow)
         self.assertIn("bundles: deb,appimage", workflow)
+        self.assertIn("scripts/package-cli-deb.sh", workflow)
+        self.assertIn('"ui-tauri/src-tauri/icons/**"', workflow)
+        self.assertIn('package_commit="$(git rev-parse HEAD)"', workflow)
+        self.assertNotIn('--commit "$GITHUB_SHA"', workflow)
         self.assertIn("release_channel:", workflow)
         self.assertIn("inputs.release_channel == 'prerelease'", workflow)
         self.assertIn("pull_request:", workflow)
@@ -72,16 +81,54 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn('"%KASSIBER_SIDECAR%" %*', launcher)
         self.assertNotIn("start ", launcher.lower())
 
-    def test_local_macos_installer_uses_the_settings_managed_marker(self):
+    def test_local_macos_installer_delegates_to_the_rust_manager(self):
         installer = (ROOT / "scripts/install-macos-desktop-cli.sh").read_text(
             encoding="utf-8"
         )
         rust = (ROOT / "ui-tauri/src-tauri/src/lib.rs").read_text(encoding="utf-8")
-        marker = "Kassiber desktop CLI launcher. Managed by Kassiber Settings."
-        self.assertIn(marker, installer)
-        self.assertIn(marker, rust)
+        self.assertIn("--install-terminal-command", installer)
+        self.assertIn("--install-terminal-command", rust)
+        self.assertNotIn("PATH_MARKER_START", installer)
+        self.assertNotIn("shell_quote", installer)
         self.assertIn("AppTranslocation", installer)
         self.assertNotIn("autostart", installer.lower())
+
+    @unittest.skipUnless(shutil.which("dpkg-deb"), "dpkg-deb is required")
+    def test_cli_only_deb_has_no_gui_dependencies_and_conflicts_cleanly(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            binary = root / "kassiber"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            package = root / "kassiber-cli.deb"
+            subprocess.run(
+                [
+                    str(ROOT / "scripts/package-cli-deb.sh"),
+                    "--binary",
+                    str(binary),
+                    "--version",
+                    "1.2.3",
+                    "--architecture",
+                    "amd64",
+                    "--output",
+                    str(package),
+                ],
+                check=True,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            control = subprocess.check_output(
+                ["dpkg-deb", "-f", str(package)], text=True
+            )
+            self.assertIn("Package: kassiber-cli", control)
+            self.assertIn("Conflicts: kassiber", control)
+            self.assertNotIn("libgtk", control)
+            self.assertNotIn("libwebkit", control)
+            listing = subprocess.check_output(
+                ["dpkg-deb", "-c", str(package)], text=True
+            )
+            self.assertIn("./usr/bin/kassiber", listing)
 
 
 if __name__ == "__main__":

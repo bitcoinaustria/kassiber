@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from typing import BinaryIO
 
 from ..errors import AppError
+from .launcher import broker_server_command, prepare_independent_child_environment
 from .protocol import PROTOCOL_VERSION, BrokerChannel, connect
 from .service import _wipe
-from .launcher import broker_server_command
 
 
 TERMINAL_OPERATION_STATES = frozenset(
@@ -36,6 +36,7 @@ class BrokerClient:
             pass
         environment = os.environ.copy()
         environment.pop("KASSIBER_OPERATOR_DIRECT", None)
+        prepare_independent_child_environment(environment)
         popen_args: dict[str, object] = {
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,

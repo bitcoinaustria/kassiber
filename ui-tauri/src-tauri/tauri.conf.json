@@ -36,6 +36,15 @@
     ],
     "linux": {
       "deb": {
+        "provides": [
+          "kassiber-command"
+        ],
+        "conflicts": [
+          "kassiber-cli"
+        ],
+        "replaces": [
+          "kassiber-cli"
+        ],
         "files": {
           "/usr/bin/kassiber": "bin/kassiber-linux"
         }

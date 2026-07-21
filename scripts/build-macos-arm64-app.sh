@@ -67,6 +67,10 @@ APP_VERSION="$(
 )"
 APP_COMMIT="$(git rev-parse --short=12 HEAD 2>/dev/null || printf unknown)"
 APP_DISPLAY_VERSION="dev"
+if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
+  SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD 2>/dev/null || date +%s)"
+  export SOURCE_DATE_EPOCH
+fi
 # macOS (BSD) mktemp only substitutes a trailing run of X's, so a
 # ".XXXXXX.json" template is NOT randomized — it yields a fixed filename that
 # fails with "File exists" if a previous run was killed before its cleanup trap

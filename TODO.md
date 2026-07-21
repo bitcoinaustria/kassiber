@@ -848,7 +848,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 ### 1.5 Packaging, signing, distribution
 
 - [x] Automated unsigned CLI-only release archives for macOS, Linux, and
-  Windows via GitHub Actions
+  Windows plus a GUI-free Linux Debian package via GitHub Actions
 - [x] Automated unsigned desktop preview artifacts for macOS, Linux, and
   Windows via GitHub Actions
 - [x] Bundle one-file Kassiber CLI sidecars into unsigned desktop preview
@@ -856,7 +856,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   forward installed-app CLI calls via `--cli`
 - [x] Embed build metadata in the shared packaged CLI and include a readable
   `BUILD_INFO.json` in CLI-only archives, with version, channel, commit, ref,
-  run id, and build timestamp; expose it through database-free `--version`
+  run id, and reproducible `SOURCE_DATE_EPOCH` build timestamp; expose it
+  through database-free `--version`
 - [ ] Decide whether production installers should keep the PyInstaller sidecar
   or switch to a `python-build-standalone` runtime tree
 - [x] Per-OS Tauri bundles produced as **unsigned** previews in CI (macOS
@@ -864,7 +865,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Cross-platform desktop terminal integration: native Homebrew/deb/Windows
   installers own stable command paths, portable macOS/Linux builds offer an
   explicit user-local Settings launcher, and local macOS builds support
-  `--install-cli`; no launcher path autostarts Kassiber
+  `--install-cli` through that same manager; desktop and CLI-only Debian
+  packages replace one another cleanly; no launcher path autostarts Kassiber
 - [ ] Production code-signing & distribution: Apple Developer ID + notarization
   (macOS), Windows EV cert, and GPG-signed `.deb`; flip `tauri.conf.json`
   `bundle.active` for production

@@ -8,11 +8,23 @@ on:
       - "uv.lock"
       - "kassiber/build_info.py"
       - "kassiber/cli/**"
+      - "kassiber/operator/**"
       - "scripts/kassiber_pyinstaller_entry.py"
+      - "scripts/package-cli-deb.sh"
       - "scripts/write_build_info.py"
       - "ui-tauri/package.json"
       - "ui-tauri/pnpm-lock.yaml"
-      - "ui-tauri/src-tauri/**"
+      - "ui-tauri/src-tauri/build.rs"
+      - "ui-tauri/src-tauri/Cargo.lock"
+      - "ui-tauri/src-tauri/Cargo.toml"
+      - "ui-tauri/src-tauri/Info.plist"
+      - "ui-tauri/src-tauri/bin/**"
+      - "ui-tauri/src-tauri/icons/**"
+      - "ui-tauri/src-tauri/src/lib.rs"
+      - "ui-tauri/src-tauri/src/main.rs"
+      - "ui-tauri/src-tauri/src/supervisor.rs"
+      - "ui-tauri/src-tauri/tauri.conf.json"
+      - "ui-tauri/src-tauri/windows/**"
   workflow_dispatch:
     inputs:
       publish_release:
@@ -105,16 +117,26 @@ jobs:
 
       - name: Write packaged build identity
         shell: bash
+        env:
+          DISPATCH_TAG_NAME: ${{ inputs.tag_name }}
         run: |
           set -euo pipefail
           version="$(uv run --locked python -c 'import kassiber; print(kassiber.__version__)')"
+          package_commit="$(git rev-parse HEAD)"
+          package_ref="$GITHUB_REF_NAME"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_TAG_NAME" ]; then
+            package_ref="$DISPATCH_TAG_NAME"
+          fi
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
           uv run --locked python scripts/write_build_info.py \
             --output build/BUILD_INFO.json \
             --version "$version" \
-            --commit "$GITHUB_SHA" \
-            --ref "$GITHUB_REF_NAME" \
+            --commit "$package_commit" \
+            --ref "$package_ref" \
             --run-id "$GITHUB_RUN_ID" \
             --channel "$BUILD_CHANNEL"
+          echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Build one-file CLI binary
         shell: bash
@@ -152,26 +174,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          assert_contains() {
+            file="$1"
+            expected="$2"
+            if ! grep -F "$expected" "$file" >/dev/null; then
+              echo "Expected $expected in $file; captured output follows:" >&2
+              cat "$file" >&2
+              return 1
+            fi
+          }
+          assert_json_value() {
+            file="$1"
+            path="$2"
+            expected="$3"
+            if ! python -c 'import json, sys; from functools import reduce; value = reduce(lambda current, key: current[key], sys.argv[2].split("."), json.load(open(sys.argv[1], encoding="utf-8"))); assert value == sys.argv[3], f"{sys.argv[2]}: expected {sys.argv[3]!r}, got {value!r}"' "$file" "$path" "$expected"; then
+              cat "$file" >&2
+              return 1
+            fi
+          }
+
           cli="./dist/kassiber${{ matrix.exe_ext }}"
+          expected_commit="$(git rev-parse --short=12 HEAD)"
           "$cli" --help >/dev/null
-          "$cli" --version | grep "${GITHUB_SHA:0:12}"
+          "$cli" --version | grep "$expected_commit"
           "$cli" --data-root "$RUNNER_TEMP/kassiber-status-smoke" --machine status >/dev/null
 
           daemon_root="$RUNNER_TEMP/kassiber-daemon-smoke"
           printf '{"request_id":"smoke-1","kind":"daemon.shutdown"}\n' \
             | "$cli" --data-root "$daemon_root" daemon \
             > "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl"
-          grep '"kind":"daemon.ready"' "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" >/dev/null
-          grep '"kind":"daemon.shutdown"' "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" >/dev/null
+          assert_contains "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" '"kind":"daemon.ready"'
+          assert_contains "$RUNNER_TEMP/kassiber-daemon-smoke.jsonl" '"kind":"daemon.shutdown"'
 
           kraken_root="$RUNNER_TEMP/kassiber-kraken-bundled-smoke"
           printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
             | "$cli" --data-root "$kraken_root" daemon \
             > "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl"
-          grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"bundled":true' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"pairs":2' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"rows":255181' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
+          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"kind":"ui.rates.kraken_csv.import"'
+          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"bundled":true'
+          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"pairs":2'
+          assert_contains "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" '"rows":255181'
 
           operator_root="$RUNNER_TEMP/kassiber-operator-smoke"
           operator_runtime="$RUNNER_TEMP/kassiber-operator-runtime"
@@ -184,17 +226,21 @@ jobs:
             # stable per-account namespace.
             export XDG_RUNTIME_DIR="$operator_runtime"
           fi
+          "$cli" --data-root "$operator_root" --machine init >/dev/null
           printf '%s\n' 'packaged operator smoke passphrase' \
             | "$cli" --data-root "$operator_root" --machine secrets init --new-passphrase-fd 0 \
             >/dev/null
-          printf '%s\n' 'packaged operator smoke passphrase' \
-            | "$cli" --data-root "$operator_root" --machine operator unlock \
-                --passphrase-fd 0 --duration 1m \
-            > "$RUNNER_TEMP/kassiber-operator-unlock.json"
-          grep '"lease":"unlocked"' "$RUNNER_TEMP/kassiber-operator-unlock.json" >/dev/null
+          if ! printf '%s\n' 'packaged operator smoke passphrase' \
+              | "$cli" --data-root "$operator_root" --machine operator unlock \
+                  --passphrase-fd 0 --duration 1m \
+              > "$RUNNER_TEMP/kassiber-operator-unlock.json"; then
+            cat "$RUNNER_TEMP/kassiber-operator-unlock.json" >&2
+            exit 1
+          fi
+          assert_json_value "$RUNNER_TEMP/kassiber-operator-unlock.json" data.lease unlocked
           "$cli" --data-root "$operator_root" --machine status \
             > "$RUNNER_TEMP/kassiber-operator-worker.json"
-          grep '"kind":"status"' "$RUNNER_TEMP/kassiber-operator-worker.json" >/dev/null
+          assert_json_value "$RUNNER_TEMP/kassiber-operator-worker.json" kind status
           "$cli" --data-root "$operator_root" --machine operator lock >/dev/null
 
           at_root="$RUNNER_TEMP/kassiber-at-smoke"
@@ -293,6 +339,12 @@ jobs:
           else
             tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
           fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            scripts/package-cli-deb.sh \
+              --binary "dist/kassiber${{ matrix.exe_ext }}" \
+              --version "$PACKAGE_VERSION" \
+              --output "release/${package_name}.deb"
+          fi
 
       - name: Upload CLI-only artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -301,6 +353,7 @@ jobs:
           path: |
             release/*.tar.gz
             release/*.zip
+            release/*.deb
           if-no-files-found: error
 
       - name: Stage identical CLI as desktop sidecar
@@ -423,11 +476,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          expected_commit="$(git rev-parse --short=12 HEAD)"
           case "$RUNNER_OS" in
             macOS)
               launcher="$(find ui-tauri/src-tauri/target -path '*/release/bundle/macos/*.app/Contents/Resources/bin/kassiber' -print -quit)"
               test -n "$launcher"
-              "$launcher" --version | grep "${GITHUB_SHA:0:12}"
+              "$launcher" --version | grep "$expected_commit"
               "$launcher" --help >/dev/null
               ;;
             Linux)
@@ -435,11 +489,11 @@ jobs:
               test -n "$appimage"
               chmod 755 "$appimage"
               APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --cli --version \
-                | grep "${GITHUB_SHA:0:12}"
+                | grep "$expected_commit"
               ;;
             Windows)
               cmd.exe /d /c 'ui-tauri\src-tauri\bin\kassiber.cmd --version' \
-                | grep "${GITHUB_SHA:0:12}"
+                | grep "$expected_commit"
               ;;
           esac
 
@@ -528,9 +582,9 @@ jobs:
           set -euo pipefail
           test -n "$(find release -maxdepth 1 -type f -print -quit)"
 
-          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' -print -quit | grep -q .; then
+          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' ! -name '*.deb' -print -quit | grep -q .; then
             echo "Raw CLI sidecars must not be published as release assets." >&2
-            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' >&2
+            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' ! -name '*.deb' >&2
             exit 1
           fi
 
@@ -563,7 +617,8 @@ jobs:
             Automated Kassiber release artifacts.
 
             These artifacts are currently unsigned CLI and desktop builds.
-            CLI-only archives are published for macOS, Linux, and Windows.
+            CLI-only archives are published for macOS, Linux, and Windows;
+            Linux also gets a GUI-free CLI-only Debian package.
             Desktop bundles use the exact same CLI executable, so normal daemon
             calls do not require a separate Python checkout. Native desktop
             installers integrate `kassiber` with the terminal; portable builds

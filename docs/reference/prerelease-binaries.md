@@ -75,10 +75,11 @@ asks for one.
 The workflow currently builds:
 
 - CLI-only releases: macOS arm64, macOS x86_64, and Linux x86_64 one-file
-  PyInstaller binaries as `.tar.gz` archives, plus Windows x86_64 as a `.zip`.
-  The extracted executable is named `kassiber` (`kassiber.exe` on Windows).
-  These artifacts do not require the desktop app. Linux is built on Ubuntu
-  22.04 to keep the glibc floor aligned with the AppImage build.
+  PyInstaller binaries as `.tar.gz` archives, Windows x86_64 as a `.zip`, and
+  Linux x86_64 additionally as a GUI-free `kassiber-cli` `.deb`. The extracted
+  executable is named `kassiber` (`kassiber.exe` on Windows). These artifacts
+  do not require the desktop app. Linux is built on Ubuntu 22.04 to keep the
+  glibc floor aligned with the AppImage build.
 - Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
   `.AppImage` plus `.deb`, and Windows `.msi` plus NSIS setup `.exe`, published
   with short user-facing filenames. Each desktop preview includes the exact
@@ -100,6 +101,7 @@ GitHub release tag already supplies it:
 
 ```text
 kassiber-cli-linux-x64.tar.gz
+kassiber-cli-linux-x64.deb
 kassiber-cli-macos-arm64.tar.gz
 kassiber-cli-macos-x64.tar.gz
 kassiber-cli-windows-x64.zip
@@ -156,10 +158,11 @@ unsigned desktop app and DMG under
 `ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
 With `--install-cli`, the helper first smokes the finished app bundle's
 `Contents/Resources/bin/kassiber` launcher and then installs a managed wrapper
-in `~/.local/bin` (or `~/bin` when that directory is already on PATH). It adds
-one marked PATH block to the current shell profile when needed. It never starts
-a daemon or background process; each invocation remains a normal one-shot CLI
-process. Without the flag, a local build does not modify the home directory.
+through the desktop binary's same Rust implementation used by Settings. That
+single implementation chooses `~/.local/bin` or `~/bin`, refuses conflicts, and
+adds one marked PATH block to the current shell profile when needed. It never
+starts a daemon or background process; each invocation remains a normal one-shot
+CLI process. Without the flag, a local build does not modify the home directory.
 
 The helper defaults to Python 3.11 to match the GitHub Actions prerelease
 workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
@@ -240,8 +243,9 @@ startup and installed-app CLI forwarding.
 
 CLI-only archives are intentionally portable: extract them and place the
 `kassiber` executable in an existing PATH directory, or invoke it by path.
-They do not edit PATH or require a GUI. Package-manager distribution can wrap
-the same executable without changing the command contract.
+They do not edit PATH or require a GUI. Linux users can instead install the
+CLI-only `kassiber-cli-linux-x64.deb`; it owns `/usr/bin/kassiber`, conflicts
+cleanly with the desktop Debian package, and has no GTK/WebKit dependency.
 
 ## Commit Identity
 
@@ -261,6 +265,10 @@ the existing version/commit display. The build record contains:
   "version": "<package version>"
 }
 ```
+
+`scripts/write_build_info.py` honors `SOURCE_DATE_EPOCH`; CI and the local macOS
+builder derive it from the source commit timestamp. This removes wall-clock
+drift from `built_at` while retaining the run id as explicit provenance.
 
 ## Verification When Editing This Workflow
 
