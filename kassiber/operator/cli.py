@@ -223,7 +223,8 @@ def route_brokered_command(
         operation_id = accepted.get("operation_id")
         if not isinstance(operation_id, str):
             raise AppError("broker did not return an operation id", code="operator_protocol_error")
-        sys.stderr.write(f"operator operation accepted: {operation_id}\n")
+        if not args.machine:
+            sys.stderr.write(f"operator operation accepted: {operation_id}\n")
         try:
             completed = client.wait(operation_id)
         except KeyboardInterrupt:

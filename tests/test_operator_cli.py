@@ -108,8 +108,10 @@ class OperatorCliTest(unittest.TestCase):
                 project=None,
                 operator_auth_fd=None,
                 non_interactive=True,
+                machine=True,
             )
             captured: dict[str, object] = {}
+            stderr = io.StringIO()
 
             def submit(_client, data_root, prepared, *, admin_authentication):
                 captured["data_root"] = data_root
@@ -120,7 +122,7 @@ class OperatorCliTest(unittest.TestCase):
                 return {"operation_id": "generation.operation", "state": "queued"}
 
             try:
-                with mock.patch(
+                with contextlib.redirect_stderr(stderr), mock.patch(
                     "kassiber.operator.cli.effective_unlock_mode",
                     return_value="brokered",
                 ), mock.patch(
@@ -149,6 +151,7 @@ class OperatorCliTest(unittest.TestCase):
         self.assertNotIn("--db-passphrase-fd", captured["argv"])
         self.assertNotIn(str(read_fd), captured["argv"])
         self.assertEqual(captured["secrets"], {})
+        self.assertEqual(stderr.getvalue(), "")
 
     def test_worker_requires_project_binding_before_runtime_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
