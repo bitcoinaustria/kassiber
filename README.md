@@ -135,6 +135,17 @@ GUI-free Linux `kassiber-cli` Debian package from the same release. The frozen
 CLI is the same executable bundled inside the desktop app and does not require
 Python or desktop GUI libraries.
 
+**Homebrew** (macOS; formula also works with Homebrew on Linux x86_64):
+
+```bash
+brew tap bitcoinaustria/kassiber
+brew install --cask kassiber   # desktop app + kassiber terminal command
+brew install kassiber-cli      # CLI only, no GUI dependencies
+```
+
+Install the cask or the formula, not both — each provides the `kassiber`
+command. Details in [docs/reference/homebrew.md](docs/reference/homebrew.md).
+
 **From source** (CLI use or development, Python `>=3.10`):
 
 ```bash

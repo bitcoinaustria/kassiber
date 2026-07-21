@@ -18,7 +18,8 @@ targets), so both render a caveat telling users to install one or the other.
 
 ## Tap setup
 
-Create the tap repository:
+The tap lives at
+[bitcoinaustria/homebrew-kassiber](https://github.com/bitcoinaustria/homebrew-kassiber):
 
 ```text
 bitcoinaustria/homebrew-kassiber
@@ -28,7 +29,7 @@ bitcoinaustria/homebrew-kassiber
     └── kassiber-cli.rb
 ```
 
-Then add a repository secret to `bitcoinaustria/kassiber`:
+Automated updates need a repository secret on `bitcoinaustria/kassiber`:
 
 - `HOMEBREW_TAP_TOKEN` — a fine-grained GitHub token with write access to
   `bitcoinaustria/homebrew-kassiber` contents.
