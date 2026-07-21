@@ -71,6 +71,9 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("BUILD_CHANNEL:", workflow)
         self.assertIn('--channel "$BUILD_CHANNEL"', workflow)
         self.assertIn('"$cli" --version', workflow)
+        self.assertIn("Hosted Linux runners have no live logind user session", workflow)
+        self.assertIn("--db-passphrase-fd 0 status", workflow)
+        self.assertIn("--machine operator unlock", workflow)
         self.assertIn("Smoke desktop terminal forwarding", workflow)
 
     def test_windows_bundle_launcher_executes_the_console_sidecar(self):

@@ -23,6 +23,7 @@ from kassiber.operator import runner as operator_runner
 from kassiber.operator.client import (
     FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
     SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS,
+    WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
     BrokerClient,
     _broker_startup_timeout_seconds,
     parse_duration,
@@ -3409,10 +3410,19 @@ class OperatorClientArgumentTest(unittest.TestCase):
         self.assertNotIn("PYINSTALLER_RESET_ENVIRONMENT", environment)
 
     def test_frozen_broker_allows_for_one_file_extraction(self) -> None:
-        with mock.patch("kassiber.operator.client.sys.frozen", True, create=True):
+        with mock.patch(
+            "kassiber.operator.client.sys.frozen", True, create=True
+        ), mock.patch("kassiber.operator.client.os.name", "posix"):
             self.assertEqual(
                 _broker_startup_timeout_seconds(),
                 FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
+            )
+        with mock.patch(
+            "kassiber.operator.client.sys.frozen", True, create=True
+        ), mock.patch("kassiber.operator.client.os.name", "nt"):
+            self.assertEqual(
+                _broker_startup_timeout_seconds(),
+                WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS,
             )
         with mock.patch("kassiber.operator.client.sys.frozen", False, create=True):
             self.assertEqual(
