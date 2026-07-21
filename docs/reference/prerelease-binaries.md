@@ -90,6 +90,11 @@ workflow run can select `release_channel=release` to publish the same verified
 artifact set as a stable GitHub release. The embedded `BUILD_INFO.json` reports
 the selected `prerelease` or `release` channel.
 
+Pull requests that change the release workflow, frozen-CLI inputs, or Tauri
+packaging files run the same cross-platform CLI and desktop build matrix without
+publishing. These CI artifacts identify themselves as `dev`; tag and manual
+publishes remain `prerelease` or `release`.
+
 Public release filenames intentionally omit the release version because the
 GitHub release tag already supplies it:
 

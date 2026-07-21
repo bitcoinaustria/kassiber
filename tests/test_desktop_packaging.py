@@ -58,6 +58,9 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("bundles: deb,appimage", workflow)
         self.assertIn("release_channel:", workflow)
         self.assertIn("inputs.release_channel == 'prerelease'", workflow)
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("BUILD_CHANNEL:", workflow)
+        self.assertIn('--channel "$BUILD_CHANNEL"', workflow)
         self.assertIn('"$cli" --version', workflow)
         self.assertIn("Smoke desktop terminal forwarding", workflow)
 

@@ -1,6 +1,18 @@
 name: prerelease-binaries
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/prerelease-binaries.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "kassiber/build_info.py"
+      - "kassiber/cli/**"
+      - "scripts/kassiber_pyinstaller_entry.py"
+      - "scripts/write_build_info.py"
+      - "ui-tauri/package.json"
+      - "ui-tauri/pnpm-lock.yaml"
+      - "ui-tauri/src-tauri/**"
   workflow_dispatch:
     inputs:
       publish_release:
@@ -29,6 +41,7 @@ permissions:
   contents: read
 
 env:
+  BUILD_CHANNEL: ${{ github.event_name == 'pull_request' && 'dev' || (github.event_name == 'workflow_dispatch' && inputs.release_channel || 'prerelease') }}
   HOMEBREW_TAP_REPOSITORY: bitcoinaustria/homebrew-kassiber
   HOMEBREW_TAP_BRANCH: main
   HOMEBREW_CASK_PATH: Casks/kassiber.rb
@@ -101,7 +114,7 @@ jobs:
             --commit "$GITHUB_SHA" \
             --ref "$GITHUB_REF_NAME" \
             --run-id "$GITHUB_RUN_ID" \
-            --channel "${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || 'prerelease' }}"
+            --channel "$BUILD_CHANNEL"
 
       - name: Build one-file CLI binary
         shell: bash
