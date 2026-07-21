@@ -20,6 +20,18 @@ TERMINAL_OPERATION_STATES = frozenset(
     {"completed", "failed", "cancelled", "result_unknown"}
 )
 MAX_CLIENT_SECRET_BYTES = 16 * 1024
+SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS = 5.0
+# One-file builds must unpack a second independent runtime before the broker can
+# bind its endpoint. Windows CI commonly needs well over the source timeout.
+FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS = 30.0
+
+
+def _broker_startup_timeout_seconds() -> float:
+    return (
+        FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS
+        if getattr(sys, "frozen", False)
+        else SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS
+    )
 
 
 @dataclass
@@ -51,7 +63,7 @@ class BrokerClient:
         else:
             popen_args["start_new_session"] = True
         subprocess.Popen(broker_server_command(), **popen_args)
-        deadline = time.monotonic() + 5.0
+        deadline = time.monotonic() + _broker_startup_timeout_seconds()
         last_error: Exception | None = None
         while time.monotonic() < deadline:
             try:
