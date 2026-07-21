@@ -363,7 +363,7 @@ class OperatorServerTest(unittest.TestCase):
         challenge = channel.send_json.call_args.args[0]["challenge"]
         channel.receive_secret.assert_called_once_with(challenge)
         server.service.configure_touch_id_authenticated.assert_called_once_with(
-            "/public-placeholder",
+            str(Path("/public-placeholder").resolve()),
             authentication,
             configured=True,
             native_auth_identity="signed-helper",
