@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
@@ -8,8 +9,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from kassiber.cli.command_registry import (
+    _COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS,
+    command_path,
+)
 from kassiber.cli.main import build_parser, dispatch, main
-from kassiber.envelope import build_envelope, derive_kind
+from kassiber.envelope import _KIND_SUBCOMMAND_ATTRS, build_envelope, derive_kind
 
 
 def _run(*args: str):
@@ -21,6 +26,41 @@ def _run(*args: str):
 
 
 class CliAgentContractTests(unittest.TestCase):
+    def test_every_nested_subparser_contributes_to_routing_identity(self):
+        destinations: set[str] = set()
+
+        def visit(parser: argparse.ArgumentParser) -> None:
+            for action in parser._actions:
+                if not isinstance(action, argparse._SubParsersAction):
+                    continue
+                destinations.add(action.dest)
+                for child in action.choices.values():
+                    visit(child)
+
+        visit(build_parser())
+        destinations.discard("command")
+        self.assertEqual(
+            destinations.difference(_KIND_SUBCOMMAND_ATTRS),
+            set(_COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS),
+        )
+
+        parser = build_parser()
+        examples = {
+            ("projects", "list"): "projects.list",
+            (
+                "metadata", "records", "tag", "add",
+                "--transaction", "tx", "--tag", "reviewed",
+            ): "metadata.records.tag.add",
+            (
+                "metadata", "records", "excluded", "clear",
+                "--transaction", "tx",
+            ): "metadata.records.excluded.clear",
+            ("reports", "filed-snapshots", "list"): "reports.filed-snapshots.list",
+        }
+        for argv, expected in examples.items():
+            with self.subTest(argv=argv):
+                self.assertEqual(command_path(parser.parse_args(argv)), expected)
+
     def test_exchange_sync_dispatch_uses_runtime_config(self):
         args = build_parser().parse_args(
             ["wallets", "sync-kraken", "--backend", "kraken-live"]

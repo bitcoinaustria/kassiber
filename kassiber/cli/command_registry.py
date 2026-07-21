@@ -38,10 +38,22 @@ _SECRET_DEST_FRAGMENTS = (
     "secret",
     "token",
 )
+_COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS = (
+    "projects_command",
+    "records_tag_command",
+    "records_excluded_command",
+    "filed_snapshots_command",
+)
 
 
 def command_path(args: argparse.Namespace) -> str:
-    return derive_kind(args)
+    path = derive_kind(args)
+    suffix = [
+        str(value)
+        for attr in _COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS
+        if (value := getattr(args, attr, None))
+    ]
+    return ".".join((path, *suffix))
 
 
 def command_needs_database(args: argparse.Namespace) -> bool:
