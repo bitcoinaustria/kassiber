@@ -22,16 +22,18 @@ TERMINAL_OPERATION_STATES = frozenset(
 MAX_CLIENT_SECRET_BYTES = 16 * 1024
 SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS = 5.0
 # One-file builds must unpack a second independent runtime before the broker can
-# bind its endpoint. Windows CI commonly needs well over the source timeout.
+# bind its endpoint. Windows Defender can make that second extraction much
+# slower than the same operation on macOS or Linux.
 FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS = 30.0
+WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS = 90.0
 
 
 def _broker_startup_timeout_seconds() -> float:
-    return (
-        FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS
-        if getattr(sys, "frozen", False)
-        else SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS
-    )
+    if not getattr(sys, "frozen", False):
+        return SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS
+    if os.name == "nt":
+        return WINDOWS_FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS
+    return FROZEN_BROKER_STARTUP_TIMEOUT_SECONDS
 
 
 @dataclass
