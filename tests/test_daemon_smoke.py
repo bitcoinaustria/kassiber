@@ -1356,7 +1356,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(status["schema_version"], 1)
             self.assertEqual(status["data"]["auth"]["mode"], "local")
             self.assertFalse(status["data"]["database_encrypted"])
-            self.assertEqual(status["data"]["data_root"], str(data_root))
+            self.assertEqual(status["data"]["data_root"], str(data_root.resolve()))
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             shutdown = _read_payload(proc)

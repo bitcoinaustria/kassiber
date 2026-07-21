@@ -6,6 +6,10 @@ allowBuilds:
 
 overrides:
   '@babel/runtime': 7.29.2
+  '@babel/core@<=7.29.0': 7.29.6
+  'brace-expansion@<1.1.16': 1.1.16
+  'brace-expansion@>=3.0.0 <5.0.7': 5.0.7
+  'js-yaml@<4.3.0': 4.3.0
 
 onlyBuiltDependencies:
   - esbuild
@@ -14,3 +18,11 @@ onlyBuiltDependencies:
 # device-sync UI. Keep the 90-day policy for every other package.
 minimumReleaseAgeExclude:
   - qrcode@1.5.4
+  # Security releases newer than the normal 90-day dependency hold. These
+  # package-scoped exceptions can be removed after 2026-10-19.
+  - '@babel/*'
+  - '@vitest/*'
+  - brace-expansion
+  - js-yaml
+  - vite
+  - vitest
