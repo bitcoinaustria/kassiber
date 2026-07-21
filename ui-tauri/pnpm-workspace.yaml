@@ -14,15 +14,7 @@ overrides:
 onlyBuiltDependencies:
   - esbuild
 
-# Owner-approved one-shot exception for the pinned QR dependency added by the
-# device-sync UI. Keep the 90-day policy for every other package.
+# Narrow exception for a security release still inside the 14-day hold
+# (published 2026-07-08). Remove after 2026-07-22.
 minimumReleaseAgeExclude:
-  - qrcode@1.5.4
-  # Security releases newer than the normal 90-day dependency hold. These
-  # package-scoped exceptions can be removed after 2026-10-19.
-  - '@babel/*'
-  - '@vitest/*'
-  - brace-expansion
-  - js-yaml
-  - vite
-  - vitest
+  - brace-expansion@1.1.16
