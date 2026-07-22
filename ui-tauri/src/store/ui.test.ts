@@ -16,7 +16,7 @@ describe("UI persistence", () => {
     expect(useUiStore.getInitialState().theme).toBe("dark");
   });
 
-  it("persists the automatic update preference but not update results", () => {
+  it("keeps native update consent and results out of renderer persistence", () => {
     useUiStore.getState().setAppUpdate({
       currentVersion: "0.22.55",
       latestVersion: "0.23.0",
@@ -29,7 +29,7 @@ describe("UI persistence", () => {
     useUiStore.getState().setAutomaticUpdateChecks(false);
 
     const stored = uiStatePartialForStorage(useUiStore.getState());
-    expect(stored).toHaveProperty("automaticUpdateChecks", false);
+    expect(stored).not.toHaveProperty("automaticUpdateChecks");
     expect(stored).not.toHaveProperty("appUpdate");
     expect(useUiStore.getState().appUpdate).toBeNull();
 

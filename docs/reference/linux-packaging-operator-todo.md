@@ -12,7 +12,10 @@ source-only pull request.
   `X.Y.Z`. Do not seed a channel from an older mismatched release.
 - [ ] Create the protected GitHub environment `linux-packaging-production`,
   require named human approvers, and restrict deployments to the protected
-  `main` branch. The workflow separately verifies the requested release tag.
+  `main` branch. Add a repository ruleset for `v*` tags that restricts creation,
+  update, and deletion to the release maintainers. The workflows also reject a
+  requested release tag unless its commit is in `origin/main` history; that
+  runtime check does not replace protected tag administration.
 - [ ] Run `publish-linux-channels.yml` once with every `publish_*` input false.
   This verifies the release assets and renders all channel definitions without
   changing an external service.
@@ -36,7 +39,10 @@ source-only pull request.
   primary key. Store an offline backup and revocation certificate separately.
   Give CI only the archive signing subkey through
   `LINUX_ARCHIVE_GPG_PRIVATE_KEY` and
-  `LINUX_ARCHIVE_GPG_PASSPHRASE`.
+  `LINUX_ARCHIVE_GPG_PASSPHRASE`. Publish the full primary fingerprint through
+  an independently controlled Bitcoin Austria channel and set the reviewed
+  value as `LINUX_ARCHIVE_GPG_FINGERPRINT` in the protected environment. CI
+  rejects missing, mismatched, or multi-primary private-key exports.
 - [ ] Add least-privilege object-store credentials through
   `LINUX_REPOSITORY_AWS_ACCESS_KEY_ID` and
   `LINUX_REPOSITORY_AWS_SECRET_ACCESS_KEY`. Scope them to the repository

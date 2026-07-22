@@ -58,6 +58,14 @@ _REJECTED_SIGNATURE_STATUSES = frozenset(
 _ACCEPTED_OPENPGP_HASH_ALGORITHMS = frozenset({"8", "9", "10", "11"})
 
 
+def _has_exact_schema_version(payload: object, expected: int) -> bool:
+    return bool(
+        isinstance(payload, dict)
+        and type(payload.get("schema_version")) is int
+        and payload["schema_version"] == expected
+    )
+
+
 def normalize_fingerprint(value: str) -> str:
     """Normalize a displayed OpenPGP fingerprint and require its full form."""
 
@@ -92,7 +100,7 @@ def load_release_signing_policy(
             "Release signing policy is not valid JSON",
             code="invalid_release_signing_policy",
         ) from exc
-    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+    if not _has_exact_schema_version(payload, 1):
         raise AppError(
             "Release signing policy has no supported schema",
             code="invalid_release_signing_policy",

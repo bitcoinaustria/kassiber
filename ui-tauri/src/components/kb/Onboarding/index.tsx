@@ -252,6 +252,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       form.taxCountry === "at"
         ? 0
         : (parseTaxLongTermDays(form.taxLongTermDays) ?? 365);
+    // Apply the app-wide network choice before setup creates or mutates any
+    // durable book state. If the owner-only preference cannot be written, the
+    // native boundary remains fail-closed and onboarding can be retried safely.
+    await setAppUpdateChecksEnabled(form.updateChecksEnabled);
     if (form.databaseMode === "sqlcipher") {
       const envelope = await getTransport("real").invoke({
         kind: "ui.secrets.init",
@@ -377,10 +381,6 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       }
       await invokeProvider("ai.providers.set_default", { name: providerName });
     }
-    // Persist the app-wide consent before identity makes the delayed update
-    // scheduler eligible to start. A disabled choice therefore reaches the
-    // native shell and packaged CLI without any intervening GitHub request.
-    await setAppUpdateChecksEnabled(form.updateChecksEnabled);
     const identity: Identity = {
       name: form.profile.trim() || "Private",
       workspace: form.workspace.trim() || "My Books",

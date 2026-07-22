@@ -92,6 +92,12 @@ existing draft. It never rebuilds or replaces an artifact. The Linux channel
 workflow independently authenticates the same manifest before deriving APT,
 DNF, AUR, Nix, COPR, or OBS inputs.
 
+Both production workflows must be dispatched from protected `main` and reject
+release tags whose commits are not in `origin/main` history before executing
+code from the tag. Protect creation, update, and deletion of `v*` tags with a
+repository ruleset restricted to the release maintainers as well; the ancestry
+check is a second boundary, not a substitute for protected tag administration.
+
 ## User verification
 
 Until Kassiber bundles the permanent public key, users must obtain the public

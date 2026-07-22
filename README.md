@@ -159,7 +159,8 @@ sidebar with an underlined `update available · vLatest` link to the GitHub
 release page. On macOS, **Kassiber → Check for Updates…** performs the same
 check on demand and can open that release page. Downloading and installing
 remain manual. Disabling the setting blocks automatic, native-menu, and CLI
-update checks; the shared preference fails closed when missing or malformed.
+update checks; the shared preference fails closed when missing or malformed,
+and disabling waits for an already-authorized check before it returns.
 The notice itself trusts HTTPS and control of the Kassiber
 GitHub repository. Release builds now include a Sparrow-style versioned
 SHA-256 manifest; once Bitcoin Austria publishes its permanent OpenPGP release

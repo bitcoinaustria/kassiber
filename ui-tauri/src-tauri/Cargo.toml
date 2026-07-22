@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 base64 = "0.22"
+fs2 = "0.4.3"
 keyring-core = "1.0.0"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 semver = "1"
@@ -29,7 +30,6 @@ tauri-plugin-dialog = "2"
 apple-native-keyring-store = { version = "1.0.0", features = ["keychain"] }
 block2 = "0.6.2"
 core-foundation = "0.10.1"
-libc = "0.2"
 objc2 = "0.6.4"
 objc2-foundation = "0.3.2"
 security-framework = { version = "3.7", features = ["OSX_10_15"] }
@@ -40,6 +40,9 @@ windows-native-keyring-store = "1.0.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus-secret-service-keyring-store = { version = "1.0.0", features = ["rt-tokio-crypto-rust"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

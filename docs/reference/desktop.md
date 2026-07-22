@@ -65,10 +65,10 @@ asks whether Kassiber may contact GitHub; no scheduled check is eligible before
 that setup choice is persisted. Ten seconds after launch, and then every 24
 hours while open, it makes one unauthenticated GET to GitHub's public Kassiber
 releases API when **Settings → Privacy → Allow GitHub update checks** is enabled.
-It examines a bounded page of releases
-and compares the highest published semantic-version tag with the packaged app
-version. Prerelease/dev builds include prereleases; a stable `release` build
-ignores them and follows stable releases only. If a newer version exists, the version
+Prerelease/dev builds examine a bounded page and compare the highest published
+semantic-version tag with the packaged app version. Stable `release` builds use
+GitHub's latest-stable endpoint so a run of prereleases cannot hide a stable
+update. If a newer version exists, the version
 label at the bottom-left of the sidebar changes to an underlined
 `update available · vLatest` link to that GitHub release page. The macOS
 Kassiber menu also includes **Check for Updates…** directly below About; while
@@ -83,8 +83,10 @@ startup. The checker runs in the Tauri process before the Python daemon
 boundary and sends no project or book data. The native command independently
 reads the same owner-only `~/.kassiber/config/update-checks.json` consent used
 by the packaged CLI and fails closed when it is absent, malformed, or disabled.
-The renderer mirrors upgrades from the earlier UI-local preference into this
-file before starting a scheduler. See
+The renderer hydrates from that canonical native preference and never restores
+consent from its own local storage. Desktop and CLI also hold the sibling
+`update-checks.lock` across an authorized request; disabling waits for an
+in-flight request and prevents any later request from starting. See
 [../../SECURITY.md](../../SECURITY.md) for the outbound-request disclosure.
 The update announcement remains unsigned and relies on HTTPS plus control of
 the Kassiber GitHub repository. Release builds include a versioned SHA-256

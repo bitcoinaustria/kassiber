@@ -62,8 +62,8 @@ configurable.
 
 | Trigger | Destination | Transport | What the other side learns |
 | --- | --- | --- | --- |
-| Desktop launch after 10 seconds and every 24 hours while open when the setup / **Settings → Privacy → Allow GitHub update checks** permission is enabled; macOS **Check for Updates…** checks only under the same permission | `https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=10` (GitHub) | unauthenticated HTTPS GET; redirects refused | IP, User-Agent, request timing, and that a Kassiber release check occurred; no project, wallet, book, build hash, hostname, device, or installation identifier is sent |
-| Packaged CLI in human-readable table mode on a TTY when the same permission is enabled and its public release cache is absent or older than 20 hours; failed attempts back off for one hour; `kassiber update` checks only while enabled | same GitHub endpoint as above | detached unauthenticated HTTPS GET with redirects refused for automatic checks; foreground GET for the explicit command | same release-check metadata as above; machine, structured-format, non-interactive, daemon, operator-child, redirected-output, and source-checkout runs do not check automatically |
+| Desktop launch after 10 seconds and every 24 hours while open when the setup / **Settings → Privacy → Allow GitHub update checks** permission is enabled; macOS **Check for Updates…** checks only under the same permission | stable builds: `https://api.github.com/repos/bitcoinaustria/kassiber/releases/latest`; prerelease builds: `https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=10` (GitHub) | unauthenticated HTTPS GET; redirects refused | IP, User-Agent, request timing, and that a Kassiber release check occurred; no project, wallet, book, build hash, hostname, device, or installation identifier is sent |
+| Packaged CLI in human-readable table mode on a TTY when the same permission is enabled and its public release cache is absent or older than 20 hours; failed attempts back off for one hour; `kassiber update` checks only while enabled | matching stable/prerelease GitHub endpoint above | detached unauthenticated HTTPS GET with redirects refused for automatic checks; foreground GET for the explicit command | same release-check metadata as above; machine, structured-format, non-interactive, daemon, operator-child, redirected-output, and source-checkout runs do not check automatically |
 | `wallets sync` against the built-in `mempool` default | `https://mempool.bitcoin-austria.at/api` (Bitcoin Austria) | Esplora over HTTPS | IP, User-Agent, scripthashes, query timing, descriptor scan shape |
 | `wallets sync` against the built-in `fulcrum` default | `ssl://index.bitcoin-austria.at:50002` (Bitcoin Austria) | Electrum JSON-RPC over TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against the built-in `liquid` default | `ssl://les.bullbitcoin.com:995` (BullBitcoin) | Electrum JSON-RPC over TLS | IP, queried Liquid scripthashes, query timing |
@@ -80,11 +80,15 @@ configurable.
 The app-wide consent at `~/.kassiber/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,
 or explicitly disabled consent fails closed in both the native desktop command
-and packaged CLI. Setup persists the choice before the desktop scheduler can
-start. Disabling it blocks automatic checks, the macOS menu action, plain
-`kassiber update`, and detached CLI refresh workers. CLI-only users manage it
-locally with `kassiber update --enable-checks`, `--disable-checks`, or `--status`;
-the latter two never contact GitHub.
+and packaged CLI. The renderer reads this file through the native boundary and
+never restores consent from browser storage. Setup persists the choice before
+creating or mutating book state. A sibling owner-only `update-checks.lock`
+serializes desktop/CLI checks with preference writes: disabling waits for an
+already-authorized request to finish, and after it returns no later request can
+start until consent is enabled again. Disabling blocks automatic checks, the
+macOS menu action, plain `kassiber update`, and detached CLI refresh workers.
+CLI-only users manage it locally with `kassiber update --enable-checks`,
+`--disable-checks`, or `--status`; the latter two never contact GitHub.
 
 The CLI cache at `~/.kassiber/config/update-check.json` contains only the public
 release version, URL, prerelease flag, and check time; it is written mode `0600`

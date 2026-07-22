@@ -356,6 +356,30 @@ def test_release_signing_policy_is_code_reviewed_and_fail_closed(tmp_path: Path)
     assert enabled["primary_fingerprint"] == TEST_RELEASE_FINGERPRINT
 
 
+@pytest.mark.parametrize("schema_version", [True, 1.0])
+def test_release_signing_policy_rejects_boolean_and_float_schema_versions(
+    tmp_path: Path,
+    schema_version: object,
+) -> None:
+    policy = tmp_path / "policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "schema_version": schema_version,
+                "enabled": False,
+                "primary_fingerprint": "",
+                "public_key_path": "release-key.asc",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AppError) as raised:
+        load_release_signing_policy(policy, repository_root=tmp_path)
+
+    assert raised.value.code == "invalid_release_signing_policy"
+
+
 def test_expired_or_revoked_signature_status_is_rejected() -> None:
     assert signature_status_has_failure("[GNUPG:] EXPKEYSIG DEADBEEF signer")
     assert signature_status_has_failure("[GNUPG:] REVKEYSIG DEADBEEF signer")

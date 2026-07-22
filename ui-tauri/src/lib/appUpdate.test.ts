@@ -4,6 +4,7 @@ import {
   APP_UPDATE_PERIOD_MS,
   APP_UPDATE_START_DELAY_MS,
   runManualAppUpdateCheck,
+  resolveAppUpdateChecksEnabled,
   startAppUpdateScheduler,
 } from "./appUpdate";
 import { uiStatePartialForStorage, useUiStore } from "@/store/ui";
@@ -30,7 +31,21 @@ describe("app update checks", () => {
 
     const stored = uiStatePartialForStorage(state);
     expect(stored).not.toHaveProperty("appUpdate");
-    expect(stored).toHaveProperty("automaticUpdateChecks", true);
+    expect(stored).not.toHaveProperty("automaticUpdateChecks");
+  });
+
+  it("hydrates consent from the native preference and fails closed", async () => {
+    await expect(
+      resolveAppUpdateChecksEnabled(async () => true),
+    ).resolves.toBe(true);
+    await expect(
+      resolveAppUpdateChecksEnabled(async () => false),
+    ).resolves.toBe(false);
+    await expect(
+      resolveAppUpdateChecksEnabled(async () => {
+        throw new Error("preference unavailable");
+      }),
+    ).resolves.toBe(false);
   });
 
   it("starts once after the delay and repeats daily until stopped", async () => {

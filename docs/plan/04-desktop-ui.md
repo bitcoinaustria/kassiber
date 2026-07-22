@@ -713,6 +713,8 @@ Per [01-stack-decision.md](01-stack-decision.md) and
   downloads, installs, or executes an asset.
 - The native command and packaged CLI independently read the same owner-only
   global consent file and fail closed when it is missing, malformed, or false.
+  A shared advisory lock serializes checks with consent writes so revocation
+  cannot return while an authorized request is still in flight.
 - The update announcement relies on HTTPS plus GitHub repository control.
   Release builds carry a versioned SHA-256 manifest; future signed releases add
   a detached OpenPGP signature verified against Kassiber's independently

@@ -73,13 +73,16 @@ aws "${aws_args[@]}" s3 sync \
   --exclude InRelease --exclude Release --exclude Release.gpg
 aws "${aws_args[@]}" s3 cp \
   "$apt_repository/dists/$suite/Release" \
-  "$destination/apt/dists/$suite/Release"
+  "$destination/apt/dists/$suite/Release" \
+  --content-type text/plain --cache-control no-cache
 aws "${aws_args[@]}" s3 cp \
   "$apt_repository/dists/$suite/Release.gpg" \
-  "$destination/apt/dists/$suite/Release.gpg"
+  "$destination/apt/dists/$suite/Release.gpg" \
+  --content-type application/pgp-signature --cache-control no-cache
 aws "${aws_args[@]}" s3 cp \
   "$apt_repository/dists/$suite/InRelease" \
-  "$destination/apt/dists/$suite/InRelease"
+  "$destination/apt/dists/$suite/InRelease" \
+  --content-type text/plain --cache-control no-cache
 
 snapshot_id="$(
   sha256sum \

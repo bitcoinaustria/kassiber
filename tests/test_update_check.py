@@ -4,6 +4,7 @@ import io
 import json
 import os
 import subprocess
+import threading
 from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -60,6 +61,10 @@ def test_update_check_consent_is_explicit_owner_only_and_fail_closed(
     update_check.set_update_checks_enabled(True, preference)
     assert update_check.update_checks_enabled(preference)
     assert preference.stat().st_mode & 0o077 == 0
+    lock_path = update_check.preference_lock_path(preference)
+    assert lock_path.is_file()
+    if os.name != "nt":
+        assert lock_path.stat().st_mode & 0o077 == 0
 
     update_check.set_update_checks_enabled(False, preference)
     assert not update_check.update_checks_enabled(preference)
@@ -71,6 +76,125 @@ def test_update_check_consent_is_explicit_owner_only_and_fail_closed(
         update_check.set_update_checks_enabled(True, target)
         preference.symlink_to(target)
         assert not update_check.update_checks_enabled(preference)
+
+
+def test_update_check_consent_rejects_boolean_and_float_schema_versions(
+    tmp_path: Path,
+):
+    preference = tmp_path / "update-checks.json"
+    for schema_version in (True, 1.0):
+        preference.write_text(
+            json.dumps({"schema_version": schema_version, "enabled": True}),
+            encoding="utf-8",
+        )
+        assert not update_check.update_checks_enabled(preference)
+
+
+def test_update_check_lock_refuses_symlinks_before_network(tmp_path: Path):
+    if os.name == "nt":
+        return
+    preference = _enabled_preference(tmp_path)
+    lock_path = update_check.preference_lock_path(preference)
+    lock_path.unlink()
+    target = tmp_path / "lock-target"
+    target.touch()
+    lock_path.symlink_to(target)
+    opened = False
+
+    try:
+        update_check.set_update_checks_enabled(False, preference)
+    except update_check.AppError as error:
+        assert error.code == "update_check_lock_failed"
+    else:
+        raise AssertionError("preference write followed a symlinked lock")
+    assert target.read_bytes() == b""
+    assert update_check.update_checks_enabled(preference)
+
+    def opener(request, *, timeout):
+        del request, timeout
+        nonlocal opened
+        opened = True
+        return _Response(_release_response())
+
+    try:
+        update_check.check_for_update(preference=preference, opener=opener)
+    except update_check.AppError as error:
+        assert error.code == "update_check_lock_failed"
+    else:
+        raise AssertionError("symlinked update-check lock unexpectedly succeeded")
+    assert opened is False
+
+
+def test_disabling_waits_for_inflight_check_and_blocks_later_network(
+    tmp_path: Path,
+):
+    preference = _enabled_preference(tmp_path)
+    cache = tmp_path / "update-check.json"
+    request_started = threading.Event()
+    release_request = threading.Event()
+    disable_started = threading.Event()
+    disable_returned = threading.Event()
+    check_errors: list[BaseException] = []
+    disable_errors: list[BaseException] = []
+    opener_calls = 0
+
+    def opener(request, *, timeout):
+        del request, timeout
+        nonlocal opener_calls
+        opener_calls += 1
+        request_started.set()
+        assert release_request.wait(2)
+        return _Response(_release_response())
+
+    def run_check():
+        try:
+            update_check.check_for_update(
+                path=cache,
+                preference=preference,
+                opener=opener,
+            )
+        except BaseException as exc:
+            check_errors.append(exc)
+
+    def disable():
+        disable_started.set()
+        try:
+            update_check.set_update_checks_enabled(False, preference)
+        except BaseException as exc:
+            disable_errors.append(exc)
+        finally:
+            disable_returned.set()
+
+    check_thread = threading.Thread(target=run_check, daemon=True)
+    check_thread.start()
+    assert request_started.wait(2)
+    disable_thread = threading.Thread(target=disable, daemon=True)
+    disable_thread.start()
+    assert disable_started.wait(2)
+    returned_while_request_was_inflight = disable_returned.wait(0.1)
+    release_request.set()
+    check_thread.join(2)
+    disable_thread.join(2)
+
+    assert not returned_while_request_was_inflight
+    assert not check_thread.is_alive()
+    assert not disable_thread.is_alive()
+    assert check_errors == []
+    assert disable_errors == []
+    assert not update_check.update_checks_enabled(preference)
+    assert opener_calls == 1
+
+    try:
+        update_check.check_for_update(
+            path=cache,
+            preference=preference,
+            opener=opener,
+        )
+    except update_check.AppError as error:
+        assert error.code == "update_checks_disabled"
+    else:
+        raise AssertionError("disabled update check unexpectedly succeeded")
+    assert opener_calls == 1
 
 
 def test_environment_disable_overrides_persisted_consent(tmp_path: Path):
@@ -159,6 +283,71 @@ def test_fetch_latest_release_uses_bounded_github_request():
         ),
         "prerelease": True,
     }
+
+
+def test_fetch_latest_stable_release_uses_latest_object_endpoint():
+    captured = {}
+
+    def opener(request, *, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        return _Response(
+            json.dumps(
+                {
+                    "tag_name": "v1.0.1",
+                    "draft": False,
+                    "prerelease": False,
+                }
+            ).encode()
+        )
+
+    with patch(
+        "kassiber.update_check.packaged_build_info",
+        return_value={"channel": "release", "version": "1.0.0"},
+    ):
+        release = update_check.fetch_latest_release(opener=opener)
+
+    assert captured == {
+        "url": update_check.GITHUB_LATEST_RELEASE_API_URL,
+        "timeout": update_check.NETWORK_TIMEOUT_SECONDS,
+    }
+    assert release == {
+        "latest_version": "1.0.1",
+        "release_tag": "v1.0.1",
+        "release_url": (
+            "https://github.com/bitcoinaustria/kassiber/releases/tag/v1.0.1"
+        ),
+        "prerelease": False,
+    }
+
+
+def test_cache_and_install_context_reject_boolean_and_float_schema_versions(
+    tmp_path: Path,
+):
+    cache = tmp_path / "update-check.json"
+    marker = tmp_path / "install-context.json"
+    for schema_version in (True, 1.0):
+        cache.write_text(
+            json.dumps(
+                {
+                    "schema_version": schema_version,
+                    "latest_version": "0.22.56",
+                    "prerelease": True,
+                    "release_url": (
+                        "https://github.com/bitcoinaustria/kassiber/"
+                        "releases/tag/v0.22.56"
+                    ),
+                    "checked_at": "2026-07-22T08:30:00Z",
+                }
+            ),
+            encoding="utf-8",
+        )
+        marker.write_text(
+            json.dumps({"schema_version": schema_version}),
+            encoding="utf-8",
+        )
+        assert update_check.read_cache(cache) is None
+        assert update_check._read_install_context(marker) is None
 
 
 def test_check_writes_public_cache_and_recomputes_current_version(tmp_path: Path):

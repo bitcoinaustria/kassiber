@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -34,6 +35,9 @@ from .errors import AppError
 GITHUB_RELEASES_API_URL = (
     "https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=10"
 )
+GITHUB_LATEST_RELEASE_API_URL = (
+    "https://api.github.com/repos/bitcoinaustria/kassiber/releases/latest"
+)
 GITHUB_RELEASES_PAGE_URL = "https://github.com/bitcoinaustria/kassiber/releases"
 CHECK_INTERVAL = timedelta(hours=20)
 FAILURE_RETRY_INTERVAL = timedelta(hours=1)
@@ -42,6 +46,7 @@ CACHE_SCHEMA_VERSION = 1
 CACHE_FILENAME = "update-check.json"
 PREFERENCE_SCHEMA_VERSION = 1
 PREFERENCE_FILENAME = "update-checks.json"
+PREFERENCE_LOCK_FILENAME = "update-checks.lock"
 INTERNAL_REFRESH_ARGUMENT = "--refresh-update-cache"
 UPDATE_CACHE_ENV = "KASSIBER_UPDATE_CACHE_FILE"
 UPDATE_PREFERENCE_ENV = "KASSIBER_UPDATE_PREFERENCE_FILE"
@@ -86,6 +91,14 @@ class ParsedVersion:
     minor: int
     patch: int
     prerelease: tuple[str, ...]
+
+
+def _has_exact_schema_version(payload: Any, expected: int) -> bool:
+    return bool(
+        isinstance(payload, dict)
+        and type(payload.get("schema_version")) is int
+        and payload["schema_version"] == expected
+    )
 
 
 def parse_version(value: str) -> ParsedVersion | None:
@@ -175,6 +188,81 @@ def preference_path() -> Path:
     )
 
 
+def preference_lock_path(path: Path | None = None) -> Path:
+    preference = path or preference_path()
+    return preference.with_name(PREFERENCE_LOCK_FILENAME)
+
+
+@contextmanager
+def _update_check_preference_lock(path: Path):
+    """Serialize consent reads/writes with the native Rust update checker."""
+
+    lock_path = preference_lock_path(path)
+    try:
+        try:
+            if stat.S_ISLNK(os.lstat(lock_path).st_mode):
+                raise OSError(f"Update-check lock must not be a symlink: {lock_path}")
+        except FileNotFoundError:
+            pass
+        flags = (
+            os.O_RDWR
+            | os.O_CREAT
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(lock_path, flags, 0o600)
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode):
+                raise OSError(
+                    f"Update-check lock must be a regular file: {lock_path}"
+                )
+            if os.name == "nt":
+                import msvcrt
+
+                if info.st_size == 0:
+                    os.write(descriptor, b"\0")
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+
+                os.fchmod(descriptor, 0o600)
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+        except BaseException:
+            os.close(descriptor)
+            raise
+    except OSError as exc:
+        raise _update_check_lock_error(exc) from exc
+    try:
+        yield
+    finally:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+
+def _update_check_lock_error(_exc: OSError) -> AppError:
+    return AppError(
+        "Could not safely coordinate the update-check permission",
+        code="update_check_lock_failed",
+        hint="Check the owner and permissions of ~/.kassiber/config/update-checks.lock.",
+        retryable=True,
+    )
+
+
 def _environment_disables_update_checks(
     environ: Mapping[str, str] | None = None,
 ) -> bool:
@@ -235,8 +323,7 @@ def update_checks_enabled(
     except (UnicodeDecodeError, json.JSONDecodeError):
         return False
     return bool(
-        isinstance(payload, dict)
-        and payload.get("schema_version") == PREFERENCE_SCHEMA_VERSION
+        _has_exact_schema_version(payload, PREFERENCE_SCHEMA_VERSION)
         and type(payload.get("enabled")) is bool
         and payload["enabled"]
     )
@@ -251,35 +338,36 @@ def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
         destination.parent.chmod(0o700)
     except OSError:
         pass
-    fd, temporary_name = tempfile.mkstemp(
-        prefix=f".{destination.name}.",
-        suffix=".tmp",
-        dir=destination.parent,
-    )
-    temporary = Path(temporary_name)
-    try:
+    with _update_check_preference_lock(destination):
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+        )
+        temporary = Path(temporary_name)
         try:
-            os.fchmod(fd, 0o600)
-        except (AttributeError, OSError):
-            pass
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(
-                {
-                    "schema_version": PREFERENCE_SCHEMA_VERSION,
-                    "enabled": bool(enabled),
-                },
-                handle,
-                sort_keys=True,
-            )
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, destination)
-    finally:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+            try:
+                os.fchmod(fd, 0o600)
+            except (AttributeError, OSError):
+                pass
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "schema_version": PREFERENCE_SCHEMA_VERSION,
+                        "enabled": bool(enabled),
+                    },
+                    handle,
+                    sort_keys=True,
+                )
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
     return destination
 
 
@@ -310,6 +398,8 @@ def _release_from_response(
     *,
     channel: str = "prerelease",
 ) -> dict[str, Any]:
+    if channel == "release" and isinstance(payload, dict):
+        payload = [payload]
     if not isinstance(payload, list):
         raise ValueError("GitHub returned an invalid releases response")
     selected: tuple[dict[str, Any], ParsedVersion] | None = None
@@ -340,8 +430,14 @@ def fetch_latest_release(
     *,
     opener: Callable[..., BinaryIO] = _open_without_redirects,
 ) -> dict[str, Any]:
+    channel = current_release_channel()
+    api_url = (
+        GITHUB_LATEST_RELEASE_API_URL
+        if channel == "release"
+        else GITHUB_RELEASES_API_URL
+    )
     request = Request(
-        GITHUB_RELEASES_API_URL,
+        api_url,
         headers={
             "Accept": "application/vnd.github+json",
             "User-Agent": f"kassiber/{current_version()}",
@@ -369,7 +465,7 @@ def fetch_latest_release(
     try:
         return _release_from_response(
             json.loads(raw.decode("utf-8")),
-            channel=current_release_channel(),
+            channel=channel,
         )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise AppError(
@@ -454,7 +550,7 @@ def read_cache(path: Path | None = None) -> dict[str, Any] | None:
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if not isinstance(payload, dict) or payload.get("schema_version") != CACHE_SCHEMA_VERSION:
+    if not _has_exact_schema_version(payload, CACHE_SCHEMA_VERSION):
         return None
     latest = str(payload.get("latest_version") or "").strip()
     release_url = str(payload.get("release_url") or "").strip()
@@ -569,13 +665,16 @@ def check_for_update(
     opener: Callable[..., BinaryIO] = _open_without_redirects,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    require_update_checks_enabled(preference)
-    result = _result_from_release(
-        fetch_latest_release(opener=opener),
-        checked_at=now or _utc_now(),
-    )
-    write_cache(result, path)
-    return result
+    consent = preference or preference_path()
+    require_update_checks_enabled(consent)
+    with _update_check_preference_lock(consent):
+        require_update_checks_enabled(consent)
+        result = _result_from_release(
+            fetch_latest_release(opener=opener),
+            checked_at=now or _utc_now(),
+        )
+        write_cache(result, path)
+        return result
 
 
 def detect_install_method(
@@ -650,7 +749,7 @@ def _read_install_context(path: Path) -> dict[str, Any] | None:
         payload = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
-    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+    if not _has_exact_schema_version(payload, 1):
         return None
     return payload
 

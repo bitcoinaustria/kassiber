@@ -34,6 +34,22 @@ async function persistAppUpdateChecksEnabled(enabled: boolean): Promise<void> {
   await invoke<boolean>("set_app_update_checks_enabled", { enabled });
 }
 
+export async function readAppUpdateChecksEnabled(): Promise<boolean> {
+  if (!canCheckAppUpdates()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("get_app_update_checks_enabled");
+}
+
+export async function resolveAppUpdateChecksEnabled(
+  read: () => Promise<boolean> = readAppUpdateChecksEnabled,
+): Promise<boolean> {
+  try {
+    return (await read()) === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Persist the global consent before exposing the new state to schedulers. The
  * native command and packaged CLI read the same owner-only preference file.
@@ -42,9 +58,7 @@ export async function setAppUpdateChecksEnabled(
   enabled: boolean,
 ): Promise<void> {
   await persistAppUpdateChecksEnabled(enabled);
-  const store = useUiStore.getState();
-  store.setAutomaticUpdateChecks(enabled);
-  if (!enabled) store.setAppUpdate(null);
+  useUiStore.getState().setAutomaticUpdateChecks(enabled);
 }
 
 type ManualUpdateDialogOptions = {
@@ -197,33 +211,42 @@ export function startAppUpdateScheduler(
 
 export function useAppUpdateScheduler(): void {
   const enabled = useUiStore((state) => state.automaticUpdateChecks);
-  const identity = useUiStore((state) => state.identity);
+  const hasIdentity = useUiStore((state) => state.identity !== null);
+  const setAutomaticUpdateChecks = useUiStore(
+    (state) => state.setAutomaticUpdateChecks,
+  );
   const setAppUpdate = useUiStore((state) => state.setAppUpdate);
+  const [consentLoaded, setConsentLoaded] = React.useState(
+    () => !canCheckAppUpdates(),
+  );
 
   React.useEffect(() => {
-    if (!identity || !canCheckAppUpdates()) return;
+    if (!canCheckAppUpdates()) return;
     let disposed = false;
-    let stopScheduler: (() => void) | undefined;
 
-    // Existing installs used renderer-local persistence. Mirror that value to
-    // the global native/CLI consent before any new scheduler can contact GitHub.
-    void persistAppUpdateChecksEnabled(enabled)
-      .then(() => {
-        if (!disposed && enabled) {
-          stopScheduler = startAppUpdateScheduler(
-            checkForAppUpdate,
-            setAppUpdate,
-          );
-        }
-      })
-      .catch(() => {
-        // Fail closed: the native command also refuses checks when consent is
-        // absent or malformed, so persistence failure cannot create traffic.
-      });
+    // The owner-only native/CLI preference is canonical. Renderer persistence
+    // is deliberately ignored so imports, upgrades, malformed files, and CLI
+    // changes cannot be converted into consent by merely starting the app.
+    void resolveAppUpdateChecksEnabled().then((canonicalEnabled) => {
+      if (disposed) return;
+      setAutomaticUpdateChecks(canonicalEnabled);
+      setConsentLoaded(true);
+    });
 
     return () => {
       disposed = true;
-      stopScheduler?.();
     };
-  }, [enabled, identity, setAppUpdate]);
+  }, [setAutomaticUpdateChecks]);
+
+  React.useEffect(() => {
+    if (
+      !consentLoaded ||
+      !enabled ||
+      !hasIdentity ||
+      !canCheckAppUpdates()
+    ) {
+      return;
+    }
+    return startAppUpdateScheduler(checkForAppUpdate, setAppUpdate);
+  }, [consentLoaded, enabled, hasIdentity, setAppUpdate]);
 }

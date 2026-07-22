@@ -58,8 +58,16 @@ jobs:
         run: test "$GITHUB_REF" = "refs/heads/main"
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.tag_name }}
+      - name: Require the release tag to come from trusted main history
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Release tag must point to a commit in origin/main history." >&2
+            exit 1
+          fi
       - name: Install package inspection tools
         run: |
           sudo apt-get update
@@ -292,15 +300,46 @@ jobs:
         env:
           ARCHIVE_PRIVATE_KEY: ${{ secrets.LINUX_ARCHIVE_GPG_PRIVATE_KEY }}
           ARCHIVE_KEY_PASSPHRASE: ${{ secrets.LINUX_ARCHIVE_GPG_PASSPHRASE }}
+          ARCHIVE_EXPECTED_FINGERPRINT: ${{ vars.LINUX_ARCHIVE_GPG_FINGERPRINT }}
         run: |
           set -euo pipefail
           test -n "$ARCHIVE_PRIVATE_KEY"
+          expected_fingerprint="$(printf '%s' "$ARCHIVE_EXPECTED_FINGERPRINT" \
+            | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+          case "$expected_fingerprint" in
+            *[!0-9A-F]*|"")
+              echo "LINUX_ARCHIVE_GPG_FINGERPRINT must be a full hexadecimal fingerprint." >&2
+              exit 1
+              ;;
+          esac
+          if [ "${#expected_fingerprint}" -ne 40 ] \
+              && [ "${#expected_fingerprint}" -ne 64 ]; then
+            echo "LINUX_ARCHIVE_GPG_FINGERPRINT must contain 40 or 64 hexadecimal characters." >&2
+            exit 1
+          fi
           export GNUPGHOME="$RUNNER_TEMP/kassiber-archive-gnupg"
           mkdir -m 0700 "$GNUPGHOME"
           printf '%s' "$ARCHIVE_PRIVATE_KEY" | gpg --batch --import
-          fingerprint="$(gpg --batch --with-colons --list-secret-keys \
-            | awk -F: '$1 == "fpr" { print $10; exit }')"
-          test -n "$fingerprint"
+          mapfile -t primary_fingerprints < <(
+            gpg --batch --with-colons --list-secret-keys \
+              | awk -F: '
+                  $1 == "sec" { awaiting_primary = 1; next }
+                  $1 == "ssb" { awaiting_primary = 0; next }
+                  $1 == "fpr" && awaiting_primary {
+                    print toupper($10)
+                    awaiting_primary = 0
+                  }
+                '
+          )
+          if [ "${#primary_fingerprints[@]}" -ne 1 ]; then
+            echo "Archive signing secret must contain exactly one primary key identity." >&2
+            exit 1
+          fi
+          fingerprint="${primary_fingerprints[0]}"
+          if [ "$fingerprint" != "$expected_fingerprint" ]; then
+            echo "Archive signing key does not match LINUX_ARCHIVE_GPG_FINGERPRINT." >&2
+            exit 1
+          fi
           release_policy_json="$(python3 scripts/release_manifest.py policy \
             --policy packaging/release/signing-policy.json \
             --require-enabled)"

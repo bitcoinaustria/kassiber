@@ -44,7 +44,10 @@ gh run download <run-id> \
 ```
 
 For a prerelease attached to an existing tag, first verify the tag points at
-the intended commit:
+the intended commit in protected `main` history. Repository rules must restrict
+creation, update, and deletion of `v*` tags to the release maintainers; release
+publication also checks the tag commit is an ancestor of `origin/main` before
+the publish job executes the tag's release policy or publishing helpers:
 
 ```bash
 git fetch --tags origin

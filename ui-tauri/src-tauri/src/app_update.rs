@@ -1,3 +1,4 @@
+use fs2::FileExt;
 use reqwest::header::{ACCEPT, USER_AGENT};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -11,8 +12,10 @@ use tauri::AppHandle;
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-const RELEASES_API_URL: &str =
+const PRERELEASES_API_URL: &str =
     "https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=10";
+const LATEST_RELEASE_API_URL: &str =
+    "https://api.github.com/repos/bitcoinaustria/kassiber/releases/latest";
 const RELEASE_PAGE_URL: &str = "https://github.com/bitcoinaustria/kassiber/releases/tag";
 const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_RESPONSE_BYTES: usize = 256 * 1024;
@@ -20,12 +23,23 @@ const MAX_PREFERENCE_BYTES: u64 = 1024;
 const PREFERENCE_SCHEMA_VERSION: u8 = 1;
 const DISABLE_UPDATE_CHECK_ENV: &str = "KASSIBER_DISABLE_UPDATE_CHECK";
 const PREFERENCE_FILENAME: &str = "update-checks.json";
+const PREFERENCE_LOCK_FILENAME: &str = "update-checks.lock";
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateCheckPreference {
     schema_version: u8,
     enabled: bool,
+}
+
+struct UpdateCheckPreferenceLock {
+    file: File,
+}
+
+impl Drop for UpdateCheckPreferenceLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -120,6 +134,28 @@ fn include_prereleases() -> bool {
     env!("KASSIBER_BUILD_CHANNEL") != "release"
 }
 
+fn releases_api_url(include_prereleases: bool) -> &'static str {
+    if include_prereleases {
+        PRERELEASES_API_URL
+    } else {
+        LATEST_RELEASE_API_URL
+    }
+}
+
+fn parse_release_response(
+    body: &[u8],
+    include_prereleases: bool,
+) -> Result<Vec<GitHubRelease>, String> {
+    if include_prereleases {
+        serde_json::from_slice::<Vec<GitHubRelease>>(body)
+            .map_err(|_| "GitHub returned an invalid release response.".to_string())
+    } else {
+        serde_json::from_slice::<GitHubRelease>(body)
+            .map(|release| vec![release])
+            .map_err(|_| "GitHub returned an invalid release response.".to_string())
+    }
+}
+
 fn environment_disables_update_checks() -> bool {
     env::var(DISABLE_UPDATE_CHECK_ENV)
         .ok()
@@ -145,6 +181,59 @@ fn preference_path() -> Result<PathBuf, String> {
                 .join(PREFERENCE_FILENAME)
         })
         .ok_or_else(|| "Could not locate the user update-check preference.".to_string())
+}
+
+fn preference_lock_path(path: &Path) -> Result<PathBuf, String> {
+    path.parent()
+        .map(|parent| parent.join(PREFERENCE_LOCK_FILENAME))
+        .ok_or_else(|| "Update-check preference has no parent directory.".to_string())
+}
+
+fn acquire_update_check_preference_lock(
+    preference: &Path,
+) -> Result<UpdateCheckPreferenceLock, String> {
+    let lock_path = preference_lock_path(preference)?;
+    match fs::symlink_metadata(&lock_path) {
+        Ok(metadata) if !metadata.file_type().is_file() => {
+            return Err("Update-check lock must be a regular file.".to_string());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("Could not inspect the update-check lock.".to_string()),
+    }
+
+    let mut options = OpenOptions::new();
+    options.create(true).read(true).write(true);
+    #[cfg(unix)]
+    {
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
+    }
+    let mut file = options
+        .open(&lock_path)
+        .map_err(|_| "Could not open the update-check lock.".to_string())?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| "Could not inspect the update-check lock.".to_string())?;
+    if !metadata.file_type().is_file() {
+        return Err("Update-check lock must be a regular file.".to_string());
+    }
+    #[cfg(unix)]
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(|_| "Could not protect the update-check lock.".to_string())?;
+
+    // Python's Windows implementation locks byte zero with `msvcrt.locking`.
+    // Keep that byte present so fs2's whole-file Windows lock range overlaps
+    // it; the same file is harmless for Unix `flock` interoperability.
+    if metadata.len() == 0 {
+        file.write_all(b"\0")
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "Could not initialize the update-check lock.".to_string())?;
+    }
+    file.lock_exclusive()
+        .map_err(|_| "Could not acquire the update-check lock.".to_string())?;
+    Ok(UpdateCheckPreferenceLock { file })
 }
 
 fn update_checks_enabled_at(path: &Path) -> bool {
@@ -193,6 +282,8 @@ fn write_update_checks_enabled_at(path: &Path, enabled: bool) -> Result<(), Stri
     #[cfg(unix)]
     fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
         .map_err(|error| format!("Could not protect the update-check settings folder: {error}"))?;
+
+    let _lock = acquire_update_check_preference_lock(path)?;
 
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -246,8 +337,20 @@ pub fn set_app_update_checks_enabled(enabled: bool) -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub fn get_app_update_checks_enabled() -> bool {
+    update_checks_enabled()
+}
+
+#[tauri::command]
 pub async fn check_app_update(app: AppHandle) -> Result<AppUpdateCheck, String> {
-    if !update_checks_enabled() {
+    let preference = preference_path()?;
+    if !update_checks_enabled_at(&preference) {
+        return Err(
+            "GitHub update checks are disabled. Enable them in Settings > Privacy.".to_string(),
+        );
+    }
+    let _lock = acquire_update_check_preference_lock(&preference)?;
+    if !update_checks_enabled_at(&preference) {
         return Err(
             "GitHub update checks are disabled. Enable them in Settings > Privacy.".to_string(),
         );
@@ -256,13 +359,14 @@ pub async fn check_app_update(app: AppHandle) -> Result<AppUpdateCheck, String> 
     if cfg!(debug_assertions) {
         return Ok(debug_update_check(&current));
     }
+    let include_prereleases = include_prereleases();
     let client = reqwest::Client::builder()
         .timeout(UPDATE_CHECK_TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| "Could not prepare the GitHub update check.".to_string())?;
     let mut response = client
-        .get(RELEASES_API_URL)
+        .get(releases_api_url(include_prereleases))
         .header(ACCEPT, "application/vnd.github+json")
         .header(USER_AGENT, format!("kassiber/{current}"))
         .header("X-GitHub-Api-Version", "2022-11-28")
@@ -282,21 +386,24 @@ pub async fn check_app_update(app: AppHandle) -> Result<AppUpdateCheck, String> 
     {
         append_response_chunk(&mut body, &chunk)?;
     }
-    let releases = serde_json::from_slice::<Vec<GitHubRelease>>(&body)
-        .map_err(|_| "GitHub returned an invalid release response.".to_string())?;
+    let releases = parse_release_response(&body, include_prereleases)?;
 
-    build_update_check(&current, &releases, include_prereleases())
+    build_update_check(&current, &releases, include_prereleases)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        append_response_chunk, build_update_check, newest_release, update_checks_enabled_at,
-        write_update_checks_enabled_at, GitHubRelease, MAX_RESPONSE_BYTES,
+        append_response_chunk, build_update_check, newest_release, parse_release_response,
+        preference_lock_path, releases_api_url, update_checks_enabled_at,
+        write_update_checks_enabled_at, GitHubRelease, LATEST_RELEASE_API_URL, MAX_RESPONSE_BYTES,
+        PRERELEASES_API_URL,
     };
     use semver::Version;
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::fs::{self, OpenOptions};
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[derive(serde::Deserialize)]
     struct SemverComparison {
@@ -333,9 +440,86 @@ mod tests {
         assert!(!update_checks_enabled_at(&path));
         write_update_checks_enabled_at(&path, true).unwrap();
         assert!(update_checks_enabled_at(&path));
+        let lock_path = preference_lock_path(&path).unwrap();
+        let lock_metadata = fs::metadata(lock_path).unwrap();
+        assert!(lock_metadata.is_file());
+        assert!(lock_metadata.len() >= 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            assert_eq!(lock_metadata.permissions().mode() & 0o077, 0);
+        }
         write_update_checks_enabled_at(&path, false).unwrap();
         assert!(!update_checks_enabled_at(&path));
         fs::write(&path, b"not-json\n").unwrap();
+        assert!(!update_checks_enabled_at(&path));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn preference_writes_wait_for_an_inflight_check_lock() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "kassiber-update-lock-ordering-{}-{nonce}",
+            std::process::id()
+        ));
+        let path = root.join("update-checks.json");
+        write_update_checks_enabled_at(&path, true).unwrap();
+        let inflight = super::acquire_update_check_preference_lock(&path).unwrap();
+        let contender = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(preference_lock_path(&path).unwrap())
+            .unwrap();
+        assert!(fs2::FileExt::try_lock_exclusive(&contender).is_err());
+        drop(contender);
+        let (started_tx, started_rx) = mpsc::channel();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let writer_path = path.clone();
+        let writer = thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let result = write_update_checks_enabled_at(&writer_path, false);
+            finished_tx.send(result).unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(finished_rx
+            .recv_timeout(Duration::from_millis(100))
+            .is_err());
+        drop(inflight);
+        finished_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        writer.join().unwrap();
+        assert!(!update_checks_enabled_at(&path));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preference_lock_rejects_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "kassiber-update-lock-symlink-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("update-checks.json");
+        let lock_path = preference_lock_path(&path).unwrap();
+        let target = root.join("lock-target");
+        fs::write(&target, b"\0").unwrap();
+        symlink(&target, &lock_path).unwrap();
+
+        assert!(write_update_checks_enabled_at(&path, true).is_err());
         assert!(!update_checks_enabled_at(&path));
         fs::remove_dir_all(root).unwrap();
     }
@@ -450,5 +634,30 @@ mod tests {
 
         assert_eq!(result.latest_version.as_deref(), Some("1.0.1"));
         assert!(!result.prerelease);
+    }
+
+    #[test]
+    fn release_channels_use_their_matching_github_response_shape() {
+        assert_eq!(releases_api_url(false), LATEST_RELEASE_API_URL);
+        assert_eq!(releases_api_url(true), PRERELEASES_API_URL);
+
+        let stable = parse_release_response(
+            br#"{"tag_name":"v1.0.1","draft":false,"prerelease":false}"#,
+            false,
+        )
+        .expect("latest stable release object");
+        assert_eq!(stable.len(), 1);
+        assert_eq!(stable[0].tag_name, "v1.0.1");
+
+        let prereleases = parse_release_response(
+            br#"[{"tag_name":"v1.1.0-rc.1","draft":false,"prerelease":true}]"#,
+            true,
+        )
+        .expect("bounded prerelease list");
+        assert_eq!(prereleases.len(), 1);
+        assert_eq!(prereleases[0].tag_name, "v1.1.0-rc.1");
+
+        assert!(parse_release_response(b"[]", false).is_err());
+        assert!(parse_release_response(b"{}", true).is_err());
     }
 }

@@ -130,6 +130,14 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("packaging/release/signing-policy.json", workflow)
         self.assertIn("Linux channel publication requires an enabled", workflow)
         self.assertIn("primary key distinct from the offline release key", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
+        self.assertLess(
+            workflow.index("git merge-base --is-ancestor HEAD origin/main"),
+            workflow.index("scripts/release_manifest.py policy"),
+        )
+        self.assertIn("LINUX_ARCHIVE_GPG_FINGERPRINT", workflow)
+        self.assertIn("exactly one primary key identity", workflow)
         self.assertIn("isDraft,isPrerelease,tagName", workflow)
         self.assertIn('"commit":sys.argv[2]', workflow)
         self.assertIn("makepkg --cleanbuild --noconfirm", workflow)
@@ -156,10 +164,29 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("gh release download", workflow)
         self.assertIn("gh release edit", workflow)
         self.assertIn("--draft=false", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
+        self.assertLess(
+            workflow.index("git merge-base --is-ancestor HEAD origin/main"),
+            workflow.index("scripts/release_manifest.py policy"),
+        )
         self.assertNotIn("gh release upload", workflow)
         self.assertNotIn("--clobber", workflow)
         self.assertNotIn("tauri build", workflow)
         self.assertNotIn("pyinstaller", workflow)
+
+    def test_release_publish_rejects_tags_outside_main_history(self):
+        workflow = (
+            ROOT / ".github/workflows/prerelease-binaries.yml"
+        ).read_text(encoding="utf-8")
+
+        publish = workflow.split("\n  publish:\n", 1)[1]
+        self.assertIn("fetch-depth: 0", publish)
+        self.assertIn("git merge-base --is-ancestor HEAD origin/main", publish)
+        self.assertLess(
+            publish.index("git merge-base --is-ancestor HEAD origin/main"),
+            publish.index("scripts/release_manifest.py policy"),
+        )
 
 
 class RepositoryPublisherTest(unittest.TestCase):
@@ -250,6 +277,16 @@ class RepositoryPublisherTest(unittest.TestCase):
             )
             snapshot = dnf_snapshot_id(repomd, signature)
             calls = log.read_text(encoding="utf-8")
+            call_lines = calls.splitlines()
+            for name in ("Release", "Release.gpg", "InRelease"):
+                matching = [
+                    line
+                    for line in call_lines
+                    if f"apt/dists/prerelease/{name} --content-type" in line
+                    and line.startswith("s3 cp ")
+                ]
+                self.assertEqual(len(matching), 1, (name, call_lines))
+                self.assertIn("--cache-control no-cache", matching[0])
             self.assertIn(
                 f"dnf/prerelease/snapshots/{snapshot}/packages",
                 calls,

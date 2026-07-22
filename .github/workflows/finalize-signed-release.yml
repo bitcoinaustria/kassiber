@@ -46,8 +46,16 @@ jobs:
       - name: Check out the release tag
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.tag_name }}
+      - name: Require the release tag to come from trusted main history
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Release tag must point to a commit in origin/main history." >&2
+            exit 1
+          fi
       - name: Load enabled release signing policy
         id: release-signing
         run: |

@@ -200,10 +200,7 @@ export interface UiState {
   identity: Identity | null;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
-  /**
-   * Legacy storage key for the app-wide GitHub update-check permission. It now
-   * gates automatic, menu, native, and packaged CLI checks—not only polling.
-   */
+  /** Native-hydrated app-wide GitHub update-check permission. */
   automaticUpdateChecks: boolean;
   /** Latest native GitHub release check; transient and never persisted. */
   appUpdate: AppUpdateCheck | null;
@@ -428,7 +425,6 @@ export function uiStatePartialForStorage(state: UiState) {
     identity: state.identity,
     aiFeaturesEnabled: state.aiFeaturesEnabled,
     developerToolsEnabled: state.developerToolsEnabled,
-    automaticUpdateChecks: state.automaticUpdateChecks,
     assistantModelSelection: state.assistantModelSelection,
     assistantDockAutoHide: state.assistantDockAutoHide,
     assistantDockPosition: state.assistantDockPosition,
@@ -457,7 +453,7 @@ export const useUiStore = create<UiState>()(
       identity: null,
       aiFeaturesEnabled: true,
       developerToolsEnabled: true,
-      automaticUpdateChecks: true,
+      automaticUpdateChecks: false,
       appUpdate: null,
       assistantModelSelection: null,
       assistantDockAutoHide: true,
@@ -684,8 +680,9 @@ export const useUiStore = create<UiState>()(
           aiFeaturesEnabled,
           developerToolsEnabled:
             restored.developerToolsEnabled ?? current.developerToolsEnabled,
-          automaticUpdateChecks:
-            restored.automaticUpdateChecks ?? current.automaticUpdateChecks,
+          // The owner-only native/CLI preference is canonical. Never restore
+          // this permission from renderer-local storage.
+          automaticUpdateChecks: current.automaticUpdateChecks,
           appUpdate: null,
           assistantModelSelection:
             restored.assistantModelSelection ??

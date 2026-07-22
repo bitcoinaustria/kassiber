@@ -182,8 +182,12 @@ The recommended production shape is:
   general offline release-signing primary. CI receives only the archive signing
   subkey through a protected
   release environment. Store an encrypted offline backup and a pre-generated
-  revocation certificate separately. Publish the minimal public key from the
-  project-owned domain and configure it with APT `Signed-By`, never `apt-key`.
+  revocation certificate separately. Pin its full primary fingerprint in the
+  protected `LINUX_ARCHIVE_GPG_FINGERPRINT` variable; the publisher requires
+  exactly one imported primary identity and refuses any mismatch. Publish the
+  minimal public key from the project-owned domain and its fingerprint through
+  an independently controlled Bitcoin Austria channel, and configure it with
+  APT `Signed-By`, never `apt-key`.
 - **Cadence:** publish only completed tagged prereleases to `prerelease`; add a
   `stable` suite only when Kassiber starts making stable releases. Regenerate
   metadata before `Valid-Until` even during a release pause.
