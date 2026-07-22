@@ -40,8 +40,11 @@ FAILURE_RETRY_INTERVAL = timedelta(hours=1)
 NETWORK_TIMEOUT_SECONDS = 5.0
 CACHE_SCHEMA_VERSION = 1
 CACHE_FILENAME = "update-check.json"
+PREFERENCE_SCHEMA_VERSION = 1
+PREFERENCE_FILENAME = "update-checks.json"
 INTERNAL_REFRESH_ARGUMENT = "--refresh-update-cache"
 UPDATE_CACHE_ENV = "KASSIBER_UPDATE_CACHE_FILE"
+UPDATE_PREFERENCE_ENV = "KASSIBER_UPDATE_PREFERENCE_FILE"
 HOMEBREW_PACKAGE_ENV = "KASSIBER_HOMEBREW_PACKAGE"
 DISABLE_UPDATE_CHECK_ENV = "KASSIBER_DISABLE_UPDATE_CHECK"
 HOMEBREW_CASK_COMMAND = (
@@ -53,6 +56,7 @@ HOMEBREW_FORMULA_COMMAND = (
 LINUX_INSTALL_CONTEXT_PATH = Path("/usr/lib/kassiber/install-context.json")
 
 _MAX_RESPONSE_BYTES = 256 * 1024
+_MAX_PREFERENCE_BYTES = 1024
 _MAX_INSTALL_CONTEXT_BYTES = 8 * 1024
 _LOCK_STALE_AFTER = timedelta(minutes=5)
 _SEMVER_RE = re.compile(
@@ -158,6 +162,138 @@ def cache_path() -> Path:
     if override:
         return Path(override).expanduser()
     return Path(DEFAULT_STATE_ROOT).expanduser() / DEFAULT_CONFIG_DIRNAME / CACHE_FILENAME
+
+
+def preference_path() -> Path:
+    override = os.environ.get(UPDATE_PREFERENCE_ENV)
+    if override:
+        return Path(override).expanduser()
+    return (
+        Path(DEFAULT_STATE_ROOT).expanduser()
+        / DEFAULT_CONFIG_DIRNAME
+        / PREFERENCE_FILENAME
+    )
+
+
+def _environment_disables_update_checks(
+    environ: Mapping[str, str] | None = None,
+) -> bool:
+    environment = os.environ if environ is None else environ
+    return str(environment.get(DISABLE_UPDATE_CHECK_ENV) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def update_checks_enabled(
+    path: Path | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> bool:
+    """Return the explicit global update-check consent, failing closed.
+
+    This file is deliberately separate from project data and renderer storage
+    so the desktop native command and every packaged CLI invocation enforce the
+    same user choice before opening a connection to GitHub.
+    """
+
+    if _environment_disables_update_checks(environ):
+        return False
+    destination = path or preference_path()
+    try:
+        if stat.S_ISLNK(os.lstat(destination).st_mode):
+            return False
+    except OSError:
+        return False
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(destination, flags)
+    except OSError:
+        return False
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_PREFERENCE_BYTES:
+            return False
+        with os.fdopen(descriptor, "rb") as handle:
+            descriptor = -1
+            raw = handle.read(_MAX_PREFERENCE_BYTES + 1)
+    except OSError:
+        return False
+    finally:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+    if len(raw) > _MAX_PREFERENCE_BYTES:
+        return False
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return bool(
+        isinstance(payload, dict)
+        and payload.get("schema_version") == PREFERENCE_SCHEMA_VERSION
+        and type(payload.get("enabled")) is bool
+        and payload["enabled"]
+    )
+
+
+def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
+    """Atomically persist the global update-check consent as owner-only JSON."""
+
+    destination = path or preference_path()
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        destination.parent.chmod(0o700)
+    except OSError:
+        pass
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "schema_version": PREFERENCE_SCHEMA_VERSION,
+                    "enabled": bool(enabled),
+                },
+                handle,
+                sort_keys=True,
+            )
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+    return destination
+
+
+def require_update_checks_enabled(path: Path | None = None) -> None:
+    if update_checks_enabled(path):
+        return
+    raise AppError(
+        "GitHub update checks are disabled",
+        code="update_checks_disabled",
+        hint=(
+            "Enable them in Settings > Privacy or run "
+            "`kassiber update --enable-checks`."
+        ),
+    )
 
 
 def release_url_for_tag(tag: str) -> str:
@@ -429,9 +565,11 @@ def automatic_refresh_due(
 def check_for_update(
     *,
     path: Path | None = None,
+    preference: Path | None = None,
     opener: Callable[..., BinaryIO] = _open_without_redirects,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    require_update_checks_enabled(preference)
     result = _result_from_release(
         fetch_latest_release(opener=opener),
         checked_at=now or _utc_now(),
@@ -649,6 +787,7 @@ def render_update_status(result: Mapping[str, Any], *, color: bool) -> str:
 def automatic_check_allowed(
     args: Any,
     *,
+    preference: Path | None = None,
     stream: TextIO | None = None,
     stdout: TextIO | None = None,
 ) -> bool:
@@ -659,11 +798,7 @@ def automatic_check_allowed(
         and bool(getattr(command_output, "isatty", lambda: False)())
     ):
         return False
-    if os.environ.get(DISABLE_UPDATE_CHECK_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }:
+    if not update_checks_enabled(preference):
         return False
     if not packaged_build_info():
         return False
@@ -736,10 +871,17 @@ def _background_environment(
     return environment
 
 
-def start_background_refresh(path: Path | None = None) -> None:
+def start_background_refresh(
+    path: Path | None = None,
+    preference: Path | None = None,
+) -> None:
     destination = path or cache_path()
+    consent = preference or preference_path()
+    if not update_checks_enabled(consent):
+        return
     environment = _background_environment()
     environment[UPDATE_CACHE_ENV] = str(destination)
+    environment[UPDATE_PREFERENCE_ENV] = str(consent)
     try:
         _write_refresh_attempt(destination)
     except OSError:
@@ -770,11 +912,17 @@ def show_cached_update_and_refresh(
     args: Any,
     *,
     path: Path | None = None,
+    preference: Path | None = None,
     stream: TextIO | None = None,
     stdout: TextIO | None = None,
 ) -> None:
     output = stream or sys.stderr
-    if not automatic_check_allowed(args, stream=output, stdout=stdout):
+    if not automatic_check_allowed(
+        args,
+        preference=preference,
+        stream=output,
+        stdout=stdout,
+    ):
         return
     cached = read_cache(path)
     if cached is not None and bool(cached.get("update_available")):
@@ -782,11 +930,17 @@ def show_cached_update_and_refresh(
         output.write("\n")
         output.flush()
     if automatic_refresh_due(cached, path=path):
-        start_background_refresh(path)
+        start_background_refresh(path, preference)
 
 
-def refresh_cache_silently(path: Path | None = None) -> None:
+def refresh_cache_silently(
+    path: Path | None = None,
+    preference: Path | None = None,
+) -> None:
     destination = path or cache_path()
+    consent = preference or preference_path()
+    if not update_checks_enabled(consent):
+        return
     lock_path = destination.with_suffix(f"{destination.suffix}.lock")
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
@@ -804,8 +958,10 @@ def refresh_cache_silently(path: Path | None = None) -> None:
         return
     try:
         os.close(lock_fd)
+        if not update_checks_enabled(consent):
+            return
         try:
-            check_for_update(path=destination)
+            check_for_update(path=destination, preference=consent)
         except (AppError, OSError):
             return
     finally:

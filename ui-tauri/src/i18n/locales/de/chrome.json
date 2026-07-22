@@ -58,6 +58,7 @@
       "releaseLabel": "Kassiber v{{version}}",
       "updateTitle": "Kassiber v{{current}} → v{{latest}} ist auf GitHub verfügbar",
       "updateLabel": "Update verfügbar · v{{version}}",
+      "disabled": "Update-Prüfungen sind deaktiviert. Aktiviere sie unter Einstellungen → Privatsphäre, bevor Kassiber GitHub kontaktiert.",
       "checkFailed": "Kassiber konnte GitHub nicht auf Updates prüfen. Bitte versuche es später erneut.",
       "availablePrompt": "Kassiber v{{version}} ist verfügbar. Release-Seite auf GitHub öffnen?",
       "current": "Kassiber v{{version}} ist aktuell.",

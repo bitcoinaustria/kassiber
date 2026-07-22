@@ -3,7 +3,7 @@
 Kassiber is local-first. The database and all computation stay on your
 machine. There is no telemetry, crash reporter, license check, or analytics.
 Installed desktop and interactive CLI builds make a minimal GitHub release
-check when automatic checks are enabled; they do not download or install
+check only after the app-wide permission is enabled; they do not download or install
 updates. Outbound traffic is limited to the requests listed below.
 
 Kassiber is pre-release (`0.1.x`) — treat this as a description of
@@ -62,8 +62,8 @@ configurable.
 
 | Trigger | Destination | Transport | What the other side learns |
 | --- | --- | --- | --- |
-| Desktop launch after 10 seconds and every 24 hours while open when **Settings → Privacy → Check automatically** is enabled; macOS **Check for Updates…** always checks explicitly | `https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=10` (GitHub) | unauthenticated HTTPS GET; redirects refused | IP, User-Agent, request timing, and that a Kassiber release check occurred; no project, wallet, book, build hash, hostname, device, or installation identifier is sent |
-| Packaged CLI in human-readable table mode on a TTY when its public release cache is absent or older than 20 hours; failed attempts back off for one hour; `kassiber update` always checks explicitly | same GitHub endpoint as above | detached unauthenticated HTTPS GET with redirects refused for automatic checks; foreground GET for the explicit command | same release-check metadata as above; machine, structured-format, non-interactive, daemon, operator-child, redirected-output, and source-checkout runs do not check automatically |
+| Desktop launch after 10 seconds and every 24 hours while open when the setup / **Settings → Privacy → Allow GitHub update checks** permission is enabled; macOS **Check for Updates…** checks only under the same permission | `https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=10` (GitHub) | unauthenticated HTTPS GET; redirects refused | IP, User-Agent, request timing, and that a Kassiber release check occurred; no project, wallet, book, build hash, hostname, device, or installation identifier is sent |
+| Packaged CLI in human-readable table mode on a TTY when the same permission is enabled and its public release cache is absent or older than 20 hours; failed attempts back off for one hour; `kassiber update` checks only while enabled | same GitHub endpoint as above | detached unauthenticated HTTPS GET with redirects refused for automatic checks; foreground GET for the explicit command | same release-check metadata as above; machine, structured-format, non-interactive, daemon, operator-child, redirected-output, and source-checkout runs do not check automatically |
 | `wallets sync` against the built-in `mempool` default | `https://mempool.bitcoin-austria.at/api` (Bitcoin Austria) | Esplora over HTTPS | IP, User-Agent, scripthashes, query timing, descriptor scan shape |
 | `wallets sync` against the built-in `fulcrum` default | `ssl://index.bitcoin-austria.at:50002` (Bitcoin Austria) | Electrum JSON-RPC over TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against the built-in `liquid` default | `ssl://les.bullbitcoin.com:995` (BullBitcoin) | Electrum JSON-RPC over TLS | IP, queried Liquid scripthashes, query timing |
@@ -77,13 +77,22 @@ configurable.
 | `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
 | consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
 
+The app-wide consent at `~/.kassiber/config/update-checks.json` is owner-only
+and contains only a schema version and boolean. Missing, malformed, symlinked,
+or explicitly disabled consent fails closed in both the native desktop command
+and packaged CLI. Setup persists the choice before the desktop scheduler can
+start. Disabling it blocks automatic checks, the macOS menu action, plain
+`kassiber update`, and detached CLI refresh workers. CLI-only users manage it
+locally with `kassiber update --enable-checks`, `--disable-checks`, or `--status`;
+the latter two never contact GitHub.
+
 The CLI cache at `~/.kassiber/config/update-check.json` contains only the public
 release version, URL, prerelease flag, and check time; it is written mode `0600`
 where supported. A sibling owner-only `.attempt` file contains only the last
 automatic-attempt time so an unavailable GitHub endpoint cannot turn every CLI
-invocation into another request. Set `KASSIBER_DISABLE_UPDATE_CHECK=1` to
-suppress automatic CLI checks; the explicit `kassiber update` command still
-works.
+invocation into another request. `KASSIBER_DISABLE_UPDATE_CHECK=1` is an
+additional process-level override that suppresses automatic and explicit checks
+even when persisted consent is enabled.
 
 The update announcement itself is not cryptographically signed. The notifier
 therefore trusts HTTPS and control of the Kassiber GitHub repository only to

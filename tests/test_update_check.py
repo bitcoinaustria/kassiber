@@ -45,6 +45,42 @@ def _release_response(version: str = "0.22.56") -> bytes:
     ).encode()
 
 
+def _enabled_preference(tmp_path: Path) -> Path:
+    preference = tmp_path / "update-checks.json"
+    update_check.set_update_checks_enabled(True, preference)
+    return preference
+
+
+def test_update_check_consent_is_explicit_owner_only_and_fail_closed(
+    tmp_path: Path,
+):
+    preference = tmp_path / "config" / "update-checks.json"
+    assert not update_check.update_checks_enabled(preference)
+
+    update_check.set_update_checks_enabled(True, preference)
+    assert update_check.update_checks_enabled(preference)
+    assert preference.stat().st_mode & 0o077 == 0
+
+    update_check.set_update_checks_enabled(False, preference)
+    assert not update_check.update_checks_enabled(preference)
+    preference.write_text("not-json\n", encoding="utf-8")
+    assert not update_check.update_checks_enabled(preference)
+    if os.name != "nt":
+        preference.unlink()
+        target = tmp_path / "enabled-target.json"
+        update_check.set_update_checks_enabled(True, target)
+        preference.symlink_to(target)
+        assert not update_check.update_checks_enabled(preference)
+
+
+def test_environment_disable_overrides_persisted_consent(tmp_path: Path):
+    preference = _enabled_preference(tmp_path)
+    assert not update_check.update_checks_enabled(
+        preference,
+        environ={update_check.DISABLE_UPDATE_CHECK_ENV: "true"},
+    )
+
+
 def test_semver_comparison_handles_prereleases_and_invalid_values():
     for case in _SEMVER_CASES["comparisons"]:
         assert (
@@ -127,6 +163,7 @@ def test_fetch_latest_release_uses_bounded_github_request():
 
 def test_check_writes_public_cache_and_recomputes_current_version(tmp_path: Path):
     destination = tmp_path / "update-check.json"
+    preference = _enabled_preference(tmp_path)
     checked_at = datetime(2026, 7, 22, 8, 30, tzinfo=timezone.utc)
 
     def opener(request, *, timeout):
@@ -145,6 +182,7 @@ def test_check_writes_public_cache_and_recomputes_current_version(tmp_path: Path
     ):
         result = update_check.check_for_update(
             path=destination,
+            preference=preference,
             opener=opener,
             now=checked_at,
         )
@@ -288,6 +326,7 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
     tmp_path: Path,
 ):
     destination = tmp_path / "update-check.json"
+    preference = _enabled_preference(tmp_path)
     old = datetime.now(timezone.utc) - timedelta(days=2)
     cached = {
         "current_version": "0.22.55",
@@ -318,12 +357,13 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
         update_check.show_cached_update_and_refresh(
             args,
             path=destination,
+            preference=preference,
             stream=stream,
             stdout=_Tty(),
         )
 
     assert "Update available" in stream.getvalue()
-    refresh.assert_called_once_with(destination)
+    refresh.assert_called_once_with(destination, preference)
 
     machine = Namespace(**{**vars(args), "machine": True})
     machine_stream = _Tty()
@@ -337,6 +377,7 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
         update_check.show_cached_update_and_refresh(
             machine,
             path=destination,
+            preference=preference,
             stream=machine_stream,
             stdout=_Tty(),
         )
@@ -350,6 +391,7 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
     ):
         assert not update_check.automatic_check_allowed(
             structured,
+            preference=preference,
             stream=_Tty(),
             stdout=_Tty(),
         )
@@ -375,6 +417,7 @@ def test_failed_automatic_checks_are_throttled(tmp_path: Path):
 
 def test_background_refresh_passes_only_required_environment(tmp_path: Path):
     destination = tmp_path / "update-check.json"
+    preference = _enabled_preference(tmp_path)
     with (
         patch.dict(
             os.environ,
@@ -387,14 +430,27 @@ def test_background_refresh_passes_only_required_environment(tmp_path: Path):
         ),
         patch("kassiber.update_check.subprocess.Popen") as popen,
     ):
-        update_check.start_background_refresh(destination)
+        update_check.start_background_refresh(destination, preference)
 
     environment = popen.call_args.kwargs["env"]
     assert environment["PATH"] == "/usr/bin"
     assert environment["HTTPS_PROXY"] == "http://proxy.example:8080"
     assert environment[update_check.UPDATE_CACHE_ENV] == str(destination)
+    assert environment[update_check.UPDATE_PREFERENCE_ENV] == str(preference)
     assert "OPENAI_API_KEY" not in environment
     assert update_check._read_refresh_attempt(destination) is not None
+
+
+def test_disabled_background_refresh_never_spawns_a_child(tmp_path: Path):
+    destination = tmp_path / "update-check.json"
+    preference = tmp_path / "update-checks.json"
+    update_check.set_update_checks_enabled(False, preference)
+
+    with patch("kassiber.update_check.subprocess.Popen") as popen:
+        update_check.start_background_refresh(destination, preference)
+
+    popen.assert_not_called()
+    assert update_check._read_refresh_attempt(destination) is None
 
 
 def test_no_color_disables_ansi_not_the_human_update_check():
@@ -405,8 +461,13 @@ def test_no_color_disables_ansi_not_the_human_update_check():
         command="status",
     )
     stream = _Tty()
+    preference = Path("/tmp/kassiber-test-update-checks-enabled.json")
     with (
         patch.dict("os.environ", {"NO_COLOR": "1"}, clear=True),
+        patch(
+            "kassiber.update_check.update_checks_enabled",
+            return_value=True,
+        ),
         patch(
             "kassiber.update_check.packaged_build_info",
             return_value={"version": "0.22.55"},
@@ -414,6 +475,7 @@ def test_no_color_disables_ansi_not_the_human_update_check():
     ):
         assert update_check.automatic_check_allowed(
             args,
+            preference=preference,
             stream=stream,
             stdout=_Tty(),
         )
@@ -466,3 +528,79 @@ def test_machine_update_command_returns_clean_structured_information():
     assert payload["kind"] == "update"
     assert payload["data"] == result
     assert stderr.getvalue() == ""
+
+
+def test_cli_can_disable_and_inspect_update_checks_without_network(tmp_path: Path):
+    preference = tmp_path / "update-checks.json"
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    with (
+        patch.dict(
+            os.environ,
+            {update_check.UPDATE_PREFERENCE_ENV: str(preference)},
+            clear=False,
+        ),
+        patch("kassiber.cli.main._configure_cli_logging"),
+        patch("kassiber.cli.main.check_for_update") as check,
+        patch("sys.stdout", stdout),
+        patch("sys.stderr", stderr),
+    ):
+        exit_code = main(["--machine", "update", "--disable-checks"])
+
+    assert exit_code == 0
+    assert not update_check.update_checks_enabled(preference)
+    check.assert_not_called()
+    payload = json.loads(stdout.getvalue())
+    assert payload["kind"] == "update.preference"
+    assert payload["data"] == {"enabled": False, "contacts_github": False}
+    assert stderr.getvalue() == ""
+
+
+def test_cli_can_enable_consent_and_check_immediately(tmp_path: Path):
+    preference = tmp_path / "update-checks.json"
+    result = {
+        "current_version": "0.22.55",
+        "latest_version": "0.22.56",
+        "update_available": True,
+        "prerelease": True,
+        "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.22.56",
+        "checked_at": "2026-07-22T08:30:00Z",
+        "install_method": "manual",
+        "update_command": None,
+    }
+    stdout = io.StringIO()
+    with (
+        patch.dict(
+            os.environ,
+            {update_check.UPDATE_PREFERENCE_ENV: str(preference)},
+            clear=False,
+        ),
+        patch("kassiber.cli.main._configure_cli_logging"),
+        patch("kassiber.cli.main.check_for_update", return_value=result) as check,
+        patch("sys.stdout", stdout),
+    ):
+        exit_code = main(["--machine", "update", "--enable-checks"])
+
+    assert exit_code == 0
+    assert update_check.update_checks_enabled(preference)
+    check.assert_called_once_with()
+    assert json.loads(stdout.getvalue())["data"] == result
+
+
+def test_disabled_explicit_check_fails_before_opening_network(tmp_path: Path):
+    preference = tmp_path / "update-checks.json"
+    opened = False
+
+    def opener(request, *, timeout):
+        del request, timeout
+        nonlocal opened
+        opened = True
+        return _Response(_release_response())
+
+    try:
+        update_check.check_for_update(preference=preference, opener=opener)
+    except update_check.AppError as error:
+        assert error.code == "update_checks_disabled"
+    else:
+        raise AssertionError("disabled update check unexpectedly succeeded")
+    assert opened is False

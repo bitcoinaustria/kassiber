@@ -30,9 +30,10 @@ Adopt the following stack:
   (Windows), `.deb`/`.AppImage` (Linux)
 - **Update model:** minimal release notification, never automatic download or
   installation. Installed desktop builds may query the fixed public GitHub
-  releases endpoint after a short startup delay and daily while open; the
-  persisted **Settings → Privacy → Check automatically** preference controls
-  polling, and macOS exposes an explicit native **Check for Updates…** action.
+  releases endpoint after a short startup delay and daily while open; setup and
+  **Settings → Privacy → Allow GitHub update checks** control the shared
+  desktop/CLI permission. macOS exposes **Check for Updates…**, but the action
+  also refuses network access while that permission is disabled.
   The notification trusts GitHub/TLS and is not an authenticated release
   announcement. Builds carry a versioned SHA-256 manifest; the Sparrow-style
   OpenPGP signature becomes authoritative only after the permanent release key

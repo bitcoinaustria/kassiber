@@ -28,6 +28,25 @@ export async function checkForAppUpdate(): Promise<AppUpdateCheck> {
   return invoke<AppUpdateCheck>("check_app_update");
 }
 
+async function persistAppUpdateChecksEnabled(enabled: boolean): Promise<void> {
+  if (!canCheckAppUpdates()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke<boolean>("set_app_update_checks_enabled", { enabled });
+}
+
+/**
+ * Persist the global consent before exposing the new state to schedulers. The
+ * native command and packaged CLI read the same owner-only preference file.
+ */
+export async function setAppUpdateChecksEnabled(
+  enabled: boolean,
+): Promise<void> {
+  await persistAppUpdateChecksEnabled(enabled);
+  const store = useUiStore.getState();
+  store.setAutomaticUpdateChecks(enabled);
+  if (!enabled) store.setAppUpdate(null);
+}
+
 type ManualUpdateDialogOptions = {
   title: string;
   kind: "info" | "error";
@@ -35,6 +54,7 @@ type ManualUpdateDialogOptions = {
 };
 
 export interface ManualAppUpdateDeps {
+  isEnabled: () => boolean;
   check: () => Promise<AppUpdateCheck>;
   setUpdate: (update: AppUpdateCheck) => void;
   showDialog: (
@@ -61,12 +81,29 @@ export async function runManualAppUpdateCheck(
   overrides: Partial<ManualAppUpdateDeps> = {},
 ): Promise<void> {
   const deps: ManualAppUpdateDeps = {
+    isEnabled: () => useUiStore.getState().automaticUpdateChecks,
     check: checkForAppUpdate,
     setUpdate: (update) => useUiStore.getState().setAppUpdate(update),
     showDialog: showNativeUpdateDialog,
     openUrl: openExternalUrl,
     ...overrides,
   };
+
+  if (!deps.isEnabled()) {
+    await deps
+      .showDialog(
+        i18n.t("shell.version.disabled", { ns: "chrome" }),
+        {
+          title: "Kassiber",
+          kind: "info",
+          buttons: {
+            ok: i18n.t("shell.version.ok", { ns: "chrome" }),
+          },
+        },
+      )
+      .catch(() => undefined);
+    return;
+  }
 
   let result: AppUpdateCheck;
   try {
@@ -160,10 +197,33 @@ export function startAppUpdateScheduler(
 
 export function useAppUpdateScheduler(): void {
   const enabled = useUiStore((state) => state.automaticUpdateChecks);
+  const identity = useUiStore((state) => state.identity);
   const setAppUpdate = useUiStore((state) => state.setAppUpdate);
 
   React.useEffect(() => {
-    if (!enabled || !canCheckAppUpdates()) return;
-    return startAppUpdateScheduler(checkForAppUpdate, setAppUpdate);
-  }, [enabled, setAppUpdate]);
+    if (!identity || !canCheckAppUpdates()) return;
+    let disposed = false;
+    let stopScheduler: (() => void) | undefined;
+
+    // Existing installs used renderer-local persistence. Mirror that value to
+    // the global native/CLI consent before any new scheduler can contact GitHub.
+    void persistAppUpdateChecksEnabled(enabled)
+      .then(() => {
+        if (!disposed && enabled) {
+          stopScheduler = startAppUpdateScheduler(
+            checkForAppUpdate,
+            setAppUpdate,
+          );
+        }
+      })
+      .catch(() => {
+        // Fail closed: the native command also refuses checks when consent is
+        // absent or malformed, so persistence failure cannot create traffic.
+      });
+
+    return () => {
+      disposed = true;
+      stopScheduler?.();
+    };
+  }, [enabled, identity, setAppUpdate]);
 }

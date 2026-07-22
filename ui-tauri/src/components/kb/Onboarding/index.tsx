@@ -18,6 +18,7 @@ import {
   type ImportProjectSelection,
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
+import { setAppUpdateChecksEnabled } from "@/lib/appUpdate";
 import {
   bookIdentityKey,
   useUiStore,
@@ -376,6 +377,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       }
       await invokeProvider("ai.providers.set_default", { name: providerName });
     }
+    // Persist the app-wide consent before identity makes the delayed update
+    // scheduler eligible to start. A disabled choice therefore reaches the
+    // native shell and packaged CLI without any intervening GitHub request.
+    await setAppUpdateChecksEnabled(form.updateChecksEnabled);
     const identity: Identity = {
       name: form.profile.trim() || "Private",
       workspace: form.workspace.trim() || "My Books",

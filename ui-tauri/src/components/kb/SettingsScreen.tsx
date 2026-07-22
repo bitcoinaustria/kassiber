@@ -38,6 +38,7 @@ import {
 } from "@/daemon/transport";
 import { confirmAction } from "@/lib/confirmAction";
 import { shouldRefreshTouchIdPassphrase } from "@/lib/appLock";
+import { setAppUpdateChecksEnabled } from "@/lib/appUpdate";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
@@ -117,12 +118,21 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     (s) => s.setDeveloperToolsEnabled,
   );
   const automaticUpdateChecks = useUiStore((s) => s.automaticUpdateChecks);
-  const setAutomaticUpdateChecks = useUiStore(
-    (s) => s.setAutomaticUpdateChecks,
-  );
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const addNotification = useUiStore((s) => s.addNotification);
+  const persistAutomaticUpdateChecks = React.useCallback(
+    (enabled: boolean) => {
+      void setAppUpdateChecksEnabled(enabled).catch(() => {
+        addNotification({
+          title: t("privacy.updatesSaveFailedTitle"),
+          body: t("privacy.updatesSaveFailedBody"),
+          tone: "error",
+        });
+      });
+    },
+    [addNotification, t],
+  );
   const dataMode = useUiStore((s) => s.dataMode);
   const deferredConnectionSetup = useUiStore(
     (s) => s.deferredConnectionSetup,
@@ -1024,7 +1034,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             clearClipboard={clearClipboard}
             setClearClipboard={setClearClipboard}
             automaticUpdateChecks={automaticUpdateChecks}
-            setAutomaticUpdateChecks={setAutomaticUpdateChecks}
+            setAutomaticUpdateChecks={persistAutomaticUpdateChecks}
             backends={backends}
             aiFeaturesEnabled={aiFeaturesEnabled}
             onEditBackend={openEditBackend}

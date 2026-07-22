@@ -200,7 +200,10 @@ export interface UiState {
   identity: Identity | null;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
-  /** User-controlled desktop release polling preference. */
+  /**
+   * Legacy storage key for the app-wide GitHub update-check permission. It now
+   * gates automatic, menu, native, and packaged CLI checks—not only polling.
+   */
   automaticUpdateChecks: boolean;
   /** Latest native GitHub release check; transient and never persisted. */
   appUpdate: AppUpdateCheck | null;
@@ -514,7 +517,10 @@ export const useUiStore = create<UiState>()(
       setDeveloperToolsEnabled: (enabled) =>
         set({ developerToolsEnabled: enabled }),
       setAutomaticUpdateChecks: (enabled) =>
-        set({ automaticUpdateChecks: enabled }),
+        set({
+          automaticUpdateChecks: enabled,
+          ...(enabled ? {} : { appUpdate: null }),
+        }),
       setAppUpdate: (appUpdate) => set({ appUpdate }),
       setAssistantModelSelection: (assistantModelSelection) =>
         set({ assistantModelSelection }),

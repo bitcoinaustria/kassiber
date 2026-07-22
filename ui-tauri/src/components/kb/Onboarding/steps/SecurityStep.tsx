@@ -143,6 +143,16 @@ export const SecurityStep = ({
           />
         )}
 
+        <CheckRow
+          id="allow-update-checks"
+          checked={form.updateChecksEnabled}
+          onCheckedChange={(checked) =>
+            update("updateChecksEnabled", checked)
+          }
+          label={t("security.updateChecks")}
+          description={t("security.updateChecksDescription")}
+        />
+
         <OnboardingStepActions>
           <Button
             type="submit"

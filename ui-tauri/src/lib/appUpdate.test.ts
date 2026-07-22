@@ -81,6 +81,7 @@ describe("app update checks", () => {
     const openUrl = vi.fn().mockResolvedValue(undefined);
 
     await runManualAppUpdateCheck({
+      isEnabled: () => true,
       check: vi.fn().mockResolvedValue(result),
       setUpdate,
       showDialog,
@@ -103,6 +104,7 @@ describe("app update checks", () => {
     const openUrl = vi.fn().mockResolvedValue(undefined);
 
     await runManualAppUpdateCheck({
+      isEnabled: () => true,
       check: vi.fn().mockResolvedValue({
         currentVersion: "0.23.0",
         latestVersion: "0.23.0",
@@ -129,6 +131,7 @@ describe("app update checks", () => {
     const showDialog = vi.fn().mockResolvedValue("OK");
 
     await runManualAppUpdateCheck({
+      isEnabled: () => true,
       check: vi.fn().mockRejectedValue(new Error("offline")),
       setUpdate,
       showDialog,
@@ -139,6 +142,25 @@ describe("app update checks", () => {
     expect(showDialog).toHaveBeenCalledWith(
       expect.stringContaining("could not check GitHub"),
       expect.objectContaining({ kind: "error" }),
+    );
+  });
+
+  it("does not invoke the native checker when consent is disabled", async () => {
+    const check = vi.fn();
+    const showDialog = vi.fn().mockResolvedValue("OK");
+
+    await runManualAppUpdateCheck({
+      isEnabled: () => false,
+      check,
+      setUpdate: vi.fn(),
+      showDialog,
+      openUrl: vi.fn(),
+    });
+
+    expect(check).not.toHaveBeenCalled();
+    expect(showDialog).toHaveBeenCalledWith(
+      expect.stringContaining("Update checks are disabled"),
+      expect.objectContaining({ kind: "info" }),
     );
   });
 });

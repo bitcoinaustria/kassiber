@@ -150,13 +150,17 @@ so no separate Python install is needed. Settings can install a user-local
 `kassiber` terminal launcher without administrator privileges. Gatekeeper /
 SmartScreen first-launch handling lives in
 [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
-With **Settings → Privacy → Check automatically** enabled (the default), the
-desktop checks GitHub for a newer release after launch and once daily while
-open. A newer version replaces the small version label in the bottom-left
+Setup asks whether Kassiber may contact GitHub for update metadata; the
+recommended choice is enabled and can later be changed under **Settings →
+Privacy → Allow GitHub update checks**. When enabled, the desktop checks for a
+newer release after launch and once daily while open. A newer version replaces
+the small version label in the bottom-left
 sidebar with an underlined `update available · vLatest` link to the GitHub
 release page. On macOS, **Kassiber → Check for Updates…** performs the same
 check on demand and can open that release page. Downloading and installing
-remain manual. The notice itself trusts HTTPS and control of the Kassiber
+remain manual. Disabling the setting blocks automatic, native-menu, and CLI
+update checks; the shared preference fails closed when missing or malformed.
+The notice itself trusts HTTPS and control of the Kassiber
 GitHub repository. Release builds now include a Sparrow-style versioned
 SHA-256 manifest; once Bitcoin Austria publishes its permanent OpenPGP release
 key, signed releases will add the matching `.txt.asc` detached signature.
@@ -177,7 +181,11 @@ Installed CLI builds use the same release metadata without delaying normal
 commands: human terminal runs in table mode show a cached update notice and
 refresh stale metadata in the background for the next run. Machine, structured,
 non-interactive, daemon, and source-checkout runs do not check automatically.
-Run `kassiber update` for an explicit check. A Homebrew cask or formula install
+The desktop setup choice is shared with the CLI. CLI-only users can run
+`kassiber update --enable-checks` to persist consent and check immediately,
+`kassiber update --disable-checks` to revoke it without network access, and
+`kassiber update --status` to inspect it locally. Plain `kassiber update`
+checks only while consent remains enabled. A Homebrew cask or formula install
 gets its exact manual `brew upgrade` command; other installs get the GitHub
 release link.
 

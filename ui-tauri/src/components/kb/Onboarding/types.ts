@@ -40,6 +40,7 @@ export interface OnboardingForm {
   recoveryAcknowledged: boolean;
   plaintextAcknowledged: boolean;
   migrateCredentials: boolean;
+  updateChecksEnabled: boolean;
   backendSetupMode: BackendSetupMode;
   backendKind: BackendKind;
   backendName: string;

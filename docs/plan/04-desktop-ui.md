@@ -705,12 +705,14 @@ Per [01-stack-decision.md](01-stack-decision.md) and
 [SECURITY.md](../../SECURITY.md): **release notification is not auto-update.**
 
 - The Rust shell may query a fixed GitHub releases endpoint ten seconds after
-  launch and daily while open when the persisted automatic-check preference is
-  enabled. Redirects are refused and responses are bounded.
-- macOS exposes a native **Check for Updates…** action regardless of the
-  automatic preference. A newer release is always opened manually in the
-  default browser; Kassiber never selects, downloads, installs, or executes an
-  asset.
+  launch and daily while open only after setup persists the shared update-check
+  permission. Redirects are refused and responses are bounded.
+- macOS exposes a native **Check for Updates…** action, but it does not invoke
+  the native network command while permission is disabled. A newer release is
+  always opened manually in the default browser; Kassiber never selects,
+  downloads, installs, or executes an asset.
+- The native command and packaged CLI independently read the same owner-only
+  global consent file and fail closed when it is missing, malformed, or false.
 - The update announcement relies on HTTPS plus GitHub repository control.
   Release builds carry a versioned SHA-256 manifest; future signed releases add
   a detached OpenPGP signature verified against Kassiber's independently

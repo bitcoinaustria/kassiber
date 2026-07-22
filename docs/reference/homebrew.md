@@ -138,8 +138,10 @@ brew upgrade --cask bitcoinaustria/kassiber/kassiber
 brew upgrade bitcoinaustria/kassiber/kassiber-cli
 ```
 
-`kassiber update` performs an explicit foreground check and shows the same
-guidance. Kassiber never invokes either Homebrew command itself. Machine,
+`kassiber update --enable-checks` persists the app-wide permission and performs
+the first foreground check. Later `kassiber update` calls show the same guidance
+while permission remains enabled; `--disable-checks` revokes it without network
+access. Kassiber never invokes either Homebrew command itself. Machine,
 structured-format, non-interactive, daemon, redirected-output, and
 source-checkout runs do not perform the automatic check.
 

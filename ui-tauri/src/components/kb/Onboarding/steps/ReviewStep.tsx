@@ -27,6 +27,7 @@ type ReviewArea =
   | "tax"
   | "sync"
   | "ai"
+  | "updates"
   | "storage"
   | "secrets";
 
@@ -195,6 +196,16 @@ function reviewRows(
       value: aiValue(t, form),
       note: aiNote(t, form),
       step: "ai",
+    },
+    {
+      areaKey: "updates",
+      value: form.updateChecksEnabled
+        ? t("review.updates.valueEnabled")
+        : t("review.updates.valueDisabled"),
+      note: form.updateChecksEnabled
+        ? t("review.updates.noteEnabled")
+        : t("review.updates.noteDisabled"),
+      step: "security",
     },
     {
       areaKey: "storage",

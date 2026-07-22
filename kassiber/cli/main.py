@@ -184,8 +184,10 @@ from ..update_check import (
     check_for_update,
     refresh_cache_silently,
     render_update_status,
+    set_update_checks_enabled,
     show_cached_update_and_refresh,
     supports_color,
+    update_checks_enabled,
 )
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 from .chat import run_chat_command
@@ -913,9 +915,25 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
-    sub.add_parser(
+    update_release = sub.add_parser(
         "update",
         help="Check for a new release and show the manual update command",
+    )
+    update_preference = update_release.add_mutually_exclusive_group()
+    update_preference.add_argument(
+        "--enable-checks",
+        action="store_true",
+        help="Allow GitHub release checks, persist the choice, and check now",
+    )
+    update_preference.add_argument(
+        "--disable-checks",
+        action="store_true",
+        help="Disable all GitHub release checks without contacting GitHub",
+    )
+    update_preference.add_argument(
+        "--status",
+        action="store_true",
+        help="Show the persisted update-check permission without contacting GitHub",
     )
     verify_release = sub.add_parser(
         "verify-download",
@@ -3171,6 +3189,22 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "status":
         return cmd_status(conn, args)
     if args.command == "update":
+        if args.disable_checks:
+            set_update_checks_enabled(False)
+            return emit(
+                args,
+                {"enabled": False, "contacts_github": False},
+                kind="update.preference",
+            )
+        if args.enable_checks:
+            set_update_checks_enabled(True)
+        if args.status:
+            enabled = update_checks_enabled()
+            return emit(
+                args,
+                {"enabled": enabled, "contacts_github": False},
+                kind="update.preference",
+            )
         result = check_for_update()
         if args.format == "table" and not args.output:
             sys.stdout.write(

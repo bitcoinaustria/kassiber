@@ -3,7 +3,7 @@ mod app_update;
 mod secret_store;
 mod supervisor;
 
-use app_update::check_app_update;
+use app_update::{check_app_update, set_app_update_checks_enabled};
 use base64::Engine;
 #[cfg(target_os = "macos")]
 use secret_store::{
@@ -2682,6 +2682,7 @@ pub fn run() {
             read_ledger_preview_file_base64,
             open_external_url,
             check_app_update,
+            set_app_update_checks_enabled,
             select_import_project_directory,
             activate_import_project,
             clear_import_project,

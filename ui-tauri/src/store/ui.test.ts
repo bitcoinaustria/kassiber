@@ -17,7 +17,6 @@ describe("UI persistence", () => {
   });
 
   it("persists the automatic update preference but not update results", () => {
-    useUiStore.getState().setAutomaticUpdateChecks(false);
     useUiStore.getState().setAppUpdate({
       currentVersion: "0.22.55",
       latestVersion: "0.23.0",
@@ -27,10 +26,12 @@ describe("UI persistence", () => {
       prerelease: false,
       checkedAt: 1_784_688_800,
     });
+    useUiStore.getState().setAutomaticUpdateChecks(false);
 
     const stored = uiStatePartialForStorage(useUiStore.getState());
     expect(stored).toHaveProperty("automaticUpdateChecks", false);
     expect(stored).not.toHaveProperty("appUpdate");
+    expect(useUiStore.getState().appUpdate).toBeNull();
 
     useUiStore.getState().setAutomaticUpdateChecks(true);
     useUiStore.getState().setAppUpdate(null);
