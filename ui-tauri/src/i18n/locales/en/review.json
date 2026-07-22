@@ -275,13 +275,6 @@
     },
     "paired": {
       "label": "Paired",
-      "backToReview": "Back to review",
-      "swapsTitle": "Paired swaps",
-      "transfersTitle": "Paired transfers",
-      "swapsDescription": "Non-Bitcoin asset swaps you've already paired. Open one to change its kind or policy, or unpair it.",
-      "transfersDescription": "Wallet moves and Bitcoin swaps you've already paired with carrying-value treatment. Open one to change its kind or policy, or unpair it.",
-      "swapsEmpty": "No paired swaps yet. Swaps you confirm from the review queue show up here.",
-      "transfersEmpty": "No paired transfers yet. Transfers you confirm from the review queue show up here.",
       "loading": "Loading paired pairs…",
       "loadFailed": "Failed to load paired pairs: {{error}}",
       "pairing": "Pairing",

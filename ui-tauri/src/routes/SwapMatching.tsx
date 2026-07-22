@@ -33,7 +33,6 @@ import {
 } from "react";
 import {
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Check,
   ChevronDown,
@@ -1412,15 +1411,9 @@ function pairFee(pair: PairedSwap) {
  * edit its kind / policy (``ui.transfers.update``) or unpaired
  * (``ui.transfers.unpair``).
  */
-function PairedSwaps({
-  mode,
-  onBackToReview,
-}: {
-  /** Restrict to one rail (the Advanced bulk-review "History" jump); the
-   * History tab passes no mode and shows every settled pairing. */
-  mode?: PairingReviewMode;
-  onBackToReview?: () => void;
-}) {
+/** The History tab: every settled pairing across all rails, grouped by
+ * custody component, with edit/unpair. */
+function PairedSwaps() {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const { data, isLoading, isError, error } =
@@ -1432,33 +1425,12 @@ function PairedSwaps({
   const [unpairTarget, setUnpairTarget] = useState<PairedSwap | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const pairs = useMemo(
-    () =>
-      (data?.data?.pairs ?? []).filter(
-        (pair) => mode === undefined || pairReviewMode(pair) === mode,
-      ),
-    [data, mode],
-  );
+  const pairs = useMemo(() => data?.data?.pairs ?? [], [data]);
   const componentGroups = useMemo(() => groupPairedComponents(pairs), [pairs]);
 
-  const title =
-    mode === undefined
-      ? t("swap.paired.historyTitle")
-      : mode === "transfers"
-        ? t("swap.paired.transfersTitle")
-        : t("swap.paired.swapsTitle");
-  const description =
-    mode === undefined
-      ? t("swap.paired.historyDescription")
-      : mode === "transfers"
-        ? t("swap.paired.transfersDescription")
-        : t("swap.paired.swapsDescription");
-  const emptyText =
-    mode === undefined
-      ? t("swap.paired.historyEmpty")
-      : mode === "transfers"
-        ? t("swap.paired.transfersEmpty")
-        : t("swap.paired.swapsEmpty");
+  const title = t("swap.paired.historyTitle");
+  const description = t("swap.paired.historyDescription");
+  const emptyText = t("swap.paired.historyEmpty");
 
   const handleSave = useCallback(
     async (pair: PairedSwap, kind: PairKind, policy: PairPolicy) => {
@@ -1498,17 +1470,6 @@ function PairedSwaps({
             <h1 className="text-base font-semibold">{title}</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
           </div>
-          {onBackToReview ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn(pageHeaderActionClassName, "shrink-0")}
-              onClick={onBackToReview}
-            >
-              <ArrowLeft className="size-3.5" aria-hidden="true" />
-              <span>{t("swap.paired.backToReview")}</span>
-            </Button>
-          ) : null}
         </header>
 
         {actionError ? (

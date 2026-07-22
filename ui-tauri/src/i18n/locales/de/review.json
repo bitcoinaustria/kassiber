@@ -275,13 +275,6 @@
     },
     "paired": {
       "label": "Gepaart",
-      "backToReview": "Zurück zur Prüfung",
-      "swapsTitle": "Gepaarte Swaps",
-      "transfersTitle": "Gepaarte Übertragungen",
-      "swapsDescription": "Nicht-Bitcoin-Asset-Swaps, die du bereits gepaart hast. Öffne einen, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
-      "transfersDescription": "Wallet-Bewegungen und Bitcoin-Swaps, die du bereits mit Carrying-Value-Behandlung gepaart hast. Öffne eine, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
-      "swapsEmpty": "Noch keine gepaarten Swaps. Swaps, die du aus der Prüfungs-Warteschlange bestätigst, erscheinen hier.",
-      "transfersEmpty": "Noch keine gepaarten Übertragungen. Übertragungen, die du aus der Prüfungs-Warteschlange bestätigst, erscheinen hier.",
       "loading": "Gepaarte Paare werden geladen…",
       "loadFailed": "Gepaarte Paare konnten nicht geladen werden: {{error}}",
       "pairing": "Paarung",

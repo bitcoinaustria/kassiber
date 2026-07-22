@@ -1,10 +1,31 @@
 # 16 — Custody UX north star: the Custody Inbox
 
-Status: implemented — the `/swaps` route now ships the Inbox | History |
-Advanced surface described below (`ui-tauri/src/routes/transfers-custody/
-CustodyInbox.tsx` + decision cards + `inboxModel.ts`); supersedes the
+Status: implemented — the `/swaps` route ships the
+Inbox | Moves & swaps | History | Advanced surface described below
+(`ui-tauri/src/routes/transfers-custody/CustodyInbox.tsx` + decision cards +
+`inboxModel.ts`, plus the restored classic pairing queue); supersedes the
 information architecture shipped in PR #455 while keeping its daemon
 contracts.
+
+**Revision (post-review):** custody contains two different *activities*, and
+the first implementation wrongly fused them into one inbox:
+
+- **Matching** (transfer/swap pairing) — high-volume, evidence-backed, fast
+  one-click confirms. This keeps its dedicated screen (the classic queue
+  with rail logos, leg rows, filters, bulk actions) as the
+  **Moves & swaps** tab. One-card-at-a-time made this fast job slow.
+- **Questions** (missing-wallet gaps + residual follow-ups) — low-volume,
+  careful, tax-consequential judgment calls. Only these live in the
+  **Inbox** decision-card flow.
+
+Boundary to Quarantine: Quarantine is *record-level data completeness* (a
+transaction can't be priced/categorized → held out of reports until its
+facts are fixed, resolved inline on that screen); Custody is
+*relationship-level identity* (which movements belong together; whether
+coins stayed yours) and carries basis. Quarantine deep-links pairing-shaped
+entries into the Moves & swaps queue via `/swaps?focus=<txid>`
+(+`method=ownership_graph`) — users never need to know about the Inbox to
+resolve quarantine.
 An interactive mockup of this design lives at
 [docs/plan/assets/custody-inbox.html](assets/custody-inbox.html) — open it
 directly in a browser (a working copy may also sit in the untracked
@@ -68,34 +89,39 @@ metric filters — and on an email inbox, which every user already knows.
 ### Information architecture
 
 ```
-Custody  (one sidebar item, one badge = open questions, blocker tone when report-blocking)
-├── Inbox      (default) — the unified decision queue
-├── History    — settled decisions as one audit timeline (pairs + bridges +
-│                components + dismissals), with Reopen/Revise/Undo per entry
-└── Advanced   — expert escape hatches, out of the main path:
-                 manual component builder (pre-seeded from a gap when opened
-                 from one), auto-pair rules, saved views, bulk selection,
-                 wallet coverage timeline, custody lineage timeline
+Custody  (one sidebar item, one badge = items to review, blocker tone when report-blocking)
+├── Inbox         (default) — custody questions only: gap candidates +
+│                  residual follow-ups, one decision card at a time
+├── Moves & swaps — the pairing queue: the classic rail-logo table with
+│                  filters, exact/rule bulk actions, and the detail sheet
+├── History       — every settled pairing, grouped by custody component,
+│                  with edit/unpair
+└── Advanced      — expert escape hatches, out of the main path:
+                    manual component builder, full gap records (reopen /
+                    revise corrections), wallet coverage timeline,
+                    custody lineage timeline
 ```
 
-The Inbox unifies gap candidates *and* transfer/swap candidates into **one
-ranked queue** — they are the same user question with different evidence. A
-type chip (Transfer · Swap · Missing wallet) distinguishes them; ranking is
-report-blocking first, then score/coverage/amount (the engine's
-`_candidate_sort_key` order).
+The Inbox ranks questions report-blocking first, then the engine's own
+confidence and amount (mirroring `_candidate_sort_key`); weak search hints
+collapse into a quiet group at the bottom. Matching stays a table because
+matching is a *scanning* activity; questions get cards because questions
+are a *judgment* activity.
 
 ### The screen (master–detail)
 
-**Header = goal, not metrics.** One line of purpose ("4 open questions · 2
-block your 2024 report"), a progress bar (resolved vs. total this cycle), and
-filter chips that *are* the metrics (All / Blocks report / Suggested / Low
-confidence). No passive counter tiles.
+**Header = goal, not metrics.** A real headline ("3 open questions") with
+one muted sub-line ("1 blocks your reports (2021–2023)"), and filter chips
+that *are* the metrics (All / Blocks report / Suggested). No passive counter
+tiles, no reassurance badges, and at most **one** quiet status line (journal
+processing / search capacity) — never a stack of banner cards.
 
 **Queue (left).** Compact rows, each a plain-language sentence:
-"10 BTC left *Ledger cold* → 9.9 BTC arrived *Sparrow hot* 2 days later",
-plus a confidence chip, a "Suggested" spark when `promotion_eligible`, and an
-impact chip ("blocks 2024"). Low-confidence search hints collapse into a
-single expandable group at the bottom. Keyboard: ↑/↓ move, y/n decide.
+"10 BTC left *Ledger cold* → 9.9 BTC arrived *Sparrow hot*", plus **at most
+one** quiet uppercase marker chosen by priority (blocks report > competing
+evidence > follow-up > suggested). Type and confidence live in the card's
+mono eyebrow, not in the queue. Low-confidence search hints collapse into a
+single expandable group at the bottom.
 
 **Decision card (right).** One question per card:
 
@@ -178,7 +204,9 @@ The inbox is a *reshuffling of presentation*, not a new backend surface.
    `ReviewDataTable` internals where they fit, else a thin new list).
 2. Decision card for gap candidates (flow diagram, plain-language evidence,
    inline confirm) on top of the existing plan/apply hooks.
-3. Decision card for transfer/swap candidates (same skeleton, pair/dismiss).
+3. Keep the pairing queue as its own first-class tab — matching is a table
+   activity, not a card activity. (A candidate decision card was built and
+   deliberately removed.)
 4. Residual follow-up card + conflict chooser.
 5. History unification; move rules/bulk/saved-views/coverage/lineage/manual
    form under Advanced.
