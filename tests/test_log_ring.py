@@ -320,8 +320,17 @@ class RingHandlerTest(unittest.TestCase):
 
     def test_formatting_errors_do_not_raise(self):
         ring = LogRing()
-        logger = self._logger(ring)
-        logger.info("synced %d outputs", "not-a-number")
+        handler = RingHandler(ring)
+        record = logging.LogRecord(
+            "kassiber.test.ring_handler",
+            logging.INFO,
+            __file__,
+            0,
+            "synced %d outputs",
+            ("not-a-number",),
+            None,
+        )
+        handler.emit(record)
         records = ring.snapshot()["records"]
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["msg"], "synced %d outputs")

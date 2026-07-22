@@ -354,7 +354,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Frontend package management uses `pnpm` under `ui-tauri/`; use the
   `packageManager` pin in `ui-tauri/package.json`. Keep
   `ui-tauri/pnpm-lock.yaml` committed with any `ui-tauri/package.json` change,
-  do not add npm/yarn lockfiles, and do not bypass the pnpm 90-day minimum
+  do not add npm/yarn lockfiles, and do not bypass the pnpm 14-day minimum
   release-age policy in `ui-tauri/.npmrc` without explicit owner approval.
 - Do not run `npx ...@latest`, `pnpm dlx ...@latest`, shadcn blocks, or other
   remote scaffolders that can rewrite project files unless the user explicitly

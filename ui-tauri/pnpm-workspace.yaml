@@ -6,11 +6,15 @@ allowBuilds:
 
 overrides:
   '@babel/runtime': 7.29.2
+  '@babel/core@<7.29.6': 7.29.6
+  'brace-expansion@<1.1.16': 1.1.16
+  'brace-expansion@>=3.0.0 <5.0.7': 5.0.7
+  'js-yaml@<4.3.0': 4.3.0
 
 onlyBuiltDependencies:
   - esbuild
 
-# Owner-approved one-shot exception for the pinned QR dependency added by the
-# device-sync UI. Keep the 90-day policy for every other package.
+# Narrow exception for a security release still inside the 14-day hold
+# (published 2026-07-08). Remove after 2026-07-22.
 minimumReleaseAgeExclude:
-  - qrcode@1.5.4
+  - brace-expansion@1.1.16
