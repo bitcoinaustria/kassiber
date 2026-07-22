@@ -1,0 +1,18 @@
+{
+  "backend" : "AppKit.NSView.cacheDisplay-own-window-detail",
+  "build" : "1248",
+  "bundle_id" : "at.bitcoinaustria.kassiber.native",
+  "byte_count" : 158850,
+  "captured_at" : "2026-07-12T05:53:28Z",
+  "commit" : "f8978672457f-dirty",
+  "executable_sha256" : "48ef0cc209b8ca3da519a05f3884854c952f73145b10b62c2f36022986f65b03",
+  "file" : "quarantine-en.png",
+  "height" : 1800,
+  "language" : "en",
+  "product" : "kassiber_native",
+  "schema_version" : 1,
+  "screen" : "quarantine",
+  "sha256" : "230b9dafd8d79124bb812006e05ba2151b05a016602ecc1c492f16e29fdd3c96",
+  "version" : "0.22.55",
+  "width" : 2388
+}

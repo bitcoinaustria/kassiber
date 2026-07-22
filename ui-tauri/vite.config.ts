@@ -248,6 +248,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.identify_onchain",
   "ui.connections.sources",
   "ui.connections.btcpay.create",
+  // AddConnectionDialog invokes this existing daemon kind in bridge mode.
+  "ui.connections.bullbitcoin_wallet.create",
   "ui.connections.btcpay.discover",
   "ui.connections.btcpay.test",
   "ui.connections.node.snapshot",

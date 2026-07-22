@@ -14,6 +14,9 @@ webcam-based descriptor and BBQR import.
 The desktop shell includes Rust keyring crates for AI-provider-key native
 storage. This applies only to AI provider API keys; backend tokens, descriptors,
 xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
+The native macOS client uses Textual for assistant Markdown, including its
+SwiftUI Math and Swift Concurrency Extras dependencies, and embeds Sparkle as a
+dormant update scaffold; no update feed is configured in development builds.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
@@ -45,6 +48,11 @@ xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 | `objc2` / `objc2-foundation` | `0.6.4` / `0.3.2` | Rust Objective-C bridge used for macOS LocalAuthentication Touch ID prompts | MIT |
 | `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys | MIT OR Apache-2.0 |
 | `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
+| `Textual` | `0.5.0` | Native macOS assistant Markdown rendering | MIT |
+| `swiftui-math` | `0.1.0` | Math and font-resource rendering used transitively by Textual | MIT |
+| `swift-concurrency-extras` | `1.4.0` | Concurrency utilities used transitively by Textual | MIT |
+| `PrismJS` | `1.29.0` | Syntax highlighting JavaScript embedded by Textual | MIT |
+| `Sparkle` | `2.9.4` | Native macOS Developer ID update scaffold; dormant until a signed feed and public key are configured | MIT-compatible permissive license with bundled BSD/MIT third-party notices |
 
 ## Notable downstream license note
 

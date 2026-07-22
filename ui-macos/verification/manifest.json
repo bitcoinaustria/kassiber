@@ -1,0 +1,346 @@
+{
+  "app_bundle": {
+    "macho_count": 7,
+    "path": "kassiber_native.app",
+    "tree_sha256": "dde32f1a64266f25c54cef49200d3c1027656ffeecc58bd3724a47d0562a9b80"
+  },
+  "archive": {
+    "bytes": 69578144,
+    "path": "kassiber_native-macos-arm64.zip",
+    "sha256": "c60aead95b1bd06086d85f778dd7d63355ec57f213dd40bf1086ef19a0414896"
+  },
+  "build": "1248",
+  "bundle_id": "at.bitcoinaustria.kassiber.native",
+  "capture_backend": "AppKit.NSView.cacheDisplay-own-window-detail",
+  "captures": [
+    {
+      "file": "dashboard-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:17Z",
+        "file": "capture-receipts/dashboard-en.png.capture.json",
+        "sha256": "22e7ed0eb9eee48bdaa0ef79d9d21f47f9fa26754d617062d4b3ef24796298af"
+      },
+      "screen": "dashboard",
+      "sha256": "dcede519d5c27ed04e3378da50c0a3448623676ba1809861bcbe76ed9c0c2e3e",
+      "width": 2388
+    },
+    {
+      "file": "transactions-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:19Z",
+        "file": "capture-receipts/transactions-en.png.capture.json",
+        "sha256": "48de560ede710e8056012ce0e59201fa70a4cd1d8a62f6cf18093e0396568548"
+      },
+      "screen": "transactions",
+      "sha256": "8b1f8e7f710514e8e2c82ca8e071c386bd46c860ddedff037517977ab013c650",
+      "width": 2388
+    },
+    {
+      "file": "wallets-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:21Z",
+        "file": "capture-receipts/wallets-en.png.capture.json",
+        "sha256": "a9126fa6cbe0305a87fb3de2d0a96788f0fc2babf6830523c89a3b8003cc4343"
+      },
+      "screen": "wallets",
+      "sha256": "f2095fad0cfc57d0af6c4520e1e243b3d65b6d9ca585030ac2be52c61997a59d",
+      "width": 2388
+    },
+    {
+      "file": "reports-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:23Z",
+        "file": "capture-receipts/reports-en.png.capture.json",
+        "sha256": "3c7e6b64e11f491a898f9e2a1e4880ee27639dc0e64f230038cc4343b71bd5ef"
+      },
+      "screen": "reports",
+      "sha256": "f26674b14688fd67b5d6f8b28ef6d2b15476c73cd24a6b68c3bff800519a8ae4",
+      "width": 2388
+    },
+    {
+      "file": "journals-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:25Z",
+        "file": "capture-receipts/journals-en.png.capture.json",
+        "sha256": "b66594eb29e09ae7d7ecb16c4762084cbbbcd58a416987c455a833d6ee0b293d"
+      },
+      "screen": "journals",
+      "sha256": "7e5e661c1c43e25a0b9010803291bfcd4d4bfd0b991f545f57e6405d8d75b434",
+      "width": 2388
+    },
+    {
+      "file": "quarantine-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:28Z",
+        "file": "capture-receipts/quarantine-en.png.capture.json",
+        "sha256": "a913fdedcd509b95f57fd6aac0b56663351e5ea5f3e7b3a8c27b9fc7d4166eed"
+      },
+      "screen": "quarantine",
+      "sha256": "230b9dafd8d79124bb812006e05ba2151b05a016602ecc1c492f16e29fdd3c96",
+      "width": 2388
+    },
+    {
+      "file": "swaps-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:30Z",
+        "file": "capture-receipts/swaps-en.png.capture.json",
+        "sha256": "4d6d0f76c53b89b552766f3c244a3860ff304921259b47dbdb8798020681a463"
+      },
+      "screen": "swaps",
+      "sha256": "a01c7176b697e6a5556aaaf6765dd6461b5ea4693fd7e484c0bfe85cadeaebcd",
+      "width": 2388
+    },
+    {
+      "file": "reconcile-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:32Z",
+        "file": "capture-receipts/reconcile-en.png.capture.json",
+        "sha256": "6a1f51a7aeb739d6f09040b81939f8ebd061698007f5eac9d749f10c4e068b16"
+      },
+      "screen": "reconcile",
+      "sha256": "9a8f96670534dca75dcc7d64387de4e8f6711415abab9a7a4f03d17bdd9ed0b4",
+      "width": 2388
+    },
+    {
+      "file": "books-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:34Z",
+        "file": "capture-receipts/books-en.png.capture.json",
+        "sha256": "abd6b7416cfda264d38341b63767578569c35f9cddf463f4906727d5a6678a40"
+      },
+      "screen": "books",
+      "sha256": "d406909d16686840754af2cd44cbde13ed9d1a14c7917df963e077a7b6878f74",
+      "width": 2388
+    },
+    {
+      "file": "connections-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:37Z",
+        "file": "capture-receipts/connections-en.png.capture.json",
+        "sha256": "995b06e1fbf97fc341bd542b236b1b59e376e50329f55244c7ca204fca3b950b"
+      },
+      "screen": "connections",
+      "sha256": "60d811d081fc510458649e863d9c6c89cd5c9f2f6df4589f6f83c5cd1567c8e5",
+      "width": 2388
+    },
+    {
+      "file": "imports-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:39Z",
+        "file": "capture-receipts/imports-en.png.capture.json",
+        "sha256": "77eb4b6a6c04e92a722bb8ab9aab32422ad3ae0fcd1cf4c5b52106a848bbe653"
+      },
+      "screen": "imports",
+      "sha256": "e864cde2756229299246bec54d39e116afd988baa5f63179ab399d4e5642a028",
+      "width": 2388
+    },
+    {
+      "file": "exit-tax-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:42Z",
+        "file": "capture-receipts/exit-tax-en.png.capture.json",
+        "sha256": "63c644df6a5821ebb5c3ea5e37e58eb6a3db6efac1b6e71d05757b830f9ce613"
+      },
+      "screen": "exitTax",
+      "sha256": "4c64f2834746ab63139c8c873d13fa1defa53a09d5819366e0253c1900a07c0c",
+      "width": 2388
+    },
+    {
+      "file": "source-funds-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:44Z",
+        "file": "capture-receipts/source-funds-en.png.capture.json",
+        "sha256": "b04dfbe055f69b3ca14f4698c0035e52f2d93f434854b53960981bdb59a9bbba"
+      },
+      "screen": "sourceFunds",
+      "sha256": "64f9967e6945e3cd7574a538717a9dd9e7f0abbae1916825539142000469f438",
+      "width": 2388
+    },
+    {
+      "file": "activity-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:47Z",
+        "file": "capture-receipts/activity-en.png.capture.json",
+        "sha256": "aba8a8602b3ac9b68057e62ca76ae040ef9617357934e8c6a66bbf337b07f13f"
+      },
+      "screen": "activity",
+      "sha256": "83e75e39ef966b37b994854605d9eb2717cffd1beaa1db4f25fc668ffd49c48c",
+      "width": 2388
+    },
+    {
+      "file": "privacy-mirror-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:50Z",
+        "file": "capture-receipts/privacy-mirror-en.png.capture.json",
+        "sha256": "3115171394f71236daf45940a00ee702a86a7e10a610bb7ecac65ccadd5c958f"
+      },
+      "screen": "privacyMirror",
+      "sha256": "f4acf48b90e23c34388460fa726a772b6cc3f976e6efca8d27743d5f5e46a500",
+      "width": 2388
+    },
+    {
+      "file": "birds-eye-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:53Z",
+        "file": "capture-receipts/birds-eye-en.png.capture.json",
+        "sha256": "6c8be27d6d7af27233128bd61cc330f3f7aa94dc87014fea403580001943c0a9"
+      },
+      "screen": "birdsEye",
+      "sha256": "2b6cfeea3efe420f70976a50b9d10e5079b707d1522dec06a3b4ac9408660ba5",
+      "width": 2388
+    },
+    {
+      "file": "egress-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:55Z",
+        "file": "capture-receipts/egress-en.png.capture.json",
+        "sha256": "be3ab423390e0a1c9e3c38464bbaa0b4ef557544f721418afd0cafce3bd112ca"
+      },
+      "screen": "egress",
+      "sha256": "3f4473cde5b2fa13494f1e199b5a58363468f9678f30c42b67ccfa3291b18aad",
+      "width": 2388
+    },
+    {
+      "file": "logs-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:59Z",
+        "file": "capture-receipts/logs-en.png.capture.json",
+        "sha256": "f1f7ab13d7f5afb0b9be4bd4bbc8531adf459aa601a6939fc8a5f754c957ddcb"
+      },
+      "screen": "logs",
+      "sha256": "e3d98677ee4b6f17c64a995f414565409398cc76ed0d29e4461f24d0f043afce",
+      "width": 2388
+    },
+    {
+      "file": "settings-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:54:03Z",
+        "file": "capture-receipts/settings-en.png.capture.json",
+        "sha256": "4d52e92b12c08b9b4ec021ae0d0de9a406b4bfaec77f28043301e81dc2ce9010"
+      },
+      "screen": "settings",
+      "sha256": "eadfa28a1386f6f4bb58a94462ed947947be8f390d9d0375814d94bd70f581ce",
+      "width": 2388
+    },
+    {
+      "file": "assistant-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:54:07Z",
+        "file": "capture-receipts/assistant-en.png.capture.json",
+        "sha256": "015a96018e60506548ce67afec3b4182fafe818cd9d132ff53c924cd8e9d6cbb"
+      },
+      "screen": "assistant",
+      "sha256": "abafd1c5566c282d872b890caf777b9e263db77ee7a3086a44051c2b3be17eef",
+      "width": 2388
+    },
+    {
+      "file": "foundation-en.png",
+      "height": 1800,
+      "language": "en",
+      "receipt": {
+        "captured_at": "2026-07-12T05:53:07Z",
+        "file": "capture-receipts/foundation-en.png.capture.json",
+        "sha256": "74b654afa7947c1ff442214e861eb7507e21125e44fb96e81f0cd62bded18497"
+      },
+      "screen": "onboarding",
+      "sha256": "14ab59e337ad19204b0b7c200f29ee1f6ed395d7b4e56e436b411f027657769d",
+      "width": 2880
+    },
+    {
+      "file": "dashboard-de.png",
+      "height": 1800,
+      "language": "de-AT",
+      "receipt": {
+        "captured_at": "2026-07-12T05:54:22Z",
+        "file": "capture-receipts/dashboard-de.png.capture.json",
+        "sha256": "489c6e2d34cdfd78360e657068b5800bd65b768033f8762b8b0f9d48bf4c0d84"
+      },
+      "screen": "dashboard",
+      "sha256": "105cbbbc14e1212296dc4ea2533f2dc97854a43dcbeabd40f4c4a75fa9648d14",
+      "width": 2388
+    },
+    {
+      "file": "transactions-de.png",
+      "height": 1800,
+      "language": "de-AT",
+      "receipt": {
+        "captured_at": "2026-07-12T05:54:25Z",
+        "file": "capture-receipts/transactions-de.png.capture.json",
+        "sha256": "5a28e20590ccc27d4fa4938ad1aeccd26906a147b110902cc47bff62f9d93445"
+      },
+      "screen": "transactions",
+      "sha256": "d191b821f2191e0d91add531fb0987c9e5500be49f9bf720386b45a171a556b2",
+      "width": 2388
+    },
+    {
+      "file": "assistant-de.png",
+      "height": 1800,
+      "language": "de-AT",
+      "receipt": {
+        "captured_at": "2026-07-12T05:54:27Z",
+        "file": "capture-receipts/assistant-de.png.capture.json",
+        "sha256": "4be5c08579a805d2609564f65941f576a2c1a25e75a8c3099ec46f969c272f0b"
+      },
+      "screen": "assistant",
+      "sha256": "23ac98819c4ddc094359dcf30e72a7534c721f4c0c43bcc34119c2cbcd319ddb",
+      "width": 2388
+    }
+  ],
+  "commit": "f8978672457f-dirty",
+  "dirty": true,
+  "executable": {
+    "architecture": "arm64",
+    "path": "kassiber_native",
+    "sha256": "48ef0cc209b8ca3da519a05f3884854c952f73145b10b62c2f36022986f65b03"
+  },
+  "icon_sha256": "bd43d341ad7dc5ee6a505a3f098a4f166d5f582f4300f50c2735c6aa3626b37d",
+  "product": "kassiber_native",
+  "schema_version": 2,
+  "sidecar": {
+    "architecture": "arm64",
+    "path": "kassiber-sidecar",
+    "sha256": "76b72c562d50c4d0a559fb983ce7de0783026af762ef434c24835a011817b45a"
+  },
+  "signing": "adhoc",
+  "version": "0.22.55"
+}
