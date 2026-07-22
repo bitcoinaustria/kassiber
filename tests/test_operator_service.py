@@ -17,6 +17,7 @@ from kassiber.db import (
     database_instance_id,
     open_db,
     resolve_database_path,
+    set_setting,
 )
 from kassiber.errors import AppError
 from kassiber.operator import runner as operator_runner
@@ -1155,6 +1156,8 @@ class OperatorServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             create_empty_encrypted_database(resolve_database_path(tmp), passphrase)
             connection = open_db(tmp, passphrase=passphrase)
+            set_setting(connection, "app_version", "test")
+            connection.commit()
             connection.close()
             service = OperatorService("generation", run_cli_operation)
             try:
@@ -1257,6 +1260,8 @@ class OperatorServiceTest(unittest.TestCase):
             passphrase = "x" * 5000
             create_empty_encrypted_database(resolve_database_path(tmp), passphrase)
             connection = open_db(tmp, passphrase=passphrase)
+            set_setting(connection, "app_version", "test")
+            connection.commit()
             expected_database_identity = database_instance_id(connection)
             connection.close()
             project = canonical_project(tmp)

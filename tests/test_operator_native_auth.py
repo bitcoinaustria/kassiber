@@ -10,7 +10,9 @@ from pathlib import Path
 
 from kassiber.errors import AppError
 from kassiber.operator.native_auth import (
+    _MACOS_APP_EXECUTABLE_NAME,
     _helper_path,
+    _signed_helper_code,
     _spawn_validated_helper,
     broker_touch_id_passphrase,
     invalidate_operator_native_auth,
@@ -59,7 +61,13 @@ class OperatorNativeAuthTest(unittest.TestCase):
 
     def test_helper_identity_detects_replacement_before_secret_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            helper = Path(tmp) / "Kassiber.app" / "Contents" / "MacOS" / "Kassiber"
+            helper = (
+                Path(tmp)
+                / "Kassiber.app"
+                / "Contents"
+                / "MacOS"
+                / _MACOS_APP_EXECUTABLE_NAME
+            )
             helper.parent.mkdir(parents=True)
             helper.write_bytes(b"signed-helper")
             helper.chmod(0o700)
@@ -80,6 +88,26 @@ class OperatorNativeAuthTest(unittest.TestCase):
                     _helper_path(expected)
 
         self.assertEqual(raised.exception.code, "native_auth_helper_mismatch")
+
+    def test_signed_helper_path_matches_packaged_macos_executable(self) -> None:
+        helper = (
+            Path("/Applications")
+            / "Kassiber.app"
+            / "Contents"
+            / "MacOS"
+            / _MACOS_APP_EXECUTABLE_NAME
+        )
+        identity = mock.Mock()
+        with mock.patch(
+            "kassiber.operator.native_auth._inspect_code",
+            return_value=identity,
+        ) as inspect:
+            self.assertIs(_signed_helper_code(helper), identity)
+            with self.assertRaises(AppError) as raised:
+                _signed_helper_code(helper.with_name("Kassiber"))
+
+        self.assertEqual(raised.exception.code, "native_auth_unavailable")
+        inspect.assert_called_once_with(str(helper))
 
     def test_rotation_generation_changes_opaque_native_account(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

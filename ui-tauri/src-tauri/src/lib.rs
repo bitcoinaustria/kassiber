@@ -1682,7 +1682,26 @@ fn terminal_command_target_path_for(
     }
     #[cfg(not(target_os = "linux"))]
     let _ = appimage;
-    current_exe()
+    let executable = current_exe()?;
+    #[cfg(target_os = "macos")]
+    if let Some(launcher) = bundled_macos_terminal_launcher(&executable) {
+        return Ok(launcher);
+    }
+    Ok(executable)
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn bundled_macos_terminal_launcher(executable: &Path) -> Option<PathBuf> {
+    let macos_dir = executable.parent()?;
+    if macos_dir.file_name()? != "MacOS" {
+        return None;
+    }
+    let launcher = macos_dir
+        .parent()?
+        .join("Resources")
+        .join("bin")
+        .join(TERMINAL_COMMAND_NAME);
+    launcher.is_file().then_some(launcher)
 }
 
 #[cfg(target_os = "windows")]
@@ -1926,11 +1945,32 @@ fn terminal_command_contents(target_path: &Path) -> String {
 
 #[cfg(not(target_os = "windows"))]
 fn terminal_command_contents(target_path: &Path) -> String {
+    let cli_flag = if bundled_terminal_launcher_path(target_path) {
+        ""
+    } else {
+        " --cli"
+    };
     format!(
-        "#!/bin/sh\n# {TERMINAL_COMMAND_MARKER}\n# target: {}\nexec {} --cli \"$@\"\n",
+        "#!/bin/sh\n# {TERMINAL_COMMAND_MARKER}\n# target: {}\nexec {}{cli_flag} \"$@\"\n",
         target_path.to_string_lossy(),
         shell_single_quote(&target_path.to_string_lossy())
     )
+}
+
+#[cfg(not(target_os = "windows"))]
+fn bundled_terminal_launcher_path(path: &Path) -> bool {
+    path.file_name().and_then(|name| name.to_str()) == Some(TERMINAL_COMMAND_NAME)
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            == Some("bin")
+        && path
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            == Some("Resources")
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -3526,8 +3566,8 @@ fn verified_codesign_identity(path: &Path) -> Result<(String, String), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        clear_desktop_biometric_stale_guard_if_matches, copy_report_export_directory,
-        database_is_encrypted, desktop_biometric_stale_generation,
+        bundled_macos_terminal_launcher, clear_desktop_biometric_stale_guard_if_matches,
+        copy_report_export_directory, database_is_encrypted, desktop_biometric_stale_generation,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
         inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
@@ -3676,12 +3716,50 @@ mod tests {
     }
 
     #[test]
-    fn terminal_command_launcher_targets_desktop_executable() {
+    fn terminal_command_launcher_targets_desktop_executable_when_no_bundle_launcher_is_used() {
         let target = Path::new("/Applications/Kassiber.app/Contents/MacOS/kassiber-ui");
         let contents = terminal_command_contents(target);
         assert!(contents.contains("Managed by Kassiber Settings"));
         assert!(contents.contains("--cli"));
         assert!(contents.contains("kassiber-ui"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn terminal_command_launcher_targets_bundled_console_launcher_without_cli_flag() {
+        let target = Path::new("/Applications/Kassiber.app/Contents/Resources/bin/kassiber");
+        let contents = terminal_command_contents(target);
+        assert!(contents.contains("Managed by Kassiber Settings"));
+        assert!(contents.contains("Resources/bin/kassiber"));
+        assert!(!contents.contains(" --cli"));
+    }
+
+    #[test]
+    fn bundled_macos_launcher_is_derived_only_from_an_app_executable() {
+        let root = unique_temp_dir("macos-terminal-launcher");
+        let executable = root
+            .join("Kassiber.app")
+            .join("Contents")
+            .join("MacOS")
+            .join("kassiber-ui");
+        let launcher = root
+            .join("Kassiber.app")
+            .join("Contents")
+            .join("Resources")
+            .join("bin")
+            .join("kassiber");
+        fs::create_dir_all(executable.parent().expect("macOS directory"))
+            .expect("create macOS directory");
+        fs::create_dir_all(launcher.parent().expect("launcher directory"))
+            .expect("create launcher directory");
+        fs::write(&launcher, "#!/bin/sh\n").expect("write launcher");
+
+        assert_eq!(bundled_macos_terminal_launcher(&executable), Some(launcher));
+        assert_eq!(
+            bundled_macos_terminal_launcher(Path::new("/usr/bin/kassiber-ui")),
+            None
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

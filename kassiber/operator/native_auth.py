@@ -21,6 +21,7 @@ from .service import _wipe
 
 OPERATOR_NATIVE_AUTH_GENERATION_SETTING = "operator_native_auth_generation"
 _NATIVE_AUTH_IDENTIFIER = "at.bitcoinaustria.kassiber"
+_MACOS_APP_EXECUTABLE_NAME = "kassiber-ui"
 
 
 @dataclass(frozen=True)
@@ -316,7 +317,11 @@ def _signed_helper_code(helper: Path) -> _CodeIdentity:
         ),
         None,
     )
-    expected = bundle / "Contents" / "MacOS" / "Kassiber" if bundle else None
+    expected = (
+        bundle / "Contents" / "MacOS" / _MACOS_APP_EXECUTABLE_NAME
+        if bundle
+        else None
+    )
     if expected is None or helper != expected:
         raise AppError(
             "the native authentication helper is outside the Kassiber app bundle",

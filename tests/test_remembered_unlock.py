@@ -579,6 +579,16 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertEqual(returncode, 0)
             self.assertEqual(payload["kind"], "secrets.init")
 
+            app_init_fd = _passphrase_fd(old_passphrase)
+            payload, returncode, _stderr = _run_cli(
+                data_root,
+                "--db-passphrase-fd",
+                str(app_init_fd),
+                "init",
+            )
+            self.assertEqual(returncode, 0)
+            self.assertEqual(payload["kind"], "init")
+
             # Desktop enrollment alone must not opt the CLI into credential reads.
             self.keyring.set_password(
                 LEGACY_SHARED_PASSPHRASE_SERVICE,
@@ -918,6 +928,15 @@ class RememberedUnlockCliTests(unittest.TestCase):
                 "--new-passphrase-fd",
                 str(init_fd),
             )
+            app_init_fd = _passphrase_fd(old_passphrase)
+            payload, returncode, _stderr = _run_cli(
+                data_root,
+                "--db-passphrase-fd",
+                str(app_init_fd),
+                "init",
+            )
+            self.assertEqual(returncode, 0)
+            self.assertEqual(payload["kind"], "init")
             _enroll_test_credential(data_root, old_passphrase)
             self.keyring.fail_writes = True
 

@@ -116,6 +116,8 @@ def _run_cli(home: Path, *args: str, input_text: str | None = None) -> subproces
 
 @pytest.mark.parametrize("command", (("status",), ("health",), ("next-actions",)))
 def test_machine_entrypoints_are_real_subprocesses(tmp_path, command):
+    initialized = _run_cli(tmp_path, "--machine", "init")
+    assert initialized.returncode == 0, initialized.stderr
     result = _run_cli(tmp_path, "--machine", *command)
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)

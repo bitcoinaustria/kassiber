@@ -192,7 +192,17 @@ jobs:
           expected_commit="$(git rev-parse --short=12 HEAD)"
           "$cli" --help >/dev/null
           "$cli" --version | grep "$expected_commit"
-          "$cli" --data-root "$RUNNER_TEMP/kassiber-status-smoke" --machine status >/dev/null
+          status_root="$RUNNER_TEMP/kassiber-status-smoke"
+          status_json="$RUNNER_TEMP/kassiber-status-smoke.json"
+          if "$cli" --data-root "$status_root" --machine status > "$status_json"; then
+            echo "Fresh status unexpectedly succeeded before kassiber init" >&2
+            exit 1
+          fi
+          assert_json_value "$status_json" kind error
+          assert_json_value "$status_json" error.code not_initialized
+          "$cli" --data-root "$status_root" --machine init >/dev/null
+          "$cli" --data-root "$status_root" --machine status > "$status_json"
+          assert_json_value "$status_json" kind status
 
           daemon_root="$RUNNER_TEMP/kassiber-daemon-smoke"
           printf '{"request_id":"smoke-1","kind":"daemon.shutdown"}\n' \
