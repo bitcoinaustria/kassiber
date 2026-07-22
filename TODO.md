@@ -870,9 +870,26 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   explicit user-local Settings launcher, and local macOS builds support
   `--install-cli` through that same manager; desktop and CLI-only Debian
   packages replace one another cleanly; no launcher path autostarts Kassiber
+- [x] Linux package-channel foundation: surface-specific Debian/RPM/AUR/Nix
+  install-context markers, fail-closed signed APT/DNF repository builders,
+  rebuildable desktop/CLI SRPMs, AUR and Nix renderers, guarded COPR/OBS/channel
+  publication, tag/version release gating, isolated package-manager lifecycle
+  tests, and the phased policy/maintenance roadmap in
+  [docs/reference/linux-packaging.md](docs/reference/linux-packaging.md)
+- [ ] Complete the external accounts, protected environment, credentials,
+  signing-key custody, hosting, staged publication, and first-release checks in
+  [docs/reference/linux-packaging-operator-todo.md](docs/reference/linux-packaging-operator-todo.md);
+  do not publish package-manager install commands before their live candidates
+  and signatures are verified
+- [ ] Lower the frozen Linux CLI glibc floor before promising RHEL/older
+  openSUSE support; Fedora 43/44 RPM lifecycle CI is the current RPM support
+  boundary, and OBS starts with Tumbleweed only after its external build passes
+- [ ] Add full Linux ARM64 packaging only after pinned BDK and LWK Linux
+  aarch64 bindings exist or are reproducibly built; use native ARM CI and ship
+  both observers across CLI, Debian, AppImage, and channel metadata
 - [ ] Production code-signing & distribution: Apple Developer ID + notarization
-  (macOS), Windows EV cert, and GPG-signed `.deb`; flip `tauri.conf.json`
-  `bundle.active` for production
+  (macOS), Windows EV cert, signed Linux repository metadata and applicable
+  artifact signatures; flip `tauri.conf.json` `bundle.active` for production
 - [ ] User-initiated update check only; no background polling
 
 ## Later backlog

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "product": "kassiber",
+  "surface": "desktop",
+  "artifact_kind": "deb",
+  "package_name": "kassiber",
+  "package_manager": "dpkg",
+  "repository_manager": "apt",
+  "repository_provenance": "probe-required",
+  "executables": [
+    "/usr/bin/kassiber-ui",
+    "/usr/bin/kassiber"
+  ]
+}

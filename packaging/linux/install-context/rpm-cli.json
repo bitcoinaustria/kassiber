@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "product": "kassiber",
+  "surface": "cli",
+  "artifact_kind": "rpm",
+  "package_name": "kassiber-cli",
+  "package_manager": "rpm",
+  "repository_manager": "dnf",
+  "repository_provenance": "probe-required",
+  "executables": [
+    "/usr/bin/kassiber"
+  ]
+}

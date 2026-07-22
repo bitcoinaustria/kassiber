@@ -46,7 +46,8 @@
           "kassiber-cli"
         ],
         "files": {
-          "/usr/bin/kassiber": "bin/kassiber-linux"
+          "/usr/bin/kassiber": "bin/kassiber-linux",
+          "/usr/lib/kassiber/install-context.json": "../../packaging/linux/install-context/deb-desktop.json"
         }
       }
     },

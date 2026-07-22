@@ -6,12 +6,22 @@ on:
       - ".github/workflows/prerelease-binaries.yml"
       - "pyproject.toml"
       - "uv.lock"
+      - "kassiber/__init__.py"
       - "kassiber/build_info.py"
       - "kassiber/cli/**"
       - "kassiber/operator/**"
       - "scripts/kassiber_pyinstaller_entry.py"
+      - "scripts/build-apt-repository.sh"
+      - "scripts/build-rpm-repository.sh"
       - "scripts/package-cli-deb.sh"
+      - "scripts/package-cli-rpm.sh"
+      - "scripts/package-desktop-rpm.sh"
+      - "scripts/prepare-obs-package.sh"
+      - "scripts/render_aur.py"
+      - "scripts/render_nix.py"
       - "scripts/write_build_info.py"
+      - "packaging/linux/**"
+      - "tests/test_dependency_drift.py"
       - "ui-tauri/package.json"
       - "ui-tauri/pnpm-lock.yaml"
       - "ui-tauri/src-tauri/build.rs"
@@ -110,13 +120,42 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
+      - name: Install Linux RPM tooling
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio rpm
+
       - name: Write packaged build identity
         shell: bash
         env:
           DISPATCH_TAG_NAME: ${{ inputs.tag_name }}
+          DISPATCH_PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
+          uv run --locked python -m unittest \
+            tests.test_dependency_drift.DependencyDriftTests.test_app_version_is_consistent_across_package_metadata
           version="$(uv run --locked python -c 'import kassiber; print(kassiber.__version__)')"
+          release_tag=""
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            release_tag="$GITHUB_REF_NAME"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] \
+              && [ "$DISPATCH_PUBLISH_RELEASE" = "true" ]; then
+            release_tag="$DISPATCH_TAG_NAME"
+          fi
+          if [ -n "$release_tag" ]; then
+            case "$release_tag" in
+              v*) expected_version="${release_tag#v}" ;;
+              *)
+                echo "Release tag must start with v: $release_tag" >&2
+                exit 1
+                ;;
+            esac
+            if [ "$version" != "$expected_version" ]; then
+              echo "Release tag $release_tag does not match package version $version." >&2
+              exit 1
+            fi
+          fi
           package_commit="$(git rev-parse HEAD)"
           package_ref="$GITHUB_REF_NAME"
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$DISPATCH_TAG_NAME" ]; then
@@ -351,6 +390,17 @@ jobs:
               --binary "dist/kassiber${{ matrix.exe_ext }}" \
               --version "$PACKAGE_VERSION" \
               --output "release/${package_name}.deb"
+            scripts/package-cli-rpm.sh \
+              --binary "dist/kassiber${{ matrix.exe_ext }}" \
+              --version "$PACKAGE_VERSION" \
+              --architecture x86_64 \
+              --output "release/${package_name}.rpm" \
+              --source-output "release/${package_name}.src.rpm"
+            rpm_path="$PWD/release/${package_name}.rpm"
+            rpm_root="$(mktemp -d)"
+            (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
+            "$rpm_root/usr/bin/kassiber" --version \
+              | grep "$(git rev-parse --short=12 HEAD)"
           fi
 
       - name: Upload CLI-only artifact
@@ -361,6 +411,7 @@ jobs:
             release/*.tar.gz
             release/*.zip
             release/*.deb
+            release/*.rpm
           if-no-files-found: error
 
       - name: Stage identical CLI as desktop sidecar
@@ -439,6 +490,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            cpio \
             curl \
             file \
             libayatana-appindicator3-dev \
@@ -449,6 +501,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             patchelf \
+            rpm \
             wget
 
       - name: Install frontend dependencies
@@ -543,6 +596,27 @@ jobs:
               -path "*/release/bundle/*" \
               \( -name "*.AppImage" -o -name "*.app" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -print0
           )
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            desktop_deb="$(find release -maxdepth 1 -type f -name '*.deb' -print -quit)"
+            test -n "$desktop_deb"
+            package_version="$(python3 -c 'import json; print(json.load(open("ui-tauri/src-tauri/tauri.conf.json", encoding="utf-8"))["version"])')"
+            export SOURCE_DATE_EPOCH
+            SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+            scripts/package-desktop-rpm.sh \
+              --deb "$desktop_deb" \
+              --version "$package_version" \
+              --architecture x86_64 \
+              --output "release/kassiber-${{ matrix.target }}.rpm" \
+              --source-output "release/kassiber-${{ matrix.target }}.src.rpm"
+            rpm_path="$PWD/release/kassiber-${{ matrix.target }}.rpm"
+            rpm_root="$(mktemp -d)"
+            (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
+            rpm_sidecar="$(find "$rpm_root/usr/lib/Kassiber" \
+              -type f -name 'kassiber-cli*' -print -quit)"
+            test -x "$rpm_sidecar"
+            "$rpm_sidecar" --version \
+              | grep "$(git rev-parse --short=12 HEAD)"
+          fi
           test -n "$(find release -type f -print -quit)"
 
       - name: Upload desktop artifact
@@ -595,9 +669,9 @@ jobs:
           set -euo pipefail
           test -n "$(find release -maxdepth 1 -type f -print -quit)"
 
-          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' ! -name '*.deb' -print -quit | grep -q .; then
+          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' ! -name '*.deb' ! -name '*.rpm' -print -quit | grep -q .; then
             echo "Raw CLI sidecars must not be published as release assets." >&2
-            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' ! -name '*.deb' >&2
+            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.zip' ! -name '*.deb' ! -name '*.rpm' >&2
             exit 1
           fi
 
@@ -631,7 +705,8 @@ jobs:
 
             These artifacts are currently unsigned CLI and desktop builds.
             CLI-only archives are published for macOS, Linux, and Windows;
-            Linux also gets a GUI-free CLI-only Debian package.
+            Linux also gets GUI-free CLI-only Debian/RPM packages, a desktop
+            RPM, and source RPM inputs for COPR or OBS.
             Desktop bundles use the exact same CLI executable, so normal daemon
             calls do not require a separate Python checkout. Native desktop
             installers integrate `kassiber` with the terminal; portable builds

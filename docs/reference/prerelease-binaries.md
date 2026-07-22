@@ -1,20 +1,21 @@
 # Prerelease Binaries
 
-Kassiber is still in early development, so binary builds are deliberately
-opt-in except for version-tag prereleases. Keep normal PR feedback cheap and
-use packaged artifacts only when a human asks for them.
+Kassiber is still in early development. Version tags publish prerelease
+artifacts, while pull requests that touch packaging inputs run the same build
+matrix without publishing.
 
 ## What Runs Automatically
 
-- Pull requests run `.github/workflows/ci.yml` only. They do not build CLI or
-  desktop binaries.
+- Pull requests run `.github/workflows/ci.yml`. Pull requests that touch the
+  release workflow, packaging scripts/metadata, frozen CLI inputs, or Tauri
+  bundle inputs also run `.github/workflows/prerelease-binaries.yml` without
+  publishing.
 - Pushes to `main` run `.github/workflows/ci.yml` only.
 - Pushes of tags matching `v*` run `.github/workflows/prerelease-binaries.yml`
   and publish the resulting artifacts to a GitHub prerelease.
 
-Do not add a `pull_request` trigger to `prerelease-binaries.yml` unless the
-user explicitly asks for binary builds on every PR. For one-off PR or branch
-artifacts, use a manual workflow run instead.
+Keep the packaging workflow's pull-request path filter narrow. For one-off
+branch artifacts outside those paths, use a manual workflow run instead.
 
 ## Manual Runs
 
@@ -76,13 +77,15 @@ The workflow currently builds:
 
 - CLI-only releases: macOS arm64 and Linux x86_64 one-file PyInstaller
   binaries as `.tar.gz` archives, Windows x86_64 as a `.zip`, and Linux
-  x86_64 additionally as a GUI-free `kassiber-cli` `.deb`. The extracted
+  x86_64 additionally as GUI-free `kassiber-cli` `.deb`, binary `.rpm`, and
+  rebuildable `.src.rpm` packages. The extracted
   executable is named `kassiber` (`kassiber.exe` on Windows). These artifacts
   do not require the desktop app. Linux is built on Ubuntu 22.04 to keep the
   glibc floor aligned with the AppImage build.
-- Desktop previews: a macOS arm64 `.app` zip plus `.dmg`, Linux `.AppImage`
-  plus `.deb`, and Windows `.msi` plus NSIS setup `.exe`, published with short
-  user-facing filenames. Each desktop preview includes the exact one-file
+- Desktop previews: a macOS arm64 `.app` zip plus `.dmg`, Linux `.AppImage`,
+  `.deb`, binary `.rpm`, and rebuildable `.src.rpm`, and Windows `.msi` plus
+  NSIS setup `.exe`, published with short user-facing filenames. Each desktop
+  preview includes the exact one-file
   Kassiber CLI executable produced by the matching CLI-only matrix leg.
 
 macOS is Apple Silicon only. Intel macOS builds were dropped deliberately:
@@ -96,6 +99,11 @@ workflow run can select `release_channel=release` to publish the same verified
 artifact set as a stable GitHub release. The embedded `BUILD_INFO.json` reports
 the selected `prerelease` or `release` channel.
 
+Tag and publishing runs fail before building when the tag without its leading
+`v` does not exactly match the Python package version. This prevents a release
+tag, Debian package metadata, Homebrew definition, and embedded build identity
+from advertising different versions.
+
 Pull requests that change the release workflow, frozen-CLI inputs, or Tauri
 packaging files run the same cross-platform CLI and desktop build matrix without
 publishing. These CI artifacts identify themselves as `dev`; tag and manual
@@ -107,9 +115,13 @@ GitHub release tag already supplies it:
 ```text
 kassiber-cli-linux-x64.tar.gz
 kassiber-cli-linux-x64.deb
+kassiber-cli-linux-x64.rpm
+kassiber-cli-linux-x64.src.rpm
 kassiber-cli-macos-arm64.tar.gz
 kassiber-cli-windows-x64.zip
 kassiber-linux-x64.deb
+kassiber-linux-x64.rpm
+kassiber-linux-x64.src.rpm
 kassiber-linux-x64.AppImage
 kassiber-macos-arm64.app.zip
 kassiber-macos-arm64.dmg
@@ -251,6 +263,11 @@ CLI-only archives are intentionally portable: extract them and place the
 They do not edit PATH or require a GUI. Linux users can instead install the
 CLI-only `kassiber-cli-linux-x64.deb`; it owns `/usr/bin/kassiber`, conflicts
 cleanly with the desktop Debian package, and has no GTK/WebKit dependency.
+Both Debian and RPM package surfaces own
+`/usr/lib/kassiber/install-context.json`; the surface-specific marker is
+documented in [Linux packaging](linux-packaging.md). It identifies the native
+package context but deliberately does not claim that APT/DNF installed a
+directly downloaded `.deb`/`.rpm`.
 
 ## Commit Identity
 

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "product": "kassiber",
+  "surface": "cli",
+  "artifact_kind": "deb",
+  "package_name": "kassiber-cli",
+  "package_manager": "dpkg",
+  "repository_manager": "apt",
+  "repository_provenance": "probe-required",
+  "executables": [
+    "/usr/bin/kassiber"
+  ]
+}
