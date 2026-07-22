@@ -21,6 +21,7 @@ from kassiber.operator.server import (
     main,
 )
 from kassiber.errors import AppError
+from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
 
 
 class OperatorServerTest(unittest.TestCase):
@@ -486,7 +487,10 @@ class OperatorServerTest(unittest.TestCase):
     def test_linux_rejects_caller_selected_persistent_runtime_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.server.sys.platform", "linux"
-        ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}), mock.patch(
+        ), mock.patch.dict(
+            os.environ,
+            {"XDG_RUNTIME_DIR": tmp, TEST_RUNTIME_OVERRIDE_ENV: "1"},
+        ), mock.patch(
             "kassiber.operator.server._linux_logind_user_alive",
             return_value=None,
         ), mock.patch("kassiber.operator.server.listen") as listen:
