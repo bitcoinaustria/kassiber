@@ -153,15 +153,21 @@ It builds the PyInstaller sidecar as
 `ui-tauri/src-tauri/binaries/kassiber-cli-aarch64-apple-darwin`, verifies that
 the executable is arm64, and runs Tauri with
 `--target aarch64-apple-darwin --bundles app,dmg`. The result is a full
-unsigned desktop app and DMG under
-`ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
+unsigned `Kassiber Dev.app` and DMG under
+`ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`. The local
+helper overrides both the product name and bundle identifier
+(`at.bitcoinaustria.kassiber.dev`), so it can coexist with an installed
+prerelease `Kassiber.app` without replacing it. Prerelease builds keep the
+production name and identifier from `tauri.conf.json`.
 With `--install-cli`, the helper first smokes the finished app bundle's
 `Contents/Resources/bin/kassiber` launcher and then installs a managed wrapper
 through the desktop binary's same Rust implementation used by Settings. That
 single implementation chooses `~/.local/bin` or `~/bin`, refuses conflicts, and
 adds one marked PATH block to the current shell profile when needed. It never
 starts a daemon or background process; each invocation remains a normal one-shot
-CLI process. Without the flag, a local build does not modify the home directory.
+CLI process. The terminal command is still named `kassiber`, so use
+`--install-cli` only when you intentionally want that command to target the dev
+app. Without the flag, a local build does not modify the home directory.
 
 The helper defaults to Python 3.11 to match the GitHub Actions prerelease
 workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
@@ -179,23 +185,23 @@ The good news for a local build: nothing downloaded it, so there is no
 `com.apple.quarantine` xattr — Gatekeeper is on its softer path.
 
 ```bash
-open ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
+open "ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber Dev.app"
 ```
 
 Expected dialogs and how to clear them:
 
-- **"Kassiber.app" cannot be opened because the developer cannot be
+- **"Kassiber Dev.app" cannot be opened because the developer cannot be
   verified.** — the typical local-build case. Either:
   - Finder → right-click the .app → **Open** → **Open** to record a
     one-time override (macOS remembers the path), or
   - System Settings → Privacy & Security → scroll to the blocked-app
     notice → **Open Anyway**.
-- **"Kassiber.app" is damaged and can't be opened.** — only if a quarantine
+- **"Kassiber Dev.app" is damaged and can't be opened.** — only if a quarantine
   xattr was attached (e.g. you zipped/unzipped the bundle through a tool
   that adds the flag). Strip it:
   ```bash
   xattr -dr com.apple.quarantine \
-    ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
+    "ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber Dev.app"
   ```
 
 Subsequent launches from the same path go through silently. If you rebuild

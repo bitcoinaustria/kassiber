@@ -6,6 +6,8 @@ cd "$ROOT"
 
 TARGET_TRIPLE="aarch64-apple-darwin"
 SIDECAR_NAME="kassiber-cli-${TARGET_TRIPLE}"
+APP_PRODUCT_NAME="Kassiber Dev"
+APP_IDENTIFIER="at.bitcoinaustria.kassiber.dev"
 BINARIES_DIR="$ROOT/ui-tauri/src-tauri/binaries"
 BUNDLES="${BUNDLES:-app,dmg}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
@@ -76,11 +78,12 @@ fi
 # fails with "File exists" if a previous run was killed before its cleanup trap
 # could fire. Create a uniquely-named temp dir (trailing X's) and keep the
 # config file inside it instead.
-TAURI_VERSION_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-version.XXXXXX")"
-trap 'rm -rf "$TAURI_VERSION_DIR"' EXIT
-TAURI_VERSION_CONFIG="$TAURI_VERSION_DIR/version.json"
-printf '{ "version": "%s" }\n' "$APP_VERSION" > "$TAURI_VERSION_CONFIG"
-BUILD_INFO="$TAURI_VERSION_DIR/BUILD_INFO.json"
+TAURI_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-tauri-config.XXXXXX")"
+trap 'rm -rf "$TAURI_CONFIG_DIR"' EXIT
+TAURI_BUILD_CONFIG="$TAURI_CONFIG_DIR/build.json"
+printf '{ "version": "%s", "productName": "%s", "identifier": "%s" }\n' \
+  "$APP_VERSION" "$APP_PRODUCT_NAME" "$APP_IDENTIFIER" > "$TAURI_BUILD_CONFIG"
+BUILD_INFO="$TAURI_CONFIG_DIR/BUILD_INFO.json"
 run uv run --locked --python "$PYTHON_VERSION" python scripts/write_build_info.py \
   --output "$BUILD_INFO" \
   --version "$APP_VERSION" \
@@ -88,9 +91,10 @@ run uv run --locked --python "$PYTHON_VERSION" python scripts/write_build_info.p
   --ref "$(git symbolic-ref --quiet --short HEAD 2>/dev/null || printf detached)" \
   --channel dev
 
-echo "Building Kassiber desktop for macOS arm64 only."
+echo "Building $APP_PRODUCT_NAME desktop for macOS arm64 only."
 echo "Package version: $APP_VERSION"
 echo "Displayed build: $APP_DISPLAY_VERSION ($APP_COMMIT)"
+echo "Bundle identifier: $APP_IDENTIFIER"
 echo "Bundled sidecar: $SIDECAR_NAME"
 echo "Bundles: $BUNDLES"
 echo "Python: $PYTHON_VERSION"
@@ -160,9 +164,9 @@ run pnpm --dir ui-tauri install --frozen-lockfile
 # runs with CI=true, so its shipped DMG is unstyled as well — the layout is
 # cosmetic for an unsigned bundle).
 run env CI=true KASSIBER_BUILD_VERSION="$APP_DISPLAY_VERSION" KASSIBER_BUILD_COMMIT="$APP_COMMIT" \
-  pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci --config "$TAURI_VERSION_CONFIG"
+  pnpm --dir ui-tauri tauri build --target "$TARGET_TRIPLE" --bundles "$BUNDLES" --ci --config "$TAURI_BUILD_CONFIG"
 
-APP_BUNDLE="$ROOT/ui-tauri/src-tauri/target/$TARGET_TRIPLE/release/bundle/macos/Kassiber.app"
+APP_BUNDLE="$ROOT/ui-tauri/src-tauri/target/$TARGET_TRIPLE/release/bundle/macos/$APP_PRODUCT_NAME.app"
 if [ -d "$APP_BUNDLE" ]; then
   run "$APP_BUNDLE/Contents/Resources/bin/kassiber" --version
   run "$APP_BUNDLE/Contents/Resources/bin/kassiber" --help

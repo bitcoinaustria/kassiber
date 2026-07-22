@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 /absolute/path/to/Kassiber.app" >&2
+  echo "Usage: $0 /absolute/path/to/app-bundle" >&2
 }
 
 if [ "$#" -ne 1 ]; then
@@ -17,11 +17,11 @@ fi
 app_bundle="$1"
 case "$app_bundle" in
   /*) ;;
-  *) echo "Kassiber.app path must be absolute." >&2; exit 2 ;;
+  *) echo "The Kassiber .app path must be absolute." >&2; exit 2 ;;
 esac
 case "$app_bundle" in
   /Volumes/*|*/AppTranslocation/*)
-    echo "Move Kassiber.app to a stable local path before installing its terminal command." >&2
+    echo "Move the Kassiber .app to a stable local path before installing its terminal command." >&2
     exit 2
     ;;
 esac
