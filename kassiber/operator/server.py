@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import secrets
 import signal
+import stat
 import sys
 import threading
 from dataclasses import dataclass
@@ -17,7 +18,12 @@ from ..command_capabilities import Capability
 from ..errors import AppError
 from ..log_ring import install_ring_logging, sanitize_traceback_text
 from ..redaction import is_sensitive_key
-from .protocol import PROTOCOL_VERSION, BrokerChannel, listen
+from .protocol import (
+    PROTOCOL_VERSION,
+    SECRET_CHALLENGE_ENTROPY_BYTES,
+    BrokerChannel,
+    listen,
+)
 from .project import canonical_project
 from .policy import require_project_policy_binding
 from .runner import run_cli_operation
@@ -40,7 +46,7 @@ class BrokerServer:
                 code="operator_session_lifetime_unavailable",
                 hint=(
                     "Use manual mode, or start the broker from a login session with "
-                    "logind or an owner-only XDG_RUNTIME_DIR."
+                    "logind or the trusted /run/user/<uid> runtime directory."
                 ),
                 retryable=False,
             )
@@ -234,7 +240,7 @@ class BrokerServer:
                     code="operator_invalid_authentication_method",
                     retryable=False,
                 )
-            challenge = secrets.token_hex(24)
+            challenge = secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES)
             channel.send_json(
                 {
                     "ok": True,
@@ -311,7 +317,7 @@ class BrokerServer:
         if action == "set_mode":
             data_root = _canonical_data_root(_required_string(request, "data_root"))
             mode = _required_string(request, "mode")
-            challenge = secrets.token_hex(24)
+            challenge = secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES)
             channel.send_json(
                 {
                     "ok": True,
@@ -347,7 +353,7 @@ class BrokerServer:
                     code="operator_protocol_error",
                     retryable=False,
                 )
-            challenge = secrets.token_hex(24)
+            challenge = secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES)
             channel.send_json(
                 {
                     "ok": True,
@@ -397,8 +403,15 @@ class BrokerServer:
         if command_path == "secrets.remember-unlock" and "--passphrase-fd" not in argv:
             admin_command_label = f"broker-secret-{secrets.token_hex(16)}"
             argv = [*argv, "--passphrase-fd", admin_command_label]
-        challenges = {label: secrets.token_hex(24) for label in labels}
-        admin_challenge = secrets.token_hex(24) if capability is Capability.ADMIN else None
+        challenges = {
+            label: secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES)
+            for label in labels
+        }
+        admin_challenge = (
+            secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES)
+            if capability is Capability.ADMIN
+            else None
+        )
         if challenges or admin_challenge is not None:
             channel.send_json(
                 {
@@ -561,10 +574,53 @@ def _login_session_runtime_is_valid(runtime: _LoginSessionRuntime | None) -> boo
     except OSError:
         return False
     return (
-        (not hasattr(os, "getuid") or info.st_uid == os.getuid())
+        _login_session_runtime_path_is_trusted(runtime.root, info)
         and info.st_dev == runtime.device
         and info.st_ino == runtime.inode
     )
+
+
+def _login_session_runtime_path_is_trusted(root: Path, info: os.stat_result) -> bool:
+    """Accept only the OS-managed, volatile Linux runtime directory."""
+
+    if not hasattr(os, "getuid"):
+        return False
+    uid = os.getuid()
+    expected = Path("/run/user") / str(uid)
+    return (
+        root == expected
+        and stat.S_ISDIR(info.st_mode)
+        and info.st_uid == uid
+        and stat.S_IMODE(info.st_mode) == 0o700
+        and _linux_runtime_filesystem_is_volatile(root)
+    )
+
+
+def _linux_runtime_filesystem_is_volatile(root: Path) -> bool:
+    """Require the effective Linux mount for the runtime root to be memory-backed."""
+
+    try:
+        mount_lines = Path("/proc/self/mountinfo").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except OSError:
+        return False
+    best_match: tuple[int, str] | None = None
+    for line in mount_lines:
+        mount, separator, filesystem = line.partition(" - ")
+        if not separator:
+            continue
+        mount_fields = mount.split()
+        filesystem_fields = filesystem.split()
+        if len(mount_fields) < 5 or not filesystem_fields:
+            continue
+        mount_point = Path(mount_fields[4])
+        if root != mount_point and mount_point not in root.parents:
+            continue
+        candidate = (len(mount_point.parts), filesystem_fields[0])
+        if best_match is None or candidate[0] > best_match[0]:
+            best_match = candidate
+    return best_match is not None and best_match[1] in {"ramfs", "tmpfs"}
 
 
 def _linux_session_lifetime_is_valid(

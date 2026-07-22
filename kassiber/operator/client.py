@@ -11,15 +11,21 @@ from dataclasses import dataclass
 from typing import BinaryIO
 
 from ..errors import AppError
+from ..secrets.prompt import MAX_PASSPHRASE_BYTES
 from .launcher import broker_server_command, prepare_independent_child_environment
-from .protocol import PROTOCOL_VERSION, BrokerChannel, connect
+from .protocol import (
+    MAX_SECRET_PAYLOAD_BYTES,
+    PROTOCOL_VERSION,
+    BrokerChannel,
+    connect,
+)
 from .service import _wipe
 
 
 TERMINAL_OPERATION_STATES = frozenset(
     {"completed", "failed", "cancelled", "result_unknown"}
 )
-MAX_CLIENT_SECRET_BYTES = 16 * 1024
+MAX_CLIENT_SECRET_BYTES = min(MAX_PASSPHRASE_BYTES, MAX_SECRET_PAYLOAD_BYTES)
 SOURCE_BROKER_STARTUP_TIMEOUT_SECONDS = 5.0
 # One-file builds must unpack a second independent runtime before the broker can
 # bind its endpoint. Windows Defender can make that second extraction much
@@ -553,7 +559,7 @@ def _read_limited(handle: BinaryIO) -> bytearray:
         if len(value) > MAX_CLIENT_SECRET_BYTES:
             _wipe(value)
             raise AppError(
-                "brokered secret exceeds the 16 KiB limit",
+                "brokered secret exceeds the application input limit",
                 code="operator_secret_too_large",
                 retryable=False,
             )

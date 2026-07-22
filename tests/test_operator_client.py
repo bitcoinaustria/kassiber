@@ -1,17 +1,51 @@
 from __future__ import annotations
 
+import io
+import os
+import tempfile
 import unittest
 from unittest import mock
 
 from kassiber.errors import AppError
 from kassiber.operator.client import (
+    MAX_CLIENT_SECRET_BYTES,
     BrokerClient,
     prepare_arguments,
     wipe_prepared,
 )
+from kassiber.operator.protocol import MAX_SECRET_PAYLOAD_BYTES
+from kassiber.secrets.prompt import MAX_PASSPHRASE_BYTES, read_passphrase_from_fd
 
 
 class OperatorClientSubmitTest(unittest.TestCase):
+    def test_prepare_arguments_respects_child_and_wire_secret_limits(self) -> None:
+        self.assertEqual(MAX_CLIENT_SECRET_BYTES, MAX_PASSPHRASE_BYTES)
+        self.assertLessEqual(MAX_CLIENT_SECRET_BYTES, MAX_SECRET_PAYLOAD_BYTES)
+        payload = b"s" * MAX_CLIENT_SECRET_BYTES
+        prepared = prepare_arguments(
+            ["backends", "create", "--token-stdin"],
+            stdin=io.BytesIO(payload),
+        )
+        try:
+            self.assertEqual(next(iter(prepared.secrets.values())), payload)
+        finally:
+            wipe_prepared(prepared)
+
+        with tempfile.TemporaryFile() as child_input:
+            child_input.write(payload)
+            child_input.seek(0)
+            self.assertEqual(
+                read_passphrase_from_fd(os.dup(child_input.fileno())),
+                payload.decode("utf-8"),
+            )
+
+        with self.assertRaises(AppError) as raised:
+            prepare_arguments(
+                ["backends", "create", "--token-stdin"],
+                stdin=io.BytesIO(payload + b"s"),
+            )
+        self.assertEqual(raised.exception.code, "operator_secret_too_large")
+
     def test_signed_cli_restarts_an_idle_mismatched_helper_broker(self) -> None:
         client = BrokerClient()
         old = {

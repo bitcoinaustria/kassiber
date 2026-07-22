@@ -21,7 +21,7 @@ from typing import Optional
 from ..errors import AppError
 
 
-_MAX_PASSPHRASE_BYTES = 8192
+MAX_PASSPHRASE_BYTES = 8192
 
 
 class PassphraseInputError(AppError):
@@ -50,7 +50,7 @@ def read_passphrase_from_fd(fd: int) -> str:
 
     The parent process is expected to have written the passphrase as raw
     UTF-8 bytes and closed its end of the pipe. We accept up to
-    `_MAX_PASSPHRASE_BYTES` and strip exactly one trailing `\\n` so files
+    `MAX_PASSPHRASE_BYTES` and strip exactly one trailing `\\n` so files
     produced with `echo` or `printf '...\\n'` work without surprises.
     """
 
@@ -69,7 +69,7 @@ def read_passphrase_from_fd(fd: int) -> str:
                 hint="Make sure the broker passed an inheritable local handle.",
             ) from None
     chunks: list[bytes] = []
-    remaining = _MAX_PASSPHRASE_BYTES + 1
+    remaining = MAX_PASSPHRASE_BYTES + 1
     try:
         while remaining > 0:
             block = os.read(fd, min(4096, remaining))
@@ -91,9 +91,9 @@ def read_passphrase_from_fd(fd: int) -> str:
             pass  # close-after-read failure is non-actionable here
 
     raw = b"".join(chunks)
-    if len(raw) > _MAX_PASSPHRASE_BYTES:
+    if len(raw) > MAX_PASSPHRASE_BYTES:
         raise PassphraseInputError(
-            f"passphrase on fd {fd} exceeds {_MAX_PASSPHRASE_BYTES}-byte limit",
+            f"passphrase on fd {fd} exceeds {MAX_PASSPHRASE_BYTES}-byte limit",
         )
     if raw.endswith(b"\n"):
         raw = raw[:-1]

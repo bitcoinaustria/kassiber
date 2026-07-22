@@ -13,6 +13,8 @@ from unittest import mock
 from kassiber.errors import AppError
 from kassiber.operator import protocol as operator_protocol
 from kassiber.operator.protocol import (
+    MAX_SECRET_PAYLOAD_BYTES,
+    SECRET_CHALLENGE_WIRE_BYTES,
     BrokerChannel,
     _SocketTransport,
     _verify_unix_peer,
@@ -57,6 +59,40 @@ class OperatorProtocolTest(unittest.TestCase):
             with self.assertRaisesRegex(AppError, "challenge") as raised:
                 receiver.receive_secret("second")
             self.assertEqual(raised.exception.code, "operator_secret_challenge_mismatch")
+        finally:
+            sender.close()
+            receiver.close()
+
+    def test_secret_payload_limit_round_trips_at_the_shared_boundary(self) -> None:
+        class LoopbackTransport:
+            def __init__(self) -> None:
+                self.buffer = bytearray()
+
+            def send_all(self, payload: bytes) -> None:
+                self.buffer.extend(payload)
+
+            def recv_exact(self, size: int) -> bytes:
+                if len(self.buffer) < size:
+                    raise EOFError
+                payload = bytes(self.buffer[:size])
+                del self.buffer[:size]
+                return payload
+
+            def close(self) -> None:
+                pass
+
+        transport = LoopbackTransport()
+        sender = BrokerChannel(transport)
+        receiver = BrokerChannel(transport)
+        challenge = "a" * SECRET_CHALLENGE_WIRE_BYTES
+        payload = b"s" * MAX_SECRET_PAYLOAD_BYTES
+        try:
+            sender.send_secret(challenge, payload)
+            secret = receiver.receive_secret(challenge)
+            self.assertEqual(bytes(secret), payload)
+            with self.assertRaises(AppError) as raised:
+                sender.send_secret(challenge, payload + b"s")
+            self.assertEqual(raised.exception.code, "operator_secret_too_large")
         finally:
             sender.close()
             receiver.close()

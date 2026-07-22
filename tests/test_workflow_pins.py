@@ -124,12 +124,9 @@ def _resolve_local_uses(
         if isinstance(runs, dict) and str(runs.get("using") or "").lower() == "docker":
             image = runs.get("image")
             normalized_image = image.strip() if isinstance(image, str) else ""
-            if (
-                normalized_image.lower().startswith("docker://")
-                and not PINNED_DOCKER_IMAGE_RE.fullmatch(normalized_image)
-            ):
+            if not PINNED_DOCKER_IMAGE_RE.fullmatch(normalized_image):
                 raise AssertionError(
-                    f"{location}: local Docker action image {image!r} is not pinned to a sha256 digest"
+                    f"{location}: local Docker action image {image!r} is not a digest-pinned docker:// image"
                 )
         return action_path
     if target.is_file() and target.suffix.lower() in WORKFLOW_SUFFIXES:
@@ -302,14 +299,27 @@ class WorkflowPinTest(unittest.TestCase):
                 "runs:\n  using: docker\n  image: docker://alpine:latest\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(AssertionError, "not pinned to a sha256 digest"):
+            with self.assertRaisesRegex(
+                AssertionError, "not a digest-pinned docker:// image"
+            ):
                 assert_workflow_uses_are_pinned(workflows)
 
             metadata.write_text(
                 "runs:\n  using: docker\n  image: DOCKER://alpine:latest\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(AssertionError, "not pinned to a sha256 digest"):
+            with self.assertRaisesRegex(
+                AssertionError, "not a digest-pinned docker:// image"
+            ):
+                assert_workflow_uses_are_pinned(workflows)
+
+            metadata.write_text(
+                "runs:\n  using: docker\n  image: Dockerfile\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                AssertionError, "not a digest-pinned docker:// image"
+            ):
                 assert_workflow_uses_are_pinned(workflows)
 
             metadata.write_text(

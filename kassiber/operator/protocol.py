@@ -21,6 +21,9 @@ from ..errors import AppError
 PROTOCOL_VERSION = 1
 MAX_JSON_FRAME = 8 * 1024 * 1024
 MAX_SECRET_FRAME = 16 * 1024
+SECRET_CHALLENGE_ENTROPY_BYTES = 24
+SECRET_CHALLENGE_WIRE_BYTES = SECRET_CHALLENGE_ENTROPY_BYTES * 2
+MAX_SECRET_PAYLOAD_BYTES = MAX_SECRET_FRAME - SECRET_CHALLENGE_WIRE_BYTES - 1
 DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS = 30.0
 DEFAULT_UNIX_SERVER_IO_TIMEOUT_SECONDS = 30.0
 SOCKET_FILENAME = "operator-v1.sock"
@@ -76,6 +79,12 @@ class BrokerChannel:
         secret_bytes = secret.encode("utf-8") if isinstance(secret, str) else bytes(secret)
         if not challenge_bytes or b"\0" in challenge_bytes:
             raise ValueError("invalid challenge")
+        if len(secret_bytes) > MAX_SECRET_PAYLOAD_BYTES:
+            raise AppError(
+                "operator secret is too large",
+                code="operator_secret_too_large",
+                retryable=False,
+            )
         raw = bytearray(challenge_bytes + b"\0" + secret_bytes)
         if len(raw) > MAX_SECRET_FRAME:
             _wipe(raw)
@@ -100,6 +109,12 @@ class BrokerChannel:
             raise AppError(
                 "operator secret challenge did not match",
                 code="operator_secret_challenge_mismatch",
+                retryable=False,
+            )
+        if len(secret) > MAX_SECRET_PAYLOAD_BYTES:
+            raise AppError(
+                "operator secret is too large",
+                code="operator_secret_too_large",
                 retryable=False,
             )
         return bytearray(secret)
