@@ -79,6 +79,13 @@ as input only when the user resumes a session. This keeps the local-first
 storage boundary and also works with providers that implement only stateless
 Responses.
 
+The implementation keeps those invariants in one request builder. Prepared
+tool-loop context is an explicit typed input and cannot be combined with the
+legacy message input accidentally. HTTP transport remains in
+`kassiber.ai.client`; fixed external CLI adapters live in
+`kassiber.ai.cli_client`, with shared delta/request contracts isolated in
+`kassiber.ai.contracts`.
+
 ## Privacy warning
 
 Treat AI prompts as sensitive accounting data.
@@ -833,5 +840,8 @@ These are directionally in scope, but should remain optional and review-gated:
 ## Related files
 
 - [Kassiber CLI Agent Skill](https://github.com/bitcoinaustria/kassiber-skill)
+- [`../../kassiber/ai/client.py`](../../kassiber/ai/client.py)
+- [`../../kassiber/ai/cli_client.py`](../../kassiber/ai/cli_client.py)
+- [`../../kassiber/ai/contracts.py`](../../kassiber/ai/contracts.py)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [`../../SECURITY.md`](../../SECURITY.md)

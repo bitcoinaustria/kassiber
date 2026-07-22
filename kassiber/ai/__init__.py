@@ -1,6 +1,6 @@
 """AI provider configuration and chat clients.
 
-Two layers:
+Provider configuration and execution are split by responsibility:
 
 - `kassiber.ai.providers` — SQLite-backed CRUD for AI provider records,
   mirroring the shape of `kassiber.backends`. Stores `name`, `base_url`,
@@ -8,11 +8,14 @@ Two layers:
   `tee`), and a `notes` field. Default-provider pointer lives in `settings`
   under `default_ai_provider`.
 
-- `kassiber.ai.client` — OpenAI Responses-compatible HTTP plus fixed
-  Claude/Codex CLI adapters. HTTP providers speak `/v1/models` and
-  `/v1/responses`;
-  CLI locators use `claude-cli://default` or `codex-cli://default` and are
-  treated as off-device unless explicitly acknowledged.
+- `kassiber.ai.client` — OpenAI Responses-compatible HTTP transport and the
+  provider-client factory. HTTP providers speak `/v1/models` and
+  `/v1/responses`.
+- `kassiber.ai.cli_client` — fixed Claude/Codex CLI adapters. CLI locators use
+  `claude-cli://default` or `codex-cli://default` and are treated as off-device
+  unless explicitly acknowledged.
+- `kassiber.ai.contracts` / `kassiber.ai.model_metadata` — small shared client
+  contracts and bounded provider capability metadata.
 
 The chat surface is deliberately narrow: list models, chat once (blocking),
 or stream semantic deltas. Tool calls and outputs cross the provider boundary

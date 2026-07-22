@@ -55,9 +55,10 @@ from .ai.client import (
     ai_client_for_locator,
     responses_request_context,
 )
+from .ai.contracts import ResponsesRequestContext
 from .ai.prompt import (
     build_chat_messages,
-    build_openai_tools,
+    build_responses_tools,
     normalize_system_prompt_kind,
 )
 from .ai.providers import (
@@ -1079,6 +1080,15 @@ class ParsedAiToolCall:
     name: str
     arguments: dict[str, Any]
     argument_error: str | None = None
+
+
+@dataclass(frozen=True)
+class AiToolTurnResult:
+    tool_calls: list[dict[str, Any]]
+    content: str
+    reasoning: str
+    finish_reason: str | None
+    response_output: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -7769,12 +7779,11 @@ def _stream_ai_chat_tool_turn(
     request_id: object,
     client,
     validated: dict[str, Any],
-    input_items: list[dict[str, Any]],
-    instructions: str | None,
+    context: ResponsesRequestContext,
     tools: list[dict[str, Any]],
     out: _OutputChannel,
     cancel_event: threading.Event,
-) -> tuple[list[dict[str, Any]], str, str, str | None, list[dict[str, Any]]]:
+) -> AiToolTurnResult:
     tool_calls: list[dict[str, Any]] = []
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
@@ -7787,13 +7796,11 @@ def _stream_ai_chat_tool_turn(
         label="Thinking",
     )
     for chunk in client.stream_chat(
-        messages=[],
         model=validated["model"],
         options=validated["options"],
         tools=tools,
         tool_choice="auto",
-        input_items=input_items,
-        instructions=instructions,
+        context=context,
     ):
         if cancel_event.is_set():
             finish_reason = "cancelled"
@@ -7848,12 +7855,12 @@ def _stream_ai_chat_tool_turn(
                     "arguments": function.get("arguments") or "",
                 }
             )
-    return (
-        tool_calls,
-        content,
-        "".join(reasoning_parts),
-        finish_reason,
-        response_output,
+    return AiToolTurnResult(
+        tool_calls=tool_calls,
+        content=content,
+        reasoning="".join(reasoning_parts),
+        finish_reason=finish_reason,
+        response_output=response_output,
     )
 
 
@@ -8097,7 +8104,7 @@ def _run_ai_chat_tool_loop(
             messages,
             _screen_context_for_model(screen_context),
         )
-    tools = build_openai_tools(
+    tools = build_responses_tools(
         validated["messages"],
         screen_context=screen_context if isinstance(screen_context, dict) else None,
         profile=validated["tool_profile"],
@@ -8133,23 +8140,25 @@ def _run_ai_chat_tool_loop(
         runtime=runtime,
         cancel_event=cancel_event,
     )
-    instructions, response_input = responses_request_context(messages)
+    response_context = responses_request_context(messages)
     finish_reason = None
     content = ""
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
-        tool_calls, content, _reasoning, finish_reason, response_output = _stream_ai_chat_tool_turn(
+        turn = _stream_ai_chat_tool_turn(
             request_id,
             client,
             validated,
-            response_input,
-            instructions,
+            response_context,
             tools,
             out,
             cancel_event,
         )
+        tool_calls = turn.tool_calls
+        content = turn.content
+        finish_reason = turn.finish_reason
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
@@ -8158,7 +8167,7 @@ def _run_ai_chat_tool_loop(
         # Replay the provider's typed output verbatim. With ``store: false``
         # this preserves encrypted reasoning and tool context in memory without
         # delegating conversation storage to the provider.
-        response_input.extend(response_output)
+        response_context.input_items.extend(turn.response_output)
         seen_call_ids: set[str] = set()
         for index, raw_tool_call in enumerate(tool_calls):
             if not isinstance(raw_tool_call, dict):
@@ -8330,7 +8339,7 @@ def _run_ai_chat_tool_loop(
                     request_id,
                 )
             )
-            response_input.append(
+            response_context.input_items.append(
                 {
                     "type": "function_call_output",
                     "call_id": call.call_id,

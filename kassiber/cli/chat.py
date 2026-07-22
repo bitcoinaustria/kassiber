@@ -10,7 +10,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable, TextIO
 
-from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
+from ..ai.cli_client import CLI_DEFAULT_MODEL
+from ..ai.contracts import is_cli_provider_locator
 from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError

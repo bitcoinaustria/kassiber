@@ -33,6 +33,7 @@ from ..db import get_setting, set_setting
 from ..errors import AppError
 from ..time_utils import now_iso
 from ..util import str_or_none
+from .contracts import is_cli_provider_locator
 
 
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
@@ -47,8 +48,6 @@ AI_PROVIDER_SECRET_STORES = (
     AI_PROVIDER_SECRET_STORE_SQLCIPHER,
 )
 AI_PROVIDER_SECRET_STATES = ("ok", "missing", "needs_reauth", "unavailable")
-
-CLI_PROVIDER_LOCATORS = ("claude-cli://default", "codex-cli://default")
 
 DEFAULT_BOOTSTRAP_PROVIDER_NAME = "ollama"
 DEFAULT_BOOTSTRAP_PROVIDERS = (
@@ -202,14 +201,6 @@ def _validate_locator_kind(base_url: str, kind: str) -> None:
                 "local providers. Mark off-device endpoints as remote and acknowledge remote use."
             ),
         )
-
-
-def is_cli_provider_locator(value: Any) -> bool:
-    base = str_or_none(value)
-    if base is None:
-        return False
-    base = base.strip().lower()
-    return base in CLI_PROVIDER_LOCATORS
 
 
 def _data_root_from_connection(conn) -> str:

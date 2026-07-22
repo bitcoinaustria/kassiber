@@ -21,12 +21,7 @@ already render through the standard envelope:
 from __future__ import annotations
 
 import json
-import os
-import shutil
-import subprocess
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 import urllib.error
@@ -36,44 +31,17 @@ import urllib.request
 from ..egress_ledger import get_egress_ledger, http_request_bytes_out
 from ..errors import AppError
 from ..redaction import provider_error_body_preview
-
-
-DEFAULT_TIMEOUT_SECONDS = 120
-SSE_DONE_SENTINEL = "[DONE]"
-CLI_DEFAULT_MODEL = "default"
-REASONING_EFFORTS = {"low", "medium", "high", "max"}
-CLI_MODEL_CHECK_KIND = "binary_presence"
-MODEL_SUPPORT_LIST_LIMIT = 32
-MODEL_SUPPORT_STRING_LIMIT = 96
-CLI_FALLBACK_DIRS = (
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    "~/.local/bin",
-    "/opt/local/bin",
+from .cli_client import CliAIClient
+from .contracts import (
+    ChatDelta,
+    DEFAULT_TIMEOUT_SECONDS,
+    ResponsesRequestContext,
+    is_cli_provider_locator,
 )
-CLI_MODEL_LIST_TIMEOUT_SECONDS = 10
-_CLI_BASE_ENV_NAMES = {
-    "HOME",
-    "LANG",
-    "LC_ALL",
-    "PATH",
-    "SSL_CERT_FILE",
-    "SSL_CERT_DIR",
-    "TERM",
-    "TMPDIR",
-    "USER",
-    "USERNAME",
-}
-_CLI_PROXY_ENV_NAMES = {
-    "ALL_PROXY",
-    "HTTPS_PROXY",
-    "HTTP_PROXY",
-    "NO_PROXY",
-    "all_proxy",
-    "https_proxy",
-    "http_proxy",
-    "no_proxy",
-}
+from .model_metadata import safe_model_capabilities
+
+
+SSE_DONE_SENTINEL = "[DONE]"
 
 
 def _url_origin(url: str) -> tuple[str, str, int | None]:
@@ -101,56 +69,6 @@ class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-_CLAUDE_ENV_NAMES = {
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_AUTH_TOKEN",
-    "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_VERTEX_PROJECT_ID",
-    "ANTHROPIC_VERTEX_REGION",
-    "CLAUDE_CODE_OAUTH_TOKEN",
-    "CLAUDE_CODE_USE_BEDROCK",
-    "CLAUDE_CODE_USE_VERTEX",
-    "CLOUD_ML_REGION",
-    "CLOUDSDK_CORE_PROJECT",
-    "GCLOUD_PROJECT",
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    "GOOGLE_CLOUD_PROJECT",
-    "GOOGLE_CLOUD_QUOTA_PROJECT",
-}
-_CLAUDE_ENV_PREFIXES = ("AWS_",)
-_CODEX_ENV_NAMES = {
-    "CODEX_ACCESS_TOKEN",
-    "CODEX_API_KEY",
-    "CODEX_HOME",
-    "OPENAI_API_KEY",
-    "OPENAI_BASE_URL",
-    "OPENAI_ORG_ID",
-    "OPENAI_ORGANIZATION",
-    "OPENAI_PROJECT",
-}
-CLAUDE_CLI_MODEL_ROWS = (
-    {"id": CLI_DEFAULT_MODEL, "check_kind": CLI_MODEL_CHECK_KIND},
-    {"id": "sonnet", "check_kind": "claude_cli_alias"},
-    {"id": "opus", "check_kind": "claude_cli_alias"},
-)
-
-
-@dataclass(frozen=True)
-class ChatDelta:
-    """One normalized chunk from a Responses API semantic event stream.
-
-    ``delta`` keeps the existing daemon shape (``content``, ``reasoning``, and
-    normalized ``tool_calls``). The terminal event also carries the complete
-    typed ``response_output`` so the tool loop can replay reasoning and tool
-    Items without flattening them back into chat messages.
-    """
-
-    delta: dict[str, Any]
-    finish_reason: str | None
-    raw: dict[str, Any]
-    response_output: list[dict[str, Any]] | None = None
-
-
 class ResponsesToolCallAccumulator:
     """Accumulate Responses ``function_call`` semantic stream events.
 
@@ -163,6 +81,17 @@ class ResponsesToolCallAccumulator:
         self._calls: dict[int, dict[str, Any]] = {}
 
     @staticmethod
+    def _empty_call() -> dict[str, Any]:
+        return {
+            "id": None,
+            "type": "function",
+            "function": {"name": "", "arguments": ""},
+        }
+
+    def _call(self, index: int) -> dict[str, Any]:
+        return self._calls.setdefault(index, self._empty_call())
+
+    @staticmethod
     def _index(event: dict[str, Any]) -> int:
         raw_index = event.get("output_index", 0)
         try:
@@ -173,14 +102,7 @@ class ResponsesToolCallAccumulator:
     def _merge_item(self, index: int, item: object, *, replace_arguments: bool) -> None:
         if not isinstance(item, dict) or item.get("type") != "function_call":
             return
-        current = self._calls.setdefault(
-            index,
-            {
-                "id": None,
-                "type": "function",
-                "function": {"name": "", "arguments": ""},
-            },
-        )
+        current = self._call(index)
         call_id = item.get("call_id") or item.get("id")
         if isinstance(call_id, str) and call_id:
             current["id"] = call_id
@@ -206,14 +128,7 @@ class ResponsesToolCallAccumulator:
                 replace_arguments=event_type == "response.output_item.done",
             )
         elif event_type == "response.function_call_arguments.delta":
-            current = self._calls.setdefault(
-                index,
-                {
-                    "id": None,
-                    "type": "function",
-                    "function": {"name": "", "arguments": ""},
-                },
-            )
+            current = self._call(index)
             call_id = event.get("call_id")
             if isinstance(call_id, str) and call_id:
                 current["id"] = call_id
@@ -224,14 +139,7 @@ class ResponsesToolCallAccumulator:
             if isinstance(delta, str):
                 current["function"]["arguments"] += delta
         elif event_type == "response.function_call_arguments.done":
-            current = self._calls.setdefault(
-                index,
-                {
-                    "id": None,
-                    "type": "function",
-                    "function": {"name": "", "arguments": ""},
-                },
-            )
+            current = self._call(index)
             call_id = event.get("call_id")
             if isinstance(call_id, str) and call_id:
                 current["id"] = call_id
@@ -241,6 +149,13 @@ class ResponsesToolCallAccumulator:
             arguments = event.get("arguments")
             if isinstance(arguments, str):
                 current["function"]["arguments"] = arguments
+        return self.snapshot()
+
+    def merge_output_items(self, items: Iterable[object]) -> list[dict[str, Any]]:
+        """Merge terminal output Items into the accumulated function calls."""
+
+        for index, item in enumerate(items):
+            self._merge_item(index, item, replace_arguments=True)
         return self.snapshot()
 
     def snapshot(self) -> list[dict[str, Any]]:
@@ -263,7 +178,7 @@ class ResponsesToolCallAccumulator:
 
 def responses_request_context(
     messages: list[dict[str, Any]],
-) -> tuple[str | None, list[dict[str, Any]]]:
+) -> ResponsesRequestContext:
     """Translate Kassiber chat messages to Responses instructions and Items."""
 
     instruction_parts: list[str] = []
@@ -324,7 +239,10 @@ def responses_request_context(
                 }
             )
     instructions = "\n\n".join(instruction_parts) or None
-    return instructions, input_items
+    return ResponsesRequestContext(
+        instructions=instructions,
+        input_items=input_items,
+    )
 
 
 def _responses_message_content(content: object) -> str | list[dict[str, Any]] | None:
@@ -667,191 +585,6 @@ def _network_error_app_error(exc: Exception) -> AppError:
     )
 
 
-def is_cli_provider_locator(base_url: str) -> bool:
-    return base_url in {"claude-cli://default", "codex-cli://default"}
-
-
-def _messages_to_prompt(messages: list[dict]) -> str:
-    lines: list[str] = []
-    for message in messages:
-        role = str(message.get("role") or "user").strip() or "user"
-        content = message.get("content")
-        if not isinstance(content, str) or not content:
-            continue
-        lines.append(f"{role.upper()}:\n{content}")
-    return "\n\n".join(lines).strip()
-
-
-def _cli_unavailable(command: str) -> AppError:
-    return AppError(
-        f"AI CLI provider '{command}' is not installed or not on PATH",
-        code="ai_unavailable",
-        hint=f"Install and authenticate `{command}` before using this provider.",
-        retryable=True,
-    )
-
-
-def _resolve_cli_executable(command: str) -> str | None:
-    resolved = shutil.which(command)
-    if resolved:
-        return resolved
-
-    for directory in CLI_FALLBACK_DIRS:
-        candidate = Path(directory).expanduser() / command
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
-    return None
-
-
-def _cli_default_model_row() -> dict[str, Any]:
-    return {
-        "id": CLI_DEFAULT_MODEL,
-        "check_kind": CLI_MODEL_CHECK_KIND,
-        "supports_reasoning_effort": True,
-        "reasoning_efforts": ["low", "medium", "high"],
-    }
-
-
-def _codex_catalog_models(executable: str) -> list[dict[str, Any]]:
-    try:
-        completed = subprocess.run(
-            [executable, "debug", "models"],
-            text=True,
-            capture_output=True,
-            timeout=CLI_MODEL_LIST_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    if completed.returncode != 0:
-        return []
-
-    try:
-        payload = json.loads(completed.stdout or "{}")
-    except json.JSONDecodeError:
-        return []
-
-    raw_models = payload.get("models")
-    if not isinstance(raw_models, list):
-        return []
-
-    rows: list[dict[str, Any]] = []
-    for item in raw_models:
-        if not isinstance(item, dict):
-            continue
-        if item.get("visibility") != "list":
-            continue
-        slug = item.get("slug")
-        if not isinstance(slug, str) or not slug.strip():
-            continue
-        raw_levels = item.get("supported_reasoning_levels")
-        if not isinstance(raw_levels, list):
-            raw_levels = []
-        supported_efforts = _safe_string_list(
-            [
-                level.get("effort")
-                for level in raw_levels
-                if isinstance(level, dict)
-            ]
-        )
-        row: dict[str, Any] = {
-            "id": slug.strip(),
-            "check_kind": "codex_model_catalog",
-        }
-        display_name = item.get("display_name")
-        if isinstance(display_name, str) and display_name.strip():
-            row["display_name"] = display_name.strip()[:MODEL_SUPPORT_STRING_LIMIT]
-        if supported_efforts:
-            row["supports_reasoning_effort"] = True
-            row["reasoning_efforts"] = supported_efforts
-        rows.append(row)
-    return rows
-
-
-def _cli_failure(command: str, completed: subprocess.CompletedProcess[str]) -> AppError:
-    stderr = completed.stderr or ""
-    stdout = completed.stdout or ""
-    details: dict[str, Any] = {"exit_code": completed.returncode}
-    if stderr:
-        details["stderr_bytes"] = len(stderr.encode("utf-8", errors="replace"))
-    if stdout:
-        details["stdout_bytes"] = len(stdout.encode("utf-8", errors="replace"))
-    return AppError(
-        f"AI CLI provider '{command}' failed",
-        code="ai_request_invalid",
-        hint=(
-            f"Run `{command} --help` or check that the CLI is authenticated. "
-            "Prompts sent through Claude/Codex CLI may leave this device."
-        ),
-        details=details,
-        retryable=False,
-    )
-
-
-def _reasoning_effort(options: dict[str, Any] | None) -> str | None:
-    if not isinstance(options, dict):
-        return None
-    raw = options.get("reasoning_effort")
-    if not isinstance(raw, str):
-        return None
-    effort = raw.strip().lower()
-    if effort in REASONING_EFFORTS:
-        return effort
-    return None
-
-
-def _safe_string_list(value: Any) -> list[str] | None:
-    if not isinstance(value, list):
-        return None
-    out: list[str] = []
-    for item in value:
-        if not isinstance(item, str):
-            continue
-        text = item.strip()
-        if not text:
-            continue
-        out.append(text[:MODEL_SUPPORT_STRING_LIMIT])
-        if len(out) >= MODEL_SUPPORT_LIST_LIMIT:
-            break
-    return out or None
-
-
-def _safe_capability_value(value: Any) -> bool | str | list[str] | None:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        text = value.strip()
-        return text[:MODEL_SUPPORT_STRING_LIMIT] if text else None
-    return _safe_string_list(value)
-
-
-def _safe_model_capabilities(item: dict[str, Any]) -> dict[str, Any]:
-    metadata: dict[str, Any] = {}
-    supports_reasoning_effort = item.get("supports_reasoning_effort")
-    if isinstance(supports_reasoning_effort, bool):
-        metadata["supports_reasoning_effort"] = supports_reasoning_effort
-
-    supported_parameters = _safe_string_list(item.get("supported_parameters"))
-    if supported_parameters is not None:
-        metadata["supported_parameters"] = supported_parameters
-
-    reasoning_efforts = _safe_string_list(item.get("reasoning_efforts"))
-    if reasoning_efforts is not None:
-        metadata["reasoning_efforts"] = reasoning_efforts
-
-    capabilities = item.get("capabilities")
-    if isinstance(capabilities, dict):
-        safe_capabilities: dict[str, Any] = {}
-        for key in ("reasoning_effort", "reasoning_efforts", "supported_parameters"):
-            raw = capabilities.get(key)
-            safe = _safe_capability_value(raw)
-            if safe is not None:
-                safe_capabilities[key] = safe
-        if safe_capabilities:
-            metadata["capabilities"] = safe_capabilities
-    return metadata
-
-
 @dataclass
 class OpenAIResponsesClient:
     """Minimal OpenAI Responses-compatible HTTP client.
@@ -963,25 +696,38 @@ class OpenAIResponsesClient:
             owned_by = item.get("owned_by")
             if isinstance(owned_by, str):
                 row["owned_by"] = owned_by
-            row.update(_safe_model_capabilities(item))
+            row.update(safe_model_capabilities(item))
             models.append(row)
         return models
 
-    def chat(
+    def _request_body(
         self,
         *,
-        messages: list[dict],
+        messages: list[dict] | None,
+        context: ResponsesRequestContext | None,
         model: str,
-        options: dict[str, Any] | None = None,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
-        input_items: list[dict[str, Any]] | None = None,
-        instructions: str | None = None,
-        timeout: float | None = None,
+        stream: bool,
+        options: dict[str, Any] | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
     ) -> dict[str, Any]:
-        """Non-streaming ``POST /v1/responses`` normalized for the daemon."""
+        """Build the canonical privacy-preserving Responses request body."""
 
-        derived_instructions, derived_input = responses_request_context(messages)
+        if context is not None and messages is not None:
+            raise AppError(
+                "Responses requests accept either messages or a prepared context, not both",
+                code="validation",
+                retryable=False,
+            )
+        if context is None:
+            if messages is None:
+                raise AppError(
+                    "Responses requests require messages or a prepared context",
+                    code="validation",
+                    retryable=False,
+                )
+            context = responses_request_context(messages)
+
         body = _responses_options(options)
         if tools is not None:
             body["tools"] = _responses_tools(tools)
@@ -990,16 +736,39 @@ class OpenAIResponsesClient:
         body.update(
             {
                 "model": model,
-                "input": list(input_items) if input_items is not None else derived_input,
-                "stream": False,
-                # Kassiber is local-first. Never let a caller option silently
-                # opt accounting context into provider-side response storage.
+                "input": list(context.input_items),
+                "stream": stream,
+                # Kassiber is local-first. Provider-side response storage may
+                # never be enabled by a caller-supplied option.
                 "store": False,
             }
         )
-        effective_instructions = instructions if instructions is not None else derived_instructions
-        if effective_instructions:
-            body["instructions"] = effective_instructions
+        if context.instructions:
+            body["instructions"] = context.instructions
+        return body
+
+    def chat(
+        self,
+        *,
+        messages: list[dict] | None = None,
+        model: str,
+        options: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        context: ResponsesRequestContext | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Non-streaming ``POST /v1/responses`` normalized for the daemon."""
+
+        body = self._request_body(
+            messages=messages,
+            context=context,
+            model=model,
+            stream=False,
+            options=options,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
         response = self._open(
             "responses",
             method="POST",
@@ -1042,33 +811,24 @@ class OpenAIResponsesClient:
     def stream_chat(
         self,
         *,
-        messages: list[dict],
+        messages: list[dict] | None = None,
         model: str,
         options: dict[str, Any] | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
-        input_items: list[dict[str, Any]] | None = None,
-        instructions: str | None = None,
+        context: ResponsesRequestContext | None = None,
     ) -> Iterator[ChatDelta]:
         """Stream semantic events from ``POST /v1/responses``."""
 
-        derived_instructions, derived_input = responses_request_context(messages)
-        body = _responses_options(options)
-        if tools is not None:
-            body["tools"] = _responses_tools(tools)
-        if tool_choice is not None:
-            body["tool_choice"] = _responses_tool_choice(tool_choice)
-        body.update(
-            {
-                "model": model,
-                "input": list(input_items) if input_items is not None else derived_input,
-                "stream": True,
-                "store": False,
-            }
+        body = self._request_body(
+            messages=messages,
+            context=context,
+            model=model,
+            stream=True,
+            options=options,
+            tools=tools,
+            tool_choice=tool_choice,
         )
-        effective_instructions = instructions if instructions is not None else derived_instructions
-        if effective_instructions:
-            body["instructions"] = effective_instructions
         response = self._open(
             "responses",
             method="POST",
@@ -1119,13 +879,9 @@ class OpenAIResponsesClient:
                     response_output = _response_output(completed) if completed is not None else None
                     finish_reason = _response_finish_reason(completed) if completed is not None else None
                     if completed is not None:
-                        for index, item in enumerate(response_output or []):
-                            tool_call_accumulator._merge_item(
-                                index,
-                                item,
-                                replace_arguments=True,
-                            )
-                        calls = tool_call_accumulator.snapshot()
+                        calls = tool_call_accumulator.merge_output_items(
+                            response_output or []
+                        )
                         if calls:
                             delta["tool_calls"] = calls
                         if not emitted_content:
@@ -1146,244 +902,6 @@ class OpenAIResponsesClient:
                     )
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise _network_error_app_error(exc) from exc
-
-
-def _cli_subprocess_env(command: str) -> dict[str, str]:
-    """Return a minimal environment for external AI CLI subprocesses.
-
-    Do not pass Kassiber's full process environment to agent CLIs: desktop and
-    daemon processes may carry backend tokens, passphrase plumbing, or other
-    app secrets that are unrelated to the selected AI provider.  Keep only
-    basic process settings plus the provider auth variables those CLIs commonly
-    use for non-interactive operation.
-    """
-    allowed = set(_CLI_BASE_ENV_NAMES)
-    allowed.update(_CLI_PROXY_ENV_NAMES)
-    allowed_prefixes: tuple[str, ...] = ()
-    if command == "claude":
-        allowed.update(_CLAUDE_ENV_NAMES)
-        allowed_prefixes = _CLAUDE_ENV_PREFIXES
-    elif command == "codex":
-        allowed.update(_CODEX_ENV_NAMES)
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if key in allowed or any(key.startswith(prefix) for prefix in allowed_prefixes)
-    }
-    env.setdefault("NO_COLOR", "1")
-    return env
-
-
-@dataclass
-class CliAIClient:
-    """Fixed adapter for Claude Code and Codex CLI providers.
-
-    This is intentionally narrow: Kassiber sends a single non-interactive
-    prompt over stdin, uses an isolated temporary cwd, and asks the CLIs not
-    to persist sessions. These CLIs may still call their vendor or configured
-    model provider, so callers must keep the normal off-device acknowledgement
-    gate.
-    """
-
-    locator: str
-    timeout: float = DEFAULT_TIMEOUT_SECONDS
-
-    @property
-    def command(self) -> str:
-        if self.locator == "claude-cli://default":
-            return "claude"
-        if self.locator == "codex-cli://default":
-            return "codex"
-        raise AppError(
-            f"Unsupported AI CLI provider locator '{self.locator}'",
-            code="validation",
-            hint="Use claude-cli://default or codex-cli://default.",
-        )
-
-    def list_models(self, *, strict: bool = False) -> list[dict]:
-        del strict
-        executable = _resolve_cli_executable(self.command)
-        if not executable:
-            raise _cli_unavailable(self.command)
-        if self.command == "codex":
-            return _codex_catalog_models(executable) or [_cli_default_model_row()]
-        return [dict(row) for row in CLAUDE_CLI_MODEL_ROWS]
-
-    def _claude_args(
-        self,
-        *,
-        command: str | None = None,
-        model: str,
-        effort: str | None,
-    ) -> list[str]:
-        args = [
-            command or self.command,
-            "--print",
-            "--no-session-persistence",
-            "--permission-mode",
-            "dontAsk",
-            "--tools",
-            "",
-            "--output-format",
-            "json",
-        ]
-        if model and model != CLI_DEFAULT_MODEL:
-            args.extend(["--model", model])
-        if effort:
-            args.extend(["--effort", effort])
-        return args
-
-    def _codex_args(
-        self,
-        *,
-        command: str | None = None,
-        cwd: str,
-        output_path: str,
-        model: str,
-        effort: str | None,
-    ) -> list[str]:
-        args = [
-            command or self.command,
-            "exec",
-            "--sandbox",
-            "read-only",
-            "--cd",
-            cwd,
-            "--skip-git-repo-check",
-            "--ephemeral",
-            "--ignore-rules",
-            "--color",
-            "never",
-            "--output-last-message",
-            output_path,
-        ]
-        if model and model != CLI_DEFAULT_MODEL:
-            args.extend(["--model", model])
-        if effort:
-            args.extend(["-c", f'model_reasoning_effort="{effort}"'])
-        args.append("-")
-        return args
-
-    def _run(
-        self,
-        *,
-        prompt: str,
-        model: str,
-        options: dict[str, Any] | None = None,
-    ) -> str:
-        command = self.command
-        executable = _resolve_cli_executable(command)
-        if not executable:
-            raise _cli_unavailable(command)
-        env = _cli_subprocess_env(command)
-        effort = _reasoning_effort(options)
-        with tempfile.TemporaryDirectory(prefix="kassiber-ai-cli-") as cwd:
-            if command == "claude":
-                args = self._claude_args(command=executable, model=model, effort=effort)
-                completed = subprocess.run(
-                    args,
-                    input=prompt,
-                    text=True,
-                    capture_output=True,
-                    cwd=cwd,
-                    env=env,
-                    timeout=self.timeout,
-                    check=False,
-                )
-                if completed.returncode != 0:
-                    raise _cli_failure(command, completed)
-                try:
-                    payload = json.loads(completed.stdout or "{}")
-                except json.JSONDecodeError:
-                    return (completed.stdout or "").strip()
-                result = payload.get("result") if isinstance(payload, dict) else None
-                if isinstance(result, str):
-                    return result.strip()
-                return (completed.stdout or "").strip()
-
-            with tempfile.NamedTemporaryFile("r", encoding="utf-8", delete=False) as output:
-                output_path = output.name
-            try:
-                args = self._codex_args(
-                    command=executable,
-                    cwd=cwd,
-                    output_path=output_path,
-                    model=model,
-                    effort=effort,
-                )
-                completed = subprocess.run(
-                    args,
-                    input=prompt,
-                    text=True,
-                    capture_output=True,
-                    cwd=cwd,
-                    env=env,
-                    timeout=self.timeout,
-                    check=False,
-                )
-                if completed.returncode != 0:
-                    raise _cli_failure(command, completed)
-                try:
-                    with open(output_path, "r", encoding="utf-8") as handle:
-                        content = handle.read().strip()
-                except OSError:
-                    content = ""
-                return content or (completed.stdout or "").strip()
-            finally:
-                try:
-                    os.unlink(output_path)
-                except OSError:
-                    pass
-
-    def chat(
-        self,
-        *,
-        messages: list[dict],
-        model: str,
-        options: dict[str, Any] | None = None,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        if tools or tool_choice not in (None, "none"):
-            raise AppError(
-                "CLI AI providers cannot be used with Kassiber tools enabled",
-                code="ai_cli_tools_disabled",
-                hint=(
-                    "Turn off assistant tools for Claude/Codex CLI providers, "
-                    "or use an OpenAI Responses-compatible provider so Kassiber can enforce "
-                    "the typed tool allowlist and consent gates."
-                ),
-                retryable=False,
-            )
-        content = self._run(prompt=_messages_to_prompt(messages), model=model, options=options)
-        return {
-            "role": "assistant",
-            "content": content,
-            "finish_reason": "stop",
-            "usage": None,
-        }
-
-    def stream_chat(
-        self,
-        *,
-        messages: list[dict],
-        model: str,
-        options: dict[str, Any] | None = None,
-        tools: list[dict[str, Any]] | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
-    ) -> Iterator[ChatDelta]:
-        response = self.chat(
-            messages=messages,
-            model=model,
-            options=options,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-        yield ChatDelta(
-            delta={"role": "assistant", "content": response["content"]},
-            finish_reason=response.get("finish_reason"),
-            raw={"provider": self.command},
-        )
 
 
 def ai_client_for_locator(

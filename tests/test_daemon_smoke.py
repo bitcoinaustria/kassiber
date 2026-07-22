@@ -7161,7 +7161,7 @@ class DaemonSmokeTest(unittest.TestCase):
         )
         tool_names = {
             tool["name"]
-            for tool in ai_tools.openai_tool_definitions(include_mutating=True)
+            for tool in ai_tools.responses_tool_definitions(include_mutating=True)
         }
         self.assertIn("ui_source_funds_preview", tool_names)
         self.assertIn("ui_source_funds_sources_create", tool_names)

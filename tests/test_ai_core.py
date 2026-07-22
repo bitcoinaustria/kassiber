@@ -37,23 +37,26 @@ from kassiber.ai import (
     update_db_ai_provider,
     seed_default_ai_provider_if_empty,
 )
-from kassiber.ai.client import (
+from kassiber.ai.cli_client import (
     CLI_DEFAULT_MODEL,
     CliAIClient,
+    _cli_failure,
+    _cli_subprocess_env,
+    _resolve_cli_executable,
+)
+from kassiber.ai.client import (
     DEFAULT_TIMEOUT_SECONDS,
     OpenAIResponsesClient,
     ResponsesToolCallAccumulator,
     parse_sse_chunks,
-    _cli_failure,
     _http_error_app_error,
     _network_error_app_error,
-    _resolve_cli_executable,
-    _cli_subprocess_env,
 )
+from kassiber.ai.contracts import ResponsesRequestContext
 from kassiber.ai.prompt import (
     DEFAULT_KASSIBER_SYSTEM_PROMPT,
     build_chat_messages,
-    build_openai_tools,
+    build_responses_tools,
 )
 from kassiber.ai.tools import (
     SKILL_REFERENCE_NAMES,
@@ -300,12 +303,12 @@ class ToolCatalogPromptTest(unittest.TestCase):
         }
         tool_names = {
             tool["name"]
-            for tool in build_openai_tools()
+            for tool in build_responses_tools()
             if tool.get("type") == "function"
         }
         self.assertEqual(tool_names, expected_tool_names)
         self.assertTrue(
-            all(tool.get("strict") is False for tool in build_openai_tools())
+            all(tool.get("strict") is False for tool in build_responses_tools())
         )
         for tool_name in tool_names:
             self.assertRegex(tool_name, r"^[A-Za-z0-9_-]{1,64}$")
@@ -518,7 +521,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
     def test_live_tool_catalog_is_capability_scoped(self):
         report_tools = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "Export my 2025 Austrian tax report"}],
                 screen_context={"route": "/reports"},
             )
@@ -529,7 +532,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
         transaction_tools = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "Explain this transaction"}],
                 screen_context={"route": "/transactions"},
             )
@@ -541,7 +544,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
         workspace_tools = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "Show the treasury across all books"}],
                 screen_context={"route": "/books"},
             )
@@ -552,7 +555,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
         loan_tools = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "Review my loan collateral marks"}],
             )
         }
@@ -562,7 +565,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
         review_tools = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "What accounting review work remains?"}],
             )
         }
@@ -570,7 +573,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
         journal_tools = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "Process journals"}],
             )
         }
@@ -578,16 +581,16 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
         payout_tools = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "Record a reviewed direct payout"}],
             )
         }
         self.assertIn("ui_transfers_payouts_create", payout_tools)
 
-        discovery_tools = build_openai_tools(
+        discovery_tools = build_responses_tools(
             [{"role": "user", "content": "What can you do? Show all tools."}]
         )
-        self.assertEqual(len(discovery_tools), len(build_openai_tools()))
+        self.assertEqual(len(discovery_tools), len(build_responses_tools()))
 
     def test_ai_tool_result_redacts_embedded_urls_and_absolute_paths(self):
         payload = {
@@ -631,17 +634,17 @@ class ToolCatalogPromptTest(unittest.TestCase):
     def test_core_tool_profile_keeps_common_accounting_tools_only(self):
         tool_names = {
             tool["name"]
-            for tool in build_openai_tools(profile="core")
+            for tool in build_responses_tools(profile="core")
             if tool.get("type") == "function"
         }
         self.assertIn("status", tool_names)
         self.assertNotIn("ui_source_funds_sources_create", tool_names)
         self.assertNotIn("ui_connections_node_snapshot", tool_names)
-        self.assertLess(len(tool_names), len(build_openai_tools(profile="full")))
+        self.assertLess(len(tool_names), len(build_responses_tools(profile="full")))
 
         discovery_names = {
             tool["name"]
-            for tool in build_openai_tools(
+            for tool in build_responses_tools(
                 [{"role": "user", "content": "What can you do?"}],
                 profile="core",
             )
@@ -838,6 +841,30 @@ class ResponsesToolCallAccumulatorTest(unittest.TestCase):
             '{"name":"wallets-backends"}',
         )
 
+    def test_terminal_output_replaces_partial_arguments(self):
+        accumulator = ResponsesToolCallAccumulator()
+        accumulator.add_event(
+            {
+                "type": "response.function_call_arguments.delta",
+                "output_index": 0,
+                "delta": '{"partial":',
+            }
+        )
+
+        calls = accumulator.merge_output_items(
+            [
+                {
+                    "type": "function_call",
+                    "call_id": "call_final",
+                    "name": "status",
+                    "arguments": "{}",
+                }
+            ]
+        )
+
+        self.assertEqual(calls[0]["id"], "call_final")
+        self.assertEqual(calls[0]["function"], {"name": "status", "arguments": "{}"})
+
 
 class HttpErrorMappingTest(unittest.TestCase):
     """`_http_error_app_error` decides whether errors are retryable, what
@@ -974,7 +1001,7 @@ class CliAIClientTest(unittest.TestCase):
 
             with (
                 patch("shutil.which", return_value=None),
-                patch("kassiber.ai.client.CLI_FALLBACK_DIRS", (tmp,)),
+                patch("kassiber.ai.cli_client.CLI_FALLBACK_DIRS", (tmp,)),
             ):
                 self.assertEqual(_resolve_cli_executable("codex"), str(binary))
                 client = CliAIClient(locator="codex-cli://default")
@@ -1253,6 +1280,48 @@ class ResponsesBodyContractTest(unittest.TestCase):
             captured["reasoning"],
             {"effort": "medium", "summary": "auto"},
         )
+
+    def test_prepared_context_is_the_only_alternate_input_source(self):
+        client = OpenAIResponsesClient(base_url="http://x/v1")
+        context = ResponsesRequestContext(
+            instructions="Keep context local.",
+            input_items=[{"type": "message", "role": "user", "content": "hello"}],
+        )
+
+        body = client._request_body(
+            messages=None,
+            context=context,
+            model="m",
+            stream=True,
+            options={"store": True},
+            tools=None,
+            tool_choice=None,
+        )
+
+        self.assertEqual(body["instructions"], "Keep context local.")
+        self.assertEqual(body["input"], context.input_items)
+        self.assertTrue(body["stream"])
+        self.assertFalse(body["store"])
+        with self.assertRaisesRegex(AppError, "either messages or a prepared context"):
+            client._request_body(
+                messages=[],
+                context=context,
+                model="m",
+                stream=False,
+                options=None,
+                tools=None,
+                tool_choice=None,
+            )
+        with self.assertRaisesRegex(AppError, "require messages or a prepared context"):
+            client._request_body(
+                messages=None,
+                context=None,
+                model="m",
+                stream=False,
+                options=None,
+                tools=None,
+                tool_choice=None,
+            )
 
     def test_stream_chat_forces_stream_true_after_options(self):
         captured: dict = {}

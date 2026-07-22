@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kassiber.ai.tools import get_tool, openai_tool_definitions
+from kassiber.ai.tools import get_tool, responses_tool_definitions
 from kassiber.core import reports as core_reports
 from kassiber.db import open_db, set_setting
 
@@ -486,7 +486,7 @@ class PrivacyMirrorTests(unittest.TestCase):
 
         definition = next(
             item
-            for item in openai_tool_definitions()
+            for item in responses_tool_definitions()
             if item["name"] == "ui_reports_privacy_mirror"
         )
         self.assertEqual(definition["parameters"], tool.parameters)
