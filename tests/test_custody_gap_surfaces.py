@@ -76,7 +76,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         self.assertFalse(lineage.parameters["additionalProperties"])
 
         advertised = {
-            item["function"]["name"]
+            item["name"]
             for item in build_openai_tools(
                 [
                     {

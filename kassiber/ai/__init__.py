@@ -8,13 +8,15 @@ Two layers:
   `tee`), and a `notes` field. Default-provider pointer lives in `settings`
   under `default_ai_provider`.
 
-- `kassiber.ai.client` — OpenAI-compatible HTTP plus fixed Claude/Codex CLI
-  adapters. HTTP providers speak `/v1/models` and `/v1/chat/completions`;
+- `kassiber.ai.client` — OpenAI Responses-compatible HTTP plus fixed
+  Claude/Codex CLI adapters. HTTP providers speak `/v1/models` and
+  `/v1/responses`;
   CLI locators use `claude-cli://default` or `codex-cli://default` and are
   treated as off-device unless explicitly acknowledged.
 
 The chat surface is deliberately narrow: list models, chat once (blocking),
-or stream chat (yields delta dicts). Tool-use plumbing lands in a follow-up.
+or stream semantic deltas. Tool calls and outputs cross the provider boundary
+as typed Responses Items.
 """
 
 from .providers import (

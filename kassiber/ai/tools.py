@@ -64,11 +64,12 @@ class ToolEntry:
     def to_openai_tool(self) -> dict[str, Any]:
         return {
             "type": "function",
-            "function": {
-                "name": self.provider_name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
+            "name": self.provider_name,
+            "description": self.description,
+            "parameters": self.parameters,
+            # Preserve Kassiber's existing optional-argument semantics. In the
+            # Responses API an omitted strict flag may be resolved as strict.
+            "strict": False,
         }
 
 

@@ -3,7 +3,7 @@
 Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
 
     name              TEXT PRIMARY KEY  (lowercase)
-    base_url          TEXT NOT NULL     (OpenAI-compatible root, e.g. http://localhost:11434/v1,
+    base_url          TEXT NOT NULL     (OpenAI Responses-compatible root, e.g. http://localhost:11434/v1,
                                         or fixed CLI locator claude-cli://default / codex-cli://default)
     api_key           TEXT              (nullable; never echoed in envelopes)
     default_model     TEXT              (nullable)
@@ -59,7 +59,7 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "api_key": None,
         "default_model": None,
         "kind": "local",
-        "notes": "Local Ollama (default OpenAI-compatible endpoint).",
+        "notes": "Local Ollama (default OpenAI Responses-compatible endpoint).",
     },
     {
         "name": "omlx",
@@ -68,7 +68,7 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "api_key": None,
         "default_model": None,
         "kind": "local",
-        "notes": "Local oMLX (Apple Silicon MLX OpenAI-compatible endpoint).",
+        "notes": "Local oMLX (Apple Silicon MLX Responses endpoint).",
     },
 )
 DEFAULT_BOOTSTRAP_PROVIDER = DEFAULT_BOOTSTRAP_PROVIDERS[0]
@@ -453,7 +453,7 @@ def normalize_base_url(value: Any) -> str:
 
     Strips whitespace and trailing slashes, requires a scheme, and raises
     `AppError(code='validation')` on bad input. Most providers use an
-    OpenAI-compatible HTTP root; fixed local CLI adapters use
+    OpenAI Responses-compatible HTTP root; fixed local CLI adapters use
     ``claude-cli://default`` or ``codex-cli://default``.
     """
     base = str_or_none(value)
@@ -462,7 +462,8 @@ def normalize_base_url(value: Any) -> str:
             "AI provider base_url is required",
             code="validation",
             hint=(
-                "Use an OpenAI-compatible root, e.g. http://localhost:11434/v1, "
+                "Use an OpenAI Responses-compatible root, e.g. "
+                "http://localhost:11434/v1, "
                 "or claude-cli://default / codex-cli://default."
             ),
         )

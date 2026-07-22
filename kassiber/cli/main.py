@@ -3050,7 +3050,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ai = sub.add_parser(
         "ai",
-        description="AI provider configuration and chat over OpenAI-compatible APIs or fixed CLI adapters.",
+        description="AI provider configuration and chat over OpenAI Responses-compatible APIs or fixed CLI adapters.",
     )
     ai_sub = ai.add_subparsers(dest="ai_command", required=True)
 
@@ -3067,7 +3067,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-url",
         required=True,
         help=(
-            "OpenAI-compatible root, e.g. http://localhost:11434/v1; "
+            "OpenAI Responses-compatible root, e.g. http://localhost:11434/v1; "
             "or claude-cli://default / codex-cli://default"
         ),
     )

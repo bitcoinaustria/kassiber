@@ -71,7 +71,7 @@ configurable.
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
 | `rates sync` (only) | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window |
-| `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
+| `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI Responses-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
 | consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
 
 Nothing else makes network calls. `rates set`, `rates latest`,
@@ -403,10 +403,13 @@ rows, and stack locals. `--save` writes the artifact under
 
 ## AI provider configuration
 
-The desktop app and `kassiber ai` CLI surface speak the OpenAI-compatible
-wire format against any provider you configure. The default seeded entry
-points at local Ollama (`http://localhost:11434/v1`); add remote providers
-through Settings → AI providers or `kassiber ai providers create`.
+The desktop app and `kassiber ai` CLI surface use `POST /v1/responses` against
+HTTP providers. The default seeded entry points at local Ollama
+(`http://localhost:11434/v1`); add remote providers through Settings → AI
+providers or `kassiber ai providers create`. Responses are stored by default
+by OpenAI, so Kassiber explicitly sends `store: false`. It does not use
+provider-side conversation IDs; typed reasoning and function-call Items needed
+for a tool round-trip are replayed only in daemon memory.
 
 - **Prompts are sensitive accounting data.** A chat about quarantined
   transactions or report prep can include wallet labels, addresses, notes,

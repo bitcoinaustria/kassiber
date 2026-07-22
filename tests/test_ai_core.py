@@ -41,8 +41,8 @@ from kassiber.ai.client import (
     CLI_DEFAULT_MODEL,
     CliAIClient,
     DEFAULT_TIMEOUT_SECONDS,
-    OpenAICompatClient,
-    ToolCallAccumulator,
+    OpenAIResponsesClient,
+    ResponsesToolCallAccumulator,
     parse_sse_chunks,
     _cli_failure,
     _http_error_app_error,
@@ -299,11 +299,14 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_egress_snapshot",
         }
         tool_names = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools()
             if tool.get("type") == "function"
         }
         self.assertEqual(tool_names, expected_tool_names)
+        self.assertTrue(
+            all(tool.get("strict") is False for tool in build_openai_tools())
+        )
         for tool_name in tool_names:
             self.assertRegex(tool_name, r"^[A-Za-z0-9_-]{1,64}$")
         self.assertEqual(get_tool("ui_overview_snapshot").name, "ui.overview.snapshot")
@@ -514,7 +517,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
     def test_live_tool_catalog_is_capability_scoped(self):
         report_tools = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "Export my 2025 Austrian tax report"}],
                 screen_context={"route": "/reports"},
@@ -525,7 +528,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertNotIn("ui_source_funds_assemble", report_tools)
 
         transaction_tools = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "Explain this transaction"}],
                 screen_context={"route": "/transactions"},
@@ -537,7 +540,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertNotIn("ui_profiles_snapshot", transaction_tools)
 
         workspace_tools = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "Show the treasury across all books"}],
                 screen_context={"route": "/books"},
@@ -548,7 +551,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertNotIn("ui_loans_mark", workspace_tools)
 
         loan_tools = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "Review my loan collateral marks"}],
             )
@@ -558,7 +561,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertNotIn("ui_workspace_overview_snapshot", loan_tools)
 
         review_tools = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "What accounting review work remains?"}],
             )
@@ -566,7 +569,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("ui_review_worklist", review_tools)
 
         journal_tools = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "Process journals"}],
             )
@@ -574,7 +577,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("ui_journals_process", journal_tools)
 
         payout_tools = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "Record a reviewed direct payout"}],
             )
@@ -627,7 +630,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
     def test_core_tool_profile_keeps_common_accounting_tools_only(self):
         tool_names = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(profile="core")
             if tool.get("type") == "function"
         }
@@ -637,7 +640,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertLess(len(tool_names), len(build_openai_tools(profile="full")))
 
         discovery_names = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in build_openai_tools(
                 [{"role": "user", "content": "What can you do?"}],
                 profile="core",
@@ -798,32 +801,35 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2000)
 
 
-class ToolCallAccumulatorTest(unittest.TestCase):
+class ResponsesToolCallAccumulatorTest(unittest.TestCase):
     def test_accumulates_partial_arguments(self):
-        accumulator = ToolCallAccumulator()
-        first = accumulator.add_delta(
-            [
-                {
-                    "index": 0,
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {
-                        "name": "read_skill_reference",
-                        "arguments": '{"name":"wallets',
-                    },
-                }
-            ]
+        accumulator = ResponsesToolCallAccumulator()
+        first = accumulator.add_event(
+            {
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_skill_reference",
+                    "arguments": "",
+                },
+            }
         )
-        self.assertEqual(first[0]["function"]["arguments"], '{"name":"wallets')
-        second = accumulator.add_delta(
-            [
-                {
-                    "index": 0,
-                    "function": {
-                        "arguments": '-backends"}',
-                    },
-                }
-            ]
+        self.assertEqual(first[0]["function"]["arguments"], "")
+        accumulator.add_event(
+            {
+                "type": "response.function_call_arguments.delta",
+                "output_index": 0,
+                "delta": '{"name":"wallets',
+            }
+        )
+        second = accumulator.add_event(
+            {
+                "type": "response.function_call_arguments.delta",
+                "output_index": 0,
+                "delta": '-backends"}',
+            }
         )
         self.assertEqual(second[0]["id"], "call_1")
         self.assertEqual(second[0]["function"]["name"], "read_skill_reference")
@@ -839,7 +845,7 @@ class HttpErrorMappingTest(unittest.TestCase):
 
     def _err(self, status, body=b""):
         return urllib.error.HTTPError(
-            url="http://test/v1/chat/completions",
+            url="http://test/v1/responses",
             code=status,
             msg="",
             hdrs=None,  # type: ignore[arg-type]
@@ -900,7 +906,7 @@ class ClientDefaultsTest(unittest.TestCase):
     """Constructor invariants the rest of the system relies on."""
 
     def test_defaults(self):
-        client = OpenAICompatClient(base_url="http://localhost:11434/v1")
+        client = OpenAIResponsesClient(base_url="http://localhost:11434/v1")
         self.assertEqual(client.timeout, DEFAULT_TIMEOUT_SECONDS)
         self.assertIsNone(client.api_key)
         headers = client._headers(json_body=True)
@@ -908,7 +914,7 @@ class ClientDefaultsTest(unittest.TestCase):
         self.assertNotIn("Authorization", headers)
 
     def test_bearer_when_key_present(self):
-        client = OpenAICompatClient(base_url="http://x/v1", api_key="sk-test")
+        client = OpenAIResponsesClient(base_url="http://x/v1", api_key="sk-test")
         headers = client._headers(json_body=False, accept_sse=True)
         self.assertEqual(headers["Authorization"], "Bearer sk-test")
         self.assertEqual(headers["Accept"], "text/event-stream")
@@ -1099,12 +1105,12 @@ class ListModelsStrictModeTest(unittest.TestCase):
         # Picker UX: providers that skip /v1/models still let the user fall
         # back to a configured default_model.
         with patch("urllib.request.urlopen", side_effect=self._http_error(404)):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             self.assertEqual(client.list_models(), [])
 
     def test_strict_mode_propagates_4xx(self):
         with patch("urllib.request.urlopen", side_effect=self._http_error(404)):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             with self.assertRaises(AppError) as ctx:
                 client.list_models(strict=True)
             self.assertEqual(ctx.exception.code, "ai_request_invalid")
@@ -1114,7 +1120,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
             "urllib.request.urlopen",
             return_value=self._FakeResponse(b"<html>not json</html>"),
         ):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             self.assertEqual(client.list_models(), [])
             with self.assertRaises(AppError) as ctx:
                 client.list_models(strict=True)
@@ -1125,7 +1131,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
             "urllib.request.urlopen",
             return_value=self._FakeResponse(b'{"ok":true}'),
         ):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             self.assertEqual(client.list_models(), [])
             with self.assertRaises(AppError) as ctx:
                 client.list_models(strict=True)
@@ -1134,7 +1140,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
     def test_strict_mode_does_not_change_auth_failure(self):
         # 401 was never swallowed; strict mode shouldn't change that path.
         with patch("urllib.request.urlopen", side_effect=self._http_error(401)):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             with self.assertRaises(AppError) as ctx:
                 client.list_models()
             self.assertEqual(ctx.exception.code, "ai_auth_failed")
@@ -1162,7 +1168,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
             "urllib.request.urlopen",
             return_value=self._FakeResponse(json.dumps(payload).encode("utf-8")),
         ):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             self.assertEqual(
                 client.list_models(),
                 [
@@ -1178,8 +1184,8 @@ class ListModelsStrictModeTest(unittest.TestCase):
             )
 
 
-class ChatBodyContractTest(unittest.TestCase):
-    """Caller-supplied options must not override the OpenAI wire contract."""
+class ResponsesBodyContractTest(unittest.TestCase):
+    """Caller-supplied options must not override the Responses contract."""
 
     class _ReadResponse:
         def __init__(self, payload: bytes):
@@ -1210,12 +1216,14 @@ class ChatBodyContractTest(unittest.TestCase):
 
         def fake_urlopen(request, timeout=None):
             captured.update(json.loads(request.data.decode("utf-8")))
+            captured["request_url"] = request.full_url
             return self._ReadResponse(
-                b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+                b'{"status":"completed","output":[{"type":"message","role":"assistant",'
+                b'"content":[{"type":"output_text","text":"ok"}]}]}'
             )
 
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             client.chat(
                 messages=[{"role": "user", "content": "real"}],
                 model="real-model",
@@ -1223,13 +1231,28 @@ class ChatBodyContractTest(unittest.TestCase):
                     "stream": True,
                     "model": "wrong-model",
                     "messages": [],
+                    "input": "wrong-input",
+                    "store": True,
                     "temperature": 0.2,
+                    "max_tokens": 42,
+                    "reasoning_effort": "medium",
                 },
             )
         self.assertEqual(captured["stream"], False)
+        self.assertEqual(captured["request_url"], "http://x/v1/responses")
         self.assertEqual(captured["model"], "real-model")
-        self.assertEqual(captured["messages"], [{"role": "user", "content": "real"}])
+        self.assertEqual(
+            captured["input"],
+            [{"type": "message", "role": "user", "content": "real"}],
+        )
+        self.assertFalse(captured["store"])
+        self.assertNotIn("messages", captured)
         self.assertEqual(captured["temperature"], 0.2)
+        self.assertEqual(captured["max_output_tokens"], 42)
+        self.assertEqual(
+            captured["reasoning"],
+            {"effort": "medium", "summary": "auto"},
+        )
 
     def test_stream_chat_forces_stream_true_after_options(self):
         captured: dict = {}
@@ -1239,17 +1262,26 @@ class ChatBodyContractTest(unittest.TestCase):
             return self._StreamResponse()
 
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             list(
                 client.stream_chat(
                     messages=[{"role": "user", "content": "real"}],
                     model="real-model",
-                    options={"stream": False, "model": "wrong-model", "messages": []},
+                    options={
+                        "stream": False,
+                        "model": "wrong-model",
+                        "messages": [],
+                        "store": True,
+                    },
                 )
             )
         self.assertEqual(captured["stream"], True)
         self.assertEqual(captured["model"], "real-model")
-        self.assertEqual(captured["messages"], [{"role": "user", "content": "real"}])
+        self.assertEqual(
+            captured["input"],
+            [{"type": "message", "role": "user", "content": "real"}],
+        )
+        self.assertFalse(captured["store"])
 
     def test_chat_sends_explicit_tools_after_options(self):
         captured: dict = {}
@@ -1258,28 +1290,87 @@ class ChatBodyContractTest(unittest.TestCase):
         def fake_urlopen(request, timeout=None):
             captured.update(json.loads(request.data.decode("utf-8")))
             return self._ReadResponse(
-                b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+                b'{"status":"completed","output":[{"type":"message","role":"assistant",'
+                b'"content":[{"type":"output_text","text":"ok"}]}]}'
             )
 
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             client.chat(
                 messages=[{"role": "user", "content": "real"}],
                 model="real-model",
                 tools=tools,
-                tool_choice="auto",
+                tool_choice={"type": "function", "function": {"name": "status"}},
                 options={"tools": [], "tool_choice": "none"},
             )
-        self.assertEqual(captured["tools"], tools)
-        self.assertEqual(captured["tool_choice"], "auto")
+        self.assertEqual(
+            captured["tools"],
+            [{"type": "function", "name": "status", "parameters": {}}],
+        )
+        self.assertEqual(
+            captured["tool_choice"], {"type": "function", "name": "status"}
+        )
+
+    def test_chat_maps_multimodal_parts_json_format_and_timeout(self):
+        captured: dict = {}
+
+        def fake_urlopen(request, timeout=None):
+            captured.update(json.loads(request.data.decode("utf-8")))
+            captured["request_timeout"] = timeout
+            return self._ReadResponse(
+                b'{"status":"completed","output":[{"type":"message",'
+                b'"role":"assistant","content":[{"type":"output_text",'
+                b'"text":"{}"}]}]}'
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            client = OpenAIResponsesClient(base_url="http://x/v1")
+            client.chat(
+                messages=[
+                    {"role": "system", "content": "Extract JSON."},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Read this image."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": "data:image/png;base64,AAAA",
+                                    "detail": "high",
+                                },
+                            },
+                        ],
+                    },
+                ],
+                model="vision-model",
+                options={"response_format": {"type": "json_object"}},
+                timeout=123.0,
+            )
+
+        self.assertEqual(captured["instructions"], "Extract JSON.")
+        self.assertEqual(
+            captured["input"],
+            [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "Read this image."},
+                        {
+                            "type": "input_image",
+                            "image_url": "data:image/png;base64,AAAA",
+                            "detail": "high",
+                        },
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(captured["text"], {"format": {"type": "json_object"}})
+        self.assertEqual(captured["request_timeout"], 123.0)
 
 
-class ChatReasoningPassthroughTest(unittest.TestCase):
-    """OpenAI o1/o3 and Ollama's OpenAI-compat shim for Qwen3 / Gemma
-    reasoning builds emit a structured `reasoning` field on the chat
-    message. Surface it on the result so callers (CLI envelope, future
-    tool-use plumbing, the assistant UI) can show or ignore it without
-    re-parsing the upstream payload."""
+class ResponsesNormalizationTest(unittest.TestCase):
+    """Typed Responses output is normalized for the existing daemon/UI."""
 
     class _FakeResponse:
         def __init__(self, payload: bytes):
@@ -1296,39 +1387,45 @@ class ChatReasoningPassthroughTest(unittest.TestCase):
 
     def test_chat_includes_reasoning_when_provider_emits_it(self):
         payload = (
-            b'{"choices":[{"message":{"role":"assistant","content":"hi",'
-            b'"reasoning":"thinking out loud"},"finish_reason":"stop"}],'
-            b'"usage":{"prompt_tokens":1,"completion_tokens":2}}'
+            b'{"status":"completed","output":['
+            b'{"type":"reasoning","summary":[{"type":"summary_text",'
+            b'"text":"thinking summary"}]},'
+            b'{"type":"message","role":"assistant","content":['
+            b'{"type":"output_text","text":"hi"}]}],'
+            b'"usage":{"input_tokens":1,"output_tokens":2}}'
         )
         with patch(
             "urllib.request.urlopen",
             return_value=self._FakeResponse(payload),
         ):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             result = client.chat(
                 messages=[{"role": "user", "content": "x"}], model="m"
             )
         self.assertEqual(result["content"], "hi")
-        self.assertEqual(result["reasoning"], "thinking out loud")
+        self.assertEqual(result["reasoning"], "thinking summary")
         self.assertEqual(result["finish_reason"], "stop")
+        self.assertEqual(result["usage"]["input_tokens"], 1)
 
-    def test_chat_normalizes_reasoning_content_when_provider_emits_it(self):
+    def test_chat_normalizes_function_call_items(self):
         payload = (
-            b'{"choices":[{"message":{"role":"assistant","content":"hi",'
-            b'"reasoning_content":"thinking from omlx"},"finish_reason":"stop"}]}'
+            b'{"status":"completed","output":[{"type":"function_call",'
+            b'"id":"fc_1","call_id":"call_1","name":"status",'
+            b'"arguments":"{}"}]}'
         )
         with patch(
             "urllib.request.urlopen",
             return_value=self._FakeResponse(payload),
         ):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             result = client.chat(
                 messages=[{"role": "user", "content": "x"}], model="m"
             )
-        self.assertEqual(result["content"], "hi")
-        self.assertEqual(result["reasoning"], "thinking from omlx")
+        self.assertEqual(result["finish_reason"], "tool_calls")
+        self.assertEqual(result["tool_calls"][0]["id"], "call_1")
+        self.assertEqual(result["tool_calls"][0]["function"]["name"], "status")
 
-    def test_stream_chat_normalizes_reasoning_content_delta(self):
+    def test_stream_chat_normalizes_semantic_text_and_reasoning_events(self):
         class _StreamResponse:
             def __enter__(self):
                 return self
@@ -1338,30 +1435,36 @@ class ChatReasoningPassthroughTest(unittest.TestCase):
 
             def __iter__(self):
                 yield (
-                    b'data: {"choices":[{"delta":{"reasoning_content":'
-                    b'"thinking from omlx"},"finish_reason":null}]}\n'
+                    b'data: {"type":"response.reasoning_summary_text.delta",'
+                    b'"delta":"thinking summary"}\n'
                 )
                 yield b"\n"
                 yield (
-                    b'data: {"choices":[{"delta":{"content":"hi"},'
-                    b'"finish_reason":"stop"}]}\n'
+                    b'data: {"type":"response.output_text.delta","delta":"hi"}\n'
                 )
                 yield b"\n"
-                yield b"data: [DONE]\n"
+                yield (
+                    b'data: {"type":"response.completed","response":'
+                    b'{"status":"completed","output":[{"type":"reasoning",'
+                    b'"summary":[{"type":"summary_text","text":"thinking summary"}]},'
+                    b'{"type":"message","role":"assistant","content":'
+                    b'[{"type":"output_text","text":"hi"}]}]}}\n'
+                )
                 yield b"\n"
 
         with patch("urllib.request.urlopen", return_value=_StreamResponse()):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             chunks = list(
                 client.stream_chat(
                     messages=[{"role": "user", "content": "x"}], model="m"
                 )
             )
-        self.assertEqual(chunks[0].delta["reasoning"], "thinking from omlx")
+        self.assertEqual(chunks[0].delta["reasoning"], "thinking summary")
         self.assertEqual(chunks[1].delta["content"], "hi")
-        self.assertEqual(chunks[1].finish_reason, "stop")
+        self.assertEqual(chunks[2].finish_reason, "stop")
+        self.assertEqual(chunks[2].response_output[0]["type"], "reasoning")
 
-    def test_stream_chat_replaces_empty_reasoning_with_reasoning_content(self):
+    def test_stream_chat_uses_completed_payload_when_deltas_are_absent(self):
         class _StreamResponse:
             def __enter__(self):
                 return self
@@ -1371,24 +1474,26 @@ class ChatReasoningPassthroughTest(unittest.TestCase):
 
             def __iter__(self):
                 yield (
-                    b'data: {"choices":[{"delta":{"reasoning":"",'
-                    b'"reasoning_content":"thinking from omlx"},'
-                    b'"finish_reason":null}]}\n'
+                    b'data: {"type":"response.completed","response":'
+                    b'{"status":"completed","output":[{"type":"reasoning",'
+                    b'"summary":[{"type":"summary_text","text":"summary"}]},'
+                    b'{"type":"message","role":"assistant","content":'
+                    b'[{"type":"output_text","text":"answer"}]}]}}\n'
                 )
-                yield b"\n"
-                yield b"data: [DONE]\n"
                 yield b"\n"
 
         with patch("urllib.request.urlopen", return_value=_StreamResponse()):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             chunks = list(
                 client.stream_chat(
                     messages=[{"role": "user", "content": "x"}], model="m"
                 )
             )
-        self.assertEqual(chunks[0].delta["reasoning"], "thinking from omlx")
+        self.assertEqual(chunks[0].delta["reasoning"], "summary")
+        self.assertEqual(chunks[0].delta["content"], "answer")
+        self.assertEqual(chunks[0].finish_reason, "stop")
 
-    def test_stream_chat_keeps_structured_reasoning_delta(self):
+    def test_stream_chat_accumulates_function_call_arguments(self):
         class _StreamResponse:
             def __enter__(self):
                 return self
@@ -1398,44 +1503,78 @@ class ChatReasoningPassthroughTest(unittest.TestCase):
 
             def __iter__(self):
                 yield (
-                    b'data: {"choices":[{"delta":{"reasoning":'
-                    b'"thinking from ollama"},"finish_reason":null}]}\n'
+                    b'data: {"type":"response.output_item.added","output_index":0,'
+                    b'"item":{"type":"function_call","call_id":"call_1",'
+                    b'"name":"status","arguments":""}}\n'
                 )
                 yield b"\n"
                 yield (
-                    b'data: {"choices":[{"delta":{"content":"hi"},'
-                    b'"finish_reason":"stop"}]}\n'
+                    b'data: {"type":"response.function_call_arguments.delta",'
+                    b'"output_index":0,"delta":"{}"}\n'
                 )
                 yield b"\n"
-                yield b"data: [DONE]\n"
+                yield (
+                    b'data: {"type":"response.completed","response":'
+                    b'{"status":"completed","output":[{"type":"function_call",'
+                    b'"call_id":"call_1","name":"status","arguments":"{}"}]}}\n'
+                )
                 yield b"\n"
 
         with patch("urllib.request.urlopen", return_value=_StreamResponse()):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             chunks = list(
                 client.stream_chat(
                     messages=[{"role": "user", "content": "x"}], model="m"
                 )
             )
-        self.assertEqual(chunks[0].delta["reasoning"], "thinking from ollama")
-        self.assertEqual(chunks[1].delta["content"], "hi")
-        self.assertEqual(chunks[1].finish_reason, "stop")
+        self.assertEqual(chunks[-1].delta["tool_calls"][0]["id"], "call_1")
+        self.assertEqual(
+            chunks[-1].delta["tool_calls"][0]["function"]["arguments"],
+            "{}",
+        )
+        self.assertEqual(chunks[-1].finish_reason, "tool_calls")
 
     def test_chat_omits_reasoning_when_provider_does_not_emit_it(self):
         payload = (
-            b'{"choices":[{"message":{"role":"assistant","content":"plain"},'
-            b'"finish_reason":"stop"}]}'
+            b'{"status":"completed","output":[{"type":"message",'
+            b'"role":"assistant","content":'
+            b'[{"type":"output_text","text":"plain"}]}]}'
         )
         with patch(
             "urllib.request.urlopen",
             return_value=self._FakeResponse(payload),
         ):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             result = client.chat(
                 messages=[{"role": "user", "content": "x"}], model="m"
             )
         self.assertEqual(result["content"], "plain")
         self.assertNotIn("reasoning", result)
+
+    def test_stream_chat_maps_top_level_error_event(self):
+        class _StreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                yield (
+                    b'data: {"type":"error","code":"rate_limit_exceeded",'
+                    b'"message":"slow down"}\n\n'
+                )
+
+        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+            client = OpenAIResponsesClient(base_url="http://x/v1")
+            with self.assertRaises(AppError) as ctx:
+                list(
+                    client.stream_chat(
+                        messages=[{"role": "user", "content": "x"}], model="m"
+                    )
+                )
+        self.assertEqual(ctx.exception.code, "ai_rate_limited")
+        self.assertTrue(ctx.exception.retryable)
 
 
 class StreamChatErrorMappingTest(unittest.TestCase):
@@ -1459,7 +1598,7 @@ class StreamChatErrorMappingTest(unittest.TestCase):
             return False
 
         def __iter__(self):
-            yield b'data: {"choices":[{"delta":{"content":"hi"}}]}\n'
+            yield b'data: {"type":"response.output_text.delta","delta":"hi"}\n'
             yield b"\n"
             raise socket.timeout("read timed out mid-stream")
 
@@ -1468,7 +1607,7 @@ class StreamChatErrorMappingTest(unittest.TestCase):
             "urllib.request.urlopen",
             return_value=self._ResponseRaisingMidIteration(),
         ):
-            client = OpenAICompatClient(base_url="http://x/v1")
+            client = OpenAIResponsesClient(base_url="http://x/v1")
             it = client.stream_chat(
                 messages=[{"role": "user", "content": "hi"}], model="m"
             )

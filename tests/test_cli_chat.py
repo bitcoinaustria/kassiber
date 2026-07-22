@@ -18,13 +18,38 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _chat_completion_response(message, finish_reason="stop"):
-    return {
-        "choices": [
+    output = []
+    content = message.get("content")
+    if content:
+        output.append(
             {
-                "message": message,
-                "finish_reason": finish_reason,
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": content}],
             }
-        ]
+        )
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        output.append(
+            {
+                "type": "function_call",
+                "id": f"fc_{call.get('id') or 'call'}",
+                "call_id": call.get("id"),
+                "name": function.get("name"),
+                "arguments": function.get("arguments") or "",
+            }
+        )
+    return {
+        "id": "resp_test",
+        "object": "response",
+        "status": "incomplete" if finish_reason == "length" else "completed",
+        "output": output,
+        **(
+            {"incomplete_details": {"reason": "max_output_tokens"}}
+            if finish_reason == "length"
+            else {}
+        ),
     }
 
 
@@ -47,7 +72,7 @@ def _tool_call_message(name, arguments="{}", call_id="call_1"):
 
 class _ToolChatHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != "/v1/chat/completions":
+        if self.path != "/v1/responses":
             self.send_response(404)
             self.end_headers()
             return
@@ -63,23 +88,25 @@ class _ToolChatHandler(BaseHTTPRequestHandler):
             self.send_header("content-type", "text/event-stream")
             self.send_header("cache-control", "no-cache")
             self.end_headers()
-            choice = payload["choices"][0]
-            message = choice["message"]
-            delta = {}
-            if "tool_calls" in message:
-                delta["tool_calls"] = message["tool_calls"]
-            if message.get("content"):
-                delta["content"] = message["content"]
-            chunk = {
-                "choices": [
-                    {
-                        "delta": delta,
-                        "finish_reason": choice.get("finish_reason"),
+            for index, item in enumerate(payload.get("output") or []):
+                if item.get("type") == "message":
+                    for part in item.get("content") or []:
+                        if part.get("type") == "output_text":
+                            event = {
+                                "type": "response.output_text.delta",
+                                "output_index": index,
+                                "delta": part.get("text") or "",
+                            }
+                            self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+                elif item.get("type") == "function_call":
+                    event = {
+                        "type": "response.output_item.done",
+                        "output_index": index,
+                        "item": item,
                     }
-                ]
-            }
-            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
-            self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+            completed = {"type": "response.completed", "response": payload}
+            self.wfile.write(f"data: {json.dumps(completed)}\n\n".encode())
             self.wfile.flush()
             return
         raw = json.dumps(payload).encode("utf-8")
@@ -355,8 +382,8 @@ finally:
         self.assertEqual(len(server.requests), 2)  # type: ignore[attr-defined]
         self.assertTrue(
             any(
-                message.get("role") == "tool"
-                for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                item.get("type") == "function_call_output"
+                for item in server.requests[1]["input"]  # type: ignore[attr-defined]
             )
         )
 
@@ -393,9 +420,9 @@ finally:
         self.assertNotEqual(tool.get("reason"), "user_denied")
         self.assertTrue(
             any(
-                message.get("role") == "tool"
-                and "user_denied" not in message.get("content", "")
-                for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                item.get("type") == "function_call_output"
+                and "user_denied" not in item.get("output", "")
+                for item in server.requests[1]["input"]  # type: ignore[attr-defined]
             )
         )
 
@@ -434,9 +461,9 @@ finally:
         self.assertEqual(tool["status"], "done")
         self.assertTrue(
             any(
-                message.get("role") == "tool"
-                and "user_denied" not in message.get("content", "")
-                for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                item.get("type") == "function_call_output"
+                and "user_denied" not in item.get("output", "")
+                for item in server.requests[1]["input"]  # type: ignore[attr-defined]
             )
         )
 
@@ -444,10 +471,8 @@ finally:
         duplicate = _tool_call_message(
             "ui_journals_process", call_id="duplicate-call"
         )
-        first_call = duplicate["choices"][0]["message"]["tool_calls"][0]
-        duplicate["choices"][0]["message"]["tool_calls"].append(
-            json.loads(json.dumps(first_call))
-        )
+        first_call = duplicate["output"][0]
+        duplicate["output"].append(json.loads(json.dumps(first_call)))
         server = _start_tool_chat_server(
             [
                 duplicate,
@@ -504,7 +529,7 @@ finally:
 
         self.assertEqual(payload["data"]["message"]["content"], "ok")
         tool_names = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in server.requests[0].get("tools", [])  # type: ignore[attr-defined]
         }
         self.assertIn("ui_reports_summary", tool_names)
@@ -539,7 +564,7 @@ finally:
 
         self.assertEqual(payload["data"]["message"]["content"], "ok")
         tool_names = {
-            tool["function"]["name"]
+            tool["name"]
             for tool in server.requests[0].get("tools", [])  # type: ignore[attr-defined]
         }
         self.assertIn("ui_source_funds_sources_create", tool_names)
@@ -721,9 +746,8 @@ finally:
         self.assertEqual(payload["data"]["message"]["content"], "ok")
         request = server.requests[0]  # type: ignore[attr-defined]
         self.assertNotIn("tools", request)
-        self.assertTrue(
-            all(message["role"] != "system" for message in request["messages"])
-        )
+        self.assertNotIn("instructions", request)
+        self.assertTrue(all(item.get("role") != "system" for item in request["input"]))
 
     def test_chat_system_flag_replaces_kassiber_prompt(self):
         server = _start_tool_chat_server(
@@ -750,9 +774,8 @@ finally:
             _stop_server(server)
 
         self.assertEqual(payload["data"]["message"]["content"], "ok")
-        first = server.requests[0]["messages"][0]  # type: ignore[attr-defined]
-        self.assertEqual(first["role"], "system")
-        self.assertEqual(first["content"], "You are terse.")
+        request = server.requests[0]  # type: ignore[attr-defined]
+        self.assertEqual(request["instructions"], "You are terse.")
 
     def test_chat_dash_reads_prompt_from_stdin(self):
         server = _start_tool_chat_server(
@@ -781,7 +804,7 @@ finally:
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["data"]["message"]["content"], "ok")
-        last = server.requests[0]["messages"][-1]  # type: ignore[attr-defined]
+        last = server.requests[0]["input"][-1]  # type: ignore[attr-defined]
         self.assertEqual(last["role"], "user")
         self.assertEqual(last["content"], "What is my status?")
 
@@ -871,9 +894,9 @@ finally:
         self.assertEqual(tool["reason"], "user_denied")
         self.assertTrue(
             any(
-                message.get("role") == "tool"
-                and "user_denied" in message.get("content", "")
-                for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                item.get("type") == "function_call_output"
+                and "user_denied" in item.get("output", "")
+                for item in server.requests[1]["input"]  # type: ignore[attr-defined]
             )
         )
 
@@ -976,7 +999,8 @@ class CliChatPersistenceTest(unittest.TestCase):
                 # The continued turn carried the stored history back to the model.
                 contents = [
                     message.get("content")
-                    for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                    for message in server.requests[1]["input"]  # type: ignore[attr-defined]
+                    if message.get("type") == "message"
                 ]
                 self.assertIn("first question", contents)
                 self.assertIn("answer one", contents)
