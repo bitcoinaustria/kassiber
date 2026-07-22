@@ -6,7 +6,7 @@ allowBuilds:
 
 overrides:
   '@babel/runtime': 7.29.2
-  '@babel/core@<=7.29.0': 7.29.6
+  '@babel/core@<7.29.6': 7.29.6
   'brace-expansion@<1.1.16': 1.1.16
   'brace-expansion@>=3.0.0 <5.0.7': 5.0.7
   'js-yaml@<4.3.0': 4.3.0

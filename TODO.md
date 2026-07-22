@@ -1472,8 +1472,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Bump `vitest` 3.2.4 -> 3.2.6 to clear the critical Dependabot alert
   (Vitest UI server arbitrary file read/exec, fixed in 3.2.6). Shipped with the
   2026-07 Dependabot sweep; `minimum-release-age` was reduced to 14 days
-  (owner-approved) so security releases clear the window without per-package
-  exceptions.
+  (owner-approved) so security releases clear the window without scope-wide
+  exceptions (one dated per-version exception remains for
+  `brace-expansion@1.1.16` until 2026-07-22).
 - [ ] Address the medium Dependabot alert on transitive `glib` 0.18.5
   (unsoundness in `VariantStrIter` `Iterator`/`DoubleEndedIterator` impls,
   fixed in 0.20.0). Dismissed as `not_used` with evidence (no glib /
