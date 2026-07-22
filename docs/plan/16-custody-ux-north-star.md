@@ -26,10 +26,11 @@ coins stayed yours) and carries basis. Quarantine deep-links pairing-shaped
 entries into the Moves & swaps queue via `/swaps?focus=<txid>`
 (+`method=ownership_graph`) — users never need to know about the Inbox to
 resolve quarantine.
-An interactive mockup of this design lives at
+An interactive mockup of the original concept lives at
 [docs/plan/assets/custody-inbox.html](assets/custody-inbox.html) — open it
-directly in a browser (a working copy may also sit in the untracked
-`ui-tauri/claude-design/` staging directory).
+directly in a browser. Note: the mockup predates the post-review revision
+below (it still shows pairing candidates inside the inbox); the shipped
+screens are the source of truth.
 
 ## Why the current surface fails
 
