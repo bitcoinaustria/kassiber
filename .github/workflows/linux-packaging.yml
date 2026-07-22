@@ -4,10 +4,12 @@ on:
   pull_request:
     paths:
       - ".github/workflows/linux-packaging.yml"
+      - ".github/workflows/finalize-signed-release.yml"
       - ".github/workflows/publish-linux-channels.yml"
       - ".github/workflows/prerelease-binaries.yml"
       - "LICENSE"
       - "packaging/linux/**"
+      - "packaging/release/**"
       - "scripts/build-apt-repository.sh"
       - "scripts/build-rpm-repository.sh"
       - "scripts/package-cli-deb.sh"

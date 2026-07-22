@@ -1,0 +1,170 @@
+name: finalize-signed-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing draft release tag"
+        required: true
+        type: string
+      release_channel:
+        description: "Publish as a prerelease or stable release"
+        required: true
+        default: prerelease
+        type: choice
+        options:
+          - prerelease
+          - release
+      publish_homebrew:
+        description: "Update the Homebrew cask and CLI formula"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-signed-release-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_TAP_REPOSITORY: bitcoinaustria/homebrew-kassiber
+  HOMEBREW_TAP_BRANCH: main
+  HOMEBREW_CASK_PATH: Casks/kassiber.rb
+  HOMEBREW_FORMULA_PATH: Formula/kassiber-cli.rb
+
+jobs:
+  finalize:
+    name: Verify and publish existing signed draft
+    environment: release-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Require the trusted main workflow ref
+        run: test "$GITHUB_REF" = "refs/heads/main"
+      - name: Check out the release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.tag_name }}
+      - name: Load enabled release signing policy
+        id: release-signing
+        run: |
+          set -euo pipefail
+          policy_json="$(python3 scripts/release_manifest.py policy \
+            --policy packaging/release/signing-policy.json \
+            --require-enabled)"
+          echo "fingerprint=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$policy_json")" >> "$GITHUB_OUTPUT"
+          echo "public_key_path=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")" >> "$GITHUB_OUTPUT"
+      - name: Inspect and download existing release assets
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_TAG_NAME" in
+            v*) version="${RELEASE_TAG_NAME#v}" ;;
+            *) echo "tag_name must start with v" >&2; exit 2 ;;
+          esac
+          case "$RELEASE_CHANNEL" in
+            prerelease) expected_prerelease=true ;;
+            release) expected_prerelease=false ;;
+            *) echo "unsupported release channel: $RELEASE_CHANNEL" >&2; exit 2 ;;
+          esac
+          release_state="$(gh release view "$RELEASE_TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,tagName \
+            --jq '[.tagName, (.isPrerelease | tostring), (.isDraft | tostring)] | @tsv')"
+          IFS=$'\t' read -r actual_tag actual_prerelease actual_draft \
+            <<< "$release_state"
+          test "$actual_tag" = "$RELEASE_TAG_NAME"
+          test "$actual_prerelease" = "$expected_prerelease"
+          mkdir release
+          gh release download "$RELEASE_TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" --dir release
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "manifest=release/kassiber-${version}-manifest.txt" >> "$GITHUB_OUTPUT"
+          echo "signature=release/kassiber-${version}-manifest.txt.asc" >> "$GITHUB_OUTPUT"
+          echo "draft=$actual_draft" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$expected_prerelease" >> "$GITHUB_OUTPUT"
+      - name: Authenticate the complete release set
+        env:
+          RELEASE_MANIFEST: ${{ steps.release.outputs.manifest }}
+          RELEASE_SIGNATURE: ${{ steps.release.outputs.signature }}
+          RELEASE_PUBLIC_KEY_PATH: ${{ steps.release-signing.outputs.public_key_path }}
+          RELEASE_SIGNING_FINGERPRINT: ${{ steps.release-signing.outputs.fingerprint }}
+        run: |
+          python3 scripts/release_manifest.py verify-release \
+            --release-dir release \
+            --manifest "$RELEASE_MANIFEST" \
+            --signature "$RELEASE_SIGNATURE" \
+            --public-key "$RELEASE_PUBLIC_KEY_PATH" \
+            --fingerprint "$RELEASE_SIGNING_FINGERPRINT"
+      - name: Require Homebrew publication credentials
+        if: inputs.publish_homebrew == true
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: test -n "$HOMEBREW_TAP_TOKEN"
+      - name: Check out Homebrew tap
+        if: inputs.publish_homebrew == true
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPOSITORY }}
+          ref: ${{ env.HOMEBREW_TAP_BRANCH }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+      - name: Render Homebrew metadata from authenticated hashes
+        if: inputs.publish_homebrew == true
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_MANIFEST: ${{ steps.release.outputs.manifest }}
+        run: |
+          set -euo pipefail
+          release_sha256() {
+            local name="$1"
+            local sha256
+            test -f "release/${name}"
+            sha256="$(awk -v name="$name" '$2 == name { print $1 }' "$RELEASE_MANIFEST")"
+            test -n "$sha256"
+            printf '%s' "$sha256"
+          }
+          python3 scripts/render_homebrew.py cask \
+            --version "$RELEASE_VERSION" \
+            --sha256 "$(release_sha256 kassiber-macos-arm64.dmg)" \
+            --output "homebrew-tap/${HOMEBREW_CASK_PATH}"
+          python3 scripts/render_homebrew.py cli-formula \
+            --version "$RELEASE_VERSION" \
+            --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
+            --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
+            --output "homebrew-tap/${HOMEBREW_FORMULA_PATH}"
+      - name: Publish the verified draft
+        if: steps.release.outputs.draft == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          RELEASE_IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          gh release edit "$RELEASE_TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --draft=false \
+            --prerelease="$RELEASE_IS_PRERELEASE"
+      - name: Commit Homebrew tap update
+        if: inputs.publish_homebrew == true
+        working-directory: homebrew-tap
+        env:
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$HOMEBREW_CASK_PATH" "$HOMEBREW_FORMULA_PATH"
+          if git diff --cached --quiet; then
+            echo "Homebrew tap already matches ${RELEASE_TAG_NAME}; nothing to push."
+            exit 0
+          fi
+          git commit -m "Update Kassiber cask and CLI formula to ${RELEASE_TAG_NAME}"
+          git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"

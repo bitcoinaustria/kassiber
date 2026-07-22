@@ -16,9 +16,14 @@ source-only pull request.
 - [ ] Run `publish-linux-channels.yml` once with every `publish_*` input false.
   This verifies the release assets and renders all channel definitions without
   changing an external service.
+- [ ] Complete the separate offline general release-key ceremony, commit its
+  public key and primary fingerprint, and enable
+  `packaging/release/signing-policy.json`. Dry-run rendering works while that
+  policy is disabled; every external channel publication deliberately fails.
 - [ ] Enable immutable GitHub releases if available to the organization. The
-  workflow also binds every mutating job to the checksum manifest produced by
-  its `prepare` job; never bypass that same-run artifact boundary.
+  workflow also binds every mutating job to checksums derived from the
+  authenticated versioned release manifest in its `prepare` job; never bypass
+  that same-run artifact boundary.
 
 ## Signed APT and DNF repositories
 
@@ -26,9 +31,10 @@ source-only pull request.
   `LINUX_REPOSITORY_BASE_URL`, `LINUX_REPOSITORY_S3_URI`,
   `LINUX_REPOSITORY_S3_ENDPOINT` when required, and
   `LINUX_REPOSITORY_AWS_REGION` in the protected environment.
-- [ ] Create an offline certification primary key and a time-bounded archive
-  signing subkey. Store an offline backup and revocation certificate
-  separately. Give CI only the signing subkey through
+- [ ] Create a dedicated offline archive certification primary key and a
+  time-bounded archive signing subkey. Do not reuse the general Kassiber release
+  primary key. Store an offline backup and revocation certificate separately.
+  Give CI only the archive signing subkey through
   `LINUX_ARCHIVE_GPG_PRIVATE_KEY` and
   `LINUX_ARCHIVE_GPG_PASSPHRASE`.
 - [ ] Add least-privilege object-store credentials through

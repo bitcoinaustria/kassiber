@@ -7,6 +7,7 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
 } from "@/lib/explorer";
+import type { AppUpdateCheck } from "@/lib/appUpdate";
 
 // The supported language set lives in `@/i18n/config` so adding a language is
 // a one-place change; the store type follows it.
@@ -199,6 +200,10 @@ export interface UiState {
   identity: Identity | null;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
+  /** User-controlled desktop release polling preference. */
+  automaticUpdateChecks: boolean;
+  /** Latest native GitHub release check; transient and never persisted. */
+  appUpdate: AppUpdateCheck | null;
   assistantModelSelection: AiModelSelection | null;
   /**
    * macOS-Dock-style auto-hide for the shell assistant dock: parked at the
@@ -265,6 +270,8 @@ export interface UiState {
   setIdentity: (identity: Identity | null) => void;
   setAiFeaturesEnabled: (enabled: boolean) => void;
   setDeveloperToolsEnabled: (enabled: boolean) => void;
+  setAutomaticUpdateChecks: (enabled: boolean) => void;
+  setAppUpdate: (update: AppUpdateCheck | null) => void;
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
   setAssistantDockAutoHide: (enabled: boolean) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
@@ -418,6 +425,7 @@ export function uiStatePartialForStorage(state: UiState) {
     identity: state.identity,
     aiFeaturesEnabled: state.aiFeaturesEnabled,
     developerToolsEnabled: state.developerToolsEnabled,
+    automaticUpdateChecks: state.automaticUpdateChecks,
     assistantModelSelection: state.assistantModelSelection,
     assistantDockAutoHide: state.assistantDockAutoHide,
     assistantDockPosition: state.assistantDockPosition,
@@ -446,6 +454,8 @@ export const useUiStore = create<UiState>()(
       identity: null,
       aiFeaturesEnabled: true,
       developerToolsEnabled: true,
+      automaticUpdateChecks: true,
+      appUpdate: null,
       assistantModelSelection: null,
       assistantDockAutoHide: true,
       // Corner park keeps the idle pill off the content axis; Settings can
@@ -503,6 +513,9 @@ export const useUiStore = create<UiState>()(
       setAiFeaturesEnabled: (enabled) => set({ aiFeaturesEnabled: enabled }),
       setDeveloperToolsEnabled: (enabled) =>
         set({ developerToolsEnabled: enabled }),
+      setAutomaticUpdateChecks: (enabled) =>
+        set({ automaticUpdateChecks: enabled }),
+      setAppUpdate: (appUpdate) => set({ appUpdate }),
       setAssistantModelSelection: (assistantModelSelection) =>
         set({ assistantModelSelection }),
       setAssistantDockAutoHide: (assistantDockAutoHide) =>
@@ -665,6 +678,9 @@ export const useUiStore = create<UiState>()(
           aiFeaturesEnabled,
           developerToolsEnabled:
             restored.developerToolsEnabled ?? current.developerToolsEnabled,
+          automaticUpdateChecks:
+            restored.automaticUpdateChecks ?? current.automaticUpdateChecks,
+          appUpdate: null,
           assistantModelSelection:
             restored.assistantModelSelection ??
             current.assistantModelSelection,

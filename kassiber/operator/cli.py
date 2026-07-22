@@ -24,7 +24,9 @@ from .runner import strip_database_passphrase_arguments
 from .service import _wipe
 
 
-_DIRECT_COMMANDS = frozenset({"commands", "daemon", "chat", "operator", "projects"})
+_DIRECT_COMMANDS = frozenset(
+    {"commands", "daemon", "chat", "operator", "projects", "update", "verify-download"}
+)
 
 
 def add_operator_parser(subparsers: argparse._SubParsersAction) -> None:

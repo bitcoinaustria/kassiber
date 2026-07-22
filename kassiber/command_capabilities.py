@@ -46,7 +46,7 @@ def _paths(value: str) -> frozenset[str]:
 
 CLI_READ_PATHS = _paths(
     """
-    status health next-actions commands.describe projects.list projects.show
+    status update verify-download health next-actions commands.describe projects.list projects.show
     operator.status operator.operation.status operator.touch-id.status
     chats.list chats.show secrets.status sync.status sync.transport.list
     sync.gc.status sync.members.list sync.devices.list sync.conflicts.list

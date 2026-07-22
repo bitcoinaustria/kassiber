@@ -55,7 +55,15 @@
       "devTitle": "Kassiber local dev build ({{commit}})",
       "releaseTitle": "Kassiber v{{version}} ({{commit}})",
       "devLabel": "Kassiber dev",
-      "releaseLabel": "Kassiber v{{version}}"
+      "releaseLabel": "Kassiber v{{version}}",
+      "updateTitle": "Kassiber v{{current}} → v{{latest}} is available on GitHub",
+      "updateLabel": "update available · v{{version}}",
+      "checkFailed": "Kassiber could not check GitHub for updates. Please try again later.",
+      "availablePrompt": "Kassiber v{{version}} is available. Open the release page on GitHub?",
+      "current": "Kassiber v{{version}} is up to date.",
+      "openGitHub": "Open GitHub",
+      "notNow": "Not now",
+      "ok": "OK"
     }
   },
   "projects": {

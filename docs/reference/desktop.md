@@ -59,6 +59,32 @@ sidecar built with PyInstaller. At runtime the supervisor prefers
 app resources, then the development Python fallback above. The same
 `KASSIBER_PYTHON` override applies to installed-app CLI forwarding.
 
+The native desktop shell also carries a deliberately minimal release notifier,
+modeled on Sparrow Wallet's cadence and manual-download flow. Ten seconds after
+launch, and then every 24 hours while open, it makes one unauthenticated GET to
+GitHub's public Kassiber releases API when **Settings → Privacy → Check
+automatically** is enabled (the default). It examines a bounded page of releases
+and compares the highest published semantic-version tag with the packaged app
+version. Prerelease/dev builds include prereleases; a stable `release` build
+ignores them and follows stable releases only. If a newer version exists, the version
+label at the bottom-left of the sidebar changes to an underlined
+`update available · vLatest` link to that GitHub release page. The macOS
+Kassiber menu also includes **Check for Updates…** directly below About; an
+explicit check reports whether Kassiber is current and offers to open the
+release page when an update exists. The automatic-check switch lives in the
+existing Privacy panel; there is no separate update settings panel.
+Kassiber never selects an asset, downloads a file, installs an update, or
+restarts itself; automatic failures stay silent so they cannot interfere with
+startup. The checker runs in the Tauri process before the Python daemon
+boundary and sends no project or book data. See
+[../../SECURITY.md](../../SECURITY.md) for the outbound-request disclosure.
+The update announcement remains unsigned and relies on HTTPS plus control of
+the Kassiber GitHub repository. Release builds include a versioned SHA-256
+manifest; future signed releases will attach its OpenPGP signature after the
+permanent public key and fingerprint are independently published. The notifier
+does not claim that downloaded bytes are authenticated. See
+[release signing](release-signing.md).
+
 For a real installable `.app` built locally on Apple Silicon (without
 Rosetta), use `./scripts/build-macos-arm64-app.sh`. The build is unsigned
 and ad-hoc signed; first-launch Gatekeeper handling is documented in

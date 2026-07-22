@@ -40,8 +40,10 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 - **Bitcoin Native** — descriptors, xpubs, BIP329, Lightning, and Liquid as
   first-class concepts.
-- **Privacy First** — no telemetry, no update check, no analytics; every
-  outbound request enumerated in [SECURITY.md](SECURITY.md).
+- **Privacy First** — no telemetry or analytics; installed desktop and
+  interactive CLI builds make a minimal GitHub release check and never
+  download or install an update. Every outbound request is enumerated in
+  [SECURITY.md](SECURITY.md).
 - **No remote honeypot** — there is no Kassiber server holding your
   addresses, balances, and identity. Crypto tax SaaS providers have been
   breached; the dumps become targeting lists for phishing and physical
@@ -148,11 +150,36 @@ so no separate Python install is needed. Settings can install a user-local
 `kassiber` terminal launcher without administrator privileges. Gatekeeper /
 SmartScreen first-launch handling lives in
 [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
+With **Settings → Privacy → Check automatically** enabled (the default), the
+desktop checks GitHub for a newer release after launch and once daily while
+open. A newer version replaces the small version label in the bottom-left
+sidebar with an underlined `update available · vLatest` link to the GitHub
+release page. On macOS, **Kassiber → Check for Updates…** performs the same
+check on demand and can open that release page. Downloading and installing
+remain manual. The notice itself trusts HTTPS and control of the Kassiber
+GitHub repository. Release builds now include a Sparrow-style versioned
+SHA-256 manifest; once Bitcoin Austria publishes its permanent OpenPGP release
+key, signed releases will add the matching `.txt.asc` detached signature.
+Current releases remain unauthenticated until that key and signature exist.
 
 **CLI only** — use the portable macOS/Linux `.tar.gz`, Windows `.zip`, or the
-GUI-free Linux `kassiber-cli` Debian package from the same release. The frozen
-CLI is the same executable bundled inside the desktop app and does not require
-Python or desktop GUI libraries.
+GUI-free Linux `kassiber-cli` Debian/RPM package from the same release. The
+frozen CLI is the same executable bundled inside the desktop app and does not
+require Python or desktop GUI libraries.
+
+Once signed releases begin, `kassiber verify-download` authenticates the PGP
+signature and then the selected artifact hash. During the key-publication
+transition it requires the public-key file and full fingerprint obtained from
+independent trusted sources. See
+[Release signing](docs/reference/release-signing.md).
+
+Installed CLI builds use the same release metadata without delaying normal
+commands: human terminal runs in table mode show a cached update notice and
+refresh stale metadata in the background for the next run. Machine, structured,
+non-interactive, daemon, and source-checkout runs do not check automatically.
+Run `kassiber update` for an explicit check. A Homebrew cask or formula install
+gets its exact manual `brew upgrade` command; other installs get the GitHub
+release link.
 
 **From source** (CLI use or development, Python `>=3.10`):
 

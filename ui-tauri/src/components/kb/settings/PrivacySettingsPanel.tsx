@@ -747,6 +747,8 @@ export function PrivacySettingsPanel({
   setHideSensitive,
   clearClipboard,
   setClearClipboard,
+  automaticUpdateChecks,
+  setAutomaticUpdateChecks,
   backends,
   aiFeaturesEnabled,
   onEditBackend,
@@ -757,6 +759,8 @@ export function PrivacySettingsPanel({
   setHideSensitive: (value: boolean) => void;
   clearClipboard: boolean;
   setClearClipboard: (value: boolean) => void;
+  automaticUpdateChecks: boolean;
+  setAutomaticUpdateChecks: (value: boolean) => void;
   backends: Backend[];
   aiFeaturesEnabled: boolean;
   onEditBackend: (backend: Backend) => void;
@@ -817,6 +821,25 @@ export function PrivacySettingsPanel({
           checked={clearClipboard}
           onCheckedChange={setClearClipboard}
         />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold">
+          {t("privacy.updatesHeading")}
+        </h3>
+        <SettingsSwitchRow
+          label={t("privacy.updatesLabel")}
+          description={
+            automaticUpdateChecks
+              ? t("privacy.updatesOn")
+              : t("privacy.updatesOff")
+          }
+          checked={automaticUpdateChecks}
+          onCheckedChange={setAutomaticUpdateChecks}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("privacy.updatesTrust")}
+        </p>
       </section>
 
       <section className="space-y-3">

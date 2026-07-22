@@ -28,11 +28,16 @@ Adopt the following stack:
   debug, or update.
 - **Packaging:** Tauri bundler — `.dmg`/`.app` (macOS), `.msi`/`.exe`
   (Windows), `.deb`/`.AppImage` (Linux)
-- **Update model:** **no background update check** (preserves the
-  [SECURITY.md](../../SECURITY.md) invariant). MVP ships a Settings link to
-  the GitHub releases page. A signed-manifest, user-initiated "Check for
-  updates" button via Tauri's updater is a follow-up decision, **off by
-  default**, never poll on launch.
+- **Update model:** minimal release notification, never automatic download or
+  installation. Installed desktop builds may query the fixed public GitHub
+  releases endpoint after a short startup delay and daily while open; the
+  persisted **Settings → Privacy → Check automatically** preference controls
+  polling, and macOS exposes an explicit native **Check for Updates…** action.
+  The notification trusts GitHub/TLS and is not an authenticated release
+  announcement. Builds carry a versioned SHA-256 manifest; the Sparrow-style
+  OpenPGP signature becomes authoritative only after the permanent release key
+  and fingerprint are published. The complete disclosure lives in
+  [SECURITY.md](../../SECURITY.md).
 
 Rust scope stays small: process supervision, stdin/stdout framing, OS path
 resolution, and Tauri command bindings. **No** tax, accounting, or storage

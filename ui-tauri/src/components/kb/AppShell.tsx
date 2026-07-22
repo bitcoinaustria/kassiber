@@ -111,6 +111,7 @@ import {
   getTransport,
   isImportProjectActive,
   noteActiveImportProject,
+  openExternalUrl,
   storeTouchIdPassphrase,
   touchIdPassphraseStatus,
   unlockTouchIdPassphrase,
@@ -1553,6 +1554,9 @@ export function AppShell() {
               decreaseAppScale: store.decreaseAppScale,
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,
+              runAppUpdateCheck: () => {
+                console.error("AppShell should not receive global menu actions");
+              },
               runAddWalletConnection: () =>
                 openAddWalletConnection(t("search.actionReason.fromNativeMenu")),
               runWalletSync: runMenuWalletSync,
@@ -2439,6 +2443,24 @@ function NavUser({
 
 function AppVersion() {
   const { t } = useTranslation("chrome");
+  const appUpdate = useUiStore((state) => state.appUpdate);
+  const releaseUrl = appUpdate?.updateAvailable ? appUpdate.releaseUrl : null;
+  const latestVersion = appUpdate?.latestVersion;
+  if (releaseUrl && latestVersion) {
+    return (
+      <button
+        type="button"
+        title={t("shell.version.updateTitle", {
+          current: appUpdate.currentVersion,
+          latest: latestVersion,
+        })}
+        onClick={() => void openExternalUrl(releaseUrl).catch(() => undefined)}
+        className="inline-flex w-full items-center justify-center px-2 pb-1 text-center text-[11px] leading-none text-primary underline underline-offset-4 group-data-[collapsible=icon]:hidden"
+      >
+        {t("shell.version.updateLabel", { version: latestVersion })}
+      </button>
+    );
+  }
   return (
     <a
       href="https://github.com/bitcoinaustria/kassiber"
@@ -2452,7 +2474,7 @@ function AppVersion() {
               commit: APP_COMMIT,
             })
       }
-      className="inline-flex items-center justify-center gap-1 px-2 pb-1 text-center text-[11px] leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
+      className="inline-flex w-full items-center justify-center gap-1 px-2 pb-1 text-center text-[11px] leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
     >
       <span>
         {APP_IS_DEV_BUILD

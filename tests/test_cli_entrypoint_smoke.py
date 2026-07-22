@@ -51,6 +51,8 @@ HELP_PATHS = (
     ("rates",),
     ("diagnostics", "collect"),
     ("chat",),
+    ("update",),
+    ("verify-download",),
     ("chats",),
     ("ai",),
     ("ai", "providers"),

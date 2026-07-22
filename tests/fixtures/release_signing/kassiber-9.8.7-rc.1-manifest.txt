@@ -1,0 +1,4 @@
+# Kassiber release manifest v1
+# Version: 9.8.7-rc.1
+9cf43d7a982a7daa9e1e6dcef4b4875a171c42fe631835c86202c38d7bbb4fd2  kassiber-cli-linux-x64.tar.gz
+0fa3beee953223a7fe82dee333ccbeab51416b218e67978c7751fbda96f7ed63  kassiber-macos-arm64.dmg

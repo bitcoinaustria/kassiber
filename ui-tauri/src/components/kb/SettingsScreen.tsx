@@ -116,6 +116,10 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setDeveloperToolsEnabled = useUiStore(
     (s) => s.setDeveloperToolsEnabled,
   );
+  const automaticUpdateChecks = useUiStore((s) => s.automaticUpdateChecks);
+  const setAutomaticUpdateChecks = useUiStore(
+    (s) => s.setAutomaticUpdateChecks,
+  );
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -1019,6 +1023,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             setHideSensitive={setHideSensitive}
             clearClipboard={clearClipboard}
             setClearClipboard={setClearClipboard}
+            automaticUpdateChecks={automaticUpdateChecks}
+            setAutomaticUpdateChecks={setAutomaticUpdateChecks}
             backends={backends}
             aiFeaturesEnabled={aiFeaturesEnabled}
             onEditBackend={openEditBackend}

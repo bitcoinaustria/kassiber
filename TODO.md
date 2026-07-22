@@ -876,8 +876,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   publication, tag/version release gating, isolated package-manager lifecycle
   tests, and the phased policy/maintenance roadmap in
   [docs/reference/linux-packaging.md](docs/reference/linux-packaging.md)
-- [ ] Complete the external accounts, protected environment, credentials,
-  signing-key custody, hosting, staged publication, and first-release checks in
+- [ ] Complete the external accounts, protected environments, credentials,
+  separate archive-signing-key custody, hosting, staged publication, and
+  first-release checks in
   [docs/reference/linux-packaging-operator-todo.md](docs/reference/linux-packaging-operator-todo.md);
   do not publish package-manager install commands before their live candidates
   and signatures are verified
@@ -890,7 +891,21 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Production code-signing & distribution: Apple Developer ID + notarization
   (macOS), Windows EV cert, signed Linux repository metadata and applicable
   artifact signatures; flip `tauri.conf.json` `bundle.active` for production
-- [ ] User-initiated update check only; no background polling
+- [x] Minimal GitHub release notifier for installed desktop and interactive CLI
+  builds: preference-controlled delayed/daily desktop checks, a native macOS
+  manual action, cached non-blocking CLI notices, and no automatic download or
+  execution
+- [x] Generate a deterministic Sparrow-style versioned SHA-256 release manifest
+  and provide local CLI verification that pins a caller-supplied full OpenPGP
+  fingerprint, authenticates the detached signature in an isolated keyring,
+  then verifies the selected artifact hash
+- [ ] Establish the permanent offline Kassiber OpenPGP release key, publish its
+  public key and full primary fingerprint through independent channels, attach
+  `.txt.asc` signatures to releases, add the public key and fingerprint to the
+  code-reviewed release policy, and enable the draft-only two-person finalizer;
+  keep this release key separate from the CI-held Linux archive key, then bundle
+  the reviewed public key in packaged clients. The GitHub update notification
+  remains a notification-only HTTPS trust path
 
 ## Later backlog
 

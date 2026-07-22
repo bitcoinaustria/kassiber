@@ -124,6 +124,12 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertNotIn("dnf upgrade", workflow)
         self.assertIn("publish-linux-channels-production", workflow)
         self.assertIn("channels/release-checksums.txt", workflow)
+        self.assertNotIn("SHA256SUMS.txt", workflow)
+        self.assertIn("kassiber-${version}-manifest.txt", workflow)
+        self.assertIn("scripts/release_manifest.py verify-release", workflow)
+        self.assertIn("packaging/release/signing-policy.json", workflow)
+        self.assertIn("Linux channel publication requires an enabled", workflow)
+        self.assertIn("primary key distinct from the offline release key", workflow)
         self.assertIn("isDraft,isPrerelease,tagName", workflow)
         self.assertIn('"commit":sys.argv[2]', workflow)
         self.assertIn("makepkg --cleanbuild --noconfirm", workflow)
@@ -139,6 +145,21 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("package-cli-rpm.sh", workflow)
         self.assertIn("package-desktop-rpm.sh", workflow)
         self.assertIn("--source-output", workflow)
+
+    def test_signed_release_finalizer_never_rebuilds_or_replaces_assets(self):
+        workflow = (
+            ROOT / ".github/workflows/finalize-signed-release.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("environment: release-production", workflow)
+        self.assertIn("scripts/release_manifest.py verify-release", workflow)
+        self.assertIn("gh release download", workflow)
+        self.assertIn("gh release edit", workflow)
+        self.assertIn("--draft=false", workflow)
+        self.assertNotIn("gh release upload", workflow)
+        self.assertNotIn("--clobber", workflow)
+        self.assertNotIn("tauri build", workflow)
+        self.assertNotIn("pyinstaller", workflow)
 
 
 class RepositoryPublisherTest(unittest.TestCase):

@@ -65,6 +65,12 @@ A separate update checker may use this contract later, but it must still:
 4. verify that the advertised version is actually present in that repository;
 5. show, but never execute, a manager command only after those checks pass.
 
+The current CLI validates the marker and its native package ownership, then
+reports a Debian/RPM manual install context in structured update output.
+Because the live repository URL and archive-key fingerprint do not exist yet,
+it deliberately does not query a candidate and continues to show the GitHub
+release link with no `apt` or `dnf` command.
+
 If no marker exists, if `repository_provenance` is `probe-required` and the
 probe fails, or if the package has only `/var/lib/dpkg/status` provenance, the
 installation must be treated as manual/unknown. In particular, a GitHub `.deb`
@@ -149,10 +155,12 @@ credential-free copy before it pushes its project-owned repository.
 
 `scripts/prepare-obs-package.sh` extracts the two rebuildable source RPMs into
 OBS package trees. `.github/workflows/publish-linux-channels.yml` is manual,
-defaults every external publish switch to false, re-verifies release checksums,
-and puts every mutating job behind `linux-packaging-production`. It can publish
-the signed APT/DNF trees or update COPR, AUR, Nix, and OBS only after an
-operator supplies the external service configuration.
+defaults every external publish switch to false, and puts every mutating job
+behind `linux-packaging-production`. During the current key-transition state it
+may use the versioned manifest only to render a no-publication dry run. Once the
+code-reviewed release-signing policy is enabled, it authenticates the detached
+manifest signature before deriving any APT/DNF, COPR, AUR, Nix, or OBS input;
+external publication fails closed without that signature.
 
 The exact external setup and launch checklist is
 [Linux Packaging Operator TODO](linux-packaging-operator-todo.md).
@@ -169,8 +177,10 @@ The recommended production shape is:
   `packages.bitcoinaustria.at`. GitHub Pages is a poor long-term binary host
   because its documented repository and bandwidth limits are small relative
   to Kassiber's roughly 100 MB packages.
-- **Keys:** an offline certification primary key and a time-bounded archive
-  signing subkey. CI receives only the signing subkey through a protected
+- **Keys:** a dedicated offline archive certification primary key and a
+  time-bounded archive signing subkey. This primary is distinct from Kassiber's
+  general offline release-signing primary. CI receives only the archive signing
+  subkey through a protected
   release environment. Store an encrypted offline backup and a pre-generated
   revocation certificate separately. Publish the minimal public key from the
   project-owned domain and configure it with APT `Signed-By`, never `apt-key`.

@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - ".github/workflows/prerelease-binaries.yml"
+      - ".github/workflows/finalize-signed-release.yml"
       - "pyproject.toml"
       - "uv.lock"
       - "kassiber/__init__.py"
       - "kassiber/build_info.py"
       - "kassiber/cli/**"
       - "kassiber/operator/**"
+      - "kassiber/release_verification.py"
       - "scripts/kassiber_pyinstaller_entry.py"
       - "scripts/build-apt-repository.sh"
       - "scripts/build-rpm-repository.sh"
@@ -17,10 +19,12 @@ on:
       - "scripts/package-cli-rpm.sh"
       - "scripts/package-desktop-rpm.sh"
       - "scripts/prepare-obs-package.sh"
+      - "scripts/release_manifest.py"
       - "scripts/render_aur.py"
       - "scripts/render_nix.py"
       - "scripts/write_build_info.py"
       - "packaging/linux/**"
+      - "packaging/release/**"
       - "tests/test_dependency_drift.py"
       - "ui-tauri/package.json"
       - "ui-tauri/pnpm-lock.yaml"
@@ -55,6 +59,11 @@ on:
         required: false
         default: ""
         type: string
+      draft_release:
+        description: "Keep the GitHub release as a draft for offline PGP signing"
+        required: true
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
@@ -592,7 +601,7 @@ jobs:
                   ;;
               esac
           done < <(
-            find ui-tauri/src-tauri/target \
+          find ui-tauri/src-tauri/target \
               -path "*/release/bundle/*" \
               \( -name "*.AppImage" -o -name "*.app" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -print0
           )
@@ -649,6 +658,21 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
+      - name: Enforce release signing cutover policy
+        id: release-signing
+        env:
+          RELEASE_IS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft_release == true }}
+        run: |
+          set -euo pipefail
+          policy_json="$(python3 scripts/release_manifest.py policy \
+            --policy packaging/release/signing-policy.json)"
+          policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
+          if [ "$policy_enabled" = true ] && [ "$RELEASE_IS_DRAFT" != true ]; then
+            echo "Signed-release policy is enabled; build a draft and publish it only through finalize-signed-release.yml." >&2
+            exit 1
+          fi
+          echo "enabled=$policy_enabled" >> "$GITHUB_OUTPUT"
+
       - name: Download CLI release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -675,35 +699,39 @@ jobs:
             exit 1
           fi
 
-      - name: Generate checksum manifest
+      - name: Generate release manifest
+        id: release-manifest
         shell: bash
+        env:
+          RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-
-          sha256_file() {
-            if command -v shasum >/dev/null 2>&1; then
-              shasum -a 256 "$1" | awk '{print $1}'
-            else
-              sha256sum "$1" | awk '{print $1}'
-            fi
-          }
-
-          find release -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 \
-            | sort -z \
-            | while IFS= read -r -d '' artifact; do
-                printf "%s  %s\n" "$(sha256_file "$artifact")" "$(basename "$artifact")"
-              done > release/SHA256SUMS.txt
+          version="${RELEASE_TAG_NAME#v}"
+          python scripts/release_manifest.py generate \
+            --release-dir release \
+            --version "$version"
+          manifest_path="release/kassiber-${version}-manifest.txt"
+          test -s "$manifest_path"
+          echo "path=${manifest_path}" >> "$GITHUB_OUTPUT"
 
       - name: Create or update release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           prerelease: ${{ github.event_name != 'workflow_dispatch' || inputs.release_channel == 'prerelease' }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft_release == true }}
           fail_on_unmatched_files: true
           body: |
             Automated Kassiber release artifacts.
 
-            These artifacts are currently unsigned CLI and desktop builds.
+            Each release includes a versioned SHA-256 manifest. A release is
+            PGP-authenticated only when the matching `.txt.asc` detached
+            signature is also attached and verifies against Kassiber's
+            independently published release-key fingerprint. Current packages
+            remain unsigned until that key and signature are published.
+
+            Platform code signing is separate from the PGP manifest. These are
+            currently unsigned CLI and desktop builds.
             CLI-only archives are published for macOS, Linux, and Windows;
             Linux also gets GUI-free CLI-only Debian/RPM packages, a desktop
             RPM, and source RPM inputs for COPR or OBS.
@@ -721,9 +749,17 @@ jobs:
         shell: bash
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          RELEASE_IS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft_release == true }}
+          RELEASE_SIGNING_ENABLED: ${{ steps.release-signing.outputs.enabled }}
         run: |
           set -euo pipefail
-          if [ -n "$HOMEBREW_TAP_TOKEN" ]; then
+          if [ "$RELEASE_SIGNING_ENABLED" = "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Signed release metadata is published only after offline verification by the finalizer."
+          elif [ "$RELEASE_IS_DRAFT" = "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Release is a draft pending offline PGP signing; skipping Homebrew update."
+          elif [ -n "$HOMEBREW_TAP_TOKEN" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -744,6 +780,7 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+          RELEASE_MANIFEST_PATH: ${{ steps.release-manifest.outputs.path }}
         run: |
           set -euo pipefail
           tag_name="${RELEASE_TAG_NAME}"
@@ -753,7 +790,7 @@ jobs:
             local name="$1"
             local sha256
             test -f "release/${name}"
-            sha256="$(awk -v name="$name" '$2 == name { print $1 }' release/SHA256SUMS.txt)"
+            sha256="$(awk -v name="$name" '$2 == name { print $1 }' "$RELEASE_MANIFEST_PATH")"
             test -n "$sha256"
             printf '%s' "$sha256"
           }

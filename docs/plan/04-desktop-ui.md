@@ -29,12 +29,15 @@ aspirations.
 
 ### Local-first stays absolute
 
-- **No background network calls from the Tauri shell.** The webview makes
-  zero outbound HTTP. Every request goes through Rust → Python daemon →
-  existing sync code paths. The set of external endpoints in
-  [SECURITY.md](../../SECURITY.md) does not grow because of this build.
-- **No update polling.** No `analytics`, `crashlytics`, `error reporter`,
-  or `phone-home` in any layer. Update checks are user-initiated only.
+- **No undisclosed background network calls from the Tauri shell.** The webview
+  makes zero outbound HTTP. Accounting/network requests go through Rust →
+  Python daemon → existing sync code paths. The sole shell-owned exception is
+  the preference-controlled, fixed-origin GitHub release notifier documented
+  completely in [SECURITY.md](../../SECURITY.md).
+- **No telemetry-style polling.** No `analytics`, `crashlytics`, error reporter,
+  license check, or identifying `phone-home` in any layer. The release notifier
+  sends only the exact app version in its User-Agent plus ordinary IP/timing
+  metadata and never downloads or installs anything.
 - **No CDN-loaded fonts/assets.** Everything bundled with the app.
 
 ### Webview is untrusted
@@ -533,9 +536,9 @@ Order picked for compounding wins:
 4. **Books** — `routes/Books.tsx`. Reads `profiles list`
    envelopes; surfaces `tax_country`, `gains_algorithm`,
    `tax_long_term_days`, `fiat_currency`.
-5. **Settings** — `routes/settings/index.tsx`. Path readouts; safe
-   redaction; the "Check for updates" link to GitHub releases (no
-   auto-poll).
+5. **Settings** — `routes/settings/index.tsx`. Path readouts; safe redaction;
+   and the persisted Privacy preference controlling the minimal GitHub release
+   check. Manual downloads remain links to GitHub releases.
 6. **Welcome** — `routes/welcome.tsx`. Empty-state onboarding text.
 
 Each screen lands as one PR with:
@@ -692,23 +695,28 @@ column stores the ref ID, not the raw value.
 - Windows: EV cert from a vendor that supports the Tauri signing flow
   (Sectigo, etc.).
 - Linux: GPG signing keys for `.deb`. AppImage signing optional.
-- All signing keys live in CI secrets, never in the repo.
+- Platform code-signing credentials use the platform's protected CI/HSM
+  integration and never live in the repo. The OpenPGP release private key stays
+  offline and never enters CI; only its public key is committed.
 
 ### 5.4 Update model
 
 Per [01-stack-decision.md](01-stack-decision.md) and
-[SECURITY.md](../../SECURITY.md): **no auto-update on launch.**
+[SECURITY.md](../../SECURITY.md): **release notification is not auto-update.**
 
-- Settings page has "Check for updates" link → opens the GitHub releases
-  page in the user's default browser via `dialog:open` capability or
-  Tauri's `open_url`.
-- A future signed-manifest updater is opt-in only. If implemented, it
-  - never polls automatically,
-  - shows a clear "do you want to check now?" dialog on user click,
-  - validates manifest signatures against a built-in pubkey,
-  - lets the user always download instead of auto-installing.
-- `User-Agent` for any update-check fetch matches the existing
-  `kassiber/<version>` convention.
+- The Rust shell may query a fixed GitHub releases endpoint ten seconds after
+  launch and daily while open when the persisted automatic-check preference is
+  enabled. Redirects are refused and responses are bounded.
+- macOS exposes a native **Check for Updates…** action regardless of the
+  automatic preference. A newer release is always opened manually in the
+  default browser; Kassiber never selects, downloads, installs, or executes an
+  asset.
+- The update announcement relies on HTTPS plus GitHub repository control.
+  Release builds carry a versioned SHA-256 manifest; future signed releases add
+  a detached OpenPGP signature verified against Kassiber's independently
+  published full release-key fingerprint.
+- `User-Agent` is `kassiber/<version>` and the checker sends no project, book,
+  wallet, device, installation, hostname, or build-hash identifier.
 
 ### 5.5 Verification gates for Phase 5
 
@@ -738,15 +746,17 @@ green before merging the phase's PRs.
 - [ ] Logs at every layer (Rust supervisor, Python daemon, webview
       console) follow the redaction rules.
 - [ ] `diagnostics collect` covers Tauri layers and is still public-safe.
-- [ ] No telemetry, crash reporter, analytics, license-check, or
-      auto-updater background polling.
+- [ ] No telemetry, crash reporter, analytics, license check, or automatic
+      update/download path; the only release polling is the documented,
+      preference-controlled fixed-origin notifier.
 - [ ] User-Agent for any outbound HTTPS still matches
       `kassiber/<version>`.
 - [ ] AGPL: every JS/Rust/Python dep tracked in
       [THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md);
       CI fails on any new dep with a license incompatible with
       AGPL-3.0-only.
-- [ ] Code-signing identities live in CI secrets, never in the repo.
+- [ ] Platform code-signing identities use protected CI/HSM integrations and
+      never live in the repo; the OpenPGP release private key remains offline.
 - [ ] Bundled Python tree is read-only at runtime; user-writable state
       stays under `~/.kassiber/`.
 - [ ] Bundled Python and Rust crates have a documented refresh cadence:

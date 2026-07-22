@@ -63,12 +63,33 @@ jobs:
       - name: Install package inspection tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cpio rpm
+          sudo apt-get install -y cpio gnupg rpm
+      - name: Load release signing policy
+        id: release-signing
+        env:
+          PUBLISH_REQUESTED: ${{ inputs.publish_repositories || inputs.publish_copr || inputs.publish_aur || inputs.publish_nix || inputs.publish_obs }}
+        run: |
+          set -euo pipefail
+          policy_json="$(python3 scripts/release_manifest.py policy \
+            --policy packaging/release/signing-policy.json)"
+          policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
+          fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$policy_json")"
+          public_key_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")"
+          if [ "$policy_enabled" != true ] && [ "$PUBLISH_REQUESTED" = true ]; then
+            echo "Linux channel publication requires an enabled, code-reviewed release signing policy." >&2
+            exit 1
+          fi
+          echo "enabled=$policy_enabled" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          echo "public_key_path=$public_key_path" >> "$GITHUB_OUTPUT"
       - name: Download and verify release inputs
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG_NAME: ${{ inputs.tag_name }}
           APT_SUITE: ${{ inputs.suite }}
+          RELEASE_SIGNING_ENABLED: ${{ steps.release-signing.outputs.enabled }}
+          RELEASE_SIGNING_FINGERPRINT: ${{ steps.release-signing.outputs.fingerprint }}
+          RELEASE_PUBLIC_KEY_PATH: ${{ steps.release-signing.outputs.public_key_path }}
         run: |
           set -euo pipefail
           case "$RELEASE_TAG_NAME" in
@@ -92,9 +113,10 @@ jobs:
           expected_commit="$(git rev-parse HEAD)"
           expected_commit_short="$(git rev-parse --short=12 HEAD)"
           mkdir -p release channels/aur channels/obs
+          manifest_name="kassiber-${version}-manifest.txt"
           gh release download "$RELEASE_TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" --dir release \
-            --pattern SHA256SUMS.txt \
+            --pattern "$manifest_name" \
             --pattern kassiber-linux-x64.AppImage \
             --pattern kassiber-cli-linux-x64.tar.gz \
             --pattern kassiber-linux-x64.deb \
@@ -104,10 +126,28 @@ jobs:
             --pattern kassiber-linux-x64.src.rpm \
             --pattern kassiber-cli-linux-x64.src.rpm
 
+          if [ "$RELEASE_SIGNING_ENABLED" = true ]; then
+            gh release download "$RELEASE_TAG_NAME" \
+              --repo "$GITHUB_REPOSITORY" --dir release \
+              --pattern "$manifest_name.asc"
+            python3 scripts/release_manifest.py verify-release \
+              --release-dir release \
+              --manifest "release/$manifest_name" \
+              --signature "release/$manifest_name.asc" \
+              --public-key "$RELEASE_PUBLIC_KEY_PATH" \
+              --fingerprint "$RELEASE_SIGNING_FINGERPRINT" \
+              --allow-subset
+          else
+            python3 scripts/release_manifest.py verify-artifacts \
+              --release-dir release \
+              --manifest "release/$manifest_name" \
+              --allow-subset
+          fi
+
           release_sha256() {
             local name="$1"
             local expected
-            expected="$(awk -v name="$name" '$2 == name { print $1 }' release/SHA256SUMS.txt)"
+            expected="$(awk -v name="$name" '$2 == name { print $1 }' "release/$manifest_name")"
             test -n "$expected"
             printf '%s  %s\n' "$expected" "release/$name" | sha256sum -c - >&2
             printf '%s' "$expected"
@@ -261,6 +301,14 @@ jobs:
           fingerprint="$(gpg --batch --with-colons --list-secret-keys \
             | awk -F: '$1 == "fpr" { print $10; exit }')"
           test -n "$fingerprint"
+          release_policy_json="$(python3 scripts/release_manifest.py policy \
+            --policy packaging/release/signing-policy.json \
+            --require-enabled)"
+          release_fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$release_policy_json")"
+          if [ "$fingerprint" = "$release_fingerprint" ]; then
+            echo "Linux archive signing must use a primary key distinct from the offline release key." >&2
+            exit 1
+          fi
           if [ -n "$ARCHIVE_KEY_PASSPHRASE" ]; then
             warmup="$RUNNER_TEMP/kassiber-signing-warmup"
             printf 'Kassiber archive signing warm-up\n' > "$warmup"

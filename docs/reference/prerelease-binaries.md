@@ -62,6 +62,18 @@ gh workflow run prerelease-binaries.yml \
   -f tag_name=<tag-name>
 ```
 
+After the permanent OpenPGP release key is published, production releases use
+the same command with `-f draft_release=true`. Download and sign the generated
+manifest offline, upload its `.asc` file to the draft, and have a second
+operator verify it. The second operator then runs
+`.github/workflows/finalize-signed-release.yml` against `main`. That workflow
+downloads the existing draft assets, authenticates the signature and exact
+artifact set against the code-reviewed release policy, renders Homebrew hashes
+from that authenticated manifest, and publishes the existing draft without
+rebuilding or replacing any asset. Once `packaging/release/signing-policy.json`
+is enabled, tag pushes and non-draft build runs fail closed instead of taking an
+unsigned publishing path.
+
 Only use `publish_release=true` for real prerelease tags. PR and branch tester
 builds should stay workflow artifacts, not GitHub Releases.
 
@@ -101,8 +113,8 @@ the selected `prerelease` or `release` channel.
 
 Tag and publishing runs fail before building when the tag without its leading
 `v` does not exactly match the Python package version. This prevents a release
-tag, Debian package metadata, Homebrew definition, and embedded build identity
-from advertising different versions.
+tag, Debian/RPM package metadata, Homebrew definition, and embedded build
+identity from advertising different versions.
 
 Pull requests that change the release workflow, frozen-CLI inputs, or Tauri
 packaging files run the same cross-platform CLI and desktop build matrix without
@@ -127,8 +139,16 @@ kassiber-macos-arm64.app.zip
 kassiber-macos-arm64.dmg
 kassiber-windows-x64.exe
 kassiber-windows-x64.msi
-SHA256SUMS.txt
+kassiber-<version>-manifest.txt
 ```
+
+The versioned manifest uses Sparrow's `sha256sum` shape plus comment headers
+that bind its format revision and semantic version; standard `sha256sum
+--check` ignores those headers and remains compatible.
+Once the permanent Kassiber release key is published, signed releases also
+carry `kassiber-<version>-manifest.txt.asc`. The manifest signature
+authenticates every artifact hash without requiring a separate PGP signature
+for every package. See [Release signing](release-signing.md).
 
 When the repository secret `HOMEBREW_TAP_TOKEN` is configured, successful
 release publishes also update `bitcoinaustria/homebrew-kassiber` with a cask
@@ -165,21 +185,15 @@ It builds the PyInstaller sidecar as
 `ui-tauri/src-tauri/binaries/kassiber-cli-aarch64-apple-darwin`, verifies that
 the executable is arm64, and runs Tauri with
 `--target aarch64-apple-darwin --bundles app,dmg`. The result is a full
-unsigned `Kassiber Dev.app` and DMG under
-`ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`. The local
-helper overrides both the product name and bundle identifier
-(`at.bitcoinaustria.kassiber.dev`), so it can coexist with an installed
-prerelease `Kassiber.app` without replacing it. Prerelease builds keep the
-production name and identifier from `tauri.conf.json`.
+unsigned desktop app and DMG under
+`ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
 With `--install-cli`, the helper first smokes the finished app bundle's
 `Contents/Resources/bin/kassiber` launcher and then installs a managed wrapper
 through the desktop binary's same Rust implementation used by Settings. That
 single implementation chooses `~/.local/bin` or `~/bin`, refuses conflicts, and
 adds one marked PATH block to the current shell profile when needed. It never
 starts a daemon or background process; each invocation remains a normal one-shot
-CLI process. The terminal command is still named `kassiber`, so use
-`--install-cli` only when you intentionally want that command to target the dev
-app. Without the flag, a local build does not modify the home directory.
+CLI process. Without the flag, a local build does not modify the home directory.
 
 The helper defaults to Python 3.11 to match the GitHub Actions prerelease
 workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
@@ -197,23 +211,23 @@ The good news for a local build: nothing downloaded it, so there is no
 `com.apple.quarantine` xattr — Gatekeeper is on its softer path.
 
 ```bash
-open "ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber Dev.app"
+open ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
 ```
 
 Expected dialogs and how to clear them:
 
-- **"Kassiber Dev.app" cannot be opened because the developer cannot be
+- **"Kassiber.app" cannot be opened because the developer cannot be
   verified.** — the typical local-build case. Either:
   - Finder → right-click the .app → **Open** → **Open** to record a
     one-time override (macOS remembers the path), or
   - System Settings → Privacy & Security → scroll to the blocked-app
     notice → **Open Anyway**.
-- **"Kassiber Dev.app" is damaged and can't be opened.** — only if a quarantine
+- **"Kassiber.app" is damaged and can't be opened.** — only if a quarantine
   xattr was attached (e.g. you zipped/unzipped the bundle through a tool
   that adds the flag). Strip it:
   ```bash
   xattr -dr com.apple.quarantine \
-    "ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber Dev.app"
+    ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Kassiber.app
   ```
 
 Subsequent launches from the same path go through silently. If you rebuild
@@ -261,13 +275,13 @@ startup and installed-app CLI forwarding.
 CLI-only archives are intentionally portable: extract them and place the
 `kassiber` executable in an existing PATH directory, or invoke it by path.
 They do not edit PATH or require a GUI. Linux users can instead install the
-CLI-only `kassiber-cli-linux-x64.deb`; it owns `/usr/bin/kassiber`, conflicts
-cleanly with the desktop Debian package, and has no GTK/WebKit dependency.
-Both Debian and RPM package surfaces own
-`/usr/lib/kassiber/install-context.json`; the surface-specific marker is
-documented in [Linux packaging](linux-packaging.md). It identifies the native
-package context but deliberately does not claim that APT/DNF installed a
-directly downloaded `.deb`/`.rpm`.
+CLI-only Debian or RPM package; it owns `/usr/bin/kassiber`, conflicts cleanly
+with the matching desktop package, and has no GTK/WebKit dependency. Both
+package formats install `/usr/lib/kassiber/install-context.json`; the
+surface-specific marker is documented in
+[Linux packaging](linux-packaging.md). It identifies native package ownership
+but deliberately does not claim that APT/DNF installed a directly downloaded
+package.
 
 ## Commit Identity
 
