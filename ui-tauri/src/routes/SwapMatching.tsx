@@ -567,25 +567,27 @@ function railForLeg(
   return "onchain";
 }
 
-type CustodySurfaceTab = "inbox" | "history" | "advanced";
+type CustodySurfaceTab = "inbox" | "pairs" | "history" | "advanced";
 
 /** Legacy `?tab=` values (old deep links, the /custody-gaps redirect, saved
- * bookmarks) map onto the three-tab inbox surface. */
+ * bookmarks) map onto the four-tab custody surface. */
 function resolveTab(tab: string | undefined): CustodySurfaceTab | null {
-  if (tab === "inbox" || tab === "review" || tab === "gaps") return "inbox";
+  if (tab === "inbox" || tab === "gaps") return "inbox";
+  if (tab === "pairs" || tab === "review") return "pairs";
   if (tab === "history") return "history";
   if (tab === "advanced" || tab === "components") return "advanced";
   return null;
 }
 
 /**
- * Custody — the single custody surface.
+ * Custody — the single custody surface, split by activity:
  *
- * **Inbox** is the primary path: one ranked decision queue over custody-gap
- * questions and pairing candidates, one plain-language card per question.
- * **History** shows every settled pairing. **Advanced** hosts the expert
- * tools (bulk review + rules, component authoring, gap records, coverage and
- * lineage timelines) — none of which are required to close questions.
+ * **Inbox** — custody questions (missing-wallet gaps + residual follow-ups):
+ * low-volume, careful judgment calls, one plain-language card at a time.
+ * **Moves & swaps** — the pairing queue: high-volume, evidence-backed
+ * matching with the rail-logo leg rows (the classic swaps screen).
+ * **History** — every settled pairing. **Advanced** — expert tools
+ * (component authoring, gap records, coverage and lineage timelines).
  */
 export function SwapMatching() {
   const { t } = useTranslation("review");
@@ -594,13 +596,16 @@ export function SwapMatching() {
     method?: "ownership_graph";
     tab?: string;
   };
-  // A `focus`/`method` deep link always targets the inbox; otherwise an
+  // A `focus`/`method` deep link targets a pairing candidate; otherwise an
   // explicit `?tab=` hint selects the tab.
-  const deepLinkToInbox = Boolean(search.focus || search.method);
-  const initialTab: CustodySurfaceTab = deepLinkToInbox
-    ? "inbox"
+  const deepLinkToPairs = Boolean(search.focus || search.method);
+  const initialTab: CustodySurfaceTab = deepLinkToPairs
+    ? "pairs"
     : (resolveTab(search.tab) ?? "inbox");
   const [activeTab, setActiveTab] = useState<CustodySurfaceTab>(initialTab);
+  // Bitcoin moves vs asset swaps is a segmented control inside the pairing
+  // queue, exactly as on the original swaps screen.
+  const [reviewMode, setReviewMode] = useState<PairingReviewMode>("transfers");
 
   // Re-sync the active tab when the URL search changes while already mounted —
   // e.g. the /custody-gaps redirect fired with this screen already on /swaps
@@ -608,7 +613,7 @@ export function SwapMatching() {
   // click does not change search, so it is never overridden.
   useEffect(() => {
     if (search.focus || search.method) {
-      setActiveTab("inbox");
+      setActiveTab("pairs");
       return;
     }
     const resolved = resolveTab(search.tab);
@@ -625,22 +630,49 @@ export function SwapMatching() {
         <div className={pageHeaderClassName}>
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
             <TabsTrigger value="inbox">{t("swap.tabs.inbox")}</TabsTrigger>
+            <TabsTrigger value="pairs">{t("swap.tabs.pairs")}</TabsTrigger>
             <TabsTrigger value="history">{t("swap.tabs.history")}</TabsTrigger>
             <TabsTrigger value="advanced">{t("swap.tabs.advanced")}</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="inbox" className="mt-0">
-          {activeTab === "inbox" ? (
-            <CustodyInbox focusTransactionId={search.focus} />
+          {activeTab === "inbox" ? <CustodyInbox /> : null}
+        </TabsContent>
+        <TabsContent value="pairs" className="mt-0 space-y-3">
+          {activeTab === "pairs" ? (
+            <>
+              <Tabs
+                value={reviewMode}
+                onValueChange={(value) =>
+                  setReviewMode(value as PairingReviewMode)
+                }
+              >
+                <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+                  <TabsTrigger value="transfers">
+                    {t("swap.tabs.transfers")}
+                  </TabsTrigger>
+                  <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <PairingReview
+                key={reviewMode}
+                mode={reviewMode}
+                onShowHistory={() => setActiveTab("history")}
+                focusTransactionId={
+                  reviewMode === "transfers" ? search.focus : undefined
+                }
+                initialMethod={
+                  reviewMode === "transfers" ? search.method : undefined
+                }
+              />
+            </>
           ) : null}
         </TabsContent>
         <TabsContent value="history" className="mt-0">
           {activeTab === "history" ? <PairedSwaps /> : null}
         </TabsContent>
         <TabsContent value="advanced" className="mt-0">
-          {activeTab === "advanced" ? (
-            <AdvancedTools onShowHistory={() => setActiveTab("history")} />
-          ) : null}
+          {activeTab === "advanced" ? <AdvancedTools /> : null}
         </TabsContent>
       </Tabs>
     </div>
@@ -781,35 +813,11 @@ function CustodyLineageSection() {
 
 /** The Advanced tab: expert tools stacked as closed disclosure sections so
  * the tab itself stays calm. Nothing here is required to close questions. */
-function AdvancedTools({ onShowHistory }: { onShowHistory: () => void }) {
+function AdvancedTools() {
   const { t } = useTranslation("review");
-  const [reviewMode, setReviewMode] = useState<PairingReviewMode>("transfers");
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">{t("swap.advanced.intro")}</p>
-      <AdvancedSection
-        title={t("swap.advanced.bulk.title")}
-        description={t("swap.advanced.bulk.description")}
-      >
-        <div className="space-y-3">
-          <Tabs
-            value={reviewMode}
-            onValueChange={(value) => setReviewMode(value as PairingReviewMode)}
-          >
-            <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-              <TabsTrigger value="transfers">
-                {t("swap.tabs.transfers")}
-              </TabsTrigger>
-              <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <PairingReview
-            key={reviewMode}
-            mode={reviewMode}
-            onShowHistory={onShowHistory}
-          />
-        </div>
-      </AdvancedSection>
       <AdvancedSection
         title={t("swap.advanced.components.title")}
         description={t("swap.advanced.components.description")}

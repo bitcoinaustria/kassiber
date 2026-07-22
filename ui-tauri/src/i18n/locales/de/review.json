@@ -2,6 +2,7 @@
   "swap": {
     "tabs": {
       "inbox": "Offene Fragen",
+      "pairs": "Bewegungen & Swaps",
       "history": "Verlauf",
       "advanced": "Erweitert",
       "transfers": "Bitcoin-Bewegungen",
@@ -517,9 +518,6 @@
       },
       "type": {
         "gap": "Fehlende Wallet",
-        "transfer": "Übertragung",
-        "layerTransition": "Bitcoin-Bewegung",
-        "swap": "Swap",
         "followUp": "Nachfrage"
       },
       "suggestedBadge": "Vorgeschlagen",
@@ -560,24 +558,6 @@
         "savedTitle": "Antwort gespeichert",
         "savedBody": "Die Einordnung des Rests wurde erfasst."
       },
-      "candidate": {
-        "questionTransfer": "Ist das deine eigene Übertragung?",
-        "questionMove": "Ist das eine einzige Bitcoin-Bewegung?",
-        "questionSwap": "Ist das ein einziger Swap?",
-        "yesTransfer": "Ja — meine Übertragung",
-        "yesMove": "Ja — eine Bewegung",
-        "yesSwap": "Ja — ein Swap",
-        "no": "Nein — unabhängig",
-        "pairing": "Wird erfasst…",
-        "feeNote": "Gebühr · {{amount}}",
-        "detailsToggle": "Details (Art & steuerliche Behandlung)",
-        "competingNote_one": "{{count}} möglicher Treffer teilt sich eine dieser Bewegungen — bestätige nur den richtigen.",
-        "competingNote_other": "{{count}} mögliche Treffer teilen sich eine dieser Bewegungen — bestätige nur den richtigen.",
-        "pairedTitle": "Zuordnung erfasst",
-        "pairedBody": "Verarbeite das Journal, um die Berichte zu aktualisieren.",
-        "dismissedTitle": "Verworfen",
-        "dismissedBody": "Der Kandidat bleibt aus der Warteschlange, solange sich die Nachweise nicht ändern."
-      },
       "done": {
         "title": "Alle Verwahrungsfragen geklärt",
         "body": "Deine Berichte sind nicht mehr durch offene Verwahrungsprüfungen blockiert. Neue Fragen erscheinen hier automatisch, wenn Importe oder Syncs ungeklärte Bewegungen finden."
@@ -588,10 +568,6 @@
     },
     "advanced": {
       "intro": "Werkzeuge für Fortgeschrittene und technische Nachweise. Nichts davon ist nötig, um Verwahrungsfragen zu schließen — der Haupteinstieg sind die offenen Fragen.",
-      "bulk": {
-        "title": "Sammelprüfung & Regeln",
-        "description": "Filter, Mehrfachauswahl, automatische Paar-Regeln und gespeicherte Ansichten über die Kandidaten-Warteschlange."
-      },
       "components": {
         "title": "Custody-Komponenten",
         "description": "Versionierte Verwahrungs-Interpretationen Leg für Leg erstellen und überarbeiten — der manuelle Weg für Fälle, die der geführte Pfad ablehnt."

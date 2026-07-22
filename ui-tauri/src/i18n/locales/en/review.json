@@ -2,6 +2,7 @@
   "swap": {
     "tabs": {
       "inbox": "Inbox",
+      "pairs": "Moves & swaps",
       "history": "History",
       "advanced": "Advanced",
       "transfers": "Bitcoin moves",
@@ -517,9 +518,6 @@
       },
       "type": {
         "gap": "Missing wallet",
-        "transfer": "Transfer",
-        "layerTransition": "Bitcoin move",
-        "swap": "Swap",
         "followUp": "Follow-up"
       },
       "suggestedBadge": "Suggested",
@@ -560,24 +558,6 @@
         "savedTitle": "Answer saved",
         "savedBody": "The remainder classification was recorded."
       },
-      "candidate": {
-        "questionTransfer": "Is this your own transfer?",
-        "questionMove": "Is this one Bitcoin move?",
-        "questionSwap": "Is this one swap?",
-        "yesTransfer": "Yes — my transfer",
-        "yesMove": "Yes — one move",
-        "yesSwap": "Yes — one swap",
-        "no": "No — unrelated",
-        "pairing": "Recording…",
-        "feeNote": "Fee · {{amount}}",
-        "detailsToggle": "Details (kind & tax treatment)",
-        "competingNote_one": "{{count}} possible match shares one of these movements — confirm only the right one.",
-        "competingNote_other": "{{count}} possible matches share one of these movements — confirm only the right one.",
-        "pairedTitle": "Match recorded",
-        "pairedBody": "Reprocess journals to update reports.",
-        "dismissedTitle": "Dismissed",
-        "dismissedBody": "The candidate stays out of the queue unless new evidence changes it."
-      },
       "done": {
         "title": "All custody questions resolved",
         "body": "Reports are no longer blocked by custody review. New questions appear here automatically when imports or syncs surface unexplained moves."
@@ -588,10 +568,6 @@
     },
     "advanced": {
       "intro": "Expert tools and technical evidence. Nothing here is required to close custody questions — the Inbox is the primary path.",
-      "bulk": {
-        "title": "Bulk review & rules",
-        "description": "Filters, multi-select pairing, auto-pair rules, and saved views over the candidate queue."
-      },
       "components": {
         "title": "Custody components",
         "description": "Author and revise versioned custody interpretations leg by leg — the manual escape hatch for shapes the guided path refuses."

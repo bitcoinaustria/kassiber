@@ -1,10 +1,11 @@
 /**
- * Custody Inbox — the unified decision queue.
+ * Custody Inbox — the queue of custody questions.
  *
- * One ranked list over missing-wallet gap questions (``ui.custody.gaps.list``)
- * and transfer/swap pairing candidates (``ui.transfers.suggest``), one
- * decision card at a time. Master–detail: queue on the left, the selected
- * question on the right. Everything expert-grade lives in the Advanced tab.
+ * One ranked list over missing-wallet gap questions
+ * (``ui.custody.gaps.list``), one decision card at a time. Master–detail:
+ * queue on the left, the selected question on the right. Transfer/swap
+ * matching lives in the dedicated pairing queue tab; expert tools live in
+ * Advanced.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -25,7 +26,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useDaemon, useDaemonInfinite } from "@/daemon/client";
+import { useDaemonInfinite } from "@/daemon/client";
 import { formatCount } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -35,7 +36,6 @@ import {
   type CustodyGapSnapshot,
 } from "../custodyGapsModel";
 import { GapDecisionCard } from "./GapDecisionCard";
-import { PairDecisionCard } from "./PairDecisionCard";
 import {
   blockedYears,
   buildInboxItems,
@@ -45,15 +45,9 @@ import {
   itemHasCompetingEvidence,
   itemIsLowConfidence,
   itemIsSuggested,
-  walletDisplayName,
-  type InboxCandidate,
   type InboxFilter,
   type InboxItem,
 } from "./inboxModel";
-
-interface SuggestEnvelope {
-  candidates: InboxCandidate[];
-}
 
 function QueueRow({
   item,
@@ -82,31 +76,12 @@ function QueueRow({
       ? t("swap.inbox.line.residual", {
           amount: formatCustodyMsat(item.gap.residual_msat, item.gap.asset),
         })
-      : item.kind === "gap"
-        ? t("swap.inbox.line.move", {
-            out: formatCustodyMsat(item.gap.source_total_msat, item.gap.asset),
-            from: item.gap.source_wallet_label,
-            in: formatCustodyMsat(item.gap.return_total_msat, item.gap.asset),
-            to: item.gap.destination_wallet_labels.join(", ") || "—",
-          })
-        : t("swap.inbox.line.move", {
-            out: formatCustodyMsat(
-              item.candidate.out_amount_msat,
-              item.candidate.out_asset,
-            ),
-            from: walletDisplayName(
-              item.candidate.out_wallet_label,
-              item.candidate.out_wallet_kind,
-            ),
-            in: formatCustodyMsat(
-              item.candidate.in_amount_msat,
-              item.candidate.in_asset,
-            ),
-            to: walletDisplayName(
-              item.candidate.in_wallet_label,
-              item.candidate.in_wallet_kind,
-            ),
-          });
+      : t("swap.inbox.line.move", {
+          out: formatCustodyMsat(item.gap.source_total_msat, item.gap.asset),
+          from: item.gap.source_wallet_label,
+          in: formatCustodyMsat(item.gap.return_total_msat, item.gap.asset),
+          to: item.gap.destination_wallet_labels.join(", ") || "—",
+        });
   return (
     <button
       type="button"
@@ -142,11 +117,7 @@ function QueueRow({
   );
 }
 
-export function CustodyInbox({
-  focusTransactionId,
-}: {
-  focusTransactionId?: string;
-}) {
+export function CustodyInbox() {
   const { t } = useTranslation("review");
   const { t: tGaps } = useTranslation("custodyGaps");
   const [filter, setFilter] = useState<InboxFilter>("all");
@@ -158,12 +129,7 @@ export function CustodyInbox({
     { limit: 100 },
     (lastPage) => lastPage.data?.next_cursor ?? undefined,
   );
-  const transferQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest", {
-    candidate_type: "transfer",
-  });
-  const swapQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest", {
-    candidate_type: "swap",
-  });
+
   const gapPages = useMemo(
     () =>
       (gapsQuery.data?.pages ?? [])
@@ -173,18 +139,8 @@ export function CustodyInbox({
   );
   const snapshot = gapPages[0];
   const gaps = useMemo(() => collectCustodyGapPages(gapPages), [gapPages]);
-  const candidates = useMemo(
-    () => [
-      ...(transferQuery.data?.data?.candidates ?? []),
-      ...(swapQuery.data?.data?.candidates ?? []),
-    ],
-    [transferQuery.data, swapQuery.data],
-  );
 
-  const items = useMemo(
-    () => buildInboxItems(gaps, candidates),
-    [gaps, candidates],
-  );
+  const items = useMemo(() => buildInboxItems(gaps), [gaps]);
   const counts = useMemo(() => countInboxItems(items), [items]);
   const filtered = useMemo(
     () => filterInboxItems(items, filter),
@@ -192,18 +148,6 @@ export function CustodyInbox({
   );
   const mainItems = filtered.filter((item) => !itemIsLowConfidence(item));
   const hintItems = filtered.filter(itemIsLowConfidence);
-
-  // Deep links (?focus=<txid>) select the matching candidate question.
-  useEffect(() => {
-    if (!focusTransactionId) return;
-    const focused = items.find(
-      (item) =>
-        item.kind === "candidate" &&
-        (item.candidate.out_id === focusTransactionId ||
-          item.candidate.in_id === focusTransactionId),
-    );
-    if (focused) setSelectedId(focused.id);
-  }, [focusTransactionId, items]);
 
   // Keep a valid selection: when the selected question settles (vanishes from
   // the recomputed queue), advance to the first open one.
@@ -216,13 +160,7 @@ export function CustodyInbox({
     if (selected && selected.id !== selectedId) setSelectedId(selected.id);
   }, [selected, selectedId]);
 
-  const refetchAll = () => {
-    void transferQuery.refetch();
-    void swapQuery.refetch();
-    void gapsQuery.refetch();
-  };
-
-  if (gapsQuery.isLoading && transferQuery.isLoading) {
+  if (gapsQuery.isLoading) {
     return <ScreenSkeleton titleWidth="w-48" />;
   }
 
@@ -364,19 +302,11 @@ export function CustodyInbox({
 
             <div>
               {selected ? (
-                selected.kind === "candidate" ? (
-                  <PairDecisionCard
-                    key={selected.id}
-                    candidate={selected.candidate}
-                    onSettled={refetchAll}
-                  />
-                ) : (
-                  <GapDecisionCard
-                    key={selected.id}
-                    gap={selected.gap}
-                    onSettled={refetchAll}
-                  />
-                )
+                <GapDecisionCard
+                  key={selected.id}
+                  gap={selected.gap}
+                  onSettled={() => void gapsQuery.refetch()}
+                />
               ) : (
                 <Card className="gap-2 py-8">
                   <CardContent className="px-5 text-center text-sm text-muted-foreground">
