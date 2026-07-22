@@ -32,13 +32,12 @@ for command in cpio rpm rpm2cpio; do
 done
 
 package_name="$(rpm -qp --queryformat '%{NAME}' "$source_rpm")"
-package_architecture="$(rpm -qp --queryformat '%{ARCH}' "$source_rpm")"
+source_package="$(rpm -qp --queryformat '%{SOURCEPACKAGE}' "$source_rpm")"
 case "$package_name" in
   kassiber|kassiber-cli) ;;
   *) die "Unexpected Kassiber source package: $package_name" ;;
 esac
-[ "$package_architecture" = "src" ] \
-  || die "Expected a source RPM, got architecture: $package_architecture"
+[ "$source_package" = "1" ] || die "Expected a source RPM"
 
 mkdir -p "$(dirname "$output")"
 stage="$(mktemp -d "${output}.tmp.XXXXXX")"

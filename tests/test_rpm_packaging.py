@@ -140,7 +140,7 @@ class RpmPackagingTest(unittest.TestCase):
             self.assertTrue(cli_srpm.is_file())
             self.assertTrue(desktop_srpm.is_file())
             obs_package = root / "obs-kassiber-cli"
-            subprocess.run(
+            obs_result = subprocess.run(
                 [
                     str(ROOT / "scripts/prepare-obs-package.sh"),
                     "--source-rpm",
@@ -148,12 +148,26 @@ class RpmPackagingTest(unittest.TestCase):
                     "--output",
                     obs_package.name,
                 ],
-                check=True,
                 cwd=root,
                 capture_output=True,
                 text=True,
             )
+            self.assertEqual(obs_result.returncode, 0, obs_result.stderr)
             self.assertTrue((obs_package / "kassiber-cli.spec").is_file())
+            rejected_binary = subprocess.run(
+                [
+                    str(ROOT / "scripts/prepare-obs-package.sh"),
+                    "--source-rpm",
+                    cli_rpm.name,
+                    "--output",
+                    "obs-invalid-binary",
+                ],
+                cwd=root,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(rejected_binary.returncode, 2)
+            self.assertIn("Expected a source RPM", rejected_binary.stderr)
             for source_rpm, package in (
                 (cli_srpm, "kassiber-cli"),
                 (desktop_srpm, "kassiber"),
