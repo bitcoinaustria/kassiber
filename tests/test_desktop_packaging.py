@@ -202,6 +202,42 @@ class DesktopPackagingTest(unittest.TestCase):
             )
             self.assertIn("./usr/bin/kassiber", listing)
 
+    @unittest.skipUnless(shutil.which("dpkg-deb"), "dpkg-deb is required")
+    def test_cli_only_deb_rejects_invalid_architectures_before_building(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            binary = root / "kassiber"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            for index, architecture in enumerate(
+                (
+                    "amd64\nPre-Depends: unexpected-package",
+                    "amd64 all",
+                    "amd64_invalid",
+                    "ämd64",
+                )
+            ):
+                with self.subTest(architecture=architecture):
+                    package = root / f"invalid-{index}.deb"
+                    completed = subprocess.run(
+                        [
+                            str(ROOT / "scripts/package-cli-deb.sh"),
+                            "--binary",
+                            str(binary),
+                            "--version",
+                            "1.2.3",
+                            "--architecture",
+                            architecture,
+                            "--output",
+                            str(package),
+                        ],
+                        cwd=ROOT,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(completed.returncode, 2)
+                    self.assertFalse(package.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

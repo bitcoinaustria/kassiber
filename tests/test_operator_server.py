@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import signal
+import stat
 import tempfile
 import threading
 import unittest
@@ -15,6 +16,7 @@ from kassiber.operator.server import (
     _linux_session_lifetime_is_valid,
     _logind_user_state_is_alive,
     _login_session_runtime_is_valid,
+    _login_session_runtime_path_is_trusted,
     _login_session_runtime_root,
     main,
 )
@@ -437,7 +439,10 @@ class OperatorServerTest(unittest.TestCase):
     def test_linux_session_runtime_disappearance_invalidates_session(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.server.sys.platform", "linux"
-        ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}):
+        ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}), mock.patch(
+            "kassiber.operator.server._login_session_runtime_path_is_trusted",
+            return_value=True,
+        ):
             runtime = _login_session_runtime_root()
             self.assertEqual(runtime.root, Path(tmp).resolve())
             self.assertTrue(_login_session_runtime_is_valid(runtime))
@@ -450,7 +455,10 @@ class OperatorServerTest(unittest.TestCase):
         ):
             root = Path(parent) / "runtime"
             root.mkdir(mode=0o700)
-            with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(root)}):
+            with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(root)}), mock.patch(
+                "kassiber.operator.server._login_session_runtime_path_is_trusted",
+                return_value=True,
+            ):
                 runtime = _login_session_runtime_root()
                 root.rename(Path(parent) / "displaced-runtime")
                 root.mkdir(mode=0o700)
@@ -474,6 +482,40 @@ class OperatorServerTest(unittest.TestCase):
         )
         listen.assert_not_called()
 
+    @unittest.skipUnless(os.name == "posix", "POSIX runtime trust test")
+    def test_linux_rejects_caller_selected_persistent_runtime_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "kassiber.operator.server.sys.platform", "linux"
+        ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}), mock.patch(
+            "kassiber.operator.server._linux_logind_user_alive",
+            return_value=None,
+        ), mock.patch("kassiber.operator.server.listen") as listen:
+            self.assertIsNone(_login_session_runtime_root())
+            with self.assertRaises(AppError) as raised:
+                BrokerServer()
+        self.assertEqual(raised.exception.code, "operator_session_lifetime_unavailable")
+        listen.assert_not_called()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX runtime trust test")
+    def test_linux_runtime_fallback_requires_canonical_volatile_owner_directory(
+        self,
+    ) -> None:
+        info = mock.Mock(st_mode=stat.S_IFDIR | 0o700, st_uid=1000)
+        with mock.patch("kassiber.operator.server.os.getuid", return_value=1000), mock.patch(
+            "kassiber.operator.server._linux_runtime_filesystem_is_volatile",
+            return_value=True,
+        ):
+            self.assertTrue(
+                _login_session_runtime_path_is_trusted(Path("/run/user/1000"), info)
+            )
+            self.assertFalse(
+                _login_session_runtime_path_is_trusted(Path("/tmp/persistent"), info)
+            )
+            info.st_mode = stat.S_IFDIR | 0o755
+            self.assertFalse(
+                _login_session_runtime_path_is_trusted(Path("/run/user/1000"), info)
+            )
+
     def test_linux_logind_guard_fails_closed_after_query_loss(self) -> None:
         self.assertFalse(
             _linux_session_lifetime_is_valid(
@@ -486,7 +528,10 @@ class OperatorServerTest(unittest.TestCase):
     def test_linux_runtime_guard_can_cover_transient_logind_query_loss(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.server.sys.platform", "linux"
-        ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}):
+        ), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": tmp}), mock.patch(
+            "kassiber.operator.server._login_session_runtime_path_is_trusted",
+            return_value=True,
+        ):
             runtime = _login_session_runtime_root()
             self.assertTrue(
                 _linux_session_lifetime_is_valid(

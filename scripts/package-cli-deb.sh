@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export LC_ALL=C
 
 usage() {
   echo "Usage: $0 --binary PATH --version VERSION --output PATH [--architecture ARCH]" >&2
@@ -38,6 +39,12 @@ esac
 if [ -z "$architecture" ]; then
   architecture="$(dpkg --print-architecture)"
 fi
+case "$architecture" in
+  ""|*[!a-z0-9-]*|-*|*-)
+    echo "Invalid Debian architecture." >&2
+    exit 2
+    ;;
+esac
 
 package_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-cli-deb.XXXXXX")"
 trap 'rm -rf "$package_root"' EXIT
