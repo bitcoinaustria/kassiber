@@ -34,11 +34,15 @@ done
 [ -n "$output" ] || die "--output is required"
 [ ! -e "$output" ] || die "Output path already exists: $output"
 case "$version" in
-  *[!0-9A-Za-z.+_~^]*|""|*-*) die "Invalid RPM version: $version" ;;
+  *[!0-9A-Za-z.+_~^-]*|""|-*|*-) die "Invalid RPM version: $version" ;;
 esac
 case "$release" in
   *[!0-9A-Za-z.+_~^]*|""|*-*) die "Invalid RPM release: $release" ;;
 esac
+# RPM uses `~` for a version that sorts before the corresponding stable
+# version. Map SemVer's prerelease separator accordingly (1.2.3-rc.1 becomes
+# 1.2.3~rc.1) while keeping the Debian/package build version unchanged.
+rpm_version="${version//-/~}"
 for command in cmp dpkg-deb rpmbuild tar; do
   command -v "$command" >/dev/null 2>&1 || die "$command is required"
 done
@@ -101,7 +105,7 @@ tar "${tar_args[@]}" -C "$topdir/payload" -czf \
 install -m 0644 "$license" "$topdir/SOURCES/LICENSE"
 rendered_spec="$topdir/SPECS/kassiber.spec"
 {
-  printf '%%global kassiber_version %s\n' "$version"
+  printf '%%global kassiber_version %s\n' "$rpm_version"
   printf '%%global kassiber_release %s\n' "$release"
   printf '%%global kassiber_arch %s\n' "$architecture"
   cat "$spec"
@@ -111,7 +115,7 @@ rpmbuild -bb \
   --define "_topdir $topdir" \
   "$rendered_spec"
 
-built_rpm="$topdir/RPMS/$architecture/kassiber-$version-$release.$architecture.rpm"
+built_rpm="$topdir/RPMS/$architecture/kassiber-$rpm_version-$release.$architecture.rpm"
 [ -f "$built_rpm" ] || die "Expected RPM was not built: $built_rpm"
 mkdir -p "$(dirname "$output")"
 install -m 0644 "$built_rpm" "$output"

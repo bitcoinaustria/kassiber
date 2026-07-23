@@ -280,6 +280,64 @@ class RpmPackagingTest(unittest.TestCase):
             self.assertFalse(desktop_binary.exists())
             repo_file.unlink()
 
+    def test_builds_cli_and_desktop_rpms_for_semver_prereleases(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            version = "1.2.3-rc.1"
+            binary = root / "kassiber"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            cli_rpm = root / "kassiber-cli-prerelease.rpm"
+            desktop_rpm = root / "kassiber-prerelease.rpm"
+
+            subprocess.run(
+                [
+                    str(ROOT / "scripts/package-cli-rpm.sh"),
+                    "--binary",
+                    str(binary),
+                    "--version",
+                    version,
+                    "--architecture",
+                    "x86_64",
+                    "--output",
+                    str(cli_rpm),
+                ],
+                check=True,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [
+                    str(ROOT / "scripts/package-desktop-rpm.sh"),
+                    "--deb",
+                    str(build_desktop_deb(root, version=version)),
+                    "--version",
+                    version,
+                    "--architecture",
+                    "x86_64",
+                    "--output",
+                    str(desktop_rpm),
+                ],
+                check=True,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+
+            for rpm_path in (cli_rpm, desktop_rpm):
+                evr = subprocess.check_output(
+                    [
+                        "rpm",
+                        "-qp",
+                        "--queryformat",
+                        "%{VERSION}-%{RELEASE}",
+                        str(rpm_path),
+                    ],
+                    text=True,
+                )
+                self.assertEqual(evr, "1.2.3~rc.1-1")
+
     def test_rpm_builders_reject_mismatched_versions(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
