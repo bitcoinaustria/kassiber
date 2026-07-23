@@ -342,6 +342,29 @@ def test_cache_rejects_boolean_and_float_schema_versions(tmp_path: Path):
         assert update_check.read_cache(cache) is None
 
 
+def test_cache_read_refuses_symlinks(tmp_path: Path):
+    target = tmp_path / "attacker-controlled-cache.json"
+    target.write_text(
+        json.dumps(
+            {
+                "schema_version": update_check.CACHE_SCHEMA_VERSION,
+                "latest_version": "0.22.56",
+                "prerelease": True,
+                "release_url": (
+                    "https://github.com/bitcoinaustria/kassiber/"
+                    "releases/tag/v0.22.56"
+                ),
+                "checked_at": "2026-07-22T08:30:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    cache = tmp_path / "update-check.json"
+    cache.symlink_to(target)
+
+    assert update_check.read_cache(cache) is None
+
+
 def test_check_writes_public_cache_and_recomputes_current_version(tmp_path: Path):
     destination = tmp_path / "update-check.json"
     preference = _enabled_preference(tmp_path)
@@ -533,6 +556,15 @@ def test_failed_automatic_checks_are_throttled(tmp_path: Path):
     assert update_check._refresh_attempt_path(destination).stat().st_mode & 0o077 == 0
 
 
+def test_refresh_attempt_read_refuses_symlinks(tmp_path: Path):
+    destination = tmp_path / "update-check.json"
+    target = tmp_path / "attacker-controlled-attempt"
+    target.write_text("2026-07-22T08:30:00Z\n", encoding="utf-8")
+    update_check._refresh_attempt_path(destination).symlink_to(target)
+
+    assert update_check._read_refresh_attempt(destination) is None
+
+
 def test_background_refresh_passes_only_required_environment(tmp_path: Path):
     destination = tmp_path / "update-check.json"
     preference = _enabled_preference(tmp_path)
@@ -557,6 +589,22 @@ def test_background_refresh_passes_only_required_environment(tmp_path: Path):
     assert environment[update_check.UPDATE_PREFERENCE_ENV] == str(preference)
     assert "OPENAI_API_KEY" not in environment
     assert update_check._read_refresh_attempt(destination) is not None
+
+
+def test_background_refresh_does_not_spawn_without_throttle_marker(tmp_path: Path):
+    destination = tmp_path / "update-check.json"
+    preference = _enabled_preference(tmp_path)
+
+    with (
+        patch(
+            "kassiber.update_check._write_refresh_attempt",
+            side_effect=OSError("read-only cache directory"),
+        ),
+        patch("kassiber.update_check.subprocess.Popen") as popen,
+    ):
+        update_check.start_background_refresh(destination, preference)
+
+    popen.assert_not_called()
 
 
 def test_disabled_background_refresh_never_spawns_a_child(tmp_path: Path):

@@ -59,6 +59,8 @@ HOMEBREW_FORMULA_COMMAND = (
 )
 _MAX_RESPONSE_BYTES = 256 * 1024
 _MAX_PREFERENCE_BYTES = 1024
+_MAX_CACHE_BYTES = 8 * 1024
+_MAX_REFRESH_ATTEMPT_BYTES = 64
 _SEMVER_RE = re.compile(
     r"^v?(?P<major>0|[1-9][0-9]*)\."
     r"(?P<minor>0|[1-9][0-9]*)\."
@@ -539,9 +541,12 @@ def write_cache(result: Mapping[str, Any], path: Path | None = None) -> None:
 
 def read_cache(path: Path | None = None) -> dict[str, Any] | None:
     source = path or cache_path()
+    raw = read_small_private_file(source, _MAX_CACHE_BYTES)
+    if raw is None:
+        return None
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return None
     if not _has_exact_schema_version(payload, CACHE_SCHEMA_VERSION):
         return None
@@ -594,14 +599,17 @@ def _refresh_attempt_path(path: Path | None = None) -> Path:
 
 
 def _read_refresh_attempt(path: Path | None = None) -> datetime | None:
+    raw = read_small_private_file(
+        _refresh_attempt_path(path),
+        _MAX_REFRESH_ATTEMPT_BYTES,
+    )
+    if raw is None:
+        return None
     try:
         value = datetime.fromisoformat(
-            _refresh_attempt_path(path)
-            .read_text(encoding="utf-8")
-            .strip()
-            .replace("Z", "+00:00")
+            raw.decode("utf-8").strip().replace("Z", "+00:00")
         )
-    except (OSError, ValueError):
+    except (UnicodeDecodeError, ValueError):
         return None
     return value if value.tzinfo is not None else None
 
@@ -818,9 +826,9 @@ def start_background_refresh(
     try:
         _write_refresh_attempt(destination)
     except OSError:
-        # The advisory check may still proceed when the private throttle marker
-        # cannot be written; startup and normal commands must remain unaffected.
-        pass
+        # Without the private marker, later CLI runs cannot enforce the retry
+        # interval. Fail closed instead of creating an update-check storm.
+        return
     kwargs: dict[str, Any] = {
         "stdin": subprocess.DEVNULL,
         "stdout": subprocess.DEVNULL,
