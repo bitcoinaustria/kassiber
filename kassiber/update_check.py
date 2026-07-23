@@ -59,7 +59,6 @@ HOMEBREW_FORMULA_COMMAND = (
 )
 _MAX_RESPONSE_BYTES = 256 * 1024
 _MAX_PREFERENCE_BYTES = 1024
-_LOCK_STALE_AFTER = timedelta(minutes=5)
 _SEMVER_RE = re.compile(
     r"^v?(?P<major>0|[1-9][0-9]*)\."
     r"(?P<minor>0|[1-9][0-9]*)\."
@@ -97,6 +96,70 @@ def _has_exact_schema_version(payload: Any, expected: int) -> bool:
     )
 
 
+def _atomic_write_private(destination: Path, text: str) -> None:
+    """Atomically replace `destination` with owner-only (0600) UTF-8 content."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+
+
+def read_small_private_file(path: Path, limit: int) -> bytes | None:
+    """Read a regular, non-symlinked file of at most `limit` bytes, or None.
+
+    Shared fail-closed reader for the consent file and similar small local
+    contracts: symlinks, special files, and oversized content all read as
+    absent rather than raising.
+    """
+
+    try:
+        if stat.S_ISLNK(os.lstat(path).st_mode):
+            return None
+    except OSError:
+        return None
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return None
+        with os.fdopen(descriptor, "rb") as handle:
+            descriptor = -1
+            raw = handle.read(limit + 1)
+    except OSError:
+        return None
+    finally:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+    return raw if len(raw) <= limit else None
+
+
 def parse_version(value: str) -> ParsedVersion | None:
     match = _SEMVER_RE.fullmatch(value.strip())
     if match is None:
@@ -112,13 +175,10 @@ def parse_version(value: str) -> ParsedVersion | None:
         for part in prerelease
     ):
         return None
-    base = tuple(int(match.group(name)) for name in ("major", "minor", "patch"))
-    if any(part > (2**64 - 1) for part in base):
-        return None
     return ParsedVersion(
-        major=base[0],
-        minor=base[1],
-        patch=base[2],
+        major=int(match.group("major")),
+        minor=int(match.group("minor")),
+        patch=int(match.group("patch")),
         prerelease=prerelease,
     )
 
@@ -285,34 +345,8 @@ def update_checks_enabled(
     if _environment_disables_update_checks(environ):
         return False
     destination = path or preference_path()
-    try:
-        if stat.S_ISLNK(os.lstat(destination).st_mode):
-            return False
-    except OSError:
-        return False
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(destination, flags)
-    except OSError:
-        return False
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_PREFERENCE_BYTES:
-            return False
-        with os.fdopen(descriptor, "rb") as handle:
-            descriptor = -1
-            raw = handle.read(_MAX_PREFERENCE_BYTES + 1)
-    except OSError:
-        return False
-    finally:
-        if descriptor >= 0:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-    if len(raw) > _MAX_PREFERENCE_BYTES:
+    raw = read_small_private_file(destination, _MAX_PREFERENCE_BYTES)
+    if raw is None:
         return False
     try:
         payload = json.loads(raw.decode("utf-8"))
@@ -335,35 +369,14 @@ def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
     except OSError:
         pass
     with _update_check_preference_lock(destination):
-        fd, temporary_name = tempfile.mkstemp(
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            dir=destination.parent,
+        document = {
+            "schema_version": PREFERENCE_SCHEMA_VERSION,
+            "enabled": bool(enabled),
+        }
+        _atomic_write_private(
+            destination,
+            json.dumps(document, sort_keys=True) + "\n",
         )
-        temporary = Path(temporary_name)
-        try:
-            try:
-                os.fchmod(fd, 0o600)
-            except (AttributeError, OSError):
-                pass
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "schema_version": PREFERENCE_SCHEMA_VERSION,
-                        "enabled": bool(enabled),
-                    },
-                    handle,
-                    sort_keys=True,
-                )
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, destination)
-        finally:
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
     return destination
 
 
@@ -513,31 +526,10 @@ def _cache_document(result: Mapping[str, Any]) -> dict[str, Any]:
 
 def write_cache(result: Mapping[str, Any], path: Path | None = None) -> None:
     destination = path or cache_path()
-    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, temporary = tempfile.mkstemp(
-        prefix=f".{destination.name}.",
-        dir=destination.parent,
-        text=True,
+    _atomic_write_private(
+        destination,
+        json.dumps(_cache_document(result), sort_keys=True) + "\n",
     )
-    try:
-        try:
-            os.fchmod(fd, 0o600)
-        except OSError:
-            pass
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(_cache_document(result), handle, sort_keys=True)
-            handle.write("\n")
-        os.replace(temporary, destination)
-    except BaseException:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
 
 
 def read_cache(path: Path | None = None) -> dict[str, Any] | None:
@@ -614,31 +606,10 @@ def _write_refresh_attempt(
     *,
     now: datetime | None = None,
 ) -> None:
-    destination = _refresh_attempt_path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, temporary = tempfile.mkstemp(
-        prefix=f".{destination.name}.",
-        dir=destination.parent,
-        text=True,
+    _atomic_write_private(
+        _refresh_attempt_path(path),
+        f"{_isoformat(now or _utc_now())}\n",
     )
-    try:
-        try:
-            os.fchmod(fd, 0o600)
-        except OSError:
-            pass
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(f"{_isoformat(now or _utc_now())}\n")
-        os.replace(temporary, destination)
-    except BaseException:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
 
 
 def automatic_refresh_due(
@@ -893,35 +864,14 @@ def refresh_cache_silently(
     path: Path | None = None,
     preference: Path | None = None,
 ) -> None:
+    # Concurrency control is the refresh-attempt throttle written by the
+    # parent before spawning this child: a racing sibling costs at most one
+    # extra bounded GET racing an atomic cache replace, which is harmless.
     destination = path or cache_path()
     consent = preference or preference_path()
     if not update_checks_enabled(consent):
         return
-    lock_path = destination.with_suffix(f"{destination.suffix}.lock")
-    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
-        lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        try:
-            lock_age = _utc_now() - datetime.fromtimestamp(
-                lock_path.stat().st_mtime,
-                tz=timezone.utc,
-            )
-            if lock_age > _LOCK_STALE_AFTER:
-                lock_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        check_for_update(path=destination, preference=consent)
+    except (AppError, OSError):
         return
-    try:
-        os.close(lock_fd)
-        if not update_checks_enabled(consent):
-            return
-        try:
-            check_for_update(path=destination, preference=consent)
-        except (AppError, OSError):
-            return
-    finally:
-        try:
-            lock_path.unlink(missing_ok=True)
-        except OSError:
-            pass

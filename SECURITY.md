@@ -82,8 +82,10 @@ and contains only a schema version and boolean. Missing, malformed, symlinked,
 or explicitly disabled consent fails closed in both the native desktop command
 and packaged CLI. The renderer reads this file through the native boundary and
 never restores consent from browser storage. Setup persists the choice before
-creating or mutating book state. A sibling owner-only `update-checks.lock`
-serializes desktop/CLI checks with preference writes: disabling waits for an
+creating or mutating book state. All GitHub release requests go through the
+CLI's single code path — the desktop invokes its bundled CLI sidecar rather
+than carrying a second HTTP client. A sibling owner-only `update-checks.lock`
+serializes checks with preference writes: disabling waits for an
 already-authorized request to finish, and after it returns no later request can
 start until consent is enabled again. Disabling blocks automatic checks, the
 macOS menu action, plain `kassiber update`, and detached CLI refresh workers.

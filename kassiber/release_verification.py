@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .errors import AppError
+from .update_check import _has_exact_schema_version, parse_version
 
 
 MAX_MANIFEST_BYTES = 1024 * 1024
@@ -34,13 +35,6 @@ _MANIFEST_LINE = re.compile(
     r"(?P<sha256>[0-9a-f]{64})  (?P<filename>[A-Za-z0-9][A-Za-z0-9._+-]{0,254})"
 )
 _FINGERPRINT = re.compile(r"(?:[0-9A-F]{40}|[0-9A-F]{64})")
-_RELEASE_VERSION = re.compile(
-    r"(?P<major>0|[1-9][0-9]*)\."
-    r"(?P<minor>0|[1-9][0-9]*)\."
-    r"(?P<patch>0|[1-9][0-9]*)"
-    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?"
-    r"(?:\+(?P<build>[0-9A-Za-z.-]+))?"
-)
 _MANIFEST_HEADER = "# Kassiber release manifest v1"
 _MANIFEST_VERSION_PREFIX = "# Version: "
 _REJECTED_SIGNATURE_STATUSES = frozenset(
@@ -56,14 +50,6 @@ _REJECTED_SIGNATURE_STATUSES = frozenset(
     }
 )
 _ACCEPTED_OPENPGP_HASH_ALGORITHMS = frozenset({"8", "9", "10", "11"})
-
-
-def _has_exact_schema_version(payload: object, expected: int) -> bool:
-    return bool(
-        isinstance(payload, dict)
-        and type(payload.get("schema_version")) is int
-        and payload["schema_version"] == expected
-    )
 
 
 def normalize_fingerprint(value: str) -> str:
@@ -224,25 +210,12 @@ def _require_small_regular_file(path: Path, *, limit: int, label: str) -> bytes:
 
 def _normalize_release_version(version: str) -> str:
     normalized = version.removeprefix("v")
-    match = _RELEASE_VERSION.fullmatch(normalized)
-    if match is None:
-        raise AppError(
-            f"Invalid release version: {version}",
-            code="invalid_release_version",
-        )
-    for section in (match.group("prerelease"), match.group("build")):
-        if section is None:
-            continue
-        identifiers = section.split(".")
-        if any(not identifier for identifier in identifiers):
-            raise AppError(
-                f"Invalid release version: {version}",
-                code="invalid_release_version",
-            )
-    prerelease = match.group("prerelease")
-    if prerelease is not None and any(
-        identifier.isdigit() and len(identifier) > 1 and identifier.startswith("0")
-        for identifier in prerelease.split(".")
+    # parse_version tolerates surrounding whitespace and one leading "v";
+    # manifest names must not, so reject both explicitly.
+    if (
+        normalized != normalized.strip()
+        or normalized.startswith("v")
+        or parse_version(normalized) is None
     ):
         raise AppError(
             f"Invalid release version: {version}",
