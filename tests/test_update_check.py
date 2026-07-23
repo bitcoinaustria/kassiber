@@ -285,6 +285,40 @@ def test_fetch_latest_release_uses_bounded_github_request():
     }
 
 
+def test_fetch_latest_prerelease_paginates_before_selecting_highest_semver():
+    captured_urls = []
+    first_page = [
+        {
+            "tag_name": f"v0.22.{index}",
+            "draft": False,
+            "prerelease": True,
+        }
+        for index in range(update_check._RELEASES_PER_PAGE)
+    ]
+    second_page = [
+        {
+            "tag_name": "v1.0.0-rc.1",
+            "draft": False,
+            "prerelease": True,
+        }
+    ]
+
+    def opener(request, *, timeout):
+        assert timeout == update_check.NETWORK_TIMEOUT_SECONDS
+        captured_urls.append(request.full_url)
+        payload = first_page if len(captured_urls) == 1 else second_page
+        return _Response(json.dumps(payload).encode())
+
+    with patch("kassiber.update_check.packaged_build_info", return_value={}):
+        release = update_check.fetch_latest_release(opener=opener)
+
+    assert captured_urls == [
+        update_check.GITHUB_RELEASES_API_URL,
+        f"{update_check.GITHUB_RELEASES_API_URL}&page=2",
+    ]
+    assert release["latest_version"] == "1.0.0-rc.1"
+
+
 def test_fetch_latest_stable_release_uses_latest_object_endpoint():
     captured = {}
 

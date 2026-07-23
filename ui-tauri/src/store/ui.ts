@@ -517,7 +517,10 @@ export const useUiStore = create<UiState>()(
           automaticUpdateChecks: enabled,
           ...(enabled ? {} : { appUpdate: null }),
         }),
-      setAppUpdate: (appUpdate) => set({ appUpdate }),
+      setAppUpdate: (appUpdate) =>
+        set((state) => ({
+          appUpdate: state.automaticUpdateChecks ? appUpdate : null,
+        })),
       setAssistantModelSelection: (assistantModelSelection) =>
         set({ assistantModelSelection }),
       setAssistantDockAutoHide: (assistantDockAutoHide) =>

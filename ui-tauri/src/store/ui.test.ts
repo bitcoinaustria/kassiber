@@ -37,6 +37,21 @@ describe("UI persistence", () => {
     useUiStore.getState().setAppUpdate(null);
   });
 
+  it("refuses a late update result after consent is disabled", () => {
+    useUiStore.getState().setAutomaticUpdateChecks(false);
+    useUiStore.getState().setAppUpdate({
+      currentVersion: "0.22.55",
+      latestVersion: "0.23.0",
+      releaseUrl:
+        "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+      updateAvailable: true,
+      prerelease: false,
+      checkedAt: 1_784_688_800,
+    });
+
+    expect(useUiStore.getState().appUpdate).toBeNull();
+  });
+
   it("coalesces notifications with the same dedupe key", () => {
     useUiStore.setState({ notifications: [] });
     const first = useUiStore.getState().addNotification({

@@ -6,7 +6,7 @@ import { useUiStore } from "@/store/ui";
 
 export const APP_UPDATE_START_DELAY_MS = 10_000;
 export const APP_UPDATE_PERIOD_MS = 24 * 60 * 60 * 1_000;
-export const APP_UPDATE_CONSENT_REFRESH_MS = 30_000;
+export const APP_UPDATE_CONSENT_REFRESH_MS = 1_000;
 
 export interface AppUpdateCheck {
   currentVersion: string;
@@ -149,6 +149,11 @@ export async function runManualAppUpdateCheck(
     return;
   }
 
+  // Consent can be revoked from another CLI process while the native check is
+  // in flight. Re-read the canonical file before exposing its result.
+  if (!(await deps.isEnabled())) {
+    return;
+  }
   deps.setUpdate(result);
   if (result.updateAvailable && result.latestVersion && result.releaseUrl) {
     const openGitHub = i18n.t("shell.version.openGitHub", { ns: "chrome" });
@@ -197,13 +202,22 @@ export async function runManualAppUpdateCheck(
 export function startAppUpdateScheduler(
   check: () => Promise<AppUpdateCheck>,
   setUpdate: (update: AppUpdateCheck) => void,
+  isEnabled: () => boolean | Promise<boolean> = resolveAppUpdateChecksEnabled,
+  setEnabled: (enabled: boolean) => void = (enabled) =>
+    useUiStore.getState().setAutomaticUpdateChecks(enabled),
 ): () => void {
   let disposed = false;
   let periodId: ReturnType<typeof globalThis.setInterval> | undefined;
   const run = async () => {
     try {
       const result = await check();
-      if (!disposed) setUpdate(result);
+      const stillEnabled = await isEnabled();
+      if (disposed) return;
+      if (!stillEnabled) {
+        setEnabled(false);
+        return;
+      }
+      setUpdate(result);
     } catch {
       // A release check is advisory; failures never interrupt the app.
     }

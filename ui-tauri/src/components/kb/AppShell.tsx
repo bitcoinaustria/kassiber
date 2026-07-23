@@ -2443,8 +2443,14 @@ function NavUser({
 
 function AppVersion() {
   const { t } = useTranslation("chrome");
+  const automaticUpdateChecks = useUiStore(
+    (state) => state.automaticUpdateChecks,
+  );
   const appUpdate = useUiStore((state) => state.appUpdate);
-  const releaseUrl = appUpdate?.updateAvailable ? appUpdate.releaseUrl : null;
+  const releaseUrl =
+    automaticUpdateChecks && appUpdate?.updateAvailable
+      ? appUpdate.releaseUrl
+      : null;
   const latestVersion = appUpdate?.latestVersion;
   if (releaseUrl && latestVersion) {
     return (

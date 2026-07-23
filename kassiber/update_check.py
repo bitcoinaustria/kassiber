@@ -32,7 +32,7 @@ from .errors import AppError
 
 
 GITHUB_RELEASES_API_URL = (
-    "https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=10"
+    "https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=100"
 )
 GITHUB_LATEST_RELEASE_API_URL = (
     "https://api.github.com/repos/bitcoinaustria/kassiber/releases/latest"
@@ -57,7 +57,9 @@ HOMEBREW_CASK_COMMAND = (
 HOMEBREW_FORMULA_COMMAND = (
     "brew upgrade bitcoinaustria/kassiber/kassiber-cli"
 )
-_MAX_RESPONSE_BYTES = 256 * 1024
+_MAX_RESPONSE_BYTES = 1024 * 1024
+_RELEASES_PER_PAGE = 100
+_MAX_RELEASE_PAGES = 10
 _MAX_PREFERENCE_BYTES = 1024
 _MAX_CACHE_BYTES = 8 * 1024
 _MAX_REFRESH_ATTEMPT_BYTES = 64
@@ -447,23 +449,40 @@ def fetch_latest_release(
     opener: Callable[..., BinaryIO] = _open_without_redirects,
 ) -> dict[str, Any]:
     channel = current_release_channel()
-    api_url = (
-        GITHUB_LATEST_RELEASE_API_URL
-        if channel == "release"
-        else GITHUB_RELEASES_API_URL
-    )
-    request = Request(
-        api_url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": f"kassiber/{current_version()}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        method="GET",
-    )
     try:
-        with opener(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
-            raw = response.read(_MAX_RESPONSE_BYTES + 1)
+        releases: list[Any] = []
+        page_count = 1 if channel == "release" else _MAX_RELEASE_PAGES
+        for page in range(1, page_count + 1):
+            if channel == "release":
+                api_url = GITHUB_LATEST_RELEASE_API_URL
+            elif page == 1:
+                api_url = GITHUB_RELEASES_API_URL
+            else:
+                api_url = f"{GITHUB_RELEASES_API_URL}&page={page}"
+            request = Request(
+                api_url,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": f"kassiber/{current_version()}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                method="GET",
+            )
+            with opener(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+                raw = response.read(_MAX_RESPONSE_BYTES + 1)
+            if len(raw) > _MAX_RESPONSE_BYTES:
+                raise ValueError("GitHub update response is too large")
+            payload = json.loads(raw.decode("utf-8"))
+            if channel == "release":
+                return _release_from_response(payload, channel=channel)
+            if not isinstance(payload, list):
+                raise ValueError("GitHub returned an invalid releases response")
+            releases.extend(payload)
+            if len(payload) < _RELEASES_PER_PAGE:
+                return _release_from_response(releases, channel=channel)
+        # Do not silently claim the app is current when the bounded scan could
+        # not establish the highest semantic version.
+        raise ValueError("GitHub release history exceeds the bounded scan")
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         raise AppError(
             "Could not check GitHub for a Kassiber update",
@@ -471,18 +490,6 @@ def fetch_latest_release(
             hint=f"Open {GITHUB_RELEASES_PAGE_URL} to check manually.",
             retryable=True,
         ) from exc
-    if len(raw) > _MAX_RESPONSE_BYTES:
-        raise AppError(
-            "GitHub returned an unexpectedly large update response",
-            code="update_check_failed",
-            hint=f"Open {GITHUB_RELEASES_PAGE_URL} to check manually.",
-            retryable=True,
-        )
-    try:
-        return _release_from_response(
-            json.loads(raw.decode("utf-8")),
-            channel=channel,
-        )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise AppError(
             "GitHub returned an invalid Kassiber update response",

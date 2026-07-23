@@ -15,7 +15,7 @@ describe("app update checks", () => {
   it("uses Sparrow's delayed daily cadence", () => {
     expect(APP_UPDATE_START_DELAY_MS).toBe(10_000);
     expect(APP_UPDATE_PERIOD_MS).toBe(86_400_000);
-    expect(APP_UPDATE_CONSENT_REFRESH_MS).toBe(30_000);
+    expect(APP_UPDATE_CONSENT_REFRESH_MS).toBe(1_000);
   });
 
   it("keeps release information transient", () => {
@@ -78,7 +78,11 @@ describe("app update checks", () => {
       };
       const check = vi.fn().mockResolvedValue(result);
       const setUpdate = vi.fn();
-      const stop = startAppUpdateScheduler(check, setUpdate);
+      const stop = startAppUpdateScheduler(
+        check,
+        setUpdate,
+        async () => true,
+      );
 
       await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS - 1);
       expect(check).not.toHaveBeenCalled();
@@ -92,6 +96,36 @@ describe("app update checks", () => {
       stop();
       await vi.advanceTimersByTimeAsync(APP_UPDATE_PERIOD_MS);
       expect(check).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops an in-flight automatic result after CLI consent revocation", async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn().mockResolvedValue({
+        currentVersion: "0.22.55",
+        latestVersion: "0.23.0",
+        releaseUrl:
+          "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+        updateAvailable: true,
+        prerelease: false,
+        checkedAt: 1_784_688_800,
+      });
+      const setUpdate = vi.fn();
+      const setEnabled = vi.fn();
+      startAppUpdateScheduler(
+        check,
+        setUpdate,
+        async () => false,
+        setEnabled,
+      );
+
+      await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS);
+
+      expect(setUpdate).not.toHaveBeenCalled();
+      expect(setEnabled).toHaveBeenCalledWith(false);
     } finally {
       vi.useRealTimers();
     }
@@ -127,6 +161,33 @@ describe("app update checks", () => {
       }),
     );
     expect(openUrl).toHaveBeenCalledWith(result.releaseUrl);
+  });
+
+  it("drops an in-flight manual result after CLI consent revocation", async () => {
+    const setUpdate = vi.fn();
+    const isEnabled = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    await runManualAppUpdateCheck({
+      isEnabled,
+      check: vi.fn().mockResolvedValue({
+        currentVersion: "0.22.55",
+        latestVersion: "0.23.0",
+        releaseUrl:
+          "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+        updateAvailable: true,
+        prerelease: false,
+        checkedAt: 1_784_688_800,
+      }),
+      setUpdate,
+      showDialog: vi.fn(),
+      openUrl: vi.fn(),
+    });
+
+    expect(isEnabled).toHaveBeenCalledTimes(2);
+    expect(setUpdate).not.toHaveBeenCalled();
   });
 
   it("reports that the installed version is current", async () => {
