@@ -110,6 +110,7 @@ def _atomic_write_private(destination: Path, text: str) -> None:
         try:
             os.fchmod(fd, 0o600)
         except (AttributeError, OSError):
+            # mkstemp already creates the file owner-only; this is hardening.
             pass
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
@@ -120,6 +121,7 @@ def _atomic_write_private(destination: Path, text: str) -> None:
         try:
             temporary.unlink()
         except OSError:
+            # Cleanup must not hide the original write/replace failure.
             pass
 
 
@@ -156,6 +158,7 @@ def read_small_private_file(path: Path, limit: int) -> bytes | None:
             try:
                 os.close(descriptor)
             except OSError:
+                # Best-effort cleanup after the read path has already failed.
                 pass
     return raw if len(raw) <= limit else None
 
@@ -259,6 +262,7 @@ def _update_check_preference_lock(path: Path):
             if stat.S_ISLNK(os.lstat(lock_path).st_mode):
                 raise OSError(f"Update-check lock must not be a symlink: {lock_path}")
         except FileNotFoundError:
+            # Expected on first use; os.open below creates the lock safely.
             pass
         flags = (
             os.O_RDWR
@@ -367,6 +371,7 @@ def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
     try:
         destination.parent.chmod(0o700)
     except OSError:
+        # Best effort for existing directories; file writes remain owner-only.
         pass
     with _update_check_preference_lock(destination):
         document = {
@@ -660,6 +665,7 @@ def detect_install_method(
         try:
             candidate_paths.append(str(Path(value).expanduser().resolve(strict=False)))
         except OSError:
+            # The unresolved executable path is still included in candidates.
             pass
     normalized = "\n".join(
         value.replace("\\", "/").lower() for value in candidate_paths

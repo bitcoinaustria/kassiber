@@ -134,8 +134,8 @@ def test_disabling_waits_for_inflight_check_and_blocks_later_network(
     release_request = threading.Event()
     disable_started = threading.Event()
     disable_returned = threading.Event()
-    check_errors: list[BaseException] = []
-    disable_errors: list[BaseException] = []
+    check_errors: list[Exception] = []
+    disable_errors: list[Exception] = []
     opener_calls = 0
 
     def opener(request, *, timeout):
@@ -153,14 +153,14 @@ def test_disabling_waits_for_inflight_check_and_blocks_later_network(
                 preference=preference,
                 opener=opener,
             )
-        except BaseException as exc:
+        except Exception as exc:
             check_errors.append(exc)
 
     def disable():
         disable_started.set()
         try:
             update_check.set_update_checks_enabled(False, preference)
-        except BaseException as exc:
+        except Exception as exc:
             disable_errors.append(exc)
         finally:
             disable_returned.set()
@@ -184,6 +184,7 @@ def test_disabling_waits_for_inflight_check_and_blocks_later_network(
     assert not update_check.update_checks_enabled(preference)
     assert opener_calls == 1
 
+    calls_before_disabled_check = opener_calls
     try:
         update_check.check_for_update(
             path=cache,
@@ -194,7 +195,7 @@ def test_disabling_waits_for_inflight_check_and_blocks_later_network(
         assert error.code == "update_checks_disabled"
     else:
         raise AssertionError("disabled update check unexpectedly succeeded")
-    assert opener_calls == 1
+    assert opener_calls == calls_before_disabled_check
 
 
 def test_environment_disable_overrides_persisted_consent(tmp_path: Path):

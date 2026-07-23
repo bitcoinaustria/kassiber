@@ -879,6 +879,7 @@ def generate_release_manifest(
         try:
             temporary.unlink(missing_ok=True)
         except OSError:
+            # Preserve and report the original manifest write failure below.
             pass
         raise AppError(
             f"Could not write release manifest: {output}",
