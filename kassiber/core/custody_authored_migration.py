@@ -750,6 +750,8 @@ def _pair_group_spec(
 
 def _migrate_legacy_pair_groups(
     conn: sqlite3.Connection,
+    *,
+    repair_component_ids: set[str] | None = None,
 ) -> ConsolidationResult:
     """Activate one atomic component for each connected active pair group."""
 
@@ -759,6 +761,14 @@ def _migrate_legacy_pair_groups(
     skipped = 0
     with _savepoint(conn, "custody_pair_consolidation"):
         for group in _connected_pair_groups(rows):
+            if repair_component_ids is not None:
+                linked = {
+                    str(_field(row, "component_id"))
+                    for row in group
+                    if _field(row, "component_id") not in (None, "")
+                }
+                if not linked or not linked.issubset(repair_component_ids):
+                    continue
             try:
                 outcome = _consolidate_pair_group(conn, group)
             except AppError as error:
@@ -884,7 +894,18 @@ def _consolidate_pair_group(
             spec = _retarget_revision_spec(
                 spec, supersedes_component_id=str(exact["id"])
             )
+        revision_parent = next(
+            (
+                component_id
+                for component_id in sorted(linked)
+                if get_component(conn, component_id)["lineage_id"]
+                == spec["lineage_id"]
+            ),
+            None,
+        )
         for old_id in sorted(linked):
+            if old_id == revision_parent:
+                continue
             supersede_component(
                 conn, old_id, reason="consolidated into authored pair group"
             )
@@ -1000,6 +1021,50 @@ def _migrate_deleted_legacy_rows(conn: sqlite3.Connection) -> ConsolidationResul
         activated=migrated,
         unchanged=unchanged,
         skipped=skipped,
+    )
+
+
+def refresh_drifted_legacy_pair_components(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+) -> ConsolidationResult:
+    """Rebind reviewed legacy pairs after evidence-only anchor drift."""
+
+    repairable: set[str] = set()
+    component_ids = {
+        str(row["component_id"])
+        for row in conn.execute(
+            """
+            SELECT DISTINCT component_id
+            FROM transaction_pairs
+            WHERE profile_id = ? AND deleted_at IS NULL
+              AND component_id IS NOT NULL
+            """,
+            (profile_id,),
+        ).fetchall()
+    }
+    for component_id in component_ids:
+        component = get_component(conn, component_id, profile_id=profile_id)
+        issue_codes = {
+            str(issue.get("code") or "")
+            for issue in component["validation"]["issues"]
+        }
+        if (
+            component["state"] == "active"
+            and component["effective_state"] == "draft"
+            and component["authored_source"] == "migration"
+            and component["evidence_kind"] == "legacy_review_migration"
+            and component["evidence_status"]["status"] == "evidence_mismatch"
+            and issue_codes == {"component_evidence_commitment_invalid"}
+            and component["validation"]["anchors"]["valid"]
+        ):
+            repairable.add(component_id)
+    if not repairable:
+        return ConsolidationResult(unchanged=1)
+    return _migrate_legacy_pair_groups(
+        conn,
+        repair_component_ids=repairable,
     )
 
 

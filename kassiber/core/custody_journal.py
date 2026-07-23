@@ -1419,6 +1419,14 @@ def process_journals(
             progress("repairing")
             overlap_repair = repair_source_overlaps(conn, profile)
             overlap_warning = source_overlap_warning(conn, profile, overlap_repair)
+            evidence_repair = (
+                custody_authored_migration.refresh_drifted_legacy_pair_components(
+                    conn,
+                    profile_id=str(profile["id"]),
+                )
+            )
+            if evidence_repair.changed:
+                _, profile = resolve_scope(conn, workspace_ref, profile_ref)
             progress("pricing")
             auto_priced = auto_price(conn, profile)
             progress("building")
@@ -1468,6 +1476,8 @@ def process_journals(
         result["source_overlap_repair"] = overlap_repair
     if overlap_warning is not None:
         result["source_overlap_warning"] = overlap_warning
+    if evidence_repair.activated:
+        result["custody_pair_evidence_repairs"] = evidence_repair.activated
     if stored["filed_report_impacts_resolved"]:
         result["filed_report_impacts_resolved"] = stored[
             "filed_report_impacts_resolved"
