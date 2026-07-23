@@ -14,7 +14,6 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { ChatMessage } from "./ChatMessage";
 import { Conversation, ConversationContent } from "@/components/ai-elements";
-import { Button } from "@/components/ui/button";
 import type { AiChatMessage } from "@/daemon/stream";
 
 interface ChatThreadProps {
@@ -118,30 +117,27 @@ export function ChatThread({
         ))}
       </ConversationContent>
       {scrollable && !isAtTop ? (
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute top-3 left-1/2 z-10 size-9 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 dark:bg-zinc-950/80"
+          className="absolute top-3 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-sm outline-none transition-colors hover:border-border hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200"
           onClick={() => scrollToTop("smooth")}
           aria-label={t("thread.scrollToTop")}
           title={t("thread.scrollToTop")}
         >
           <ArrowUp className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        </button>
       ) : null}
       {scrollable && !isAtBottom ? (
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="icon-lg"
-          className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 dark:bg-zinc-950/80"
+          className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-xs text-muted-foreground shadow-sm outline-none transition-colors hover:border-border hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200"
           onClick={() => scrollToBottom("smooth")}
           aria-label={t("thread.scrollToLatest")}
           title={t("thread.scrollToLatest")}
         >
-          <ArrowDown className="h-5 w-5" aria-hidden="true" />
-        </Button>
+          <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{t("thread.scrollToLatestShort")}</span>
+        </button>
       ) : null}
     </Conversation>
   );

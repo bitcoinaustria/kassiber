@@ -93,7 +93,7 @@ const components: Components = {
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "my-4 overflow-x-auto rounded-lg border border-border bg-muted/70 p-3 font-mono text-xs leading-relaxed text-foreground first:mt-0 last:mb-0 [&_code]:bg-transparent [&_code]:p-0",
+        "my-4 overflow-x-auto rounded-xl border border-border bg-muted/70 p-3 font-mono text-xs leading-relaxed text-foreground first:mt-0 last:mb-0 [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0",
         className,
       )}
       {...props}
@@ -102,7 +102,7 @@ const components: Components = {
   code: ({ className, ...props }) => (
     <code
       className={cn(
-        "rounded-md bg-muted px-1 py-0.5 font-mono text-[0.9em]",
+        "rounded-md border border-border bg-muted px-1 py-0.5 font-mono text-[0.85em]",
         className,
       )}
       {...props}
@@ -157,7 +157,7 @@ export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
   return (
     <div
       className={cn(
-        "max-w-none text-sm leading-6 text-foreground",
+        "max-w-none text-sm leading-relaxed text-foreground/85",
         className,
       )}
     >

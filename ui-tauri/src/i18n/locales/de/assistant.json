@@ -62,6 +62,7 @@
   },
   "thread": {
     "scrollToLatest": "Zur neuesten Nachricht scrollen",
+    "scrollToLatestShort": "Zum Neuesten",
     "scrollToTop": "Nach oben scrollen"
   },
   "message": {

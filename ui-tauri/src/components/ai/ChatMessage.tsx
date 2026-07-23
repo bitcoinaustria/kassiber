@@ -84,8 +84,8 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const loaderLabel = message.activityLabel ?? t("message.generating");
 
   return (
-    <div className="flex w-full justify-start">
-      <div className="w-full min-w-0 px-1 py-1 text-sm">
+    <div className="group/assistant flex w-full justify-start">
+      <div className="w-full min-w-0 px-1 py-0.5 text-sm">
         {hasThinking ? (
           <ChatReasoning
             segments={thinkingSegments}
@@ -230,7 +230,7 @@ function UserMessage({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
             aria-label={t("message.edit")}
-            className="min-h-[60px] w-full resize-none rounded-2xl rounded-tr-sm bg-muted text-sm"
+            className="min-h-[60px] w-full resize-none rounded-2xl bg-secondary text-sm"
           />
           <div className="mt-1 flex items-center justify-end gap-0.5 text-muted-foreground">
             <Button
@@ -264,7 +264,7 @@ function UserMessage({
 
   return (
     <div className="group/user flex w-full flex-col items-end gap-1">
-      <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground shadow-sm sm:max-w-[72%]">
+      <div className="max-w-[82%] rounded-2xl bg-secondary p-3 text-sm text-foreground sm:max-w-[80%]">
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
       </div>
       {canEdit ? (
@@ -341,7 +341,7 @@ function ChatMessageActions({
     : null;
 
   return (
-    <div className="mt-2 flex items-center gap-0.5 text-muted-foreground">
+    <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/assistant:opacity-100">
       <Button
         type="button"
         variant="ghost"
