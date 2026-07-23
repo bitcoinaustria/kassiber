@@ -42,7 +42,7 @@ esac
 # RPM uses `~` for a version that sorts before the corresponding stable
 # version. Map SemVer's prerelease separator accordingly (1.2.3-rc.1 becomes
 # 1.2.3~rc.1) while keeping the user-facing/package build version unchanged.
-rpm_version="${version//-/~}"
+rpm_version="${version//-/\~}"
 if [ -z "$architecture" ]; then
   architecture="$(uname -m)"
 fi

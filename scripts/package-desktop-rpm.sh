@@ -42,7 +42,7 @@ esac
 # RPM uses `~` for a version that sorts before the corresponding stable
 # version. Map SemVer's prerelease separator accordingly (1.2.3-rc.1 becomes
 # 1.2.3~rc.1) while keeping the Debian/package build version unchanged.
-rpm_version="${version//-/~}"
+rpm_version="${version//-/\~}"
 for command in cmp dpkg-deb rpmbuild tar; do
   command -v "$command" >/dev/null 2>&1 || die "$command is required"
 done

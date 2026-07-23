@@ -165,7 +165,7 @@ jobs:
           for artifact in \
             kassiber-linux-x64.rpm \
             kassiber-cli-linux-x64.rpm; do
-            rpm_version="${version//-/~}"
+            rpm_version="${version//-/\~}"
             test "$(rpm -qp --queryformat '%{VERSION}' "release/$artifact")" = "$rpm_version"
           done
           tar -xOf release/kassiber-cli-linux-x64.tar.gz \

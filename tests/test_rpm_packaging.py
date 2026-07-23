@@ -58,6 +58,17 @@ def build_desktop_deb(root: Path, version: str = "1.2.3") -> Path:
     return output
 
 
+class RpmVersionContractTest(unittest.TestCase):
+    def test_rpm_builders_escape_the_literal_tilde_replacement(self):
+        for script_name in ("package-cli-rpm.sh", "package-desktop-rpm.sh"):
+            script = (ROOT / "scripts" / script_name).read_text(encoding="utf-8")
+            self.assertIn('rpm_version="${version//-/\\~}"', script)
+        workflow = (
+            ROOT / ".github/workflows/publish-linux-channels.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('rpm_version="${version//-/\\~}"', workflow)
+
+
 @unittest.skipUnless(
     all(shutil.which(command) for command in RPM_TOOLS),
     "RPM, repository, and Debian tooling is required",
