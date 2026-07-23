@@ -6,6 +6,7 @@ import { useUiStore } from "@/store/ui";
 
 export const APP_UPDATE_START_DELAY_MS = 10_000;
 export const APP_UPDATE_PERIOD_MS = 24 * 60 * 60 * 1_000;
+export const APP_UPDATE_CONSENT_REFRESH_MS = 30_000;
 
 export interface AppUpdateCheck {
   currentVersion: string;
@@ -50,6 +51,16 @@ export async function resolveAppUpdateChecksEnabled(
   }
 }
 
+export async function syncAppUpdateChecksEnabled(
+  setEnabled: (enabled: boolean) => void = (enabled) =>
+    useUiStore.getState().setAutomaticUpdateChecks(enabled),
+  read: () => Promise<boolean> = readAppUpdateChecksEnabled,
+): Promise<boolean> {
+  const enabled = await resolveAppUpdateChecksEnabled(read);
+  setEnabled(enabled);
+  return enabled;
+}
+
 /**
  * Persist the global consent before exposing the new state to schedulers. The
  * native command and packaged CLI read the same owner-only preference file.
@@ -68,7 +79,7 @@ type ManualUpdateDialogOptions = {
 };
 
 export interface ManualAppUpdateDeps {
-  isEnabled: () => boolean;
+  isEnabled: () => boolean | Promise<boolean>;
   check: () => Promise<AppUpdateCheck>;
   setUpdate: (update: AppUpdateCheck) => void;
   showDialog: (
@@ -95,7 +106,7 @@ export async function runManualAppUpdateCheck(
   overrides: Partial<ManualAppUpdateDeps> = {},
 ): Promise<void> {
   const deps: ManualAppUpdateDeps = {
-    isEnabled: () => useUiStore.getState().automaticUpdateChecks,
+    isEnabled: syncAppUpdateChecksEnabled,
     check: checkForAppUpdate,
     setUpdate: (update) => useUiStore.getState().setAppUpdate(update),
     showDialog: showNativeUpdateDialog,
@@ -103,7 +114,7 @@ export async function runManualAppUpdateCheck(
     ...overrides,
   };
 
-  if (!deps.isEnabled()) {
+  if (!(await deps.isEnabled())) {
     await deps
       .showDialog(
         i18n.t("shell.version.disabled", { ns: "chrome" }),
@@ -227,14 +238,23 @@ export function useAppUpdateScheduler(): void {
     // The owner-only native/CLI preference is canonical. Renderer persistence
     // is deliberately ignored so imports, upgrades, malformed files, and CLI
     // changes cannot be converted into consent by merely starting the app.
-    void resolveAppUpdateChecksEnabled().then((canonicalEnabled) => {
+    // Refreshing this local file also keeps a running desktop synchronized
+    // when the user changes consent through the CLI.
+    const refreshConsent = async () => {
+      const canonicalEnabled = await resolveAppUpdateChecksEnabled();
       if (disposed) return;
       setAutomaticUpdateChecks(canonicalEnabled);
       setConsentLoaded(true);
-    });
+    };
+    void refreshConsent();
+    const refreshId = globalThis.setInterval(
+      () => void refreshConsent(),
+      APP_UPDATE_CONSENT_REFRESH_MS,
+    );
 
     return () => {
       disposed = true;
+      globalThis.clearInterval(refreshId);
     };
   }, [setAutomaticUpdateChecks]);
 

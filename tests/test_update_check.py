@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import json
 import os
-import subprocess
 import threading
 from argparse import Namespace
 from datetime import datetime, timedelta, timezone

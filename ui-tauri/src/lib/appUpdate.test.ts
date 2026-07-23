@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  APP_UPDATE_CONSENT_REFRESH_MS,
   APP_UPDATE_PERIOD_MS,
   APP_UPDATE_START_DELAY_MS,
   runManualAppUpdateCheck,
   resolveAppUpdateChecksEnabled,
   startAppUpdateScheduler,
+  syncAppUpdateChecksEnabled,
 } from "./appUpdate";
 import { uiStatePartialForStorage, useUiStore } from "@/store/ui";
 
@@ -13,6 +15,7 @@ describe("app update checks", () => {
   it("uses Sparrow's delayed daily cadence", () => {
     expect(APP_UPDATE_START_DELAY_MS).toBe(10_000);
     expect(APP_UPDATE_PERIOD_MS).toBe(86_400_000);
+    expect(APP_UPDATE_CONSENT_REFRESH_MS).toBe(30_000);
   });
 
   it("keeps release information transient", () => {
@@ -46,6 +49,19 @@ describe("app update checks", () => {
         throw new Error("preference unavailable");
       }),
     ).resolves.toBe(false);
+  });
+
+  it("synchronizes renderer state with later CLI consent changes", async () => {
+    const setEnabled = vi.fn();
+
+    await expect(
+      syncAppUpdateChecksEnabled(setEnabled, async () => true),
+    ).resolves.toBe(true);
+    await expect(
+      syncAppUpdateChecksEnabled(setEnabled, async () => false),
+    ).resolves.toBe(false);
+
+    expect(setEnabled.mock.calls).toEqual([[true], [false]]);
   });
 
   it("starts once after the delay and repeats daily until stopped", async () => {
@@ -177,5 +193,22 @@ describe("app update checks", () => {
       expect.stringContaining("Update checks are disabled"),
       expect.objectContaining({ kind: "info" }),
     );
+  });
+
+  it("re-reads canonical consent before a manual check", async () => {
+    const check = vi.fn();
+    const showDialog = vi.fn().mockResolvedValue("OK");
+    const isEnabled = vi.fn().mockResolvedValue(false);
+
+    await runManualAppUpdateCheck({
+      isEnabled,
+      check,
+      setUpdate: vi.fn(),
+      showDialog,
+      openUrl: vi.fn(),
+    });
+
+    expect(isEnabled).toHaveBeenCalledTimes(1);
+    expect(check).not.toHaveBeenCalled();
   });
 });
