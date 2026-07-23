@@ -83,7 +83,9 @@
     "branch": "Branch in new chat",
     "edit": "Edit message",
     "confirmEdit": "Confirm edit",
-    "cancelEdit": "Cancel edit"
+    "cancelEdit": "Cancel edit",
+    "showFullMessage": "Show full message",
+    "showLess": "Show less"
   },
   "facts": {
     "asset": "Asset",

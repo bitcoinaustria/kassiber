@@ -82,6 +82,8 @@
     "moreOptions": "Weitere Optionen",
     "branch": "In neuem Chat verzweigen",
     "edit": "Nachricht bearbeiten",
+    "showFullMessage": "Ganze Nachricht anzeigen",
+    "showLess": "Weniger anzeigen",
     "confirmEdit": "Bearbeitung bestätigen",
     "cancelEdit": "Bearbeitung abbrechen"
   },
