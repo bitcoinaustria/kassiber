@@ -17,7 +17,7 @@ Two surfaces ship today:
   [bitcoinaustria/kassiber-skill](https://github.com/bitcoinaustria/kassiber-skill) for AI
   coding and terminal assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
-  OpenAI-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
+  OpenAI Responses-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
   parallel CLI surface (`kassiber chat`, `kassiber ai providers …`,
   `kassiber ai models`) that reuses the same provider config.
 
@@ -46,6 +46,45 @@ The intended uses are:
 - tie-breaking when deterministic matching narrows the field but does not finish it
 
 Deterministic matching should work without AI first. AI should stay optional.
+
+## Why the Responses API
+
+Kassiber's HTTP transport uses `POST /v1/responses` rather than the legacy
+Chat Completions endpoint. OpenAI recommends Responses for new projects and
+describes it as the future-facing interface for agentic and multimodal work.
+For Kassiber, the practical improvements are:
+
+- typed `message`, `function_call`, `function_call_output`, and `reasoning`
+  Items instead of encoding every provider action as a chat message
+- semantic streaming events such as `response.output_text.delta` and
+  `response.completed`, which are less ambiguous than parsing choice deltas
+- correct reasoning-model tool round-trips: Kassiber replays the complete
+  response output alongside each matching function result
+- a direct path to future Responses-only models and tools without another
+  transport migration
+
+OpenAI also reports a 3% SWE-bench improvement for reasoning models and
+40–80% better cache utilization in its internal Responses-vs-Chat-Completions
+tests. Those are OpenAI measurements, not a promised improvement for Ollama,
+oMLX, or every model Kassiber can connect to. See the
+[OpenAI migration guide](https://developers.openai.com/api/docs/guides/migrate-to-responses),
+[function-calling guide](https://developers.openai.com/api/docs/guides/function-calling),
+and [streaming guide](https://developers.openai.com/api/docs/guides/streaming-responses).
+
+Kassiber deliberately does **not** enable provider-managed conversation state.
+Every HTTP request sets `store: false`; system guidance is sent through
+`instructions`, and the bounded tool loop replays typed output Items in memory.
+Persisted chat history remains a Kassiber/SQLCipher concern and is sent again
+as input only when the user resumes a session. This keeps the local-first
+storage boundary and also works with providers that implement only stateless
+Responses.
+
+The implementation keeps those invariants in one request builder. Prepared
+tool-loop context is an explicit typed input and cannot be combined with the
+legacy message input accidentally. HTTP transport remains in
+`kassiber.ai.client`; fixed external CLI adapters live in
+`kassiber.ai.cli_client`, with shared delta/request contracts isolated in
+`kassiber.ai.contracts`.
 
 ## Privacy warning
 
@@ -88,6 +127,15 @@ Ollama remains the default provider for compatibility, but oMLX appears as a
 built-in local provider and Settings preset. Run the server (`ollama serve`, or
 `omlx start` / the oMLX menu-bar app) and use **Test connection** in Settings
 before saving a provider change.
+
+HTTP providers must implement `POST /v1/responses`; a server that only exposes
+`/v1/chat/completions` is no longer sufficient. Ollama added its stateless
+Responses endpoint in v0.13.3, including streaming, function calling, and
+reasoning summaries, so older Ollama installations must be upgraded. Current
+oMLX releases and OpenRouter also expose `/v1/responses`. See
+[Ollama's compatibility reference](https://docs.ollama.com/api/openai-compatibility),
+[oMLX releases](https://github.com/jundot/omlx/releases), and the
+[OpenRouter Responses reference](https://openrouter.ai/docs/api/api-reference/responses/create-responses).
 
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
@@ -140,7 +188,7 @@ kassiber ai providers create codex-cli --base-url codex-cli://default --kind rem
 
 For these providers, `--model` / `default_model` is forwarded to the CLI when it
 is not `default`. The assistant's thinking selector sends `reasoning_effort` for
-OpenAI-compatible providers, maps to Claude CLI `--effort`, and maps to Codex
+Responses-compatible providers, maps to Claude CLI `--effort`, and maps to Codex
 CLI's `model_reasoning_effort` config override.
 
 ## In-app surface
@@ -337,15 +385,14 @@ has an inline `api_key`; backup import surfaces a non-fatal
 tokens, descriptors, xpubs, and blinding keys stay SQLCipher-protected. See
 [`../plan/10-secret-management.md`](../plan/10-secret-management.md).
 
-Reasoning-capable models surface chain-of-thought through one of two
-channels, and both are split into collapsible reasoning pane(s) above the
-answer:
+Reasoning-capable models surface provider-exposed reasoning summaries or
+model-authored thinking text through one of two channels, and both are split
+into collapsible reasoning pane(s) above the answer:
 
 - Inline `<think>...</think>` tags inside the content stream — emitted by
   DeepSeek-R1 and QwQ.
-- A structured `reasoning` field on the delta — emitted by OpenAI o1/o3
-  and by Ollama's OpenAI-compat shim for Qwen3 / Gemma reasoning builds
-  (oMLX over `/v1` uses the same channel when the model exposes it).
+- Structured Responses reasoning-summary events — emitted by supported OpenAI
+  reasoning models and by compatible Ollama/oMLX thinking models.
 
 Each user turn gets its own assistant message. Inside a tool-using turn,
 each provider completion round (`waiting_for_model` before the next model
@@ -358,7 +405,9 @@ daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
 and reports the model count without persisting anything. For Claude/Codex CLI
 locators, this only verifies that the CLI executable is present; authentication
-and model reachability are checked when chat starts.
+and model reachability are checked when chat starts. For HTTP providers, the
+connection test probes `/v1/models`; it does not spend tokens on a generation,
+so the first chat remains the final check that `/v1/responses` is enabled.
 
 Remote, TEE, Claude CLI, and Codex CLI providers require explicit
 acknowledgement before chat. The CLI uses
@@ -374,8 +423,9 @@ independently.
 
 Before the first token arrives, `ai.chat` may emit `ai.chat.status` records
 with phases such as `preparing`, `connecting`, and `waiting_for_model`. These
-records are UI progress hints only; chain-of-thought is shown only when the
-provider emits inline `<think>` content or structured `reasoning` deltas.
+records are UI progress hints only; model-authored thinking is shown only when
+the provider emits inline `<think>` content or structured reasoning-summary
+deltas.
 
 Pressing **Stop** in the desktop UI, choosing cancel at a terminal consent
 prompt, or interrupting `kassiber chat` sends `ai.chat.cancel` with
@@ -400,11 +450,12 @@ The desktop assistant and `kassiber chat` opt into a bounded tool loop with
 
 Tool control stays top-level; generation options still live under `options`.
 When enabled, Kassiber prepends a compact Kassiber skill-aware system prompt,
-sends OpenAI-style tool definitions, emits `ai.chat.tool_call`,
+sends flat Responses function definitions, emits `ai.chat.tool_call`,
 `ai.chat.tool_consent_required`, and
 `ai.chat.tool_result` stream records as needed, feeds tool results back as
-`role: "tool"` messages, and finishes with the normal terminal `ai.chat`
-envelope.
+typed `function_call_output` Items with matching `call_id` values, and finishes
+with the normal terminal `ai.chat` envelope. The complete provider output is
+replayed between tool rounds so reasoning Items are not discarded.
 
 Before the provider is called, Kassiber also runs a small deterministic
 read-only router for Kassiber questions. It looks for common accounting intents
@@ -756,8 +807,8 @@ Remote inference should be an explicit choice, not the default.
 If remote inference is needed, prefer a provider that documents encrypted
 inference and attestation rather than a generic hosted model API. One example
 is [Maple Proxy / Maple AI](https://blog.trymaple.ai/maple-proxy-documentation/),
-which documents TEE-based encrypted inference behind an OpenAI-compatible local
-proxy.
+which documents TEE-based encrypted inference behind a local proxy. Confirm
+that any selected proxy exposes `/v1/responses` before configuring it.
 
 Even then, users should make an intentional privacy decision before sending
 accounting data off-device.
@@ -789,5 +840,8 @@ These are directionally in scope, but should remain optional and review-gated:
 ## Related files
 
 - [Kassiber CLI Agent Skill](https://github.com/bitcoinaustria/kassiber-skill)
+- [`../../kassiber/ai/client.py`](../../kassiber/ai/client.py)
+- [`../../kassiber/ai/cli_client.py`](../../kassiber/ai/cli_client.py)
+- [`../../kassiber/ai/contracts.py`](../../kassiber/ai/contracts.py)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [`../../SECURITY.md`](../../SECURITY.md)

@@ -3,8 +3,8 @@
  *
  * Many open thinking-capable models (Qwen3, DeepSeek-R1, QwQ, …) emit
  * reasoning inline in the assistant content stream wrapped in `<think>`
- * tags. The OpenAI-compatible wire format does not separate reasoning from
- * the visible answer, so the UI has to do the split itself.
+ * tags. Responses can expose structured reasoning summaries, but models that
+ * put thinking text in the visible content still need this UI-side fallback.
  *
  * `ThinkParser` consumes raw content chunks (in arrival order) and emits
  * how many bytes go to the `content` channel vs the `thinking` channel for

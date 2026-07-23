@@ -61,14 +61,15 @@ class ToolEntry:
     def provider_name(self) -> str:
         return self.wire_name or self.name
 
-    def to_openai_tool(self) -> dict[str, Any]:
+    def to_responses_tool(self) -> dict[str, Any]:
         return {
             "type": "function",
-            "function": {
-                "name": self.provider_name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
+            "name": self.provider_name,
+            "description": self.description,
+            "parameters": self.parameters,
+            # Preserve Kassiber's existing optional-argument semantics. In the
+            # Responses API an omitted strict flag may be resolved as strict.
+            "strict": False,
         }
 
 
@@ -3097,14 +3098,14 @@ def get_tool(name: str) -> ToolEntry | None:
     return TOOL_BY_NAME.get(name)
 
 
-def openai_tool_definitions(
+def responses_tool_definitions(
     *,
     include_mutating: bool = False,
     capabilities: frozenset[str] | None = None,
     allowed_names: frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     return [
-        tool.to_openai_tool()
+        tool.to_responses_tool()
         for tool in TOOL_CATALOG
         if (include_mutating or tool.kind_class == "read_only")
         and (allowed_names is None or tool.name in allowed_names)

@@ -246,11 +246,11 @@
   "ai": {
     "local": {
       "title": "Lokalen Endpunkt nutzen",
-      "description": "Nutze Ollama, oMLX oder einen anderen lokalen OpenAI-kompatiblen Server auf diesem Rechner."
+      "description": "Nutze Ollama, oMLX oder einen anderen lokalen Server mit kompatibler OpenAI Responses API auf diesem Rechner."
     },
     "remote": {
       "title": "Remote-Provider nutzen",
-      "description": "Bereite einen OpenAI-kompatiblen Endpunkt oder die Claude/Codex CLI vor. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
+      "description": "Bereite einen Endpunkt mit kompatibler OpenAI Responses API oder die Claude/Codex CLI vor. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
     },
     "disabled": {
       "title": "AI vorerst deaktivieren",
@@ -264,7 +264,7 @@
     "providerNameDescription": "Eine kurze Bezeichnung, die in den AI-Provider-Einstellungen angezeigt wird.",
     "baseUrl": "Basis-URL",
     "baseUrlPlaceholderRemote": "https://…/v1 oder claude-cli://default",
-    "baseUrlDescription": "Verwende einen OpenAI-kompatiblen /v1-Endpunkt oder einen unterstützten CLI-Locator.",
+    "baseUrlDescription": "Verwende einen /v1-Endpunkt mit kompatibler OpenAI Responses API oder einen unterstützten CLI-Locator.",
     "remoteAck": "Mir ist klar, dass Prompts dieses Gerät verlassen können.",
     "remoteAckDescription": "Buchhaltungskontext, Labels, Notizen, Backend-Hostnamen und Berichtsdetails können sensibel sein.",
     "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst AI-Funktionen später in den Einstellungen aktivieren."
@@ -298,7 +298,7 @@
       },
       "remote": {
         "title": "Remote-Provider",
-        "body": "Ein OpenAI-kompatibler Endpunkt oder die Claude/Codex CLI. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
+        "body": "Ein Endpunkt mit kompatibler OpenAI Responses API oder die Claude/Codex CLI. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
       },
       "disabled": {
         "title": "Deaktiviert",

@@ -50,10 +50,15 @@ from .ai import (
     set_db_ai_provider_api_key,
     update_db_ai_provider,
 )
-from .ai.client import DEFAULT_TIMEOUT_SECONDS, ai_client_for_locator
+from .ai.client import (
+    DEFAULT_TIMEOUT_SECONDS,
+    ai_client_for_locator,
+    responses_request_context,
+)
+from .ai.contracts import ResponsesRequestContext
 from .ai.prompt import (
     build_chat_messages,
-    build_openai_tools,
+    build_responses_tools,
     normalize_system_prompt_kind,
 )
 from .ai.providers import (
@@ -1075,6 +1080,15 @@ class ParsedAiToolCall:
     name: str
     arguments: dict[str, Any]
     argument_error: str | None = None
+
+
+@dataclass(frozen=True)
+class AiToolTurnResult:
+    tool_calls: list[dict[str, Any]]
+    content: str
+    reasoning: str
+    finish_reason: str | None
+    response_output: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -7765,15 +7779,16 @@ def _stream_ai_chat_tool_turn(
     request_id: object,
     client,
     validated: dict[str, Any],
-    messages: list[dict[str, Any]],
+    context: ResponsesRequestContext,
     tools: list[dict[str, Any]],
     out: _OutputChannel,
     cancel_event: threading.Event,
-) -> tuple[list[dict[str, Any]], str, str, str | None]:
+) -> AiToolTurnResult:
     tool_calls: list[dict[str, Any]] = []
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
     finish_reason = None
+    response_output: list[dict[str, Any]] | None = None
     _write_ai_chat_status(
         out,
         request_id,
@@ -7781,11 +7796,11 @@ def _stream_ai_chat_tool_turn(
         label="Thinking",
     )
     for chunk in client.stream_chat(
-        messages=messages,
         model=validated["model"],
         options=validated["options"],
         tools=tools,
         tool_choice="auto",
+        context=context,
     ):
         if cancel_event.is_set():
             finish_reason = "cancelled"
@@ -7812,10 +7827,41 @@ def _stream_ai_chat_tool_turn(
             )
         if chunk.finish_reason is not None:
             finish_reason = chunk.finish_reason
+        if chunk.response_output is not None:
+            response_output = chunk.response_output
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
-    return tool_calls, "".join(content_parts), "".join(reasoning_parts), finish_reason
+    content = "".join(content_parts)
+    if response_output is None:
+        response_output = []
+        if content:
+            response_output.append(
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": content}],
+                }
+            )
+        for call in tool_calls:
+            function = call.get("function") if isinstance(call, dict) else None
+            if not isinstance(function, dict):
+                continue
+            response_output.append(
+                {
+                    "type": "function_call",
+                    "call_id": call.get("id"),
+                    "name": function.get("name"),
+                    "arguments": function.get("arguments") or "",
+                }
+            )
+    return AiToolTurnResult(
+        tool_calls=tool_calls,
+        content=content,
+        reasoning="".join(reasoning_parts),
+        finish_reason=finish_reason,
+        response_output=response_output,
+    )
 
 
 def _ui_chat_sessions_payload(
@@ -8058,17 +8104,15 @@ def _run_ai_chat_tool_loop(
             messages,
             _screen_context_for_model(screen_context),
         )
-    tools = build_openai_tools(
+    tools = build_responses_tools(
         validated["messages"],
         screen_context=screen_context if isinstance(screen_context, dict) else None,
         profile=validated["tool_profile"],
     )
     runtime.maintenance_state["advertised_tools"] = [
-        function["function"]["name"]
+        function["name"]
         for function in tools
-        if isinstance(function, dict)
-        and isinstance(function.get("function"), dict)
-        and isinstance(function["function"].get("name"), str)
+        if isinstance(function, dict) and isinstance(function.get("name"), str)
     ]
     latest_question = _latest_user_message_content(validated["messages"]).lower()
     runtime.maintenance_state["cross_book_read_allowed"] = _message_has_any(
@@ -8096,34 +8140,34 @@ def _run_ai_chat_tool_loop(
         runtime=runtime,
         cancel_event=cancel_event,
     )
+    response_context = responses_request_context(messages)
     finish_reason = None
     content = ""
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
-        tool_calls, content, _reasoning, finish_reason = _stream_ai_chat_tool_turn(
+        turn = _stream_ai_chat_tool_turn(
             request_id,
             client,
             validated,
-            messages,
+            response_context,
             tools,
             out,
             cancel_event,
         )
+        tool_calls = turn.tool_calls
+        content = turn.content
+        finish_reason = turn.finish_reason
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
         if not tool_calls:
             break
-
-        messages.append(
-            {
-                "role": "assistant",
-                "content": content,
-                "tool_calls": tool_calls,
-            }
-        )
+        # Replay the provider's typed output verbatim. With ``store: false``
+        # this preserves encrypted reasoning and tool context in memory without
+        # delegating conversation storage to the provider.
+        response_context.input_items.extend(turn.response_output)
         seen_call_ids: set[str] = set()
         for index, raw_tool_call in enumerate(tool_calls):
             if not isinstance(raw_tool_call, dict):
@@ -8295,11 +8339,11 @@ def _run_ai_chat_tool_loop(
                     request_id,
                 )
             )
-            messages.append(
+            response_context.input_items.append(
                 {
-                    "role": "tool",
-                    "tool_call_id": call.call_id,
-                    "content": _tool_result_content_for_model(result),
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": _tool_result_content_for_model(result),
                 }
             )
             if cancel_event.is_set():
@@ -16086,7 +16130,7 @@ def handle_request(
         # nothing is persisted. A caller-supplied API key may be used for this
         # one probe. Stored credentials may only be reused for the stored
         # provider URL; otherwise a compromised renderer could redirect a saved
-        # bearer token to an attacker-controlled OpenAI-compatible URL.
+        # bearer token to an attacker-controlled OpenAI Responses URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():

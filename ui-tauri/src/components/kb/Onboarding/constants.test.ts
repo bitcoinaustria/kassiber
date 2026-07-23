@@ -91,7 +91,7 @@ describe("onboarding endpoint validation", () => {
     ).toBe("Do not include usernames or passwords in the endpoint.");
   });
 
-  it("validates OpenAI-compatible base URLs", () => {
+  it("validates OpenAI Responses API-compatible base URLs", () => {
     expect(aiBaseUrlHint("http://localhost:11434/v1")).toBeNull();
     expect(aiBaseUrlHint("https://api.example/v1")).toBeNull();
     expect(aiBaseUrlHint("claude-cli://default")).toBeNull();

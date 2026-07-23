@@ -246,11 +246,11 @@
   "ai": {
     "local": {
       "title": "Use a local endpoint",
-      "description": "Use Ollama, oMLX, or another local OpenAI-compatible server on this machine."
+      "description": "Use Ollama, oMLX, or another local OpenAI Responses API-compatible server on this machine."
     },
     "remote": {
       "title": "Use a remote provider",
-      "description": "Prepare an OpenAI-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
+      "description": "Prepare an OpenAI Responses API-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
     },
     "disabled": {
       "title": "Disable AI for now",
@@ -264,7 +264,7 @@
     "providerNameDescription": "A short label shown in AI provider settings.",
     "baseUrl": "Base URL",
     "baseUrlPlaceholderRemote": "https://…/v1 or claude-cli://default",
-    "baseUrlDescription": "Use an OpenAI-compatible /v1 endpoint or a supported CLI locator.",
+    "baseUrlDescription": "Use an OpenAI Responses API-compatible /v1 endpoint or a supported CLI locator.",
     "remoteAck": "I understand prompts may leave this device.",
     "remoteAckDescription": "Accounting context, labels, notes, backend hostnames, and report details can be sensitive.",
     "disabledNote": "This hides the Assistant screen and floating chat after onboarding. You can enable AI features later in Settings."
@@ -298,7 +298,7 @@
       },
       "remote": {
         "title": "Remote provider",
-        "body": "An OpenAI-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
+        "body": "An OpenAI Responses API-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
       },
       "disabled": {
         "title": "Disabled",

@@ -3,7 +3,7 @@
 Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
 
     name              TEXT PRIMARY KEY  (lowercase)
-    base_url          TEXT NOT NULL     (OpenAI-compatible root, e.g. http://localhost:11434/v1,
+    base_url          TEXT NOT NULL     (OpenAI Responses-compatible root, e.g. http://localhost:11434/v1,
                                         or fixed CLI locator claude-cli://default / codex-cli://default)
     api_key           TEXT              (nullable; never echoed in envelopes)
     default_model     TEXT              (nullable)
@@ -33,6 +33,7 @@ from ..db import get_setting, set_setting
 from ..errors import AppError
 from ..time_utils import now_iso
 from ..util import str_or_none
+from .contracts import is_cli_provider_locator
 
 
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
@@ -48,8 +49,6 @@ AI_PROVIDER_SECRET_STORES = (
 )
 AI_PROVIDER_SECRET_STATES = ("ok", "missing", "needs_reauth", "unavailable")
 
-CLI_PROVIDER_LOCATORS = ("claude-cli://default", "codex-cli://default")
-
 DEFAULT_BOOTSTRAP_PROVIDER_NAME = "ollama"
 DEFAULT_BOOTSTRAP_PROVIDERS = (
     {
@@ -59,7 +58,7 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "api_key": None,
         "default_model": None,
         "kind": "local",
-        "notes": "Local Ollama (default OpenAI-compatible endpoint).",
+        "notes": "Local Ollama (default OpenAI Responses-compatible endpoint).",
     },
     {
         "name": "omlx",
@@ -68,7 +67,7 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "api_key": None,
         "default_model": None,
         "kind": "local",
-        "notes": "Local oMLX (Apple Silicon MLX OpenAI-compatible endpoint).",
+        "notes": "Local oMLX (Apple Silicon MLX Responses endpoint).",
     },
 )
 DEFAULT_BOOTSTRAP_PROVIDER = DEFAULT_BOOTSTRAP_PROVIDERS[0]
@@ -202,14 +201,6 @@ def _validate_locator_kind(base_url: str, kind: str) -> None:
                 "local providers. Mark off-device endpoints as remote and acknowledge remote use."
             ),
         )
-
-
-def is_cli_provider_locator(value: Any) -> bool:
-    base = str_or_none(value)
-    if base is None:
-        return False
-    base = base.strip().lower()
-    return base in CLI_PROVIDER_LOCATORS
 
 
 def _data_root_from_connection(conn) -> str:
@@ -453,7 +444,7 @@ def normalize_base_url(value: Any) -> str:
 
     Strips whitespace and trailing slashes, requires a scheme, and raises
     `AppError(code='validation')` on bad input. Most providers use an
-    OpenAI-compatible HTTP root; fixed local CLI adapters use
+    OpenAI Responses-compatible HTTP root; fixed local CLI adapters use
     ``claude-cli://default`` or ``codex-cli://default``.
     """
     base = str_or_none(value)
@@ -462,7 +453,8 @@ def normalize_base_url(value: Any) -> str:
             "AI provider base_url is required",
             code="validation",
             hint=(
-                "Use an OpenAI-compatible root, e.g. http://localhost:11434/v1, "
+                "Use an OpenAI Responses-compatible root, e.g. "
+                "http://localhost:11434/v1, "
                 "or claude-cli://default / codex-cli://default."
             ),
         )

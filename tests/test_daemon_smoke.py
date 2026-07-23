@@ -221,7 +221,7 @@ class _SlowChatHandler(BaseHTTPRequestHandler):
     request_count_lock = threading.Lock()
 
     def do_POST(self):
-        if self.path != "/v1/chat/completions":
+        if self.path != "/v1/responses":
             self.send_response(404)
             self.end_headers()
             return
@@ -236,12 +236,9 @@ class _SlowChatHandler(BaseHTTPRequestHandler):
         self.end_headers()
         for chunk in ("one", "two", "three"):
             payload = {
-                "choices": [
-                    {
-                        "delta": {"content": chunk},
-                        "finish_reason": None,
-                    }
-                ]
+                "type": "response.output_text.delta",
+                "output_index": 0,
+                "delta": chunk,
             }
             try:
                 self.wfile.write(f"data: {json.dumps(payload)}\n\n".encode())
@@ -250,7 +247,13 @@ class _SlowChatHandler(BaseHTTPRequestHandler):
                 return
             time.sleep(0.15)
         try:
-            self.wfile.write(b"data: [DONE]\n\n")
+            completed = {
+                "type": "response.completed",
+                "response": _chat_completion_response(
+                    {"role": "assistant", "content": "onetwothree"}
+                ),
+            }
+            self.wfile.write(f"data: {json.dumps(completed)}\n\n".encode())
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             return
@@ -260,19 +263,44 @@ class _SlowChatHandler(BaseHTTPRequestHandler):
 
 
 def _chat_completion_response(message, finish_reason="stop"):
-    return {
-        "choices": [
+    output = []
+    content = message.get("content")
+    if content:
+        output.append(
             {
-                "message": message,
-                "finish_reason": finish_reason,
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": content}],
             }
-        ]
+        )
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        output.append(
+            {
+                "type": "function_call",
+                "id": f"fc_{call.get('id') or 'call'}",
+                "call_id": call.get("id"),
+                "name": function.get("name"),
+                "arguments": function.get("arguments") or "",
+            }
+        )
+    return {
+        "id": "resp_test",
+        "object": "response",
+        "status": "incomplete" if finish_reason == "length" else "completed",
+        "output": output,
+        **(
+            {"incomplete_details": {"reason": "max_output_tokens"}}
+            if finish_reason == "length"
+            else {}
+        ),
     }
 
 
 class _ToolChatHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != "/v1/chat/completions":
+        if self.path != "/v1/responses":
             self.send_response(404)
             self.end_headers()
             return
@@ -292,23 +320,27 @@ class _ToolChatHandler(BaseHTTPRequestHandler):
             self.send_header("content-type", "text/event-stream")
             self.send_header("cache-control", "no-cache")
             self.end_headers()
-            choice = payload["choices"][0]
-            message = choice["message"]
-            delta = {}
-            if "tool_calls" in message:
-                delta["tool_calls"] = message["tool_calls"]
-            if message.get("content"):
-                delta["content"] = message["content"]
-            chunk = {
-                "choices": [
-                    {
-                        "delta": delta,
-                        "finish_reason": choice.get("finish_reason"),
+            for index, item in enumerate(payload.get("output") or []):
+                if item.get("type") == "message":
+                    for part in item.get("content") or []:
+                        if part.get("type") == "output_text":
+                            event = {
+                                "type": "response.output_text.delta",
+                                "output_index": index,
+                                "delta": part.get("text") or "",
+                            }
+                            self.wfile.write(
+                                f"data: {json.dumps(event)}\n\n".encode()
+                            )
+                elif item.get("type") == "function_call":
+                    event = {
+                        "type": "response.output_item.done",
+                        "output_index": index,
+                        "item": item,
                     }
-                ]
-            }
-            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
-            self.wfile.write(b"data: [DONE]\n\n")
+                    self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+            completed = {"type": "response.completed", "response": payload}
+            self.wfile.write(f"data: {json.dumps(completed)}\n\n".encode())
             self.wfile.flush()
             return
         raw = json.dumps(payload).encode("utf-8")
@@ -7128,8 +7160,8 @@ class DaemonSmokeTest(unittest.TestCase):
             set(core_source_funds.ALLOCATION_POLICIES),
         )
         tool_names = {
-            tool["function"]["name"]
-            for tool in ai_tools.openai_tool_definitions(include_mutating=True)
+            tool["name"]
+            for tool in ai_tools.responses_tool_definitions(include_mutating=True)
         }
         self.assertIn("ui_source_funds_preview", tool_names)
         self.assertIn("ui_source_funds_sources_create", tool_names)
@@ -10273,12 +10305,12 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertTrue(server.requests[0]["tools"])  # type: ignore[attr-defined]
                 self.assertTrue(
                     any(
-                        message.get("role") == "tool"
-                        for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                        item.get("type") == "function_call_output"
+                        for item in server.requests[1]["input"]  # type: ignore[attr-defined]
                     )
                 )
                 tool_names = {
-                    tool["function"]["name"]
+                    tool["name"]
                     for tool in server.requests[0]["tools"]  # type: ignore[attr-defined]
                 }
                 self.assertIn("ui_journals_events_list", tool_names)
@@ -10381,7 +10413,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertTrue(worklist_result["ok"])
                 self.assertEqual(len(server.requests), 1)  # type: ignore[attr-defined]
                 first_tool_names = {
-                    tool["function"]["name"]
+                    tool["name"]
                     for tool in server.requests[0]["tools"]  # type: ignore[attr-defined]
                 }
                 self.assertIn("ui_workspace_health", first_tool_names)
@@ -10392,7 +10424,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         message.get("role") == "user"
                         and "untrusted accounting data" in str(message.get("content"))
                         and "auto_read_tools" in str(message.get("content"))
-                        for message in server.requests[0]["messages"]  # type: ignore[attr-defined]
+                        for message in server.requests[0]["input"]  # type: ignore[attr-defined]
                     )
                 )
 
@@ -10502,7 +10534,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(len(server.requests), 1)  # type: ignore[attr-defined]
                 auto_context_messages = [
                     message
-                    for message in server.requests[0]["messages"]  # type: ignore[attr-defined]
+                    for message in server.requests[0]["input"]  # type: ignore[attr-defined]
                     if message.get("role") == "user"
                     and "auto_read_tools" in str(message.get("content"))
                 ]
@@ -10585,12 +10617,9 @@ class DaemonSmokeTest(unittest.TestCase):
                         terminal = payload
                 self.assertIsNotNone(terminal)
 
-                request_messages = server.requests[0]["messages"]  # type: ignore[attr-defined]
-                system_text = "\n".join(
-                    str(message.get("content"))
-                    for message in request_messages
-                    if message.get("role") == "system"
-                )
+                request = server.requests[0]  # type: ignore[attr-defined]
+                request_messages = request["input"]
+                system_text = str(request.get("instructions") or "")
                 self.assertNotIn(injected, system_text)
                 auto_context = [
                     message
@@ -10777,9 +10806,9 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(len(server.requests), 2)  # type: ignore[attr-defined]
                 self.assertTrue(
                     any(
-                        message.get("role") == "tool"
-                        and "user_denied" in message.get("content", "")
-                        for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                        item.get("type") == "function_call_output"
+                        and "user_denied" in item.get("output", "")
+                        for item in server.requests[1]["input"]  # type: ignore[attr-defined]
                     )
                 )
 

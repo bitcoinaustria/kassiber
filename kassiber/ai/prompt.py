@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ..errors import AppError
-from .tools import CORE_TOOL_NAMES, openai_tool_definitions, select_tool_capabilities
+from .tools import CORE_TOOL_NAMES, responses_tool_definitions, select_tool_capabilities
 
 
 SystemPromptKind = Literal["kassiber", "raw"] | None
@@ -83,7 +83,7 @@ def build_chat_messages(
     return list(messages)
 
 
-def build_openai_tools(
+def build_responses_tools(
     messages: list[dict[str, Any]] | None = None,
     *,
     screen_context: dict[str, Any] | None = None,
@@ -99,7 +99,7 @@ def build_openai_tools(
     if profile not in {None, "core", "full"}:
         raise AppError("unknown AI tool profile", code="validation")
     selected_messages = [] if profile == "core" and messages is None else messages
-    return openai_tool_definitions(
+    return responses_tool_definitions(
         include_mutating=True,
         capabilities=(
             None

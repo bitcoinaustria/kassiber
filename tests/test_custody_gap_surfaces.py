@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from kassiber.ai.tools import get_tool
-from kassiber.ai.prompt import build_openai_tools
+from kassiber.ai.prompt import build_responses_tools
 from kassiber.core.ui_snapshot import build_custody_lineage_snapshot
 from kassiber.daemon import (
     AiToolRuntime,
@@ -76,8 +76,8 @@ class CustodyGapSurfaceTest(unittest.TestCase):
         self.assertFalse(lineage.parameters["additionalProperties"])
 
         advertised = {
-            item["function"]["name"]
-            for item in build_openai_tools(
+            item["name"]
+            for item in build_responses_tools(
                 [
                     {
                         "role": "user",

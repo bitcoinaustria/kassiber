@@ -648,7 +648,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add reusable shell-level assistant mockup based on `@blocks-so/ai-02`,
   with local-model selector, Kassiber-specific suggestions, collapsed-on-scroll
   behavior, and hover/focus expansion
-- [x] Wire the in-app assistant to a real OpenAI-compatible client over the
+- [x] Wire the in-app assistant to an OpenAI Responses-compatible client over the
   daemon protocol — provider config in SQLite, CLI parity
   (`kassiber ai providers/models/chat`), streaming chat with `<think>`
   reasoning split, and a Settings → AI providers panel
@@ -1112,7 +1112,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   warning into a refusal once no test or example needs the dotenv path for
   secret seeding.
 - [x] Extend the stdin/fd secret-input pattern to `ai_providers.api_key`:
-  OpenAI-compatible remote providers now support `--api-key-stdin` /
+  OpenAI Responses-compatible remote providers now support `--api-key-stdin` /
   `--api-key-fd FD` and desktop Settings uses the daemon-side
   `ai.providers.set_api_key` rotate/re-enter flow. The legacy
   `--api-key <value>` argv form remains a warning-on-use shim for scripts.
