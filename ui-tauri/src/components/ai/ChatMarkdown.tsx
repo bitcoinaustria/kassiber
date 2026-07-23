@@ -7,14 +7,111 @@
  * transcript table/headline spacing that the stock typography-free setup lacks.
  */
 
+import * as React from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Check, Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 interface ChatMarkdownProps {
   content: string;
   className?: string;
+}
+
+function nodeToString(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(nodeToString).join("");
+  if (React.isValidElement(node)) {
+    return nodeToString(
+      (node.props as { children?: React.ReactNode }).children,
+    );
+  }
+  return "";
+}
+
+/**
+ * Fenced code block with T3Code-style chrome: a header carrying the language
+ * label and a copy affordance, over the code surface. Syntax highlighting
+ * (Shiki in T3Code) is intentionally omitted — Kassiber's assistant rarely
+ * emits source code, so the heavy highlighter isn't worth the weight.
+ */
+function ChatCodeBlock({
+  children,
+  className,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) {
+  const { t } = useTranslation("assistant");
+  const [copied, setCopied] = React.useState(false);
+  const timerRef = React.useRef<number | null>(null);
+
+  const codeChild = React.Children.toArray(children).find(
+    React.isValidElement,
+  ) as
+    | React.ReactElement<{ className?: string; children?: React.ReactNode }>
+    | undefined;
+  const language =
+    /language-([\w-]+)/.exec(codeChild?.props.className ?? "")?.[1] ?? null;
+  const raw = nodeToString(codeChild?.props.children ?? children).replace(
+    /\n$/,
+    "",
+  );
+
+  React.useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  const handleCopy = () => {
+    void copyTextWithPolicy(raw);
+    setCopied(true);
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      timerRef.current = null;
+    }, 1500);
+  };
+
+  const copyLabel = copied ? t("message.copied") : t("message.copy");
+
+  return (
+    <div className="my-4 overflow-hidden rounded-xl border border-border bg-muted/70 first:mt-0 last:mb-0">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/50 py-1 pr-1.5 pl-3">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          {language ?? t("message.code")}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={copyLabel}
+          title={copyLabel}
+        >
+          {copied ? (
+            <Check className="h-3 w-3" aria-hidden="true" />
+          ) : (
+            <Copy className="h-3 w-3" aria-hidden="true" />
+          )}
+          <span>{copyLabel}</span>
+        </button>
+      </div>
+      <pre
+        className={cn(
+          "overflow-x-auto p-3 font-mono text-xs leading-relaxed text-foreground [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0",
+          className,
+        )}
+      >
+        {children}
+      </pre>
+    </div>
+  );
 }
 
 const components: Components = {
@@ -90,14 +187,8 @@ const components: Components = {
   hr: ({ className, ...props }) => (
     <hr className={cn("my-6 border-border", className)} {...props} />
   ),
-  pre: ({ className, ...props }) => (
-    <pre
-      className={cn(
-        "my-4 overflow-x-auto rounded-xl border border-border bg-muted/70 p-3 font-mono text-xs leading-relaxed text-foreground first:mt-0 last:mb-0 [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0",
-        className,
-      )}
-      {...props}
-    />
+  pre: ({ className, children }) => (
+    <ChatCodeBlock className={className}>{children}</ChatCodeBlock>
   ),
   code: ({ className, ...props }) => (
     <code

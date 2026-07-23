@@ -85,7 +85,8 @@
     "confirmEdit": "Confirm edit",
     "cancelEdit": "Cancel edit",
     "showFullMessage": "Show full message",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "code": "Code"
   },
   "facts": {
     "asset": "Asset",
