@@ -84,7 +84,10 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const loaderLabel = message.activityLabel ?? t("message.generating");
 
   return (
-    <div className="group/assistant flex w-full justify-start">
+    <div
+      className="group/assistant flex w-full justify-start"
+      data-message-id={message.id}
+    >
       <div className="w-full min-w-0 px-1 py-0.5 text-sm">
         {hasThinking ? (
           <ChatReasoning
@@ -233,7 +236,10 @@ function UserMessage({
   if (isEditing) {
     const canConfirm = Boolean(draft.trim());
     return (
-      <div className="flex w-full flex-col items-end gap-1">
+      <div
+        className="flex w-full flex-col items-end gap-1"
+        data-message-id={message.id}
+      >
         <div className="w-full max-w-[82%] sm:max-w-[72%]">
           <Textarea
             ref={textareaRef}
@@ -275,7 +281,10 @@ function UserMessage({
   }
 
   return (
-    <div className="group/user flex w-full flex-col items-end gap-1">
+    <div
+      className="group/user flex w-full flex-col items-end gap-1"
+      data-message-id={message.id}
+    >
       <div className="max-w-[82%] rounded-2xl bg-secondary p-3 text-sm text-foreground sm:max-w-[80%]">
         <p
           className={cn(
