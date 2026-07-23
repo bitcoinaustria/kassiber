@@ -451,6 +451,89 @@ def test_journal_processing_reserves_writer_before_projection_reads(tmp_path):
         owner.close()
 
 
+def test_journal_processing_refreshes_reviewed_pair_after_evidence_drift(tmp_path):
+    conn = open_db(tmp_path)
+    try:
+        _legacy_rows(conn)
+        refresh_legacy_authored_components(conn)
+        old_component_id = conn.execute(
+            "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
+        ).fetchone()[0]
+        conn.execute(
+            "UPDATE transactions SET kind = 'withdrawal' WHERE id = 'pair-out'"
+        )
+        drifted = get_component(conn, old_component_id)
+        assert drifted["effective_state"] == "draft"
+        assert drifted["evidence_status"]["status"] == "evidence_mismatch"
+        assert {
+            issue["code"] for issue in drifted["validation"]["issues"]
+        } == {"component_evidence_commitment_invalid"}
+
+        result = process_custody_journals(
+            conn,
+            "ws",
+            "profile",
+            repair_source_overlaps=lambda *_args: None,
+            source_overlap_warning=lambda *_args: None,
+            auto_price=lambda *_args: 0,
+        )
+
+        new_component_id = conn.execute(
+            "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
+        ).fetchone()[0]
+        assert new_component_id != old_component_id
+        assert get_component(conn, old_component_id)["state"] == "superseded"
+        repaired = get_component(conn, new_component_id)
+        assert repaired["effective_state"] == "active"
+        assert result["custody_pair_evidence_repairs"] == 1
+        profile = conn.execute(
+            "SELECT journal_input_version, last_processed_input_version "
+            "FROM profiles WHERE id = 'profile'"
+        ).fetchone()
+        assert profile["last_processed_input_version"] == profile[
+            "journal_input_version"
+        ]
+    finally:
+        conn.close()
+
+
+def test_journal_processing_does_not_refresh_pair_with_other_validation_failure(
+    tmp_path,
+):
+    conn = open_db(tmp_path)
+    try:
+        _legacy_rows(conn)
+        refresh_legacy_authored_components(conn)
+        component_id = conn.execute(
+            "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
+        ).fetchone()[0]
+        conn.execute(
+            "UPDATE transactions SET fee = 1000 WHERE id = 'pair-out'"
+        )
+        drifted = get_component(conn, component_id)
+        assert drifted["effective_state"] == "draft"
+        assert {
+            issue["code"] for issue in drifted["validation"]["issues"]
+        } != {"component_evidence_commitment_invalid"}
+
+        result = process_custody_journals(
+            conn,
+            "ws",
+            "profile",
+            repair_source_overlaps=lambda *_args: None,
+            source_overlap_warning=lambda *_args: None,
+            auto_price=lambda *_args: 0,
+        )
+
+        assert conn.execute(
+            "SELECT component_id FROM transaction_pairs WHERE id = 'pair'"
+        ).fetchone()[0] == component_id
+        assert "custody_pair_evidence_repairs" not in result
+        assert get_component(conn, component_id)["effective_state"] == "draft"
+    finally:
+        conn.close()
+
+
 def test_malformed_legacy_review_becomes_persisted_journal_blocker(tmp_path):
     conn = open_db(tmp_path)
     _legacy_rows(conn)
