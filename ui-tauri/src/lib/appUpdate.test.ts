@@ -1,0 +1,275 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  APP_UPDATE_CONSENT_REFRESH_MS,
+  APP_UPDATE_PERIOD_MS,
+  APP_UPDATE_START_DELAY_MS,
+  runManualAppUpdateCheck,
+  resolveAppUpdateChecksEnabled,
+  startAppUpdateScheduler,
+  syncAppUpdateChecksEnabled,
+} from "./appUpdate";
+import { uiStatePartialForStorage, useUiStore } from "@/store/ui";
+
+describe("app update checks", () => {
+  it("uses Sparrow's delayed daily cadence", () => {
+    expect(APP_UPDATE_START_DELAY_MS).toBe(10_000);
+    expect(APP_UPDATE_PERIOD_MS).toBe(86_400_000);
+    expect(APP_UPDATE_CONSENT_REFRESH_MS).toBe(1_000);
+  });
+
+  it("keeps release information transient", () => {
+    const state = {
+      ...useUiStore.getState(),
+      appUpdate: {
+        currentVersion: "0.22.55",
+        latestVersion: "0.22.56",
+        releaseUrl:
+          "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.22.56",
+        updateAvailable: true,
+        prerelease: true,
+        checkedAt: 1_784_688_800,
+      },
+    };
+
+    const stored = uiStatePartialForStorage(state);
+    expect(stored).not.toHaveProperty("appUpdate");
+    expect(stored).not.toHaveProperty("automaticUpdateChecks");
+  });
+
+  it("hydrates consent from the native preference and fails closed", async () => {
+    await expect(
+      resolveAppUpdateChecksEnabled(async () => true),
+    ).resolves.toBe(true);
+    await expect(
+      resolveAppUpdateChecksEnabled(async () => false),
+    ).resolves.toBe(false);
+    await expect(
+      resolveAppUpdateChecksEnabled(async () => {
+        throw new Error("preference unavailable");
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("synchronizes renderer state with later CLI consent changes", async () => {
+    const setEnabled = vi.fn();
+
+    await expect(
+      syncAppUpdateChecksEnabled(setEnabled, async () => true),
+    ).resolves.toBe(true);
+    await expect(
+      syncAppUpdateChecksEnabled(setEnabled, async () => false),
+    ).resolves.toBe(false);
+
+    expect(setEnabled.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("starts once after the delay and repeats daily until stopped", async () => {
+    vi.useFakeTimers();
+    try {
+      const result = {
+        currentVersion: "0.22.55",
+        latestVersion: "0.23.0",
+        releaseUrl:
+          "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+        updateAvailable: true,
+        prerelease: false,
+        checkedAt: 1_784_688_800,
+      };
+      const check = vi.fn().mockResolvedValue(result);
+      const setUpdate = vi.fn();
+      const stop = startAppUpdateScheduler(
+        check,
+        setUpdate,
+        async () => true,
+      );
+
+      await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS - 1);
+      expect(check).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(setUpdate).toHaveBeenCalledWith(result);
+
+      await vi.advanceTimersByTimeAsync(APP_UPDATE_PERIOD_MS);
+      expect(check).toHaveBeenCalledTimes(2);
+
+      stop();
+      await vi.advanceTimersByTimeAsync(APP_UPDATE_PERIOD_MS);
+      expect(check).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops an in-flight automatic result after CLI consent revocation", async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn().mockResolvedValue({
+        currentVersion: "0.22.55",
+        latestVersion: "0.23.0",
+        releaseUrl:
+          "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+        updateAvailable: true,
+        prerelease: false,
+        checkedAt: 1_784_688_800,
+      });
+      const setUpdate = vi.fn();
+      const setEnabled = vi.fn();
+      startAppUpdateScheduler(
+        check,
+        setUpdate,
+        async () => false,
+        setEnabled,
+      );
+
+      await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS);
+
+      expect(setUpdate).not.toHaveBeenCalled();
+      expect(setEnabled).toHaveBeenCalledWith(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers the GitHub release after a manual check finds an update", async () => {
+    const result = {
+      currentVersion: "0.22.55",
+      latestVersion: "0.23.0",
+      releaseUrl:
+        "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+      updateAvailable: true,
+      prerelease: false,
+      checkedAt: 1_784_688_800,
+    };
+    const setUpdate = vi.fn();
+    const showDialog = vi.fn().mockResolvedValue("Open GitHub");
+    const openUrl = vi.fn().mockResolvedValue(undefined);
+
+    await runManualAppUpdateCheck({
+      isEnabled: () => true,
+      check: vi.fn().mockResolvedValue(result),
+      setUpdate,
+      showDialog,
+      openUrl,
+    });
+
+    expect(setUpdate).toHaveBeenCalledWith(result);
+    expect(showDialog).toHaveBeenCalledWith(
+      expect.stringContaining("v0.23.0"),
+      expect.objectContaining({
+        buttons: { ok: "Open GitHub", cancel: "Not now" },
+      }),
+    );
+    expect(openUrl).toHaveBeenCalledWith(result.releaseUrl);
+  });
+
+  it("drops an in-flight manual result after CLI consent revocation", async () => {
+    const setUpdate = vi.fn();
+    const isEnabled = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    await runManualAppUpdateCheck({
+      isEnabled,
+      check: vi.fn().mockResolvedValue({
+        currentVersion: "0.22.55",
+        latestVersion: "0.23.0",
+        releaseUrl:
+          "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+        updateAvailable: true,
+        prerelease: false,
+        checkedAt: 1_784_688_800,
+      }),
+      setUpdate,
+      showDialog: vi.fn(),
+      openUrl: vi.fn(),
+    });
+
+    expect(isEnabled).toHaveBeenCalledTimes(2);
+    expect(setUpdate).not.toHaveBeenCalled();
+  });
+
+  it("reports that the installed version is current", async () => {
+    const setUpdate = vi.fn();
+    const showDialog = vi.fn().mockResolvedValue("OK");
+    const openUrl = vi.fn().mockResolvedValue(undefined);
+
+    await runManualAppUpdateCheck({
+      isEnabled: () => true,
+      check: vi.fn().mockResolvedValue({
+        currentVersion: "0.23.0",
+        latestVersion: "0.23.0",
+        releaseUrl: null,
+        updateAvailable: false,
+        prerelease: false,
+        checkedAt: 1_784_688_800,
+      }),
+      setUpdate,
+      showDialog,
+      openUrl,
+    });
+
+    expect(setUpdate).toHaveBeenCalledTimes(1);
+    expect(showDialog).toHaveBeenCalledWith(
+      "Kassiber v0.23.0 is up to date.",
+      expect.any(Object),
+    );
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  it("reports GitHub failures for a user-requested check", async () => {
+    const setUpdate = vi.fn();
+    const showDialog = vi.fn().mockResolvedValue("OK");
+
+    await runManualAppUpdateCheck({
+      isEnabled: () => true,
+      check: vi.fn().mockRejectedValue(new Error("offline")),
+      setUpdate,
+      showDialog,
+      openUrl: vi.fn(),
+    });
+
+    expect(setUpdate).not.toHaveBeenCalled();
+    expect(showDialog).toHaveBeenCalledWith(
+      expect.stringContaining("could not check GitHub"),
+      expect.objectContaining({ kind: "error" }),
+    );
+  });
+
+  it("does not invoke the native checker when consent is disabled", async () => {
+    const check = vi.fn();
+    const showDialog = vi.fn().mockResolvedValue("OK");
+
+    await runManualAppUpdateCheck({
+      isEnabled: () => false,
+      check,
+      setUpdate: vi.fn(),
+      showDialog,
+      openUrl: vi.fn(),
+    });
+
+    expect(check).not.toHaveBeenCalled();
+    expect(showDialog).toHaveBeenCalledWith(
+      expect.stringContaining("Update checks are disabled"),
+      expect.objectContaining({ kind: "info" }),
+    );
+  });
+
+  it("re-reads canonical consent before a manual check", async () => {
+    const check = vi.fn();
+    const showDialog = vi.fn().mockResolvedValue("OK");
+    const isEnabled = vi.fn().mockResolvedValue(false);
+
+    await runManualAppUpdateCheck({
+      isEnabled,
+      check,
+      setUpdate: vi.fn(),
+      showDialog,
+      openUrl: vi.fn(),
+    });
+
+    expect(isEnabled).toHaveBeenCalledTimes(1);
+    expect(check).not.toHaveBeenCalled();
+  });
+});

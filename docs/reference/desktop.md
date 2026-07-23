@@ -59,6 +59,45 @@ sidecar built with PyInstaller. At runtime the supervisor prefers
 app resources, then the development Python fallback above. The same
 `KASSIBER_PYTHON` override applies to installed-app CLI forwarding.
 
+The native desktop shell also carries a deliberately minimal release notifier,
+modeled on Sparrow Wallet's cadence and manual-download flow. Setup explicitly
+asks whether Kassiber may contact GitHub; no scheduled check is eligible before
+that setup choice is persisted. Ten seconds after launch, and then every 24
+hours while open, the desktop asks the bundled CLI sidecar to perform the
+check (`kassiber --format json update`) when **Settings → Privacy → Allow
+GitHub update checks** is enabled. The CLI owns the single GitHub code path:
+prerelease/dev builds examine a bounded page and compare the highest published
+semantic-version tag with the packaged version, while stable `release` builds
+use GitHub's latest-stable endpoint so a run of prereleases cannot hide a
+stable update. Desktop-triggered checks therefore share the CLI's response
+cache and throttling instead of contacting GitHub separately. If a newer
+version exists, the version
+label at the bottom-left of the sidebar changes to an underlined
+`update available · vLatest` link to that GitHub release page. The macOS
+Kassiber menu also includes **Check for Updates…** directly below About; while
+permission is enabled, an explicit check reports whether Kassiber is current
+and offers to open the release page when an update exists. While disabled, that
+menu action reports that checks are disabled without spawning the sidecar.
+The switch lives in the existing Privacy panel; there is no
+separate update settings panel.
+Kassiber never selects an asset, downloads a file, installs an update, or
+restarts itself; automatic failures stay silent so they cannot interfere with
+startup. The native shell independently
+reads the same owner-only `~/.kassiber/config/update-checks.json` consent used
+by the packaged CLI before spawning anything, fails closed when it is absent,
+malformed, or disabled, and rejects any release URL that leaves the official
+repository. The renderer hydrates from that canonical native preference and
+never restores consent from its own local storage. The CLI holds the sibling
+`update-checks.lock` across an authorized request; disabling waits for an
+in-flight request and prevents any later request from starting. See
+[../../SECURITY.md](../../SECURITY.md) for the outbound-request disclosure.
+The update announcement remains unsigned and relies on HTTPS plus control of
+the Kassiber GitHub repository. Release builds include a versioned SHA-256
+manifest; future signed releases will attach its OpenPGP signature after the
+permanent public key and fingerprint are independently published. The notifier
+does not claim that downloaded bytes are authenticated. See
+[release signing](release-signing.md).
+
 For a real installable `.app` built locally on Apple Silicon (without
 Rosetta), use `./scripts/build-macos-arm64-app.sh`. The build is unsigned
 and ad-hoc signed; first-launch Gatekeeper handling is documented in

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 
 import { ConnectionsFields } from "../ConnectionsFields";
 import { SyncExplainer } from "../explainers";
+import { CheckRow } from "../fields";
 import {
   OnboardingStepActions,
   OnboardingStepFrame,
@@ -37,7 +38,24 @@ export const SyncStep = ({
           }}
           className="flex h-full flex-col justify-between gap-6 py-4"
         >
-          <ConnectionsFields form={form} update={update} />
+          <div className="space-y-5">
+            <ConnectionsFields form={form} update={update} />
+
+            <section className="space-y-3 border-t border-line pt-5">
+              <h2 className="m-0 text-sm font-semibold text-ink">
+                {t("sync.updateChecksHeading")}
+              </h2>
+              <CheckRow
+                id="allow-update-checks"
+                checked={form.updateChecksEnabled}
+                onCheckedChange={(checked) =>
+                  update("updateChecksEnabled", checked)
+                }
+                label={t("sync.updateChecks")}
+                description={t("sync.updateChecksDescription")}
+              />
+            </section>
+          </div>
 
           <OnboardingStepActions>
             <Button type="submit" className="w-full" disabled={!canContinue}>

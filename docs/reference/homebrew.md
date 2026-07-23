@@ -72,22 +72,28 @@ Automated updates need a repository secret on `bitcoinaustria/kassiber`:
 - `HOMEBREW_TAP_TOKEN` — a fine-grained GitHub token with write access to
   `bitcoinaustria/homebrew-kassiber` contents.
 
-When the secret is absent, the prerelease workflow still publishes Kassiber
-release artifacts and skips the Homebrew update.
+When the secret is absent, the release workflows can still publish Kassiber
+artifacts but skip or reject the requested Homebrew update as appropriate.
 
 ## Publishing
 
-For a tag publish or `workflow_dispatch` run with `publish_release=true`, the
-release job:
+During the unsigned transition, a tag publish or `workflow_dispatch` run with
+`publish_release=true` performs the complete build and tap update. After the
+code-reviewed release-signing policy is enabled, the build workflow creates a
+draft only and `finalize-signed-release.yml` performs the publication:
 
 1. Builds and uploads `kassiber-macos-arm64.dmg` plus the
    `kassiber-cli-*.tar.gz` archives.
-2. Generates `SHA256SUMS.txt`.
-3. Checks out `bitcoinaustria/homebrew-kassiber` when `HOMEBREW_TAP_TOKEN` is
-   configured.
-4. Renders `Casks/kassiber.rb` and `Formula/kassiber-cli.rb` with
-   `scripts/render_homebrew.py`.
-5. Commits and pushes `Update Kassiber cask and CLI formula to <tag>`.
+2. Generates `kassiber-<version>-manifest.txt`, the same versioned SHA-256
+   manifest used for OpenPGP release verification.
+3. Authenticates the detached manifest signature and verifies the exact draft
+   asset set without rebuilding or replacing files.
+4. Checks out `bitcoinaustria/homebrew-kassiber` when
+   `HOMEBREW_TAP_TOKEN` is configured.
+5. Renders `Casks/kassiber.rb` and `Formula/kassiber-cli.rb` from authenticated
+   manifest hashes with `scripts/render_homebrew.py`.
+6. Publishes the existing draft, then commits and pushes
+   `Update Kassiber cask and CLI formula to <tag>`.
 
 The generated cask points at the immutable GitHub release DMG and links the
 bundled terminal launcher:
@@ -121,6 +127,24 @@ brew install bitcoinaustria/kassiber/kassiber-cli
 kassiber status
 ```
 
+Packaged human-terminal runs use a public, per-user release cache and
+show a colored update notice when a newer version is available. The notice is
+informational only. Failed background attempts wait an hour before retrying;
+successful metadata remains fresh for 20 hours. For these two Homebrew routes
+it prints the matching manual command:
+
+```bash
+brew upgrade --cask bitcoinaustria/kassiber/kassiber
+brew upgrade bitcoinaustria/kassiber/kassiber-cli
+```
+
+`kassiber update --enable-checks` persists the app-wide permission and performs
+the first foreground check. Later `kassiber update` calls show the same guidance
+while permission remains enabled; `--disable-checks` revokes it without network
+access. Kassiber never invokes either Homebrew command itself. Machine,
+structured-format, non-interactive, daemon, redirected-output, and
+source-checkout runs do not perform the automatic check.
+
 Both routes use Homebrew's own prefix for the terminal command, so they do not
 need Kassiber's Settings -> Desktop -> Terminal command helper. That helper
 still matters for users who install the `.dmg` directly or do not use
@@ -132,6 +156,11 @@ not offer to overwrite it.
 Homebrew's integrity model is the SHA-256 checksum in the rendered files, so
 installs and upgrades work without Apple code signing or notarization. What
 signing changes is Gatekeeper friction, and it differs per package:
+
+The Homebrew repository checksum protects against download corruption and
+asset replacement after the tap commit. A Kassiber OpenPGP signature over the
+source manifest separately authenticates those checksums to the independently
+published release key; neither mechanism replaces the other.
 
 - **Cask**: Homebrew applies the macOS quarantine attribute to downloaded
   apps by default, so the unsigned, un-notarized Kassiber.app triggers

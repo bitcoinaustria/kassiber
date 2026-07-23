@@ -20,6 +20,22 @@ from kassiber.operator.cli import route_brokered_command
 
 
 class OperatorCliTest(unittest.TestCase):
+    def test_update_is_global_and_never_routed_through_the_project_broker(self) -> None:
+        args = mock.Mock(command="update")
+        with mock.patch(
+            "kassiber.operator.cli.effective_unlock_mode",
+            side_effect=AssertionError("global update must not inspect a project"),
+        ):
+            self.assertIsNone(route_brokered_command(args, ["update"]))
+
+    def test_verify_download_is_global_and_never_routed_through_the_project_broker(self) -> None:
+        args = mock.Mock(command="verify-download")
+        with mock.patch(
+            "kassiber.operator.cli.effective_unlock_mode",
+            side_effect=AssertionError("download verification must not inspect a project"),
+        ):
+            self.assertIsNone(route_brokered_command(args, ["verify-download"]))
+
     def test_manual_next_actions_preserves_new_project_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             stdout = io.StringIO()

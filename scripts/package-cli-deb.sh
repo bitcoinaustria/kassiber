@@ -48,7 +48,10 @@ esac
 
 package_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-cli-deb.XXXXXX")"
 trap 'rm -rf "$package_root"' EXIT
-mkdir -p "$package_root/DEBIAN" "$package_root/usr/bin" "$(dirname "$output")"
+mkdir -p \
+  "$package_root/DEBIAN" \
+  "$package_root/usr/bin" \
+  "$(dirname "$output")"
 chmod 0755 "$package_root" "$package_root/DEBIAN"
 install -m 0755 "$binary" "$package_root/usr/bin/kassiber"
 

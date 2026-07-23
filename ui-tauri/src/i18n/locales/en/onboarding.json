@@ -353,7 +353,10 @@
     "plaintextAckDescription": "Balances, addresses, tags, and backend metadata are readable by anything with disk access."
   },
   "sync": {
-    "title": "Choose sync connections"
+    "title": "Choose sync connections",
+    "updateChecksHeading": "App updates",
+    "updateChecks": "Allow Kassiber to check GitHub for updates",
+    "updateChecksDescription": "Optional. GitHub sees your IP address, exact Kassiber version, and request time. Turn this off to block automatic, menu, and CLI update checks."
   },
   "aiStep": {
     "title": "Choose AI assistance"
@@ -370,6 +373,7 @@
       "tax": "Tax",
       "sync": "Sync",
       "ai": "AI",
+      "updates": "Updates",
       "storage": "Storage",
       "secrets": "Secrets"
     },
@@ -401,6 +405,12 @@
       "noteDisabled": "No assistant calls during normal app use.",
       "noteRemote": "Remote provider can receive selected book context after consent.",
       "noteLocal": "Local provider endpoint; book context stays on your machine unless configured otherwise."
+    },
+    "updates": {
+      "valueEnabled": "GitHub checks allowed",
+      "valueDisabled": "GitHub checks disabled",
+      "noteEnabled": "Kassiber may send its exact version, your IP address, and request time to GitHub; no book or wallet data is sent.",
+      "noteDisabled": "Kassiber will not contact GitHub for automatic, menu, or CLI update checks."
     },
     "storage": {
       "valueEncrypted": "SQLCipher encrypted database",

@@ -177,7 +177,18 @@ from ..secrets.cli_input import (
 from ..secrets.prompt import read_passphrase_from_fd
 from ..secrets.sqlcipher import open_encrypted, require_sqlcipher
 from ..operator.cli import add_operator_parser, dispatch_operator, route_brokered_command
+from ..release_verification import verify_download
 from ..tax_policy import supported_tax_countries
+from ..update_check import (
+    INTERNAL_REFRESH_ARGUMENT,
+    check_for_update,
+    refresh_cache_silently,
+    render_update_status,
+    set_update_checks_enabled,
+    show_cached_update_and_refresh,
+    supports_color,
+    update_checks_enabled,
+)
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 from .chat import run_chat_command
 from .command_registry import command_needs_database, describe_command_catalog
@@ -904,6 +915,47 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+    update_release = sub.add_parser(
+        "update",
+        help="Check for a new release and show the manual update command",
+    )
+    update_preference = update_release.add_mutually_exclusive_group()
+    update_preference.add_argument(
+        "--enable-checks",
+        action="store_true",
+        help="Allow GitHub release checks, persist the choice, and check now",
+    )
+    update_preference.add_argument(
+        "--disable-checks",
+        action="store_true",
+        help="Disable all GitHub release checks without contacting GitHub",
+    )
+    update_preference.add_argument(
+        "--status",
+        action="store_true",
+        help="Show the persisted update-check permission without contacting GitHub",
+    )
+    verify_release = sub.add_parser(
+        "verify-download",
+        help="Verify a release artifact against a PGP-signed SHA-256 manifest",
+    )
+    verify_release.add_argument("artifact", help="Downloaded Kassiber release artifact")
+    verify_release.add_argument("--manifest", required=True, help="Kassiber release manifest")
+    verify_release.add_argument(
+        "--signature",
+        required=True,
+        help="Detached ASCII-armored OpenPGP signature for the manifest",
+    )
+    verify_release.add_argument(
+        "--public-key",
+        required=True,
+        help="Kassiber release public-key file obtained from a trusted source",
+    )
+    verify_release.add_argument(
+        "--fingerprint",
+        required=True,
+        help="Full release-key fingerprint obtained from an independent trusted source",
+    )
     add_operator_parser(sub)
     health = sub.add_parser(
         "health",
@@ -3136,6 +3188,42 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return cmd_init(conn, args)
     if args.command == "status":
         return cmd_status(conn, args)
+    if args.command == "update":
+        if args.disable_checks:
+            set_update_checks_enabled(False)
+            return emit(
+                args,
+                {"enabled": False, "contacts_github": False},
+                kind="update.preference",
+            )
+        if args.enable_checks:
+            set_update_checks_enabled(True)
+        if args.status:
+            enabled = update_checks_enabled()
+            return emit(
+                args,
+                {"enabled": enabled, "contacts_github": False},
+                kind="update.preference",
+            )
+        result = check_for_update()
+        if args.format == "table" and not args.output:
+            sys.stdout.write(
+                render_update_status(result, color=supports_color(sys.stdout))
+            )
+            sys.stdout.flush()
+            return None
+        return emit(args, result)
+    if args.command == "verify-download":
+        return emit(
+            args,
+            verify_download(
+                args.artifact,
+                args.manifest,
+                args.signature,
+                args.public_key,
+                args.fingerprint,
+            ),
+        )
     if args.command == "health":
         if bool(args.workspace) != bool(args.profile):
             raise AppError(
@@ -5579,6 +5667,9 @@ def _configure_cli_logging(args: argparse.Namespace) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    if raw_argv == [INTERNAL_REFRESH_ARGUMENT]:
+        refresh_cache_silently()
+        return 0
     if raw_argv == ["--operator-broker-server"]:
         from ..operator.server import main as operator_server_main
 
@@ -5595,6 +5686,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.format = "table"
         emit_error(args, exc)
         return 1
+
+    try:
+        show_cached_update_and_refresh(args)
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "automatic update check failed",
+            exc_info=True,
+        )
 
     try:
         if args.command in {"projects", "operator"}:

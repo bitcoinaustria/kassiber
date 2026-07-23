@@ -353,7 +353,10 @@
     "plaintextAckDescription": "Guthaben, Adressen, Tags und Backend-Metadaten sind für alles mit Festplattenzugriff lesbar."
   },
   "sync": {
-    "title": "Sync-Verbindungen wählen"
+    "title": "Sync-Verbindungen wählen",
+    "updateChecksHeading": "App-Updates",
+    "updateChecks": "Kassiber erlauben, GitHub auf Updates zu prüfen",
+    "updateChecksDescription": "Optional. GitHub sieht deine IP-Adresse, die genaue Kassiber-Version und den Zeitpunkt der Anfrage. Deaktiviere dies, um automatische, Menü- und CLI-Update-Prüfungen zu blockieren."
   },
   "aiStep": {
     "title": "AI-Unterstützung wählen"
@@ -370,6 +373,7 @@
       "tax": "Steuer",
       "sync": "Sync",
       "ai": "AI",
+      "updates": "Updates",
       "storage": "Speicherung",
       "secrets": "Geheimnisse"
     },
@@ -401,6 +405,12 @@
       "noteDisabled": "Keine Assistenten-Aufrufe im normalen App-Betrieb.",
       "noteRemote": "Der Remote-Provider kann nach Zustimmung ausgewählten Buch-Kontext erhalten.",
       "noteLocal": "Lokaler Provider-Endpunkt; der Buch-Kontext bleibt auf deinem Rechner, sofern nicht anders konfiguriert."
+    },
+    "updates": {
+      "valueEnabled": "GitHub-Prüfungen erlaubt",
+      "valueDisabled": "GitHub-Prüfungen deaktiviert",
+      "noteEnabled": "Kassiber darf seine genaue Version, deine IP-Adresse und den Anfragezeitpunkt an GitHub senden; Buch- oder Wallet-Daten werden nicht gesendet.",
+      "noteDisabled": "Kassiber kontaktiert GitHub weder für automatische noch für Menü- oder CLI-Update-Prüfungen."
     },
     "storage": {
       "valueEncrypted": "SQLCipher-verschlüsselte Datenbank",

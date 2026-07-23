@@ -1,0 +1,150 @@
+name: linux-packaging
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/linux-packaging.yml"
+      - ".github/workflows/finalize-signed-release.yml"
+      - ".github/workflows/publish-linux-channels.yml"
+      - ".github/workflows/prerelease-binaries.yml"
+      - "LICENSE"
+      - "packaging/linux/**"
+      - "packaging/release/**"
+      - "scripts/build-apt-repository.sh"
+      - "scripts/build-rpm-repository.sh"
+      - "scripts/package-cli-deb.sh"
+      - "scripts/package-cli-rpm.sh"
+      - "scripts/package-desktop-rpm.sh"
+      - "scripts/publish-linux-repositories-s3.sh"
+      - "scripts/render_aur.py"
+      - "scripts/render_nix.py"
+      - "tests/test_linux_channel_renderers.py"
+      - "tests/test_linux_packaging.py"
+      - "tests/test_rpm_packaging.py"
+      - "ui-tauri/src-tauri/tauri.conf.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apt:
+    name: Signed APT and Debian lifecycle
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Install APT repository tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils dpkg-dev gnupg
+      - name: Run Debian and APT integration tests
+        run: python3 -m unittest tests.test_linux_packaging -v
+
+  rpm:
+    name: RPM and DNF lifecycle — Fedora ${{ matrix.fedora }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fedora: 43
+            image: fedora:43@sha256:52cfb35e60823b691af7541b576c0fa49195628044b2c1a15b0ae775ec01048e
+          - fedora: 44
+            image: fedora:44@sha256:89f61a124414261868224666aa7fb8df1b78397a53623774bdfb105d1612b48b
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Build, sign, install, swap, and remove RPM packages
+        run: |
+          docker run --rm \
+            --env KASSIBER_RPM_LIFECYCLE=1 \
+            --env PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --workdir /workspace \
+            "${{ matrix.image }}" \
+            bash -euxo pipefail -c '
+              dnf install -y \
+                cpio \
+                createrepo_c \
+                dnf-plugins-core \
+                dpkg \
+                gnupg2 \
+                python3 \
+                rpm-build \
+                rpm-sign
+              python3 -m unittest tests.test_rpm_packaging -v
+            '
+
+  aur:
+    name: AUR recipes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Render and validate AUR metadata
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --workdir /workspace \
+            archlinux:base-devel@sha256:bf0af8920a0e70715207d9c4f463ebac321db72748db2b8a391b639696965d87 \
+            bash -euxo pipefail -c '
+              pacman -Syu --noconfirm --needed namcap python
+              work="$(mktemp -d)"
+              python scripts/render_aur.py desktop \
+                --version 1.2.3 \
+                --sha256 "$(printf a%.0s {1..64})" \
+                --output "$work/desktop"
+              python scripts/render_aur.py cli \
+                --version 1.2.3 \
+                --sha256 "$(printf b%.0s {1..64})" \
+                --output "$work/cli"
+              useradd --create-home builder
+              chown -R builder:builder "$work"
+              for package in desktop cli; do
+                bash -n "$work/$package/PKGBUILD"
+                su builder -c \
+                  "cd $work/$package && makepkg --printsrcinfo > .SRCINFO.actual"
+                diff -u "$work/$package/.SRCINFO" "$work/$package/.SRCINFO.actual"
+                namcap "$work/$package/PKGBUILD"
+              done
+            '
+
+  nix:
+    name: Nix flake evaluation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Render release flake
+        run: |
+          python3 scripts/render_nix.py \
+            --version 1.2.3 \
+            --sha256-desktop "$(printf a%.0s {1..64})" \
+            --sha256-cli "$(printf b%.0s {1..64})" \
+            --output build/nix-channel
+      - name: Evaluate the flake without downloading release artifacts
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/build/nix-channel:/flake" \
+            nixos/nix:2.28.7@sha256:6fdb4370f378229a56312742d2d30f7d3c55d6b411e12f231b3e3bab9912e2d9 \
+            nix --extra-experimental-features "nix-command flakes" \
+              flake check /flake --no-build
+
+  renderers:
+    name: Channel renderer unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest tests.test_linux_channel_renderers -v

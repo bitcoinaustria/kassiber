@@ -1,7 +1,9 @@
+mod app_update;
 #[allow(dead_code)]
 mod secret_store;
 mod supervisor;
 
+use app_update::{check_app_update, get_app_update_checks_enabled, set_app_update_checks_enabled};
 use base64::Engine;
 #[cfg(target_os = "macos")]
 use secret_store::{
@@ -60,6 +62,7 @@ const TERMINAL_PATH_BLOCK_END: &str = "# <<< kassiber terminal command <<<";
 // without colliding with their URL form.
 const MENU_EVENT: &str = "kassiber:intent";
 const MENU_OPEN_SETTINGS: &str = "kassiber:settings";
+const MENU_CHECK_UPDATES: &str = "kassiber:check-updates";
 const MENU_SETTINGS_GENERAL: &str = "kassiber:settings:general";
 const MENU_SETTINGS_PRIVACY: &str = "kassiber:settings:privacy";
 const MENU_SETTINGS_DISPLAY: &str = "kassiber:settings:display";
@@ -2678,6 +2681,9 @@ pub fn run() {
             save_logs_export_as,
             read_ledger_preview_file_base64,
             open_external_url,
+            check_app_update,
+            get_app_update_checks_enabled,
+            set_app_update_checks_enabled,
             select_import_project_directory,
             activate_import_project,
             clear_import_project,
@@ -2749,6 +2755,8 @@ fn deep_link_settings_section(section: &str) -> Option<&'static str> {
 fn build_app_menu(
     app: &tauri::AppHandle<tauri::Wry>,
 ) -> tauri::Result<(Menu<tauri::Wry>, AppMenuHandles)> {
+    #[cfg(target_os = "macos")]
+    let check_updates_item = menu_item(app, MENU_CHECK_UPDATES, "Check for Updates…", None)?;
     let settings_item = menu_item(app, MENU_OPEN_SETTINGS, "Settings...", Some("CmdOrCtrl+,"))?;
     let general_settings = menu_item(app, MENU_SETTINGS_GENERAL, "General", None)?;
     let privacy_settings = menu_item(app, MENU_SETTINGS_PRIVACY, "Privacy", None)?;
@@ -2857,6 +2865,7 @@ fn build_app_menu(
     #[cfg(target_os = "macos")]
     let app_menu = SubmenuBuilder::new(app, "Kassiber")
         .about(Some(about_metadata(app)))
+        .item(&check_updates_item)
         .separator()
         .item(&settings_item)
         .separator()
@@ -2965,11 +2974,9 @@ fn build_app_menu(
         .about(Some(about_metadata(app)))
         .build()?;
 
-    let mut menu_builder = MenuBuilder::new(app);
+    let menu_builder = MenuBuilder::new(app);
     #[cfg(target_os = "macos")]
-    {
-        menu_builder = menu_builder.item(&app_menu);
-    }
+    let menu_builder = menu_builder.item(&app_menu);
     let menu = menu_builder
         .item(&file_menu)
         .item(&edit_menu)
@@ -3095,6 +3102,7 @@ fn handle_app_menu_event(app: &tauri::AppHandle<tauri::Wry>, event: tauri::menu:
 
 fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
     match id {
+        MENU_CHECK_UPDATES => Some(menu_action("check-for-updates")),
         MENU_OPEN_SETTINGS | MENU_SETTINGS_GENERAL => Some(open_settings_action(None)),
         MENU_SETTINGS_PRIVACY => Some(open_settings_action(Some("privacy"))),
         MENU_SETTINGS_DISPLAY => Some(open_settings_action(Some("display"))),
@@ -3578,13 +3586,13 @@ mod tests {
         touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
         validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
         ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
-        MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS,
-        MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY,
-        MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY,
-        MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE,
-        MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
-        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
-        TERMINAL_COMMAND_MARKER,
+        MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
+        MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA,
+        MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
+        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
+        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::io::Cursor;
@@ -4305,6 +4313,10 @@ mod tests {
                 "settings menu id {menu_id} should route to {section:?}"
             );
         }
+        assert_eq!(
+            menu_action_for_id(MENU_CHECK_UPDATES),
+            Some(menu_action("check-for-updates"))
+        );
         assert_eq!(
             menu_action_for_id(MENU_NAV_REPORTS),
             Some(navigate_action("/reports"))

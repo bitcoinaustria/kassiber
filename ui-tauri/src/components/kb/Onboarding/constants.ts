@@ -32,6 +32,7 @@ export const DEFAULT_FORM: OnboardingForm = {
   recoveryAcknowledged: false,
   plaintextAcknowledged: false,
   migrateCredentials: true,
+  updateChecksEnabled: true,
   backendSetupMode: "default",
   backendKind: "electrum",
   backendName: DEFAULT_BACKEND_NAME,

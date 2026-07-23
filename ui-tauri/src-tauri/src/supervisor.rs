@@ -1089,6 +1089,17 @@ struct DaemonCommand {
     source: &'static str,
 }
 
+/// Resolve the same CLI invocation the daemon supervisor uses (env override,
+/// bundled sidecar, developer Python fallback) for one-shot CLI calls that
+/// need captured output instead of inherited stdio.
+pub(crate) fn cli_invocation(
+    resource_dir: Option<&Path>,
+    args: Vec<String>,
+) -> (PathBuf, Vec<String>, PathBuf) {
+    let command = kassiber_command(resource_dir, args);
+    (command.program, command.args, command.cwd)
+}
+
 pub fn run_cli(resource_dir: Option<&Path>, args: Vec<String>) -> i32 {
     let inferred_resource_dir = resource_dir
         .is_none()

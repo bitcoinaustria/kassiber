@@ -9,6 +9,16 @@
 set -eu
 
 launcher=$0
+launcher_origin=$launcher
+case "$launcher_origin" in
+  */*) ;;
+  *) launcher_origin=$(command -v "$launcher_origin" 2>/dev/null || printf '%s' "$launcher_origin") ;;
+esac
+case "$launcher_origin" in
+  /opt/homebrew/bin/kassiber|/usr/local/bin/kassiber)
+    export KASSIBER_HOMEBREW_PACKAGE=cask
+    ;;
+esac
 depth=0
 while [ -L "$launcher" ]; do
   depth=$((depth + 1))

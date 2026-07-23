@@ -1,0 +1,536 @@
+name: publish-linux-channels
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing, correctly versioned Kassiber release tag"
+        required: true
+        type: string
+      suite:
+        description: "APT suite"
+        required: true
+        default: prerelease
+        type: choice
+        options:
+          - prerelease
+          - stable
+      publish_repositories:
+        description: "Publish signed APT and DNF repositories"
+        required: true
+        default: false
+        type: boolean
+      publish_aur:
+        description: "Push desktop and CLI recipes to AUR"
+        required: true
+        default: false
+        type: boolean
+      publish_nix:
+        description: "Update the project-owned binary Nix flake repository"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-linux-channels-production
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Verify release and render channel definitions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Require the trusted main workflow ref
+        run: test "$GITHUB_REF" = "refs/heads/main"
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.tag_name }}
+      - name: Require the release tag to come from trusted main history
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Release tag must point to a commit in origin/main history." >&2
+            exit 1
+          fi
+      - name: Install package inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio gnupg rpm
+      - name: Load release signing policy
+        id: release-signing
+        env:
+          PUBLISH_REQUESTED: ${{ inputs.publish_repositories || inputs.publish_aur || inputs.publish_nix }}
+        run: |
+          set -euo pipefail
+          policy_json="$(python3 scripts/release_manifest.py policy \
+            --policy packaging/release/signing-policy.json)"
+          policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
+          fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$policy_json")"
+          public_key_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")"
+          if [ "$policy_enabled" != true ] && [ "$PUBLISH_REQUESTED" = true ]; then
+            echo "Linux channel publication requires an enabled, code-reviewed release signing policy." >&2
+            exit 1
+          fi
+          echo "enabled=$policy_enabled" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          echo "public_key_path=$public_key_path" >> "$GITHUB_OUTPUT"
+      - name: Download and verify release inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          APT_SUITE: ${{ inputs.suite }}
+          RELEASE_SIGNING_ENABLED: ${{ steps.release-signing.outputs.enabled }}
+          RELEASE_SIGNING_FINGERPRINT: ${{ steps.release-signing.outputs.fingerprint }}
+          RELEASE_PUBLIC_KEY_PATH: ${{ steps.release-signing.outputs.public_key_path }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_TAG_NAME" in
+            v*) version="${RELEASE_TAG_NAME#v}" ;;
+            *) echo "tag_name must start with v" >&2; exit 2 ;;
+          esac
+          case "$APT_SUITE" in
+            prerelease) expected_channel=prerelease; expected_prerelease=true ;;
+            stable) expected_channel=release; expected_prerelease=false ;;
+            *) echo "unsupported suite: $APT_SUITE" >&2; exit 2 ;;
+          esac
+          release_state="$(gh release view "$RELEASE_TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,tagName \
+            --jq '[.tagName, (.isPrerelease | tostring), (.isDraft | tostring)] | @tsv')"
+          IFS=$'\t' read -r actual_tag actual_prerelease actual_draft \
+            <<< "$release_state"
+          test "$actual_tag" = "$RELEASE_TAG_NAME"
+          test "$actual_prerelease" = "$expected_prerelease"
+          test "$actual_draft" = false
+          expected_commit="$(git rev-parse HEAD)"
+          expected_commit_short="$(git rev-parse --short=12 HEAD)"
+          mkdir -p release channels/aur
+          manifest_name="kassiber-${version}-manifest.txt"
+          gh release download "$RELEASE_TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" --dir release \
+            --pattern "$manifest_name" \
+            --pattern kassiber-linux-x64.AppImage \
+            --pattern kassiber-cli-linux-x64.tar.gz \
+            --pattern kassiber-linux-x64.deb \
+            --pattern kassiber-cli-linux-x64.deb \
+            --pattern kassiber-linux-x64.rpm \
+            --pattern kassiber-cli-linux-x64.rpm
+
+          if [ "$RELEASE_SIGNING_ENABLED" = true ]; then
+            gh release download "$RELEASE_TAG_NAME" \
+              --repo "$GITHUB_REPOSITORY" --dir release \
+              --pattern "$manifest_name.asc"
+            python3 scripts/release_manifest.py verify-release \
+              --release-dir release \
+              --manifest "release/$manifest_name" \
+              --signature "release/$manifest_name.asc" \
+              --public-key "$RELEASE_PUBLIC_KEY_PATH" \
+              --fingerprint "$RELEASE_SIGNING_FINGERPRINT" \
+              --allow-subset
+          else
+            python3 scripts/release_manifest.py verify-artifacts \
+              --release-dir release \
+              --manifest "release/$manifest_name" \
+              --allow-subset
+          fi
+
+          release_sha256() {
+            local name="$1"
+            local expected
+            expected="$(awk -v name="$name" '$2 == name { print $1 }' "release/$manifest_name")"
+            test -n "$expected"
+            printf '%s  %s\n' "$expected" "release/$name" | sha256sum -c - >&2
+            printf '%s' "$expected"
+          }
+          artifacts=(
+            kassiber-linux-x64.AppImage
+            kassiber-cli-linux-x64.tar.gz
+            kassiber-linux-x64.deb
+            kassiber-cli-linux-x64.deb
+            kassiber-linux-x64.rpm
+            kassiber-cli-linux-x64.rpm
+          )
+          for artifact in "${artifacts[@]}"; do
+            printf '%s  %s\n' "$(release_sha256 "$artifact")" "$artifact"
+          done > channels/release-checksums.txt
+
+          test "$(dpkg-deb -f release/kassiber-linux-x64.deb Version)" = "$version"
+          test "$(dpkg-deb -f release/kassiber-cli-linux-x64.deb Version)" = "$version"
+          for artifact in \
+            kassiber-linux-x64.rpm \
+            kassiber-cli-linux-x64.rpm; do
+            rpm_version="${version//-/\~}"
+            test "$(rpm -qp --queryformat '%{VERSION}' "release/$artifact")" = "$rpm_version"
+          done
+          tar -xOf release/kassiber-cli-linux-x64.tar.gz \
+            kassiber-cli-linux-x64/BUILD_INFO.json \
+            > channels/cli-build-info.json
+          python3 -c \
+            'import json,sys; actual=json.load(open(sys.argv[4], encoding="utf-8")); expected={"version":sys.argv[1], "commit":sys.argv[2], "channel":sys.argv[3]}; mismatches={key:(actual.get(key), value) for key,value in expected.items() if actual.get(key) != value}; raise SystemExit(f"CLI build identity mismatch: {mismatches}" if mismatches else 0)' \
+            "$version" "$expected_commit" "$expected_channel" \
+            channels/cli-build-info.json
+          chmod 0755 release/kassiber-linux-x64.AppImage
+          appimage_version="$(APPIMAGE_EXTRACT_AND_RUN=1 \
+            release/kassiber-linux-x64.AppImage --cli --version)"
+          case "$appimage_version" in
+            "Kassiber $version"|"Kassiber $version ("*) ;;
+            *)
+              echo "AppImage build version does not match $version: $appimage_version" >&2
+              exit 1
+              ;;
+          esac
+          printf '%s\n' "$appimage_version" | grep -F "$expected_commit_short"
+
+          python3 scripts/render_aur.py desktop \
+            --version "$version" \
+            --sha256 "$(release_sha256 kassiber-linux-x64.AppImage)" \
+            --output channels/aur/kassiber-bin
+          python3 scripts/render_aur.py cli \
+            --version "$version" \
+            --sha256 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
+            --output channels/aur/kassiber-cli-bin
+          python3 scripts/render_nix.py \
+            --version "$version" \
+            --sha256-desktop "$(release_sha256 kassiber-linux-x64.AppImage)" \
+            --sha256-cli "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
+            --output channels/nix
+      - name: Upload rendered channel definitions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-channel-definitions-${{ inputs.tag_name }}
+          path: channels
+          if-no-files-found: error
+          retention-days: 14
+
+  repositories:
+    name: Publish signed APT and DNF repositories
+    if: inputs.publish_repositories == true
+    needs: prepare
+    environment: linux-packaging-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Install repository tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            apt-utils \
+            awscli \
+            cpio \
+            createrepo-c \
+            dpkg-dev \
+            gnupg \
+            rpm
+      - name: Download package artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          mkdir release
+          gh release download "$RELEASE_TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" --dir release \
+            --pattern kassiber-linux-x64.deb \
+            --pattern kassiber-cli-linux-x64.deb \
+            --pattern kassiber-linux-x64.rpm \
+            --pattern kassiber-cli-linux-x64.rpm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: linux-channel-definitions-${{ inputs.tag_name }}
+          path: channels
+      - name: Verify packages against the prepared release manifest
+        run: |
+          set -euo pipefail
+          release_sha256() {
+            local name="$1"
+            local expected
+            expected="$(awk -v name="$name" '$2 == name { print $1 }' \
+              channels/release-checksums.txt)"
+            test -n "$expected"
+            printf '%s  %s\n' "$expected" "release/$name" | sha256sum -c -
+          }
+          for artifact in \
+            kassiber-linux-x64.deb \
+            kassiber-cli-linux-x64.deb \
+            kassiber-linux-x64.rpm \
+            kassiber-cli-linux-x64.rpm; do
+            release_sha256 "$artifact"
+          done
+      - name: Import protected archive signing key
+        id: signing
+        env:
+          ARCHIVE_PRIVATE_KEY: ${{ secrets.LINUX_ARCHIVE_GPG_PRIVATE_KEY }}
+          ARCHIVE_KEY_PASSPHRASE: ${{ secrets.LINUX_ARCHIVE_GPG_PASSPHRASE }}
+          ARCHIVE_EXPECTED_FINGERPRINT: ${{ vars.LINUX_ARCHIVE_GPG_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          test -n "$ARCHIVE_PRIVATE_KEY"
+          expected_fingerprint="$(printf '%s' "$ARCHIVE_EXPECTED_FINGERPRINT" \
+            | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+          case "$expected_fingerprint" in
+            *[!0-9A-F]*|"")
+              echo "LINUX_ARCHIVE_GPG_FINGERPRINT must be a full hexadecimal fingerprint." >&2
+              exit 1
+              ;;
+          esac
+          if [ "${#expected_fingerprint}" -ne 40 ] \
+              && [ "${#expected_fingerprint}" -ne 64 ]; then
+            echo "LINUX_ARCHIVE_GPG_FINGERPRINT must contain 40 or 64 hexadecimal characters." >&2
+            exit 1
+          fi
+          export GNUPGHOME="$RUNNER_TEMP/kassiber-archive-gnupg"
+          mkdir -m 0700 "$GNUPGHOME"
+          printf '%s' "$ARCHIVE_PRIVATE_KEY" | gpg --batch --import
+          mapfile -t primary_fingerprints < <(
+            gpg --batch --with-colons --list-secret-keys \
+              | awk -F: '
+                  $1 == "sec" { awaiting_primary = 1; next }
+                  $1 == "ssb" { awaiting_primary = 0; next }
+                  $1 == "fpr" && awaiting_primary {
+                    print toupper($10)
+                    awaiting_primary = 0
+                  }
+                '
+          )
+          if [ "${#primary_fingerprints[@]}" -ne 1 ]; then
+            echo "Archive signing secret must contain exactly one primary key identity." >&2
+            exit 1
+          fi
+          fingerprint="${primary_fingerprints[0]}"
+          if [ "$fingerprint" != "$expected_fingerprint" ]; then
+            echo "Archive signing key does not match LINUX_ARCHIVE_GPG_FINGERPRINT." >&2
+            exit 1
+          fi
+          release_policy_json="$(python3 scripts/release_manifest.py policy \
+            --policy packaging/release/signing-policy.json \
+            --require-enabled)"
+          release_fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$release_policy_json")"
+          if [ "$fingerprint" = "$release_fingerprint" ]; then
+            echo "Linux archive signing must use a primary key distinct from the offline release key." >&2
+            exit 1
+          fi
+          if [ -n "$ARCHIVE_KEY_PASSPHRASE" ]; then
+            warmup="$RUNNER_TEMP/kassiber-signing-warmup"
+            printf 'Kassiber archive signing warm-up\n' > "$warmup"
+            printf '%s' "$ARCHIVE_KEY_PASSPHRASE" \
+              | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+                  --local-user "$fingerprint" --detach-sign \
+                  --output /dev/null "$warmup"
+          fi
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+      - name: Build signed repository trees
+        env:
+          SIGNING_FINGERPRINT: ${{ steps.signing.outputs.fingerprint }}
+          APT_SUITE: ${{ inputs.suite }}
+        run: |
+          set -euo pipefail
+          apt_flags=(--not-automatic --but-automatic-upgrades)
+          if [ "$APT_SUITE" = "stable" ]; then
+            apt_flags=()
+          fi
+          scripts/build-apt-repository.sh \
+            --input release \
+            --output repository/apt \
+            --suite "$APT_SUITE" \
+            --architecture amd64 \
+            "${apt_flags[@]}" \
+            --signing-key "$SIGNING_FINGERPRINT"
+          scripts/build-rpm-repository.sh \
+            --input release \
+            --output repository/dnf \
+            --architecture x86_64 \
+            --signing-key "$SIGNING_FINGERPRINT"
+          gpg --batch --armor --export "$SIGNING_FINGERPRINT" \
+            > repository/kassiber-archive-key.asc
+      - name: Render scoped repository configuration
+        env:
+          APT_SUITE: ${{ inputs.suite }}
+          REPOSITORY_BASE_URL: ${{ vars.LINUX_REPOSITORY_BASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$REPOSITORY_BASE_URL"
+          REPOSITORY_BASE_URL="${REPOSITORY_BASE_URL%/}"
+          printf '%s\n' \
+            'Types: deb' \
+            "URIs: $REPOSITORY_BASE_URL/apt" \
+            "Suites: $APT_SUITE" \
+            'Components: main' \
+            'Architectures: amd64' \
+            'Signed-By: /etc/apt/keyrings/kassiber.asc' \
+            > "repository/kassiber-$APT_SUITE.sources"
+          printf '%s\n' \
+            "[kassiber-$APT_SUITE]" \
+            'name=Kassiber' \
+            "mirrorlist=$REPOSITORY_BASE_URL/dnf/$APT_SUITE/mirrorlist" \
+            'enabled=1' \
+            'gpgcheck=1' \
+            'repo_gpgcheck=1' \
+            "gpgkey=$REPOSITORY_BASE_URL/kassiber-archive-key.asc" \
+            > "repository/kassiber-$APT_SUITE.repo"
+      - name: Publish signed repository metadata in fail-closed order
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.LINUX_REPOSITORY_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.LINUX_REPOSITORY_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.LINUX_REPOSITORY_AWS_REGION }}
+          REPOSITORY_S3_URI: ${{ vars.LINUX_REPOSITORY_S3_URI }}
+          REPOSITORY_S3_ENDPOINT: ${{ vars.LINUX_REPOSITORY_S3_ENDPOINT }}
+          REPOSITORY_BASE_URL: ${{ vars.LINUX_REPOSITORY_BASE_URL }}
+          APT_SUITE: ${{ inputs.suite }}
+        run: |
+          set -euo pipefail
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$REPOSITORY_S3_URI"
+          aws_args=()
+          publish_args=()
+          if [ -n "$REPOSITORY_S3_ENDPOINT" ]; then
+            aws_args+=(--endpoint-url "$REPOSITORY_S3_ENDPOINT")
+            publish_args+=(--endpoint "$REPOSITORY_S3_ENDPOINT")
+          fi
+          aws "${aws_args[@]}" s3 cp repository/kassiber-archive-key.asc \
+            "${REPOSITORY_S3_URI%/}/kassiber-archive-key.asc"
+          scripts/publish-linux-repositories-s3.sh \
+            --apt repository/apt \
+            --dnf repository/dnf \
+            --suite "$APT_SUITE" \
+            --destination "$REPOSITORY_S3_URI" \
+            --base-url "$REPOSITORY_BASE_URL" \
+            "${publish_args[@]}"
+          aws "${aws_args[@]}" s3 cp \
+            "repository/kassiber-$APT_SUITE.sources" \
+            "${REPOSITORY_S3_URI%/}/kassiber-$APT_SUITE.sources"
+          aws "${aws_args[@]}" s3 cp \
+            "repository/kassiber-$APT_SUITE.repo" \
+            "${REPOSITORY_S3_URI%/}/kassiber-$APT_SUITE.repo"
+
+  aur:
+    name: Publish AUR recipes
+    if: inputs.publish_aur == true
+    needs: prepare
+    environment: linux-packaging-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: linux-channel-definitions-${{ inputs.tag_name }}
+          path: channels
+      - name: Build and smoke the real AUR release packages without credentials
+        env:
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --env "EXPECTED_VERSION=${RELEASE_TAG_NAME#v}" \
+            --volume "$GITHUB_WORKSPACE/channels/aur:/aur:ro" \
+            archlinux:base-devel@sha256:bf0af8920a0e70715207d9c4f463ebac321db72748db2b8a391b639696965d87 \
+            bash -euxo pipefail -c '
+              pacman -Syu --noconfirm --needed gtk3 webkit2gtk-4.1 zlib
+              useradd --create-home builder
+              install -d -o builder -g builder /build
+              cp -a /aur/. /build/
+              chown -R builder:builder /build
+              for package in kassiber-cli-bin kassiber-bin; do
+                su builder -c "cd /build/$package && makepkg --cleanbuild --noconfirm"
+                archive="$(find "/build/$package" -maxdepth 1 \
+                  -type f -name "*.pkg.tar.*" ! -name "*.sig" -print -quit)"
+                test -n "$archive"
+                pacman -U --noconfirm "$archive"
+                kassiber --version | grep -F "Kassiber $EXPECTED_VERSION"
+                pacman -R --noconfirm "$package"
+              done
+            '
+      - name: Configure AUR SSH identity
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_KNOWN_HOSTS: ${{ secrets.AUR_KNOWN_HOSTS }}
+        run: |
+          test -n "$AUR_SSH_PRIVATE_KEY"
+          test -n "$AUR_KNOWN_HOSTS"
+          mkdir -m 0700 "$HOME/.ssh"
+          printf '%s' "$AUR_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$AUR_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+      - name: Commit and push both AUR packages
+        env:
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          for package in kassiber-bin kassiber-cli-bin; do
+            git clone "ssh://aur@aur.archlinux.org/$package.git" "aur-$package"
+            rsync -a --delete --exclude .git/ "channels/aur/$package/" "aur-$package/"
+            (
+              cd "aur-$package"
+              git config user.name "Bitcoin Austria release automation"
+              git config user.email "office@bitcoin-austria.at"
+              git add -A
+              if ! git diff --cached --quiet; then
+                git commit -m "Update to $RELEASE_TAG_NAME"
+                git push origin HEAD:master
+              fi
+            )
+          done
+
+  nix:
+    name: Publish binary Nix flake
+    if: inputs.publish_nix == true
+    needs: prepare
+    environment: linux-packaging-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: linux-channel-definitions-${{ inputs.tag_name }}
+          path: channels
+      - name: Check out project-owned Nix channel
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ vars.NIX_CHANNEL_REPOSITORY }}
+          ref: ${{ vars.NIX_CHANNEL_BRANCH || 'main' }}
+          token: ${{ secrets.NIX_CHANNEL_TOKEN }}
+          path: nix-channel
+      - name: Lock, validate, and push the flake
+        env:
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          NIX_CHANNEL_BRANCH: ${{ vars.NIX_CHANNEL_BRANCH || 'main' }}
+        run: |
+          set -euo pipefail
+          mkdir nix-validation
+          rsync -a channels/nix/ nix-validation/
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/nix-validation:/flake" \
+            nixos/nix:2.28.7@sha256:6fdb4370f378229a56312742d2d30f7d3c55d6b411e12f231b3e3bab9912e2d9 \
+            sh -euxc '
+              features="nix-command flakes"
+              nix --extra-experimental-features "$features" flake lock /flake
+              nix --extra-experimental-features "$features" \
+                flake check /flake --no-build
+              nix --extra-experimental-features "$features" \
+                build /flake#cli /flake#desktop
+              nix --extra-experimental-features "$features" \
+                run /flake#cli -- --version
+            '
+          rsync -a --delete --exclude .git/ nix-validation/ nix-channel/
+          (
+            cd nix-channel
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "Update Kassiber packages to $RELEASE_TAG_NAME"
+              git push origin "HEAD:$NIX_CHANNEL_BRANCH"
+            fi
+          )

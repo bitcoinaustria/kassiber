@@ -2,6 +2,10 @@ import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useUiStore } from "@/store/ui";
+import {
+  runManualAppUpdateCheck,
+  useAppUpdateScheduler,
+} from "@/lib/appUpdate";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import {
   dispatchMenuIntent,
@@ -24,6 +28,7 @@ const unexpectedWorkspaceAction = () => {
  * fires once an identity exists.
  */
 export function RootIntentListener() {
+  useAppUpdateScheduler();
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -53,6 +58,7 @@ export function RootIntentListener() {
               decreaseAppScale: store.decreaseAppScale,
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,
+              runAppUpdateCheck: () => void runManualAppUpdateCheck(),
               runAddWalletConnection: unexpectedWorkspaceAction,
               runWalletSync: unexpectedWorkspaceAction,
               runJournalProcessing: unexpectedWorkspaceAction,

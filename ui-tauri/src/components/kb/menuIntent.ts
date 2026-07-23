@@ -59,7 +59,7 @@ export type SettingsMenuSection =
   | "terminal";
 
 export type NativeMenuPayload =
-  | { action: "lock-app" | "toggle-sensitive" }
+  | { action: "lock-app" | "toggle-sensitive" | "check-for-updates" }
   | { action: "ui-scale-decrease" | "ui-scale-increase" | "ui-scale-reset" }
   | { action: "add-wallet" | "sync-all-wallets" | "process-journals" }
   | { action: "open-settings"; section?: SettingsMenuSection | null }
@@ -113,6 +113,7 @@ export interface MenuIntentDeps {
   decreaseAppScale: () => void;
   increaseAppScale: () => void;
   resetAppScale: () => void;
+  runAppUpdateCheck: () => void;
   addNotification: (notification: MenuIntentNotification) => void;
   emitSettingsSection: (section: string | null) => void;
 }
@@ -132,6 +133,7 @@ const GLOBAL_ACTIONS = new Set([
   "ui-scale-decrease",
   "ui-scale-increase",
   "ui-scale-reset",
+  "check-for-updates",
 ] as const);
 
 function actionScope(action: NativeMenuPayload["action"]): "global" | "workspace" {
@@ -181,6 +183,10 @@ export function dispatchMenuIntent(
 
     case "ui-scale-reset":
       deps.resetAppScale();
+      return;
+
+    case "check-for-updates":
+      deps.runAppUpdateCheck();
       return;
 
     case "add-wallet":

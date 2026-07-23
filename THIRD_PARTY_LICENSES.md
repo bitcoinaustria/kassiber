@@ -14,6 +14,10 @@ webcam-based descriptor and BBQR import.
 The desktop shell includes Rust keyring crates for AI-provider-key native
 storage. This applies only to AI provider API keys; backend tokens, descriptors,
 xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
+Its minimal release notifier delegates the GitHub request to the bundled CLI
+sidecar rather than carrying a second HTTP client. The desktop and CLI
+coordinate update-check consent revocation with an owner-only advisory lock;
+the native side uses `fs2` for the cross-platform file-lock primitive.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
@@ -39,6 +43,7 @@ xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
 | `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
+| `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider secret storage | MIT OR Apache-2.0 |
 | `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend for AI provider API keys and opt-in database passphrase remember-unlock | MIT OR Apache-2.0 |
 | `block2` | `0.6.2` | Objective-C block bridge for the macOS Touch ID LocalAuthentication callback | MIT |

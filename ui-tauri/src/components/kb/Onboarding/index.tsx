@@ -18,6 +18,7 @@ import {
   type ImportProjectSelection,
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
+import { setAppUpdateChecksEnabled } from "@/lib/appUpdate";
 import {
   bookIdentityKey,
   useUiStore,
@@ -251,6 +252,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       form.taxCountry === "at"
         ? 0
         : (parseTaxLongTermDays(form.taxLongTermDays) ?? 365);
+    // Apply the app-wide network choice before setup creates or mutates any
+    // durable book state. If the owner-only preference cannot be written, the
+    // native boundary remains fail-closed and onboarding can be retried safely.
+    await setAppUpdateChecksEnabled(form.updateChecksEnabled);
     if (form.databaseMode === "sqlcipher") {
       const envelope = await getTransport("real").invoke({
         kind: "ui.secrets.init",

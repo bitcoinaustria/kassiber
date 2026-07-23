@@ -1,0 +1,15 @@
+{
+  "comparisons": [
+    { "latest": "0.22.56", "current": "0.22.55", "newer": true },
+    { "latest": "0.22.56", "current": "0.22.56-rc.1", "newer": true },
+    { "latest": "0.22.56-rc.2", "current": "0.22.56-rc.1", "newer": true },
+    { "latest": "0.22.56-rc.1", "current": "0.22.56", "newer": false },
+    { "latest": "0.22.56+published", "current": "0.22.56+local", "newer": false }
+  ],
+  "invalid": [
+    "not-a-version",
+    "0.22.56-01",
+    "0.22.56-alpha..1",
+    "0.22.56+build..1"
+  ]
+}

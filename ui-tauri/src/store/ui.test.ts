@@ -16,6 +16,42 @@ describe("UI persistence", () => {
     expect(useUiStore.getInitialState().theme).toBe("dark");
   });
 
+  it("keeps native update consent and results out of renderer persistence", () => {
+    useUiStore.getState().setAppUpdate({
+      currentVersion: "0.22.55",
+      latestVersion: "0.23.0",
+      releaseUrl:
+        "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+      updateAvailable: true,
+      prerelease: false,
+      checkedAt: 1_784_688_800,
+    });
+    useUiStore.getState().setAutomaticUpdateChecks(false);
+
+    const stored = uiStatePartialForStorage(useUiStore.getState());
+    expect(stored).not.toHaveProperty("automaticUpdateChecks");
+    expect(stored).not.toHaveProperty("appUpdate");
+    expect(useUiStore.getState().appUpdate).toBeNull();
+
+    useUiStore.getState().setAutomaticUpdateChecks(true);
+    useUiStore.getState().setAppUpdate(null);
+  });
+
+  it("refuses a late update result after consent is disabled", () => {
+    useUiStore.getState().setAutomaticUpdateChecks(false);
+    useUiStore.getState().setAppUpdate({
+      currentVersion: "0.22.55",
+      latestVersion: "0.23.0",
+      releaseUrl:
+        "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.23.0",
+      updateAvailable: true,
+      prerelease: false,
+      checkedAt: 1_784_688_800,
+    });
+
+    expect(useUiStore.getState().appUpdate).toBeNull();
+  });
+
   it("coalesces notifications with the same dedupe key", () => {
     useUiStore.setState({ notifications: [] });
     const first = useUiStore.getState().addNotification({

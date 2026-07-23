@@ -21,6 +21,8 @@ _NO_BOOTSTRAP_DATABASE_PREFIXES = {
     "projects",
     "operator",
     "secrets",
+    "update",
+    "verify-download",
 }
 _NO_BOOTSTRAP_DATABASE_PATHS = {
     "backends.kinds",

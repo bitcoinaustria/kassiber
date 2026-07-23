@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "primary_fingerprint": "",
+  "public_key_path": "packaging/release/kassiber-release.asc"
+}

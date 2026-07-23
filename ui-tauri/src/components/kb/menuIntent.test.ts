@@ -17,6 +17,7 @@ function makeDeps(overrides: Partial<MenuIntentDeps> = {}): MenuIntentDeps {
     decreaseAppScale: vi.fn(),
     increaseAppScale: vi.fn(),
     resetAppScale: vi.fn(),
+    runAppUpdateCheck: vi.fn(),
     runAddWalletConnection: vi.fn(),
     runWalletSync: vi.fn(),
     runJournalProcessing: vi.fn(),
@@ -172,10 +173,12 @@ describe("dispatchMenuIntent — scope filter", () => {
     );
     dispatchMenuIntent({ action: "toggle-sensitive" }, deps, "global");
     dispatchMenuIntent({ action: "ui-scale-increase" }, deps, "global");
+    dispatchMenuIntent({ action: "check-for-updates" }, deps, "global");
     expect(deps.navigate).toHaveBeenCalledTimes(2); // navigate + open-settings
     expect(deps.emitSettingsSection).toHaveBeenCalledWith("privacy");
     expect(deps.setHideSensitive).toHaveBeenCalledTimes(1);
     expect(deps.increaseAppScale).toHaveBeenCalledTimes(1);
+    expect(deps.runAppUpdateCheck).toHaveBeenCalledTimes(1);
   });
 
   it("workspace scope drops global actions", () => {
@@ -188,10 +191,12 @@ describe("dispatchMenuIntent — scope filter", () => {
     dispatchMenuIntent({ action: "open-settings" }, deps, "workspace");
     dispatchMenuIntent({ action: "toggle-sensitive" }, deps, "workspace");
     dispatchMenuIntent({ action: "ui-scale-reset" }, deps, "workspace");
+    dispatchMenuIntent({ action: "check-for-updates" }, deps, "workspace");
     expect(deps.navigate).not.toHaveBeenCalled();
     expect(deps.emitSettingsSection).not.toHaveBeenCalled();
     expect(deps.setHideSensitive).not.toHaveBeenCalled();
     expect(deps.resetAppScale).not.toHaveBeenCalled();
+    expect(deps.runAppUpdateCheck).not.toHaveBeenCalled();
   });
 
   it("workspace scope handles lock and workflow actions", () => {
@@ -227,6 +232,12 @@ describe("dispatchMenuIntent — direct actions", () => {
     expect(deps.decreaseAppScale).toHaveBeenCalledTimes(1);
     expect(deps.increaseAppScale).toHaveBeenCalledTimes(1);
     expect(deps.resetAppScale).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes manual update checks to the native update runner", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent({ action: "check-for-updates" }, deps);
+    expect(deps.runAppUpdateCheck).toHaveBeenCalledTimes(1);
   });
 
   it("add-wallet routes to the wallet connection runner", () => {
