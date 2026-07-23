@@ -349,13 +349,14 @@
     "existingCredentials": "Bestehende Backend-Zugangsdaten",
     "migrateCredentials": "Zugangsdaten aus backends.env in die verschlüsselte DB übernehmen.",
     "migrateCredentialsDescription": "Nützlich beim Upgrade eines bestehenden CLI-Setups. Bei neuen Büchern kann dies bedenkenlos aktiviert bleiben.",
-    "updateChecks": "Kassiber erlauben, GitHub auf Updates zu prüfen",
-    "updateChecksDescription": "Optional. GitHub sieht deine IP-Adresse, die genaue Kassiber-Version und den Zeitpunkt der Anfrage. Deaktiviere dies, um automatische, Menü- und CLI-Update-Prüfungen zu blockieren.",
     "plaintextAck": "Mir ist klar, dass der Klartextmodus nicht für echte Wallet-Daten gedacht ist.",
     "plaintextAckDescription": "Guthaben, Adressen, Tags und Backend-Metadaten sind für alles mit Festplattenzugriff lesbar."
   },
   "sync": {
-    "title": "Sync-Verbindungen wählen"
+    "title": "Sync-Verbindungen wählen",
+    "updateChecksHeading": "App-Updates",
+    "updateChecks": "Kassiber erlauben, GitHub auf Updates zu prüfen",
+    "updateChecksDescription": "Optional. GitHub sieht deine IP-Adresse, die genaue Kassiber-Version und den Zeitpunkt der Anfrage. Deaktiviere dies, um automatische, Menü- und CLI-Update-Prüfungen zu blockieren."
   },
   "aiStep": {
     "title": "AI-Unterstützung wählen"

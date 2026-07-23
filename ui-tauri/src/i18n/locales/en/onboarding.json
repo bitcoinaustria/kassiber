@@ -349,13 +349,14 @@
     "existingCredentials": "Existing backend credentials",
     "migrateCredentials": "Move credentials from backends.env into the encrypted DB.",
     "migrateCredentialsDescription": "Useful when upgrading an existing CLI setup. New books can leave this checked safely.",
-    "updateChecks": "Allow Kassiber to check GitHub for updates",
-    "updateChecksDescription": "Optional. GitHub sees your IP address, exact Kassiber version, and request time. Turn this off to block automatic, menu, and CLI update checks.",
     "plaintextAck": "I understand plaintext mode is not for real wallet data.",
     "plaintextAckDescription": "Balances, addresses, tags, and backend metadata are readable by anything with disk access."
   },
   "sync": {
-    "title": "Choose sync connections"
+    "title": "Choose sync connections",
+    "updateChecksHeading": "App updates",
+    "updateChecks": "Allow Kassiber to check GitHub for updates",
+    "updateChecksDescription": "Optional. GitHub sees your IP address, exact Kassiber version, and request time. Turn this off to block automatic, menu, and CLI update checks."
   },
   "aiStep": {
     "title": "Choose AI assistance"

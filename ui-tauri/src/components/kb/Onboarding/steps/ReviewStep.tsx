@@ -205,7 +205,7 @@ function reviewRows(
       note: form.updateChecksEnabled
         ? t("review.updates.noteEnabled")
         : t("review.updates.noteDisabled"),
-      step: "security",
+      step: "sync",
     },
     {
       areaKey: "storage",
