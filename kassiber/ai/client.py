@@ -79,6 +79,10 @@ class ResponsesToolCallAccumulator:
 
     def __init__(self) -> None:
         self._calls: dict[int, dict[str, Any]] = {}
+        self._slot_by_output_index: dict[int, int] = {}
+        self._slot_by_item_id: dict[str, int | None] = {}
+        self._slot_by_call_id: dict[str, int | None] = {}
+        self._next_slot = 0
 
     @staticmethod
     def _empty_call() -> dict[str, Any]:
@@ -88,21 +92,104 @@ class ResponsesToolCallAccumulator:
             "function": {"name": "", "arguments": ""},
         }
 
-    def _call(self, index: int) -> dict[str, Any]:
-        return self._calls.setdefault(index, self._empty_call())
+    def _call(self, slot: int) -> dict[str, Any]:
+        return self._calls.setdefault(slot, self._empty_call())
 
     @staticmethod
-    def _index(event: dict[str, Any]) -> int:
-        raw_index = event.get("output_index", 0)
+    def _output_index(event: dict[str, Any]) -> int | None:
+        raw_index = event.get("output_index")
+        if isinstance(raw_index, bool):
+            return None
         try:
-            return int(raw_index)
+            index = int(raw_index)
         except (TypeError, ValueError):
-            return 0
+            return None
+        return index if index >= 0 else None
 
-    def _merge_item(self, index: int, item: object, *, replace_arguments: bool) -> None:
+    @staticmethod
+    def _identifiers(
+        event: dict[str, Any], item: object = None
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        item_ids = [event.get("item_id")]
+        call_ids = [event.get("call_id")]
+        if isinstance(item, dict):
+            item_ids.append(item.get("id"))
+            call_ids.append(item.get("call_id"))
+        return (
+            tuple(
+                dict.fromkeys(
+                    value for value in item_ids if isinstance(value, str) and value
+                )
+            ),
+            tuple(
+                dict.fromkeys(
+                    value for value in call_ids if isinstance(value, str) and value
+                )
+            ),
+        )
+
+    @staticmethod
+    def _mapped_slot(
+        slots: dict[str, int | None], identifiers: tuple[str, ...]
+    ) -> int | None:
+        for identifier in identifiers:
+            slot = slots.get(identifier)
+            if slot is not None:
+                return slot
+        return None
+
+    @staticmethod
+    def _register_identifiers(
+        slots: dict[str, int | None], identifiers: tuple[str, ...], slot: int
+    ) -> None:
+        for identifier in identifiers:
+            if identifier not in slots:
+                slots[identifier] = slot
+            elif slots[identifier] != slot:
+                slots[identifier] = None
+
+    def _slot(self, event: dict[str, Any], item: object = None) -> int:
+        item_ids, call_ids = self._identifiers(event, item)
+        output_index = self._output_index(event)
+        output_index_is_known = output_index in self._slot_by_output_index
+        slot = (
+            self._slot_by_output_index.get(output_index)
+            if output_index is not None
+            else None
+        )
+        if slot is None:
+            slot = self._mapped_slot(self._slot_by_item_id, item_ids)
+        if slot is None and (not item_ids or output_index is not None):
+            slot = self._mapped_slot(self._slot_by_call_id, call_ids)
+        if (
+            slot is not None
+            and output_index is not None
+            and not output_index_is_known
+            and slot in self._slot_by_output_index.values()
+        ):
+            # A valid output index is authoritative. Reusing a provider-buggy
+            # item/call ID here would hide duplicate calls from consent checks.
+            slot = None
+        if slot is None:
+            slot = self._next_slot
+            self._next_slot += 1
+        if output_index is not None:
+            self._slot_by_output_index[output_index] = slot
+        self._register_identifiers(self._slot_by_item_id, item_ids, slot)
+        self._register_identifiers(self._slot_by_call_id, call_ids, slot)
+        return slot
+
+    def _reset(self) -> None:
+        self._calls.clear()
+        self._slot_by_output_index.clear()
+        self._slot_by_item_id.clear()
+        self._slot_by_call_id.clear()
+        self._next_slot = 0
+
+    def _merge_item(self, slot: int, item: object, *, replace_arguments: bool) -> None:
         if not isinstance(item, dict) or item.get("type") != "function_call":
             return
-        current = self._call(index)
+        current = self._call(slot)
         call_id = item.get("call_id") or item.get("id")
         if isinstance(call_id, str) and call_id:
             current["id"] = call_id
@@ -120,15 +207,15 @@ class ResponsesToolCallAccumulator:
         if not isinstance(event, dict):
             return self.snapshot()
         event_type = event.get("type")
-        index = self._index(event)
         if event_type in {"response.output_item.added", "response.output_item.done"}:
+            item = event.get("item")
             self._merge_item(
-                index,
-                event.get("item"),
+                self._slot(event, item),
+                item,
                 replace_arguments=event_type == "response.output_item.done",
             )
         elif event_type == "response.function_call_arguments.delta":
-            current = self._call(index)
+            current = self._call(self._slot(event))
             call_id = event.get("call_id")
             if isinstance(call_id, str) and call_id:
                 current["id"] = call_id
@@ -139,7 +226,7 @@ class ResponsesToolCallAccumulator:
             if isinstance(delta, str):
                 current["function"]["arguments"] += delta
         elif event_type == "response.function_call_arguments.done":
-            current = self._call(index)
+            current = self._call(self._slot(event))
             call_id = event.get("call_id")
             if isinstance(call_id, str) and call_id:
                 current["id"] = call_id
@@ -151,11 +238,19 @@ class ResponsesToolCallAccumulator:
                 current["function"]["arguments"] = arguments
         return self.snapshot()
 
-    def merge_output_items(self, items: Iterable[object]) -> list[dict[str, Any]]:
-        """Merge terminal output Items into the accumulated function calls."""
+    def replace_output_items(self, items: Iterable[object]) -> list[dict[str, Any]]:
+        """Replace streamed partials with the authoritative terminal output."""
 
+        self._reset()
         for index, item in enumerate(items):
-            self._merge_item(index, item, replace_arguments=True)
+            if not isinstance(item, dict) or item.get("type") != "function_call":
+                continue
+            event = {"output_index": index}
+            self._merge_item(
+                self._slot(event, item),
+                item,
+                replace_arguments=True,
+            )
         return self.snapshot()
 
     def snapshot(self) -> list[dict[str, Any]]:
@@ -879,10 +974,11 @@ class OpenAIResponsesClient:
                     response_output = _response_output(completed) if completed is not None else None
                     finish_reason = _response_finish_reason(completed) if completed is not None else None
                     if completed is not None:
-                        calls = tool_call_accumulator.merge_output_items(
+                        had_streamed_calls = bool(tool_call_accumulator.snapshot())
+                        calls = tool_call_accumulator.replace_output_items(
                             response_output or []
                         )
-                        if calls:
+                        if calls or had_streamed_calls:
                             delta["tool_calls"] = calls
                         if not emitted_content:
                             completed_text = _response_text(completed)

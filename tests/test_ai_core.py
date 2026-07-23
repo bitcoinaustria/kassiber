@@ -851,7 +851,7 @@ class ResponsesToolCallAccumulatorTest(unittest.TestCase):
             }
         )
 
-        calls = accumulator.merge_output_items(
+        calls = accumulator.replace_output_items(
             [
                 {
                     "type": "function_call",
@@ -864,6 +864,123 @@ class ResponsesToolCallAccumulatorTest(unittest.TestCase):
 
         self.assertEqual(calls[0]["id"], "call_final")
         self.assertEqual(calls[0]["function"], {"name": "status", "arguments": "{}"})
+
+    def test_missing_output_index_uses_item_identity_for_multiple_calls(self):
+        accumulator = ResponsesToolCallAccumulator()
+        for item_id, call_id, name in (
+            ("fc_1", "call_1", "first"),
+            ("fc_2", "call_2", "second"),
+        ):
+            accumulator.add_event(
+                {
+                    "type": "response.output_item.added",
+                    "output_index": "invalid",
+                    "item": {
+                        "type": "function_call",
+                        "id": item_id,
+                        "call_id": call_id,
+                        "name": name,
+                        "arguments": "",
+                    },
+                }
+            )
+
+        accumulator.add_event(
+            {
+                "type": "response.function_call_arguments.delta",
+                "item_id": "fc_1",
+                "delta": '{"first":true}',
+            }
+        )
+        calls = accumulator.add_event(
+            {
+                "type": "response.function_call_arguments.delta",
+                "item_id": "fc_2",
+                "delta": '{"second":true}',
+            }
+        )
+
+        self.assertEqual(
+            calls,
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "first", "arguments": '{"first":true}'},
+                },
+                {
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {"name": "second", "arguments": '{"second":true}'},
+                },
+            ],
+        )
+
+    def test_terminal_output_drops_stale_stream_slots(self):
+        accumulator = ResponsesToolCallAccumulator()
+        accumulator.add_event(
+            {
+                "type": "response.output_item.added",
+                "output_index": 7,
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call_stale",
+                    "name": "stale",
+                    "arguments": "",
+                },
+            }
+        )
+
+        calls = accumulator.replace_output_items(
+            [
+                {"type": "reasoning", "id": "reasoning_1"},
+                {
+                    "type": "function_call",
+                    "call_id": "call_final",
+                    "name": "status",
+                    "arguments": "{}",
+                },
+            ]
+        )
+
+        self.assertEqual(
+            calls,
+            [
+                {
+                    "id": "call_final",
+                    "type": "function",
+                    "function": {"name": "status", "arguments": "{}"},
+                }
+            ],
+        )
+
+    def test_distinct_output_indexes_preserve_duplicate_call_ids(self):
+        accumulator = ResponsesToolCallAccumulator()
+        item = {
+            "type": "function_call",
+            "id": "fc_duplicate",
+            "call_id": "call_duplicate",
+            "name": "status",
+            "arguments": "{}",
+        }
+
+        accumulator.add_event(
+            {
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": item,
+            }
+        )
+        calls = accumulator.add_event(
+            {
+                "type": "response.output_item.done",
+                "output_index": 1,
+                "item": dict(item),
+            }
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([call["id"] for call in calls], ["call_duplicate"] * 2)
 
 
 class HttpErrorMappingTest(unittest.TestCase):
@@ -1602,6 +1719,41 @@ class ResponsesNormalizationTest(unittest.TestCase):
             "{}",
         )
         self.assertEqual(chunks[-1].finish_reason, "tool_calls")
+
+    def test_stream_chat_clears_calls_omitted_from_completed_output(self):
+        class _StreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                yield (
+                    b'data: {"type":"response.output_item.added","output_index":7,'
+                    b'"item":{"type":"function_call","call_id":"call_stale",'
+                    b'"name":"status","arguments":""}}\n'
+                )
+                yield b"\n"
+                yield (
+                    b'data: {"type":"response.completed","response":'
+                    b'{"status":"completed","output":[{"type":"message",'
+                    b'"role":"assistant","content":'
+                    b'[{"type":"output_text","text":"done"}]}]}}\n'
+                )
+                yield b"\n"
+
+        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+            client = OpenAIResponsesClient(base_url="http://x/v1")
+            chunks = list(
+                client.stream_chat(
+                    messages=[{"role": "user", "content": "x"}], model="m"
+                )
+            )
+
+        self.assertEqual(chunks[0].delta["tool_calls"][0]["id"], "call_stale")
+        self.assertEqual(chunks[-1].delta["tool_calls"], [])
+        self.assertEqual(chunks[-1].finish_reason, "stop")
 
     def test_chat_omits_reasoning_when_provider_does_not_emit_it(self):
         payload = (
