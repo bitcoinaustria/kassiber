@@ -488,12 +488,25 @@ def compile_finalized_tax_projection(
             )
             if bundle is not None and reviewed_fee:
                 consumed_fee_bundles.add(bundle)
+            raw_fee = fee_for(decision)
+            projected_fee = (
+                reviewed_fee
+                if reviewed_fee
+                and decision.component_id is not None
+                and decision.transfer_kind != "swap-refund"
+                else raw_fee + reviewed_fee
+            )
             out_row = _projected_slice_row(
                 source,
                 decision.source,
                 rows_by_id,
                 side="move-out",
-                fee_msat=fee_for(decision) + reviewed_fee,
+                # A component fee allocation preserves the same observed miner
+                # fee inside an authored review bundle; it replaces the raw
+                # sibling rather than adding a second copy. Native graph
+                # residuals and failed-swap refunds represent custody losses
+                # distinct from the outbound miner fee.
+                fee_msat=projected_fee,
             )
             in_row = _projected_slice_row(
                 target, decision.target, rows_by_id, side="move-in"

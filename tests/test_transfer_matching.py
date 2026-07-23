@@ -749,7 +749,7 @@ class PaymentHashExactMatchTests(unittest.TestCase):
 
         self.assertEqual(len(suggest_swap_candidates(rows)), 1)
 
-    def test_same_asset_transfer_defaults_to_carrying_value_for_generic_profile(self):
+    def test_same_asset_onchain_rows_require_ownership_evidence(self):
         out = _row(
             id="cold-out",
             wallet_id="cold",
@@ -767,9 +767,7 @@ class PaymentHashExactMatchTests(unittest.TestCase):
             occurred_at="2026-03-14T17:32:00Z",
             amount=99_990_000_000,
         )
-        candidates = suggest_swap_candidates([out, inbound])
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].default_policy, POLICY_CARRYING_VALUE)
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
 
 class ProviderEvidenceExactMatchTests(unittest.TestCase):
@@ -926,7 +924,7 @@ class ProviderEvidenceExactMatchTests(unittest.TestCase):
         self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
         self.assertEqual(candidate.confidence, CONFIDENCE_STRONG)
 
-    def test_strong_provider_hint_keeps_competing_heuristic_visible(self):
+    def test_strong_provider_hint_does_not_add_onchain_heuristic_sibling(self):
         provider = {
             "provider": "boltz",
             "swap_id": "ambiguous-provider-route",
@@ -955,12 +953,9 @@ class ProviderEvidenceExactMatchTests(unittest.TestCase):
 
         candidates = suggest_swap_candidates([out, provider_in, other_in])
 
-        self.assertEqual({candidate.in_id for candidate in candidates}, {"provider-in", "other-in"})
-        self.assertEqual({candidate.conflict_size for candidate in candidates}, {2})
-        self.assertEqual(
-            next(candidate for candidate in candidates if candidate.in_id == "provider-in").method,
-            METHOD_PROVIDER_SWAP_ID,
-        )
+        self.assertEqual({candidate.in_id for candidate in candidates}, {"provider-in"})
+        self.assertEqual(candidates[0].conflict_size, 1)
+        self.assertEqual(candidates[0].method, METHOD_PROVIDER_SWAP_ID)
 
     def test_duplicate_provider_rows_never_become_exact(self):
         raw = {
@@ -1368,7 +1363,7 @@ class ProviderEvidenceAdversarialTests(unittest.TestCase):
 
 
 class HeuristicMatchTests(unittest.TestCase):
-    def test_same_txid_unknown_principal_residual_stays_reviewable(self):
+    def test_same_txid_onchain_rows_do_not_become_heuristic_candidates(self):
         out = _row(
             id="cold-out",
             external_id=_TXID_A,
@@ -1388,10 +1383,57 @@ class HeuristicMatchTests(unittest.TestCase):
             occurred_at="2026-03-14T17:32:00Z",
             amount=100_000_000_000,
         )
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
+    def test_different_onchain_txids_do_not_match_by_time_and_amount(self):
+        out = _row(
+            id="later-payment",
+            external_id=_TXID_A,
+            wallet_id="cold",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="BTC",
+            occurred_at="2023-02-01T04:41:00Z",
+            amount=15_025_943_000,
+            fee=652_000,
+        )
+        inbound = _row(
+            id="earlier-funding",
+            external_id=_TXID_B,
+            wallet_id="hot",
+            wallet_kind="descriptor",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2023-02-01T02:15:00Z",
+            amount=14_964_523_000,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
+    def test_same_asset_chain_to_lightning_remains_a_heuristic_candidate(self):
+        out = _row(
+            id="chain-lockup",
+            wallet_id="chain",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="BTC",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="lightning-settlement",
+            wallet_id="node",
+            wallet_kind="lnd",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_500_000,
+        )
+
         candidates = suggest_swap_candidates([out, inbound])
+
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].confidence, CONFIDENCE_STRONG)
         self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
+        self.assertEqual(candidates[0].default_kind, KIND_SUBMARINE_SWAP)
 
     def test_same_txid_cross_asset_not_treated_as_self_transfer(self):
         out = _row(
@@ -1439,7 +1481,7 @@ class HeuristicMatchTests(unittest.TestCase):
             [],
         )
 
-    def test_zero_value_placeholder_does_not_hide_unknown_principal_residual(self):
+    def test_zero_value_placeholder_does_not_restore_onchain_heuristic(self):
         txid = "11" * 32
         out = _row(id="o", external_id=txid, wallet_id="cold",
                    direction="outbound", asset="BTC", amount=100_100_000_000)
@@ -1449,9 +1491,7 @@ class HeuristicMatchTests(unittest.TestCase):
                             direction="inbound", asset="BTC", amount=0)
 
         rows = [out, inbound, zero_inbound]
-        candidates = suggest_swap_candidates(rows)
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].confidence, CONFIDENCE_STRONG)
+        self.assertEqual(suggest_swap_candidates(rows), [])
 
     def test_cross_asset_heuristic_without_recognized_route_skipped(self):
         # LBTC->BTC across two custodial-exchange wallets (neither a chain nor a
@@ -1759,21 +1799,18 @@ class ConflictClusteringTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].conflict_size, 1)
 
-    def test_cross_type_conflict_keeps_size_across_interpretations(self):
-        # One outbound BTC leg that matches both a same-asset inbound
-        # (transfer interpretation) and a cross-asset inbound (swap
-        # interpretation). Both candidates carry conflict_size=2 so a
-        # filtered swap-only or transfer-only view cannot make either
-        # look solo.
+    def test_onchain_heuristic_does_not_create_cross_type_conflict(self):
+        # The same-asset on-chain row is not a candidate. It therefore cannot
+        # manufacture a conflict around the legitimate cross-asset review.
         out = _row(id="o", wallet_id="A", asset="BTC", direction="outbound", amount=100_000_000_000)
         transfer_in = _row(id="i-btc", wallet_id="B", asset="BTC", direction="inbound",
                            amount=99_900_000_000, occurred_at="2026-03-14T17:40:00Z")
         swap_in = _row(id="i-lbtc", wallet_id="C", asset="LBTC", direction="inbound",
                        amount=99_800_000_000, occurred_at="2026-03-14T17:45:00Z")
         candidates = suggest_swap_candidates([out, transfer_in, swap_in])
-        self.assertEqual(len(candidates), 2)
-        self.assertEqual({c.in_id for c in candidates}, {"i-btc", "i-lbtc"})
-        self.assertEqual([c.conflict_size for c in candidates], [2, 2])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].in_id, "i-lbtc")
+        self.assertEqual(candidates[0].conflict_size, 1)
 
     def test_exact_dominates_heuristic_with_overlap(self):
         # Exact (payment_hash) and heuristic candidates that share the same

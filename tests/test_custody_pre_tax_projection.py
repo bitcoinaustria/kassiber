@@ -21,7 +21,10 @@ from kassiber.core.custody_quantity import (
 from kassiber.core.custody_interpreters import compile_custody_interpreters
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine, _GenericRailCarryResult
-from tests.custody_tax_helpers import authoritative_chain_observation
+from tests.custody_tax_helpers import (
+    authoritative_chain_observation,
+    finalized_tax_inputs,
+)
 
 
 def build_canonical_quantity_state(rows, **kwargs):
@@ -150,6 +153,92 @@ def test_suspense_principal_still_projects_separately_known_network_fee():
         and item["reason"] == "custody_basis_barrier"
         for item in projection.quarantines
     )
+
+
+def test_reviewed_component_fee_replaces_raw_fee_in_move_projection():
+    rows = [
+        _row("acquisition", "source", "inbound", 1_010, "2024-01-01T00:00:00Z"),
+        _row("out", "source", "outbound", 1_000, "2025-01-01T00:00:00Z"),
+        _row("in", "destination", "inbound", 900, "2025-01-01T00:01:00Z"),
+    ]
+    rows[1]["fee"] = 10
+    wallet_refs = {
+        wallet_id: {
+            "id": wallet_id,
+            "label": wallet_id,
+            "kind": "descriptor",
+            "config_json": "{}",
+            "wallet_account_id": "account",
+            "account_code": "treasury",
+            "account_label": "Treasury",
+        }
+        for wallet_id in ("source", "destination")
+    }
+
+    inputs = finalized_tax_inputs(
+        {"id": "profile", "workspace_id": "workspace", "label": "Book"},
+        rows=rows,
+        wallet_refs_by_id=wallet_refs,
+        manual_pair_records=(
+            {
+                "id": "reviewed-pair",
+                "out_transaction_id": "out",
+                "in_transaction_id": "in",
+                "kind": "manual",
+                "policy": "carrying-value",
+                "out_amount": 900,
+            },
+        ),
+    )
+
+    move_out = next(
+        row
+        for row in inputs.finalized_tax_projection.rows
+        if row["journal_transaction_id"] == "out" and row["amount"] == 900
+    )
+    assert move_out["fee"] == 10
+
+
+def test_swap_refund_residual_remains_additive_to_raw_miner_fee():
+    rows = [
+        _row("acquisition", "wallet", "inbound", 1_010, "2024-01-01T00:00:00Z"),
+        _row("out", "wallet", "outbound", 1_000, "2025-01-01T00:00:00Z"),
+        _row("refund", "wallet", "inbound", 998, "2025-01-01T00:01:00Z"),
+    ]
+    rows[1]["fee"] = 1
+    wallet_refs = {
+        "wallet": {
+            "id": "wallet",
+            "label": "wallet",
+            "kind": "custom",
+            "config_json": "{}",
+            "wallet_account_id": "account",
+            "account_code": "treasury",
+            "account_label": "Treasury",
+        }
+    }
+
+    inputs = finalized_tax_inputs(
+        {"id": "profile", "workspace_id": "workspace", "label": "Book"},
+        rows=rows,
+        wallet_refs_by_id=wallet_refs,
+        manual_pair_records=(
+            {
+                "id": "reviewed-refund",
+                "out_transaction_id": "out",
+                "in_transaction_id": "refund",
+                "kind": "swap-refund",
+                "policy": "carrying-value",
+            },
+        ),
+    )
+
+    move_out = next(
+        row
+        for row in inputs.finalized_tax_projection.rows
+        if row["journal_transaction_id"] == "out" and row["amount"] == 998
+    )
+    assert move_out["fee"] == 3
 
 
 def test_basis_barrier_fails_closed_for_distinct_same_timestamp_event():

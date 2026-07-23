@@ -269,6 +269,15 @@ def compile_component_quantity_claims(
         if isinstance(residual_review, Mapping)
         else ""
     )
+    review_kinds = {
+        str(term.get("review_kind") or "")
+        for term in component.get("economic_terms", ())
+        if term.get("term_kind") == "transaction_pair"
+        and term.get("review_kind") not in (None, "")
+    }
+    quantity_transfer_kind = (
+        next(iter(review_kinds)) if len(review_kinds) == 1 else None
+    )
     leg_residual_classifications = {
         str(leg.get("notes") or "").removeprefix("reviewed_residual:")
         for leg in legs.values()
@@ -650,7 +659,7 @@ def compile_component_quantity_claims(
                 transfer_kind=(
                     str(component.get("component_type") or "swap")
                     if conservation_mode == "conversion"
-                    else None
+                    else quantity_transfer_kind
                 ),
                 transfer_policy=(
                     str(component.get("conversion_policy") or "taxable")
