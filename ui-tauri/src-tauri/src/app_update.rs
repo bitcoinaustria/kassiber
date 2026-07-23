@@ -349,12 +349,16 @@ pub async fn check_app_update(app: AppHandle) -> Result<AppUpdateCheck, String> 
             "GitHub update checks are disabled. Enable them in Settings > Privacy.".to_string(),
         );
     }
-    let _lock = acquire_update_check_preference_lock(&preference)?;
+    let lock = acquire_update_check_preference_lock(&preference)?;
     if !update_checks_enabled_at(&preference) {
         return Err(
             "GitHub update checks are disabled. Enable them in Settings > Privacy.".to_string(),
         );
     }
+    // Consent is now authorized for this check. Holding the lock through the
+    // network fetch would only stall preference writes for up to the request
+    // timeout without being able to un-send the request, so release it here.
+    drop(lock);
     let current = app.package_info().version.clone();
     if cfg!(debug_assertions) {
         return Ok(debug_update_check(&current));

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
 import shutil
 from pathlib import Path
@@ -42,23 +41,6 @@ def _write(path: Path, content: str, *, executable: bool = False) -> None:
     path.chmod(0o755 if executable else 0o644)
 
 
-def _marker(surface: str, package_name: str, executables: list[str]) -> str:
-    return json.dumps(
-        {
-            "schema_version": 1,
-            "product": "kassiber",
-            "surface": surface,
-            "artifact_kind": "aur-bin",
-            "package_name": package_name,
-            "package_manager": "pacman",
-            "repository_manager": "pacman",
-            "repository_provenance": "probe-required",
-            "executables": executables,
-        },
-        indent=2,
-    ) + "\n"
-
-
 def render_desktop(version: str, sha256: str, output: Path) -> None:
     version = normalized_version(version)
     artifact = "kassiber-linux-x64.AppImage"
@@ -90,10 +72,6 @@ def render_desktop(version: str, sha256: str, output: Path) -> None:
         "Terminal=false\n"
         "Categories=Office;Finance;\n",
     )
-    _write(
-        output / "install-context.json",
-        _marker("desktop", "kassiber-bin", ["/usr/bin/kassiber-ui", "/usr/bin/kassiber"]),
-    )
     shutil.copyfile(ROOT / "ui-tauri/src-tauri/icons/128x128.png", output / "kassiber.png")
     shutil.copyfile(ROOT / "LICENSE", output / "LICENSE")
 
@@ -102,7 +80,6 @@ def render_desktop(version: str, sha256: str, output: Path) -> None:
         "kassiber-ui",
         "kassiber.desktop",
         "kassiber.png",
-        "install-context.json",
         "LICENSE",
     ]
     local_hashes = [_sha256(output / name) for name in local_sources]
@@ -143,8 +120,6 @@ package() {{
     "${{pkgdir}}/usr/share/applications/Kassiber.desktop"
   install -Dpm644 "${{srcdir}}/kassiber.png" \
     "${{pkgdir}}/usr/share/icons/hicolor/128x128/apps/kassiber-ui.png"
-  install -Dpm644 "${{srcdir}}/install-context.json" \
-    "${{pkgdir}}/usr/lib/kassiber/install-context.json"
   install -Dpm644 "${{srcdir}}/LICENSE" \
     "${{pkgdir}}/usr/share/licenses/${{pkgname}}/LICENSE"
 }}
@@ -186,12 +161,8 @@ def render_cli(version: str, sha256: str, output: Path) -> None:
     artifact = "kassiber-cli-linux-x64.tar.gz"
     artifact_sha256 = validated_sha256(sha256, artifact)
     output.mkdir(parents=True, exist_ok=True)
-    _write(
-        output / "install-context.json",
-        _marker("cli", "kassiber-cli-bin", ["/usr/bin/kassiber"]),
-    )
     shutil.copyfile(ROOT / "LICENSE", output / "LICENSE")
-    local_sources = ["install-context.json", "LICENSE"]
+    local_sources = ["LICENSE"]
     local_hashes = [_sha256(output / name) for name in local_sources]
     renamed_artifact = f"kassiber-cli-bin-{version}.tar.gz"
     artifact_url = f"{RELEASE_URL_BASE}/v{version}/{artifact}"
@@ -206,18 +177,14 @@ depends=('glibc' 'zlib')
 provides=('kassiber-cli' 'kassiber-command')
 conflicts=('kassiber' 'kassiber-bin' 'kassiber-cli')
 options=('!strip')
-source=('install-context.json'
-        'LICENSE'
+source=('LICENSE'
         '{renamed_artifact}::{artifact_url}')
 sha256sums=('{local_hashes[0]}'
-            '{local_hashes[1]}'
             '{artifact_sha256}')
 
 package() {{
   install -Dpm755 "${{srcdir}}/kassiber-cli-linux-x64/kassiber" \
     "${{pkgdir}}/usr/bin/kassiber"
-  install -Dpm644 "${{srcdir}}/install-context.json" \
-    "${{pkgdir}}/usr/lib/kassiber/install-context.json"
   install -Dpm644 "${{srcdir}}/LICENSE" \
     "${{pkgdir}}/usr/share/licenses/${{pkgname}}/LICENSE"
 }}
@@ -240,11 +207,9 @@ package() {{
 \tconflicts = kassiber-bin
 \tconflicts = kassiber-cli
 \toptions = !strip
-\tsource = install-context.json
 \tsource = LICENSE
 \tsource = {renamed_artifact}::{artifact_url}
 \tsha256sums = {local_hashes[0]}
-\tsha256sums = {local_hashes[1]}
 \tsha256sums = {artifact_sha256}
 
 pkgname = kassiber-cli-bin

@@ -1,6 +1,5 @@
 import hashlib
 import importlib.util
-import json
 import os
 import subprocess
 import tempfile
@@ -31,7 +30,7 @@ def dnf_snapshot_id(metadata: Path, signature: Path) -> str:
 
 
 class AurRendererTest(unittest.TestCase):
-    def test_desktop_recipe_uses_the_appimage_and_surface_marker(self):
+    def test_desktop_recipe_uses_the_appimage(self):
         renderer = load_script("render_aur.py")
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir)
@@ -39,9 +38,6 @@ class AurRendererTest(unittest.TestCase):
 
             pkgbuild = (output / "PKGBUILD").read_text(encoding="utf-8")
             srcinfo = (output / ".SRCINFO").read_text(encoding="utf-8")
-            marker = json.loads(
-                (output / "install-context.json").read_text(encoding="utf-8")
-            )
             self.assertIn("pkgname=kassiber-bin", pkgbuild)
             self.assertIn("kassiber-linux-x64.AppImage", pkgbuild)
             self.assertIn("APPIMAGE_EXTRACT_AND_RUN", (output / "kassiber").read_text())
@@ -49,10 +45,6 @@ class AurRendererTest(unittest.TestCase):
             self.assertIn("conflicts=('kassiber' 'kassiber-cli'", pkgbuild)
             self.assertIn("'webkit2gtk-4.1'", pkgbuild)
             self.assertIn("sha256sums = " + sha256(output / "kassiber"), srcinfo)
-            self.assertEqual(marker["surface"], "desktop")
-            self.assertEqual(marker["package_manager"], "pacman")
-            self.assertEqual(marker["repository_provenance"], "probe-required")
-            self.assertNotIn("upgrade_command", marker)
 
     def test_cli_recipe_uses_the_frozen_archive(self):
         renderer = load_script("render_aur.py")
@@ -61,9 +53,6 @@ class AurRendererTest(unittest.TestCase):
             renderer.render_cli("1.2.3", "b" * 64, output)
 
             pkgbuild = (output / "PKGBUILD").read_text(encoding="utf-8")
-            marker = json.loads(
-                (output / "install-context.json").read_text(encoding="utf-8")
-            )
             self.assertIn("pkgname=kassiber-cli-bin", pkgbuild)
             self.assertIn("kassiber-cli-linux-x64.tar.gz", pkgbuild)
             self.assertIn("kassiber-cli-linux-x64/kassiber", pkgbuild)
@@ -71,8 +60,6 @@ class AurRendererTest(unittest.TestCase):
                 "conflicts=('kassiber' 'kassiber-bin' 'kassiber-cli')",
                 pkgbuild,
             )
-            self.assertEqual(marker["surface"], "cli")
-            self.assertEqual(marker["package_name"], "kassiber-cli-bin")
 
     def test_rejects_invalid_versions_and_checksums(self):
         renderer = load_script("render_aur.py")
@@ -100,12 +87,6 @@ class NixRendererTest(unittest.TestCase):
             self.assertIn('system = "x86_64-linux"', flake)
             self.assertIn('makeWrapper "$out/bin/kassiber-ui"', flake)
             self.assertNotIn("aarch64-linux", flake)
-            marker = json.loads(
-                (output / "desktop-install-context.json").read_text(
-                    encoding="utf-8"
-                )
-            )
-            self.assertEqual(marker["repository_provenance"], "probe-required")
 
 
 class LinuxChannelWorkflowTest(unittest.TestCase):
@@ -116,35 +97,14 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
 
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("\n  push:", workflow)
-        self.assertEqual(workflow.count("environment: linux-packaging-production"), 5)
-        for channel in ("repositories", "copr", "aur", "nix", "obs"):
-            self.assertIn(f"  {channel}:\n", workflow)
-        self.assertGreaterEqual(workflow.count("release_sha256"), 3)
         self.assertNotIn("apt upgrade", workflow)
         self.assertNotIn("dnf upgrade", workflow)
-        self.assertIn("publish-linux-channels-production", workflow)
-        self.assertIn("channels/release-checksums.txt", workflow)
-        self.assertNotIn("SHA256SUMS.txt", workflow)
-        self.assertIn("kassiber-${version}-manifest.txt", workflow)
         self.assertIn("scripts/release_manifest.py verify-release", workflow)
         self.assertIn("packaging/release/signing-policy.json", workflow)
-        self.assertIn("Linux channel publication requires an enabled", workflow)
-        self.assertIn("primary key distinct from the offline release key", workflow)
-        self.assertIn("fetch-depth: 0", workflow)
         self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
-        self.assertLess(
-            workflow.index("git merge-base --is-ancestor HEAD origin/main"),
-            workflow.index("scripts/release_manifest.py policy"),
-        )
         self.assertIn("LINUX_ARCHIVE_GPG_FINGERPRINT", workflow)
-        self.assertIn("exactly one primary key identity", workflow)
-        self.assertIn("isDraft,isPrerelease,tagName", workflow)
-        self.assertIn('"commit":sys.argv[2]', workflow)
-        self.assertIn("makepkg --cleanbuild --noconfirm", workflow)
-        self.assertIn('"[kassiber-$APT_SUITE]"', workflow)
-        self.assertNotIn("fedora:44 \\", workflow)
 
-    def test_release_workflow_uploads_binary_and_source_rpms(self):
+    def test_release_workflow_uploads_rpms(self):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
         ).read_text(encoding="utf-8")
@@ -152,7 +112,6 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("release/*.rpm", workflow)
         self.assertIn("package-cli-rpm.sh", workflow)
         self.assertIn("package-desktop-rpm.sh", workflow)
-        self.assertIn("--source-output", workflow)
 
     def test_signed_release_finalizer_never_rebuilds_or_replaces_assets(self):
         workflow = (

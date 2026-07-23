@@ -15,7 +15,6 @@ on:
       - "scripts/package-cli-deb.sh"
       - "scripts/package-cli-rpm.sh"
       - "scripts/package-desktop-rpm.sh"
-      - "scripts/prepare-obs-package.sh"
       - "scripts/publish-linux-repositories-s3.sh"
       - "scripts/render_aur.py"
       - "scripts/render_nix.py"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import shutil
 from pathlib import Path
@@ -28,23 +27,6 @@ def validated_sha256(sha256: str, artifact: str) -> str:
     return sha256
 
 
-def marker(surface: str, package_name: str, executables: list[str]) -> str:
-    return json.dumps(
-        {
-            "schema_version": 1,
-            "product": "kassiber",
-            "surface": surface,
-            "artifact_kind": "nix-binary",
-            "package_name": package_name,
-            "package_manager": "nix",
-            "repository_manager": "nix",
-            "repository_provenance": "probe-required",
-            "executables": executables,
-        },
-        indent=2,
-    ) + "\n"
-
-
 def render_flake(
     version: str,
     sha256_desktop: str,
@@ -57,14 +39,6 @@ def render_flake(
     desktop_sha256 = validated_sha256(sha256_desktop, desktop_artifact)
     cli_sha256 = validated_sha256(sha256_cli, cli_artifact)
     output.mkdir(parents=True, exist_ok=True)
-    (output / "desktop-install-context.json").write_text(
-        marker("desktop", "kassiber", ["bin/kassiber-ui", "bin/kassiber"]),
-        encoding="utf-8",
-    )
-    (output / "cli-install-context.json").write_text(
-        marker("cli", "kassiber-cli", ["bin/kassiber"]),
-        encoding="utf-8",
-    )
     shutil.copyfile(ROOT / "LICENSE", output / "LICENSE")
 
     desktop_url = f"{RELEASE_URL_BASE}/v{version}/{desktop_artifact}"
@@ -93,8 +67,6 @@ def render_flake(
         installPhase = ''
           runHook preInstall
           install -Dpm755 kassiber "$out/bin/kassiber"
-          install -Dpm644 ${{./cli-install-context.json}} \
-            "$out/lib/kassiber/install-context.json"
           install -Dpm644 ${{./LICENSE}} \
             "$out/share/licenses/kassiber-cli/LICENSE"
           runHook postInstall
@@ -128,8 +100,6 @@ def render_flake(
           mv "$out/bin/kassiber" "$out/bin/kassiber-ui"
           makeWrapper "$out/bin/kassiber-ui" "$out/bin/kassiber" \
             --add-flags "--cli"
-          install -Dpm644 ${{./desktop-install-context.json}} \
-            "$out/lib/kassiber/install-context.json"
           install -Dpm644 ${{./LICENSE}} \
             "$out/share/licenses/kassiber/LICENSE"
           desktop_file=""

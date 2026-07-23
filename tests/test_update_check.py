@@ -321,11 +321,8 @@ def test_fetch_latest_stable_release_uses_latest_object_endpoint():
     }
 
 
-def test_cache_and_install_context_reject_boolean_and_float_schema_versions(
-    tmp_path: Path,
-):
+def test_cache_rejects_boolean_and_float_schema_versions(tmp_path: Path):
     cache = tmp_path / "update-check.json"
-    marker = tmp_path / "install-context.json"
     for schema_version in (True, 1.0):
         cache.write_text(
             json.dumps(
@@ -342,12 +339,7 @@ def test_cache_and_install_context_reject_boolean_and_float_schema_versions(
             ),
             encoding="utf-8",
         )
-        marker.write_text(
-            json.dumps({"schema_version": schema_version}),
-            encoding="utf-8",
-        )
         assert update_check.read_cache(cache) is None
-        assert update_check._read_install_context(marker) is None
 
 
 def test_check_writes_public_cache_and_recomputes_current_version(tmp_path: Path):
@@ -410,7 +402,6 @@ def test_install_method_proves_formula_or_cask_before_suggesting_brew(
             executable="/Applications/Kassiber.app/Contents/MacOS/kassiber",
             argv0="kassiber",
             environ={},
-            install_context_path=tmp_path / "missing-install-context.json",
         )
         == "manual"
     )
@@ -430,68 +421,6 @@ def test_install_method_proves_formula_or_cask_before_suggesting_brew(
         )
         == "homebrew_formula"
     )
-
-
-def test_linux_package_marker_requires_exact_package_ownership_and_stays_manual(
-    tmp_path: Path,
-):
-    marker = tmp_path / "install-context.json"
-    marker.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "product": "kassiber",
-                "surface": "cli",
-                "artifact_kind": "deb",
-                "package_name": "kassiber-cli",
-                "package_manager": "dpkg",
-                "repository_manager": "apt",
-                "repository_provenance": "probe-required",
-                "executables": ["/usr/bin/kassiber"],
-            }
-        ),
-        encoding="utf-8",
-    )
-    captured = {}
-
-    def owned_runner(command, **kwargs):
-        captured["command"] = command
-        captured["environment"] = kwargs["env"]
-        return subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=f"kassiber-cli: {marker}\n",
-        )
-
-    with patch("kassiber.update_check.shutil.which", return_value="/usr/bin/dpkg-query"):
-        method = update_check.detect_install_method(
-            executable="/usr/bin/kassiber",
-            argv0="kassiber",
-            environ={"PATH": "/usr/bin", "OPENAI_API_KEY": "do-not-forward"},
-            install_context_path=marker,
-            runner=owned_runner,
-        )
-
-    assert method == "linux_deb_manual"
-    assert update_check.update_command_for_method(method) is None
-    assert captured["command"] == ["/usr/bin/dpkg-query", "-S", str(marker)]
-    assert captured["environment"] == {"PATH": "/usr/bin"}
-
-    def wrong_owner_runner(command, **kwargs):
-        del kwargs
-        return subprocess.CompletedProcess(command, 0, stdout=f"other: {marker}\n")
-
-    with patch("kassiber.update_check.shutil.which", return_value="/usr/bin/dpkg-query"):
-        assert (
-            update_check.detect_install_method(
-                executable="/usr/bin/kassiber",
-                argv0="kassiber",
-                environ={"PATH": "/usr/bin"},
-                install_context_path=marker,
-                runner=wrong_owner_runner,
-            )
-            == "manual"
-        )
 
 
 def test_notice_colors_only_human_terminal_content():

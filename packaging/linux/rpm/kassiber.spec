@@ -41,7 +41,6 @@ install -Dpm 0644 %{SOURCE1} \
 %{_bindir}/kassiber
 %{_bindir}/kassiber-ui
 %{_prefix}/lib/Kassiber/
-%{_prefix}/lib/kassiber/install-context.json
 %{_datadir}/applications/Kassiber.desktop
 %{_datadir}/icons/hicolor/*/apps/kassiber-ui.png
 

@@ -121,14 +121,11 @@ key signs mutable APT/DNF metadata and RPMs; it has a distinct primary identity
 so compromise of that CI-held subkey cannot authenticate a general release
 manifest.
 
-On Linux, the CLI may read the fixed, public
-`/usr/lib/kassiber/install-context.json` marker and locally ask `dpkg-query` or
-`rpm` which exact package owns it. The subprocess receives only locale and PATH
-state, not Kassiber/backend/AI secrets. This makes structured update output
-package-aware without network access. The marker does not prove repository
-provenance, so Kassiber still shows the GitHub release link and no `apt`/`dnf`
-command until a live signed origin and archive-key fingerprint are pinned and
-verified.
+On Linux, the update checker treats `.deb`/`.rpm` installs as manual and shows
+the GitHub release link with no `apt`/`dnf` command. Package contents cannot
+prove repository provenance, so no package-manager command is offered until a
+live signed origin and archive-key fingerprint are pinned and verified in
+code.
 
 Both update clients honor the process's standard system proxy environment. A
 configured proxy can therefore observe the GitHub destination and request

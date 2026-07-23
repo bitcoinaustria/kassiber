@@ -20,11 +20,6 @@ on:
         required: true
         default: false
         type: boolean
-      publish_copr:
-        description: "Submit both source RPMs to COPR"
-        required: true
-        default: false
-        type: boolean
       publish_aur:
         description: "Push desktop and CLI recipes to AUR"
         required: true
@@ -32,11 +27,6 @@ on:
         type: boolean
       publish_nix:
         description: "Update the project-owned binary Nix flake repository"
-        required: true
-        default: false
-        type: boolean
-      publish_obs:
-        description: "Commit both source packages to OBS"
         required: true
         default: false
         type: boolean
@@ -75,7 +65,7 @@ jobs:
       - name: Load release signing policy
         id: release-signing
         env:
-          PUBLISH_REQUESTED: ${{ inputs.publish_repositories || inputs.publish_copr || inputs.publish_aur || inputs.publish_nix || inputs.publish_obs }}
+          PUBLISH_REQUESTED: ${{ inputs.publish_repositories || inputs.publish_aur || inputs.publish_nix }}
         run: |
           set -euo pipefail
           policy_json="$(python3 scripts/release_manifest.py policy \
@@ -120,7 +110,7 @@ jobs:
           test "$actual_draft" = false
           expected_commit="$(git rev-parse HEAD)"
           expected_commit_short="$(git rev-parse --short=12 HEAD)"
-          mkdir -p release channels/aur channels/obs
+          mkdir -p release channels/aur
           manifest_name="kassiber-${version}-manifest.txt"
           gh release download "$RELEASE_TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" --dir release \
@@ -130,9 +120,7 @@ jobs:
             --pattern kassiber-linux-x64.deb \
             --pattern kassiber-cli-linux-x64.deb \
             --pattern kassiber-linux-x64.rpm \
-            --pattern kassiber-cli-linux-x64.rpm \
-            --pattern kassiber-linux-x64.src.rpm \
-            --pattern kassiber-cli-linux-x64.src.rpm
+            --pattern kassiber-cli-linux-x64.rpm
 
           if [ "$RELEASE_SIGNING_ENABLED" = true ]; then
             gh release download "$RELEASE_TAG_NAME" \
@@ -160,27 +148,15 @@ jobs:
             printf '%s  %s\n' "$expected" "release/$name" | sha256sum -c - >&2
             printf '%s' "$expected"
           }
-          for artifact in \
-            kassiber-linux-x64.AppImage \
-            kassiber-cli-linux-x64.tar.gz \
-            kassiber-linux-x64.deb \
-            kassiber-cli-linux-x64.deb \
-            kassiber-linux-x64.rpm \
-            kassiber-cli-linux-x64.rpm \
-            kassiber-linux-x64.src.rpm \
-            kassiber-cli-linux-x64.src.rpm; do
-            release_sha256 "$artifact" >/dev/null
-          done
-
-          for artifact in \
-            kassiber-linux-x64.AppImage \
-            kassiber-cli-linux-x64.tar.gz \
-            kassiber-linux-x64.deb \
-            kassiber-cli-linux-x64.deb \
-            kassiber-linux-x64.rpm \
-            kassiber-cli-linux-x64.rpm \
-            kassiber-linux-x64.src.rpm \
-            kassiber-cli-linux-x64.src.rpm; do
+          artifacts=(
+            kassiber-linux-x64.AppImage
+            kassiber-cli-linux-x64.tar.gz
+            kassiber-linux-x64.deb
+            kassiber-cli-linux-x64.deb
+            kassiber-linux-x64.rpm
+            kassiber-cli-linux-x64.rpm
+          )
+          for artifact in "${artifacts[@]}"; do
             printf '%s  %s\n' "$(release_sha256 "$artifact")" "$artifact"
           done > channels/release-checksums.txt
 
@@ -188,9 +164,7 @@ jobs:
           test "$(dpkg-deb -f release/kassiber-cli-linux-x64.deb Version)" = "$version"
           for artifact in \
             kassiber-linux-x64.rpm \
-            kassiber-cli-linux-x64.rpm \
-            kassiber-linux-x64.src.rpm \
-            kassiber-cli-linux-x64.src.rpm; do
+            kassiber-cli-linux-x64.rpm; do
             test "$(rpm -qp --queryformat '%{VERSION}' "release/$artifact")" = "$version"
           done
           tar -xOf release/kassiber-cli-linux-x64.tar.gz \
@@ -225,12 +199,6 @@ jobs:
             --sha256-desktop "$(release_sha256 kassiber-linux-x64.AppImage)" \
             --sha256-cli "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
             --output channels/nix
-          scripts/prepare-obs-package.sh \
-            --source-rpm release/kassiber-linux-x64.src.rpm \
-            --output channels/obs/kassiber
-          scripts/prepare-obs-package.sh \
-            --source-rpm release/kassiber-cli-linux-x64.src.rpm \
-            --output channels/obs/kassiber-cli
       - name: Upload rendered channel definitions
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -443,65 +411,6 @@ jobs:
             "repository/kassiber-$APT_SUITE.repo" \
             "${REPOSITORY_S3_URI%/}/kassiber-$APT_SUITE.repo"
 
-  copr:
-    name: Submit source RPMs to COPR
-    if: inputs.publish_copr == true
-    needs: prepare
-    environment: linux-packaging-production
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - name: Download source RPMs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
-        run: |
-          mkdir release
-          gh release download "$RELEASE_TAG_NAME" \
-            --repo "$GITHUB_REPOSITORY" --dir release \
-            --pattern kassiber-linux-x64.src.rpm \
-            --pattern kassiber-cli-linux-x64.src.rpm
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: linux-channel-definitions-${{ inputs.tag_name }}
-          path: channels
-      - name: Verify source packages against the prepared release manifest
-        run: |
-          set -euo pipefail
-          release_sha256() {
-            local name="$1"
-            local expected
-            expected="$(awk -v name="$name" '$2 == name { print $1 }' \
-              channels/release-checksums.txt)"
-            test -n "$expected"
-            printf '%s  %s\n' "$expected" "release/$name" | sha256sum -c -
-          }
-          release_sha256 kassiber-linux-x64.src.rpm
-          release_sha256 kassiber-cli-linux-x64.src.rpm
-      - name: Configure COPR credentials
-        env:
-          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
-        run: |
-          test -n "$COPR_CONFIG"
-          mkdir -p "$RUNNER_TEMP/copr-config"
-          printf '%s' "$COPR_CONFIG" > "$RUNNER_TEMP/copr-config/copr"
-          chmod 0600 "$RUNNER_TEMP/copr-config/copr"
-      - name: Submit the atomic desktop and CLI build batch
-        env:
-          COPR_PROJECT: ${{ vars.COPR_PROJECT }}
-        run: |
-          test -n "$COPR_PROJECT"
-          docker run --rm \
-            --volume "$RUNNER_TEMP/copr-config/copr:/root/.config/copr:ro" \
-            --volume "$GITHUB_WORKSPACE/release:/release:ro" \
-            fedora:44@sha256:89f61a124414261868224666aa7fb8df1b78397a53623774bdfb105d1612b48b \
-            bash -euxo pipefail -c '
-              dnf install -y copr-cli
-              copr-cli build "'"$COPR_PROJECT"'" \
-                /release/kassiber-linux-x64.src.rpm \
-                /release/kassiber-cli-linux-x64.src.rpm
-            '
-
   aur:
     name: Publish AUR recipes
     if: inputs.publish_aur == true
@@ -624,49 +533,3 @@ jobs:
               git push origin "HEAD:$NIX_CHANNEL_BRANCH"
             fi
           )
-
-  obs:
-    name: Publish OBS source packages
-    if: inputs.publish_obs == true
-    needs: prepare
-    environment: linux-packaging-production
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: linux-channel-definitions-${{ inputs.tag_name }}
-          path: channels
-      - name: Install and configure osc
-        env:
-          OSC_CONFIG: ${{ secrets.OSC_CONFIG }}
-        run: |
-          test -n "$OSC_CONFIG"
-          sudo apt-get update
-          sudo apt-get install -y osc
-          mkdir -p "$HOME/.config/osc"
-          printf '%s' "$OSC_CONFIG" > "$HOME/.config/osc/oscrc"
-          chmod 0600 "$HOME/.config/osc/oscrc"
-      - name: Commit both OBS package sources
-        env:
-          OBS_PROJECT: ${{ vars.OBS_PROJECT }}
-          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
-        run: |
-          set -euo pipefail
-          test -n "$OBS_PROJECT"
-          mkdir obs-work
-          cd obs-work
-          for package in kassiber kassiber-cli; do
-            osc checkout "$OBS_PROJECT" "$package"
-            rsync -a --delete \
-              --exclude .osc/ \
-              "$GITHUB_WORKSPACE/channels/obs/$package/" \
-              "$OBS_PROJECT/$package/"
-            (
-              cd "$OBS_PROJECT/$package"
-              osc addremove
-              if [ -n "$(osc status)" ]; then
-                osc commit -m "Update to $RELEASE_TAG_NAME"
-              fi
-            )
-          done

@@ -92,13 +92,13 @@ The workflow currently builds:
 
 - CLI-only releases: macOS arm64 and Linux x86_64 one-file PyInstaller
   binaries as `.tar.gz` archives, Windows x86_64 as a `.zip`, and Linux
-  x86_64 additionally as GUI-free `kassiber-cli` `.deb`, binary `.rpm`, and
-  rebuildable `.src.rpm` packages. The extracted
+  x86_64 additionally as GUI-free `kassiber-cli` `.deb` and binary `.rpm`
+  packages. The extracted
   executable is named `kassiber` (`kassiber.exe` on Windows). These artifacts
   do not require the desktop app. Linux is built on Ubuntu 22.04 to keep the
   glibc floor aligned with the AppImage build.
 - Desktop previews: a macOS arm64 `.app` zip plus `.dmg`, Linux `.AppImage`,
-  `.deb`, binary `.rpm`, and rebuildable `.src.rpm`, and Windows `.msi` plus
+  `.deb`, and binary `.rpm`, and Windows `.msi` plus
   NSIS setup `.exe`, published with short user-facing filenames. Each desktop
   preview includes the exact one-file
   Kassiber CLI executable produced by the matching CLI-only matrix leg.
@@ -131,12 +131,10 @@ GitHub release tag already supplies it:
 kassiber-cli-linux-x64.tar.gz
 kassiber-cli-linux-x64.deb
 kassiber-cli-linux-x64.rpm
-kassiber-cli-linux-x64.src.rpm
 kassiber-cli-macos-arm64.tar.gz
 kassiber-cli-windows-x64.zip
 kassiber-linux-x64.deb
 kassiber-linux-x64.rpm
-kassiber-linux-x64.src.rpm
 kassiber-linux-x64.AppImage
 kassiber-macos-arm64.app.zip
 kassiber-macos-arm64.dmg
@@ -279,12 +277,10 @@ CLI-only archives are intentionally portable: extract them and place the
 `kassiber` executable in an existing PATH directory, or invoke it by path.
 They do not edit PATH or require a GUI. Linux users can instead install the
 CLI-only Debian or RPM package; it owns `/usr/bin/kassiber`, conflicts cleanly
-with the matching desktop package, and has no GTK/WebKit dependency. Both
-package formats install `/usr/lib/kassiber/install-context.json`; the
-surface-specific marker is documented in
-[Linux packaging](linux-packaging.md). It identifies native package ownership
-but deliberately does not claim that APT/DNF installed a directly downloaded
-package.
+with the matching desktop package, and has no GTK/WebKit dependency. The
+update checker treats these packages as manual installs and shows the GitHub
+release link; see [Linux packaging](linux-packaging.md) for why no `apt`/`dnf`
+command is offered.
 
 ## Commit Identity
 

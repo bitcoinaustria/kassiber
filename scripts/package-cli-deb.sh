@@ -48,22 +48,12 @@ esac
 
 package_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-cli-deb.XXXXXX")"
 trap 'rm -rf "$package_root"' EXIT
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-install_context="$script_dir/../packaging/linux/install-context/deb-cli.json"
-if [ ! -f "$install_context" ]; then
-  echo "CLI install-context marker is missing: $install_context" >&2
-  exit 1
-fi
 mkdir -p \
   "$package_root/DEBIAN" \
   "$package_root/usr/bin" \
-  "$package_root/usr/lib/kassiber" \
   "$(dirname "$output")"
 chmod 0755 "$package_root" "$package_root/DEBIAN"
 install -m 0755 "$binary" "$package_root/usr/bin/kassiber"
-install -m 0644 \
-  "$install_context" \
-  "$package_root/usr/lib/kassiber/install-context.json"
 
 printf '%s\n' \
   'Package: kassiber-cli' \
@@ -76,7 +66,6 @@ printf '%s\n' \
   'Conflicts: kassiber' \
   'Replaces: kassiber' \
   'Provides: kassiber-command' \
-  'X-Kassiber-Install-Context: /usr/lib/kassiber/install-context.json' \
   'Description: Kassiber local-first Bitcoin accounting CLI' \
   ' Standalone command-line package without desktop GUI dependencies.' \
   > "$package_root/DEBIAN/control"

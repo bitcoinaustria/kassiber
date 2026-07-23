@@ -870,12 +870,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   explicit user-local Settings launcher, and local macOS builds support
   `--install-cli` through that same manager; desktop and CLI-only Debian
   packages replace one another cleanly; no launcher path autostarts Kassiber
-- [x] Linux package-channel foundation: surface-specific Debian/RPM/AUR/Nix
-  install-context markers, fail-closed signed APT/DNF repository builders,
-  rebuildable desktop/CLI SRPMs, AUR and Nix renderers, guarded COPR/OBS/channel
-  publication, tag/version release gating, isolated package-manager lifecycle
-  tests, and the phased policy/maintenance roadmap in
-  [docs/reference/linux-packaging.md](docs/reference/linux-packaging.md)
+- [x] Linux package-channel foundation: fail-closed signed APT/DNF repository
+  builders, AUR and Nix renderers, guarded channel publication, tag/version
+  release gating, isolated package-manager lifecycle tests, and the phased
+  policy/maintenance roadmap in
+  [docs/reference/linux-packaging.md](docs/reference/linux-packaging.md);
+  COPR/OBS submission and source RPMs deferred to the change that provisions
+  those projects
 - [ ] Complete the external accounts, protected environments, credentials,
   separate archive-signing-key custody, hosting, staged publication, and
   first-release checks in

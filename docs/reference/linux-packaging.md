@@ -33,64 +33,32 @@ Every package-manager channel must fail closed unless all of these checks pass:
 
 The release workflow enforces the first gate for tag and publishing runs.
 
-## Install-context contract
+## Package-manager upgrade guidance is deliberately absent
 
-Native Debian/RPM packages and rendered AUR/Nix packages install an
-`install-context.json` marker. Native packages use
-`/usr/lib/kassiber/install-context.json`. The schema-1 fields are:
+The update checker treats Linux `.deb`/`.rpm` installs as manual: it shows the
+GitHub release link and never an `apt`/`dnf` command. Package contents cannot
+prove how a package was obtained — a directly downloaded GitHub `.deb` and the
+byte-identical artifact later indexed by a repository are the same bytes — and
+the local package database has only `/var/lib/dpkg/status`-level provenance.
+Before the updater may show a package-manager command, a future change must:
 
-| Field | Meaning |
-| --- | --- |
-| `product` | Always `kassiber`. |
-| `surface` | `desktop` or `cli`. |
-| `artifact_kind` | Package format: `deb`, `rpm`, `aur-bin`, or `nix-binary`. |
-| `package_name` | Native package owning the marker. |
-| `package_manager` | Local package database: `dpkg`, `rpm`, `pacman`, or `nix`. |
-| `repository_manager` | Candidate resolver: `apt`, `dnf`, `pacman`, or `nix`. |
-| `repository_provenance` | `probe-required`: the marker does not prove that a repository installed the package. |
-| `executables` | Package-owned public command paths. |
+1. query the configured repository manager for the exact Kassiber package;
+2. verify the candidate's signed repository origin/label against a built-in
+   Kassiber allowlist (live repository URL plus pinned archive-key
+   fingerprint, neither of which exists yet);
+3. verify that the advertised version is actually present in that repository;
+4. show, but never execute, the manager command only after those checks pass.
 
-The marker deliberately contains neither a package version nor an upgrade
-command. The package database is authoritative for the installed version. A
-directly downloaded GitHub `.deb`/`.rpm` and the byte-identical artifact later
-indexed by a repository have the same contents, so package contents cannot
-prove how the package was obtained.
-
-A separate update checker may use this contract later, but it must still:
-
-1. verify that the expected native package owns the marker;
-2. query the configured repository manager for that exact package;
-3. verify the candidate's signed repository origin/label against a built-in
-   Kassiber allowlist;
-4. verify that the advertised version is actually present in that repository;
-5. show, but never execute, a manager command only after those checks pass.
-
-The current CLI validates the marker and its native package ownership, then
-reports a Debian/RPM manual install context in structured update output.
-Because the live repository URL and archive-key fingerprint do not exist yet,
-it deliberately does not query a candidate and continues to show the GitHub
-release link with no `apt` or `dnf` command.
-
-If no marker exists, if `repository_provenance` is `probe-required` and the
-probe fails, or if the package has only `/var/lib/dpkg/status` provenance, the
-installation must be treated as manual/unknown. In particular, a GitHub `.deb`
-must not be told to run `apt upgrade` unless a qualifying APT source is now
-configured and carries the candidate.
-
-Future formats should preserve the semantic fields while using the platform's
-normal marker location: an RPM-owned FHS file, a Homebrew prefix file, a Nix
-store file, or the signed runtime identity exposed by Snap/Flatpak. AUR helper
-commands are not standardized, so an AUR marker alone is not enough to offer an
-exact upgrade command.
+That detection machinery ships with the repository-pinning feature itself, not
+before.
 
 ## APT foundation
 
 `scripts/build-apt-repository.sh` turns completed `kassiber` and
 `kassiber-cli` Debian packages into a new repository tree. It:
 
-- rejects unknown packages, undeclared architectures, missing or mismatched
-  install-context markers, duplicate package/version/architecture tuples, and
-  pre-existing output paths;
+- rejects unknown packages, undeclared architectures, duplicate
+  package/version/architecture tuples, and pre-existing output paths;
 - emits `Packages`, deterministic `Packages.gz`, SHA-256 by-hash indices, and
   Release metadata with `Valid-Until`;
 - requires a full signing-key fingerprint unless `--unsigned` is explicitly
@@ -122,17 +90,15 @@ No public repository URL or install command belongs in user documentation
 until the signed tree, public key, custom domain, retention policy, and
 operational owner exist.
 
-## RPM, AUR, Nix, COPR, and OBS foundation
+## RPM, AUR, and Nix foundation
 
-The release workflow emits binary and source RPMs for both package surfaces.
-The specs preserve the same `kassiber`/`kassiber-cli` ownership boundary as the
-Debian packages, embed RPM-specific install-context markers, declare the
-current glibc floor, and carry conditional Fedora/openSUSE runtime package
-names. Source RPMs contain fully resolved version/release/architecture macros
-and are rebuilt from scratch in CI before they are eligible for COPR or OBS.
+The release workflow emits binary RPMs for both package surfaces. The specs
+preserve the same `kassiber`/`kassiber-cli` ownership boundary as the Debian
+packages, declare the current glibc floor, and carry conditional
+Fedora/openSUSE runtime package names.
 
 `scripts/build-rpm-repository.sh` rejects unknown packages, undeclared
-architectures, mismatched markers, unsigned production use, and pre-existing
+architectures, unsigned production use, and pre-existing
 outputs. It signs every binary RPM and `repodata/repomd.xml`, and gives payloads
 canonical versioned NEVRA filenames. The S3 publisher writes complete DNF
 snapshots below the selected `stable` or `prerelease` suite before changing its
@@ -141,7 +107,7 @@ desktop, and removes the packages with DNF in disposable containers.
 
 `scripts/render_aur.py` generates separate project-owned `kassiber-bin` and
 `kassiber-cli-bin` repositories with pinned release URLs, SHA-256 checksums,
-conflicts/provides metadata, license files, launchers, and markers. CI compares
+conflicts/provides metadata, license files, and launchers. CI compares
 the rendered `.SRCINFO` to `makepkg --printsrcinfo` and runs `namcap`. Before
 publication credentials are configured, the guarded release job also builds,
 installs, smokes, and removes both recipes against their real release assets in
@@ -149,18 +115,21 @@ a clean pinned Arch container.
 
 `scripts/render_nix.py` generates an x86_64-only binary flake with explicit
 `binaryNativeCode` provenance, pinned release hashes, a desktop AppImage
-wrapper, an auto-patched GUI-free CLI derivation, and markers. The external
+wrapper, and an auto-patched GUI-free CLI derivation. The external
 channel workflow locks, checks, builds both outputs, and smokes the CLI in a
 credential-free copy before it pushes its project-owned repository.
 
-`scripts/prepare-obs-package.sh` extracts the two rebuildable source RPMs into
-OBS package trees. `.github/workflows/publish-linux-channels.yml` is manual,
+`.github/workflows/publish-linux-channels.yml` is manual,
 defaults every external publish switch to false, and puts every mutating job
 behind `linux-packaging-production`. During the current key-transition state it
 may use the versioned manifest only to render a no-publication dry run. Once the
 code-reviewed release-signing policy is enabled, it authenticates the detached
-manifest signature before deriving any APT/DNF, COPR, AUR, Nix, or OBS input;
+manifest signature before deriving any APT/DNF, AUR, or Nix input;
 external publication fails closed without that signature.
+
+COPR and OBS submission (and the source-RPM packaging they need) were
+deliberately removed from this foundation; they return in the change that
+actually provisions those projects.
 
 The exact external setup and launch checklist is
 [Linux Packaging Operator TODO](linux-packaging-operator-todo.md).
@@ -202,12 +171,12 @@ The recommended production shape is:
 
 | Phase/channel | Package inputs and ownership | Acceptance criteria | Typical maintenance |
 | --- | --- | --- | --- |
-| 0: release/channel foundations | Project-owned workflows, Debian/RPM packages, AUR/Nix renderers, install-context markers | Tag/version equality blocks publish; signed local APT/DNF repositories pass verification; SRPMs rebuild; AUR metadata and Nix evaluation pass | Review whenever release/package metadata changes |
+| 0: release/channel foundations | Project-owned workflows, Debian/RPM packages, AUR/Nix renderers | Tag/version equality blocks publish; signed local APT/DNF repositories pass verification; AUR metadata and Nix evaluation pass | Review whenever release/package metadata changes |
 | 1: signed APT prerelease, amd64 | Existing desktop and CLI Debian packages; Bitcoin Austria owns host/key | Ubuntu 22.04/24.04 and Debian 12 clean install, cross-surface replacement, upgrade, remove, signed-origin, expiry, and rollback drills pass; repository is atomic and monitored | About 1-2 hours/month after automation, plus key/host incident duty |
 | 2: lower CLI glibc floor + Linux ARM64 | Native x86_64/aarch64 CLI builds; upstream or project-built BDK/LWK wheels | CLI is built on the oldest promised glibc; `readelf` and container smokes prove the floor; native ARM runner builds and runs BDK, LWK, SQLCipher, PyInstaller, Debian, and desktop/AppImage matrices | Dependency-wheel monitoring every release |
 | 3: AUR `-bin` recipes | Project-owned `kassiber-bin` and `kassiber-cli-bin` recipes consume immutable release assets | Renderer/metadata CI is green; then `namcap`, clean-chroot build, checksum, file ownership, conflicts/provides, desktop metadata, install/upgrade/remove pass on x86_64; ARM64 is added only with real assets | Review each release and respond to AUR comments; automation cannot replace maintainer review |
 | 4: project flake, then Nixpkgs | Interim binary derivations declare `binaryNativeCode`; prefer source derivations later | Rendered flake evaluates in CI; then `nix build`, CLI/desktop smoke and sandbox paths pass on x86_64. Add aarch64 only with real release assets; maintain the upstream flake before Nixpkgs submission | Flake input/hash bumps per release; Nixpkgs review and stable backports |
-| 5: RPM + COPR | Separate rebuildable `kassiber` and `kassiber-cli` specs/SRPMs; COPR owns hosted repository signing | Fedora 43/44 lifecycle CI is green; then COPR `rpmlint`/mock builds and published signatures pass for each enabled chroot; no generic RHEL claim | Follow Fedora releases/EOL; rebuild and test each tag, roughly 1-2 hours/month |
+| 5: RPM + COPR | Reintroduce rebuildable `kassiber` and `kassiber-cli` SRPMs with the COPR submission itself; COPR owns hosted repository signing | Fedora 43/44 lifecycle CI is green; then COPR `rpmlint`/mock builds and published signatures pass for each enabled chroot; no generic RHEL claim | Follow Fedora releases/EOL; rebuild and test each tag, roughly 1-2 hours/month |
 | 6: OBS for openSUSE | Reuse source packaging where practical; a named Bitcoin Austria/openSUSE maintainer owns the OBS project | Tumbleweed first; Leap/SLES only after their glibc and WebKitGTK floors pass; OBS-signed repositories and zypper lifecycle tests pass per target | Track OBS target changes and openSUSE/SLES lifecycle separately from COPR |
 | Deferred: Snap | Source build or staged desktop package; project owns Snap name/store credentials | Strict confinement must support data roots, attachments, local backends, Secret Service, deep links, and single-instance D-Bus. Classic confinement requires store approval and explicit user trust | High: store credentials, tracks, confinement regressions |
 | Blocked: Flathub | No submission while current policy excludes AI-assisted application code/docs/submissions | Re-check the live policy; proceed only after written eligibility is clear and a human can maintain the submission without violating it | Policy and sandbox review every update |

@@ -18,7 +18,6 @@ on:
       - "scripts/package-cli-deb.sh"
       - "scripts/package-cli-rpm.sh"
       - "scripts/package-desktop-rpm.sh"
-      - "scripts/prepare-obs-package.sh"
       - "scripts/release_manifest.py"
       - "scripts/render_aur.py"
       - "scripts/render_nix.py"
@@ -403,8 +402,7 @@ jobs:
               --binary "dist/kassiber${{ matrix.exe_ext }}" \
               --version "$PACKAGE_VERSION" \
               --architecture x86_64 \
-              --output "release/${package_name}.rpm" \
-              --source-output "release/${package_name}.src.rpm"
+              --output "release/${package_name}.rpm"
             rpm_path="$PWD/release/${package_name}.rpm"
             rpm_root="$(mktemp -d)"
             (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
@@ -615,8 +613,7 @@ jobs:
               --deb "$desktop_deb" \
               --version "$package_version" \
               --architecture x86_64 \
-              --output "release/kassiber-${{ matrix.target }}.rpm" \
-              --source-output "release/kassiber-${{ matrix.target }}.src.rpm"
+              --output "release/kassiber-${{ matrix.target }}.rpm"
             rpm_path="$PWD/release/kassiber-${{ matrix.target }}.rpm"
             rpm_root="$(mktemp -d)"
             (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
@@ -742,8 +739,8 @@ jobs:
             Platform code signing is separate from the PGP manifest. These are
             currently unsigned CLI and desktop builds.
             CLI-only archives are published for macOS, Linux, and Windows;
-            Linux also gets GUI-free CLI-only Debian/RPM packages, a desktop
-            RPM, and source RPM inputs for COPR or OBS.
+            Linux also gets GUI-free CLI-only Debian/RPM packages and a
+            desktop RPM.
             Desktop bundles use the exact same CLI executable, so normal daemon
             calls do not require a separate Python checkout. Native desktop
             installers integrate `kassiber` with the terminal; portable builds

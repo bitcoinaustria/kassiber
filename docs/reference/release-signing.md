@@ -90,7 +90,7 @@ signature and every manifest entry, rejects missing or unexpected assets,
 renders Homebrew hashes from that authenticated manifest, and publishes the
 existing draft. It never rebuilds or replaces an artifact. The Linux channel
 workflow independently authenticates the same manifest before deriving APT,
-DNF, AUR, Nix, COPR, or OBS inputs.
+DNF, AUR, or Nix inputs.
 
 Both production workflows must be dispatched from protected `main` and reject
 release tags whose commits are not in `origin/main` history before executing

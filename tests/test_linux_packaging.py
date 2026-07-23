@@ -1,4 +1,3 @@
-import json
 import os
 import shutil
 import subprocess
@@ -9,7 +8,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-INSTALL_CONTEXT_DIR = ROOT / "packaging" / "linux" / "install-context"
 
 
 def _build_test_deb(
@@ -19,13 +17,11 @@ def _build_test_deb(
     surface: str,
     version: str = "1.2.3",
     architecture: str = "amd64",
-    marker_surface: str | None = None,
 ) -> Path:
     package_root = root / f"root-{package}"
     (package_root / "DEBIAN").mkdir(parents=True)
     (package_root / "DEBIAN").chmod(0o755)
     (package_root / "usr/bin").mkdir(parents=True)
-    (package_root / "usr/lib/kassiber").mkdir(parents=True)
 
     executables = (
         ("kassiber", "kassiber-ui")
@@ -36,10 +32,6 @@ def _build_test_deb(
         executable_path = package_root / "usr/bin" / executable
         executable_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         executable_path.chmod(0o755)
-    shutil.copy2(
-        INSTALL_CONTEXT_DIR / f"deb-{marker_surface or surface}.json",
-        package_root / "usr/lib/kassiber/install-context.json",
-    )
 
     conflict = "kassiber-cli" if package == "kassiber" else "kassiber"
     (package_root / "DEBIAN/control").write_text(
@@ -72,56 +64,8 @@ def _build_test_deb(
 
 
 @unittest.skipUnless(shutil.which("dpkg-deb"), "dpkg-deb is required")
-class InstallContextTest(unittest.TestCase):
-    def test_debian_markers_are_surface_specific_and_do_not_claim_repository_origin(self):
-        cli = json.loads((INSTALL_CONTEXT_DIR / "deb-cli.json").read_text())
-        desktop = json.loads((INSTALL_CONTEXT_DIR / "deb-desktop.json").read_text())
-
-        for marker in (cli, desktop):
-            self.assertEqual(marker["schema_version"], 1)
-            self.assertEqual(marker["product"], "kassiber")
-            self.assertEqual(marker["artifact_kind"], "deb")
-            self.assertEqual(marker["package_manager"], "dpkg")
-            self.assertEqual(marker["repository_manager"], "apt")
-            self.assertEqual(marker["repository_provenance"], "probe-required")
-            self.assertNotIn("upgrade_command", marker)
-            self.assertNotIn("repository_origin", marker)
-
-        self.assertEqual(cli["surface"], "cli")
-        self.assertEqual(cli["package_name"], "kassiber-cli")
-        self.assertEqual(desktop["surface"], "desktop")
-        self.assertEqual(desktop["package_name"], "kassiber")
-
-    def test_rpm_markers_are_surface_specific_and_require_a_repository_probe(self):
-        cli = json.loads((INSTALL_CONTEXT_DIR / "rpm-cli.json").read_text())
-        desktop = json.loads((INSTALL_CONTEXT_DIR / "rpm-desktop.json").read_text())
-
-        for marker in (cli, desktop):
-            self.assertEqual(marker["schema_version"], 1)
-            self.assertEqual(marker["product"], "kassiber")
-            self.assertEqual(marker["artifact_kind"], "rpm")
-            self.assertEqual(marker["package_manager"], "rpm")
-            self.assertEqual(marker["repository_manager"], "dnf")
-            self.assertEqual(marker["repository_provenance"], "probe-required")
-            self.assertNotIn("upgrade_command", marker)
-            self.assertNotIn("repository_origin", marker)
-
-        self.assertEqual(cli["surface"], "cli")
-        self.assertEqual(cli["package_name"], "kassiber-cli")
-        self.assertEqual(desktop["surface"], "desktop")
-        self.assertEqual(desktop["package_name"], "kassiber")
-
-    def test_desktop_deb_installs_the_desktop_marker(self):
-        config = json.loads(
-            (ROOT / "ui-tauri/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
-        )
-        files = config["bundle"]["linux"]["deb"]["files"]
-        self.assertEqual(
-            files["/usr/lib/kassiber/install-context.json"],
-            "../../packaging/linux/install-context/deb-desktop.json",
-        )
-
-    def test_cli_deb_installs_the_cli_marker(self):
+class CliDebPackageTest(unittest.TestCase):
+    def test_cli_deb_packages_the_binary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             binary = root / "kassiber"
@@ -147,11 +91,8 @@ class InstallContextTest(unittest.TestCase):
             )
             listing = subprocess.check_output(["dpkg-deb", "-c", str(package)], text=True)
             control = subprocess.check_output(["dpkg-deb", "-f", str(package)], text=True)
-            self.assertIn("./usr/lib/kassiber/install-context.json", listing)
-            self.assertIn(
-                "X-Kassiber-Install-Context: /usr/lib/kassiber/install-context.json",
-                control,
-            )
+            self.assertIn("./usr/bin/kassiber", listing)
+            self.assertIn("Package: kassiber-cli", control)
 
     @unittest.skipUnless(shutil.which("dpkg"), "dpkg is required")
     def test_install_upgrade_conflict_replace_and_remove_lifecycle(self):
@@ -198,8 +139,10 @@ class InstallContextTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            marker_path = install_root / "usr/lib/kassiber/install-context.json"
-            self.assertEqual(json.loads(marker_path.read_text())["surface"], "cli")
+            cli_binary = install_root / "usr/bin/kassiber"
+            desktop_binary = install_root / "usr/bin/kassiber-ui"
+            self.assertTrue(cli_binary.exists())
+            self.assertFalse(desktop_binary.exists())
 
             subprocess.run(
                 [*dpkg, "--install", str(cli_124)],
@@ -225,7 +168,7 @@ class InstallContextTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertEqual(json.loads(marker_path.read_text())["surface"], "desktop")
+            self.assertTrue(desktop_binary.exists())
             removed_cli = subprocess.run(
                 [
                     "dpkg-query",
@@ -245,7 +188,7 @@ class InstallContextTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertFalse(marker_path.exists())
+            self.assertFalse(desktop_binary.exists())
 
             subprocess.run(
                 [*dpkg, "--install", str(desktop_124)],
@@ -259,14 +202,15 @@ class InstallContextTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            self.assertEqual(json.loads(marker_path.read_text())["surface"], "cli")
+            self.assertTrue(cli_binary.exists())
+            self.assertFalse(desktop_binary.exists())
             subprocess.run(
                 [*dpkg, "--remove", "kassiber-cli"],
                 check=True,
                 capture_output=True,
                 text=True,
             )
-            self.assertFalse(marker_path.exists())
+            self.assertFalse(cli_binary.exists())
 
 
 @unittest.skipUnless(
@@ -358,38 +302,6 @@ class AptRepositoryBuilderTest(unittest.TestCase):
             )
             self.assertEqual(completed.returncode, 2)
             self.assertIn("--signing-key is required", completed.stderr)
-            self.assertFalse((root / "repo").exists())
-
-    def test_builder_rejects_a_marker_for_the_wrong_package_surface(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            inputs = root / "input"
-            inputs.mkdir()
-            _build_test_deb(
-                inputs,
-                package="kassiber-cli",
-                surface="cli",
-                marker_surface="desktop",
-            )
-            completed = subprocess.run(
-                [
-                    str(ROOT / "scripts/build-apt-repository.sh"),
-                    "--input",
-                    str(inputs),
-                    "--output",
-                    str(root / "repo"),
-                    "--suite",
-                    "prerelease",
-                    "--architecture",
-                    "amd64",
-                    "--unsigned",
-                ],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(completed.returncode, 2)
-            self.assertIn("does not match its package surface", completed.stderr)
             self.assertFalse((root / "repo").exists())
 
     def test_builds_and_verifies_a_signed_prerelease_repository(self):

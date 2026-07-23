@@ -55,9 +55,6 @@ source-only pull request.
 
 ## Hosted community channels
 
-- [ ] COPR: create the project and Fedora 43/44 chroots, set `COPR_PROJECT`,
-  and store the owner configuration as `COPR_CONFIG`. Review the first binary
-  RPMs and COPR signatures before advertising the repository.
 - [ ] AUR: register and own `kassiber-bin` and `kassiber-cli-bin`; store a
   dedicated SSH key and pinned host keys as `AUR_SSH_PRIVATE_KEY` and
   `AUR_KNOWN_HOSTS`. Review the generated diffs and first clean-chroot builds.
@@ -65,10 +62,11 @@ source-only pull request.
   `NIX_CHANNEL_REPOSITORY` and optional `NIX_CHANNEL_BRANCH`, and add the
   least-privilege `NIX_CHANNEL_TOKEN`. Build both outputs before publishing
   install instructions.
-- [ ] OBS: create the project plus `kassiber` and `kassiber-cli` packages, set
-  `OBS_PROJECT`, and store a dedicated `osc` configuration as `OSC_CONFIG`.
-  Start with Tumbleweed and do not claim Leap/SLES until their runtime floors
-  pass.
+- [ ] COPR and OBS: these channels were deliberately left out of the current
+  foundation. When creating the external projects, reintroduce source-RPM
+  packaging and the submission jobs in the same change, then review the first
+  builds and signatures before advertising either repository. OBS starts with
+  Tumbleweed; do not claim Leap/SLES until their runtime floors pass.
 
 ## Still blocked or intentionally deferred
 

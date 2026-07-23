@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 import sys
@@ -58,11 +57,8 @@ HOMEBREW_CASK_COMMAND = (
 HOMEBREW_FORMULA_COMMAND = (
     "brew upgrade bitcoinaustria/kassiber/kassiber-cli"
 )
-LINUX_INSTALL_CONTEXT_PATH = Path("/usr/lib/kassiber/install-context.json")
-
 _MAX_RESPONSE_BYTES = 256 * 1024
 _MAX_PREFERENCE_BYTES = 1024
-_MAX_INSTALL_CONTEXT_BYTES = 8 * 1024
 _LOCK_STALE_AFTER = timedelta(minutes=5)
 _SEMVER_RE = re.compile(
     r"^v?(?P<major>0|[1-9][0-9]*)\."
@@ -682,8 +678,6 @@ def detect_install_method(
     executable: str | None = None,
     argv0: str | None = None,
     environ: Mapping[str, str] | None = None,
-    install_context_path: Path | None = None,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> str:
     environment = os.environ if environ is None else environ
     explicit = str(environment.get(HOMEBREW_PACKAGE_ENV) or "").strip().lower()
@@ -701,148 +695,11 @@ def detect_install_method(
     )
     if "/cellar/kassiber-cli/" in normalized:
         return "homebrew_formula"
-    linux_method = _detect_linux_package_context(
-        install_context_path or LINUX_INSTALL_CONTEXT_PATH,
-        runner=runner,
-        environ=environment,
-    )
-    if linux_method is not None:
-        return linux_method
+    # Linux .deb/.rpm installs report "manual" on purpose: package ownership
+    # alone cannot prove a signed Kassiber repository installed the package,
+    # so until a live repository URL and archive-key fingerprint are pinned in
+    # code, the only safe guidance is the GitHub release page.
     return "manual"
-
-
-_LINUX_PACKAGE_CONTEXTS = {
-    ("deb", "kassiber", "desktop", "dpkg", "apt"): "linux_deb_manual",
-    ("deb", "kassiber-cli", "cli", "dpkg", "apt"): "linux_deb_manual",
-    ("rpm", "kassiber", "desktop", "rpm", "dnf"): "linux_rpm_manual",
-    ("rpm", "kassiber-cli", "cli", "rpm", "dnf"): "linux_rpm_manual",
-}
-
-
-def _read_install_context(path: Path) -> dict[str, Any] | None:
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return None
-    try:
-        stat_result = os.fstat(descriptor)
-    except OSError:
-        os.close(descriptor)
-        return None
-    if (
-        not stat.S_ISREG(stat_result.st_mode)
-        or stat_result.st_size > _MAX_INSTALL_CONTEXT_BYTES
-    ):
-        os.close(descriptor)
-        return None
-    try:
-        with os.fdopen(descriptor, "rb") as handle:
-            raw = handle.read(_MAX_INSTALL_CONTEXT_BYTES + 1)
-    except OSError:
-        return None
-    if len(raw) > _MAX_INSTALL_CONTEXT_BYTES:
-        return None
-    try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not _has_exact_schema_version(payload, 1):
-        return None
-    return payload
-
-
-def _package_probe_environment(environ: Mapping[str, str]) -> dict[str, str]:
-    return {
-        key: value
-        for key, value in environ.items()
-        if key in {"LANG", "LANGUAGE", "PATH", "SYSTEMROOT", "WINDIR"}
-        or key.startswith("LC_")
-    }
-
-
-def _probe_package_owner(
-    marker: Path,
-    *,
-    package_manager: str,
-    package_name: str,
-    runner: Callable[..., subprocess.CompletedProcess[str]],
-    environ: Mapping[str, str],
-) -> bool:
-    if package_manager == "dpkg":
-        executable = shutil.which("dpkg-query")
-        command = [executable, "-S", str(marker)] if executable else []
-    elif package_manager == "rpm":
-        executable = shutil.which("rpm")
-        command = (
-            [executable, "-qf", "--qf", "%{NAME}\n", str(marker)]
-            if executable
-            else []
-        )
-    else:
-        return False
-    if not command:
-        return False
-    try:
-        completed = runner(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            encoding="utf-8",
-            errors="replace",
-            timeout=3,
-            check=False,
-            env=_package_probe_environment(environ),
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    if completed.returncode != 0:
-        return False
-    output = completed.stdout.strip()
-    if package_manager == "dpkg":
-        owners = {
-            line.partition(":")[0].removeprefix("diversion by ").strip()
-            for line in output.splitlines()
-            if ":" in line
-        }
-        return owners == {package_name}
-    return output == package_name
-
-
-def _detect_linux_package_context(
-    marker: Path,
-    *,
-    runner: Callable[..., subprocess.CompletedProcess[str]],
-    environ: Mapping[str, str],
-) -> str | None:
-    payload = _read_install_context(marker)
-    if payload is None or payload.get("product") != "kassiber":
-        return None
-    identity = (
-        str(payload.get("artifact_kind") or ""),
-        str(payload.get("package_name") or ""),
-        str(payload.get("surface") or ""),
-        str(payload.get("package_manager") or ""),
-        str(payload.get("repository_manager") or ""),
-    )
-    method = _LINUX_PACKAGE_CONTEXTS.get(identity)
-    if method is None or payload.get("repository_provenance") != "probe-required":
-        return None
-    if not _probe_package_owner(
-        marker,
-        package_manager=identity[3],
-        package_name=identity[1],
-        runner=runner,
-        environ=environ,
-    ):
-        return None
-    # The package owns the marker, but that does not prove a signed Kassiber
-    # repository installed it. Until the live repository URL and archive-key
-    # fingerprint are pinned in code, the only safe guidance remains GitHub.
-    return method
 
 
 def update_command_for_method(method: str) -> str | None:

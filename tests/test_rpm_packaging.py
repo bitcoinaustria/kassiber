@@ -1,4 +1,3 @@
-import json
 import os
 import shutil
 import subprocess
@@ -17,7 +16,6 @@ def build_desktop_deb(root: Path, version: str = "1.2.3") -> Path:
     for path in (
         "usr/bin",
         "usr/lib/Kassiber/binaries",
-        "usr/lib/kassiber",
         "usr/share/applications",
         "usr/share/icons/hicolor/128x128/apps",
     ):
@@ -29,10 +27,6 @@ def build_desktop_deb(root: Path, version: str = "1.2.3") -> Path:
     sidecar = package_root / "usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu"
     sidecar.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     sidecar.chmod(0o755)
-    shutil.copy2(
-        ROOT / "packaging/linux/install-context/deb-desktop.json",
-        package_root / "usr/lib/kassiber/install-context.json",
-    )
     (package_root / "usr/share/applications/Kassiber.desktop").write_text(
         "[Desktop Entry]\nName=Kassiber\nExec=kassiber-ui\nType=Application\n",
         encoding="utf-8",
@@ -64,38 +58,18 @@ def build_desktop_deb(root: Path, version: str = "1.2.3") -> Path:
     return output
 
 
-def rpm_file(path: Path, member: str) -> bytes:
-    rpm2cpio = subprocess.Popen(
-        ["rpm2cpio", str(path)],
-        stdout=subprocess.PIPE,
-    )
-    completed = subprocess.run(
-        ["cpio", "--quiet", "-i", "--to-stdout", f".{member}"],
-        stdin=rpm2cpio.stdout,
-        capture_output=True,
-        check=True,
-    )
-    assert rpm2cpio.stdout is not None
-    rpm2cpio.stdout.close()
-    returncode = rpm2cpio.wait()
-    if returncode != 0:
-        raise subprocess.CalledProcessError(returncode, rpm2cpio.args)
-    return completed.stdout
-
-
 @unittest.skipUnless(
     all(shutil.which(command) for command in RPM_TOOLS),
     "RPM, repository, and Debian tooling is required",
 )
 class RpmPackagingTest(unittest.TestCase):
-    def test_builds_cli_desktop_and_source_rpms(self):
+    def test_builds_cli_and_desktop_rpms(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             binary = root / "kassiber"
             binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             binary.chmod(0o755)
             cli_rpm = root / "kassiber-cli.rpm"
-            cli_srpm = root / "kassiber-cli.src.rpm"
             subprocess.run(
                 [
                     str(ROOT / "scripts/package-cli-rpm.sh"),
@@ -107,8 +81,6 @@ class RpmPackagingTest(unittest.TestCase):
                     "x86_64",
                     "--output",
                     str(cli_rpm),
-                    "--source-output",
-                    str(cli_srpm),
                 ],
                 check=True,
                 cwd=ROOT,
@@ -116,7 +88,6 @@ class RpmPackagingTest(unittest.TestCase):
                 text=True,
             )
             desktop_rpm = root / "kassiber.rpm"
-            desktop_srpm = root / "kassiber.src.rpm"
             subprocess.run(
                 [
                     str(ROOT / "scripts/package-desktop-rpm.sh"),
@@ -128,8 +99,6 @@ class RpmPackagingTest(unittest.TestCase):
                     "x86_64",
                     "--output",
                     str(desktop_rpm),
-                    "--source-output",
-                    str(desktop_srpm),
                 ],
                 check=True,
                 cwd=ROOT,
@@ -137,68 +106,9 @@ class RpmPackagingTest(unittest.TestCase):
                 text=True,
             )
 
-            self.assertTrue(cli_srpm.is_file())
-            self.assertTrue(desktop_srpm.is_file())
-            obs_package = root / "obs-kassiber-cli"
-            obs_result = subprocess.run(
-                [
-                    str(ROOT / "scripts/prepare-obs-package.sh"),
-                    "--source-rpm",
-                    cli_srpm.name,
-                    "--output",
-                    obs_package.name,
-                ],
-                cwd=root,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(obs_result.returncode, 0, obs_result.stderr)
-            self.assertTrue((obs_package / "kassiber-cli.spec").is_file())
-            rejected_binary = subprocess.run(
-                [
-                    str(ROOT / "scripts/prepare-obs-package.sh"),
-                    "--source-rpm",
-                    cli_rpm.name,
-                    "--output",
-                    "obs-invalid-binary",
-                ],
-                cwd=root,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(rejected_binary.returncode, 2)
-            self.assertIn("Expected a source RPM", rejected_binary.stderr)
-            for source_rpm, package in (
-                (cli_srpm, "kassiber-cli"),
-                (desktop_srpm, "kassiber"),
-            ):
-                rebuild = root / f"rebuild-{package}"
-                for directory in (
-                    "BUILD",
-                    "BUILDROOT",
-                    "RPMS",
-                    "SOURCES",
-                    "SPECS",
-                    "SRPMS",
-                ):
-                    (rebuild / directory).mkdir(parents=True)
-                subprocess.run(
-                    [
-                        "rpmbuild",
-                        "--rebuild",
-                        "--define",
-                        f"_topdir {rebuild}",
-                        str(source_rpm),
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                rebuilt = rebuild / "RPMS/x86_64" / f"{package}-1.2.3-1.x86_64.rpm"
-                self.assertTrue(rebuilt.is_file())
-            for rpm_path, package, surface in (
-                (cli_rpm, "kassiber-cli", "cli"),
-                (desktop_rpm, "kassiber", "desktop"),
+            for rpm_path, package in (
+                (cli_rpm, "kassiber-cli"),
+                (desktop_rpm, "kassiber"),
             ):
                 metadata = subprocess.check_output(
                     [
@@ -211,13 +121,6 @@ class RpmPackagingTest(unittest.TestCase):
                     text=True,
                 )
                 self.assertEqual(metadata, f"{package} 1.2.3 x86_64")
-                marker = json.loads(
-                    rpm_file(rpm_path, "/usr/lib/kassiber/install-context.json")
-                )
-                self.assertEqual(marker["surface"], surface)
-                self.assertEqual(marker["package_manager"], "rpm")
-                self.assertEqual(marker["repository_manager"], "dnf")
-                self.assertEqual(marker["repository_provenance"], "probe-required")
 
             cli_requires = subprocess.check_output(
                 ["rpm", "-qp", "--requires", str(cli_rpm)], text=True
@@ -367,14 +270,14 @@ class RpmPackagingTest(unittest.TestCase):
                 "--enablerepo=kassiber-test",
             ]
             subprocess.run([*dnf, "install", "kassiber-cli"], check=True)
-            installed_marker = Path("/usr/lib/kassiber/install-context.json")
-            self.assertEqual(json.loads(installed_marker.read_text())["surface"], "cli")
+            cli_binary = Path("/usr/bin/kassiber")
+            desktop_binary = Path("/usr/bin/kassiber-ui")
+            self.assertTrue(cli_binary.exists())
+            self.assertFalse(desktop_binary.exists())
             subprocess.run([*dnf, "swap", "kassiber-cli", "kassiber"], check=True)
-            self.assertEqual(
-                json.loads(installed_marker.read_text())["surface"], "desktop"
-            )
+            self.assertTrue(desktop_binary.exists())
             subprocess.run([*dnf, "remove", "kassiber"], check=True)
-            self.assertFalse(installed_marker.exists())
+            self.assertFalse(desktop_binary.exists())
             repo_file.unlink()
 
     def test_rpm_builders_reject_mismatched_versions(self):

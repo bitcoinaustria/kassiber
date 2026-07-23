@@ -7,8 +7,7 @@ Summary:        Local-first Bitcoin accounting CLI
 License:        AGPL-3.0-only
 URL:            https://github.com/bitcoinaustria/kassiber
 Source0:        kassiber
-Source1:        install-context.json
-Source2:        LICENSE
+Source1:        LICENSE
 BuildArch:      %{kassiber_arch}
 
 Requires:       glibc >= 2.35
@@ -31,14 +30,11 @@ standalone command-line application without desktop dependencies.
 %install
 install -Dpm 0755 %{SOURCE0} %{buildroot}%{_bindir}/kassiber
 install -Dpm 0644 %{SOURCE1} \
-  %{buildroot}%{_prefix}/lib/kassiber/install-context.json
-install -Dpm 0644 %{SOURCE2} \
   %{buildroot}%{_licensedir}/%{name}/LICENSE
 
 %files
 %license %{_licensedir}/%{name}/LICENSE
 %{_bindir}/kassiber
-%{_prefix}/lib/kassiber/install-context.json
 
 %changelog
 * Thu Jan 01 1970 Bitcoin Austria <office@bitcoin-austria.at> - 0-1

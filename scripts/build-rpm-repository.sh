@@ -77,7 +77,6 @@ mapfile -d '' packages < <(
     | sort -z
 )
 [ "${#packages[@]}" -gt 0 ] || die "No binary RPM packages found in $input"
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "$(dirname "$output")"
 stage="$(mktemp -d "${output}.tmp.XXXXXX")"
@@ -110,8 +109,7 @@ for package_path in "${packages[@]}"; do
   package_release="$(rpm -qp --queryformat '%{RELEASE}' "$package_path")"
   package_architecture="$(rpm -qp --queryformat '%{ARCH}' "$package_path")"
   case "$package_name" in
-    kassiber) expected_marker="rpm-desktop.json" ;;
-    kassiber-cli) expected_marker="rpm-cli.json" ;;
+    kassiber|kassiber-cli) ;;
     *) die "Unexpected package in Kassiber repository input: $package_name" ;;
   esac
   architecture_allowed=false
@@ -125,16 +123,6 @@ for package_path in "${packages[@]}"; do
   if [ "$architecture_allowed" != true ]; then
     die "Package architecture $package_architecture was not declared"
   fi
-  if ! rpm -qpl "$package_path" \
-      | awk '$0 == "/usr/lib/kassiber/install-context.json" { found=1 } END { exit !found }'; then
-    die "$package_name is missing /usr/lib/kassiber/install-context.json"
-  fi
-  if ! rpm2cpio "$package_path" \
-      | cpio --quiet -i --to-stdout ./usr/lib/kassiber/install-context.json \
-      | cmp -s - "$script_dir/../packaging/linux/install-context/$expected_marker"; then
-    die "$package_name install-context marker does not match its package surface"
-  fi
-
   canonical_filename="${package_name}-${package_version}-${package_release}.${package_architecture}.rpm"
   destination="$stage/packages/$canonical_filename"
   [ ! -e "$destination" ] || die "Duplicate RPM identity: $canonical_filename"

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export LC_ALL=C
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat >&2 <<'EOF'
@@ -144,8 +143,7 @@ for package_path in "${packages[@]}"; do
   package_architecture="$(dpkg-deb -f "$package_path" Architecture)"
 
   case "$package_name" in
-    kassiber) expected_marker="$script_dir/../packaging/linux/install-context/deb-desktop.json" ;;
-    kassiber-cli) expected_marker="$script_dir/../packaging/linux/install-context/deb-cli.json" ;;
+    kassiber|kassiber-cli) ;;
     *) die "Unexpected package in Kassiber repository input: $package_name" ;;
   esac
 
@@ -158,16 +156,6 @@ for package_path in "${packages[@]}"; do
   done
   if [ "$architecture_allowed" != true ]; then
     die "Package architecture $package_architecture was not declared with --architecture"
-  fi
-
-  if ! dpkg-deb -c "$package_path" \
-      | awk '$1 ~ /^-/ && $NF == "./usr/lib/kassiber/install-context.json" { found=1 } END { exit !found }'; then
-    die "$package_name is missing the regular file /usr/lib/kassiber/install-context.json"
-  fi
-  if ! dpkg-deb --fsys-tarfile "$package_path" \
-      | tar -xOf - ./usr/lib/kassiber/install-context.json \
-      | cmp -s - "$expected_marker"; then
-    die "$package_name install-context marker does not match its package surface"
   fi
 
   filename_version="${package_version//:/_}"
