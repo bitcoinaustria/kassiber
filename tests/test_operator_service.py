@@ -36,7 +36,7 @@ from kassiber.operator.launcher import (
     cli_child_command,
     prepare_independent_child_environment,
 )
-from kassiber.operator.project import canonical_project
+from kassiber.operator.project import acquire_project_ownership, canonical_project
 from kassiber.operator.protocol import MAX_JSON_FRAME
 from kassiber.command_capabilities import Capability
 from kassiber.operator.service import (
@@ -1498,6 +1498,63 @@ class OperatorServiceTest(unittest.TestCase):
                 reopened.close()
             finally:
                 service.close()
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
+    def test_brokered_passphrase_rotation_cannot_break_live_desktop_connection(
+        self,
+    ) -> None:
+        old_passphrase = "correct horse battery staple"
+        new_passphrase = bytearray(b"new correct horse battery staple")
+        with tempfile.TemporaryDirectory() as tmp:
+            create_empty_encrypted_database(resolve_database_path(tmp), old_passphrase)
+            desktop_owner = acquire_project_ownership(
+                canonical_project(tmp),
+                owner_kind="desktop",
+                generation="desktop",
+            )
+            desktop_connection = open_db(tmp, passphrase=old_passphrase)
+            service = OperatorService("generation", run_cli_operation)
+            try:
+                service.unlock(
+                    tmp,
+                    bytearray(old_passphrase.encode()),
+                    duration_seconds=None,
+                )
+                authorization = service.verify_admin(
+                    tmp,
+                    bytearray(old_passphrase.encode()),
+                )
+                accepted = service.submit(
+                    tmp,
+                    [
+                        "--machine",
+                        "secrets",
+                        "change-passphrase",
+                        "--new-passphrase-fd",
+                        "broker-secret-new-passphrase",
+                    ],
+                    secret_arguments={
+                        "broker-secret-new-passphrase": new_passphrase,
+                    },
+                    admin_authorization=authorization,
+                )
+                completed = self._wait_terminal(service, accepted["operation_id"])
+                self.assertEqual(completed["state"], "result_unknown", completed)
+                self.assertEqual(
+                    desktop_connection.execute("SELECT 1").fetchone()[0],
+                    1,
+                )
+                reopened = open_db(tmp, passphrase=old_passphrase)
+                reopened.close()
+                with self.assertRaises(AppError):
+                    open_db(
+                        tmp,
+                        passphrase="new correct horse battery staple",
+                    )
+            finally:
+                service.close()
+                desktop_connection.close()
+                desktop_owner.release()
 
     def test_different_projects_run_concurrently(self) -> None:
         both_started = threading.Event()

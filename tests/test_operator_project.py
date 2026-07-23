@@ -5,17 +5,21 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from kassiber.operator import project as project_module
 from kassiber.errors import AppError
 from kassiber.operator.project import (
+    CanonicalProject,
     ProjectOwnerChildHandles,
     ProjectOwnerLease,
     acquire_project_ownership,
     canonical_project,
+    exclusive_project_maintenance,
 )
 from kassiber.operator.protocol import operator_runtime_dir
 from kassiber.operator.service import OperationResult, OperatorService
@@ -27,13 +31,17 @@ class _Connection:
         pass
 
 
-def _competing_owner(data_root: str, output: multiprocessing.Queue) -> None:
+def _competing_owner(
+    data_root: str,
+    owner_kind: str,
+    output: multiprocessing.Queue,
+) -> None:
     project = canonical_project(data_root)
     try:
         lease = acquire_project_ownership(
             project,
-            owner_kind="desktop",
-            generation="desktop-test",
+            owner_kind=owner_kind,
+            generation=f"{owner_kind}-test",
         )
     except AppError as exc:
         output.put((exc.code, exc.details))
@@ -44,9 +52,63 @@ def _competing_owner(data_root: str, output: multiprocessing.Queue) -> None:
 
 def _reported_locked_owner(owner: str) -> str:
     # POSIX flock permits reading the already-open lock record after the lock
-    # attempt fails. Windows share-mode zero correctly prevents that second
-    # open, so the contender can prove exclusion but not read the owner label.
+    # attempt fails. The Windows writer share policy prevents that competing
+    # writer open, so the contender proves exclusion without the owner label.
     return "unknown" if os.name == "nt" else owner
+
+
+def _try_legacy_exclusive_lock(
+    lock_path: Path,
+    project_id: str,
+):
+    if os.name != "nt":
+        handle = project_module._open_owner_lock(lock_path, project_id)
+        if not project_module._try_lock_handle(handle):
+            handle.close()
+            return None
+        return handle
+
+    import ctypes
+    from ctypes import wintypes
+
+    create_file = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    handle = create_file(
+        str(lock_path),
+        0x80000000 | 0x40000000,  # GENERIC_READ | GENERIC_WRITE
+        0,  # legacy versions denied all sharing
+        None,
+        4,  # OPEN_ALWAYS
+        0x80,  # FILE_ATTRIBUTE_NORMAL
+        None,
+    )
+    invalid_handle = wintypes.HANDLE(-1).value
+    if handle == invalid_handle:
+        error = ctypes.get_last_error()
+        if error in {32, 33}:  # ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION
+            return None
+        raise OSError(error, f"CreateFileW failed for {lock_path}")
+    return handle
+
+
+def _close_legacy_exclusive_lock(handle) -> None:
+    if os.name == "nt":
+        import ctypes
+
+        if not ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(handle):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return
+    project_module._unlock_handle(handle)
+    handle.close()
 
 
 class OperatorProjectTest(unittest.TestCase):
@@ -131,7 +193,7 @@ class OperatorProjectTest(unittest.TestCase):
                 output: multiprocessing.Queue = context.Queue()
                 process = context.Process(
                     target=_competing_owner,
-                    args=(tmp, output),
+                    args=(tmp, "broker", output),
                 )
                 process.start()
                 process.join(5)
@@ -146,6 +208,165 @@ class OperatorProjectTest(unittest.TestCase):
                 self.assertNotIn(str(Path(tmp)), repr(details))
             finally:
                 lease.release()
+
+    def test_desktop_and_broker_can_coexist_across_processes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            desktop = acquire_project_ownership(
+                canonical_project(tmp),
+                owner_kind="desktop",
+                generation="desktop",
+            )
+            try:
+                context = multiprocessing.get_context("spawn")
+                output: multiprocessing.Queue = context.Queue()
+                process = context.Process(
+                    target=_competing_owner,
+                    args=(tmp, "broker", output),
+                )
+                process.start()
+                process.join(5)
+                self.assertEqual(process.exitcode, 0)
+                self.assertEqual(output.get(timeout=1), ("acquired", {}))
+            finally:
+                desktop.release()
+
+    def test_simultaneous_desktop_and_broker_admission_both_succeed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            desktop_in_probe = threading.Event()
+            continue_desktop = threading.Event()
+            original_probe = project_module._active_owner_record
+            leases: list[ProjectOwnerLease] = []
+            errors: list[BaseException] = []
+
+            def paused_probe(lock_path: Path, project_id: str):
+                if (
+                    lock_path.name.endswith(".broker")
+                    and not desktop_in_probe.is_set()
+                ):
+                    desktop_in_probe.set()
+                    self.assertTrue(continue_desktop.wait(2))
+                return original_probe(lock_path, project_id)
+
+            def acquire(owner_kind: str) -> None:
+                try:
+                    leases.append(
+                        acquire_project_ownership(
+                            project,
+                            owner_kind=owner_kind,
+                            generation=owner_kind,
+                        )
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+
+            with mock.patch.object(
+                project_module,
+                "_active_owner_record",
+                side_effect=paused_probe,
+            ):
+                desktop_thread = threading.Thread(target=acquire, args=("desktop",))
+                broker_thread = threading.Thread(target=acquire, args=("broker",))
+                desktop_thread.start()
+                self.assertTrue(desktop_in_probe.wait(2))
+                broker_thread.start()
+                continue_desktop.set()
+                desktop_thread.join(5)
+                broker_thread.join(5)
+
+            try:
+                self.assertFalse(desktop_thread.is_alive())
+                self.assertFalse(broker_thread.is_alive())
+                self.assertEqual(errors, [])
+                self.assertCountEqual(
+                    [lease.owner_kind for lease in leases],
+                    ["desktop", "broker"],
+                )
+            finally:
+                for lease in reversed(leases):
+                    lease.release()
+
+    def test_database_maintenance_excludes_the_other_live_role(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            desktop = acquire_project_ownership(
+                project,
+                owner_kind="desktop",
+                generation="desktop",
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    with exclusive_project_maintenance(
+                        tmp,
+                        active_owner_kind="broker",
+                    ):
+                        self.fail("maintenance must not overlap the desktop")
+                self.assertEqual(raised.exception.code, "project_in_use")
+            finally:
+                desktop.release()
+
+            broker = acquire_project_ownership(
+                project,
+                owner_kind="broker",
+                generation="broker",
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    with exclusive_project_maintenance(
+                        tmp,
+                        active_owner_kind="desktop",
+                    ):
+                        self.fail("maintenance must not overlap the broker")
+                self.assertEqual(raised.exception.code, "project_in_use")
+            finally:
+                broker.release()
+
+            with exclusive_project_maintenance(tmp, active_owner_kind=None):
+                pass
+
+    def test_rejected_alias_rolls_back_only_its_new_locks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            first_root = Path(tmp) / "first"
+            alias_root = Path(tmp) / "alias"
+            first_root.mkdir()
+            alias_root.mkdir()
+            first_database = first_root / "kassiber.sqlite3"
+            first_database.write_bytes(b"database")
+            project = canonical_project(first_root)
+            owner = acquire_project_ownership(
+                project,
+                owner_kind="broker",
+                generation="broker",
+            )
+            original_handles = owner._handles
+            original_lock_paths = owner._lock_paths.copy()
+            alias = CanonicalProject(
+                database=alias_root / "kassiber.sqlite3",
+                lock_path=project.lock_path,
+                alias_lock_path=project_module._owner_lock_root()
+                / "path-alias.lock",
+                local_lock_path=alias_root / project_module.OWNER_LOCK_FILENAME,
+                identity=project.identity,
+                public_id=project.public_id,
+            )
+            try:
+                with mock.patch.object(
+                    project_module,
+                    "_require_compatible_other_owner",
+                    side_effect=AppError(
+                        "replaced project",
+                        code="project_in_use",
+                    ),
+                ):
+                    with self.assertRaises(AppError):
+                        owner.add_alias(alias)
+                self.assertEqual(owner._handles, original_handles)
+                self.assertEqual(owner._lock_paths, original_lock_paths)
+            finally:
+                owner.release()
 
     def test_release_allows_next_owner_and_lock_is_private(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -185,8 +406,8 @@ class OperatorProjectTest(unittest.TestCase):
                     with self.assertRaises(AppError) as raised:
                         acquire_project_ownership(
                             canonical_project(tmp),
-                            owner_kind="desktop",
-                            generation="desktop",
+                            owner_kind="broker",
+                            generation="other-broker",
                         )
                 self.assertEqual(raised.exception.code, "project_in_use")
             finally:
@@ -233,7 +454,7 @@ class OperatorProjectTest(unittest.TestCase):
             self.assertEqual(runtime.stat().st_mode & 0o777, 0o700)
             self.assertEqual(operator_runtime_dir(), runtime.resolve())
 
-    def test_broker_first_blocks_desktop_owner(self) -> None:
+    def test_broker_first_allows_desktop_owner(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = canonical_project(tmp)
             broker = acquire_project_ownership(
@@ -247,20 +468,20 @@ class OperatorProjectTest(unittest.TestCase):
                 ownership_generation="desktop",
             )
             try:
-                with self.assertRaises(AppError) as raised:
-                    daemon_runtime._ensure_daemon_project_owner(ctx)
-                self.assertEqual(raised.exception.code, "project_in_use")
-                self.assertEqual(
-                    raised.exception.details["owner"],
-                    _reported_locked_owner("broker"),
-                )
+                desktop = daemon_runtime._ensure_daemon_project_owner(ctx)
+                self.assertEqual(desktop.owner_kind, "desktop")
+                self.assertEqual(desktop.project.identity, broker.project.identity)
             finally:
+                daemon_runtime._release_daemon_project_owner(ctx)
                 broker.release()
 
-    def test_desktop_first_blocks_broker_unlock(self) -> None:
+    def test_desktop_first_allows_broker_unlock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.operator.service.open_db", return_value=_Connection()
-        ) as open_database:
+        ) as open_database, mock.patch(
+            "kassiber.operator.service.set_unlock_mode",
+            return_value="brokered",
+        ):
             project = canonical_project(tmp)
             desktop = acquire_project_ownership(
                 project,
@@ -272,22 +493,47 @@ class OperatorProjectTest(unittest.TestCase):
                 lambda *_args: OperationResult(0, "", ""),
             )
             try:
-                with self.assertRaises(AppError) as raised:
-                    service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
-                self.assertEqual(raised.exception.code, "project_in_use")
-                self.assertEqual(
-                    raised.exception.details["owner"],
-                    _reported_locked_owner("desktop"),
+                status = service.unlock(
+                    tmp,
+                    bytearray(b"passphrase"),
+                    duration_seconds=None,
                 )
-                open_database.assert_not_called()
+                self.assertEqual(status["lease"], "unlocked")
+                open_database.assert_called_once()
             finally:
                 service.close()
                 desktop.release()
 
-    def test_broker_owner_blocks_daemon_before_database_open(self) -> None:
+    def test_desktop_and_broker_can_own_the_same_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = canonical_project(tmp)
+            desktop = acquire_project_ownership(
+                project,
+                owner_kind="desktop",
+                generation="desktop",
+            )
+            try:
+                broker = acquire_project_ownership(
+                    project,
+                    owner_kind="broker",
+                    generation="broker",
+                )
+            finally:
+                desktop.release()
+            broker.release()
+
+    def test_broker_owner_allows_daemon_database_open(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(
             "kassiber.daemon.open_db", return_value=_Connection()
-        ) as open_database:
+        ) as open_database, mock.patch(
+            "kassiber.daemon.validate_project_migration_after_unlock"
+        ), mock.patch(
+            "kassiber.daemon.merge_db_backends"
+        ), mock.patch(
+            "kassiber.daemon._remember_unlocked_passphrase"
+        ), mock.patch(
+            "kassiber.daemon._start_freshness_background_worker"
+        ):
             broker = acquire_project_ownership(
                 canonical_project(tmp),
                 owner_kind="broker",
@@ -299,13 +545,16 @@ class OperatorProjectTest(unittest.TestCase):
                 project_owner=None,
                 ownership_generation="desktop",
                 retired_project_resources=[],
+                runtime_config={},
+                project_id=None,
+                select_project_on_open=False,
             )
             try:
-                with self.assertRaises(AppError) as raised:
-                    daemon_runtime._open_daemon_connection(ctx)
-                self.assertEqual(raised.exception.code, "project_in_use")
-                open_database.assert_not_called()
+                opened = daemon_runtime._open_daemon_connection(ctx)
+                self.assertIs(opened, ctx.conn)
+                open_database.assert_called_once()
             finally:
+                daemon_runtime._release_daemon_project_owner(ctx)
                 broker.release()
 
     @unittest.skipIf(os.name == "nt", "POSIX symlink test")
@@ -376,16 +625,16 @@ class OperatorProjectTest(unittest.TestCase):
                 with self.assertRaises(AppError) as raised:
                     acquire_project_ownership(
                         project,
-                        owner_kind="desktop",
-                        generation="desktop",
+                        owner_kind="broker",
+                        generation="replacement-broker",
                     )
                 self.assertEqual(raised.exception.code, "project_in_use")
             finally:
                 child.wait(timeout=2)
             next_owner = acquire_project_ownership(
                 project,
-                owner_kind="desktop",
-                generation="desktop",
+                owner_kind="broker",
+                generation="replacement-broker",
             )
             next_owner.release()
 
@@ -410,8 +659,8 @@ class OperatorProjectTest(unittest.TestCase):
                 with self.assertRaises(AppError) as raised:
                     acquire_project_ownership(
                         moved,
-                        owner_kind="desktop",
-                        generation="desktop",
+                        owner_kind="broker",
+                        generation="replacement-broker",
                     )
                 self.assertEqual(raised.exception.code, "project_in_use")
             finally:
@@ -439,14 +688,54 @@ class OperatorProjectTest(unittest.TestCase):
             finally:
                 lease.release()
 
-    def test_windows_owner_contract_uses_inheritable_share_mode_reservation(self) -> None:
-        source = (
-            Path(__file__).parents[1] / "kassiber" / "operator" / "project.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn("CreateFileW", source)
-        self.assertIn("no sharing", source)
-        self.assertIn("os.dup", source)
-        self.assertIn("os.set_handle_inheritable", source)
+    def test_legacy_exclusive_owner_blocks_new_role_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            legacy = _try_legacy_exclusive_lock(
+                project.lock_path,
+                project.public_id,
+            )
+            self.assertIsNotNone(legacy)
+            try:
+                with mock.patch.object(
+                    project_module,
+                    "_read_owner_record",
+                    return_value={
+                        "owner": "desktop",
+                        "generation": "legacy-desktop",
+                    },
+                ):
+                    with self.assertRaises(AppError) as raised:
+                        acquire_project_ownership(
+                            project,
+                            owner_kind="desktop",
+                            generation="desktop",
+                        )
+                self.assertEqual(raised.exception.code, "project_in_use")
+                if os.name != "nt":
+                    self.assertIn("desktop app or preview", str(raised.exception))
+                    self.assertIn("second desktop", raised.exception.hint)
+            finally:
+                _close_legacy_exclusive_lock(legacy)
+
+    def test_new_role_owner_blocks_legacy_exclusive_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            owner = acquire_project_ownership(
+                project,
+                owner_kind="broker",
+                generation="broker",
+            )
+            try:
+                legacy = _try_legacy_exclusive_lock(
+                    project.lock_path,
+                    project.public_id,
+                )
+                self.assertIsNone(legacy)
+            finally:
+                owner.release()
 
 
 if __name__ == "__main__":

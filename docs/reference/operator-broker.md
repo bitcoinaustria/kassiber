@@ -215,27 +215,40 @@ desktop owner's database open use that same canonical root. The desktop
 project-switch path resolves and owns its target once, then verifies and opens
 through that resolved root rather than returning to a catalog alias. It closes
 a retired connection before releasing that project's ownership lock. A close
-failure retains both resources for retry, so a second runtime cannot acquire
-the old project while its SQLite connection may still be live.
+failure retains both resources for retry, so a second desktop runtime cannot
+acquire the old project while its SQLite connection may still be live.
 
-The broker and desktop daemon take the same non-blocking project ownership
-locks before opening or retaining an unlocked runtime. One lock is keyed by
-stable canonical file identity, one by each admitted canonical path, and one
-is stored locally beside the project database. The global owner namespace is
-stored below the OS account's persistent Kassiber runtime directory, is
-derived from the account database rather than caller environment variables,
-and deliberately ignores broker endpoint/runtime overrides. The identity lock
-follows a moved file, while path locks prevent a replacement inode from
-becoming a concurrent project while the old lease remains addressable for
-explicit lock/revocation. Directory and database symlinks are resolved before
-policy or ownership decisions. A database with more than one filesystem hard
-link is rejected before unlock-mode, remembered-credential, broker, or desktop
-ownership routing; otherwise two path-scoped policy stores could disagree
-about the same encrypted file. Exactly one long-lived owner may hold a project.
-Starting desktop-first or broker-first either rendezvous with the existing
-supported owner or returns `project_in_use`; Kassiber never starts a silent
-competing daemon. Short-lived broker child commands run only through the
-owning project's serialized worker.
+The broker and desktop daemon take compatible non-blocking project ownership
+locks before opening or retaining an unlocked runtime. A shared compatibility
+lock blocks older Kassiber versions that used one exclusive owner, while
+role-specific locks exclude duplicate brokers and duplicate desktop daemons.
+One broker and one desktop daemon may therefore use the same canonical
+database concurrently; ordinary and brokered CLI commands remain available
+while the GUI is open. A short-lived per-path admission mutex serializes the
+role-lock acquisition and opposite-role identity check, so simultaneous
+broker/desktop startup cannot mistake the other process's probe for a live
+owner or admit different database identities at the same path. One lock set is
+keyed by stable canonical file identity, one by each admitted canonical path,
+and one is stored locally beside the project database. The global owner
+namespace is stored below the OS account's persistent Kassiber runtime
+directory, is derived from the account database rather than caller environment
+variables, and deliberately ignores broker endpoint/runtime overrides. The
+identity lock follows a moved file, while path locks reject a different
+database identity at a path still held by either role. Directory and database
+symlinks are resolved before policy or ownership decisions. A database with
+more than one filesystem hard link is rejected before unlock-mode,
+remembered-credential, broker, or desktop ownership routing; otherwise two
+path-scoped policy stores could disagree about the same encrypted file.
+Short-lived broker child commands run only through the owning project's
+serialized broker worker; SQLite continues to arbitrate ordinary database
+access between that worker and the desktop daemon.
+
+Passphrase rotation is database-wide maintenance rather than ordinary SQLite
+access. It temporarily reserves the opposite role and fails with
+`project_in_use` before closing or rekeying anything if another role is live.
+Close the desktop project before a brokered rotation, or lock the broker lease
+before desktop rotation, then retry. Direct CLI SQLCipher initialization and
+plaintext migration reserve both roles for the duration.
 
 Workspace/profile/book selection is made explicit at admission. A brokered
 command whose CLI contract declares `--workspace` or `--profile` must supply
@@ -336,15 +349,18 @@ capacity cannot deadlock a later command-specific secret handoff.
 No-bootstrap children then authenticate and close the canonical database as a
 preflight, enforcing the queued durable database identity before even a
 credential-store-only or staged-backup handler can run.
-The worker child inherits duplicate project-owner handles. If the broker dies,
-the OS therefore keeps ownership exclusion in force until the orphan child
-exits; a desktop or replacement broker cannot overlap it. Source installs
+The worker child inherits duplicate broker-owner handles. If the broker dies,
+the OS therefore keeps broker ownership exclusion in force until the orphan
+child exits; a replacement broker cannot overlap it, while the desktop may
+continue through its separate role lock. Source installs
 re-exec Python modules, while frozen one-file sidecars use hidden internal
 entry modes rather than treating the bundled executable as a Python
 interpreter. POSIX uses duplicated `flock` file descriptions; Windows opens
-owner files with `CreateFileW` share mode zero and inherits duplicates of that
-exclusive open-file reservation rather than relying on process-owned byte-range
-locks.
+compatibility files with read/write sharing so the two new roles can coexist,
+while role files allow read-only probes but reject a competing writer. This
+also conflicts bidirectionally with older share-mode-zero owners. Inherited
+duplicates preserve those open-file reservations rather than relying on
+process-owned byte-range locks.
 
 The operation id includes the broker generation. If a client asks a restarted
 broker about an operation accepted by a dead generation, the answer is
@@ -355,7 +371,9 @@ Unproven nonzero exits from mutating/admin children are likewise
 `failed`. Every brokered passphrase-rotation attempt revokes the old lease and
 cancels its queued work after the child exits; this also covers a rekey that
 succeeded before a later acknowledgement/invalidation failure, so status never
-advertises an unusable stale secret.
+advertises an unusable stale secret. A live desktop owner prevents the child
+from starting the rekey, leaving both the desktop connection and old database
+passphrase usable.
 
 Production Tauri and development-bridge calls likewise have no arbitrary
 accepted-operation timeout. They wait for the exact request-id terminal record

@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import nullcontext
 from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -50,6 +51,7 @@ from kassiber.daemon_freshness import (
 )
 from kassiber.backends import DEFAULT_BACKENDS
 from kassiber.errors import AppError
+from kassiber.operator.project import acquire_project_ownership, canonical_project
 from kassiber.secrets.sqlcipher import sqlcipher_available
 from kassiber.secrets.unlock_store import DESKTOP_BIOMETRIC_STALE_SETTING
 from kassiber.wallet_descriptors import (
@@ -974,7 +976,11 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
 
     def test_guard_write_failure_preserves_live_connection(self):
         connection = mock.Mock()
-        ctx = SimpleNamespace(data_root="/tmp/kassiber-rotate-test", conn=connection)
+        ctx = SimpleNamespace(
+            data_root="/tmp/kassiber-rotate-test",
+            conn=connection,
+            project_owner=mock.Mock(),
+        )
         with mock.patch.object(
             daemon_module,
             "_database_file_is_encrypted",
@@ -991,6 +997,10 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
             daemon_module,
             "change_database_passphrase",
             side_effect=lambda *_args, **kwargs: kwargs["before_rekey"](),
+        ), mock.patch.object(
+            daemon_module,
+            "exclusive_project_maintenance",
+            return_value=nullcontext(),
         ), mock.patch.object(
             daemon_module,
             "_stop_freshness_background_worker",
@@ -1013,7 +1023,11 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"
             data_root.mkdir()
-            ctx = SimpleNamespace(data_root=data_root, conn=None)
+            ctx = SimpleNamespace(
+                data_root=data_root,
+                conn=None,
+                project_owner=mock.Mock(),
+            )
             with mock.patch.object(
                 daemon_module,
                 "_database_file_is_encrypted",
@@ -1029,6 +1043,10 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
                 daemon_module,
                 "change_database_passphrase",
                 side_effect=fail_after_binding,
+            ), mock.patch.object(
+                daemon_module,
+                "exclusive_project_maintenance",
+                return_value=nullcontext(),
             ):
                 with self.assertRaises(AppError):
                     daemon_module.handle_request(ctx, self._request(), mock.Mock())
@@ -1039,6 +1057,55 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
                 ),
                 str,
             )
+
+    def test_locked_rotation_failure_releases_temporary_desktop_owner(self):
+        owner = mock.Mock()
+        ctx = SimpleNamespace(
+            data_root="/tmp/kassiber-rotate-test",
+            conn=None,
+            project_owner=None,
+        )
+
+        def acquire_owner(target):
+            target.project_owner = owner
+            return owner
+
+        def release_owner(target):
+            target.project_owner = None
+
+        with mock.patch.object(
+            daemon_module,
+            "_database_file_is_encrypted",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "_verify_passphrase_with_backoff",
+            return_value=True,
+        ), mock.patch.object(
+            daemon_module,
+            "_ensure_daemon_project_owner",
+            side_effect=acquire_owner,
+        ), mock.patch.object(
+            daemon_module,
+            "_release_daemon_project_owner",
+            side_effect=release_owner,
+        ) as release, mock.patch.object(
+            daemon_module,
+            "exclusive_project_maintenance",
+            return_value=nullcontext(),
+        ), mock.patch.object(
+            daemon_module,
+            "change_database_passphrase",
+            side_effect=AppError(
+                "verification failed after rekey",
+                code="rekey_verification_failed",
+            ),
+        ):
+            with self.assertRaises(AppError):
+                daemon_module.handle_request(ctx, self._request(), mock.Mock())
+
+        release.assert_called_once_with(ctx)
+        self.assertIsNone(ctx.project_owner)
 
 
 class DaemonFreshnessForceFullTest(unittest.TestCase):
@@ -5111,6 +5178,167 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
+    def test_daemon_encryption_init_waits_for_live_broker_owner(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            connection = open_db(data_root)
+            connection.close()
+            proc = _start_daemon(data_root)
+            broker = None
+            try:
+                self.assertEqual(_read_payload(proc)["kind"], "daemon.ready")
+                broker = acquire_project_ownership(
+                    canonical_project(data_root),
+                    owner_kind="broker",
+                    generation="broker-test",
+                )
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "secrets-init-blocked",
+                        "kind": "ui.secrets.init",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": "correct horse battery",
+                            },
+                            "migrate_credentials": False,
+                        },
+                    },
+                )
+                blocked = _read_payload(proc)
+                self.assertEqual(blocked["kind"], "error")
+                self.assertEqual(blocked["error"]["code"], "project_in_use")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "status-after-block", "kind": "status"},
+                )
+                self.assertEqual(_read_payload(proc)["kind"], "status")
+            finally:
+                if broker is not None:
+                    broker.release()
+                if proc.poll() is None:
+                    proc.kill()
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
+    def test_daemon_rekey_waits_for_live_broker_owner(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            broker = None
+            try:
+                self.assertEqual(_read_payload(proc)["kind"], "daemon.ready")
+                old_passphrase = "correct horse battery"
+                new_passphrase = "better horse battery"
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "secrets-init",
+                        "kind": "ui.secrets.init",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": old_passphrase,
+                            },
+                            "migrate_credentials": False,
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload(proc)["kind"], "ui.secrets.init")
+
+                broker = acquire_project_ownership(
+                    canonical_project(data_root),
+                    owner_kind="broker",
+                    generation="broker-test",
+                )
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "rekey-blocked",
+                        "kind": "ui.secrets.change_passphrase",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": old_passphrase,
+                            },
+                            "new_passphrase_secret": new_passphrase,
+                        },
+                    },
+                )
+                blocked = _read_payload(proc)
+                self.assertEqual(blocked["kind"], "error")
+                self.assertEqual(blocked["error"]["code"], "project_in_use")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "status-after-block", "kind": "status"},
+                )
+                self.assertEqual(_read_payload(proc)["kind"], "status")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "lock-before-second-block", "kind": "daemon.lock"},
+                )
+                self.assertEqual(_read_payload(proc)["kind"], "daemon.lock")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "locked-rekey-blocked",
+                        "kind": "ui.secrets.change_passphrase",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": old_passphrase,
+                            },
+                            "new_passphrase_secret": new_passphrase,
+                        },
+                    },
+                )
+                locked_blocked = _read_payload(proc)
+                self.assertEqual(locked_blocked["kind"], "error")
+                self.assertEqual(
+                    locked_blocked["error"]["code"],
+                    "project_in_use",
+                )
+                desktop_probe = acquire_project_ownership(
+                    canonical_project(data_root),
+                    owner_kind="desktop",
+                    generation="desktop-probe",
+                )
+                desktop_probe.release()
+
+                broker.release()
+                broker = None
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "rekey-after-lock",
+                        "kind": "ui.secrets.change_passphrase",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": old_passphrase,
+                            },
+                            "new_passphrase_secret": new_passphrase,
+                        },
+                    },
+                )
+                self.assertEqual(
+                    _read_payload(proc)["kind"],
+                    "ui.secrets.change_passphrase",
+                )
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if broker is not None:
+                    broker.release()
+                if proc.poll() is None:
+                    proc.kill()
 
     @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
     def test_daemon_auth_backoff_throttles_unlock_and_reauth(self):

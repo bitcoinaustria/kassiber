@@ -369,7 +369,7 @@ class DaemonProjectSwitchTests(unittest.TestCase):
             project_root=str(entry.root),
         )
 
-    def test_broker_owned_target_is_rejected_before_authentication_or_open(self):
+    def test_broker_owned_target_can_open_in_desktop(self):
         from kassiber import daemon as daemon_runtime
         from kassiber import projects as projects_module
 
@@ -379,12 +379,14 @@ class DaemonProjectSwitchTests(unittest.TestCase):
             old_data = projects_module.DEFAULT_DATA_ROOT
             broker_owner = None
             alpha_conn = None
+            ctx = None
             try:
                 projects_module.DEFAULT_STATE_ROOT = str(state_root)
                 projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
                 alpha = create_project("Alpha", project_id="alpha")
                 beta = create_project("Beta", project_id="beta", select=False)
                 alpha_conn = open_db(str(alpha.data_root))
+                open_db(str(beta.data_root)).close()
                 ctx = self._context(daemon_runtime, alpha, alpha_conn)
                 broker_owner = daemon_runtime.acquire_project_ownership(
                     daemon_runtime.canonical_project(str(beta.data_root)),
@@ -395,36 +397,46 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                 with mock.patch.object(
                     daemon_runtime,
                     "_data_root_database_is_encrypted",
+                    return_value=False,
                 ) as encrypted, mock.patch.object(
                     daemon_runtime,
                     "_verify_project_passphrase_with_backoff",
                 ) as verify, mock.patch.object(
                     daemon_runtime,
                     "_open_project_connection_for_switch",
-                ) as open_target:
-                    with self.assertRaises(AppError) as raised:
-                        daemon_runtime._select_project_payload(
-                            ctx,
-                            {
-                                "project_id": beta.id,
-                                "auth_response": {
-                                    "passphrase_secret": "not-probed"
-                                },
-                            },
-                            "switch",
-                        )
+                    return_value=(
+                        open_db(str(beta.data_root)),
+                        {
+                            "env_file": str(beta.root / "config" / "backends.env"),
+                            "default_backend": None,
+                            "backends": {},
+                        },
+                    ),
+                ) as open_target, mock.patch.object(
+                    daemon_runtime,
+                    "_stop_freshness_background_worker",
+                ), mock.patch.object(
+                    daemon_runtime,
+                    "_start_freshness_background_worker",
+                ):
+                    daemon_runtime._select_project_payload(
+                        ctx,
+                        {"project_id": beta.id},
+                        "switch",
+                    )
 
-                self.assertEqual(raised.exception.code, "project_in_use")
-                encrypted.assert_not_called()
+                encrypted.assert_called_once()
                 verify.assert_not_called()
-                open_target.assert_not_called()
-                self.assertIs(ctx.conn, alpha_conn)
-                self.assertEqual(ctx.project_id, alpha.id)
+                open_target.assert_called_once()
+                self.assertIsNot(ctx.conn, alpha_conn)
+                self.assertEqual(ctx.project_id, beta.id)
                 self.assertEqual(
                     load_catalog(catalog_path(state_root))["selected_project_id"],
-                    alpha.id,
+                    beta.id,
                 )
             finally:
+                if ctx is not None:
+                    daemon_runtime._retire_current_project_resources(ctx)
                 if broker_owner is not None:
                     broker_owner.release()
                 if alpha_conn is not None:

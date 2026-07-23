@@ -32,6 +32,7 @@ from .operator.project import (
     ProjectOwnerLease,
     acquire_project_ownership,
     canonical_project,
+    exclusive_project_maintenance,
 )
 from .operator.native_auth import invalidate_operator_native_auth
 from .backends import preferred_explorer_base
@@ -3690,9 +3691,9 @@ def _select_project_payload(
     target_owner_committed = transferred_owner is not None
     target_conn: sqlite3.Connection | None = None
     try:
-        # The ownership rendezvous must precede even a passphrase probe. A
-        # broker-owned target therefore fails with project_in_use without the
-        # desktop opening or authenticating against that database first.
+        # The desktop role lock must precede even a passphrase probe. It may
+        # coexist with the broker role for the same canonical database, while
+        # duplicate desktops and replaced identities still fail closed.
         target_encrypted = _data_root_database_is_encrypted(target_data_root)
         if target_encrypted:
             if not passphrase:
@@ -13706,33 +13707,39 @@ def handle_request(
                 "database": str(db_path),
             }
         else:
-            _stop_freshness_background_worker(ctx, cancel_running=True)
-            if ctx.conn is not None:
-                ctx.conn.close()
-                ctx.conn = None
-                _clear_unlocked_passphrase(ctx)
-            if db_path.exists() and db_path.stat().st_size > 0:
-                migration = migrate_plaintext_to_encrypted(db_path, passphrase)
-                result = {
-                    "encrypted": True,
-                    "already_encrypted": False,
-                    "database": str(migration.encrypted_path),
-                    "backup_path": str(migration.backup_path),
-                    "integrity_check": migration.integrity_check,
-                    "cipher_integrity_check": migration.cipher_integrity_check,
-                    "credential_marker_clean": migration.credential_marker_clean,
-                }
-            else:
-                created = create_empty_encrypted_database(db_path, passphrase)
-                result = {
-                    "encrypted": True,
-                    "already_encrypted": False,
-                    "database": str(created),
-                    "backup_path": None,
-                    "integrity_check": "ok",
-                    "cipher_integrity_check": None,
-                    "credential_marker_clean": True,
-                }
+            _ensure_daemon_project_owner(ctx)
+            with exclusive_project_maintenance(
+                ctx.data_root,
+                active_owner_kind="desktop",
+            ):
+                _stop_freshness_background_worker(ctx, cancel_running=True)
+                if ctx.conn is not None:
+                    ctx.conn.close()
+                    ctx.conn = None
+                    _clear_unlocked_passphrase(ctx)
+                if db_path.exists() and db_path.stat().st_size > 0:
+                    migration = migrate_plaintext_to_encrypted(db_path, passphrase)
+                    result = {
+                        "encrypted": True,
+                        "already_encrypted": False,
+                        "database": str(migration.encrypted_path),
+                        "backup_path": str(migration.backup_path),
+                        "integrity_check": migration.integrity_check,
+                        "cipher_integrity_check": migration.cipher_integrity_check,
+                        "credential_marker_clean": migration.credential_marker_clean,
+                    }
+                else:
+                    created = create_empty_encrypted_database(db_path, passphrase)
+                    result = {
+                        "encrypted": True,
+                        "already_encrypted": False,
+                        "database": str(created),
+                        "backup_path": None,
+                        "integrity_check": "ok",
+                        "cipher_integrity_check": None,
+                        "credential_marker_clean": True,
+                    }
+            _release_daemon_project_owner(ctx)
             conn = _open_daemon_connection(ctx, passphrase=passphrase)
             if args.get("migrate_credentials") is not False:
                 result["credentials"] = migrate_dotenv_credentials(
@@ -13893,25 +13900,41 @@ def handle_request(
                 ctx.conn = None
                 _clear_unlocked_passphrase(ctx)
 
-        result = change_database_passphrase(
-            db_path,
-            current,
-            new_passphrase,
-            before_rekey=invalidate_native_credentials,
-        )
-        result["desktop_biometric_invalidated"] = (
-            desktop_stale_generation is not None
-        )
-        result["desktop_biometric_stale_generation"] = desktop_stale_generation
-        result["operator_native_auth_invalidated"] = True
-        result["operator_native_auth_stale_generation"] = operator_stale_generation
-        remembered_warning = refresh_remembered_passphrase_after_rotation(
-            ctx.data_root,
-            new_passphrase,
-        )
-        if remembered_warning is not None:
-            result["remembered_unlock_warning"] = remembered_warning
-        _open_daemon_connection(ctx, passphrase=new_passphrase)
+        owner_acquired_for_rotation = ctx.project_owner is None
+        if owner_acquired_for_rotation:
+            _ensure_daemon_project_owner(ctx)
+        try:
+            with exclusive_project_maintenance(
+                ctx.data_root,
+                active_owner_kind="desktop",
+            ):
+                result = change_database_passphrase(
+                    db_path,
+                    current,
+                    new_passphrase,
+                    before_rekey=invalidate_native_credentials,
+                )
+                result["desktop_biometric_invalidated"] = (
+                    desktop_stale_generation is not None
+                )
+                result["desktop_biometric_stale_generation"] = (
+                    desktop_stale_generation
+                )
+                result["operator_native_auth_invalidated"] = True
+                result["operator_native_auth_stale_generation"] = (
+                    operator_stale_generation
+                )
+                remembered_warning = refresh_remembered_passphrase_after_rotation(
+                    ctx.data_root,
+                    new_passphrase,
+                )
+                if remembered_warning is not None:
+                    result["remembered_unlock_warning"] = remembered_warning
+                _open_daemon_connection(ctx, passphrase=new_passphrase)
+        except Exception:
+            if owner_acquired_for_rotation and ctx.conn is None:
+                _release_daemon_project_owner(ctx)
+            raise
         return (
             _with_request_id(
                 build_envelope("ui.secrets.change_passphrase", result),

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 import stat
 import sys
+import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
@@ -17,6 +20,8 @@ from ..errors import AppError
 
 OWNER_LOCK_FILENAME = ".operator-owner.lock"
 _OWNER_KINDS = frozenset({"broker", "desktop"})
+_OWNER_ADMISSION_TIMEOUT_SECONDS = 5.0
+_OWNER_ADMISSION_RETRY_SECONDS = 0.01
 
 
 @dataclass(frozen=True)
@@ -89,36 +94,101 @@ class ProjectOwnerLease:
                 retryable=False,
             )
         for lock_path in (project.alias_lock_path, project.local_lock_path):
-            if lock_path not in self._lock_paths:
-                self._add_lock(lock_path, project.public_id)
+            self._add_project_lock(lock_path, project)
 
-    def _add_lock(self, lock_path: Path, project_id: str) -> None:
-        handle = _open_owner_lock(lock_path, project_id)
+    def _add_project_lock(
+        self,
+        lock_path: Path,
+        project: CanonicalProject,
+    ) -> None:
+        admission = _acquire_admission_lock(lock_path, project.public_id)
+        original_handles = self._handles
+        original_lock_paths = self._lock_paths.copy()
         try:
-            if not _try_lock_handle(handle):
+            compatibility_path = lock_path
+            owner_path = _owner_kind_lock_path(lock_path, self.owner_kind)
+            if compatibility_path not in self._lock_paths:
+                self._add_lock(
+                    compatibility_path,
+                    project,
+                    shared=True,
+                    write_record=False,
+                )
+            if owner_path not in self._lock_paths:
+                self._add_lock(
+                    owner_path,
+                    project,
+                    shared=False,
+                    write_record=True,
+                )
+            _require_compatible_other_owner(lock_path, project, self.owner_kind)
+        except Exception:
+            added_handles = self._handles[len(original_handles) :]
+            self._handles = original_handles
+            self._lock_paths = original_lock_paths
+            for handle in reversed(added_handles):
+                handle.close()
+            raise
+        finally:
+            _unlock_handle(admission)
+            admission.close()
+
+    def _add_lock(
+        self,
+        lock_path: Path,
+        project: CanonicalProject,
+        *,
+        shared: bool,
+        write_record: bool,
+    ) -> None:
+        handle = _open_owner_lock(lock_path, project.public_id, shared=shared)
+        try:
+            if not _try_lock_handle(handle, shared=shared):
                 owner = _read_owner_record(handle)
+                owner_kind = owner.get("owner", "unknown")
+                hint = (
+                    "Reuse or close the existing desktop app or preview. "
+                    "A CLI broker can coexist, but a second desktop cannot."
+                    if owner_kind == "desktop"
+                    else (
+                        "Reuse or lock the existing CLI broker, then retry."
+                        if owner_kind == "broker"
+                        else None
+                    )
+                )
                 raise AppError(
-                    "another long-lived process owns this project path",
+                    (
+                        "another desktop app or preview owns this project"
+                        if owner_kind == "desktop"
+                        else (
+                            "another CLI broker owns this project"
+                            if owner_kind == "broker"
+                            else "another long-lived process owns this project path"
+                        )
+                    ),
                     code="project_in_use",
+                    hint=hint,
                     details={
-                        "project": project_id,
-                        "owner": owner.get("owner", "unknown"),
+                        "project": project.public_id,
+                        "owner": owner_kind,
                         "generation": owner.get("generation"),
                     },
                     retryable=True,
                 )
-            record = json.dumps(
-                {
-                    "schema_version": 1,
-                    "owner": self.owner_kind,
-                    "generation": self.generation,
-                    "pid": os.getpid(),
-                },
-                sort_keys=True,
-            ).encode("utf-8")
-            handle.seek(0)
-            handle.truncate(0)
-            handle.write(record + b"\n")
+            if write_record:
+                record = json.dumps(
+                    {
+                        "schema_version": 2,
+                        "owner": self.owner_kind,
+                        "generation": self.generation,
+                        "identity": project.identity,
+                        "pid": os.getpid(),
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+                handle.seek(0)
+                handle.truncate(0)
+                handle.write(record + b"\n")
             self._handles = (*self._handles, handle)
             self._lock_paths.add(lock_path)
         except Exception:
@@ -209,63 +279,189 @@ def acquire_project_ownership(
     owner_kind: str,
     generation: str,
 ) -> ProjectOwnerLease:
-    """Acquire the canonical long-lived owner lock without waiting."""
+    """Acquire this role's canonical long-lived owner locks without waiting."""
 
     if owner_kind not in _OWNER_KINDS:
         raise ValueError(f"invalid owner kind: {owner_kind}")
-    handles: list[IO[bytes]] = []
+    lease = ProjectOwnerLease(
+        project,
+        owner_kind,
+        generation,
+        (),
+        set(),
+    )
     try:
-        # Identity preserves ownership across moves; the global path lock and
-        # project-local lock prevent replacement or differing runtime-directory
-        # selections from creating a second owner at the admitted project.
+        # The shared compatibility locks block older Kassiber versions that
+        # assumed one exclusive owner. Role-specific locks still exclude a
+        # duplicate broker or desktop while allowing CLI and GUI to coexist.
         lock_paths = (
             project.lock_path,
             project.alias_lock_path,
             project.local_lock_path,
         )
         for lock_path in dict.fromkeys(lock_paths):
-            handle = _open_owner_lock(lock_path, project.public_id)
-            handles.append(handle)
-            if not _try_lock_handle(handle):
-                owner = _read_owner_record(handle)
+            lease._add_project_lock(lock_path, project)
+        return lease
+    except Exception:
+        lease.release()
+        raise
+
+
+def _owner_kind_lock_path(lock_path: Path, owner_kind: str) -> Path:
+    return lock_path.with_name(f"{lock_path.name}.{owner_kind}")
+
+
+def _owner_admission_lock_path(lock_path: Path) -> Path:
+    return lock_path.with_name(f"{lock_path.name}.admission")
+
+
+def _acquire_admission_lock(
+    lock_path: Path,
+    project_id: str,
+) -> IO[bytes]:
+    admission_path = _owner_admission_lock_path(lock_path)
+    deadline = time.monotonic() + _OWNER_ADMISSION_TIMEOUT_SECONDS
+    if os.name != "nt":
+        handle = _open_owner_lock(admission_path, project_id)
+        try:
+            while not _try_lock_handle(handle):
+                if time.monotonic() >= deadline:
+                    raise AppError(
+                        "project owner admission is busy",
+                        code="project_in_use",
+                        hint=(
+                            "Retry after the other Kassiber process finishes "
+                            "opening."
+                        ),
+                        details={"project": project_id},
+                        retryable=True,
+                    )
+                time.sleep(_OWNER_ADMISSION_RETRY_SECONDS)
+        except Exception:
+            handle.close()
+            raise
+        return handle
+
+    while True:
+        try:
+            return _open_owner_lock(admission_path, project_id)
+        except AppError as exc:
+            if (
+                exc.code != "project_in_use"
+                or time.monotonic() >= deadline
+            ):
                 raise AppError(
-                    "another long-lived process owns this project",
+                    "project owner admission is busy",
                     code="project_in_use",
-                    hint="Lock the active broker lease or close the desktop project, then retry.",
+                    hint="Retry after the other Kassiber process finishes opening.",
+                    details={"project": project_id},
+                    retryable=True,
+                ) from exc
+            time.sleep(_OWNER_ADMISSION_RETRY_SECONDS)
+
+
+@contextmanager
+def exclusive_project_maintenance(
+    data_root: str | os.PathLike[str],
+    *,
+    active_owner_kind: str | None,
+) -> Iterator[None]:
+    """Exclude every other long-lived role during database-wide maintenance."""
+
+    if active_owner_kind is not None and active_owner_kind not in _OWNER_KINDS:
+        raise ValueError(f"invalid active owner kind: {active_owner_kind}")
+    project = canonical_project(data_root)
+    owner_kinds = (
+        tuple(kind for kind in ("broker", "desktop") if kind != active_owner_kind)
+        if active_owner_kind is not None
+        else ("broker", "desktop")
+    )
+    leases: list[ProjectOwnerLease] = []
+    try:
+        for owner_kind in owner_kinds:
+            try:
+                leases.append(
+                    acquire_project_ownership(
+                        project,
+                        owner_kind=owner_kind,
+                        generation=f"maintenance-{os.getpid()}",
+                    )
+                )
+            except AppError as exc:
+                if exc.code != "project_in_use":
+                    raise
+                raise AppError(
+                    "database maintenance requires exclusive project access",
+                    code="project_in_use",
+                    hint=(
+                        "Lock the operator broker lease and close the desktop "
+                        "project, then retry."
+                    ),
                     details={
                         "project": project.public_id,
-                        "owner": owner.get("owner", "unknown"),
-                        "generation": owner.get("generation"),
+                        "owner": (exc.details or {}).get("owner", "unknown"),
                     },
                     retryable=True,
-                )
-        record = json.dumps(
-            {
-                "schema_version": 1,
-                "owner": owner_kind,
-                "generation": generation,
-                "pid": os.getpid(),
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-        for handle in handles:
-            handle.seek(0)
-            handle.truncate(0)
-            handle.write(record + b"\n")
-        return ProjectOwnerLease(
-            project,
-            owner_kind,
-            generation,
-            tuple(handles),
-            set(lock_paths),
-        )
-    except Exception:
-        for handle in reversed(handles):
+                ) from exc
+        yield
+    finally:
+        first_error: Exception | None = None
+        for lease in reversed(leases):
             try:
-                _unlock_handle(handle)
-            finally:
-                handle.close()
-        raise
+                lease.release()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None and sys.exc_info()[0] is None:
+            raise first_error
+
+
+def _require_compatible_other_owner(
+    lock_path: Path,
+    project: CanonicalProject,
+    owner_kind: str,
+) -> None:
+    other_kind = "desktop" if owner_kind == "broker" else "broker"
+    owner = _active_owner_record(
+        _owner_kind_lock_path(lock_path, other_kind),
+        project.public_id,
+    )
+    if owner is None or owner.get("identity") == project.identity:
+        return
+    raise AppError(
+        "another long-lived process owns a different project at this path",
+        code="project_in_use",
+        hint="Close the process using the replaced project path, then retry.",
+        details={
+            "project": project.public_id,
+            "owner": owner.get("owner", "unknown"),
+            "generation": owner.get("generation"),
+        },
+        retryable=True,
+    )
+
+
+def _active_owner_record(
+    lock_path: Path,
+    project_id: str,
+) -> dict[str, object] | None:
+    try:
+        handle = _open_owner_lock(lock_path, project_id)
+    except AppError as exc:
+        if os.name != "nt" or exc.code != "project_in_use":
+            raise
+        probe = _open_owner_lock(lock_path, project_id, probe=True)
+        try:
+            return _read_owner_record(probe)
+        finally:
+            probe.close()
+    try:
+        if _try_lock_handle(handle):
+            _unlock_handle(handle)
+            return None
+        return _read_owner_record(handle)
+    finally:
+        handle.close()
 
 
 def _owner_lock_root() -> Path:
@@ -334,9 +530,20 @@ def _windows_local_appdata() -> Path:
     return Path(buffer.value)
 
 
-def _open_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:
+def _open_owner_lock(
+    lock_path: Path,
+    project_id: str,
+    *,
+    shared: bool = False,
+    probe: bool = False,
+) -> IO[bytes]:
     if os.name == "nt":
-        return _open_windows_owner_lock(lock_path, project_id)
+        return _open_windows_owner_lock(
+            lock_path,
+            project_id,
+            shared=shared,
+            probe=probe,
+        )
     flags = os.O_RDWR | os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -369,8 +576,14 @@ def _open_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:
         raise
 
 
-def _open_windows_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:
-    """Open with share-mode zero so inherited duplicates preserve exclusion."""
+def _open_windows_owner_lock(
+    lock_path: Path,
+    project_id: str,
+    *,
+    shared: bool,
+    probe: bool,
+) -> IO[bytes]:
+    """Use Windows share modes for compatibility and per-role exclusion."""
 
     import ctypes
     import msvcrt
@@ -389,8 +602,12 @@ def _open_windows_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:
     create_file.restype = wintypes.HANDLE
     handle = create_file(
         str(lock_path),
-        0x80000000 | 0x40000000,  # GENERIC_READ | GENERIC_WRITE
-        0,  # no sharing: duplicate/inherited handles keep this reservation
+        0x80000000 if probe else 0x80000000 | 0x40000000,
+        (
+            0x00000001 | 0x00000002
+            if shared or probe
+            else 0x00000001
+        ),  # FILE_SHARE_READ | optional FILE_SHARE_WRITE
         None,
         4,  # OPEN_ALWAYS
         0x80,  # FILE_ATTRIBUTE_NORMAL
@@ -413,11 +630,14 @@ def _open_windows_owner_lock(lock_path: Path, project_id: str) -> IO[bytes]:
             retryable=True,
         )
     try:
-        fd = msvcrt.open_osfhandle(int(handle), os.O_RDWR)
+        fd = msvcrt.open_osfhandle(
+            int(handle),
+            os.O_RDONLY if probe else os.O_RDWR,
+        )
     except Exception:
         ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(handle)
         raise
-    file_handle = os.fdopen(fd, "r+b", buffering=0)
+    file_handle = os.fdopen(fd, "rb" if probe else "r+b", buffering=0)
     try:
         info = os.fstat(file_handle.fileno())
         if not stat.S_ISREG(info.st_mode):
@@ -464,14 +684,15 @@ def _require_windows_path_owner(path: Path) -> None:
         )
 
 
-def _try_lock_handle(handle: IO[bytes]) -> bool:
+def _try_lock_handle(handle: IO[bytes], *, shared: bool = False) -> bool:
     if os.name == "nt":
-        # Share-mode zero was acquired atomically by _open_windows_owner_lock.
+        # The requested Windows share mode was acquired atomically on open.
         return True
     import fcntl
 
     try:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
         return True
     except BlockingIOError:
         return False
@@ -500,7 +721,9 @@ def _read_owner_record(handle: IO[bytes]) -> dict[str, object]:
         return {}
     owner = payload.get("owner")
     generation = payload.get("generation")
+    identity = payload.get("identity")
     return {
         "owner": owner if owner in _OWNER_KINDS else "unknown",
         "generation": generation if isinstance(generation, str) else None,
+        "identity": identity if isinstance(identity, str) else None,
     }

@@ -159,8 +159,12 @@ Windows uses user-scope Credential Manager; Linux uses Secret Service only when
 available and unlocked. There is no plaintext fallback. CLI reads are not
 biometric-gated. Desktop passphrase rotation updates the CLI entry or disables
 the marker and warns if the store rejects the update, then separately refreshes
-the desktop entry. Before desktop or CLI rotation rekeys SQLCipher, the Python
-side arms a non-secret `desktop_biometric_stale` guard in managed settings.
+the desktop entry. Passphrase rotation first reserves the opposite runtime
+role; a live GUI blocks brokered rotation and a live broker blocks desktop
+rotation before any connection is closed or database bytes change. Direct CLI
+SQLCipher initialization and plaintext migration reserve both roles. Before
+desktop or CLI rotation rekeys SQLCipher, the Python side arms a non-secret
+`desktop_biometric_stale` guard in managed settings.
 The value is an opaque generation token. The guard stays armed on any rotation
 error because verification can fail after the key already changed; successful
 Tauri enrollment refresh compare-and-clears only the generation that initiated

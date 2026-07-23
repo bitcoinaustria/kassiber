@@ -26,7 +26,7 @@ from ..db import (
 from ..errors import AppError
 from ..operator.modes import unlock_mode_status
 from ..operator.native_auth import invalidate_operator_native_auth
-from ..operator.project import canonical_project
+from ..operator.project import canonical_project, exclusive_project_maintenance
 from .credentials import (
     migrate_dotenv_credentials,
     scan_dotenv_for_secrets,
@@ -181,21 +181,28 @@ def cmd_secrets_init(args: argparse.Namespace) -> dict:
     )
     _enforce_min_length(new_passphrase)
 
-    if classification["exists"] and classification["plaintext"]:
-        result = migrate_plaintext_to_encrypted(db_path, new_passphrase)
-        return {
-            "mode": "migrated",
-            "database": str(result.encrypted_path),
-            "backup": str(result.backup_path),
-            "user_version": result.plaintext_user_version,
-            "auto_vacuum": result.plaintext_auto_vacuum,
-            "integrity_check": result.integrity_check,
-            "cipher_integrity_check": result.cipher_integrity_check,
-            "credential_marker_clean": result.credential_marker_clean,
-        }
+    active_owner_kind = (
+        "broker" if os.environ.get("KASSIBER_OPERATOR_CHILD") == "1" else None
+    )
+    with exclusive_project_maintenance(
+        args.data_root,
+        active_owner_kind=active_owner_kind,
+    ):
+        if classification["exists"] and classification["plaintext"]:
+            result = migrate_plaintext_to_encrypted(db_path, new_passphrase)
+            return {
+                "mode": "migrated",
+                "database": str(result.encrypted_path),
+                "backup": str(result.backup_path),
+                "user_version": result.plaintext_user_version,
+                "auto_vacuum": result.plaintext_auto_vacuum,
+                "integrity_check": result.integrity_check,
+                "cipher_integrity_check": result.cipher_integrity_check,
+                "credential_marker_clean": result.credential_marker_clean,
+            }
 
-    create_empty_encrypted_database(db_path, new_passphrase)
-    return {"mode": "created", "database": str(db_path)}
+        create_empty_encrypted_database(db_path, new_passphrase)
+        return {"mode": "created", "database": str(db_path)}
 
 
 def cmd_secrets_init_resume(args: argparse.Namespace) -> dict:
@@ -254,12 +261,19 @@ def cmd_secrets_change_passphrase(args: argparse.Namespace) -> dict:
         )
         operator_stale_generation = invalidate_operator_native_auth(args.data_root)
 
-    result = change_database_passphrase(
-        db_path,
-        current,
-        new_passphrase,
-        before_rekey=invalidate_native_credentials,
+    active_owner_kind = (
+        "broker" if os.environ.get("KASSIBER_OPERATOR_CHILD") == "1" else None
     )
+    with exclusive_project_maintenance(
+        args.data_root,
+        active_owner_kind=active_owner_kind,
+    ):
+        result = change_database_passphrase(
+            db_path,
+            current,
+            new_passphrase,
+            before_rekey=invalidate_native_credentials,
+        )
     result["desktop_biometric_invalidated"] = desktop_stale_generation is not None
     result["desktop_biometric_stale_generation"] = desktop_stale_generation
     result["operator_native_auth_invalidated"] = True
