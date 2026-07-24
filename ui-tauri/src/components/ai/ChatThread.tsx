@@ -6,10 +6,10 @@
  * message can pin ~16px from the TOP of the viewport, and the assistant reply
  * streams in below it (rather than the message sitting at the bottom and being
  * shoved upward). The reserved space shrinks as the reply grows; once the turn
- * outgrows the viewport it follows the streaming tail. A manual wheel/touch
- * gesture opts out into free-scrolling and surfaces the "scroll to latest" pill.
- * On mount an actively-streaming turn anchors; a resumed (settled) thread just
- * opens pinned to the newest message.
+ * outgrows the viewport it follows the streaming tail. Any backwards scroll —
+ * wheel, touch, scrollbar, PageUp — opts out into free-scrolling and surfaces
+ * the "scroll to latest" pill. On mount an actively-streaming turn anchors; a
+ * resumed (settled) thread just opens pinned to the newest message.
  *
  * T3Code drives this through LegendList's `anchoredEndSpace`; here the same
  * behaviour is reproduced on a plain scroll container with an imperative
@@ -21,6 +21,11 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { ChatMessage } from "./ChatMessage";
+import {
+  resolveScrollAffordances,
+  resolveScrollMode,
+  type ScrollMode,
+} from "./chatThreadScroll";
 import { Conversation, ConversationContent } from "@/components/ai-elements";
 import type { AiChatMessage } from "@/daemon/stream";
 
@@ -46,8 +51,6 @@ interface ChatThreadProps {
 const EDGE_THRESHOLD_PX = 32;
 // Where the anchored user turn sits below the top of the viewport (T3Code: 16).
 const ANCHOR_OFFSET_PX = 16;
-
-type ScrollMode = "following" | "anchoring" | "free";
 
 function findLastUserId(messages: AiChatMessage[]): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -76,6 +79,7 @@ export function ChatThread({
   const frameRef = React.useRef<number | null>(null);
 
   const modeRef = React.useRef<ScrollMode>("following");
+  const lastTopRef = React.useRef(0);
   const anchorIdRef = React.useRef<string | null>(null);
   const lastUserIdRef = React.useRef<string | null>(null);
   const messageCountRef = React.useRef(0);
@@ -165,20 +169,30 @@ export function ChatThread({
   const handleScroll = React.useCallback(() => {
     const node = containerRef.current;
     if (!node) return;
+    const previousTop = lastTopRef.current;
+    lastTopRef.current = node.scrollTop;
     const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
     const atBottom = distance <= EDGE_THRESHOLD_PX;
     const atTop = node.scrollTop <= EDGE_THRESHOLD_PX;
-    // Scrolling back to the live edge re-engages following.
-    if (atBottom && modeRef.current === "free") modeRef.current = "following";
-    const free = modeRef.current === "free";
-    // The scroll affordances only appear while the user is browsing away from
-    // the live edge — never mid-anchor, where we hold the view deliberately.
-    setShowJumpPill(free && !atBottom);
-    setShowScrollTop(free && !atTop);
-  }, []);
+    const nextMode = resolveScrollMode(modeRef.current, {
+      atBottom,
+      scrolledUp: node.scrollTop < previousTop - 1,
+    });
+    if (nextMode !== modeRef.current) {
+      modeRef.current = nextMode;
+      if (nextMode === "free") {
+        anchorIdRef.current = null;
+        setSpacer(0);
+      }
+    }
+    const affordances = resolveScrollAffordances(nextMode, { atBottom, atTop });
+    setShowJumpPill(affordances.jumpToLatest);
+    setShowScrollTop(affordances.jumpToTop);
+  }, [setSpacer]);
 
-  // A real wheel/touch gesture (never our own programmatic scrollTo) drops out
-  // of auto-follow, mirroring T3Code's manual-navigation opt-out.
+  // A wheel/touch gesture drops out of auto-follow the moment it starts, before
+  // the scroll even lands, mirroring T3Code's manual-navigation opt-out. Routes
+  // without these events (scrollbar, keyboard) opt out in `handleScroll`.
   React.useEffect(() => {
     const node = containerRef.current;
     if (!node || !scrollable) return;
