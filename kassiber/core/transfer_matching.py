@@ -12,9 +12,11 @@ Confidence ladder
   Lightning ``payment_hash``; a unique provider/client ``swap_id`` whose
   canonical route txids and whole-row amounts agree; or a uniquely verified
   on-chain HTLC refund outpoint.
-* **strong** — different wallets, opposite directions, time delta within
-  the configured window, and the implicit ``out_amount - in_amount``
-  delta sits below the fee tolerance (``max(fee_pct_max * out, fee_sats_min)``).
+* **strong** — cross-rail/provider legs in different wallets, opposite
+  directions, with a time delta inside the configured window and an implicit
+  ``out_amount - in_amount`` delta below the fee tolerance
+  (``max(fee_pct_max * out, fee_sats_min)``). Ordinary same-asset on-chain
+  wallet movements require native ownership-graph evidence instead.
   Surfaced via ``method = "heuristic"``.
 
 Anything weaker stays unmatched; the user explicitly pairs from the row
@@ -1286,6 +1288,14 @@ def _provider_route_matches_row(
     return external_id.lower() == str(expected).strip().lower()
 
 
+def _is_known_onchain_row(row: Mapping) -> bool:
+    wallet_kind = normalize_wallet_kind_alias(_record_get(row, "wallet_kind"))
+    return (
+        wallet_kind in CHAIN_INFERENCE_WALLET_KINDS
+        or onchain_transfer_scope(row) is not None
+    )
+
+
 def _match_heuristic(
     out_rows: Sequence[Mapping],
     in_rows: Sequence[Mapping],
@@ -1304,7 +1314,7 @@ def _match_heuristic(
     is fine: ``suggest_swap_candidates`` applies a total-order sort and
     conflict clustering is order-independent.
     """
-    in_entries: list[tuple[float, Mapping, int]] = []
+    in_entries: list[tuple[float, Mapping, int, bool]] = []
     for in_row in in_rows:
         in_seconds = _iso_to_seconds(_record_get(in_row, "occurred_at"))
         if in_seconds is None:
@@ -1315,7 +1325,9 @@ def _match_heuristic(
             # rows) would otherwise match any small outbound within the
             # absolute fee floor.
             continue
-        in_entries.append((in_seconds, in_row, in_amount))
+        in_entries.append(
+            (in_seconds, in_row, in_amount, _is_known_onchain_row(in_row))
+        )
     in_entries.sort(key=lambda entry: entry[0])
     in_times = [entry[0] for entry in in_entries]
 
@@ -1335,14 +1347,27 @@ def _match_heuristic(
         hi = bisect.bisect_right(in_times, out_seconds + time_window_seconds)
         out_asset = str(_record_get(out_row, "asset") or "")
         out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
-        for _, in_row, in_amount in in_entries[lo:hi]:
+        out_is_onchain = _is_known_onchain_row(out_row)
+        for _, in_row, in_amount, in_is_onchain in in_entries[lo:hi]:
             if out_wallet_id == _record_get(in_row, "wallet_id"):
                 continue
             delta = out_amount - in_amount
             if delta < 0 or delta > threshold:
                 continue
             in_asset = str(_record_get(in_row, "asset") or "")
-            if out_asset.upper() != in_asset.upper():
+            same_asset = out_asset.upper() == in_asset.upper()
+            if (
+                same_asset
+                and out_asset.upper() in {"BTC", "LBTC"}
+                and out_is_onchain
+                and in_is_onchain
+            ):
+                # A Bitcoin-family transfer between observed on-chain wallets
+                # is a transaction-graph fact, not a time/amount guess. The
+                # ownership journal either proves and books that physical move
+                # or surfaces its exact graph conflict for review.
+                continue
+            if not same_asset:
                 # Cross-asset (layer-hop) candidates must look like a recognized
                 # peg / submarine route, not just two similar-sized legs that
                 # happen to fall inside the window+fee band. Without this, an
