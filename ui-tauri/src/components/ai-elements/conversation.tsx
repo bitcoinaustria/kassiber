@@ -39,14 +39,14 @@ const ConversationContent = React.forwardRef<
       data-slot="conversation-content"
       className={cn(
         "flex min-h-0 w-full flex-1 flex-col",
-        contentClassName ? "gap-0 px-0" : "gap-6 px-1",
+        contentClassName ? "gap-0 px-0" : "gap-5 px-1",
         scrollable ? "overflow-y-auto" : "overflow-visible",
         className,
       )}
       {...props}
     >
       {contentClassName ? (
-        <div className={cn("flex flex-col gap-6", contentClassName)}>
+        <div className={cn("flex flex-col gap-5", contentClassName)}>
           {children}
         </div>
       ) : (

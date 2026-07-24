@@ -96,7 +96,7 @@ describe("Assistant toolbar", () => {
     expect(renderToStaticMarkup(<Assistant />)).toContain("Export");
   });
 
-  it("keeps the toolbar full-width while the thread stays max-w-4xl", () => {
+  it("keeps the toolbar full-width while the thread column stays capped", () => {
     assistantSession = makeAssistantSession({
       messages: [
         {
@@ -110,7 +110,10 @@ describe("Assistant toolbar", () => {
 
     const html = renderToStaticMarkup(<Assistant />);
 
+    // The conversation column + docked composer are capped (ported to the
+    // T3Code max-w-3xl reading column) while the toolbar row spans full width.
     expect(html).not.toContain("max-w-6xl");
-    expect(html).toContain("max-w-4xl");
+    expect(html).not.toContain("max-w-4xl");
+    expect(html).toContain("max-w-3xl");
   });
 });

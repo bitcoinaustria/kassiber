@@ -58,8 +58,12 @@ const DOCK_POSITION_CLASS: Record<AssistantDockPosition, string> = {
   right: "ml-auto mr-0",
 };
 
+// Understated frosted panel — the same material as the composer's
+// `.kb-composer-glass` (hairline border + soft short-throw shadow + a light
+// `bg-card` frost), so the floating assistant reads as the ported T3Code chat
+// in every state. Replaces the earlier heavy drop shadow + glossy top edge.
 const CARD_SURFACE =
-  "pointer-events-auto relative flex border border-border bg-card shadow-[0_24px_70px_rgba(15,23,42,0.18),0_6px_20px_rgba(15,23,42,0.10)] dark:border-white/12 dark:shadow-[0_24px_70px_rgba(0,0,0,0.6),0_4px_16px_rgba(0,0,0,0.4)] before:pointer-events-none before:absolute before:inset-x-3 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/55 before:to-transparent dark:before:via-white/18 origin-bottom transition-[transform,opacity,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
+  "pointer-events-auto relative flex border border-border/70 bg-card/95 shadow-[0_20px_48px_-24px_rgba(15,23,42,0.45)] backdrop-blur-md dark:border-white/10 dark:bg-card/90 dark:shadow-[0_20px_48px_-22px_rgba(0,0,0,0.65)] origin-bottom transition-[transform,opacity,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
 
 export function AssistantDock({
   className,
@@ -514,7 +518,7 @@ function ParkedHandle({
     <div
       className={cn(
         className,
-        "mx-auto w-fit flex-row items-center rounded-full p-1 before:inset-x-4",
+        "mx-auto w-fit flex-row items-center rounded-full p-1",
       )}
     >
       <button
@@ -556,7 +560,7 @@ function MinimizedChip({
     <div
       className={cn(
         className,
-        "ml-auto w-fit flex-row items-center rounded-full p-1 before:inset-x-4",
+        "ml-auto w-fit flex-row items-center rounded-full p-1",
       )}
     >
       <button
@@ -619,7 +623,7 @@ function WorkingFollowUpSurface({
     <div
       className={cn(
         className,
-        "ml-auto w-full max-w-md flex-col gap-2 rounded-3xl p-2 before:inset-x-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-300",
+        "ml-auto w-full max-w-md flex-col gap-2 rounded-3xl p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-300",
       )}
     >
       <div className="flex items-center gap-1.5 px-1">

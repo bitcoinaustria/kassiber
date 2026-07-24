@@ -62,6 +62,7 @@
   },
   "thread": {
     "scrollToLatest": "Zur neuesten Nachricht scrollen",
+    "scrollToLatestShort": "Zum Neuesten",
     "scrollToTop": "Nach oben scrollen"
   },
   "message": {
@@ -81,6 +82,9 @@
     "moreOptions": "Weitere Optionen",
     "branch": "In neuem Chat verzweigen",
     "edit": "Nachricht bearbeiten",
+    "showFullMessage": "Ganze Nachricht anzeigen",
+    "showLess": "Weniger anzeigen",
+    "code": "Code",
     "confirmEdit": "Bearbeitung bestätigen",
     "cancelEdit": "Bearbeitung abbrechen"
   },

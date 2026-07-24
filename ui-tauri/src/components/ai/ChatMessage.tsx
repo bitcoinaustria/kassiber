@@ -84,8 +84,11 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const loaderLabel = message.activityLabel ?? t("message.generating");
 
   return (
-    <div className="flex w-full justify-start">
-      <div className="w-full min-w-0 px-1 py-1 text-sm">
+    <div
+      className="group/assistant flex w-full justify-start"
+      data-message-id={message.id}
+    >
+      <div className="w-full min-w-0 px-1 py-0.5 text-sm">
         {hasThinking ? (
           <ChatReasoning
             segments={thinkingSegments}
@@ -159,6 +162,13 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   );
 }
 
+// Long user messages collapse behind a bottom fade (ported from T3Code): the
+// last ~1.75rem of the bubble dissolves, with a "Show full message" toggle.
+const USER_MESSAGE_FADE_MASK =
+  "linear-gradient(to bottom, black calc(100% - 1.75rem), transparent)";
+const USER_MESSAGE_COLLAPSE_CHARS = 600;
+const USER_MESSAGE_COLLAPSE_LINES = 8;
+
 function UserMessage({
   message,
   onEdit,
@@ -168,9 +178,14 @@ function UserMessage({
 }) {
   const { t } = useTranslation("assistant");
   const [isEditing, setIsEditing] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
   const [draft, setDraft] = React.useState(message.content);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const canEdit = Boolean(onEdit) && Boolean(message.content);
+  const canCollapse =
+    message.content.length > USER_MESSAGE_COLLAPSE_CHARS ||
+    message.content.split("\n").length > USER_MESSAGE_COLLAPSE_LINES;
+  const isCollapsed = canCollapse && !expanded;
 
   const startEditing = React.useCallback(() => {
     setDraft(message.content);
@@ -221,7 +236,10 @@ function UserMessage({
   if (isEditing) {
     const canConfirm = Boolean(draft.trim());
     return (
-      <div className="flex w-full flex-col items-end gap-1">
+      <div
+        className="flex w-full flex-col items-end gap-1"
+        data-message-id={message.id}
+      >
         <div className="w-full max-w-[82%] sm:max-w-[72%]">
           <Textarea
             ref={textareaRef}
@@ -230,7 +248,7 @@ function UserMessage({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
             aria-label={t("message.edit")}
-            className="min-h-[60px] w-full resize-none rounded-2xl rounded-tr-sm bg-muted text-sm"
+            className="min-h-[60px] w-full resize-none rounded-2xl bg-secondary text-sm"
           />
           <div className="mt-1 flex items-center justify-end gap-0.5 text-muted-foreground">
             <Button
@@ -263,22 +281,56 @@ function UserMessage({
   }
 
   return (
-    <div className="group/user flex w-full flex-col items-end gap-1">
-      <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground shadow-sm sm:max-w-[72%]">
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
-      </div>
-      {canEdit ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="rounded-full text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/user:opacity-100"
-          onClick={startEditing}
-          aria-label={t("message.edit")}
-          title={t("message.edit")}
+    <div
+      className="group/user flex w-full flex-col items-end gap-1"
+      data-message-id={message.id}
+    >
+      <div className="max-w-[82%] rounded-2xl bg-secondary p-3 text-sm text-foreground sm:max-w-[80%]">
+        <p
+          className={cn(
+            "whitespace-pre-wrap break-words",
+            isCollapsed && "max-h-44 overflow-hidden",
+          )}
+          style={
+            isCollapsed
+              ? {
+                  WebkitMaskImage: USER_MESSAGE_FADE_MASK,
+                  maskImage: USER_MESSAGE_FADE_MASK,
+                }
+              : undefined
+          }
         >
-          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-        </Button>
+          {message.content}
+        </p>
+      </div>
+      {canCollapse || canEdit ? (
+        <div className="flex items-center gap-0.5">
+          {canCollapse ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className="h-6 rounded-md px-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setExpanded((value) => !value)}
+              aria-expanded={expanded}
+            >
+              {expanded ? t("message.showLess") : t("message.showFullMessage")}
+            </Button>
+          ) : null}
+          {canEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="rounded-full text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/user:opacity-100"
+              onClick={startEditing}
+              aria-label={t("message.edit")}
+              title={t("message.edit")}
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -341,7 +393,7 @@ function ChatMessageActions({
     : null;
 
   return (
-    <div className="mt-2 flex items-center gap-0.5 text-muted-foreground">
+    <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/assistant:opacity-100">
       <Button
         type="button"
         variant="ghost"

@@ -34,7 +34,7 @@ function Tool({
       data-slot="tool"
       className={cn(
         "w-full min-w-0 overflow-hidden rounded-md border text-xs",
-        "border-border/70 bg-background/70",
+        "border-border/60 bg-muted/20",
         className,
       )}
       {...props}

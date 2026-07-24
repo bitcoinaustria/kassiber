@@ -65,19 +65,15 @@ export function Assistant() {
 
   const composer = (
     <Ai02
-      // No outer card: the composer is a single borderless box in a shade
-      // above the page background, with the suggestion chips sitting below it
-      // (outside the box), mirroring the reference layout.
-      className={cn(
-        "max-w-none border-0 bg-transparent p-0 shadow-none ring-0 backdrop-blur-0",
-        !hasMessages && "gap-4",
-      )}
-      composerClassName={cn(
-        "border-0 bg-muted shadow-none backdrop-blur-0 dark:bg-muted",
-        // The empty "agenda" hero gets a larger, squarer box to sit with the
-        // suggestion chips; the docked-thread composer stays compact.
-        hasMessages ? "rounded-2xl" : "min-h-[112px] rounded-3xl",
-      )}
+      // The composer is T3Code's understated frosted-glass panel (see
+      // `.kb-composer-glass`); the suggestion chips sit below it, outside the
+      // box, in the transparent layout column. The page containers govern
+      // width, so the composer itself is unconstrained here.
+      className={cn("max-w-none", !hasMessages && "gap-4")}
+      // The empty "agenda" hero gets a slightly taller box to sit with the
+      // suggestion chips; the docked-thread composer stays compact. Surface
+      // (fill/border/shadow/blur) comes from the glass default.
+      composerClassName={cn(!hasMessages && "min-h-[96px]")}
       alwaysShowSuggestions={!hasMessages}
       selection={selection}
       onSelectionChange={setSelection}
@@ -206,13 +202,13 @@ export function Assistant() {
             <ChatThread
               messages={messages}
               className="h-full min-h-0"
-              contentClassName="mx-auto w-full max-w-4xl px-4 sm:px-6"
+              contentClassName="mx-auto w-full max-w-3xl px-3 sm:px-5"
               onBranchMessage={branchFromMessage}
               onEditMessage={editUserMessage}
             />
           ) : (
             <div className="mx-auto flex w-full max-w-3xl -translate-y-6 flex-col items-center gap-7 px-1 text-center sm:-translate-y-10">
-              <h2 className="text-3xl font-medium tracking-normal text-foreground sm:text-4xl">
+              <h2 className="text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
                 {t("page.heading")}
               </h2>
               <div className="w-full">{composer}</div>
@@ -222,7 +218,7 @@ export function Assistant() {
         </div>
 
         {error ? (
-          <div className="mx-auto mt-3 w-full max-w-4xl px-4 sm:px-6">
+          <div className="mx-auto mt-3 w-full max-w-3xl px-3 sm:px-5">
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error.message}
             </div>
@@ -230,7 +226,7 @@ export function Assistant() {
         ) : null}
 
         {hasMessages ? (
-          <div className="sticky bottom-0 z-20 mx-auto mt-3 w-full max-w-4xl shrink-0 bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
+          <div className="sticky bottom-0 z-20 mx-auto mt-3 w-full max-w-3xl shrink-0 bg-gradient-to-t from-background via-background/95 to-transparent px-3 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
             {composer}
           </div>
         ) : null}

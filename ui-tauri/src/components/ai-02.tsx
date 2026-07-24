@@ -135,26 +135,30 @@ export default function Ai02({
   return (
     <div
       className={cn(
-        "group/assistant mx-auto flex w-full max-w-3xl flex-col rounded-[28px] border border-zinc-300/90 bg-zinc-200/78 p-2 shadow-[0_24px_90px_rgba(15,23,42,0.30),0_3px_18px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.65)] ring-1 ring-white/90 backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/16 dark:bg-zinc-950/86 dark:shadow-[0_24px_80px_rgba(0,0,0,0.68),0_6px_24px_rgba(0,0,0,0.44),inset_0_1px_0_rgba(255,255,255,0.11)] dark:ring-white/12",
-        compact
-          ? "gap-0 rounded-[24px] p-1.5 focus-within:gap-3 focus-within:rounded-[28px] focus-within:p-2"
-          : "gap-3",
+        // Transparent layout column (ported from T3Code): the visible surface is
+        // the inner composer box below; this wrapper only stacks the box and the
+        // suggestion chips with a gap.
+        "group/assistant mx-auto flex w-full max-w-3xl flex-col transition-all duration-200 ease-out",
+        compact ? "gap-0 focus-within:gap-3" : "gap-3",
         className,
       )}
     >
       <div
         className={cn(
-          "flex cursor-text flex-col border border-border/70 bg-background/90 backdrop-blur-md transition-all duration-200 ease-out dark:bg-background/60",
-          // Focus lives on this whole muted surface (textarea + toolbar), not
-          // the Textarea's own ring — otherwise the blue outline cuts off above
-          // the model/send row.
-          "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
-          inputPanelElevated
-            ? "shadow-[0_10px_35px_rgba(15,23,42,0.14)]"
-            : "shadow-none",
+          "flex cursor-text flex-col rounded-[22px] transition-all duration-200 ease-out",
+          // Focus lives on this whole surface (textarea + toolbar), not the
+          // Textarea's own ring — otherwise the outline cuts off above the
+          // model/send row. Uses `outline` (not `ring`) because the glass
+          // surface below already owns `box-shadow`; a ring would override the
+          // hairline+drop-shadow on focus. Brand-red for the a11y affordance.
+          "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring/55",
+          // T3Code's understated frosted-glass surface. The dock opts out
+          // (inputPanelElevated=false) and supplies its own flat fill via
+          // composerClassName so it doesn't stack a second card inside its own.
+          inputPanelElevated ? "kb-composer-glass" : "shadow-none",
           compact
-            ? "min-h-[52px] rounded-[18px] group-focus-within/assistant:min-h-[72px] group-focus-within/assistant:rounded-2xl"
-            : "min-h-[72px] rounded-2xl",
+            ? "min-h-[52px] group-focus-within/assistant:min-h-[72px]"
+            : "min-h-[72px]",
           composerClassName,
         )}
         onMouseDown={(event) => {
@@ -172,7 +176,7 @@ export default function Ai02({
           inputRef.current?.focus();
         }}
       >
-        <div className="relative min-h-0 flex-1">
+        <div className="relative z-10 min-h-0 flex-1">
           <Textarea
             ref={inputRef}
             rows={1}
@@ -181,7 +185,7 @@ export default function Ai02({
             onKeyDown={handleKeyDown}
             placeholder={resolvedPlaceholder}
             className={cn(
-              "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[17px] leading-6 text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/80 focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none",
+              "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[15px] leading-relaxed text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/45 focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none",
               compact
                 ? "pr-14 pl-4 pt-3.5 pb-0 group-focus-within/assistant:px-4 group-focus-within/assistant:pt-4 group-focus-within/assistant:pb-1"
                 : "px-4 pt-4 pb-1",
@@ -193,7 +197,7 @@ export default function Ai02({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-9 cursor-pointer rounded-full bg-destructive transition-all duration-100 ease-out hover:bg-destructive/90! active:scale-[0.94]"
+                  className="size-9 cursor-pointer rounded-full bg-destructive transition-all duration-100 ease-out hover:bg-destructive/90! hover:scale-105 active:scale-[0.94]"
                   onClick={onAbort}
                   aria-label={t("composer.stopGenerating")}
                 >
@@ -204,7 +208,7 @@ export default function Ai02({
                   variant="ghost"
                   size="icon-sm"
                   className={cn(
-                    "size-9 cursor-pointer rounded-full bg-foreground text-background transition-all duration-100 ease-out hover:bg-foreground/90 active:scale-[0.94] disabled:bg-muted disabled:text-muted-foreground",
+                    "size-9 cursor-pointer rounded-full bg-foreground text-background transition-all duration-100 ease-out hover:bg-foreground/90 hover:scale-105 active:scale-[0.94] disabled:bg-muted disabled:text-muted-foreground",
                     canSend && "bg-foreground hover:bg-foreground/90!",
                   )}
                   disabled={!canSubmit}
@@ -229,7 +233,7 @@ export default function Ai02({
 
         <div
           className={cn(
-            "flex items-center gap-2 px-2 pt-0 transition-all duration-200 ease-out",
+            "relative z-10 flex items-center gap-2 px-2 pt-0 transition-all duration-200 ease-out",
             compact
               ? "max-h-0 min-h-0 overflow-hidden pb-0 opacity-0 group-focus-within/assistant:max-h-11 group-focus-within/assistant:min-h-[42px] group-focus-within/assistant:pb-2 group-focus-within/assistant:opacity-100"
               : "min-h-[42px] pb-2",
@@ -265,7 +269,7 @@ export default function Ai02({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="cursor-pointer rounded-full bg-destructive transition-all duration-100 ease-out hover:bg-destructive/90! active:scale-[0.94]"
+                className="cursor-pointer rounded-full bg-destructive transition-all duration-100 ease-out hover:bg-destructive/90! hover:scale-105 active:scale-[0.94]"
                 onClick={onAbort}
                 aria-label={t("composer.stopGenerating")}
               >
@@ -277,7 +281,7 @@ export default function Ai02({
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "cursor-pointer rounded-full bg-foreground text-background transition-all duration-100 ease-out hover:bg-foreground/90 active:scale-[0.94] disabled:bg-muted disabled:text-muted-foreground",
+                  "cursor-pointer rounded-full bg-foreground text-background transition-all duration-100 ease-out hover:bg-foreground/90 hover:scale-105 active:scale-[0.94] disabled:bg-muted disabled:text-muted-foreground",
                   (canSend || canQueue) && "bg-foreground hover:bg-foreground/90!",
                 )}
                 disabled={!canSubmit}
