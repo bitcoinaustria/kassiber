@@ -104,6 +104,26 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
         self.assertIn("LINUX_ARCHIVE_GPG_FINGERPRINT", workflow)
 
+    def test_publication_jobs_execute_against_the_verified_release_tag(self):
+        workflow = (
+            ROOT / ".github/workflows/publish-linux-channels.yml"
+        ).read_text(encoding="utf-8")
+        repositories = workflow.split("\n  repositories:\n", 1)[1].split(
+            "\n  aur:\n", 1
+        )[0]
+        nix = workflow.split("\n  nix:\n", 1)[1]
+
+        for job in (repositories, nix):
+            kassiber_checkout = job.split(
+                "uses: actions/checkout@", 1
+            )[1].split("\n      - ", 1)[0]
+            self.assertIn("ref: ${{ inputs.tag_name }}", kassiber_checkout)
+
+        self.assertLess(
+            repositories.index("ref: ${{ inputs.tag_name }}"),
+            repositories.index("scripts/release_manifest.py policy"),
+        )
+
     def test_release_workflow_uploads_rpms(self):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
