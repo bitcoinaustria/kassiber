@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -2045,6 +2046,7 @@ class FreshnessTest(unittest.TestCase):
             out=_Out(),
             freshness_stop_event=threading.Event(),
             db_passphrase="current-passphrase",
+            project_owner=Mock(),
         )
 
         with (
@@ -2060,8 +2062,13 @@ class FreshnessTest(unittest.TestCase):
                 "change_database_passphrase",
                 side_effect=fail_after_binding,
             ),
+            patch.object(
+                daemon_runtime,
+                "exclusive_project_maintenance",
+                return_value=nullcontext(),
+            ),
         ):
-            with self.assertRaises(AppError):
+            with self.assertRaises(AppError) as raised:
                 daemon_runtime.handle_request(
                     ctx,
                     {
@@ -2075,6 +2082,7 @@ class FreshnessTest(unittest.TestCase):
                     ctx.out,
                 )
 
+        self.assertEqual(raised.exception.code, "rotation_failed")
         self.assertIsNone(ctx.conn)
         self.assertIsNone(ctx.db_passphrase)
 
