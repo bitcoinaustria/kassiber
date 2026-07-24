@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -123,6 +124,108 @@ class RpmRepositoryScriptSafetyTest(unittest.TestCase):
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("Failed to discover binary RPM packages", completed.stderr)
             self.assertFalse(output.exists())
+
+    def test_concurrent_publication_collision_fails_without_nesting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            package = inputs / "kassiber-cli.rpm"
+            package.write_text("test rpm", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in (
+                "awk",
+                "cmp",
+                "cpio",
+                "gpg",
+                "rpm2cpio",
+                "rpmkeys",
+            ):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            rpm = fake_bin / "rpm"
+            rpm.write_text(
+                "#!/bin/sh\n"
+                "case \"$*\" in\n"
+                "  *'%{NAME}'*) printf 'kassiber-cli' ;;\n"
+                "  *'%{VERSION}'*) printf '1.2.3' ;;\n"
+                "  *'%{RELEASE}'*) printf '1' ;;\n"
+                "  *'%{ARCH}'*) printf 'x86_64' ;;\n"
+                "  *) exit 2 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            rpm.chmod(0o755)
+            createrepo = fake_bin / "createrepo_c"
+            createrepo.write_text(
+                "#!/bin/sh\n"
+                "for argument in \"$@\"; do repository=$argument; done\n"
+                "mkdir -p \"$repository/repodata\"\n"
+                "printf 'metadata\\n' > \"$repository/repodata/repomd.xml\"\n",
+                encoding="utf-8",
+            )
+            createrepo.chmod(0o755)
+
+            ready = root / "ready"
+            resume = root / "resume"
+            real_mv = shutil.which("mv")
+            self.assertIsNotNone(real_mv)
+            mv = fake_bin / "mv"
+            mv.write_text(
+                "#!/bin/sh\n"
+                "printf ready > \"$KASSIBER_TEST_READY\"\n"
+                "while [ ! -e \"$KASSIBER_TEST_RESUME\" ]; do sleep 0.01; done\n"
+                f'exec "{real_mv}" "$@"\n',
+                encoding="utf-8",
+            )
+            mv.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_READY"] = str(ready)
+            environment["KASSIBER_TEST_RESUME"] = str(resume)
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "scripts/build-rpm-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+            )
+            deadline = time.monotonic() + 5
+            while (
+                not ready.exists()
+                and process.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            if not ready.exists():
+                resume.touch()
+                stdout, stderr = process.communicate(timeout=5)
+                self.fail(
+                    "builder did not reach publication barrier: "
+                    f"stdout={stdout!r}, stderr={stderr!r}"
+                )
+
+            output.mkdir()
+            resume.touch()
+            stdout, stderr = process.communicate(timeout=5)
+
+            self.assertNotEqual(process.returncode, 0, stdout)
+            self.assertIn("Output path appeared during repository build", stderr)
+            self.assertEqual(list(output.iterdir()), [])
+            self.assertEqual(list(root.glob("repository.tmp.*")), [])
 
 
 @unittest.skipUnless(
