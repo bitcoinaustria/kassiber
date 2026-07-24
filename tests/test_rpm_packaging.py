@@ -11,6 +11,20 @@ ROOT = Path(__file__).resolve().parents[1]
 RPM_TOOLS = ("cpio", "createrepo_c", "dpkg-deb", "rpm", "rpm2cpio", "rpmbuild")
 
 
+def _has_gnu_mv() -> bool:
+    """Report whether `mv` supports the GNU no-clobber publication barrier."""
+    mv = shutil.which("mv")
+    if mv is None:
+        return False
+    try:
+        completed = subprocess.run(
+            [mv, "--version"], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return False
+    return "GNU coreutils" in completed.stdout
+
+
 def build_desktop_deb(root: Path, version: str = "1.2.3") -> Path:
     package_root = root / "desktop-root"
     (package_root / "DEBIAN").mkdir(parents=True)
@@ -125,6 +139,9 @@ class RpmRepositoryScriptSafetyTest(unittest.TestCase):
             self.assertIn("Failed to discover binary RPM packages", completed.stderr)
             self.assertFalse(output.exists())
 
+    @unittest.skipUnless(
+        _has_gnu_mv(), "GNU coreutils is required to publish an RPM repository"
+    )
     def test_concurrent_publication_collision_fails_without_nesting(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

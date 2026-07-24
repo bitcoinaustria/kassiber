@@ -10,6 +10,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _has_gnu_mv() -> bool:
+    """Report whether `mv` supports the GNU no-clobber publication barrier."""
+    mv = shutil.which("mv")
+    if mv is None:
+        return False
+    try:
+        completed = subprocess.run(
+            [mv, "--version"], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return False
+    return "GNU coreutils" in completed.stdout
+
+
 def _build_test_deb(
     root: Path,
     *,
@@ -272,6 +286,9 @@ class AptRepositoryScriptSafetyTest(unittest.TestCase):
             self.assertIn("Failed to discover Debian packages", completed.stderr)
             self.assertFalse(output.exists())
 
+    @unittest.skipUnless(
+        _has_gnu_mv(), "GNU coreutils is required to build an APT repository"
+    )
     def test_concurrent_publication_collision_fails_without_nesting(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
