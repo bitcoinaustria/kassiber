@@ -109,7 +109,7 @@ for value in "$origin" "$label"; do
   esac
 done
 
-for command in apt-ftparchive awk cmp dpkg-deb dpkg-scanpackages gzip sha256sum tar; do
+for command in apt-ftparchive awk cmp dpkg-deb dpkg-scanpackages find gzip mktemp sha256sum sort tar; do
   command -v "$command" >/dev/null 2>&1 || die "$command is required"
 done
 if [ -n "$signing_key" ]; then
@@ -122,20 +122,32 @@ for architecture in "${architectures[@]}"; do
   esac
 done
 
-mapfile -d '' packages < <(
-  find "$input" -maxdepth 1 -type f -name '*.deb' -print0 | sort -z
-)
-[ "${#packages[@]}" -gt 0 ] || die "No Debian packages found in $input"
-
-output_parent="$(dirname "$output")"
-mkdir -p "$output_parent"
-stage="$(mktemp -d "${output}.tmp.XXXXXX")"
+package_manifest="$(mktemp "${TMPDIR:-/tmp}/kassiber-apt-packages.XXXXXX")"
+stage=""
 cleanup() {
+  if [ -n "${package_manifest:-}" ] && [ -f "$package_manifest" ]; then
+    rm -f "$package_manifest"
+  fi
   if [ -n "${stage:-}" ] && [ -d "$stage" ]; then
     rm -rf "$stage"
   fi
 }
 trap cleanup EXIT
+
+if ! (
+  find "$input" -maxdepth 1 -type f -name '*.deb' -print0 \
+    | sort -z > "$package_manifest"
+); then
+  die "Failed to discover Debian packages in $input"
+fi
+mapfile -d '' packages < "$package_manifest"
+rm -f "$package_manifest"
+package_manifest=""
+[ "${#packages[@]}" -gt 0 ] || die "No Debian packages found in $input"
+
+output_parent="$(dirname "$output")"
+mkdir -p "$output_parent"
+stage="$(mktemp -d "${output}.tmp.XXXXXX")"
 
 for package_path in "${packages[@]}"; do
   package_name="$(dpkg-deb -f "$package_path" Package)"

@@ -213,6 +213,66 @@ class CliDebPackageTest(unittest.TestCase):
             self.assertFalse(cli_binary.exists())
 
 
+class AptRepositoryScriptSafetyTest(unittest.TestCase):
+    def test_failed_package_discovery_cannot_publish_partial_input(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            partial_package = inputs / "partial.deb"
+            partial_package.write_text("not a deb", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in (
+                "apt-ftparchive",
+                "awk",
+                "cmp",
+                "dpkg-deb",
+                "dpkg-scanpackages",
+                "gzip",
+                "sha256sum",
+                "tar",
+            ):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            find = fake_bin / "find"
+            find.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\0' \"$1/partial.deb\"\n"
+                "exit 23\n",
+                encoding="utf-8",
+            )
+            find.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/build-apt-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--suite",
+                    "prerelease",
+                    "--architecture",
+                    "amd64",
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("Failed to discover Debian packages", completed.stderr)
+            self.assertFalse(output.exists())
+
+
 @unittest.skipUnless(
     all(
         shutil.which(command)
