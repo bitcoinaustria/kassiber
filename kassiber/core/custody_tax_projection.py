@@ -493,6 +493,7 @@ def compile_finalized_tax_projection(
                 reviewed_fee
                 if reviewed_fee
                 and decision.component_id is not None
+                and decision.reason == "reviewed_custody_component"
                 and decision.transfer_kind != "swap-refund"
                 else raw_fee + reviewed_fee
             )
@@ -501,11 +502,12 @@ def compile_finalized_tax_projection(
                 decision.source,
                 rows_by_id,
                 side="move-out",
-                # A component fee allocation preserves the same observed miner
-                # fee inside an authored review bundle; it replaces the raw
-                # sibling rather than adding a second copy. Native graph
-                # residuals and failed-swap refunds represent custody losses
-                # distinct from the outbound miner fee.
+                # An ordinary reviewed custody component's fee allocation
+                # preserves the same observed miner fee inside the authored
+                # bundle, so it replaces the raw sibling. Reviewed conversion
+                # losses, native graph residuals, and failed-swap refunds are
+                # custody losses distinct from the outbound miner fee and
+                # remain additive.
                 fee_msat=projected_fee,
             )
             in_row = _projected_slice_row(

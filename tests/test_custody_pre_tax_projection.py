@@ -199,6 +199,70 @@ def test_reviewed_component_fee_replaces_raw_fee_in_move_projection():
     assert move_out["fee"] == 10
 
 
+def test_reviewed_conversion_fee_remains_additive_to_raw_miner_fee():
+    rows = [
+        _row("acquisition", "source", "inbound", 1_010, "2024-01-01T00:00:00Z"),
+        _row("out", "source", "outbound", 1_000, "2025-01-01T00:00:00Z"),
+        _row("in", "destination", "inbound", 900, "2025-01-01T00:01:00Z"),
+    ]
+    rows[1]["fee"] = 10
+    state = build_canonical_quantity_state(
+        rows,
+        effective_components=(
+            {
+                "id": "reviewed-conversion",
+                "component_type": "swap",
+                "conservation_mode": "conversion",
+                "conversion_policy": "carrying-value",
+                "conversion_reviewed": True,
+                "effective_state": "active",
+                "legs": (
+                    {
+                        "id": "source",
+                        "role": "source",
+                        "transaction_id": "out",
+                    },
+                    {
+                        "id": "retained",
+                        "role": "destination",
+                        "transaction_id": "in",
+                    },
+                    {"id": "fee", "role": "fee", "amount_msat": 100},
+                ),
+                "allocations": (
+                    {
+                        "id": "retained",
+                        "source_leg_id": "source",
+                        "sink_leg_id": "retained",
+                        "source_amount_msat": 900,
+                        "sink_amount_msat": 900,
+                    },
+                    {
+                        "id": "fee",
+                        "source_leg_id": "source",
+                        "sink_leg_id": "fee",
+                        "source_amount_msat": 100,
+                        "sink_amount_msat": 100,
+                    },
+                ),
+            },
+        ),
+    )
+
+    projection = compile_finalized_tax_projection(
+        {"id": "profile", "workspace_id": "workspace", "label": "Book"},
+        rows,
+        state,
+    )
+
+    move_out = next(
+        row
+        for row in projection.rows
+        if row["journal_transaction_id"] == "out" and row["amount"] == 900
+    )
+    assert move_out["fee"] == 110
+
+
 def test_swap_refund_residual_remains_additive_to_raw_miner_fee():
     rows = [
         _row("acquisition", "wallet", "inbound", 1_010, "2024-01-01T00:00:00Z"),
