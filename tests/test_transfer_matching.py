@@ -1393,6 +1393,85 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(candidates[0].confidence, CONFIDENCE_STRONG)
         self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
 
+    def test_different_onchain_txids_do_not_match_by_time_and_amount(self):
+        out = _row(
+            id="later-payment",
+            external_id=_TXID_A,
+            wallet_id="cold",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="BTC",
+            occurred_at="2023-02-01T04:41:00Z",
+            amount=15_025_943_000,
+            fee=652_000,
+        )
+        inbound = _row(
+            id="earlier-funding",
+            external_id=_TXID_B,
+            wallet_id="hot",
+            wallet_kind="descriptor",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2023-02-01T02:15:00Z",
+            amount=14_964_523_000,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
+    def test_unknown_txid_leg_still_matches_a_known_onchain_txid(self):
+        # An import that never carried a txid is not evidence of a *different*
+        # physical transaction. A chain wallet whose sibling leg was imported
+        # without one must stay reviewable instead of silently disposing.
+        out = _row(
+            id="cold-out",
+            external_id=_TXID_A,
+            wallet_id="cold",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="BTC",
+            amount=100_100_000_000,
+        )
+        inbound = _row(
+            id="hot-in",
+            external_id="exchange-deposit-4711",
+            wallet_id="hot",
+            wallet_kind="descriptor",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=100_000_000_000,
+        )
+
+        candidates = suggest_swap_candidates([out, inbound])
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
+
+    def test_same_asset_chain_to_lightning_remains_a_heuristic_candidate(self):
+        out = _row(
+            id="chain-lockup",
+            wallet_id="chain",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="BTC",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="lightning-settlement",
+            wallet_id="node",
+            wallet_kind="lnd",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_500_000,
+        )
+
+        candidates = suggest_swap_candidates([out, inbound])
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
+        self.assertEqual(candidates[0].default_kind, KIND_SUBMARINE_SWAP)
+
     def test_same_txid_cross_asset_not_treated_as_self_transfer(self):
         out = _row(
             id="btc-out",

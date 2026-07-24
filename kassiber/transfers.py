@@ -13,9 +13,10 @@ RP2 `IntraTransaction` instances happens in the journal pipeline.
 Detection is evidence-first and profile-wide. Exact transaction-graph and
 owned-script evidence can prove same-wallet consolidations, cross-wallet
 migrations, fan-out, fan-in, and N:M flows. Ambiguous amount/time heuristics
-remain review candidates; they never become stronger merely because a profile
-uses a particular country or tax policy. Accounting policy is applied only
-after the custody graph has been established.
+remain review candidates, and never link two legs already observed inside
+different on-chain transactions; they never become stronger merely because a
+profile uses a particular country or tax policy. Accounting policy is applied
+only after the custody graph has been established.
 """
 
 import json

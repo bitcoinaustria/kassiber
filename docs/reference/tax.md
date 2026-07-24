@@ -138,7 +138,12 @@ so they keep their normal payment/receipt treatment.
 source-qualified canonical Lightning hash with compatible whole-row semantics;
 a unique provider key with canonical route txids and explicit full-row integer
 msat principals; or a witness-proven unique HTLC funding outpoint with amount
-coverage. Everything else stays strong/manual. A blocked ownership proof
+coverage. Everything else stays strong/manual, except same-asset legs already
+observed inside two *different* on-chain transactions: one movement between two
+of your wallets is one physical transaction, so distinct txids are never paired
+from time/amount proximity (use `transfers pair` if a multi-hop route really
+links them). Legs sharing a txid, and legs whose transaction is unknown, stay
+heuristic/manual candidates. A blocked ownership proof
 (`method=ownership_graph`) is always manual-confirm-only. Ownership-graph cards carry
 only wallet ids/labels, transaction ids, amounts, and stable reason codes. They
 are manual-confirm-only: rules and bulk-pair operations never apply them.

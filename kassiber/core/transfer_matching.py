@@ -15,7 +15,9 @@ Confidence ladder
 * **strong** — different wallets, opposite directions, time delta within
   the configured window, and the implicit ``out_amount - in_amount``
   delta sits below the fee tolerance (``max(fee_pct_max * out, fee_sats_min)``).
-  Surfaced via ``method = "heuristic"``.
+  Same-asset legs scoped to two *different* observed on-chain txids are
+  excluded: one physical move shares one txid, so time/amount proximity there
+  would invent a transfer. Surfaced via ``method = "heuristic"``.
 
 Anything weaker stays unmatched; the user explicitly pairs from the row
 "…" menu.
@@ -1286,6 +1288,19 @@ def _provider_route_matches_row(
     return external_id.lower() == str(expected).strip().lower()
 
 
+def _observed_onchain_txid(row: Mapping) -> str | None:
+    """Return the canonical txid this row is scoped to, or ``None``.
+
+    ``None`` means the physical transaction is simply unknown for this row (a
+    provider/import identifier, a Lightning payment hash, a synthetic journal
+    projection, or contradictory identity metadata) — never that the row is
+    known to belong to some other transaction.
+    """
+
+    scope = onchain_transfer_scope(row)
+    return None if scope is None else scope[2]
+
+
 def _match_heuristic(
     out_rows: Sequence[Mapping],
     in_rows: Sequence[Mapping],
@@ -1304,7 +1319,7 @@ def _match_heuristic(
     is fine: ``suggest_swap_candidates`` applies a total-order sort and
     conflict clustering is order-independent.
     """
-    in_entries: list[tuple[float, Mapping, int]] = []
+    in_entries: list[tuple[float, Mapping, int, str | None]] = []
     for in_row in in_rows:
         in_seconds = _iso_to_seconds(_record_get(in_row, "occurred_at"))
         if in_seconds is None:
@@ -1315,7 +1330,9 @@ def _match_heuristic(
             # rows) would otherwise match any small outbound within the
             # absolute fee floor.
             continue
-        in_entries.append((in_seconds, in_row, in_amount))
+        in_entries.append(
+            (in_seconds, in_row, in_amount, _observed_onchain_txid(in_row))
+        )
     in_entries.sort(key=lambda entry: entry[0])
     in_times = [entry[0] for entry in in_entries]
 
@@ -1335,14 +1352,34 @@ def _match_heuristic(
         hi = bisect.bisect_right(in_times, out_seconds + time_window_seconds)
         out_asset = str(_record_get(out_row, "asset") or "")
         out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
-        for _, in_row, in_amount in in_entries[lo:hi]:
+        out_txid = _observed_onchain_txid(out_row)
+        for _, in_row, in_amount, in_txid in in_entries[lo:hi]:
             if out_wallet_id == _record_get(in_row, "wallet_id"):
                 continue
             delta = out_amount - in_amount
             if delta < 0 or delta > threshold:
                 continue
             in_asset = str(_record_get(in_row, "asset") or "")
-            if out_asset.upper() != in_asset.upper():
+            same_asset = out_asset.upper() == in_asset.upper()
+            if (
+                same_asset
+                and out_asset.upper() in {"BTC", "LBTC"}
+                and out_txid is not None
+                and in_txid is not None
+                and out_txid != in_txid
+            ):
+                # One on-chain movement between two of your wallets is a single
+                # physical transaction, so both legs carry the same txid. Two
+                # rows scoped to *different* observed txids can never be the two
+                # sides of one move, and pairing them on time/amount proximity
+                # invents a transfer: unrelated same-size spends inside the
+                # window get stamped `strong`, bulk-paired, and author suspense
+                # residuals that quarantine everything downstream. Rows sharing
+                # a txid, or whose physical transaction is unknown, stay review
+                # candidates — the ownership graph proves what it can, and the
+                # rest must remain visible for the user to pair.
+                continue
+            if not same_asset:
                 # Cross-asset (layer-hop) candidates must look like a recognized
                 # peg / submarine route, not just two similar-sized legs that
                 # happen to fall inside the window+fee band. Without this, an
