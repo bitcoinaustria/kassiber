@@ -27,9 +27,13 @@ Every package-manager channel must fail closed unless all of these checks pass:
    distribution named as supported. A package merely building is not evidence
    that it runs on an older glibc or a different libc.
 5. Repository payloads and content-addressed metadata are uploaded before the
-   signed top-level metadata. APT switches through one `InRelease` object. DNF
-   publishes a complete immutable, suite-scoped snapshot and then switches one
-   mirrorlist object, so clients never observe a mixed metadata/signature pair.
+   signed top-level metadata. APT requires `Acquire-By-Hash: yes`, validates
+   every referenced immutable index, and switches through one `InRelease`
+   object. The detached `Release` plus `Release.gpg` compatibility interface
+   cannot switch atomically and is not supported as an atomic-consumption path.
+   DNF publishes a complete immutable, suite-scoped snapshot and then switches
+   one mirrorlist object, so clients never observe a mixed metadata/signature
+   pair.
 
 The release workflow enforces the first gate for tag and publishing runs.
 
