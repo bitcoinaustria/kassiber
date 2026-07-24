@@ -69,6 +69,62 @@ class RpmVersionContractTest(unittest.TestCase):
         self.assertIn('rpm_version="${version//-/\\~}"', workflow)
 
 
+class RpmRepositoryScriptSafetyTest(unittest.TestCase):
+    def test_failed_package_discovery_cannot_publish_partial_input(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            partial_package = inputs / "partial.rpm"
+            partial_package.write_text("not an rpm", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in (
+                "awk",
+                "cmp",
+                "cpio",
+                "createrepo_c",
+                "gpg",
+                "rpm",
+                "rpm2cpio",
+                "rpmkeys",
+            ):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            find = fake_bin / "find"
+            find.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\0' \"$1/partial.rpm\"\n"
+                "exit 23\n",
+                encoding="utf-8",
+            )
+            find.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/build-rpm-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("Failed to discover binary RPM packages", completed.stderr)
+            self.assertFalse(output.exists())
+
+
 @unittest.skipUnless(
     all(shutil.which(command) for command in RPM_TOOLS),
     "RPM, repository, and Debian tooling is required",
