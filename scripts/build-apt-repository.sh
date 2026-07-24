@@ -109,7 +109,7 @@ for value in "$origin" "$label"; do
   esac
 done
 
-for command in apt-ftparchive awk cmp dpkg-deb dpkg-scanpackages find gzip mktemp sha256sum sort tar; do
+for command in apt-ftparchive awk cmp dpkg-deb dpkg-scanpackages find gzip mktemp mv sha256sum sort tar; do
   command -v "$command" >/dev/null 2>&1 || die "$command is required"
 done
 if [ -n "$signing_key" ]; then
@@ -235,6 +235,12 @@ if [ -n "$signing_key" ]; then
 fi
 
 chmod -R u=rwX,go=rX "$stage"
-mv "$stage" "$output"
+if ! mv --no-clobber --no-target-directory "$stage" "$output"; then
+  die "Output path appeared during repository build: $output"
+fi
+if [ -d "$stage" ]; then
+  die "Output path appeared during repository build: $output"
+fi
+[ -d "$output" ] || die "Repository publication failed: $output"
 stage=""
 echo "Built Kassiber APT repository: $output"

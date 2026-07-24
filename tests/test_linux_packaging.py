@@ -272,6 +272,111 @@ class AptRepositoryScriptSafetyTest(unittest.TestCase):
             self.assertIn("Failed to discover Debian packages", completed.stderr)
             self.assertFalse(output.exists())
 
+    def test_concurrent_publication_collision_fails_without_nesting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            package = inputs / "kassiber-cli.deb"
+            package.write_text("test deb", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in ("cmp", "tar"):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            dpkg_deb = fake_bin / "dpkg-deb"
+            dpkg_deb.write_text(
+                "#!/bin/sh\n"
+                "for argument in \"$@\"; do field=$argument; done\n"
+                "case \"$field\" in\n"
+                "  Package) printf 'kassiber-cli' ;;\n"
+                "  Version) printf '1.2.3' ;;\n"
+                "  Architecture) printf 'amd64' ;;\n"
+                "  *) exit 2 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            dpkg_deb.chmod(0o755)
+            scanpackages = fake_bin / "dpkg-scanpackages"
+            scanpackages.write_text(
+                "#!/bin/sh\n"
+                "printf 'Package: kassiber-cli\\n"
+                "Version: 1.2.3\\n"
+                "Architecture: amd64\\n\\n'\n",
+                encoding="utf-8",
+            )
+            scanpackages.chmod(0o755)
+            apt_ftparchive = fake_bin / "apt-ftparchive"
+            apt_ftparchive.write_text(
+                "#!/bin/sh\nprintf 'Acquire-By-Hash: yes\\n'\n",
+                encoding="utf-8",
+            )
+            apt_ftparchive.chmod(0o755)
+
+            ready = root / "ready"
+            resume = root / "resume"
+            real_mv = shutil.which("mv")
+            self.assertIsNotNone(real_mv)
+            mv = fake_bin / "mv"
+            mv.write_text(
+                "#!/bin/sh\n"
+                "printf ready > \"$KASSIBER_TEST_READY\"\n"
+                "while [ ! -e \"$KASSIBER_TEST_RESUME\" ]; do sleep 0.01; done\n"
+                f'exec "{real_mv}" "$@"\n',
+                encoding="utf-8",
+            )
+            mv.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_READY"] = str(ready)
+            environment["KASSIBER_TEST_RESUME"] = str(resume)
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "scripts/build-apt-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--suite",
+                    "prerelease",
+                    "--architecture",
+                    "amd64",
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+            )
+            deadline = time.monotonic() + 5
+            while (
+                not ready.exists()
+                and process.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            if not ready.exists():
+                resume.touch()
+                stdout, stderr = process.communicate(timeout=5)
+                self.fail(
+                    "builder did not reach publication barrier: "
+                    f"stdout={stdout!r}, stderr={stderr!r}"
+                )
+
+            output.mkdir()
+            resume.touch()
+            stdout, stderr = process.communicate(timeout=5)
+
+            self.assertNotEqual(process.returncode, 0, stdout)
+            self.assertIn("Output path appeared during repository build", stderr)
+            self.assertEqual(list(output.iterdir()), [])
+            self.assertEqual(list(root.glob("repository.tmp.*")), [])
+
 
 @unittest.skipUnless(
     all(
