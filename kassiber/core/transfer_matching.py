@@ -12,12 +12,12 @@ Confidence ladder
   Lightning ``payment_hash``; a unique provider/client ``swap_id`` whose
   canonical route txids and whole-row amounts agree; or a uniquely verified
   on-chain HTLC refund outpoint.
-* **strong** — cross-rail/provider legs in different wallets, opposite
-  directions, with a time delta inside the configured window and an implicit
-  ``out_amount - in_amount`` delta below the fee tolerance
-  (``max(fee_pct_max * out, fee_sats_min)``). Ordinary same-asset on-chain
-  wallet movements require native ownership-graph evidence instead.
-  Surfaced via ``method = "heuristic"``.
+* **strong** — different wallets, opposite directions, time delta within
+  the configured window, and the implicit ``out_amount - in_amount``
+  delta sits below the fee tolerance (``max(fee_pct_max * out, fee_sats_min)``).
+  Same-asset legs scoped to two *different* observed on-chain txids are
+  excluded: one physical move shares one txid, so time/amount proximity there
+  would invent a transfer. Surfaced via ``method = "heuristic"``.
 
 Anything weaker stays unmatched; the user explicitly pairs from the row
 "…" menu.
@@ -1288,12 +1288,17 @@ def _provider_route_matches_row(
     return external_id.lower() == str(expected).strip().lower()
 
 
-def _is_known_onchain_row(row: Mapping) -> bool:
-    wallet_kind = normalize_wallet_kind_alias(_record_get(row, "wallet_kind"))
-    return (
-        wallet_kind in CHAIN_INFERENCE_WALLET_KINDS
-        or onchain_transfer_scope(row) is not None
-    )
+def _observed_onchain_txid(row: Mapping) -> str | None:
+    """Return the canonical txid this row is scoped to, or ``None``.
+
+    ``None`` means the physical transaction is simply unknown for this row (a
+    provider/import identifier, a Lightning payment hash, a synthetic journal
+    projection, or contradictory identity metadata) — never that the row is
+    known to belong to some other transaction.
+    """
+
+    scope = onchain_transfer_scope(row)
+    return None if scope is None else scope[2]
 
 
 def _match_heuristic(
@@ -1314,7 +1319,7 @@ def _match_heuristic(
     is fine: ``suggest_swap_candidates`` applies a total-order sort and
     conflict clustering is order-independent.
     """
-    in_entries: list[tuple[float, Mapping, int, bool]] = []
+    in_entries: list[tuple[float, Mapping, int, str | None]] = []
     for in_row in in_rows:
         in_seconds = _iso_to_seconds(_record_get(in_row, "occurred_at"))
         if in_seconds is None:
@@ -1326,7 +1331,7 @@ def _match_heuristic(
             # absolute fee floor.
             continue
         in_entries.append(
-            (in_seconds, in_row, in_amount, _is_known_onchain_row(in_row))
+            (in_seconds, in_row, in_amount, _observed_onchain_txid(in_row))
         )
     in_entries.sort(key=lambda entry: entry[0])
     in_times = [entry[0] for entry in in_entries]
@@ -1347,8 +1352,8 @@ def _match_heuristic(
         hi = bisect.bisect_right(in_times, out_seconds + time_window_seconds)
         out_asset = str(_record_get(out_row, "asset") or "")
         out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
-        out_is_onchain = _is_known_onchain_row(out_row)
-        for _, in_row, in_amount, in_is_onchain in in_entries[lo:hi]:
+        out_txid = _observed_onchain_txid(out_row)
+        for _, in_row, in_amount, in_txid in in_entries[lo:hi]:
             if out_wallet_id == _record_get(in_row, "wallet_id"):
                 continue
             delta = out_amount - in_amount
@@ -1359,13 +1364,20 @@ def _match_heuristic(
             if (
                 same_asset
                 and out_asset.upper() in {"BTC", "LBTC"}
-                and out_is_onchain
-                and in_is_onchain
+                and out_txid is not None
+                and in_txid is not None
+                and out_txid != in_txid
             ):
-                # A Bitcoin-family transfer between observed on-chain wallets
-                # is a transaction-graph fact, not a time/amount guess. The
-                # ownership journal either proves and books that physical move
-                # or surfaces its exact graph conflict for review.
+                # One on-chain movement between two of your wallets is a single
+                # physical transaction, so both legs carry the same txid. Two
+                # rows scoped to *different* observed txids can never be the two
+                # sides of one move, and pairing them on time/amount proximity
+                # invents a transfer: unrelated same-size spends inside the
+                # window get stamped `strong`, bulk-paired, and author suspense
+                # residuals that quarantine everything downstream. Rows sharing
+                # a txid, or whose physical transaction is unknown, stay review
+                # candidates — the ownership graph proves what it can, and the
+                # rest must remain visible for the user to pair.
                 continue
             if not same_asset:
                 # Cross-asset (layer-hop) candidates must look like a recognized
