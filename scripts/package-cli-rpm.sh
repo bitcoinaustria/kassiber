@@ -54,7 +54,9 @@ case "$architecture" in
   x86_64|aarch64) ;;
   *) die "Unsupported RPM architecture: $architecture" ;;
 esac
-command -v rpmbuild >/dev/null 2>&1 || die "rpmbuild is required"
+for command in basename dirname install ln mktemp rpmbuild; do
+  command -v "$command" >/dev/null 2>&1 || die "$command is required"
+done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$script_dir/.." && pwd)"
@@ -65,7 +67,14 @@ for required in "$spec" "$license"; do
 done
 
 topdir="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-cli-rpm.XXXXXX")"
-trap 'rm -rf "$topdir"' EXIT
+publish_temp=""
+cleanup() {
+  rm -rf "$topdir"
+  if [ -n "$publish_temp" ] && [ -f "$publish_temp" ]; then
+    rm -f "$publish_temp"
+  fi
+}
+trap cleanup EXIT
 mkdir -p "$topdir/BUILD" "$topdir/BUILDROOT" "$topdir/RPMS" \
   "$topdir/SOURCES" "$topdir/SPECS" "$topdir/SRPMS"
 install -m 0755 "$binary" "$topdir/SOURCES/kassiber"
@@ -84,5 +93,12 @@ rpmbuild -bb \
 
 built_rpm="$topdir/RPMS/$architecture/kassiber-cli-$rpm_version-$release.$architecture.rpm"
 [ -f "$built_rpm" ] || die "Expected RPM was not built: $built_rpm"
-mkdir -p "$(dirname "$output")"
-install -m 0644 "$built_rpm" "$output"
+output_parent="$(dirname "$output")"
+mkdir -p "$output_parent"
+publish_temp="$(mktemp "$output_parent/.$(basename "$output").tmp.XXXXXX")"
+install -m 0644 "$built_rpm" "$publish_temp"
+if ! ln "$publish_temp" "$output"; then
+  die "Output path appeared during RPM build: $output"
+fi
+rm -f "$publish_temp"
+publish_temp=""

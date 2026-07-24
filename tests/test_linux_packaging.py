@@ -10,6 +10,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _has_gnu_mv() -> bool:
+    """Report whether `mv` supports the GNU no-clobber publication barrier."""
+    mv = shutil.which("mv")
+    if mv is None:
+        return False
+    try:
+        completed = subprocess.run(
+            [mv, "--version"], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return False
+    return "GNU coreutils" in completed.stdout
+
+
 def _build_test_deb(
     root: Path,
     *,
@@ -213,6 +227,174 @@ class CliDebPackageTest(unittest.TestCase):
             self.assertFalse(cli_binary.exists())
 
 
+class AptRepositoryScriptSafetyTest(unittest.TestCase):
+    def test_failed_package_discovery_cannot_publish_partial_input(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            partial_package = inputs / "partial.deb"
+            partial_package.write_text("not a deb", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in (
+                "apt-ftparchive",
+                "awk",
+                "cmp",
+                "dpkg-deb",
+                "dpkg-scanpackages",
+                "gzip",
+                "sha256sum",
+                "tar",
+            ):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            find = fake_bin / "find"
+            find.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\0' \"$1/partial.deb\"\n"
+                "exit 23\n",
+                encoding="utf-8",
+            )
+            find.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/build-apt-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--suite",
+                    "prerelease",
+                    "--architecture",
+                    "amd64",
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("Failed to discover Debian packages", completed.stderr)
+            self.assertFalse(output.exists())
+
+    @unittest.skipUnless(
+        _has_gnu_mv(), "GNU coreutils is required to build an APT repository"
+    )
+    def test_concurrent_publication_collision_fails_without_nesting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            package = inputs / "kassiber-cli.deb"
+            package.write_text("test deb", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in ("cmp", "tar"):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            dpkg_deb = fake_bin / "dpkg-deb"
+            dpkg_deb.write_text(
+                "#!/bin/sh\n"
+                "for argument in \"$@\"; do field=$argument; done\n"
+                "case \"$field\" in\n"
+                "  Package) printf 'kassiber-cli' ;;\n"
+                "  Version) printf '1.2.3' ;;\n"
+                "  Architecture) printf 'amd64' ;;\n"
+                "  *) exit 2 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            dpkg_deb.chmod(0o755)
+            scanpackages = fake_bin / "dpkg-scanpackages"
+            scanpackages.write_text(
+                "#!/bin/sh\n"
+                "printf 'Package: kassiber-cli\\n"
+                "Version: 1.2.3\\n"
+                "Architecture: amd64\\n\\n'\n",
+                encoding="utf-8",
+            )
+            scanpackages.chmod(0o755)
+            apt_ftparchive = fake_bin / "apt-ftparchive"
+            apt_ftparchive.write_text(
+                "#!/bin/sh\nprintf 'Acquire-By-Hash: yes\\n'\n",
+                encoding="utf-8",
+            )
+            apt_ftparchive.chmod(0o755)
+
+            ready = root / "ready"
+            resume = root / "resume"
+            real_mv = shutil.which("mv")
+            self.assertIsNotNone(real_mv)
+            mv = fake_bin / "mv"
+            mv.write_text(
+                "#!/bin/sh\n"
+                "printf ready > \"$KASSIBER_TEST_READY\"\n"
+                "while [ ! -e \"$KASSIBER_TEST_RESUME\" ]; do sleep 0.01; done\n"
+                f'exec "{real_mv}" "$@"\n',
+                encoding="utf-8",
+            )
+            mv.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_READY"] = str(ready)
+            environment["KASSIBER_TEST_RESUME"] = str(resume)
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "scripts/build-apt-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--suite",
+                    "prerelease",
+                    "--architecture",
+                    "amd64",
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+            )
+            deadline = time.monotonic() + 5
+            while (
+                not ready.exists()
+                and process.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            if not ready.exists():
+                resume.touch()
+                stdout, stderr = process.communicate(timeout=5)
+                self.fail(
+                    "builder did not reach publication barrier: "
+                    f"stdout={stdout!r}, stderr={stderr!r}"
+                )
+
+            output.mkdir()
+            resume.touch()
+            stdout, stderr = process.communicate(timeout=5)
+
+            self.assertNotEqual(process.returncode, 0, stdout)
+            self.assertIn("Output path appeared during repository build", stderr)
+            self.assertEqual(list(output.iterdir()), [])
+            self.assertEqual(list(root.glob("repository.tmp.*")), [])
+
+
 @unittest.skipUnless(
     all(
         shutil.which(command)
@@ -351,6 +533,16 @@ class AptRepositoryBuilderTest(unittest.TestCase):
             self.assertIn("Acquire-By-Hash: yes", release)
             self.assertTrue((release_dir / "InRelease").is_file())
             self.assertTrue((release_dir / "Release.gpg").is_file())
+            # Release must not check itself in: a self-entry carries the digest
+            # of the empty file the redirect created, and no by-hash object can
+            # ever back it.
+            checksum_paths = [
+                line.split()[2]
+                for line in release.splitlines()
+                if line.startswith(" ") and len(line.split()) == 3
+            ]
+            self.assertNotIn("Release", checksum_paths)
+            self.assertIn("main/binary-amd64/Packages", checksum_paths)
 
             subprocess.run(
                 ["gpg", "--batch", "--verify", str(release_dir / "InRelease")],
@@ -408,6 +600,91 @@ class AptRepositoryBuilderTest(unittest.TestCase):
                 text=True,
             )
             self.assertIn("Candidate: 1.2.3", policy)
+
+    def test_publisher_preflight_accepts_a_real_apt_ftparchive_release(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            _build_test_deb(inputs, package="kassiber-cli", surface="cli")
+            environment, fingerprint = self._generate_signing_key(root / "gnupg")
+            repository = root / "repository"
+            subprocess.run(
+                [
+                    str(ROOT / "scripts/build-apt-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(repository),
+                    "--suite",
+                    "prerelease",
+                    "--architecture",
+                    "amd64",
+                    "--signing-key",
+                    fingerprint,
+                ],
+                check=True,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            dnf = root / "dnf"
+            (dnf / "packages").mkdir(parents=True)
+            (dnf / "repodata").mkdir(parents=True)
+            (dnf / "repodata/repomd.xml").write_text("metadata", encoding="utf-8")
+            (dnf / "repodata/repomd.xml.asc").write_text(
+                "signature", encoding="utf-8"
+            )
+
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            aws = fake_bin / "aws"
+            aws.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$KASSIBER_TEST_AWS_LOG\"\n",
+                encoding="utf-8",
+            )
+            aws.chmod(0o755)
+            log = root / "aws.log"
+            publish_environment = os.environ.copy()
+            publish_environment["PATH"] = (
+                f"{fake_bin}:{publish_environment['PATH']}"
+            )
+            publish_environment["KASSIBER_TEST_AWS_LOG"] = str(log)
+
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/publish-linux-repositories-s3.sh"),
+                    "--apt",
+                    str(repository),
+                    "--dnf",
+                    str(dnf),
+                    "--suite",
+                    "prerelease",
+                    "--destination",
+                    "s3://example/kassiber",
+                    "--base-url",
+                    "https://packages.invalid",
+                ],
+                capture_output=True,
+                text=True,
+                env=publish_environment,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            calls = log.read_text(encoding="utf-8").splitlines()
+            by_hash_publish = next(
+                index
+                for index, line in enumerate(calls)
+                if "--include */by-hash/SHA256/*" in line
+            )
+            in_release_publish = next(
+                index
+                for index, line in enumerate(calls)
+                if "apt/dists/prerelease/InRelease" in line
+            )
+            self.assertLess(by_hash_publish, in_release_publish)
 
 
 class PackagingWorkflowVersionGateTest(unittest.TestCase):

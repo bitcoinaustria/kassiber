@@ -104,6 +104,26 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
         self.assertIn("LINUX_ARCHIVE_GPG_FINGERPRINT", workflow)
 
+    def test_publication_jobs_execute_against_the_verified_release_tag(self):
+        workflow = (
+            ROOT / ".github/workflows/publish-linux-channels.yml"
+        ).read_text(encoding="utf-8")
+        repositories = workflow.split("\n  repositories:\n", 1)[1].split(
+            "\n  aur:\n", 1
+        )[0]
+        nix = workflow.split("\n  nix:\n", 1)[1]
+
+        for job in (repositories, nix):
+            kassiber_checkout = job.split(
+                "uses: actions/checkout@", 1
+            )[1].split("\n      - ", 1)[0]
+            self.assertIn("ref: ${{ inputs.tag_name }}", kassiber_checkout)
+
+        self.assertLess(
+            repositories.index("ref: ${{ inputs.tag_name }}"),
+            repositories.index("scripts/release_manifest.py policy"),
+        )
+
     def test_release_workflow_uploads_rpms(self):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
@@ -134,6 +154,16 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertNotIn("tauri build", workflow)
         self.assertNotIn("pyinstaller", workflow)
 
+    def test_signed_release_is_published_only_after_homebrew_push(self):
+        workflow = (
+            ROOT / ".github/workflows/finalize-signed-release.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertLess(
+            workflow.index('git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"'),
+            workflow.index('gh release edit "$RELEASE_TAG_NAME"'),
+        )
+
     def test_release_publish_rejects_tags_outside_main_history(self):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
@@ -157,6 +187,38 @@ class RepositoryPublisherTest(unittest.TestCase):
         (dnf / "packages").mkdir(parents=True)
         (dnf / "repodata").mkdir(parents=True)
         return apt, dnf
+
+    def _write_apt_metadata(
+        self,
+        apt: Path,
+        *,
+        include_by_hash: bool = True,
+        include_signed_metadata_entries: bool = False,
+    ) -> None:
+        release_dir = apt / "dists/prerelease"
+        index = release_dir / "main/binary-amd64/Packages"
+        index.parent.mkdir(parents=True)
+        index.write_text("Package: kassiber-cli\n", encoding="utf-8")
+        digest = sha256(index)
+        signed_metadata_entries = ""
+        if include_signed_metadata_entries:
+            signed_metadata_entries = "".join(
+                f" {'0' * 64} 0 {name}\n"
+                for name in ("Release", "Release.gpg", "InRelease")
+            )
+        (release_dir / "Release").write_text(
+            "Acquire-By-Hash: yes\n"
+            "SHA256:\n"
+            f" {digest} {index.stat().st_size} main/binary-amd64/Packages\n"
+            f"{signed_metadata_entries}",
+            encoding="utf-8",
+        )
+        (release_dir / "InRelease").write_text("signed", encoding="utf-8")
+        (release_dir / "Release.gpg").write_text("signature", encoding="utf-8")
+        if include_by_hash:
+            by_hash = index.parent / f"by-hash/SHA256/{digest}"
+            by_hash.parent.mkdir(parents=True)
+            by_hash.write_bytes(index.read_bytes())
 
     def test_publisher_preflights_every_signature_before_aws(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -185,13 +247,106 @@ class RepositoryPublisherTest(unittest.TestCase):
             self.assertEqual(completed.returncode, 2)
             self.assertIn("APT Release is missing", completed.stderr)
 
+    def test_publisher_rejects_missing_by_hash_before_aws(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            apt, dnf = self._repository_roots(root)
+            self._write_apt_metadata(apt, include_by_hash=False)
+            (dnf / "repodata/repomd.xml").write_text("metadata", encoding="utf-8")
+            (dnf / "repodata/repomd.xml.asc").write_text(
+                "signature", encoding="utf-8"
+            )
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            aws = fake_bin / "aws"
+            aws.write_text(
+                "#!/bin/sh\n"
+                "printf called >> \"$KASSIBER_TEST_AWS_LOG\"\n",
+                encoding="utf-8",
+            )
+            aws.chmod(0o755)
+            log = root / "aws.log"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_AWS_LOG"] = str(log)
+
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/publish-linux-repositories-s3.sh"),
+                    "--apt",
+                    str(apt),
+                    "--dnf",
+                    str(dnf),
+                    "--suite",
+                    "prerelease",
+                    "--destination",
+                    "s3://example/kassiber",
+                    "--base-url",
+                    "https://packages.invalid",
+                ],
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("APT by-hash object is missing", completed.stderr)
+            self.assertFalse(log.exists())
+
+    def test_publisher_accepts_a_release_that_lists_signed_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            apt, dnf = self._repository_roots(root)
+            self._write_apt_metadata(apt, include_signed_metadata_entries=True)
+            (dnf / "repodata/repomd.xml").write_text("metadata", encoding="utf-8")
+            (dnf / "repodata/repomd.xml.asc").write_text(
+                "signature", encoding="utf-8"
+            )
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            aws = fake_bin / "aws"
+            aws.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$KASSIBER_TEST_AWS_LOG\"\n",
+                encoding="utf-8",
+            )
+            aws.chmod(0o755)
+            log = root / "aws.log"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_AWS_LOG"] = str(log)
+
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/publish-linux-repositories-s3.sh"),
+                    "--apt",
+                    str(apt),
+                    "--dnf",
+                    str(dnf),
+                    "--suite",
+                    "prerelease",
+                    "--destination",
+                    "s3://example/kassiber",
+                    "--base-url",
+                    "https://packages.invalid",
+                ],
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            # The signed top-level objects are the atomic switch, not by-hash
+            # indices, so listing them must not block publication.
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(
+                "apt/dists/prerelease/InRelease",
+                log.read_text(encoding="utf-8"),
+            )
+
     def test_dnf_publish_uses_a_suite_scoped_immutable_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             apt, dnf = self._repository_roots(root)
-            release_dir = apt / "dists/prerelease"
-            for name in ("InRelease", "Release", "Release.gpg"):
-                (release_dir / name).write_text(name, encoding="utf-8")
+            self._write_apt_metadata(apt)
             repomd = dnf / "repodata/repomd.xml"
             repomd.write_text("metadata", encoding="utf-8")
             signature = dnf / "repodata/repomd.xml.asc"
@@ -246,6 +401,23 @@ class RepositoryPublisherTest(unittest.TestCase):
                 ]
                 self.assertEqual(len(matching), 1, (name, call_lines))
                 self.assertIn("--cache-control no-cache", matching[0])
+            by_hash_publish = next(
+                index
+                for index, line in enumerate(call_lines)
+                if "--include */by-hash/SHA256/*" in line
+            )
+            mutable_index_publish = next(
+                index
+                for index, line in enumerate(call_lines)
+                if "--exclude */by-hash/*" in line
+            )
+            in_release_publish = next(
+                index
+                for index, line in enumerate(call_lines)
+                if "apt/dists/prerelease/InRelease --content-type" in line
+            )
+            self.assertLess(by_hash_publish, mutable_index_publish)
+            self.assertLess(mutable_index_publish, in_release_publish)
             self.assertIn(
                 f"dnf/prerelease/snapshots/{snapshot}/packages",
                 calls,

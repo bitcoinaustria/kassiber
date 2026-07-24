@@ -2,12 +2,27 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 RPM_TOOLS = ("cpio", "createrepo_c", "dpkg-deb", "rpm", "rpm2cpio", "rpmbuild")
+
+
+def _has_gnu_mv() -> bool:
+    """Report whether `mv` supports the GNU no-clobber publication barrier."""
+    mv = shutil.which("mv")
+    if mv is None:
+        return False
+    try:
+        completed = subprocess.run(
+            [mv, "--version"], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return False
+    return "GNU coreutils" in completed.stdout
 
 
 def build_desktop_deb(root: Path, version: str = "1.2.3") -> Path:
@@ -67,6 +82,254 @@ class RpmVersionContractTest(unittest.TestCase):
             ROOT / ".github/workflows/publish-linux-channels.yml"
         ).read_text(encoding="utf-8")
         self.assertIn('rpm_version="${version//-/\\~}"', workflow)
+
+
+class RpmRepositoryScriptSafetyTest(unittest.TestCase):
+    def test_failed_package_discovery_cannot_publish_partial_input(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            partial_package = inputs / "partial.rpm"
+            partial_package.write_text("not an rpm", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in (
+                "awk",
+                "cmp",
+                "cpio",
+                "createrepo_c",
+                "gpg",
+                "rpm",
+                "rpm2cpio",
+                "rpmkeys",
+            ):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            find = fake_bin / "find"
+            find.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\0' \"$1/partial.rpm\"\n"
+                "exit 23\n",
+                encoding="utf-8",
+            )
+            find.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/build-rpm-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("Failed to discover binary RPM packages", completed.stderr)
+            self.assertFalse(output.exists())
+
+    @unittest.skipUnless(
+        _has_gnu_mv(), "GNU coreutils is required to publish an RPM repository"
+    )
+    def test_concurrent_publication_collision_fails_without_nesting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            package = inputs / "kassiber-cli.rpm"
+            package.write_text("test rpm", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+
+            for command in (
+                "awk",
+                "cmp",
+                "cpio",
+                "gpg",
+                "rpm2cpio",
+                "rpmkeys",
+            ):
+                shim = fake_bin / command
+                shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                shim.chmod(0o755)
+            rpm = fake_bin / "rpm"
+            rpm.write_text(
+                "#!/bin/sh\n"
+                "case \"$*\" in\n"
+                "  *'%{NAME}'*) printf 'kassiber-cli' ;;\n"
+                "  *'%{VERSION}'*) printf '1.2.3' ;;\n"
+                "  *'%{RELEASE}'*) printf '1' ;;\n"
+                "  *'%{ARCH}'*) printf 'x86_64' ;;\n"
+                "  *) exit 2 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            rpm.chmod(0o755)
+            createrepo = fake_bin / "createrepo_c"
+            createrepo.write_text(
+                "#!/bin/sh\n"
+                "for argument in \"$@\"; do repository=$argument; done\n"
+                "mkdir -p \"$repository/repodata\"\n"
+                "printf 'metadata\\n' > \"$repository/repodata/repomd.xml\"\n",
+                encoding="utf-8",
+            )
+            createrepo.chmod(0o755)
+
+            ready = root / "ready"
+            resume = root / "resume"
+            real_mv = shutil.which("mv")
+            self.assertIsNotNone(real_mv)
+            mv = fake_bin / "mv"
+            mv.write_text(
+                "#!/bin/sh\n"
+                "printf ready > \"$KASSIBER_TEST_READY\"\n"
+                "while [ ! -e \"$KASSIBER_TEST_RESUME\" ]; do sleep 0.01; done\n"
+                f'exec "{real_mv}" "$@"\n',
+                encoding="utf-8",
+            )
+            mv.chmod(0o755)
+
+            output = root / "repository"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_READY"] = str(ready)
+            environment["KASSIBER_TEST_RESUME"] = str(resume)
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "scripts/build-rpm-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(output),
+                    "--unsigned",
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+            )
+            deadline = time.monotonic() + 5
+            while (
+                not ready.exists()
+                and process.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            if not ready.exists():
+                resume.touch()
+                stdout, stderr = process.communicate(timeout=5)
+                self.fail(
+                    "builder did not reach publication barrier: "
+                    f"stdout={stdout!r}, stderr={stderr!r}"
+                )
+
+            output.mkdir()
+            resume.touch()
+            stdout, stderr = process.communicate(timeout=5)
+
+            self.assertNotEqual(process.returncode, 0, stdout)
+            self.assertIn("Output path appeared during repository build", stderr)
+            self.assertEqual(list(output.iterdir()), [])
+            self.assertEqual(list(root.glob("repository.tmp.*")), [])
+
+
+class RpmArtifactPublicationSafetyTest(unittest.TestCase):
+    def test_cli_rpm_publication_does_not_clobber_concurrent_output(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            binary = root / "kassiber"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            ready = root / "ready"
+            resume = root / "resume"
+            rpmbuild = fake_bin / "rpmbuild"
+            rpmbuild.write_text(
+                "#!/bin/sh\n"
+                "topdir=''\n"
+                "while [ \"$#\" -gt 0 ]; do\n"
+                "  if [ \"$1\" = --define ]; then\n"
+                "    shift\n"
+                "    case \"$1\" in\n"
+                "      '_topdir '*) topdir=${1#_topdir } ;;\n"
+                "    esac\n"
+                "  fi\n"
+                "  shift\n"
+                "done\n"
+                "test -n \"$topdir\"\n"
+                "printf ready > \"$KASSIBER_TEST_READY\"\n"
+                "while [ ! -e \"$KASSIBER_TEST_RESUME\" ]; do sleep 0.01; done\n"
+                "mkdir -p \"$topdir/RPMS/x86_64\"\n"
+                "printf 'built rpm\\n' > "
+                "\"$topdir/RPMS/x86_64/kassiber-cli-1.2.3-1.x86_64.rpm\"\n",
+                encoding="utf-8",
+            )
+            rpmbuild.chmod(0o755)
+
+            output = root / "artifact.rpm"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_READY"] = str(ready)
+            environment["KASSIBER_TEST_RESUME"] = str(resume)
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "scripts/package-cli-rpm.sh"),
+                    "--binary",
+                    str(binary),
+                    "--version",
+                    "1.2.3",
+                    "--architecture",
+                    "x86_64",
+                    "--output",
+                    str(output),
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+            )
+            deadline = time.monotonic() + 5
+            while (
+                not ready.exists()
+                and process.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            if not ready.exists():
+                resume.touch()
+                stdout, stderr = process.communicate(timeout=5)
+                self.fail(
+                    "RPM build did not reach publication barrier: "
+                    f"stdout={stdout!r}, stderr={stderr!r}"
+                )
+
+            output.write_text("competing file\n", encoding="utf-8")
+            resume.touch()
+            stdout, stderr = process.communicate(timeout=5)
+
+            self.assertNotEqual(process.returncode, 0, stdout)
+            self.assertIn("Output path appeared during RPM build", stderr)
+            self.assertEqual(output.read_text(encoding="utf-8"), "competing file\n")
+            self.assertEqual(list(root.glob(".artifact.rpm.tmp.*")), [])
+
+    def test_both_rpm_builders_use_exclusive_final_creation(self):
+        for script_name in ("package-cli-rpm.sh", "package-desktop-rpm.sh"):
+            script = (ROOT / "scripts" / script_name).read_text(encoding="utf-8")
+            self.assertIn('ln "$publish_temp" "$output"', script)
 
 
 @unittest.skipUnless(

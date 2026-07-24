@@ -27,9 +27,13 @@ Every package-manager channel must fail closed unless all of these checks pass:
    distribution named as supported. A package merely building is not evidence
    that it runs on an older glibc or a different libc.
 5. Repository payloads and content-addressed metadata are uploaded before the
-   signed top-level metadata. APT switches through one `InRelease` object. DNF
-   publishes a complete immutable, suite-scoped snapshot and then switches one
-   mirrorlist object, so clients never observe a mixed metadata/signature pair.
+   signed top-level metadata. APT requires `Acquire-By-Hash: yes`, validates
+   every referenced immutable index, and switches through one `InRelease`
+   object. The detached `Release` plus `Release.gpg` compatibility interface
+   cannot switch atomically and is not supported as an atomic-consumption path.
+   DNF publishes a complete immutable, suite-scoped snapshot and then switches
+   one mirrorlist object, so clients never observe a mixed metadata/signature
+   pair.
 
 The release workflow enforces the first gate for tag and publishing runs.
 
@@ -126,6 +130,12 @@ may use the versioned manifest only to render a no-publication dry run. Once the
 code-reviewed release-signing policy is enabled, it authenticates the detached
 manifest signature before deriving any APT/DNF, AUR, or Nix input;
 external publication fails closed without that signature.
+
+Every job that checks out Kassiber pins its checkout to `tag_name`, so the
+signing policy that verified the release is the same policy that gates
+publication. The consequence is that republishing an older tag runs that tag's
+packaging scripts: a packaging fix landed on `main` reaches a channel only once
+a release tag contains it.
 
 COPR and OBS submission (and the source-RPM packaging they need) were
 deliberately removed from this foundation; they return in the change that

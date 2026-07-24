@@ -43,7 +43,7 @@ esac
 # version. Map SemVer's prerelease separator accordingly (1.2.3-rc.1 becomes
 # 1.2.3~rc.1) while keeping the Debian/package build version unchanged.
 rpm_version="${version//-/\~}"
-for command in cmp dpkg-deb rpmbuild tar; do
+for command in basename cmp dirname dpkg-deb install ln mktemp rpmbuild tar; do
   command -v "$command" >/dev/null 2>&1 || die "$command is required"
 done
 
@@ -80,7 +80,14 @@ for required in "$spec" "$license"; do
 done
 
 topdir="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-desktop-rpm.XXXXXX")"
-trap 'rm -rf "$topdir"' EXIT
+publish_temp=""
+cleanup() {
+  rm -rf "$topdir"
+  if [ -n "$publish_temp" ] && [ -f "$publish_temp" ]; then
+    rm -f "$publish_temp"
+  fi
+}
+trap cleanup EXIT
 mkdir -p "$topdir/BUILD" "$topdir/BUILDROOT" "$topdir/RPMS" \
   "$topdir/SOURCES" "$topdir/SPECS" "$topdir/SRPMS" "$topdir/payload"
 dpkg-deb -x "$deb" "$topdir/payload"
@@ -117,5 +124,12 @@ rpmbuild -bb \
 
 built_rpm="$topdir/RPMS/$architecture/kassiber-$rpm_version-$release.$architecture.rpm"
 [ -f "$built_rpm" ] || die "Expected RPM was not built: $built_rpm"
-mkdir -p "$(dirname "$output")"
-install -m 0644 "$built_rpm" "$output"
+output_parent="$(dirname "$output")"
+mkdir -p "$output_parent"
+publish_temp="$(mktemp "$output_parent/.$(basename "$output").tmp.XXXXXX")"
+install -m 0644 "$built_rpm" "$publish_temp"
+if ! ln "$publish_temp" "$output"; then
+  die "Output path appeared during RPM build: $output"
+fi
+rm -f "$publish_temp"
+publish_temp=""

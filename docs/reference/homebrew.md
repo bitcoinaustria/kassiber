@@ -92,8 +92,9 @@ draft only and `finalize-signed-release.yml` performs the publication:
    `HOMEBREW_TAP_TOKEN` is configured.
 5. Renders `Casks/kassiber.rb` and `Formula/kassiber-cli.rb` from authenticated
    manifest hashes with `scripts/render_homebrew.py`.
-6. Publishes the existing draft, then commits and pushes
-   `Update Kassiber cask and CLI formula to <tag>`.
+6. Commits and pushes `Update Kassiber cask and CLI formula to <tag>`.
+7. Publishes the existing draft last. A failed tap push therefore leaves the
+   release as a draft instead of announcing a version the tap cannot install.
 
 The generated cask points at the immutable GitHub release DMG and links the
 bundled terminal launcher:

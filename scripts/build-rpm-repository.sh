@@ -63,7 +63,7 @@ for architecture in "${architectures[@]}"; do
   esac
 done
 
-for command in awk cmp cpio createrepo_c gpg rpm rpm2cpio rpmkeys; do
+for command in awk cmp cpio createrepo_c find gpg mktemp mv rpm rpm2cpio rpmkeys sort; do
   command -v "$command" >/dev/null 2>&1 || die "$command is required"
 done
 if [ -n "$signing_key" ]; then
@@ -72,16 +72,13 @@ if [ -n "$signing_key" ]; then
     || die "Signing key is not available in the active GnuPG home: $signing_key"
 fi
 
-mapfile -d '' packages < <(
-  find "$input" -maxdepth 1 -type f -name '*.rpm' ! -name '*.src.rpm' -print0 \
-    | sort -z
-)
-[ "${#packages[@]}" -gt 0 ] || die "No binary RPM packages found in $input"
-
-mkdir -p "$(dirname "$output")"
-stage="$(mktemp -d "${output}.tmp.XXXXXX")"
+package_manifest="$(mktemp "${TMPDIR:-/tmp}/kassiber-rpm-packages.XXXXXX")"
+stage=""
 verification=""
 cleanup() {
+  if [ -n "${package_manifest:-}" ] && [ -f "$package_manifest" ]; then
+    rm -f "$package_manifest"
+  fi
   if [ -n "${stage:-}" ] && [ -d "$stage" ]; then
     rm -rf "$stage"
   fi
@@ -90,6 +87,20 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+if ! (
+  find "$input" -maxdepth 1 -type f -name '*.rpm' ! -name '*.src.rpm' -print0 \
+    | sort -z > "$package_manifest"
+); then
+  die "Failed to discover binary RPM packages in $input"
+fi
+mapfile -d '' packages < "$package_manifest"
+rm -f "$package_manifest"
+package_manifest=""
+[ "${#packages[@]}" -gt 0 ] || die "No binary RPM packages found in $input"
+
+mkdir -p "$(dirname "$output")"
+stage="$(mktemp -d "${output}.tmp.XXXXXX")"
 mkdir -p "$stage/packages"
 if [ -n "$signing_key" ]; then
   verification="$(mktemp -d "${output}.verify.XXXXXX")"
@@ -147,6 +158,12 @@ if [ -n "$signing_key" ]; then
 fi
 
 chmod -R u=rwX,go=rX "$stage"
-mv "$stage" "$output"
+if ! mv --no-clobber --no-target-directory "$stage" "$output"; then
+  die "Output path appeared during repository build: $output"
+fi
+if [ -d "$stage" ]; then
+  die "Output path appeared during repository build: $output"
+fi
+[ -d "$output" ] || die "Repository publication failed: $output"
 stage=""
 echo "Built Kassiber DNF repository: $output"
