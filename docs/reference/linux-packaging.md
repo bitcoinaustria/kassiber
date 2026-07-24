@@ -131,6 +131,12 @@ code-reviewed release-signing policy is enabled, it authenticates the detached
 manifest signature before deriving any APT/DNF, AUR, or Nix input;
 external publication fails closed without that signature.
 
+Every job that checks out Kassiber pins its checkout to `tag_name`, so the
+signing policy that verified the release is the same policy that gates
+publication. The consequence is that republishing an older tag runs that tag's
+packaging scripts: a packaging fix landed on `main` reaches a channel only once
+a release tag contains it.
+
 COPR and OBS submission (and the source-RPM packaging they need) were
 deliberately removed from this foundation; they return in the change that
 actually provisions those projects.
