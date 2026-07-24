@@ -228,6 +228,93 @@ class RpmRepositoryScriptSafetyTest(unittest.TestCase):
             self.assertEqual(list(root.glob("repository.tmp.*")), [])
 
 
+class RpmArtifactPublicationSafetyTest(unittest.TestCase):
+    def test_cli_rpm_publication_does_not_clobber_concurrent_output(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            binary = root / "kassiber"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            ready = root / "ready"
+            resume = root / "resume"
+            rpmbuild = fake_bin / "rpmbuild"
+            rpmbuild.write_text(
+                "#!/bin/sh\n"
+                "topdir=''\n"
+                "while [ \"$#\" -gt 0 ]; do\n"
+                "  if [ \"$1\" = --define ]; then\n"
+                "    shift\n"
+                "    case \"$1\" in\n"
+                "      '_topdir '*) topdir=${1#_topdir } ;;\n"
+                "    esac\n"
+                "  fi\n"
+                "  shift\n"
+                "done\n"
+                "test -n \"$topdir\"\n"
+                "printf ready > \"$KASSIBER_TEST_READY\"\n"
+                "while [ ! -e \"$KASSIBER_TEST_RESUME\" ]; do sleep 0.01; done\n"
+                "mkdir -p \"$topdir/RPMS/x86_64\"\n"
+                "printf 'built rpm\\n' > "
+                "\"$topdir/RPMS/x86_64/kassiber-cli-1.2.3-1.x86_64.rpm\"\n",
+                encoding="utf-8",
+            )
+            rpmbuild.chmod(0o755)
+
+            output = root / "artifact.rpm"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_READY"] = str(ready)
+            environment["KASSIBER_TEST_RESUME"] = str(resume)
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "scripts/package-cli-rpm.sh"),
+                    "--binary",
+                    str(binary),
+                    "--version",
+                    "1.2.3",
+                    "--architecture",
+                    "x86_64",
+                    "--output",
+                    str(output),
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+            )
+            deadline = time.monotonic() + 5
+            while (
+                not ready.exists()
+                and process.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            if not ready.exists():
+                resume.touch()
+                stdout, stderr = process.communicate(timeout=5)
+                self.fail(
+                    "RPM build did not reach publication barrier: "
+                    f"stdout={stdout!r}, stderr={stderr!r}"
+                )
+
+            output.write_text("competing file\n", encoding="utf-8")
+            resume.touch()
+            stdout, stderr = process.communicate(timeout=5)
+
+            self.assertNotEqual(process.returncode, 0, stdout)
+            self.assertIn("Output path appeared during RPM build", stderr)
+            self.assertEqual(output.read_text(encoding="utf-8"), "competing file\n")
+            self.assertEqual(list(root.glob(".artifact.rpm.tmp.*")), [])
+
+    def test_both_rpm_builders_use_exclusive_final_creation(self):
+        for script_name in ("package-cli-rpm.sh", "package-desktop-rpm.sh"):
+            script = (ROOT / "scripts" / script_name).read_text(encoding="utf-8")
+            self.assertIn('ln "$publish_temp" "$output"', script)
+
+
 @unittest.skipUnless(
     all(shutil.which(command) for command in RPM_TOOLS),
     "RPM, repository, and Debian tooling is required",
