@@ -533,6 +533,16 @@ class AptRepositoryBuilderTest(unittest.TestCase):
             self.assertIn("Acquire-By-Hash: yes", release)
             self.assertTrue((release_dir / "InRelease").is_file())
             self.assertTrue((release_dir / "Release.gpg").is_file())
+            # Release must not check itself in: a self-entry carries the digest
+            # of the empty file the redirect created, and no by-hash object can
+            # ever back it.
+            checksum_paths = [
+                line.split()[2]
+                for line in release.splitlines()
+                if line.startswith(" ") and len(line.split()) == 3
+            ]
+            self.assertNotIn("Release", checksum_paths)
+            self.assertIn("main/binary-amd64/Packages", checksum_paths)
 
             subprocess.run(
                 ["gpg", "--batch", "--verify", str(release_dir / "InRelease")],

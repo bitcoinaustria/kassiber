@@ -111,6 +111,12 @@ while IFS=$'\t' read -r expected_hash relative_path; do
     */by-hash/*)
       continue
       ;;
+    Release|Release.gpg|InRelease)
+      # The signed top-level objects are the switch itself, never by-hash
+      # indices. Some apt-ftparchive invocations list them alongside the
+      # indices they cover.
+      continue
+      ;;
   esac
   index_path="$release_dir/$relative_path"
   [ -f "$index_path" ] \

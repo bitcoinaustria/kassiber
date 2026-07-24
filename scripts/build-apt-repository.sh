@@ -123,10 +123,14 @@ for architecture in "${architectures[@]}"; do
 done
 
 package_manifest="$(mktemp "${TMPDIR:-/tmp}/kassiber-apt-packages.XXXXXX")"
+release_metadata=""
 stage=""
 cleanup() {
   if [ -n "${package_manifest:-}" ] && [ -f "$package_manifest" ]; then
     rm -f "$package_manifest"
+  fi
+  if [ -n "${release_metadata:-}" ] && [ -f "$release_metadata" ]; then
+    rm -f "$release_metadata"
   fi
   if [ -n "${stage:-}" ] && [ -d "$stage" ]; then
     rm -rf "$stage"
@@ -220,10 +224,17 @@ if [ "$but_automatic_upgrades" = true ]; then
 fi
 
 release_dir="$stage/dists/$suite"
+# Collect the manifest outside the scanned tree. Redirecting straight into
+# dists/SUITE/Release creates that file before apt-ftparchive walks the
+# directory, so Release would list itself with the digest of a zero-byte file:
+# an entry no by-hash object can ever back.
+release_metadata="$(mktemp "${TMPDIR:-/tmp}/kassiber-apt-release.XXXXXX")"
 (
   cd "$stage"
   apt-ftparchive "${release_options[@]}" release "dists/$suite"
-) > "$release_dir/Release"
+) > "$release_metadata"
+mv --no-target-directory "$release_metadata" "$release_dir/Release"
+release_metadata=""
 
 if [ -n "$signing_key" ]; then
   gpg --batch --list-secret-keys "$signing_key" >/dev/null 2>&1 \

@@ -193,16 +193,24 @@ class RepositoryPublisherTest(unittest.TestCase):
         apt: Path,
         *,
         include_by_hash: bool = True,
+        include_signed_metadata_entries: bool = False,
     ) -> None:
         release_dir = apt / "dists/prerelease"
         index = release_dir / "main/binary-amd64/Packages"
         index.parent.mkdir(parents=True)
         index.write_text("Package: kassiber-cli\n", encoding="utf-8")
         digest = sha256(index)
+        signed_metadata_entries = ""
+        if include_signed_metadata_entries:
+            signed_metadata_entries = "".join(
+                f" {'0' * 64} 0 {name}\n"
+                for name in ("Release", "Release.gpg", "InRelease")
+            )
         (release_dir / "Release").write_text(
             "Acquire-By-Hash: yes\n"
             "SHA256:\n"
-            f" {digest} {index.stat().st_size} main/binary-amd64/Packages\n",
+            f" {digest} {index.stat().st_size} main/binary-amd64/Packages\n"
+            f"{signed_metadata_entries}",
             encoding="utf-8",
         )
         (release_dir / "InRelease").write_text("signed", encoding="utf-8")
@@ -284,6 +292,55 @@ class RepositoryPublisherTest(unittest.TestCase):
             self.assertEqual(completed.returncode, 2)
             self.assertIn("APT by-hash object is missing", completed.stderr)
             self.assertFalse(log.exists())
+
+    def test_publisher_accepts_a_release_that_lists_signed_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            apt, dnf = self._repository_roots(root)
+            self._write_apt_metadata(apt, include_signed_metadata_entries=True)
+            (dnf / "repodata/repomd.xml").write_text("metadata", encoding="utf-8")
+            (dnf / "repodata/repomd.xml.asc").write_text(
+                "signature", encoding="utf-8"
+            )
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            aws = fake_bin / "aws"
+            aws.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$KASSIBER_TEST_AWS_LOG\"\n",
+                encoding="utf-8",
+            )
+            aws.chmod(0o755)
+            log = root / "aws.log"
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["KASSIBER_TEST_AWS_LOG"] = str(log)
+
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/publish-linux-repositories-s3.sh"),
+                    "--apt",
+                    str(apt),
+                    "--dnf",
+                    str(dnf),
+                    "--suite",
+                    "prerelease",
+                    "--destination",
+                    "s3://example/kassiber",
+                    "--base-url",
+                    "https://packages.invalid",
+                ],
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            # The signed top-level objects are the atomic switch, not by-hash
+            # indices, so listing them must not block publication.
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn(
+                "apt/dists/prerelease/InRelease",
+                log.read_text(encoding="utf-8"),
+            )
 
     def test_dnf_publish_uses_a_suite_scoped_immutable_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
