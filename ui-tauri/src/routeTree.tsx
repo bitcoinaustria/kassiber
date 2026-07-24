@@ -64,10 +64,6 @@ const SwapMatching = lazyRouteComponent(
   () => import("./routes/SwapMatching"),
   "SwapMatching",
 );
-const CustodyGaps = lazyRouteComponent(
-  () => import("./routes/CustodyGaps"),
-  "CustodyGaps",
-);
 const Quarantine = lazyRouteComponent(
   () => import("./routes/Quarantine"),
   "Quarantine",
@@ -208,10 +204,14 @@ const swapMatchingRoute = createRoute({
   component: SwapMatching,
 });
 
+// `/custody-gaps` merged into the Transfers & Custody surface (`/swaps`); it
+// now opens that screen's Custody gaps tab.
 const custodyGapsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/custody-gaps",
-  component: CustodyGaps,
+  beforeLoad: () => {
+    throw redirect({ to: "/swaps", search: { tab: "gaps" } });
+  },
 });
 
 const transferMatchingRoute = createRoute({

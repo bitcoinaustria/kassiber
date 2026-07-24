@@ -12,7 +12,7 @@
     "egress": "Network Monitor",
     "sourceFunds": "Source Funds",
     "custodyGaps": "Custody Gaps",
-    "swaps": "Swaps & Transfers",
+    "swaps": "Transfers & Custody",
     "activity": "Activity",
     "logs": "Logs",
     "exitTax": "Exit Tax",

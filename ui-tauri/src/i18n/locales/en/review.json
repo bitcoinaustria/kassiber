@@ -1,29 +1,78 @@
 {
   "swap": {
     "tabs": {
+      "review": "Review",
+      "gaps": "Custody gaps",
       "swaps": "Swaps",
       "transfers": "Bitcoin moves",
-      "components": "Close gaps"
+      "components": "Components"
     },
     "components": {
-      "title": "Close custody gaps",
+      "title": "Custody components",
       "description": "Resolve long wallet-migration and consolidation histories as atomic custody components. One-to-many, many-to-one, N:M, on-chain, Liquid, and Lightning legs can share one reviewed interpretation without rewriting the imported transactions.",
-      "bulkTitle": "Bulk component resolver",
-      "bulkDescription": "Paste one component or a batch as JSON, preview conservation locally, then save every item as a draft or activate the complete batch.",
-      "atomicHint": "Bulk activation is all-or-nothing. If any component is incomplete or does not conserve, nothing is activated. Save drafts while a wallet, fee, or intermediate hop is still missing.",
-      "jsonLabel": "Custody component JSON",
-      "loadExample": "Load migration example",
-      "referenceHint": "Use transaction, transaction_ref, or transaction_id for imported anchors. For a missing historical wallet, set untracked_wallet to a new or existing placeholder label plus occurred_at; the batch creates and reuses it atomically. N:M flows need explicit source_ordinal/sink_ordinal allocations. Write amount_btc as a JSON decimal string, or use decimal strings for integer fields beyond JavaScript's exact range.",
-      "preview": "Preview",
-      "saveDrafts": "Save as drafts",
-      "activateAll": "Activate all",
-      "previewTitle": "Local preview",
-      "readyToActivate": "Ready to activate",
-      "needsCorrection": "Needs correction",
-      "draftOnly": "Draft only",
+      "form": {
+        "title": "Build a custody component",
+        "description": "Describe how Bitcoin moved between your wallets — including any wallet history not imported into Kassiber — as source, destination, and fee legs. Kassiber checks that the amounts balance before you save.",
+        "componentType": "Component type",
+        "conservationMode": "Conservation",
+        "conversionPolicy": "Conversion policy",
+        "conversionPolicyPlaceholder": "e.g. taxable_swap",
+        "conversionReviewed": "Reviewed conversion (required to activate)",
+        "evidenceKind": "Evidence kind",
+        "notes": "Notes",
+        "notesPlaceholder": "What does this component record, and why?",
+        "legsTitle": "Legs",
+        "legsHint": "Add one leg per movement: where the Bitcoin left, where it arrived, and any fee.",
+        "addLeg": "Add leg",
+        "removeLeg": "Remove leg",
+        "leg": {
+          "role": "Role",
+          "amount": "Amount (BTC)",
+          "location": "Location",
+          "locationKind": {
+            "transaction": "Imported transaction",
+            "wallet": "Imported wallet",
+            "untracked": "Untracked wallet"
+          },
+          "transactionRef": "Transaction",
+          "transactionRefPlaceholder": "Transaction id or external id",
+          "walletRef": "Wallet",
+          "walletRefPlaceholder": "Wallet id or label",
+          "untrackedWallet": "Untracked wallet label",
+          "untrackedWalletPlaceholder": "e.g. Old migration wallet",
+          "occurredAt": "Occurred at",
+          "originTransaction": "Imported transaction {{id}}",
+          "originWallet": "Wallet {{id}}",
+          "changeLocation": "Change location",
+          "valuationUnit": "Valuation unit",
+          "valuationUnitPlaceholder": "e.g. eur_cents",
+          "valuationAmount": "Valuation amount",
+          "valuationAmountPlaceholder": "Integer in the valuation unit",
+          "suspenseHint": "A suspense leg records value in limbo — no wallet or transaction, only a time. Add an allocation from its funding source below."
+        },
+        "balance": {
+          "sources": "Sources",
+          "sinks": "Destinations + fees",
+          "balanced": "Balanced",
+          "unbalanced": "Not balanced"
+        },
+        "allocations": {
+          "title": "Allocations",
+          "hint": "Map exactly how much of each source funds each destination, fee, or retained leg. Required for multi-source, conversion, and suspense components.",
+          "add": "Add allocation",
+          "remove": "Remove allocation",
+          "source": "From (source)",
+          "sink": "To (destination / fee)",
+          "amount": "Amount (BTC)",
+          "selectLeg": "Select a leg",
+          "empty": "No allocations yet. Add one edge per source → destination flow."
+        },
+        "saveDraft": "Save as draft",
+        "activate": "Activate",
+        "reset": "Start over"
+      },
       "structuralErrors": "Fix before saving",
       "activationErrors": "Blocks activation",
-      "previewReadyHint": "The batch is structurally valid and locally conserves. The daemon will still verify wallet ownership, transaction direction, asset, allocation coverage, and active-component conflicts before committing.",
       "savedSummary_one": "Saved {{count}} component: {{active}} active, {{draft}} draft.",
       "savedSummary_other": "Saved {{count}} components: {{active}} active, {{draft}} draft.",
       "listTitle": "Custody components",
@@ -32,21 +81,15 @@
       "moreAvailable_other": "Showing the newest {{count}} components. More exist in this book; narrow the review scope to inspect older revisions.",
       "loading": "Loading custody components…",
       "loadFailed": "Could not load custody components: {{error}}",
-      "empty": "No custody components yet. Preview a migration batch above to start.",
+      "empty": "No custody components yet. Build one with the form above to start.",
       "revision": "revision {{count}}",
+      "legCount_one": "{{count}} leg",
+      "legCount_other": "{{count}} legs",
       "activate": "Activate",
       "supersede": "Supersede",
       "undo": "Undo",
       "validationIssues": "Why this is not effective",
       "unknownIssue": "Unknown validation issue",
-      "summary": {
-        "components": "components",
-        "legs": "legs",
-        "sources": "sources",
-        "destinations": "destinations",
-        "anchors": "tx anchors",
-        "untracked": "untracked legs"
-      },
       "state": {
         "draft": "Draft",
         "active": "Active",
@@ -60,14 +103,6 @@
         "refund": "Refund",
         "manual_bridge": "Manual bridge"
       },
-      "serverPreviewTitle": "Daemon dry-run preview",
-      "serverPreviewVerified": "Rollback verified",
-      "serverPreviewActivates_one": "The daemon accepted this exact batch for atomic activation: {{count}} component, {{active}} active.",
-      "serverPreviewActivates_other": "The daemon accepted this exact batch for atomic activation: {{count}} components, {{active}} active.",
-      "serverPreviewDrafts_one": "The daemon accepted this exact batch as drafts: {{count}} component, {{draft}} draft.",
-      "serverPreviewDrafts_other": "The daemon accepted this exact batch as drafts: {{count}} components, {{draft}} draft.",
-      "serverPreviewFailed": "Daemon preview failed",
-      "revisionSingleRequired": "A revision document must contain exactly one component.",
       "editDraft": "Edit draft",
       "revise": "Create revision",
       "retireDraft": "Retire draft",
@@ -77,6 +112,7 @@
         "fee": "Fee",
         "external": "External",
         "retained": "Retained custody",
+        "suspense": "Suspense",
         "unresolved": "Unresolved",
         "unknown": "Unknown role: {{role}}"
       },
@@ -108,11 +144,7 @@
         "editTitle": "Correct custody-component draft",
         "reviseTitle": "Create a custody-component revision",
         "description": "Edits create a new immutable revision. The previous record stays in the audit trail; activating the revision atomically replaces the active interpretation.",
-        "jsonLabel": "Single component revision JSON",
-        "safetyHint": "Persisted leg IDs keep hidden local evidence attached while the daemon writes fresh immutable IDs. You may correct legs, allocations, conservation, conversion review, policy, and notes.",
-        "cancel": "Cancel",
-        "saveDraft": "Save revised draft",
-        "saveActivate": "Save and activate"
+        "cancel": "Cancel"
       },
       "localIssue": {
         "jsonInvalid": "Invalid JSON: {{detail}}",
@@ -286,7 +318,7 @@
     },
     "header": {
       "applyExact": "Apply exact {{count}}",
-      "rules": "Rules {{enabled}}/{{total}}"
+      "advanced": "Advanced"
     },
     "metric": {
       "candidates": "Candidates",
@@ -357,6 +389,7 @@
       "pairSelected": "Pair selected"
     },
     "showing": "Showing {{from}}-{{to}} of {{total}}",
+    "loadMore": "Load more",
     "preview": {
       "exactTitle": "Apply all exact matches",
       "rulesTitle": "Apply matching rules",
