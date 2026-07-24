@@ -134,6 +134,16 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertNotIn("tauri build", workflow)
         self.assertNotIn("pyinstaller", workflow)
 
+    def test_signed_release_is_published_only_after_homebrew_push(self):
+        workflow = (
+            ROOT / ".github/workflows/finalize-signed-release.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertLess(
+            workflow.index('git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"'),
+            workflow.index('gh release edit "$RELEASE_TAG_NAME"'),
+        )
+
     def test_release_publish_rejects_tags_outside_main_history(self):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"

@@ -148,18 +148,6 @@ jobs:
             --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
             --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
             --output "homebrew-tap/${HOMEBREW_FORMULA_PATH}"
-      - name: Publish the verified draft
-        if: steps.release.outputs.draft == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
-          RELEASE_IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
-        run: |
-          gh release edit "$RELEASE_TAG_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --draft=false \
-            --prerelease="$RELEASE_IS_PRERELEASE"
       - name: Commit Homebrew tap update
         if: inputs.publish_homebrew == true
         working-directory: homebrew-tap
@@ -176,3 +164,15 @@ jobs:
           fi
           git commit -m "Update Kassiber cask and CLI formula to ${RELEASE_TAG_NAME}"
           git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"
+      - name: Publish the verified draft
+        if: steps.release.outputs.draft == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          RELEASE_IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          gh release edit "$RELEASE_TAG_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --draft=false \
+            --prerelease="$RELEASE_IS_PRERELEASE"
