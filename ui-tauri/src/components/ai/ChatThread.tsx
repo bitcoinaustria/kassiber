@@ -93,6 +93,22 @@ export function ChatThread({
     if (spacer) spacer.style.height = `${Math.max(0, Math.round(px))}px`;
   }, []);
 
+  // Scroll, then re-baseline the direction tracker `handleScroll` reads. Our own
+  // scrolls are not navigation, and they are not always forwards: a wider
+  // viewport rewraps the messages above the anchor, which shortens them and
+  // moves the anchored scroll offset *up*. Without the re-baseline that lands as
+  // a backwards scroll and opts the reader out of following (see the `scrolledUp`
+  // rule in ./chatThreadScroll).
+  const scrollTo = React.useCallback(
+    (node: HTMLDivElement, top: number, behavior: ScrollBehavior = "auto") => {
+      node.scrollTo({ top, behavior });
+      // Smooth scrolls settle later; the start position is the right baseline
+      // either way, since both smooth callers move forwards or go free.
+      lastTopRef.current = node.scrollTop;
+    },
+    [],
+  );
+
   // Position the list for the current mode. Runs in rAF so freshly-rendered
   // (or still-streaming) rows have settled before we measure them.
   const applyScroll = React.useCallback(() => {
@@ -109,7 +125,7 @@ export function ChatThread({
         );
         if (!anchorEl) {
           setSpacer(0);
-          node.scrollTo({ top: node.scrollHeight });
+          scrollTo(node, node.scrollHeight);
           return;
         }
         const containerTop = node.getBoundingClientRect().top;
@@ -123,21 +139,21 @@ export function ChatThread({
           modeRef.current = "following";
           anchorIdRef.current = null;
           setSpacer(0);
-          node.scrollTo({ top: node.scrollHeight });
+          scrollTo(node, node.scrollHeight);
           return;
         }
         // Reserve exactly enough blank space to lift the anchor to the top.
         setSpacer(usableViewport - turnHeight);
-        node.scrollTo({ top: node.scrollHeight - node.clientHeight });
+        scrollTo(node, node.scrollHeight - node.clientHeight);
         return;
       }
 
       if (modeRef.current === "following") {
         setSpacer(0);
-        node.scrollTo({ top: node.scrollHeight });
+        scrollTo(node, node.scrollHeight);
       }
     });
-  }, [setSpacer]);
+  }, [setSpacer, scrollTo]);
 
   const scrollToLatest = React.useCallback(
     (behavior: ScrollBehavior = "smooth") => {
@@ -147,9 +163,9 @@ export function ChatThread({
       anchorIdRef.current = null;
       setSpacer(0);
       setShowJumpPill(false);
-      node.scrollTo({ top: node.scrollHeight, behavior });
+      scrollTo(node, node.scrollHeight, behavior);
     },
-    [scrollable, setSpacer],
+    [scrollable, setSpacer, scrollTo],
   );
 
   const scrollToTop = React.useCallback(
@@ -161,9 +177,9 @@ export function ChatThread({
       modeRef.current = "free";
       anchorIdRef.current = null;
       setSpacer(0);
-      node.scrollTo({ top: 0, behavior });
+      scrollTo(node, 0, behavior);
     },
-    [scrollable, setSpacer],
+    [scrollable, setSpacer, scrollTo],
   );
 
   const handleScroll = React.useCallback(() => {
@@ -209,6 +225,24 @@ export function ChatThread({
       node.removeEventListener("touchmove", onManualNavigation);
     };
   }, [scrollable, setSpacer]);
+
+  // Re-apply the current mode when the scroller itself is resized — a window
+  // resize, the sidebar collapsing, or the composer growing a line. The
+  // reserved end-space and the anchor offset are both computed against
+  // `clientHeight`, so without this an anchored turn keeps a position measured
+  // for the old viewport and drifts off the top edge. Only the container is
+  // observed, never the content, so our own spacer writes can't feed back in.
+  React.useEffect(() => {
+    const node = containerRef.current;
+    if (!node || !scrollable || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      // Free-scrolling readers keep whatever position they chose.
+      if (modeRef.current === "free") return;
+      applyScroll();
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [scrollable, applyScroll]);
 
   React.useLayoutEffect(() => {
     const node = containerRef.current;
