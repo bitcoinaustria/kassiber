@@ -591,6 +591,91 @@ class AptRepositoryBuilderTest(unittest.TestCase):
             )
             self.assertIn("Candidate: 1.2.3", policy)
 
+    def test_publisher_preflight_accepts_a_real_apt_ftparchive_release(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "input"
+            inputs.mkdir()
+            _build_test_deb(inputs, package="kassiber-cli", surface="cli")
+            environment, fingerprint = self._generate_signing_key(root / "gnupg")
+            repository = root / "repository"
+            subprocess.run(
+                [
+                    str(ROOT / "scripts/build-apt-repository.sh"),
+                    "--input",
+                    str(inputs),
+                    "--output",
+                    str(repository),
+                    "--suite",
+                    "prerelease",
+                    "--architecture",
+                    "amd64",
+                    "--signing-key",
+                    fingerprint,
+                ],
+                check=True,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            dnf = root / "dnf"
+            (dnf / "packages").mkdir(parents=True)
+            (dnf / "repodata").mkdir(parents=True)
+            (dnf / "repodata/repomd.xml").write_text("metadata", encoding="utf-8")
+            (dnf / "repodata/repomd.xml.asc").write_text(
+                "signature", encoding="utf-8"
+            )
+
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            aws = fake_bin / "aws"
+            aws.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$KASSIBER_TEST_AWS_LOG\"\n",
+                encoding="utf-8",
+            )
+            aws.chmod(0o755)
+            log = root / "aws.log"
+            publish_environment = os.environ.copy()
+            publish_environment["PATH"] = (
+                f"{fake_bin}:{publish_environment['PATH']}"
+            )
+            publish_environment["KASSIBER_TEST_AWS_LOG"] = str(log)
+
+            completed = subprocess.run(
+                [
+                    str(ROOT / "scripts/publish-linux-repositories-s3.sh"),
+                    "--apt",
+                    str(repository),
+                    "--dnf",
+                    str(dnf),
+                    "--suite",
+                    "prerelease",
+                    "--destination",
+                    "s3://example/kassiber",
+                    "--base-url",
+                    "https://packages.invalid",
+                ],
+                capture_output=True,
+                text=True,
+                env=publish_environment,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            calls = log.read_text(encoding="utf-8").splitlines()
+            by_hash_publish = next(
+                index
+                for index, line in enumerate(calls)
+                if "--include */by-hash/SHA256/*" in line
+            )
+            in_release_publish = next(
+                index
+                for index, line in enumerate(calls)
+                if "apt/dists/prerelease/InRelease" in line
+            )
+            self.assertLess(by_hash_publish, in_release_publish)
+
 
 class PackagingWorkflowVersionGateTest(unittest.TestCase):
     def test_release_tag_must_match_the_embedded_package_version(self):
