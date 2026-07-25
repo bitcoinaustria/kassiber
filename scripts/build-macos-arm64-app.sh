@@ -99,13 +99,7 @@ echo "Bundled sidecar: $SIDECAR_NAME"
 echo "Bundles: $BUNDLES"
 echo "Python: $PYTHON_VERSION"
 
-# One-*dir*, not one-file. A one-file sidecar unpacks ~170 MB into a fresh temp
-# directory on every launch, and macOS re-validates the code signature of every
-# bundled dylib from scratch each time because that cache is keyed by inode:
-# ~6s of off-CPU work before the daemon answers, on every cold start. Shipping
-# the unpacked tree at a stable path inside the bundle lets the cache hit —
-# measured 6.0s -> 0.19s to `daemon.ready`. `bundled_sidecar` in
-# src/supervisor.rs and Contents/Resources/bin/kassiber both look here first.
+# One-*dir*, not one-file: cold-start fix, see docs/reference/desktop.md.
 run uv run --locked --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --clean \
   --noconfirm \
@@ -135,9 +129,8 @@ run uv run --locked --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinst
 SIDECAR_DIST="dist/$SIDECAR_NAME"
 SIDECAR_BIN="$SIDECAR_DIST/$SIDECAR_NAME"
 
-# Tauri copies resource directories file by file and skips symlinks, so a
-# symlinked payload would arrive in the bundle broken. Nothing produces one
-# today; fail loudly if a future Python build layout starts to.
+# Tauri skips symlinks when copying resource directories, so a symlinked
+# payload would arrive in the bundle broken.
 if [ -n "$(find "$SIDECAR_DIST" -type l -print -quit)" ]; then
   echo "$SIDECAR_DIST contains symlinks, which Tauri will not bundle intact." >&2
   exit 1

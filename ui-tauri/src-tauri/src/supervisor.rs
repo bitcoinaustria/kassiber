@@ -1814,15 +1814,8 @@ fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
     let resource_dir = resource_dir?;
     let sidecar = sidecar_filename()?;
     [
-        // macOS ships a PyInstaller one-*dir* sidecar: the executable sits in
-        // `binaries/kassiber-cli/` next to its `_internal/` payload. A one-file
-        // sidecar unpacks ~170 MB into a fresh temp directory on every launch,
-        // and macOS then re-validates the code signature of all ~115 bundled
-        // dylibs from scratch, because that cache is keyed by inode. That is
-        // ~6s of off-CPU `fcntl` before the daemon answers, every cold start.
-        // Stable paths inside the bundle let the cache hit: ~0.2s after the
-        // first launch. Linux and Windows have no equivalent per-inode cost and
-        // still ship the flat one-file sidecar below.
+        // macOS one-*dir* sidecar: executable beside its `_internal/` payload.
+        // Why one-dir on macOS only: docs/reference/desktop.md.
         resource_dir
             .join("binaries")
             .join("kassiber-cli")
@@ -1834,9 +1827,8 @@ fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
         resource_dir.join(&sidecar),
     ]
     .into_iter()
-    // `is_file`, not `exists`: the one-dir layout puts a *directory* next to
-    // where the flat candidates look, and handing a directory to `Command` only
-    // fails later, as a confusing spawn error.
+    // `is_file`, not `exists`: a directory handed to `Command` only fails later,
+    // as a confusing spawn error.
     .find(|path| path.is_file())
 }
 
@@ -1872,11 +1864,8 @@ mod tests {
 
     static TEST_TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-    /// The one-dir sidecar puts a *directory* at `binaries/kassiber-cli`, right
-    /// where the flat candidate used to be the only thing that could match. An
-    /// `exists()` check would hand that directory to `Command` and fail much
-    /// later with a confusing spawn error, so pin both halves: the one-dir
-    /// executable wins, and a directory never counts as a sidecar.
+    /// Pins both halves of the one-dir lookup: the one-dir executable wins, and
+    /// a directory never counts as a sidecar.
     #[test]
     fn bundled_sidecar_prefers_one_dir_and_ignores_directories() {
         let Some(name) = sidecar_filename() else {
