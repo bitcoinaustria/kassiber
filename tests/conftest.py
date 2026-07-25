@@ -48,7 +48,9 @@ def _sweep_session_owner_locks():
             if project_module._try_lock_handle(handle):
                 path.unlink(missing_ok=True)
         except OSError:
-            pass
+            # One file that cannot be removed must not abort the sweep, and a
+            # session that already passed must not fail in teardown over it.
+            continue
         finally:
             try:
                 project_module._unlock_handle(handle)
