@@ -1543,7 +1543,7 @@ function ConnectionDetailView({
         // Balance metric already reflects it) rather than adding a standing
         // "all good" confirmation. The comparison + the
         // signed delta is the actionable signal.
-        <Card className="rounded-[1.25rem] border-amber-300 py-3 shadow-sm dark:border-amber-900/60">
+        <Card className="border-amber-300 py-3 dark:border-amber-900/60">
           <CardContent className="flex items-center justify-between gap-4 px-4">
             <div className="flex items-center gap-4">
               <span
@@ -1630,7 +1630,7 @@ function ConnectionDetailView({
       />
 
       {samouraiMetadata ? (
-        <Card className="rounded-[1.25rem] border-border/70 shadow-sm">
+        <Card>
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
               {t("detail.samourai.title")}
@@ -1797,7 +1797,7 @@ function ConnectionDetailView({
       ) : null}
 
       {walletProvenanceRoutes.length > 0 ? (
-        <Card className="rounded-[1.25rem] border-border/70 shadow-sm">
+        <Card>
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="text-sm sm:text-base">
               {t("detail.btcpayProvenance.title")}
@@ -1845,7 +1845,7 @@ function ConnectionDetailView({
       ) : null}
 
       <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
+        <Card variant="flush">
           <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
@@ -1952,7 +1952,7 @@ function ConnectionDetailView({
         </Card>
 
         <div className="space-y-3 xl:sticky xl:top-4">
-          <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
+          <Card variant="flush">
             <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.connectionDetails.title")}
@@ -2040,7 +2040,7 @@ function ConnectionDetailView({
             </CardContent>
           </Card>
 
-          <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
+          <Card variant="flush">
             <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.relatedViews.title")}

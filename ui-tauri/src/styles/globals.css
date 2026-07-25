@@ -527,6 +527,73 @@
   background-color: color-mix(in srgb, var(--background) 64%, transparent);
 }
 
+/*
+ * Card surfaces — two tiers, and the distinction matters.
+ *
+ * Cards are deliberately NOT frosted. `backdrop-filter` blurs what is behind an
+ * element, and a card sits on the flat page background: blurring a flat colour
+ * returns that colour, so glass would cost a compositing layer per card and
+ * render nothing. Glass is for surfaces that genuinely float over content.
+ *
+ * - `.kb-surface`       a top-level panel on the page. Large radius, hairline
+ *                       edge, and a two-layer shadow (tight contact + wide
+ *                       ambient) — that pairing is what reads as lifted, where a
+ *                       single flat shadow reads as merely outlined.
+ * - `.kb-surface-inset` a surface nested INSIDE a panel. Small radius, same
+ *                       hairline, and no shadow: an inner tile casting a shadow
+ *                       inside its parent is the tell of an ad-hoc surface.
+ *
+ * The app previously drew this concept at four different radii with a
+ * full-strength border. These two classes are the whole vocabulary.
+ */
+.kb-surface {
+  border-radius: var(--radius-2xl);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background-color: var(--card);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 3.5%),
+    0 10px 30px rgb(0 0 0 / 3.5%);
+}
+
+.dark .kb-surface {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 35%),
+    0 10px 30px rgb(0 0 0 / 20%);
+}
+
+.kb-surface-inset {
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background-color: var(--card);
+}
+
+/*
+ * Elevated glass, ported from T3Code's `.dropdown-glass` — menus, popovers and
+ * select lists.
+ *
+ * The tint is deliberately DENSER than the ambient surfaces above. Nesting the
+ * blur mix inside an 18% `--popover` tint keeps high-contrast page content from
+ * blooming through a menu and washing out its text, while still letting the
+ * opacity token do its work. An overlay carries copy you must be able to read;
+ * an ambient panel does not.
+ */
+.kb-glass-popover {
+  background-color: color-mix(
+    in srgb,
+    var(--popover) 18%,
+    color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
+  );
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturation));
+  border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
+}
+
+.dark .kb-glass-popover {
+  box-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
+}
+
 /* Graceful fallback where backdrop-filter is unsupported: solid surfaces. */
 @supports not (backdrop-filter: blur(1px)) {
   .kb-glass-panel,
@@ -534,7 +601,8 @@
     background-color: var(--card);
   }
 
-  .kb-glass-dialog {
+  .kb-glass-dialog,
+  .kb-glass-popover {
     background-color: var(--popover);
   }
 }

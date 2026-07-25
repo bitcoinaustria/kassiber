@@ -194,7 +194,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="kb-surface-inset overflow-hidden">
         <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-sm font-medium">{targetLabel}</div>
