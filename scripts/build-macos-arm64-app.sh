@@ -99,11 +99,12 @@ echo "Bundled sidecar: $SIDECAR_NAME"
 echo "Bundles: $BUNDLES"
 echo "Python: $PYTHON_VERSION"
 
+# One-*dir*, not one-file: cold-start fix, see docs/reference/desktop.md.
 run uv run --locked --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --clean \
   --noconfirm \
-  --onefile \
-  --name kassiber-cli \
+  --onedir \
+  --name "$SIDECAR_NAME" \
   --specpath build \
   --paths . \
   --collect-data kassiber \
@@ -125,22 +126,35 @@ run uv run --locked --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinst
   --hidden-import rp2.plugin.country.at \
   scripts/kassiber_pyinstaller_entry.py
 
-sidecar_arch="$(file dist/kassiber-cli)"
+SIDECAR_DIST="dist/$SIDECAR_NAME"
+SIDECAR_BIN="$SIDECAR_DIST/$SIDECAR_NAME"
+
+# Tauri skips symlinks when copying resource directories, so a symlinked
+# payload would arrive in the bundle broken. A framework-shaped CPython emits
+# them; uv's managed build, used above, does not.
+sidecar_symlinks="$(find "$SIDECAR_DIST" -type l)"
+if [ -n "$sidecar_symlinks" ]; then
+  echo "$SIDECAR_DIST contains symlinks, which Tauri will not bundle intact:" >&2
+  printf '%s\n' "$sidecar_symlinks" >&2
+  exit 1
+fi
+
+sidecar_arch="$(file "$SIDECAR_BIN")"
 echo "$sidecar_arch"
 case "$sidecar_arch" in
   *"arm64"*) ;;
   *)
-    echo "dist/kassiber-cli is not an arm64 executable; refusing to bundle it." >&2
+    echo "$SIDECAR_BIN is not an arm64 executable; refusing to bundle it." >&2
     exit 1
     ;;
 esac
 
-run dist/kassiber-cli --help
+run "$SIDECAR_BIN" --help
 
 kraken_smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-kraken-bundled-smoke.XXXXXX")"
 kraken_smoke_out="$kraken_smoke_root/daemon.jsonl"
 printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","args":{"use_bundled":true}}\n{"request_id":"shutdown-1","kind":"daemon.shutdown"}\n' \
-  | dist/kassiber-cli --data-root "$kraken_smoke_root/data" daemon \
+  | "$SIDECAR_BIN" --data-root "$kraken_smoke_root/data" daemon \
   > "$kraken_smoke_out"
 grep '"kind":"ui.rates.kraken_csv.import"' "$kraken_smoke_out" >/dev/null
 grep '"bundled":true' "$kraken_smoke_out" >/dev/null
@@ -148,9 +162,12 @@ grep '"pairs":2' "$kraken_smoke_out" >/dev/null
 grep '"rows":255181' "$kraken_smoke_out" >/dev/null
 
 mkdir -p "$BINARIES_DIR"
+# Sweep both layouts so switching branches never leaves a stale flat sidecar
+# shadowing the one-dir tree (or the other way round).
 find "$BINARIES_DIR" -maxdepth 1 -type f -name 'kassiber-cli-*' -delete
-run cp dist/kassiber-cli "$BINARIES_DIR/$SIDECAR_NAME"
-run chmod 755 "$BINARIES_DIR/$SIDECAR_NAME"
+rm -rf "${BINARIES_DIR:?}/kassiber-cli"
+run cp -R "$SIDECAR_DIST" "$BINARIES_DIR/kassiber-cli"
+run chmod 755 "$BINARIES_DIR/kassiber-cli/$SIDECAR_NAME"
 
 run rustup target add "$TARGET_TRIPLE"
 run pnpm --dir ui-tauri install --frozen-lockfile
@@ -186,7 +203,7 @@ Look under:
   $ROOT/ui-tauri/src-tauri/target/$TARGET_TRIPLE/release/bundle
 
 The app bundle includes:
-  binaries/$SIDECAR_NAME
+  binaries/kassiber-cli/$SIDECAR_NAME (plus its _internal/ payload)
 
 To install or repair the user-local terminal command on the next build:
   ./scripts/build-macos-arm64-app.sh --install-cli

@@ -1814,6 +1814,12 @@ fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
     let resource_dir = resource_dir?;
     let sidecar = sidecar_filename()?;
     [
+        // macOS one-*dir* sidecar: executable beside its `_internal/` payload.
+        // Why one-dir on macOS only: docs/reference/desktop.md.
+        resource_dir
+            .join("binaries")
+            .join("kassiber-cli")
+            .join(&sidecar),
         // Packaged Tauri builds place resources under the configured
         // `binaries/` directory. The flat fallback keeps manually assembled
         // dev bundles easy to smoke-test.
@@ -1821,7 +1827,9 @@ fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
         resource_dir.join(&sidecar),
     ]
     .into_iter()
-    .find(|path| path.exists())
+    // `is_file`, not `exists`: a directory handed to `Command` only fails later,
+    // as a confusing spawn error.
+    .find(|path| path.is_file())
 }
 
 fn sidecar_filename() -> Option<String> {
@@ -1855,6 +1863,32 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     static TEST_TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+    /// Pins both halves of the one-dir lookup: the one-dir executable wins, and
+    /// a directory never counts as a sidecar.
+    #[test]
+    fn bundled_sidecar_prefers_one_dir_and_ignores_directories() {
+        let Some(name) = sidecar_filename() else {
+            return; // unsupported target triple; nothing to resolve
+        };
+        let counter = TEST_TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let root = env::temp_dir().join(format!(
+            "kassiber-sidecar-lookup-{}-{counter}",
+            std::process::id()
+        ));
+        let flat = root.join("binaries").join(&name);
+        let one_dir = root.join("binaries").join("kassiber-cli").join(&name);
+        fs::create_dir_all(one_dir.parent().expect("one-dir parent")).expect("create dirs");
+
+        // A directory sitting at the flat candidate must not be picked up.
+        fs::create_dir_all(&flat).expect("create shadowing directory");
+        assert_eq!(bundled_sidecar(Some(&root)), None);
+
+        fs::write(&one_dir, b"#!/bin/sh\n").expect("write one-dir sidecar");
+        assert_eq!(bundled_sidecar(Some(&root)), Some(one_dir));
+
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn redacts_stderr_tail_and_sensitive_details() {

@@ -99,9 +99,12 @@ The workflow currently builds:
   glibc floor aligned with the AppImage build.
 - Desktop previews: a macOS arm64 `.app` zip plus `.dmg`, Linux `.AppImage`,
   `.deb`, and binary `.rpm`, and Windows `.msi` plus
-  NSIS setup `.exe`, published with short user-facing filenames. Each desktop
-  preview includes the exact one-file
-  Kassiber CLI executable produced by the matching CLI-only matrix leg.
+  NSIS setup `.exe`, published with short user-facing filenames. Linux and
+  Windows previews include the exact one-file Kassiber CLI executable produced
+  by the matching CLI-only matrix leg. macOS previews instead carry a one-dir
+  build of the same entry point, under `binaries/kassiber-cli/`, because
+  re-unpacking a one-file sidecar on every launch costs ~6s of macOS code
+  signature re-validation (see [desktop.md](desktop.md)).
 
 macOS is Apple Silicon only. Intel macOS builds were dropped deliberately:
 they could not ship the pinned `lwk` wheel (no macOS x86_64 wheel exists), so
@@ -182,9 +185,9 @@ BUNDLES=app ./scripts/build-macos-arm64-app.sh
 ./scripts/build-macos-arm64-app.sh --install-cli
 ```
 
-It builds the PyInstaller sidecar as
-`ui-tauri/src-tauri/binaries/kassiber-cli-aarch64-apple-darwin`, verifies that
-the executable is arm64, and runs Tauri with
+It builds the one-dir PyInstaller sidecar as
+`ui-tauri/src-tauri/binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin`,
+verifies that the executable is arm64, and runs Tauri with
 `--target aarch64-apple-darwin --bundles app,dmg`. The result is a full
 unsigned desktop app and DMG under
 `ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.

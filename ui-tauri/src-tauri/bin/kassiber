@@ -50,10 +50,15 @@ case "$architecture" in
     ;;
 esac
 
+# One-dir candidate first, flat candidates for hand-assembled dev bundles.
+# Mirrors `bundled_sidecar` in src/supervisor.rs; rationale in docs/reference/desktop.md.
 sidecar=
 for sidecar_name in $sidecar_names; do
-  for candidate in "$resource_dir/binaries/$sidecar_name" "$resource_dir/$sidecar_name"; do
-    if [ -x "$candidate" ]; then
+  for candidate in \
+    "$resource_dir/binaries/kassiber-cli/$sidecar_name" \
+    "$resource_dir/binaries/$sidecar_name" \
+    "$resource_dir/$sidecar_name"; do
+    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
       sidecar=$candidate
       break 2
     fi
