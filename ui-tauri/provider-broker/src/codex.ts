@@ -33,8 +33,20 @@ class CodexConnection {
   private readonly listeners = new Set<(message: JsonRpc) => void>();
   private nextId = 1;
   private stderrPreview = "";
+  /**
+   * Rejects when the app-server goes away. Notification-backed promises such as
+   * the per-turn completion have no pending JSON-RPC id, so a child that exits
+   * mid-turn would otherwise leave them pending forever.
+   */
+  readonly closed: Promise<never>;
+  private closedReject!: (error: Error) => void;
 
   constructor(executable: string, cwd: string) {
+    this.closed = new Promise<never>((_, reject) => {
+      this.closedReject = reject;
+    });
+    // Nothing awaits `closed` until a turn races it; keep Node quiet until then.
+    this.closed.catch(() => undefined);
     this.child = spawn(executable, ["app-server", "--stdio"], {
       cwd,
       env: providerEnvironment("codex"),
@@ -72,7 +84,8 @@ class CodexConnection {
         this.stderrPreview += String(chunk);
       }
     });
-    this.child.once("exit", (code) => {
+    // `close`, not `exit`: exit can fire while stdout lines are still queued.
+    this.child.once("close", (code) => {
       const detail = safeErrorMessage(this.stderrPreview);
       const error = new Error(
         detail && detail !== "Provider request failed."
@@ -81,6 +94,7 @@ class CodexConnection {
       );
       for (const waiter of this.pending.values()) waiter.reject(error);
       this.pending.clear();
+      this.closedReject(error);
     });
   }
 
@@ -231,6 +245,12 @@ export async function codexChat(request: ChatRequest, cwd: string): Promise<void
     }
     const threadId = String(opened.thread.id);
     const prompt = promptFromMessages(request.messages, resumed);
+    // Known residual risk: Codex exposes no no-tools profile, so tools are
+    // constrained rather than absent. `sandboxPolicy` below sets readOnly with
+    // networkAccess: false, and the listener aborts the turn on the first
+    // non-text item — but a local read can begin before that abort lands. With
+    // the network off, its content can only surface through assistant text on a
+    // turn we are already failing. Revisit if Codex ships a tool-free mode.
     const completion = new Promise<{ status: string; error?: unknown }>((resolve, reject) => {
       connection.onNotification((message) => {
         if (message.method === "item/agentMessage/delta") {
@@ -263,7 +283,7 @@ export async function codexChat(request: ChatRequest, cwd: string): Promise<void
       ...(request.model === "default" ? {} : { model: request.model }),
       ...(effort && effort !== "auto" ? { effort } : {}),
     });
-    const result = await completion;
+    const result = await Promise.race([completion, connection.closed]);
     if (result.status !== "completed") throw new Error("Codex did not complete the response.");
     writeEvent({ type: "done", finish_reason: "stop", provider_session_id: threadId });
   } finally {

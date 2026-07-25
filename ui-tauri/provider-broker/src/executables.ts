@@ -112,8 +112,19 @@ export function providerEnvironment(provider: ProviderId): NodeJS.ProcessEnv {
     providerPrefixes.push("ANTHROPIC_", "CLAUDE_", "AWS_", "GOOGLE_", "CLOUDSDK_");
   }
   if (provider === "opencode") providerPrefixes.push("OPENCODE_");
+  // Ambient server-auth settings would make the loopback server demand
+  // credentials the SDK client here does not send, so every session call 401s
+  // for users with a password-protected OpenCode config.
+  const dropped = new Set([
+    "OPENCODE_SERVER_PASSWORD",
+    "OPENCODE_SERVER_TOKEN",
+    "OPENCODE_SERVER_AUTH",
+    "OPENCODE_API_PASSWORD",
+    "OPENCODE_PASSWORD",
+  ]);
   const env: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(process.env)) {
+    if (dropped.has(name)) continue;
     if (allowed.has(name) || providerPrefixes.some((prefix) => name.startsWith(prefix))) {
       env[name] = value;
     }

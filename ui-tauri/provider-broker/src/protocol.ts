@@ -34,13 +34,20 @@ export function providerStatus(
   rest: Pick<ProviderStatus, "state" | "message"> &
     Partial<Pick<ProviderStatus, "executable" | "version" | "models">>,
 ): ProviderStatus {
+  const { executable, ...remainder } = rest;
   return {
     provider,
     display_name,
     privacy_posture: "remote",
     native_tools: "disabled",
     models: [],
-    ...rest,
+    ...remainder,
+    // The resolved path identifies the user (`/Users/<name>/.local/bin/...`) and
+    // this object is forwarded verbatim to the UI. The basename is all the
+    // surface needs to say which binary answered.
+    ...(executable === undefined
+      ? {}
+      : { executable: executable.split(/[/\\]/).pop() || executable }),
   };
 }
 

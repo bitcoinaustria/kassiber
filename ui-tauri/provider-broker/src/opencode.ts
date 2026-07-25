@@ -88,7 +88,14 @@ async function startServer(executable: string, cwd: string): Promise<{
       reject(new Error(`OpenCode server exited with code ${String(code)}.`));
     });
   });
-  await ready;
+  try {
+    await ready;
+  } catch (error) {
+    // The caller never receives a handle on this path, so nothing else can stop
+    // the server it started.
+    child.kill("SIGKILL");
+    throw error;
+  }
   return { child, url: `http://127.0.0.1:${String(port)}` };
 }
 
@@ -129,7 +136,15 @@ export async function loadProviderEndpoints(
   cwd: string,
 ): Promise<Map<string, string>> {
   const endpoints = new Map<string, string>();
-  const result = await runProvider("opencode", executable, ["debug", "config"], { cwd });
+  // `opencode debug config` intermittently exits non-zero with empty stdout when
+  // other opencode processes are running concurrently. An empty result here is
+  // not neutral: it downgrades a genuinely local model's badge to remote. Fail
+  // safe but retry once, and let the caller run this before the other probes
+  // rather than racing them.
+  let result = await runProvider("opencode", executable, ["debug", "config"], { cwd });
+  if (result.code !== 0 || !result.stdout.trim()) {
+    result = await runProvider("opencode", executable, ["debug", "config"], { cwd });
+  }
   if (result.code !== 0) return endpoints;
   let config: unknown;
   try {
@@ -222,10 +237,12 @@ export async function openCodeStatus(cwd: string): Promise<ProviderStatus> {
     });
   }
   try {
-    const [modelsResult, versionResult, endpoints] = await Promise.all([
+    // Sequential: three concurrent opencode invocations are what makes the
+    // config read flaky, and a lost read silently mislabels local models.
+    const endpoints = await loadProviderEndpoints(executable, cwd);
+    const [modelsResult, versionResult] = await Promise.all([
       runProvider("opencode", executable, ["models", "--verbose"], { cwd }),
       runProvider("opencode", executable, ["--version"], { cwd }),
-      loadProviderEndpoints(executable, cwd),
     ]);
     const models =
       modelsResult.code === 0
@@ -332,9 +349,21 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
       }
       throw new Error("OpenCode event stream ended unexpectedly.");
     })();
+    // The consumer can reject before anything awaits it — a failing splitModel
+    // or promptAsync below would leave this rejection unobserved until the
+    // server closes, surfacing as an unhandled rejection instead of a
+    // sanitized broker error. Observing it now keeps the failure attached.
+    let consumerError: unknown;
+    completed.catch((error: unknown) => {
+      consumerError = error;
+    });
+    const failFast = <T,>(work: Promise<T>): Promise<T> =>
+      work.catch((error: unknown) => {
+        throw consumerError ?? error;
+      });
 
     const model = splitModel(request.model);
-    await client.session.promptAsync({
+    await failFast(client.session.promptAsync({
       sessionID: session.id,
       model,
       system: CHAT_ONLY_INSTRUCTIONS,
@@ -349,7 +378,7 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
           text: promptFromMessages(request.messages, resumed),
         },
       ],
-    });
+    }));
     await completed;
   } finally {
     server.child.kill("SIGTERM");

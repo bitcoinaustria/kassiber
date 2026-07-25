@@ -56,10 +56,13 @@ class ProviderDiscoveryCache:
         self._condition = threading.Condition()
         self._entries: dict[Hashable, _CacheEntry] = {}
         self._refreshing: set[Hashable] = set()
+        # Cold-cache failures, handed to the waiters of that same probe only.
+        self._failures: dict[Hashable, Exception] = {}
 
     def invalidate(self) -> None:
         with self._condition:
             self._entries.clear()
+            self._failures.clear()
 
     def get(
         self,
@@ -77,12 +80,20 @@ class ProviderDiscoveryCache:
                 entry = self._entries.get(key)
                 if entry:
                     return entry.snapshot
+                failure = self._failures.get(key)
+                if failure is not None:
+                    # A cold-cache probe just failed. Without sharing that
+                    # outcome every waiter would run its own serialized probe,
+                    # turning one slow failure into N.
+                    raise failure
+            self._failures.pop(key, None)
             self._refreshing.add(key)
 
         try:
             value = fetch()
         except Exception as exc:
             with self._condition:
+                self._failures[key] = exc
                 previous = self._entries.get(key)
                 if previous:
                     snapshot = DiscoverySnapshot(

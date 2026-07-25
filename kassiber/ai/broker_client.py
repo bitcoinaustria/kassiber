@@ -151,18 +151,30 @@ class BrokerAIClient:
         )
         return result if isinstance(result, list) else []
 
+    @staticmethod
+    def _signal_group(process: subprocess.Popen[str], sig: int) -> None:
+        """Signal the whole broker process group.
+
+        The broker spawns provider CLIs, which spawn their own children. Node is
+        started with `start_new_session`, so signalling only its pid leaves those
+        grandchildren running — a provider CLI can keep a model request alive
+        after Kassiber believes the turn is over.
+        """
+
+        try:
+            if os.name != "nt":
+                os.killpg(os.getpgid(process.pid), sig)
+            else:
+                process.terminate()
+        except (OSError, ProcessLookupError):
+            return
+
     def cancel(self) -> None:
         with self._lock:
             process = self._process
         if process is None or process.poll() is not None:
             return
-        try:
-            if os.name != "nt":
-                os.killpg(process.pid, signal.SIGTERM)
-            else:
-                process.terminate()
-        except (OSError, ProcessLookupError):
-            return
+        self._signal_group(process, signal.SIGTERM)
 
     def stream_chat(
         self,
@@ -218,6 +230,20 @@ class BrokerAIClient:
             raise _broker_unavailable() from exc
         with self._lock:
             self._process = process
+        # `for line in process.stdout` blocks with no deadline of its own, so a
+        # provider that stops producing output would pin a daemon worker forever.
+        # A timer kills the whole group instead, which closes stdout and ends the
+        # read; `timed_out` distinguishes that from an ordinary early exit.
+        timed_out = threading.Event()
+
+        def _on_timeout() -> None:
+            timed_out.set()
+            self._signal_group(process, signal.SIGKILL)
+
+        watchdog = threading.Timer(max(self.timeout, 1.0), _on_timeout)
+        watchdog.daemon = True
+        watchdog.start()
+        saw_done = False
         try:
             assert process.stdin is not None
             assert process.stdout is not None
@@ -242,6 +268,7 @@ class BrokerAIClient:
                     if delta:
                         yield ChatDelta(delta=delta, finish_reason=None, raw={"provider": self.provider})
                 elif event_type == "done":
+                    saw_done = True
                     session_id = event.get("provider_session_id")
                     self.last_provider_session_id = (
                         session_id if isinstance(session_id, str) and session_id else None
@@ -252,22 +279,37 @@ class BrokerAIClient:
                         raw={"provider": self.provider},
                     )
                     return
-            if process.returncode not in (None, 0):
+            # EOF without a terminal `done` event is a failure, whatever the
+            # exit status. `returncode` is still None here until the process is
+            # reaped, so testing it alone treated a crashed or silent broker as a
+            # complete answer and emitted finish_reason=null downstream.
+            if not saw_done:
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+                if timed_out.is_set():
+                    raise AppError(
+                        "The CLI provider stopped responding",
+                        code="ai_unavailable",
+                        retryable=True,
+                    )
                 raise AppError(
                     "The CLI provider stopped before completing the response",
                     code="ai_unavailable",
                     retryable=True,
                 )
         finally:
+            watchdog.cancel()
             with self._lock:
                 if self._process is process:
                     self._process = None
             if process.poll() is None:
-                process.terminate()
+                self._signal_group(process, signal.SIGTERM)
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                process.kill()
+                self._signal_group(process, signal.SIGKILL)
                 process.wait()
             if process.stdout is not None:
                 process.stdout.close()

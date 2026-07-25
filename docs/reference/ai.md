@@ -126,7 +126,13 @@ material into a remote model unless that is acceptable for your threat model.
 If in doubt, keep inference local.
 
 Codex, Claude, and OpenCode CLI providers are supported for convenience, but
-they are not a local-privacy guarantee. Kassiber reuses their normal local
+they are not a local-privacy guarantee. The broker denies provider-native tools
+in layers — Claude runs in safe mode with no hooks, plugins, skills or MCP;
+OpenCode serves with `--pure` and a deny-all session permission; Codex runs a
+read-only sandbox with network access off — and any tool item aborts the turn.
+Codex exposes no tool-free profile, so a local read there can begin before the
+abort lands; with its network disabled that content can only surface through
+assistant text on a turn Kassiber is already failing. Kassiber reuses their normal local
 authentication/config, telemetry, and model-provider routing without reading,
 copying, persisting, or displaying provider credentials. Treat them as
 off-device unless the underlying configuration proves local or confidential
