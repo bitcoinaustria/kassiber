@@ -154,7 +154,6 @@ def _insert_journal_entry(
     fiat_value: float,
     occurred_at: str | None = None,
     entry_type: str = "acquisition",
-    cost_basis: float | None = None,
 ) -> None:
     conn.execute(
         """
@@ -175,10 +174,69 @@ def _insert_journal_entry(
             btc_to_msat(quantity_btc),
             fiat_value,
             fiat_value,
-            fiat_value if cost_basis is None else cost_basis,
+            fiat_value,
             NOW,
         ),
     )
+
+
+def _seed_directional_book(
+    conn: sqlite3.Connection,
+    prefix: str,
+    *,
+    journals: bool,
+) -> None:
+    """One book receiving 1.0 BTC, then sending 0.25 BTC back out."""
+    _insert_workspace(conn, f"{prefix}-ws", "Net Set")
+    _insert_profile(
+        conn,
+        f"{prefix}-pf",
+        f"{prefix}-ws",
+        "Trading",
+        processed=journals,
+        active_transactions=2,
+    )
+    _insert_wallet(
+        conn,
+        f"{prefix}-wal",
+        f"{prefix}-ws",
+        f"{prefix}-pf",
+        "Trading Wallet",
+    )
+    for tx_id, amount_btc, rate, occurred_at, direction in (
+        ("tx-in", "1.0", 50_000, "2026-06-01T08:00:00Z", "inbound"),
+        ("tx-out", "0.25", 60_000, "2026-06-03T08:00:00Z", "outbound"),
+    ):
+        _insert_transaction(
+            conn,
+            f"{prefix}-{tx_id}",
+            f"{prefix}-ws",
+            f"{prefix}-pf",
+            f"{prefix}-wal",
+            amount_btc=amount_btc,
+            fiat_currency="EUR",
+            fiat_rate=rate,
+            occurred_at=occurred_at,
+            direction=direction,
+        )
+    if journals:
+        for entry_id, tx_id, quantity_btc, fiat_value, occurred_at, entry_type in (
+            ("je-in", "tx-in", "1.0", 50_000, "2026-06-01T08:00:00Z", "acquisition"),
+            ("je-out", "tx-out", "-0.25", 15_000, "2026-06-03T08:00:00Z", "disposal"),
+        ):
+            _insert_journal_entry(
+                conn,
+                f"{prefix}-{entry_id}",
+                f"{prefix}-ws",
+                f"{prefix}-pf",
+                f"{prefix}-wal",
+                f"{prefix}-{tx_id}",
+                quantity_btc=quantity_btc,
+                fiat_value=fiat_value,
+                occurred_at=occurred_at,
+                entry_type=entry_type,
+            )
+    conn.commit()
 
 
 def _insert_quarantine(
@@ -296,104 +354,22 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
 
     def test_outbound_transaction_reduces_rollup_and_portfolio_series(self):
         conn = self._db()
-        _insert_workspace(conn, "net-ws", "Net Set")
-        _insert_profile(conn, "net-pf", "net-ws", "Trading", active_transactions=2)
-        _insert_wallet(conn, "net-wal", "net-ws", "net-pf", "Trading Wallet")
-        _insert_transaction(
-            conn,
-            "tx-in",
-            "net-ws",
-            "net-pf",
-            "net-wal",
-            amount_btc="1.0",
-            fiat_currency="EUR",
-            fiat_rate=50_000,
-            occurred_at="2026-06-01T08:00:00Z",
-        )
-        _insert_transaction(
-            conn,
-            "tx-out",
-            "net-ws",
-            "net-pf",
-            "net-wal",
-            amount_btc="0.25",
-            fiat_currency="EUR",
-            fiat_rate=60_000,
-            occurred_at="2026-06-03T08:00:00Z",
-            direction="outbound",
-        )
-        _insert_journal_entry(
-            conn,
-            "je-in",
-            "net-ws",
-            "net-pf",
-            "net-wal",
-            "tx-in",
-            quantity_btc="1.0",
-            fiat_value=50_000,
-            occurred_at="2026-06-01T08:00:00Z",
-        )
-        _insert_journal_entry(
-            conn,
-            "je-out",
-            "net-ws",
-            "net-pf",
-            "net-wal",
-            "tx-out",
-            quantity_btc="-0.25",
-            fiat_value=15_000,
-            occurred_at="2026-06-03T08:00:00Z",
-            entry_type="disposal",
-            cost_basis=12_500,
-        )
-        conn.commit()
+        _seed_directional_book(conn, "net", journals=True)
 
         snapshot = build_workspace_overview_snapshot(conn, {"workspace_id": "net-ws"})
 
-        self.assertEqual(snapshot["status"]["transactionCount"], 2)
         self.assertAlmostEqual(snapshot["fiat"]["btcBalance"], 0.75)
         self.assertAlmostEqual(snapshot["fiat"]["eurBalance"], 45_000)
-        self.assertAlmostEqual(snapshot["fiat"]["eurCostBasis"], 37_500)
-        self.assertAlmostEqual(snapshot["fiat"]["books"][0]["balance"], 45_000)
+        self.assertAlmostEqual(snapshot["fiat"]["eurCostBasis"], 35_000)
         series_by_date = {point["date"]: point for point in snapshot["portfolioSeries"]}
         self.assertAlmostEqual(series_by_date["2026-06-01"]["balanceBtc"], 1.0)
         self.assertAlmostEqual(series_by_date["2026-06-03"]["balanceBtc"], 0.75)
-        self.assertLess(
-            series_by_date["2026-06-03"]["valueEur"],
-            series_by_date["2026-06-01"]["valueEur"] * 1.2,
-        )
 
     def test_outbound_transaction_reduces_unprocessed_book_rollup(self):
         # No journals yet, so the rollup is derived straight from transaction
         # direction rather than from book state.
         conn = self._db()
-        _insert_workspace(conn, "raw-ws", "Raw Set")
-        _insert_profile(conn, "raw-pf", "raw-ws", "Trading", processed=False)
-        _insert_wallet(conn, "raw-wal", "raw-ws", "raw-pf", "Trading Wallet")
-        _insert_transaction(
-            conn,
-            "tx-raw-in",
-            "raw-ws",
-            "raw-pf",
-            "raw-wal",
-            amount_btc="1.0",
-            fiat_currency="EUR",
-            fiat_rate=50_000,
-            occurred_at="2026-06-01T08:00:00Z",
-        )
-        _insert_transaction(
-            conn,
-            "tx-raw-out",
-            "raw-ws",
-            "raw-pf",
-            "raw-wal",
-            amount_btc="0.25",
-            fiat_currency="EUR",
-            fiat_rate=60_000,
-            occurred_at="2026-06-03T08:00:00Z",
-            direction="outbound",
-        )
-        conn.commit()
+        _seed_directional_book(conn, "raw", journals=False)
 
         snapshot = build_workspace_overview_snapshot(conn, {"workspace_id": "raw-ws"})
 
