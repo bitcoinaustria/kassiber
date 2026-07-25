@@ -123,7 +123,10 @@ export const StatsCards = ({
                 </span>
               ) : null}
             </div>
-            <p className="text-lg font-semibold tracking-tight sm:text-xl">
+            {/* `tabular-nums`: these tiles sit side by side, so proportional
+                digits leave the figures misaligned across tiles and make them
+                jitter as values update mid-sync. */}
+            <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
               {formatMarketRateValue(snapshot, to)}
             </p>
             <p
@@ -193,7 +196,7 @@ export const StatsCards = ({
                   </div>
                   <p
                     className={cn(
-                      "text-lg font-semibold tracking-tight sm:text-xl",
+                      "text-lg font-semibold tracking-tight tabular-nums sm:text-xl",
                       blurClass(hideSensitive),
                     )}
                   >

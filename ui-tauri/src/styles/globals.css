@@ -416,7 +416,14 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  /*
+   * Brand red, as in light mode. This was a neutral grey, which silently made
+   * every focus ring in dark mode colourless — light mode deliberately spends
+   * the brand on focus, so dropping it in dark read as an oversight rather than
+   * a decision. `--kb-accent` is already the lifted red under `.dark`, so it
+   * clears contrast against the near-black surfaces.
+   */
+  --ring: var(--kb-accent);
   --sidebar: var(--app-chrome);
   --sidebar-foreground: hsl(240 4.8% 95.9%);
   --sidebar-primary: hsl(224.3 76.3% 48%);
