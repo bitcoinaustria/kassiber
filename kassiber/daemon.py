@@ -6572,6 +6572,10 @@ def _execute_mutating_ai_tool(
             return _run_scoped_ai_mutation(runtime, _execute)
         if entry.daemon_kind in {
             "ui.btcpay.provenance.review",
+            # Seeding suggestions upserts link rows, so it is declared mutating
+            # and must also be dispatchable here — otherwise consent is asked
+            # for and then the call dead-ends in tool_not_allowed.
+            "ui.btcpay.provenance.suggest",
             "ui.documents.create",
         }:
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
