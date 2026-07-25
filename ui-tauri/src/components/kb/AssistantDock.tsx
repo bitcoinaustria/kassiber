@@ -25,7 +25,10 @@ import {
 } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
-import { useAssistantSession } from "@/components/ai/assistantSession";
+import {
+  useAssistantSession,
+  type AssistantThinkingEffort,
+} from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
@@ -611,8 +614,8 @@ function WorkingFollowUpSurface({
   onValueChange: (value: string) => void;
   onSubmit: (prompt: string) => void;
   isStreaming: boolean;
-  thinkingEffort: "auto" | "low" | "medium" | "high";
-  onThinkingEffortChange?: (effort: "auto" | "low" | "medium" | "high") => void;
+  thinkingEffort: AssistantThinkingEffort;
+  onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort: boolean;
   modelPickerEnabled: boolean;
   followUpPlaceholder: string;

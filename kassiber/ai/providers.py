@@ -3,8 +3,8 @@
 Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
 
     name              TEXT PRIMARY KEY  (lowercase)
-    base_url          TEXT NOT NULL     (OpenAI Responses-compatible root, e.g. http://localhost:11434/v1,
-                                        or fixed CLI locator claude-cli://default / codex-cli://default)
+    base_url          TEXT NOT NULL     (OpenAI Responses-compatible root or
+                                        fixed native-provider CLI locator)
     api_key           TEXT              (nullable; never echoed in envelopes)
     default_model     TEXT              (nullable)
     kind              TEXT NOT NULL     (local | remote | tee)
@@ -39,6 +39,7 @@ from .contracts import is_cli_provider_locator
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
 DEFAULT_AI_PROVIDER_SETTING = "default_ai_provider"
 AI_PROVIDERS_SEEDED_SETTING = "ai_providers_seeded"
+AI_NATIVE_PROVIDERS_SEEDED_SETTING = "ai_native_broker_providers_seeded"
 DESKTOP_BUNDLE_ID = "at.bitcoinaustria.kassiber"
 AI_PROVIDER_SECRET_STORE_SQLCIPHER = "sqlcipher_inline"
 AI_PROVIDER_SECRET_STORES = (
@@ -68,6 +69,33 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "default_model": None,
         "kind": "local",
         "notes": "Local oMLX (Apple Silicon MLX Responses endpoint).",
+    },
+    {
+        "name": "codex",
+        "display_name": "Codex",
+        "base_url": "codex-cli://default",
+        "api_key": None,
+        "default_model": "default",
+        "kind": "remote",
+        "notes": "Chat-only broker using the installed Codex app-server and existing login.",
+    },
+    {
+        "name": "claude",
+        "display_name": "Claude",
+        "base_url": "claude-cli://default",
+        "api_key": None,
+        "default_model": "default",
+        "kind": "remote",
+        "notes": "Chat-only broker using the installed Claude CLI and existing login.",
+    },
+    {
+        "name": "opencode",
+        "display_name": "OpenCode",
+        "base_url": "opencode-cli://default",
+        "api_key": None,
+        "default_model": None,
+        "kind": "remote",
+        "notes": "Chat-only broker using the installed OpenCode server and existing configuration.",
     },
 )
 DEFAULT_BOOTSTRAP_PROVIDER = DEFAULT_BOOTSTRAP_PROVIDERS[0]
@@ -185,7 +213,7 @@ def _validate_locator_kind(base_url: str, kind: str) -> None:
         return
     if is_cli_provider_locator(base_url):
         raise AppError(
-            "Claude/Codex CLI providers cannot be marked local",
+            "Codex, Claude, and OpenCode CLI providers cannot be marked local",
             code="validation",
             hint=(
                 "Use --kind remote (or tee if your configured CLI path has documented "
@@ -445,7 +473,8 @@ def normalize_base_url(value: Any) -> str:
     Strips whitespace and trailing slashes, requires a scheme, and raises
     `AppError(code='validation')` on bad input. Most providers use an
     OpenAI Responses-compatible HTTP root; fixed local CLI adapters use
-    ``claude-cli://default`` or ``codex-cli://default``.
+    ``claude-cli://default``, ``codex-cli://default``, or
+    ``opencode-cli://default``.
     """
     base = str_or_none(value)
     if base is None:
@@ -455,7 +484,7 @@ def normalize_base_url(value: Any) -> str:
             hint=(
                 "Use an OpenAI Responses-compatible root, e.g. "
                 "http://localhost:11434/v1, "
-                "or claude-cli://default / codex-cli://default."
+                "or a built-in *-cli://default locator."
             ),
         )
     base = base.strip().rstrip("/")
@@ -467,13 +496,13 @@ def normalize_base_url(value: Any) -> str:
         raise AppError(
             f"AI provider base_url '{base}' is missing a scheme",
             code="validation",
-            hint="Include http://, https://, claude-cli://, or codex-cli://.",
+            hint="Include http://, https://, or a built-in *-cli:// scheme.",
         )
     if not (base.startswith("http://") or base.startswith("https://")):
         raise AppError(
             f"Unsupported AI provider locator '{base}'",
             code="validation",
-            hint="Use http(s)://, claude-cli://default, or codex-cli://default.",
+            hint="Use http(s):// or a built-in *-cli://default locator.",
         )
     return base
 
@@ -565,9 +594,51 @@ def seed_default_ai_provider_if_empty(conn) -> None:
     conn.commit()
 
 
+def seed_native_ai_providers(conn) -> None:
+    """Add the built-in chat broker providers once without storing credentials."""
+
+    if get_setting(conn, AI_NATIVE_PROVIDERS_SEEDED_SETTING):
+        return
+    ts = now_iso()
+    native_rows = [
+        provider
+        for provider in DEFAULT_BOOTSTRAP_PROVIDERS
+        if is_cli_provider_locator(provider["base_url"])
+        and conn.execute(
+            "SELECT 1 FROM ai_providers WHERE lower(base_url) = lower(?) LIMIT 1",
+            (provider["base_url"],),
+        ).fetchone()
+        is None
+    ]
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO ai_providers(
+            name, display_name, base_url, api_key, default_model, kind, notes,
+            acknowledged_at, created_at, updated_at
+        ) VALUES(?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?)
+        """,
+        [
+            (
+                provider["name"],
+                provider["display_name"],
+                provider["base_url"],
+                provider["default_model"],
+                provider["kind"],
+                provider["notes"],
+                ts,
+                ts,
+            )
+            for provider in native_rows
+        ],
+    )
+    set_setting(conn, AI_NATIVE_PROVIDERS_SEEDED_SETTING, "1")
+    conn.commit()
+
+
 def list_db_ai_providers(conn) -> list[dict]:
     """Return all rows from the `ai_providers` table, sorted by name."""
     seed_default_ai_provider_if_empty(conn)
+    seed_native_ai_providers(conn)
     rows = conn.execute(
         """
         SELECT
@@ -589,6 +660,7 @@ def list_db_ai_providers(conn) -> list[dict]:
 def get_db_ai_provider(conn, name: str) -> dict:
     """Fetch one provider, or raise `AppError(not_found)`."""
     seed_default_ai_provider_if_empty(conn)
+    seed_native_ai_providers(conn)
     name = _normalize_name(name)
     row = conn.execute(
         """

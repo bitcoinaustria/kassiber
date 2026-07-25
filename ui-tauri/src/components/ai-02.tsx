@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
+import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -38,8 +39,8 @@ interface Ai02Props {
   onSubmit: (prompt: string) => void;
   onAbort?: () => void;
   isStreaming?: boolean;
-  thinkingEffort?: "auto" | "low" | "medium" | "high";
-  onThinkingEffortChange?: (effort: "auto" | "low" | "medium" | "high") => void;
+  thinkingEffort?: AssistantThinkingEffort;
+  onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort?: boolean;
   inputPanelElevated?: boolean;
   modelPickerEnabled?: boolean;
@@ -250,7 +251,7 @@ export default function Ai02({
           >
             <Plus className="h-4 w-4" />
           </Button>
-          {/* Combined model + reasoning-effort control (one dropdown). */}
+          {/* T3Code-style provider/model picker plus adjacent reasoning menu. */}
           <div className="flex min-w-0 flex-1 items-center">
             <ProviderModelPicker
               value={selection}

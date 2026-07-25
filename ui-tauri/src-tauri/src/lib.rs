@@ -354,6 +354,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.providers.set_default",
     "ai.providers.clear_default",
     "ai.providers.acknowledge",
+    "ai.provider_runtime.status",
     "ai.list_models",
     "ai.test_connection",
     "ai.chat",
@@ -436,6 +437,7 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
 // deliberately excluded: providers stay configurable while AI is off so the
 // user can wire keys before turning the feature on.
 const AI_RUNTIME_KINDS: &[&str] = &[
+    "ai.provider_runtime.status",
     "ai.list_models",
     "ai.test_connection",
     "ui.wallets.document_import.preview",

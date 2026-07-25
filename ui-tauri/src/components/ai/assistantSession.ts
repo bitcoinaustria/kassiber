@@ -59,7 +59,14 @@ export interface AssistantModelSelection {
   model: string;
 }
 
-export type AssistantThinkingEffort = "auto" | "low" | "medium" | "high";
+export type AssistantThinkingEffort =
+  | "auto"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max"
+  | "ultra";
 
 export interface AssistantSessionContextValue {
   messages: AiChatMessage[];

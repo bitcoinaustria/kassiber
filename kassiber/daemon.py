@@ -56,7 +56,9 @@ from .ai.client import (
     ai_client_for_locator,
     responses_request_context,
 )
+from .ai.broker_client import BrokerAIClient
 from .ai.contracts import ResponsesRequestContext
+from .ai.discovery_cache import ProviderDiscoveryCache
 from .ai.prompt import (
     build_chat_messages,
     build_responses_tools,
@@ -530,6 +532,7 @@ SUPPORTED_KINDS = (
     "ai.providers.set_default",
     "ai.providers.clear_default",
     "ai.providers.acknowledge",
+    "ai.provider_runtime.status",
     "ai.list_models",
     "ai.test_connection",
     "ai.chat",
@@ -761,10 +764,11 @@ class AiToolConsentState:
                 self._decisions.pop(call_id, None)
 
 
-@dataclass(frozen=True)
+@dataclass
 class ActiveAiChat:
     cancel_event: threading.Event
     consent: AiToolConsentState
+    cancel_handler: Callable[[], None] | None = None
 
 
 class ActiveAiChats:
@@ -774,6 +778,7 @@ class ActiveAiChats:
         self._lock = threading.Lock()
         self._chats: dict[str, ActiveAiChat] = {}
         self._pending_cancel_deadlines: dict[str, float] = {}
+        self._provider_sessions: dict[tuple[str, str], tuple[str, str]] = {}
 
     def register(self, request_id: object) -> tuple[str | None, ActiveAiChat]:
         chat = ActiveAiChat(
@@ -801,18 +806,66 @@ class ActiveAiChats:
 
     def cancel(self, target_request_id: str) -> tuple[bool, bool]:
         now = time.monotonic()
+        cancel_handler: Callable[[], None] | None = None
         with self._lock:
             self._prune_pending_locked(now)
             chat = self._chats.get(target_request_id)
             if chat is not None:
                 chat.cancel_event.set()
                 chat.consent.notify_cancelled()
-                return True, False
-            self._pending_cancel_deadlines[target_request_id] = (
-                now + PENDING_AI_CANCEL_TTL_SECONDS
+                cancel_handler = chat.cancel_handler
+            else:
+                self._pending_cancel_deadlines[target_request_id] = (
+                    now + PENDING_AI_CANCEL_TTL_SECONDS
+                )
+                self._trim_pending_locked()
+        if cancel_handler is not None:
+            cancel_handler()
+        if chat is not None:
+            return True, False
+        return False, True
+
+    def set_cancel_handler(
+        self,
+        chat: ActiveAiChat,
+        handler: Callable[[], None] | None,
+    ) -> None:
+        with self._lock:
+            chat.cancel_handler = handler
+            already_cancelled = chat.cancel_event.is_set()
+        if already_cancelled and handler is not None:
+            handler()
+
+    def provider_session(
+        self,
+        *,
+        chat_session_id: str | None,
+        provider_name: str,
+        history_fingerprint: str,
+    ) -> str | None:
+        if not chat_session_id:
+            return None
+        with self._lock:
+            entry = self._provider_sessions.get((chat_session_id, provider_name))
+        if entry is None or entry[1] != history_fingerprint:
+            return None
+        return entry[0]
+
+    def remember_provider_session(
+        self,
+        *,
+        chat_session_id: str | None,
+        provider_name: str,
+        provider_session_id: str | None,
+        history_fingerprint: str,
+    ) -> None:
+        if not chat_session_id or not provider_session_id:
+            return
+        with self._lock:
+            self._provider_sessions[(chat_session_id, provider_name)] = (
+                provider_session_id,
+                history_fingerprint,
             )
-            self._trim_pending_locked()
-            return False, True
 
     def _prune_pending_locked(self, now: float) -> None:
         expired = [
@@ -1058,6 +1111,9 @@ class DaemonContext:
     )
     document_import_sessions: DocumentImportSessions = field(
         default_factory=DocumentImportSessions
+    )
+    ai_discovery_cache: ProviderDiscoveryCache = field(
+        default_factory=ProviderDiscoveryCache
     )
 
 
@@ -7776,6 +7832,22 @@ def _effective_ai_chat_system_prompt_kind(
     return system_prompt_kind
 
 
+def _provider_session_history_fingerprint(messages: list[dict[str, Any]]) -> str:
+    """Bind a native provider cursor to the exact visible chat branch."""
+
+    normalized = [
+        {
+            "role": str(message.get("role") or ""),
+            "content": str(message.get("content") or ""),
+        }
+        for message in messages
+        if isinstance(message, dict)
+    ]
+    return hashlib.sha256(
+        json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def _stream_ai_chat_tool_turn(
     request_id: object,
     client,
@@ -8396,6 +8468,9 @@ def _run_ai_chat_stream(
                 api_key=provider_snapshot.get("api_key"),
                 timeout=validated["timeout_seconds"],
             )
+            cancel = getattr(client, "cancel", None)
+            if callable(cancel):
+                active_ai_chats.set_cancel_handler(active_chat, cancel)
             _write_ai_chat_status(
                 out,
                 request_id,
@@ -8432,10 +8507,20 @@ def _run_ai_chat_stream(
                 phase="waiting_for_model",
                 label="Loading model",
             )
+            stream_options = dict(validated["options"])
+            provider_session_id = active_ai_chats.provider_session(
+                chat_session_id=validated["session_id"],
+                provider_name=provider_snapshot["name"],
+                history_fingerprint=_provider_session_history_fingerprint(
+                    validated["messages"]
+                ),
+            )
+            if provider_session_id:
+                stream_options["provider_session_id"] = provider_session_id
             for chunk in client.stream_chat(
                 messages=stream_messages,
                 model=validated["model"],
-                options=validated["options"],
+                options=stream_options,
             ):
                 if cancel_event.is_set():
                     finish_reason = "cancelled"
@@ -8458,6 +8543,21 @@ def _run_ai_chat_stream(
                     break
         if cancel_event.is_set():
             finish_reason = "cancelled"
+        if finish_reason != "cancelled" and "client" in locals():
+            active_ai_chats.remember_provider_session(
+                chat_session_id=validated["session_id"],
+                provider_name=provider_snapshot["name"],
+                provider_session_id=getattr(client, "last_provider_session_id", None),
+                history_fingerprint=_provider_session_history_fingerprint(
+                    [
+                        *validated["messages"],
+                        {
+                            "role": "assistant",
+                            "content": "".join(content_parts),
+                        },
+                    ]
+                ),
+            )
         _write_ai_chat_terminal(
             out,
             request_id,
@@ -8492,6 +8592,7 @@ def _run_ai_chat_stream(
             )
         )
     finally:
+        active_ai_chats.set_cancel_handler(active_chat, None)
         active_ai_chats.unregister(registry_key, active_chat)
 
 
@@ -15961,6 +16062,7 @@ def handle_request(
             notes=args.get("notes"),
             acknowledged=bool(args.get("acknowledged")),
         )
+        ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
                 build_envelope("ai.providers.create", _ai_provider_redacted(ctx, created)),
@@ -16004,6 +16106,7 @@ def handle_request(
                 "acknowledge_clear": bool(args.get("acknowledge_clear")),
             },
         )
+        ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
                 build_envelope("ai.providers.update", _ai_provider_redacted(ctx, updated)),
@@ -16026,6 +16129,7 @@ def handle_request(
             name=name,
             api_key=api_key,
         )
+        ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
                 build_envelope("ai.providers.set_api_key", _ai_provider_redacted(ctx, updated)),
@@ -16052,6 +16156,7 @@ def handle_request(
             target_store_id=target_store_id,
             api_key=api_key,
         )
+        ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
                 build_envelope("ai.providers.move_api_key", _ai_provider_redacted(ctx, updated)),
@@ -16067,9 +16172,11 @@ def handle_request(
             raise AppError("ai.providers.delete requires a name string", code="validation")
         provider = get_db_ai_provider(ctx.conn, name)
         _delete_native_ai_provider_secret(ctx, args, provider)
+        deleted = delete_db_ai_provider(ctx.conn, name)
+        ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
-                build_envelope("ai.providers.delete", delete_db_ai_provider(ctx.conn, name)),
+                build_envelope("ai.providers.delete", deleted),
                 request_id,
             ),
             False,
@@ -16124,6 +16231,24 @@ def handle_request(
             False,
         )
 
+    if kind == "ai.provider_runtime.status":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        snapshot = ctx.ai_discovery_cache.get(
+            ("runtime", "*"),
+            BrokerAIClient.runtime_status,
+            refresh=_optional_bool_arg(args, "refresh", False),
+        )
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ai.provider_runtime.status",
+                    {"providers": snapshot.value, **snapshot.metadata()},
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ai.list_models":
         args = _coerce_args_dict(request_id, request.get("args"))
         provider_name = args.get("provider")
@@ -16134,13 +16259,19 @@ def handle_request(
             base_url=provider["base_url"],
             api_key=_resolve_ai_provider_api_key(ctx, provider, args),
         )
+        snapshot = ctx.ai_discovery_cache.get(
+            ("models", provider["name"]),
+            client.list_models,
+            refresh=_optional_bool_arg(args, "refresh", False),
+        )
         return (
             _with_request_id(
                 build_envelope(
                     "ai.list_models",
                     {
                         "provider": provider["name"],
-                        "models": client.list_models(),
+                        "models": snapshot.value,
+                        **snapshot.metadata(),
                     },
                 ),
                 request_id,

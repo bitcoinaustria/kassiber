@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDaemonMutation } from "@/daemon/client";
 import { getTransport } from "@/daemon/transport";
+import { isNativeAiProviderLocator } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
 
 export interface AiProviderInput {
@@ -59,7 +60,6 @@ const PROVIDER_KIND_HINT_KEYS = {
   tee: "aiProvider.kindHint.tee",
 } as const satisfies Record<AiProviderInput["kind"], string>;
 
-const CLI_LOCATORS = ["claude-cli://default", "codex-cli://default"] as const;
 const PROVIDER_PRESETS = [
   {
     name: "ollama",
@@ -93,11 +93,15 @@ const PROVIDER_PRESETS = [
     kind: "remote" as const,
     default_model: "default",
   },
+  {
+    name: "opencode-cli",
+    display_name: "OpenCode CLI",
+    label: "OpenCode CLI",
+    base_url: "opencode-cli://default",
+    kind: "remote" as const,
+    default_model: "",
+  },
 ];
-
-function isCliLocator(value: string) {
-  return CLI_LOCATORS.some((locator) => value.trim().toLowerCase() === locator);
-}
 
 export function AiProviderForm({
   open,
@@ -160,7 +164,7 @@ export function AiProviderForm({
       if (!trimmedUrl) {
         throw new Error(t("aiProvider.errorBaseUrlRequired"));
       }
-      if (!/^https?:\/\//.test(trimmedUrl) && !isCliLocator(trimmedUrl)) {
+      if (!/^https?:\/\//.test(trimmedUrl) && !isNativeAiProviderLocator(trimmedUrl)) {
         throw new Error(t("aiProvider.errorUrlScheme"));
       }
       const args: Record<string, unknown> = { base_url: trimmedUrl };
@@ -197,7 +201,7 @@ export function AiProviderForm({
     try {
       const needsRemoteAck =
         kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
-      if (kind === "local" && isCliLocator(baseUrl)) {
+      if (kind === "local" && isNativeAiProviderLocator(baseUrl)) {
         throw new Error(t("aiProvider.errorCliLocalPosture"));
       }
       if (needsRemoteAck) {

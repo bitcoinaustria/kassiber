@@ -11,7 +11,6 @@ import * as React from "react";
 import {
   Check,
   Copy,
-  MoreHorizontal,
   Pencil,
   Split,
   Square,
@@ -33,14 +32,6 @@ import {
 } from "@/components/ai-elements";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import {
   currentUiLocale,
@@ -388,10 +379,6 @@ function ChatMessageActions({
     setSpeaking(true);
   }, [canSpeak, speaking, message.content]);
 
-  const answeredAt = message.provenance?.generated_at
-    ? shortTime(message.provenance.generated_at)
-    : null;
-
   return (
     <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/assistant:opacity-100">
       <Button
@@ -429,53 +416,19 @@ function ChatMessageActions({
           )}
         </Button>
       ) : null}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="rounded-full hover:text-foreground"
-            aria-label={t("message.moreOptions")}
-            title={t("message.moreOptions")}
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-44">
-          {answeredAt ? (
-            <>
-              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-                {answeredAt}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-            </>
-          ) : null}
-          <DropdownMenuItem onSelect={handleCopy}>
-            <Copy className="h-4 w-4" aria-hidden="true" />
-            {t("message.copy")}
-          </DropdownMenuItem>
-          {canSpeak ? (
-            <DropdownMenuItem onSelect={toggleReadAloud}>
-              {speaking ? (
-                <Square className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <Volume2 className="h-4 w-4" aria-hidden="true" />
-              )}
-              {speaking ? t("message.stopReading") : t("message.readAloud")}
-            </DropdownMenuItem>
-          ) : null}
-          {onBranch ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={onBranch}>
-                <Split className="h-4 w-4" aria-hidden="true" />
-                {t("message.branch")}
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {onBranch ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="rounded-full hover:text-foreground"
+          onClick={onBranch}
+          aria-label={t("message.branch")}
+          title={t("message.branch")}
+        >
+          <Split className="h-3.5 w-3.5" aria-hidden="true" />
+        </Button>
+      ) : null}
     </div>
   );
 }

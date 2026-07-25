@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
+from ..ai.contracts import is_cli_provider_locator
 from . import custody_filed_reports as core_custody_filed_reports
 from . import custody_journal as core_custody_journal
 from . import pricing
@@ -581,7 +582,7 @@ def _ai_provider_privacy_facts(conn: sqlite3.Connection) -> dict[str, Any]:
         provider_count += 1
         kind = str(row["kind"] or "").strip().lower()
         base_url = str(row["base_url"] or "").strip().lower()
-        if base_url in {"claude-cli://default", "codex-cli://default"}:
+        if is_cli_provider_locator(base_url):
             cli_count += 1
         elif kind == "local":
             local_count += 1

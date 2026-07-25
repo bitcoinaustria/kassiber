@@ -250,7 +250,7 @@
     },
     "remote": {
       "title": "Use a remote provider",
-      "description": "Prepare an OpenAI Responses API-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
+      "description": "Prepare an OpenAI Responses API-compatible endpoint or use Codex, Claude, or OpenCode CLI. Prompts and accounting context may leave this device."
     },
     "disabled": {
       "title": "Disable AI for now",
@@ -298,7 +298,7 @@
       },
       "remote": {
         "title": "Remote provider",
-        "body": "An OpenAI Responses API-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
+        "body": "An OpenAI Responses API-compatible endpoint or Codex, Claude, or OpenCode CLI. Prompts and accounting context may leave this device."
       },
       "disabled": {
         "title": "Disabled",

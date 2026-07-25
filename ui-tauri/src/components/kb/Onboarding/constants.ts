@@ -8,6 +8,7 @@ import type {
   OnboardingForm,
   TaxCountry,
 } from "./types";
+import { isNativeAiProviderLocator } from "@/lib/aiCapabilities";
 
 export const DEFAULT_BACKEND_NAME = "fulcrum";
 export const DEFAULT_BACKEND_URL = "ssl://index.bitcoin-austria.at:50002";
@@ -106,14 +107,6 @@ const hasHttpUrl = (raw: string): boolean => {
   }
 };
 
-const hasAiCliLocator = (raw: string): boolean => {
-  const normalized = raw.trim().toLowerCase();
-  return (
-    normalized === "claude-cli://default" ||
-    normalized === "codex-cli://default"
-  );
-};
-
 export const hasLoopbackAiBaseUrl = (raw: string): boolean => {
   try {
     const parsed = new URL(raw.trim());
@@ -201,9 +194,9 @@ export const aiBaseUrlHint = (raw: string): string | null => {
   if (hasInlineCredential(trimmed)) {
     return "Do not include usernames or passwords in the endpoint.";
   }
-  return hasHttpUrl(trimmed) || hasAiCliLocator(trimmed)
+  return hasHttpUrl(trimmed) || isNativeAiProviderLocator(trimmed)
     ? null
-    : "Use an http:// or https:// URL, or claude-cli://default / codex-cli://default.";
+    : "Use an http:// or https:// URL, or a supported native CLI locator.";
 };
 
 export const localAiBaseUrlHint = (raw: string): string | null => {

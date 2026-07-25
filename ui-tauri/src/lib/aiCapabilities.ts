@@ -4,6 +4,26 @@ export type AssistantModelSelection = {
 } | null;
 
 export type AiProviderKind = "local" | "remote" | "tee";
+export const NATIVE_AI_PROVIDER_BY_LOCATOR = {
+  "claude-cli://default": "claude",
+  "codex-cli://default": "codex",
+  "opencode-cli://default": "opencode",
+} as const;
+export type NativeAiProviderRuntime =
+  (typeof NATIVE_AI_PROVIDER_BY_LOCATOR)[keyof typeof NATIVE_AI_PROVIDER_BY_LOCATOR];
+
+const NATIVE_RUNTIME_LOOKUP: Record<string, NativeAiProviderRuntime> =
+  NATIVE_AI_PROVIDER_BY_LOCATOR;
+
+export function nativeAiProviderRuntime(value: unknown): NativeAiProviderRuntime | null {
+  if (typeof value !== "string") return null;
+  return NATIVE_RUNTIME_LOOKUP[value.trim().toLowerCase()] ?? null;
+}
+
+export function isNativeAiProviderLocator(value: unknown): boolean {
+  return nativeAiProviderRuntime(value) !== null;
+}
+
 export type AiSecretStoreId =
   | "macos_keychain"
   | "windows_dpapi"
@@ -51,16 +71,50 @@ export interface AiProvidersListData {
 
 export interface AiModelRow {
   id: string;
+  display_name?: string;
   owned_by?: string;
+  source_provider?: string;
+  privacy_posture?: AiProviderKind;
+  privacy_reason?: string;
   supports_reasoning_effort?: boolean;
   supported_parameters?: unknown;
   reasoning_efforts?: unknown;
   capabilities?: unknown;
 }
 
-export interface AiModelsListData {
+export interface AiDiscoveryMetadata {
+  checked_at?: string | null;
+  stale?: boolean;
+  error?: {
+    code: string;
+    message: string;
+  } | null;
+}
+
+export interface AiModelsListData extends AiDiscoveryMetadata {
   provider: string;
   models: AiModelRow[];
+}
+
+export type AiProviderRuntimeState =
+  | "ready"
+  | "missing_executable"
+  | "authentication_required"
+  | "error";
+
+export interface AiProviderRuntimeStatus {
+  provider: "codex" | "claude" | "opencode";
+  display_name: string;
+  state: AiProviderRuntimeState;
+  version?: string;
+  message: string;
+  privacy_posture: "remote";
+  native_tools: "disabled";
+  models: AiModelRow[];
+}
+
+export interface AiProviderRuntimeStatusData extends AiDiscoveryMetadata {
+  providers: AiProviderRuntimeStatus[];
 }
 
 function hasTruthyCapability(value: unknown): boolean {

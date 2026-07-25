@@ -30,7 +30,7 @@ describe("ChatMessage", () => {
     expect(html).not.toContain("include_reports");
   });
 
-  it("shows the copy/more actions on a completed assistant answer", () => {
+  it("shows direct copy and branch actions on a completed assistant answer", () => {
     const message: AiChatMessage = {
       id: "assistant-2",
       role: "assistant",
@@ -38,10 +38,13 @@ describe("ChatMessage", () => {
       status: "done",
     };
 
-    const html = renderToStaticMarkup(<ChatMessage message={message} />);
+    const html = renderToStaticMarkup(
+      <ChatMessage message={message} onBranch={() => {}} />,
+    );
 
     expect(html).toContain('aria-label="Copy"');
-    expect(html).toContain('aria-label="More options"');
+    expect(html).toContain('aria-label="Branch in new chat"');
+    expect(html).not.toContain('aria-label="More options"');
   });
 
   it("renders local references and the per-answer privacy receipt", () => {

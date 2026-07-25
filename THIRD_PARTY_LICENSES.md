@@ -43,6 +43,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
 | `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
+| `@opencode-ai/sdk` | `1.15.13` (exact) | Typed client for the chat-only loopback OpenCode server supervised by Kassiber | MIT |
 | `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider secret storage | MIT OR Apache-2.0 |
 | `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend for AI provider API keys and opt-in database passphrase remember-unlock | MIT OR Apache-2.0 |
@@ -77,9 +78,14 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | --- | --- | --- | --- |
 | [Sparrow Frigate](https://github.com/sparrowwallet/frigate) | `dev/regtest/Dockerfile.frigate`, `dev/regtest/compose.bitcoin.yml` | Optional regtest Electrum server for BIP352 Silent Payments discovery | Apache-2.0 |
 | [pytest-xdist](https://github.com/pytest-dev/pytest-xdist) | `pyproject.toml`, `uv.lock`, `.github/workflows/ci.yml` | Runs the explicitly safe Python CI shards across isolated worker processes; socket/process-sensitive modules stay serial | MIT |
+| [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one Python-package data file; it is a build dependency, not a provider runtime | MIT |
 
 ## Practical notes
 
+- Third-party provider names and logos shown in the UI are not covered by
+  Kassiber's software license. They remain the property of their respective
+  owners and are used solely for provider identification; their appearance
+  does not imply endorsement, sponsorship, or affiliation.
 - Preserve upstream notices and license texts when redistributing Kassiber with bundled third-party code.
 - Treat bundled market-data redistribution status as release-blocking until the
   source terms are reviewed.

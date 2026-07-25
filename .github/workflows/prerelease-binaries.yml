@@ -128,6 +128,33 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
+      # The AI provider broker is a Node sidecar bundled from
+      # ui-tauri/provider-broker. It is deliberately NOT committed, but pyproject
+      # ships the bundle as package data, so it has to exist before PyInstaller
+      # collects it — otherwise the packaged CLI silently loses every
+      # CLI-backed AI provider.
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 10.33.0
+
+      - name: Build AI provider broker bundle
+        run: |
+          pnpm --dir ui-tauri install --frozen-lockfile
+          pnpm --dir ui-tauri run broker:build
+
+      - name: Verify broker bundle exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s kassiber/ai/provider_broker/index.mjs
+          echo "broker bundle: $(wc -c < kassiber/ai/provider_broker/index.mjs) bytes"
+
       - name: Install Linux RPM tooling
         if: runner.os == 'Linux'
         run: |

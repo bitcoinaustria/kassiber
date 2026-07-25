@@ -39,11 +39,15 @@
     "attach": "Attach files",
     "modelContext": "Model context",
     "thinking": "Thinking",
+    "reasoningEffort": "Reasoning effort",
     "effort": {
       "auto": "Auto",
       "low": "Low",
       "medium": "Medium",
-      "high": "High"
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max",
+      "ultra": "Ultra"
     }
   },
   "prompts": {
@@ -292,6 +296,14 @@
     "models": "Models",
     "noProviders": "No AI providers configured",
     "noModels": "No models found",
-    "refreshModels": "Refresh all AI models"
+    "noMatchingModels": "No matching models",
+    "searchModels": "Search models…",
+    "checkingProvider": "Checking local provider status…",
+    "staleModels": "Showing last known models · {{error}}",
+    "privacyFilter": "Model privacy filter",
+    "allModels": "All",
+    "localModels": "Local",
+    "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts may leave this device. Provider-native tools and Kassiber typed tools are unavailable for this provider.",
+    "cliChatOnly": "Local CLI broker · chat only · native tools disabled"
   }
 }

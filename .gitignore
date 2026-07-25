@@ -17,3 +17,7 @@ log/
 /temp
 /reports
 /.pnpm-store
+
+# Built by `pnpm --dir ui-tauri run broker:build`; shipped as package data,
+# built in CI before packaging rather than committed.
+kassiber/ai/provider_broker/*.mjs

@@ -279,6 +279,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.providers.set_default",
   "ai.providers.clear_default",
   "ai.providers.acknowledge",
+  "ai.provider_runtime.status",
   "ai.list_models",
   "ai.test_connection",
   "ai.chat",

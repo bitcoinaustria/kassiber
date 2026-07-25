@@ -7,13 +7,25 @@ from typing import Any
 
 
 DEFAULT_TIMEOUT_SECONDS = 120
-CLI_PROVIDER_LOCATORS = ("claude-cli://default", "codex-cli://default")
+CLI_DEFAULT_MODEL = "default"
+CLI_PROVIDER_BY_LOCATOR = {
+    "claude-cli://default": "claude",
+    "codex-cli://default": "codex",
+    "opencode-cli://default": "opencode",
+}
+CLI_PROVIDER_LOCATORS = tuple(CLI_PROVIDER_BY_LOCATOR)
 
 
 def is_cli_provider_locator(value: object) -> bool:
     if not isinstance(value, str):
         return False
     return value.strip().lower() in CLI_PROVIDER_LOCATORS
+
+
+def cli_provider_for_locator(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return CLI_PROVIDER_BY_LOCATOR.get(value.strip().lower())
 
 
 @dataclass(frozen=True)
