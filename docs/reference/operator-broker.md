@@ -247,37 +247,6 @@ A conflicting owner is reported with its pid. The lock record names a process
 of the same OS user inside a `0700` directory, so the principal could already
 read it; withholding it only leaves an operator unable to find the holder.
 
-### Dev leniency for parallel previews
-
-A developer reviewing several worktrees at once needs more than one preview on
-one real book. Setting `KASSIBER_DEV_SHARED_DESKTOP=1` makes a desktop take its
-role lock in shared mode: the first process becomes the primary and every later
-one a secondary. Secondaries run no background freshness worker, because
-duplicates would multiply requests against the same rate-limited hosts and race
-each other's writes for no benefit.
-
-The exclusion that matters is preserved rather than relaxed. Database-wide
-maintenance never opts in, so its exclusive acquisition still fails while any
-number of shared desktops are live, and passphrase rotation keeps reserving the
-whole book. A desktop that did not opt in still holds the lock exclusively, so
-leniency is never imposed on a process that did not ask for it.
-
-Two independent gates keep this out of production: the daemon refuses the flag
-in a frozen sidecar build, and the desktop supervisor strips it from the
-environment whenever it spawns the bundled sidecar. Windows exclusion is
-decided by share modes at open time rather than by convertible advisory locks,
-so the flag does nothing there.
-
-Leniency is per process and gives the primary role to whoever arrives first.
-Closing that first preview does not promote a peer, so background freshness
-stays off for the rest until they are restarted.
-
-The owner namespace also collects lock groups that are a day old and that
-nothing holds, bounded per process and taken under the same admission mutex as
-ownership itself. A live owner is excluded by its own lock rather than by age.
-Without collection, every throwaway database path — most of all in test runs —
-would leave a group behind forever.
-
 Passphrase rotation is database-wide maintenance rather than ordinary SQLite
 access. It temporarily reserves the opposite role and fails with
 `project_in_use` before closing or rekeying anything if another role is live.

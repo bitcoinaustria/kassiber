@@ -255,7 +255,7 @@ from .daemon_freshness import (
     _maintenance_run_payload,
     _maintenance_settings_payload,
     _remember_unlocked_passphrase,
-    _start_freshness_background_worker as _start_freshness_worker_for_owner,
+    _start_freshness_background_worker,
     _stop_freshness_background_worker,
     _sync_payload_has_errors,
     _wallets_sync_payload,
@@ -3474,24 +3474,6 @@ def _open_daemon_connection(
     return conn
 
 
-def _start_freshness_background_worker(
-    ctx: DaemonContext,
-    *,
-    passphrase: str | None = None,
-) -> None:
-    """Start background freshness unless this desktop is a dev peer.
-
-    Under dev leniency several previews share one book. Only the primary runs
-    the background worker: duplicates would double the request volume against
-    the same rate-limited hosts and race each other's writes for no benefit.
-    """
-
-    owner = ctx.project_owner
-    if owner is not None and owner.role == "shared_secondary":
-        return
-    _start_freshness_worker_for_owner(ctx, passphrase=passphrase)
-
-
 def _ensure_daemon_project_owner(ctx: DaemonContext) -> ProjectOwnerLease:
     project = canonical_project(ctx.data_root)
     if ctx.project_owner is not None:
@@ -3507,7 +3489,6 @@ def _ensure_daemon_project_owner(ctx: DaemonContext) -> ProjectOwnerLease:
         project,
         owner_kind="desktop",
         generation=ctx.ownership_generation,
-        allow_shared_desktop=True,
     )
     return ctx.project_owner
 
@@ -3706,7 +3687,6 @@ def _select_project_payload(
         target_project,
         owner_kind="desktop",
         generation=ctx.ownership_generation,
-        allow_shared_desktop=True,
     )
     target_owner_committed = transferred_owner is not None
     target_conn: sqlite3.Connection | None = None
