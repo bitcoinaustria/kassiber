@@ -53,12 +53,29 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertEqual(environment.attrib["Value"], "[INSTALLDIR]bin")
         self.assertEqual(environment.attrib["Permanent"], "no")
 
-    def test_cli_release_and_desktop_sidecar_share_one_build(self):
+    def test_cli_release_and_desktop_sidecar_share_one_argument_set(self):
+        """The downloadable CLI and the desktop sidecar must stay the same
+        program.
+
+        They are no longer the same *file*: macOS ships a one-dir sidecar so
+        the kernel can cache dylib signature validation across launches (see
+        docs/reference/desktop.md), and one-dir and one-file cannot be one
+        artifact. What still has to hold is that neither build can drift from
+        the other — same job, same synced dependencies, and one shared
+        argument array differing only in packaging mode.
+        """
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
         ).read_text(encoding="utf-8")
 
-        self.assertEqual(workflow.count("pyinstaller \\"), 1)
+        # One-file CLI plus the macOS one-dir sidecar, and nothing else.
+        self.assertEqual(workflow.count("pyinstaller \\"), 2)
+        self.assertEqual(workflow.count("--onefile"), 1)
+        self.assertEqual(workflow.count("--onedir"), 1)
+        # Both invocations expand the same array, so an argument added for one
+        # cannot silently miss the other.
+        self.assertEqual(workflow.count('"${pyinstaller_args[@]}"'), 2)
+        self.assertEqual(workflow.count("pyinstaller_args=("), 1)
         self.assertNotIn("build-desktop-sidecar:", workflow)
         self.assertIn("kassiber-cli-release-${{ matrix.target }}", workflow)
         self.assertIn("target: windows-x64", workflow)
