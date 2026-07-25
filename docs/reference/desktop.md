@@ -53,11 +53,21 @@ Current development modes:
   `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
   different checkout.
 
-Current prerelease desktop packages bundle a one-file `kassiber-cli-*`
-sidecar built with PyInstaller. At runtime the supervisor prefers
-`KASSIBER_PYTHON` when it is explicitly set, then the bundled sidecar from the
-app resources, then the development Python fallback above. The same
-`KASSIBER_PYTHON` override applies to installed-app CLI forwarding.
+Prerelease desktop packages bundle a `kassiber-cli-*` sidecar built with
+PyInstaller. macOS ships it one-*dir*, as
+`binaries/kassiber-cli/kassiber-cli-aarch64-apple-darwin` beside its
+`_internal/` payload; Linux and Windows ship the flat one-file build. The
+macOS split is a cold-start fix, not a packaging preference: a one-file
+sidecar unpacks ~170 MB into a fresh temp directory on every launch, and macOS
+re-validates the code signature of every bundled dylib from scratch each time
+because that cache is keyed by inode. That cost 6s of off-CPU work before the
+daemon answered, on every cold start; a stable path inside the bundle brings it
+to 0.19s. Linux and Windows have no equivalent per-inode cost.
+
+At runtime the supervisor prefers `KASSIBER_PYTHON` when it is explicitly set,
+then the bundled sidecar from the app resources (one-dir candidate first), then
+the development Python fallback above. The same `KASSIBER_PYTHON` override
+applies to installed-app CLI forwarding.
 
 The native desktop shell also carries a deliberately minimal release notifier,
 modeled on Sparrow Wallet's cadence and manual-download flow. Setup explicitly

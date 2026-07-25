@@ -50,10 +50,17 @@ case "$architecture" in
     ;;
 esac
 
+# The one-dir candidate comes first: macOS ships the sidecar as an executable
+# beside its `_internal/` payload so the kernel can cache dylib signature
+# validation across launches. Keep the flat candidates for manually assembled
+# dev bundles. Mirrors `bundled_sidecar` in src/supervisor.rs.
 sidecar=
 for sidecar_name in $sidecar_names; do
-  for candidate in "$resource_dir/binaries/$sidecar_name" "$resource_dir/$sidecar_name"; do
-    if [ -x "$candidate" ]; then
+  for candidate in \
+    "$resource_dir/binaries/kassiber-cli/$sidecar_name" \
+    "$resource_dir/binaries/$sidecar_name" \
+    "$resource_dir/$sidecar_name"; do
+    if [ -x "$candidate" ] && [ -f "$candidate" ]; then
       sidecar=$candidate
       break 2
     fi

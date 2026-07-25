@@ -207,7 +207,7 @@ jobs:
             --channel "$BUILD_CHANNEL"
           echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
 
-      - name: Build one-file CLI binary
+      - name: Build packaged CLI binaries
         shell: bash
         run: |
           set -euo pipefail
@@ -219,25 +219,59 @@ jobs:
           if uv run --locked python -c 'import lwk'; then
             observer_collect_args+=(--collect-submodules lwk --collect-data lwk --copy-metadata lwk)
           fi
+          # Shared between both builds below so they can never drift apart.
+          # The entry script stays last, after every option.
+          pyinstaller_args=(
+            --noconfirm
+            --paths .
+            --collect-data kassiber
+            --add-data "build/BUILD_INFO.json:kassiber/data"
+            "${observer_collect_args[@]}"
+            --collect-submodules embit
+            --collect-data embit
+            --collect-submodules rp2
+            --collect-data rp2
+            --collect-submodules prezzemolo
+            --collect-submodules keyring.backends
+            --copy-metadata keyring
+            --hidden-import prezzemolo.avl_tree
+            --hidden-import rp2.plugin.country.at
+            scripts/kassiber_pyinstaller_entry.py
+          )
+
+          # The downloadable CLI stays one file — a single binary is the whole
+          # point of the tarball, the Homebrew formula and the deb/rpm.
+          # Only this first build takes `--clean`; the sidecar build below reuses
+          # the warm analysis cache instead of paying for it twice.
           uv run --locked --with pyinstaller==6.20.0 pyinstaller \
             --clean \
-            --noconfirm \
             --onefile \
             --name kassiber \
-            --paths . \
-            --collect-data kassiber \
-            --add-data "build/BUILD_INFO.json:kassiber/data" \
-            "${observer_collect_args[@]}" \
-            --collect-submodules embit \
-            --collect-data embit \
-            --collect-submodules rp2 \
-            --collect-data rp2 \
-            --collect-submodules prezzemolo \
-            --collect-submodules keyring.backends \
-            --copy-metadata keyring \
-            --hidden-import prezzemolo.avl_tree \
-            --hidden-import rp2.plugin.country.at \
-            scripts/kassiber_pyinstaller_entry.py
+            "${pyinstaller_args[@]}"
+
+          # The macOS desktop sidecar is one-*dir*. A one-file sidecar unpacks
+          # ~170 MB into a fresh temp directory on every launch, and macOS
+          # re-validates the code signature of every bundled dylib from scratch
+          # each time because that cache is keyed by inode — ~6s of off-CPU work
+          # before the daemon answers, on every cold start. Shipping the
+          # unpacked tree at a stable path inside the .app lets the cache hit:
+          # measured 6.0s -> 0.19s to `daemon.ready`. Linux and Windows have no
+          # equivalent per-inode cost and keep reusing the one-file CLI.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            uv run --locked --with pyinstaller==6.20.0 pyinstaller \
+              --onedir \
+              --name "kassiber-cli-${{ matrix.triple }}" \
+              --distpath sidecar-dist \
+              --workpath sidecar-build \
+              "${pyinstaller_args[@]}"
+            sidecar_dir="sidecar-dist/kassiber-cli-${{ matrix.triple }}"
+            test -x "$sidecar_dir/kassiber-cli-${{ matrix.triple }}"
+            test -d "$sidecar_dir/_internal"
+            # Tauri copies resource directories file by file and skips symlinks,
+            # so a symlinked payload would arrive in the bundle broken. Nothing
+            # produces one today; fail loudly if the Python layout ever changes.
+            test -z "$(find "$sidecar_dir" -type l -print -quit)"
+          fi
 
       - name: Smoke packaged CLI
         shell: bash
@@ -448,20 +482,31 @@ jobs:
             release/*.rpm
           if-no-files-found: error
 
-      - name: Stage identical CLI as desktop sidecar
+      # macOS stages the one-dir tree under `kassiber-cli/`; the other platforms
+      # stage the identical one-file CLI flat, as before. Both layouts are what
+      # `bundled_sidecar` in ui-tauri/src-tauri/src/supervisor.rs looks for.
+      - name: Stage desktop sidecar
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p sidecar
-          cp "dist/kassiber${{ matrix.exe_ext }}" \
-            "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
-          chmod 755 "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            cp -R "sidecar-dist/kassiber-cli-${{ matrix.triple }}" sidecar/kassiber-cli
+            chmod 755 "sidecar/kassiber-cli/kassiber-cli-${{ matrix.triple }}"
+          else
+            cp "dist/kassiber${{ matrix.exe_ext }}" \
+              "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+            chmod 755 "sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          fi
 
+      # `path: sidecar` (the directory), not `sidecar/*`: with a glob the
+      # artifact root collapses to the single matched entry, which would flatten
+      # the one-dir tree and drop the `kassiber-cli/` level.
       - name: Upload desktop sidecar
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: kassiber-desktop-sidecar-${{ matrix.triple }}
-          path: sidecar/*
+          path: sidecar
           if-no-files-found: error
           retention-days: 7
 
@@ -549,14 +594,29 @@ jobs:
           path: ui-tauri/src-tauri/binaries
           merge-multiple: true
 
+      # upload-artifact does not preserve the executable bit, so both branches
+      # restore it before Tauri copies the sidecar into the bundle.
       - name: Verify desktop CLI sidecar inputs
         shell: bash
         run: |
           set -euo pipefail
-          count="$(find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
-          test "$count" = "${{ matrix.sidecar_expected }}"
-          find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
-          find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -print
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # Asserted, not probed: if the artifact layout ever flattens, the
+            # bootloader would lose track of `_internal` and the app would fail
+            # at runtime instead of here.
+            onedir="ui-tauri/src-tauri/binaries/kassiber-cli"
+            test -d "$onedir"
+            test -d "$onedir/_internal"
+            count="$(find "$onedir" -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
+            test "$count" = "${{ matrix.sidecar_expected }}"
+            find "$onedir" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
+            find "$onedir" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec {} --version \;
+          else
+            count="$(find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
+            test "$count" = "${{ matrix.sidecar_expected }}"
+            find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
+            find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -print
+          fi
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
