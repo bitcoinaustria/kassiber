@@ -245,7 +245,7 @@ export function OptionalSection({
 }) {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <section className="rounded-md border bg-card">
+      <section className="kb-surface-inset">
         <CollapsibleTrigger asChild>
           <button
             type="button"
