@@ -295,8 +295,8 @@ jobs:
             file="$1"
             path="$2"
             expected="$3"
-            # `uv run python`, not bare `python`: no runner-provided interpreter
-            # is on PATH under every OS in this matrix.
+            # Goes through uv rather than a bare `python`: no runner-provided
+            # interpreter is on PATH under every OS in this matrix.
             if ! uv run --locked python -c 'import json, sys; from functools import reduce; value = reduce(lambda current, key: current[key], sys.argv[2].split("."), json.load(open(sys.argv[1], encoding="utf-8"))); assert value == sys.argv[3], f"{sys.argv[2]}: expected {sys.argv[3]!r}, got {value!r}"' "$file" "$path" "$expected"; then
               cat "$file" >&2
               return 1
