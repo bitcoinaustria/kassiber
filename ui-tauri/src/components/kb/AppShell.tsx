@@ -23,10 +23,11 @@ import {
   ChevronsUpDown,
   ClipboardList,
   Database,
+  Download,
   Eye,
   EyeOff,
-  FileSearch,
   Fingerprint,
+  Folder,
   Gauge,
   Heart,
   History,
@@ -40,7 +41,6 @@ import {
   RefreshCw,
   RotateCcw,
   Route,
-  Search,
   Server,
   Settings,
   ShieldAlert,
@@ -51,6 +51,7 @@ import {
   Users,
   Wallet,
   WalletCards,
+  X,
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -81,6 +82,7 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -134,12 +136,23 @@ import {
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
-import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel";
+import {
+  backendRowToSettingsBackend,
+  backendsForLayer,
+  type BackendSettingsData,
+} from "@/components/kb/settings/SettingsModel";
+import { SettingsSidebarNav } from "@/components/kb/settings/SettingsNavigation";
+import {
+  DEFAULT_SETTINGS_SECTION_ID,
+  settingsSectionForPathname,
+  type SettingsSectionId,
+} from "@/components/kb/settingsSections";
+import { ShellSearch } from "@/components/kb/shell/ShellSearch";
+import { SidebarStageBackdrop } from "@/components/kb/shell/SidebarStageBackdrop";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
 import { RouteErrorBoundary } from "@/components/AppErrorBoundary";
-import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
 import { appWorkflowHotkeyAction } from "@/lib/appWorkflowHotkeys";
 import {
@@ -165,17 +178,6 @@ import {
   routeProgressFromNotifications,
   type RouteProgressState,
 } from "./progressIndicator";
-import {
-  buildAppSearchResults,
-  isLikelyTransactionLookupQuery,
-  isSearchResultActivatable,
-  searchResultForActivation,
-  type RankedSearchResult,
-  type ResolvedTransactionLookup,
-  type SearchActionId,
-  type SearchIconKey,
-} from "./search";
-
 import {
   dispatchMenuIntent,
   type AppRoutePath,
@@ -284,8 +286,25 @@ const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const APP_IS_DEV_BUILD = APP_VERSION === "dev";
 const NATIVE_MENU_EVENT = "kassiber:intent";
 const ACTIVE_PROGRESS_CLEAR_GRACE_MS = 750;
-const topNavIconButtonClassName =
-  "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
+/*
+ * T3Code's ghost icon-button recipe, for the controls that float over the
+ * content panel: no chrome at rest, a `--accent` fill on hover, a muted glyph
+ * against foreground-coloured text, and `rounded-lg` rather than a pill.
+ */
+const shellIconButtonClassName =
+  "size-8 rounded-lg border border-transparent text-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background [&>svg]:text-muted-foreground hover:[&>svg]:text-foreground";
+/*
+ * T3Code's nav-row recipe: rows sit quiet in a muted foreground with a faint
+ * hover fill, and the current page lifts onto its own surface. Both tones come
+ * from `--sidebar-row-*` so hover and active never collapse into one colour.
+ */
+/* Same recipe on the nav surface, where hover/glyph read from `sidebar-*`. */
+const navIconButtonClassName =
+  "size-7 shrink-0 rounded-md border border-transparent text-sidebar-foreground hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar [&>svg]:text-sidebar-muted-foreground hover:[&>svg]:text-sidebar-foreground";
+const navRowClassName =
+  "h-8 gap-2 rounded-md text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
+const navSubRowClassName =
+  "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 
 function appCanStartTouchIdPrompt() {
   if (typeof document === "undefined") {
@@ -512,55 +531,6 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
 ];
-
-function nextSearchIndex(current: number, delta: number, total: number) {
-  if (total <= 0) return 0;
-  return (current + delta + total) % total;
-}
-
-const SEARCH_ICON_BY_KEY: Record<
-  SearchIconKey | string,
-  React.ComponentType<React.SVGProps<SVGSVGElement>>
-> = {
-  activity: Gauge,
-  assistant: MessageSquareText,
-  book: BookOpen,
-  database: Database,
-  file_search: FileSearch,
-  ledger: ClipboardList,
-  lock: LockKeyhole,
-  logs: TerminalSquare,
-  report: BarChart3,
-  search: Search,
-  settings: Settings,
-  shield: ShieldAlert,
-  sync: ArrowLeftRight,
-  transaction: ArrowLeftRight,
-  wallet: Wallet,
-};
-
-// Maps a search result category to its `chrome:search.category.*` key.
-const SEARCH_CATEGORY_LABEL_KEYS: Record<
-  RankedSearchResult["category"],
-  string
-> = {
-  action: "action",
-  page: "page",
-  report: "report",
-  review_item: "review_item",
-  setting: "setting",
-  transaction: "transaction",
-  wallet: "wallet",
-};
-
-function searchResultIcon(result: RankedSearchResult) {
-  const key = result.iconKey ?? result.category;
-  return SEARCH_ICON_BY_KEY[key] ?? Search;
-}
-
-function exhaustiveSearchAction(actionId: never): never {
-  throw new Error(`Unhandled search action: ${actionId}`);
-}
 
 function identityFromProject(
   project: ProjectCatalogEntry,
@@ -1666,23 +1636,23 @@ export function AppShell() {
     <TooltipProvider>
       <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
         <PreAlphaBanner className="shrink-0" />
-        <SidebarProvider className="min-h-0 flex-1 flex-col bg-sidebar">
+        {/*
+          The shell is a two-column frame: the side nav owns all navigation
+          (brand, book switcher, search, pages, settings), and the content panel
+          carries only its own page plus a floating strip of shell controls.
+          There is no full-width top bar — the controls float over the panel.
+        */}
+        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
           <a
             href="#app-main"
             className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
           >
             {t("shell.skipToContent")}
           </a>
-          <AppDashboardHeader
-            meta={routeMeta}
-            onLock={lockApp}
-            onRefresh={runHeaderRefresh}
-            isRefreshing={isSyncing}
-            daemonEnabled={daemonEnabled}
-          />
           <div className="flex min-h-0 flex-1">
             <AppSidebar
               pathname={pathname}
+              meta={routeMeta}
               onLock={lockApp}
               onProjectSelect={switchProject}
               daemonEnabled={daemonEnabled}
@@ -1691,6 +1661,13 @@ export function AppShell() {
             />
             <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5">
               <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-tl-xl lg:rounded-tr-xl">
+                <ShellFloatingControls
+                  meta={routeMeta}
+                  onLock={lockApp}
+                  onRefresh={runHeaderRefresh}
+                  isRefreshing={isSyncing}
+                  daemonEnabled={daemonEnabled}
+                />
                 {importRootBlocked ? (
                   <main
                     id="app-main"
@@ -1871,8 +1848,17 @@ function RouteTopProgressLine({
   );
 }
 
+/**
+ * The app's single navigation surface.
+ *
+ * Two modes share one frame: the book navigation, and — on any `/settings/*`
+ * route — the settings navigation, which takes over the whole nav rather than
+ * squeezing a second rail into the page. The frame itself is a frosted panel
+ * (`.kb-glass-panel`) lifted off the app chrome.
+ */
 function AppSidebar({
   pathname,
+  meta,
   onLock,
   onProjectSelect,
   daemonEnabled,
@@ -1880,6 +1866,7 @@ function AppSidebar({
   developerToolsEnabled,
 }: {
   pathname: string;
+  meta: RouteMeta;
   onLock: () => void;
   onProjectSelect: (project: ProjectCatalogEntry) => void;
   daemonEnabled: boolean;
@@ -1887,6 +1874,9 @@ function AppSidebar({
   developerToolsEnabled: boolean;
 }) {
   const { t } = useTranslation("nav");
+  const inSettings = pathname === "/settings" || pathname.startsWith("/settings/");
+  const settingsSectionId =
+    settingsSectionForPathname(pathname) ?? DEFAULT_SETTINGS_SECTION_ID;
   const navGroups = React.useMemo(
     () =>
       NAV_GROUPS.map((group) => ({
@@ -1937,41 +1927,236 @@ function AppSidebar({
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      className="top-6 h-[calc(100svh-1.5rem)] !border-r-0 group-data-[side=left]:!border-r-0"
+      /* The frosted nav and the content panel land within a few percent of each
+         other in lightness by design (T3Code's quiet hierarchy), so the seam
+         needs an explicit hairline or the two surfaces visually merge. */
+      className="kb-glass-panel top-6 h-[calc(100svh-1.5rem)] border-r border-sidebar-border/70"
     >
-      <SidebarContent className="pt-12">
-        {navGroups.map((group) => (
-          <SidebarGroup key={group.titleKey}>
-            <SidebarGroupLabel>{t(group.titleKey as never) /* dynamic key */}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => (
-                  <NavMenuItem
-                    key={item.labelKey}
-                    item={item}
-                    pathname={pathname}
-                    badge={navBadges[item.href]}
-                  />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarActions
-          pathname={pathname}
-          developerToolsEnabled={developerToolsEnabled}
-        />
-        <NavUser
-          onLock={onLock}
-          onProjectSelect={onProjectSelect}
+      {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
+          palette are reachable from settings too. `relative` + the children's
+          `z-10` let the stage art sit behind them; the art renders nothing at
+          all on a stable release. */}
+      <SidebarHeader className="relative gap-1 px-2 pt-2 pb-1">
+        <SidebarStageBackdrop />
+        <div className="relative z-10 flex flex-col gap-1">
+          {/*
+            Only the brand row is relit, and only in dark mode (the CSS is
+            `.dark`-scoped): the art fades out before the search row, so
+            relighting that row too would put white text on the near-white faded
+            tail. The class is unconditional because every channel now draws art.
+          */}
+          <div className="kb-stage-header-content">
+            <SidebarBrand />
+          </div>
+          <ShellSearch searchKey={meta.searchKey} daemonEnabled={daemonEnabled} />
+        </div>
+      </SidebarHeader>
+      {inSettings ? (
+        <SettingsNavSection
+          activeId={settingsSectionId}
           daemonEnabled={daemonEnabled}
         />
-        <AppVersion />
-      </SidebarFooter>
+      ) : (
+        <>
+          <SidebarContent className="gap-0">
+            {navGroups.map((group) => (
+              <SidebarGroup key={group.titleKey} className="gap-1.5 px-2 py-1.5">
+                {/* T3Code's "Projects" label recipe: plain sentence-case text at
+                    `text-xs font-medium` in the muted nav tone. This replaced a
+                    9px uppercase-mono caption that read as noise at nav scale. */}
+                <SidebarGroupLabel className="mb-1 h-auto px-2 text-xs font-medium text-sidebar-muted-foreground/80">
+                  {t(group.titleKey as never) /* dynamic key */}
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {group.items.map((item) => (
+                      <NavMenuItem
+                        key={item.labelKey}
+                        item={item}
+                        pathname={pathname}
+                        badge={navBadges[item.href]}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
+          </SidebarContent>
+          <SidebarFooter className="gap-1 p-2">
+            <SidebarActions
+              pathname={pathname}
+              developerToolsEnabled={developerToolsEnabled}
+            />
+            <SidebarUpdatePill />
+            <NavUser
+              onLock={onLock}
+              onProjectSelect={onProjectSelect}
+              daemonEnabled={daemonEnabled}
+            />
+            <AppVersion />
+          </SidebarFooter>
+        </>
+      )}
       <SidebarRail className="after:hidden" />
     </Sidebar>
+  );
+}
+
+/**
+ * Settings navigation, with the per-layer backend counts the old in-page rail
+ * showed. The backends query is the same key the settings panels use, so
+ * react-query serves it from cache instead of issuing a second request.
+ */
+function SettingsNavSection({
+  activeId,
+  daemonEnabled,
+}: {
+  activeId: SettingsSectionId;
+  daemonEnabled: boolean;
+}) {
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+    undefined,
+    { enabled: daemonEnabled, staleTime: 15_000 },
+  );
+  const counts = React.useMemo<Partial<Record<SettingsSectionId, number>>>(() => {
+    const backends = (backendSettingsQuery.data?.data?.backends ?? []).map(
+      backendRowToSettingsBackend,
+    );
+    return {
+      "network-bitcoin": backendsForLayer(backends, "bitcoin").length,
+      "network-lightning": backendsForLayer(backends, "lightning").length,
+      "network-liquid": backendsForLayer(backends, "liquid").length,
+      "network-market": backends.filter((backend) => backend.net === "FX").length,
+    };
+  }, [backendSettingsQuery.data]);
+
+  return <SettingsSidebarNav activeId={activeId} counts={counts} />;
+}
+
+/**
+ * Nav header, arranged as T3Code arranges it.
+ *
+ * T3Code puts the nav-collapse control and the wordmark side by side on the very
+ * top-left row — its toggle is `fixed` at the window corner and the brand is
+ * pushed right by exactly the control's width to sit beside it. The book
+ * switcher is NOT on this row: T3Code keeps its equivalent (the project-scope
+ * picker) on its own row further down, which is what leaves this row roomy
+ * enough for the history controls to join the toggle.
+ *
+ * Collapsed to the icon rail, only the toggle survives — the wordmark and the
+ * history buttons would not fit, and the toggle is what gets the nav back.
+ */
+function SidebarBrand() {
+  const { t } = useTranslation("chrome");
+  const { state, isMobile } = useSidebar();
+  const collapsed = state === "collapsed" && !isMobile;
+
+  return (
+    <div
+      className={cn(
+        "flex h-8 min-w-0 items-center gap-0.5",
+        collapsed && "justify-center",
+      )}
+    >
+      <SidebarTrigger className={navIconButtonClassName} />
+      {collapsed ? null : (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={navIconButtonClassName}
+            aria-label={t("shell.back")}
+            title={t("shell.back")}
+            onClick={() => window.history.back()}
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={navIconButtonClassName}
+            aria-label={t("shell.forward")}
+            title={t("shell.forward")}
+            onClick={() => window.history.forward()}
+          >
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Button>
+          <Link
+            to="/overview"
+            aria-label={t("shell.overviewLink")}
+            className="ml-1 flex h-7 min-w-0 shrink items-center truncate rounded-md text-sm font-medium tracking-tight text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            Kassiber
+          </Link>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Leading crumb: the active book, and the control that switches it.
+ *
+ * T3Code's breadcrumb leads with the project — `[favicon] Project / Thread` —
+ * on the reasoning that knowing which project you are in is priority zero and
+ * the title alone does not answer it. The same holds here for the book, so this
+ * takes the same slot and the same styling: a 3.5-size glyph, a `max-w-40`
+ * truncating name in muted `text-sm font-medium`, and a `/` at 40% opacity
+ * before the current page.
+ *
+ * T3Code's crumb is static text; ours is a button, because the book is
+ * switchable and this is where a user looks to switch it.
+ */
+function BreadcrumbBook({ daemonEnabled }: { daemonEnabled: boolean }) {
+  const { t } = useTranslation("chrome");
+  const identity = useUiStore((s) => s.identity);
+  const { data } = useDaemon<OverviewSnapshot>(
+    "ui.overview.snapshot",
+    undefined,
+    { enabled: daemonEnabled },
+  );
+  const [bookSwitcherOpen, setBookSwitcherOpen] = React.useState(false);
+  const bookLabel =
+    data?.data?.status?.profile ??
+    data?.data?.status?.workspace ??
+    identity?.profile ??
+    t("shell.booksFallback");
+  const label = t("shell.switchBooksLabel", { book: bookLabel });
+
+  return (
+    <span className="inline-flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        aria-haspopup="dialog"
+        aria-expanded={bookSwitcherOpen}
+        onClick={() => setBookSwitcherOpen(true)}
+        className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <Folder
+          className="size-3.5 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span className="max-w-40 truncate text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+          {bookLabel}
+        </span>
+        <ChevronsUpDown
+          className="size-3 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
+          aria-hidden="true"
+        />
+      </button>
+      <span aria-hidden="true" className="text-muted-foreground/40">
+        /
+      </span>
+      <BookSwitcherPopover
+        open={bookSwitcherOpen}
+        onClose={() => setBookSwitcherOpen(false)}
+      />
+    </span>
   );
 }
 
@@ -2052,6 +2237,7 @@ function SidebarActions({
           asChild
           isActive={pathname === "/activity"}
           tooltip={t("nav:book.activity")}
+          className={navRowClassName}
         >
           <Link to="/activity">
             <History className="size-4" aria-hidden="true" />
@@ -2065,6 +2251,7 @@ function SidebarActions({
             asChild
             isActive={pathname === "/logs"}
             tooltip={t("nav:book.logs")}
+            className={navRowClassName}
           >
             <Link to="/logs">
               <TerminalSquare className="size-4" aria-hidden="true" />
@@ -2088,16 +2275,20 @@ function SidebarActions({
         <Collapsible asChild defaultOpen={supportActive} className="group/collapsible">
           <div>
             <CollapsibleTrigger asChild>
-              <SidebarMenuButton isActive={supportActive} tooltip={t("shell.support.title")}>
+              <SidebarMenuButton
+                isActive={supportActive}
+                tooltip={t("shell.support.title")}
+                className={navRowClassName}
+              >
                 <LifeBuoy className="size-4" aria-hidden="true" />
                 <span>{t("shell.support.title")}</span>
-                <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                <ChevronRight className="ml-auto size-3.5! shrink-0 text-muted-foreground/70 transition-transform duration-150 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
               </SidebarMenuButton>
             </CollapsibleTrigger>
             <CollapsibleContent>
               <SidebarMenuSub>
                 <SidebarMenuSubItem>
-                  <SidebarMenuSubButton asChild>
+                  <SidebarMenuSubButton asChild className={navSubRowClassName}>
                     <a
                       href="https://github.com/bitcoinaustria/kassiber/issues"
                       target="_blank"
@@ -2109,7 +2300,7 @@ function SidebarActions({
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
                 <SidebarMenuSubItem>
-                  <SidebarMenuSubButton asChild>
+                  <SidebarMenuSubButton asChild className={navSubRowClassName}>
                     <a
                       href="https://github.com/bitcoinaustria/kassiber/discussions"
                       target="_blank"
@@ -2129,10 +2320,13 @@ function SidebarActions({
         <Collapsible asChild className="group/collapsible">
           <div>
             <CollapsibleTrigger asChild>
-              <SidebarMenuButton tooltip={t("shell.extras.title")}>
+              <SidebarMenuButton
+                tooltip={t("shell.extras.title")}
+                className={navRowClassName}
+              >
                 <Plus className="size-4" aria-hidden="true" />
                 <span>{t("shell.extras.title")}</span>
-                <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                <ChevronRight className="ml-auto size-3.5! shrink-0 text-muted-foreground/70 transition-transform duration-150 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
               </SidebarMenuButton>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -2140,6 +2334,7 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
+                    className={navSubRowClassName}
                     isActive={pathname === "/exit-tax"}
                   >
                     <Link to="/exit-tax">
@@ -2151,6 +2346,7 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
+                    className={navSubRowClassName}
                     isActive={pathname === "/privacy-mirror"}
                   >
                     <Link to="/privacy-mirror">
@@ -2162,6 +2358,7 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
+                    className={navSubRowClassName}
                     isActive={pathname === "/egress"}
                   >
                     <Link to="/egress">
@@ -2175,11 +2372,16 @@ function SidebarActions({
           </div>
         </Collapsible>
       </SidebarMenuItem>
-      <SidebarMenuItem>
+      {/* Hairline above Settings, as T3Code has it: everything above is a place
+          in the book, Settings is not, and the line marks that boundary. The
+          negative inset lets it span the nav's full width rather than stopping
+          at the row's padding. */}
+      <SidebarMenuItem className="mt-1 -mx-2 border-t border-sidebar-border/60 px-2 pt-1">
         <SidebarMenuButton
           asChild
-          isActive={pathname === "/settings"}
+          isActive={pathname.startsWith("/settings")}
           tooltip={t("nav:book.settings")}
+          className={navRowClassName}
         >
           <Link to="/settings">
             <Settings className="size-4" aria-hidden="true" />
@@ -2259,7 +2461,12 @@ function NavMenuItem({
   if (!item.children?.length) {
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={active} tooltip={t(item.labelKey as never) /* dynamic key */}>
+        <SidebarMenuButton
+          asChild
+          isActive={active}
+          tooltip={t(item.labelKey as never) /* dynamic key */}
+          className={navRowClassName}
+        >
           <Link to={item.href}>
             <Icon className="size-4" aria-hidden="true" />
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
@@ -2279,10 +2486,14 @@ function NavMenuItem({
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton isActive={active} tooltip={t(item.labelKey as never) /* dynamic key */}>
+          <SidebarMenuButton
+            isActive={active}
+            tooltip={t(item.labelKey as never) /* dynamic key */}
+            className={navRowClassName}
+          >
             <Icon className="size-4" aria-hidden="true" />
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
-            <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+            <ChevronRight className="ml-auto size-3.5! shrink-0 text-muted-foreground/70 transition-transform duration-150 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -2292,7 +2503,7 @@ function NavMenuItem({
                 pathname === child.href || pathname.startsWith(`${child.href}/`);
               return (
                 <SidebarMenuSubItem key={child.labelKey}>
-                  <SidebarMenuSubButton asChild isActive={childActive}>
+                  <SidebarMenuSubButton asChild className={navSubRowClassName} isActive={childActive}>
                     <Link to={child.href}>
                       {t(child.labelKey as never) /* dynamic key */}
                     </Link>
@@ -2441,32 +2652,66 @@ function NavUser({
   );
 }
 
-function AppVersion() {
+/**
+ * Update notice in the nav footer, ported from T3Code's `SidebarUpdatePill`:
+ * a primary-tinted `rounded-lg` row with a download glyph, a label, and a ✕ that
+ * dismisses it until the next launch.
+ *
+ * T3Code's pill also drives an in-app downloader ("Downloading (42%)" →
+ * "Restart to update"). Kassiber has no updater of its own — `checkForAppUpdate`
+ * only compares versions — so the pill's single action opens the release page,
+ * and the download/install states are deliberately absent rather than faked.
+ */
+function SidebarUpdatePill() {
   const { t } = useTranslation("chrome");
   const automaticUpdateChecks = useUiStore(
     (state) => state.automaticUpdateChecks,
   );
   const appUpdate = useUiStore((state) => state.appUpdate);
+  const [dismissed, setDismissed] = React.useState(false);
   const releaseUrl =
     automaticUpdateChecks && appUpdate?.updateAvailable
       ? appUpdate.releaseUrl
       : null;
   const latestVersion = appUpdate?.latestVersion;
-  if (releaseUrl && latestVersion) {
-    return (
+
+  if (dismissed || !releaseUrl || !latestVersion) return null;
+
+  const tooltip = t("shell.version.updateTitle", {
+    current: appUpdate.currentVersion,
+    latest: latestVersion,
+  });
+
+  return (
+    <div className="group/update relative flex h-7 w-full items-center rounded-lg bg-primary/15 text-xs font-medium text-primary group-data-[collapsible=icon]:hidden">
+      <div className="pointer-events-none absolute inset-0 rounded-lg transition-colors group-has-[button.update-main:hover]/update:bg-primary/22" />
       <button
         type="button"
-        title={t("shell.version.updateTitle", {
-          current: appUpdate.currentVersion,
-          latest: latestVersion,
-        })}
+        aria-label={tooltip}
+        title={tooltip}
+        className="update-main relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-l-lg px-2"
         onClick={() => void openExternalUrl(releaseUrl).catch(() => undefined)}
-        className="inline-flex w-full items-center justify-center px-2 pb-1 text-center text-[11px] leading-none text-primary underline underline-offset-4 group-data-[collapsible=icon]:hidden"
       >
-        {t("shell.version.updateLabel", { version: latestVersion })}
+        <Download className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">
+          {t("shell.version.updateLabel", { version: latestVersion })}
+        </span>
       </button>
-    );
-  }
+      <button
+        type="button"
+        aria-label={t("shell.version.updateDismiss")}
+        title={t("shell.version.updateDismiss")}
+        className="relative mr-1 inline-flex size-5 shrink-0 items-center justify-center rounded-md text-primary/60 transition-colors hover:text-primary"
+        onClick={() => setDismissed(true)}
+      >
+        <X className="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function AppVersion() {
+  const { t } = useTranslation("chrome");
   return (
     <a
       href="https://github.com/bitcoinaustria/kassiber"
@@ -2495,7 +2740,16 @@ function AppVersion() {
   );
 }
 
-function AppDashboardHeader({
+/**
+ * Floating shell controls.
+ *
+ * The old full-width top bar is gone: its navigation half moved into the side
+ * nav (brand, book switcher, search), and what is left — the book-refresh split
+ * button, notifications, and the view toggles — floats over the content panel as
+ * frosted-glass pills. The strip still occupies its own row rather than
+ * overlaying, so nothing on the page ever hides behind a button.
+ */
+function ShellFloatingControls({
   meta,
   onLock,
   onRefresh,
@@ -2508,169 +2762,24 @@ function AppDashboardHeader({
   isRefreshing: boolean;
   daemonEnabled: boolean;
 }) {
-  const { t } = useTranslation(["chrome", "nav", "search", "settings"]);
-  const { state: sidebarState } = useSidebar();
+  const { t } = useTranslation(["chrome", "nav"]);
   const navigate = useNavigate();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const appNotifications = useUiStore((s) => s.notifications);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
-  const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const identity = useUiStore((s) => s.identity);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
-  const setDeferredConnectionSetup = useUiStore(
-    (s) => s.setDeferredConnectionSetup,
-  );
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [searchOpen, setSearchOpen] = React.useState(false);
-  const [bookSwitcherOpen, setBookSwitcherOpen] = React.useState(false);
-  const [activeSearchIndex, setActiveSearchIndex] = React.useState(0);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const searchRootRef = React.useRef<HTMLDivElement>(null);
   const { data } = useDaemon<OverviewSnapshot>(
     "ui.overview.snapshot",
     undefined,
     { enabled: daemonEnabled },
   );
   const snapshot = data?.data;
-  const shouldResolveTransaction = isLikelyTransactionLookupQuery(searchQuery);
-  const resolvedTransaction = useDaemon<ResolvedTransactionLookup>(
-    "ui.transactions.resolve",
-    { query: searchQuery.trim() },
-    { enabled: daemonEnabled && shouldResolveTransaction },
-  );
-  const searchResults = React.useMemo(
-    () =>
-      buildAppSearchResults({
-        snapshot,
-        query: searchQuery,
-        aiFeaturesEnabled,
-        developerToolsEnabled,
-        resolvedTransaction: resolvedTransaction.data?.data ?? null,
-        isResolvingTransaction:
-          shouldResolveTransaction &&
-          (resolvedTransaction.isFetching || resolvedTransaction.isLoading),
-        // Dynamic, prefixed keys fall outside the typed-key union; resolve via
-        // a thin structural adapter over the namespace-branded translator.
-        t: (key: string, options?: Record<string, unknown>) =>
-          t(key as never, options as never) as unknown,
-      }),
-    [
-      snapshot,
-      searchQuery,
-      aiFeaturesEnabled,
-      developerToolsEnabled,
-      resolvedTransaction.data?.data,
-      resolvedTransaction.isFetching,
-      resolvedTransaction.isLoading,
-      shouldResolveTransaction,
-      t,
-    ],
-  );
-  const searchListId = React.useId();
-  const searchActiveId = searchResults[activeSearchIndex]?.id
-    ? `search-result-${searchResults[activeSearchIndex].id.replace(/[^a-zA-Z0-9_-]/g, "-")}`
-    : undefined;
-  const activateSearchAction = React.useCallback(
-    (actionId: SearchActionId) => {
-      switch (actionId) {
-        case "process-journals":
-          runJournalProcessing();
-          return;
-        case "add-wallet":
-        case "connect-btcpay":
-        case "import-btcpay":
-          setDeferredConnectionSetup({
-            sourceId:
-              actionId === "connect-btcpay"
-                ? "btcpay"
-                : actionId === "import-btcpay"
-                  ? "btcpay-csv"
-                  : "descriptor",
-            reason: t("search.actionReason.fromSearch"),
-          });
-          void navigate({ to: "/connections" });
-          return;
-        default:
-          exhaustiveSearchAction(actionId);
-      }
-    },
-    [navigate, runJournalProcessing, setDeferredConnectionSetup, t],
-  );
-  const activateSearchResult = React.useCallback(
-    (result: RankedSearchResult | undefined) => {
-      if (!result) return;
-      const actionId = result.action?.id;
-      if (actionId) {
-        setSearchOpen(false);
-        setSearchQuery("");
-        activateSearchAction(actionId);
-        return;
-      }
-
-      const route = result.route;
-      if (!route) return;
-      setSearchOpen(false);
-      setSearchQuery("");
-      if (
-        route.to === "/connections/$connectionId" &&
-        typeof route.params?.connectionId === "string"
-      ) {
-        void navigate({
-          to: "/connections/$connectionId",
-          params: { connectionId: route.params.connectionId },
-        });
-        return;
-      }
-      if (route.to === "/connections/$connectionId") return;
-      if (route.to === "/transactions" && typeof route.search?.tx === "string") {
-        void navigate({
-          to: "/transactions",
-          search: { tx: route.search.tx },
-        });
-        return;
-      }
-      if (route.to === "/settings" && route.hash) {
-        void navigate({ to: "/settings", hash: route.hash });
-        window.dispatchEvent(
-          new CustomEvent("kassiber:settings-section", {
-            detail: { section: route.hash },
-          }),
-        );
-        return;
-      }
-      void navigate({ to: route.to });
-    },
-    [activateSearchAction, navigate],
-  );
-
-  React.useEffect(() => {
-    setActiveSearchIndex(0);
-  }, [searchQuery]);
-
-  React.useEffect(() => {
-    if (activeSearchIndex < searchResults.length) return;
-    setActiveSearchIndex(Math.max(0, searchResults.length - 1));
-  }, [activeSearchIndex, searchResults.length]);
-
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "k") return;
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.altKey || event.shiftKey) return;
-      event.preventDefault();
-      setSearchOpen(true);
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   const systemNotificationItems: NotificationItem[] = [
     ...(snapshot?.status?.needsJournals
@@ -2713,16 +2822,9 @@ function AppDashboardHeader({
     ...systemNotificationItems,
   ];
   const notificationCount = notificationItems.filter(
-    (item) =>
-      item.tone !== "info" ||
-      item.title.toLowerCase().includes("sync"),
+    (item) => item.tone !== "info" || item.title.toLowerCase().includes("sync"),
   ).length;
-  const bookLabel =
-    snapshot?.status?.profile ??
-    snapshot?.status?.workspace ??
-    t("shell.booksFallback");
   const reviewCount = snapshot?.status?.quarantines ?? 0;
-  const sidebarCollapsed = sidebarState === "collapsed";
   const needsJournals = Boolean(snapshot?.status?.needsJournals);
   const notificationAlertClassName =
     reviewCount > 0
@@ -2736,223 +2838,29 @@ function AppDashboardHeader({
       : t("notifications.label");
 
   return (
-    <header
-      className="relative z-20 grid h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 bg-sidebar px-2 text-sidebar-foreground md:grid-cols-[minmax(0,1fr)_minmax(10rem,28rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(16rem,38rem)_minmax(0,1fr)]"
-    >
-      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-        <Link
-          to="/overview"
-          aria-label={t("shell.overviewLink")}
-          className={cn(
-            "flex h-8 shrink-0 items-center rounded-md text-sidebar-foreground hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            sidebarCollapsed ? "w-8 justify-center" : "gap-2 pr-1.5",
-          )}
+    /*
+      There is no top bar: this row paints nothing at all. It reserves the
+      controls' height inside the content panel — so page content never scrolls
+      under a button — and the buttons themselves sit bare on the panel, as
+      T3Code's workspace controls do.
+    */
+    <div className="relative z-20 flex h-[var(--kb-topbar-height)] w-full shrink-0 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-5">
+      {/*
+        T3Code's breadcrumb, shape for shape: the owning scope leads in muted
+        text, a 40%-opacity `/` separates, and the current item sits in the
+        foreground weight. It is not an ancestor chain — T3Code has no
+        Breadcrumb component and no deeper trail than these two levels.
+      */}
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
+        <BreadcrumbBook daemonEnabled={daemonEnabled} />
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+          title={t(meta.titleKey as never) /* dynamic key */}
         >
-          <span className="kledger-app-icon size-8 shrink-0">
-            <img
-              src={kLedgerMarkUrl}
-              alt=""
-              aria-hidden="true"
-              className="kledger-app-icon__mark"
-            />
-          </span>
-          <span
-            className={cn(
-              "hidden text-sm font-semibold leading-none sm:inline",
-              sidebarCollapsed && "sm:hidden",
-            )}
-          >
-            Kassiber
-          </span>
-        </Link>
-        <SidebarTrigger
-          className={cn(
-            "size-8 shrink-0 rounded-md border border-sidebar-border/70 bg-sidebar-accent/35",
-            topNavIconButtonClassName,
-          )}
-        />
-        <div className="hidden items-center gap-0.5 sm:flex">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={topNavIconButtonClassName}
-            aria-label={t("shell.back")}
-            onClick={() => window.history.back()}
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={topNavIconButtonClassName}
-            aria-label={t("shell.forward")}
-            onClick={() => window.history.forward()}
-          >
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
-        <div className="min-w-0 pl-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="group flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              aria-label={t("shell.switchBooksLabel", { book: bookLabel })}
-              aria-haspopup="dialog"
-              aria-expanded={bookSwitcherOpen}
-              onClick={() => setBookSwitcherOpen(true)}
-            >
-              <span className="truncate text-sm font-semibold text-sidebar-foreground">
-                {bookLabel}
-              </span>
-              <ChevronsUpDown
-                className="hidden size-3.5 shrink-0 text-sidebar-foreground/55 transition-colors group-hover:text-sidebar-foreground/80 sm:block"
-                aria-hidden="true"
-              />
-            </Button>
-            <span className="hidden text-sidebar-foreground/35 xl:inline">
-              /
-            </span>
-            <span className="hidden truncate text-sm text-sidebar-foreground/65 xl:inline">
-              {t(meta.titleKey as never) /* dynamic key */}
-            </span>
-          </div>
-        </div>
+          {t(meta.titleKey as never) /* dynamic key */}
+        </span>
       </div>
-      <BookSwitcherPopover
-        open={bookSwitcherOpen}
-        onClose={() => setBookSwitcherOpen(false)}
-      />
-
-      <div
-        ref={searchRootRef}
-        className="relative w-full min-w-0"
-        onBlur={(event) => {
-          if (
-            event.relatedTarget instanceof Node &&
-            searchRootRef.current?.contains(event.relatedTarget)
-          ) {
-            return;
-          }
-          setSearchOpen(false);
-        }}
-      >
-          <Search
-            className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/55"
-            aria-hidden="true"
-          />
-          <Input
-            ref={searchInputRef}
-            type="search"
-            name="header-search"
-            inputMode="search"
-            autoComplete="off"
-            aria-label={t(`${meta.searchKey}.label` as never) /* dynamic key */}
-            aria-expanded={searchOpen}
-            aria-controls={searchListId}
-            aria-activedescendant={searchActiveId}
-            placeholder={t(`${meta.searchKey}.placeholder` as never) /* dynamic key */}
-            value={searchQuery}
-            onChange={(event) => {
-              setSearchQuery(event.target.value);
-              setSearchOpen(true);
-            }}
-            onFocus={() => setSearchOpen(true)}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setSearchOpen(true);
-                setActiveSearchIndex((current) =>
-                  nextSearchIndex(current, 1, searchResults.length),
-                );
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setSearchOpen(true);
-                setActiveSearchIndex((current) =>
-                  nextSearchIndex(current, -1, searchResults.length),
-                );
-              } else if (event.key === "Enter") {
-                event.preventDefault();
-                activateSearchResult(
-                  searchResultForActivation(searchResults, activeSearchIndex) ??
-                    undefined,
-                );
-              } else if (event.key === "Escape") {
-                setSearchOpen(false);
-                searchInputRef.current?.blur();
-              }
-            }}
-            className="h-8 w-full border-sidebar-border/75 bg-background/10 pr-14 pl-9 text-sm text-sidebar-foreground shadow-none placeholder:text-sidebar-foreground/50 focus-visible:bg-background focus-visible:text-foreground focus-visible:placeholder:text-muted-foreground"
-          />
-          <kbd className="pointer-events-none absolute top-1/2 right-2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded-md border border-sidebar-border bg-sidebar-accent px-1.5 font-mono text-[11px] font-semibold leading-none text-sidebar-foreground shadow-sm md:inline-flex">
-            {"\u2318"}
-            {"\u00a0"}K
-          </kbd>
-          {searchOpen && searchQuery.trim() && (
-            <div
-              id={searchListId}
-              role="listbox"
-              className="absolute top-11 right-0 left-0 z-30 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"
-            >
-              {searchResults.length > 0 ? (
-                searchResults.map((result, index) => {
-                  const active = index === activeSearchIndex;
-                  const itemId = `search-result-${result.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-                  const ResultIcon = searchResultIcon(result);
-                  const activatable = isSearchResultActivatable(result);
-                  return (
-                    <button
-                      key={result.id}
-                      id={itemId}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      aria-disabled={!activatable}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        activateSearchResult(result);
-                      }}
-                      onMouseEnter={() => setActiveSearchIndex(index)}
-                      className={cn(
-                        "grid w-full grid-cols-[auto_minmax(0,1fr)] gap-2 rounded-sm px-3 py-2 text-left text-sm",
-                        active ? "bg-accent text-accent-foreground" : "",
-                      )}
-                    >
-                      <span className="mt-0.5 flex size-7 items-center justify-center rounded-md border bg-background text-muted-foreground">
-                        <ResultIcon className="size-3.5" aria-hidden="true" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate font-medium">
-                            {result.title}
-                          </span>
-                          <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            {t(
-                              `search.category.${SEARCH_CATEGORY_LABEL_KEYS[result.category]}` as never, // dynamic key
-                            )}
-                          </span>
-                        </span>
-                        {result.subtitle ? (
-                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                            {result.subtitle}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="px-3 py-2 text-sm text-muted-foreground">
-                  {t("shell.searchNoMatches")}
-                </div>
-              )}
-            </div>
-          )}
-      </div>
-      <div className="flex min-w-0 items-center justify-end gap-2">
+      <div className="flex shrink-0 items-center gap-0.5 pl-2">
         {/* Split control: primary click runs an incremental book refresh; the
             caret opens the other "bring the book current" actions. The book
             refresh already chains source sync + auto-pair + journals, so this
@@ -2962,7 +2870,7 @@ function AppDashboardHeader({
             type="button"
             variant="ghost"
             size="icon"
-            className={cn(topNavIconButtonClassName, "rounded-r-none")}
+            className={cn(shellIconButtonClassName, "rounded-r-none")}
             aria-label={t("shell.refresh")}
             title={t("shell.refreshTitle")}
             onClick={() => onRefresh()}
@@ -2982,8 +2890,16 @@ function AppDashboardHeader({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  topNavIconButtonClassName,
-                  "w-5 rounded-l-none border-l border-sidebar-border/60",
+                  shellIconButtonClassName,
+                  // `border-l-*` (border-left-COLOR), not `border border-*`:
+                  // the shared recipe already carries `border border-transparent`
+                  // for layout, and a plain `border-border/60` sits in the same
+                  // tailwind-merge group as `border-transparent`, so it replaces
+                  // it and paints all four sides — which is what made this caret
+                  // read as an outlined box next to its borderless neighbours.
+                  // Colouring only the left edge keeps the pair reading as one
+                  // split control without adding chrome the others lack.
+                  "w-5 rounded-l-none border-l-border/60",
                 )}
                 aria-label={t("shell.refreshMenu.options")}
                 title={t("shell.refreshMenu.options")}
@@ -3017,7 +2933,7 @@ function AppDashboardHeader({
               size="icon"
               className={cn(
                 "relative",
-                topNavIconButtonClassName,
+                shellIconButtonClassName,
                 notificationAlertClassName,
               )}
               aria-label={notificationLabel}
@@ -3063,7 +2979,7 @@ function AppDashboardHeader({
               return (
                 <div key={item.id} className="px-1 py-1">
                   <DropdownMenuItem
-                    className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
+                    className="flex cursor-pointer items-start justify-between gap-3 rounded-md whitespace-normal"
                     onSelect={(event) => {
                       // An in-progress book refresh minimized via "Continue in
                       // background" re-opens the full-screen sync card (rather than
@@ -3148,11 +3064,10 @@ function AppDashboardHeader({
         <Button
           variant="ghost"
           size="icon"
-          className={
-            hideSensitive
-              ? "size-8 bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
-              : topNavIconButtonClassName
-          }
+          className={cn(
+            shellIconButtonClassName,
+            hideSensitive && "bg-accent [&>svg]:text-foreground",
+          )}
           aria-label={hideSensitive ? t("sensitive.show") : t("sensitive.hide")}
           aria-pressed={hideSensitive}
           title={hideSensitive ? t("sensitive.show") : t("sensitive.hide")}
@@ -3168,7 +3083,7 @@ function AppDashboardHeader({
         <Button
           variant="ghost"
           size="icon"
-          className={topNavIconButtonClassName}
+          className={shellIconButtonClassName}
           aria-label={t("shell.lockKassiber")}
           title={t("shell.lockKassiberTitle")}
           onClick={onLock}
@@ -3176,7 +3091,7 @@ function AppDashboardHeader({
           <LockKeyhole className="size-4" aria-hidden="true" />
         </Button>
       </div>
-    </header>
+    </div>
   );
 }
 
@@ -3192,7 +3107,7 @@ function ThemeMenu() {
         <Button
           variant="ghost"
           size="icon"
-          className={topNavIconButtonClassName}
+          className={shellIconButtonClassName}
           aria-label={t("theme.label")}
           title={t("theme.label")}
         >
@@ -3244,7 +3159,7 @@ function CurrencyToggle() {
       type="button"
       variant="ghost"
       size="icon"
-      className={topNavIconButtonClassName}
+      className={shellIconButtonClassName}
       aria-label={t("currencyToggle.label", {
         current: currentLabel,
         next: nextLabel,
