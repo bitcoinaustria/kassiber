@@ -144,37 +144,7 @@ class ProjectOwnerLease:
         handle = _open_owner_lock(lock_path, project.public_id, shared=shared)
         try:
             if not _try_lock_handle(handle, shared=shared):
-                owner = _read_owner_record(handle)
-                owner_kind = owner.get("owner", "unknown")
-                hint = (
-                    "Reuse or close the existing desktop app or preview. "
-                    "A CLI broker can coexist, but a second desktop cannot."
-                    if owner_kind == "desktop"
-                    else (
-                        "Reuse or lock the existing CLI broker, then retry."
-                        if owner_kind == "broker"
-                        else None
-                    )
-                )
-                raise AppError(
-                    (
-                        "another desktop app or preview owns this project"
-                        if owner_kind == "desktop"
-                        else (
-                            "another CLI broker owns this project"
-                            if owner_kind == "broker"
-                            else "another long-lived process owns this project path"
-                        )
-                    ),
-                    code="project_in_use",
-                    hint=hint,
-                    details={
-                        "project": project.public_id,
-                        "owner": owner_kind,
-                        "generation": owner.get("generation"),
-                    },
-                    retryable=True,
-                )
+                raise _project_in_use_error(handle, project)
             if write_record:
                 record = json.dumps(
                     {
@@ -305,6 +275,47 @@ def acquire_project_ownership(
     except Exception:
         lease.release()
         raise
+
+
+def _project_in_use_error(
+    handle: IO[bytes],
+    project: CanonicalProject,
+) -> AppError:
+    """Describe the conflicting owner well enough to go resolve it.
+
+    The lock record names a process of the same OS user in a 0700 directory,
+    so reporting its pid discloses nothing the principal cannot already read;
+    withholding it only leaves the operator with no way to find the holder.
+    """
+
+    owner = _read_owner_record(handle)
+    owner_kind = owner.get("owner", "unknown")
+    pid = owner.get("pid")
+    held_by = f" It is held by pid {pid}." if isinstance(pid, int) else ""
+    if owner_kind == "desktop":
+        message = "another desktop app or preview owns this project"
+        hint = (
+            f"Reuse or close the existing desktop app or preview.{held_by} "
+            "A CLI broker can coexist, but a second desktop cannot."
+        )
+    elif owner_kind == "broker":
+        message = "another CLI broker owns this project"
+        hint = f"Reuse or lock the existing CLI broker, then retry.{held_by}"
+    else:
+        message = "another long-lived process owns this project path"
+        hint = held_by.strip() or None
+    return AppError(
+        message,
+        code="project_in_use",
+        hint=hint,
+        details={
+            "project": project.public_id,
+            "owner": owner_kind,
+            "generation": owner.get("generation"),
+            "pid": pid,
+        },
+        retryable=True,
+    )
 
 
 def _owner_kind_lock_path(lock_path: Path, owner_kind: str) -> Path:
@@ -722,8 +733,11 @@ def _read_owner_record(handle: IO[bytes]) -> dict[str, object]:
     owner = payload.get("owner")
     generation = payload.get("generation")
     identity = payload.get("identity")
+    pid = payload.get("pid")
     return {
         "owner": owner if owner in _OWNER_KINDS else "unknown",
         "generation": generation if isinstance(generation, str) else None,
         "identity": identity if isinstance(identity, str) else None,
+        # bool is an int subclass, so reject it before trusting the pid.
+        "pid": pid if isinstance(pid, int) and not isinstance(pid, bool) else None,
     }
