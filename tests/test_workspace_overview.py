@@ -153,6 +153,7 @@ def _insert_journal_entry(
     quantity_btc: str,
     fiat_value: float,
     occurred_at: str | None = None,
+    entry_type: str = "acquisition",
 ) -> None:
     conn.execute(
         """
@@ -160,7 +161,7 @@ def _insert_journal_entry(
             id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
             occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
             cost_basis, proceeds, gain_loss, created_at
-        ) VALUES(?, ?, ?, ?, ?, NULL, ?, 'acquisition', 'BTC', ?, ?, ?, ?, NULL, 0, ?)
+        ) VALUES(?, ?, ?, ?, ?, NULL, ?, ?, 'BTC', ?, ?, ?, ?, NULL, 0, ?)
         """,
         (
             entry_id,
@@ -169,6 +170,7 @@ def _insert_journal_entry(
             tx_id,
             wallet_id,
             occurred_at or NOW,
+            entry_type,
             btc_to_msat(quantity_btc),
             fiat_value,
             fiat_value,
@@ -176,6 +178,65 @@ def _insert_journal_entry(
             NOW,
         ),
     )
+
+
+def _seed_directional_book(
+    conn: sqlite3.Connection,
+    prefix: str,
+    *,
+    journals: bool,
+) -> None:
+    """One book receiving 1.0 BTC, then sending 0.25 BTC back out."""
+    _insert_workspace(conn, f"{prefix}-ws", "Net Set")
+    _insert_profile(
+        conn,
+        f"{prefix}-pf",
+        f"{prefix}-ws",
+        "Trading",
+        processed=journals,
+        active_transactions=2,
+    )
+    _insert_wallet(
+        conn,
+        f"{prefix}-wal",
+        f"{prefix}-ws",
+        f"{prefix}-pf",
+        "Trading Wallet",
+    )
+    for tx_id, amount_btc, rate, occurred_at, direction in (
+        ("tx-in", "1.0", 50_000, "2026-06-01T08:00:00Z", "inbound"),
+        ("tx-out", "0.25", 60_000, "2026-06-03T08:00:00Z", "outbound"),
+    ):
+        _insert_transaction(
+            conn,
+            f"{prefix}-{tx_id}",
+            f"{prefix}-ws",
+            f"{prefix}-pf",
+            f"{prefix}-wal",
+            amount_btc=amount_btc,
+            fiat_currency="EUR",
+            fiat_rate=rate,
+            occurred_at=occurred_at,
+            direction=direction,
+        )
+    if journals:
+        for entry_id, tx_id, quantity_btc, fiat_value, occurred_at, entry_type in (
+            ("je-in", "tx-in", "1.0", 50_000, "2026-06-01T08:00:00Z", "acquisition"),
+            ("je-out", "tx-out", "-0.25", 15_000, "2026-06-03T08:00:00Z", "disposal"),
+        ):
+            _insert_journal_entry(
+                conn,
+                f"{prefix}-{entry_id}",
+                f"{prefix}-ws",
+                f"{prefix}-pf",
+                f"{prefix}-wal",
+                f"{prefix}-{tx_id}",
+                quantity_btc=quantity_btc,
+                fiat_value=fiat_value,
+                occurred_at=occurred_at,
+                entry_type=entry_type,
+            )
+    conn.commit()
 
 
 def _insert_quarantine(
@@ -290,6 +351,33 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
             {row["profileLabel"] for row in series_by_date["2026-06-02"]["books"]},
             {"Operating", "Personal"},
         )
+
+    def test_outbound_transaction_reduces_rollup_and_portfolio_series(self):
+        conn = self._db()
+        _seed_directional_book(conn, "net", journals=True)
+
+        snapshot = build_workspace_overview_snapshot(conn, {"workspace_id": "net-ws"})
+
+        self.assertAlmostEqual(snapshot["fiat"]["btcBalance"], 0.75)
+        self.assertAlmostEqual(snapshot["fiat"]["eurBalance"], 45_000)
+        self.assertAlmostEqual(snapshot["fiat"]["eurCostBasis"], 35_000)
+        series_by_date = {point["date"]: point for point in snapshot["portfolioSeries"]}
+        self.assertAlmostEqual(series_by_date["2026-06-01"]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(series_by_date["2026-06-03"]["balanceBtc"], 0.75)
+
+    def test_outbound_transaction_reduces_unprocessed_book_rollup(self):
+        # No journals yet, so the rollup is derived straight from transaction
+        # direction rather than from book state.
+        conn = self._db()
+        _seed_directional_book(conn, "raw", journals=False)
+
+        snapshot = build_workspace_overview_snapshot(conn, {"workspace_id": "raw-ws"})
+
+        self.assertAlmostEqual(snapshot["fiat"]["btcBalance"], 0.75)
+        self.assertAlmostEqual(snapshot["fiat"]["eurBalance"], 45_000)
+        series_by_date = {point["date"]: point for point in snapshot["portfolioSeries"]}
+        self.assertAlmostEqual(series_by_date["2026-06-01"]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(series_by_date["2026-06-03"]["balanceBtc"], 0.75)
 
     def test_mixed_currency_rollup_is_partial_and_keeps_per_book_rows(self):
         conn = self._db()
