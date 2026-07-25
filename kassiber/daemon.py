@@ -5197,14 +5197,19 @@ def _review_worklist_payload(
 
         sections["loans"] = safe_section(loan_section)
     if "commercial" in categories:
+        # Read the pending suggestions; never call the suggest route from here.
+        # `ui.btcpay.provenance.suggest` upserts link rows and commits, so
+        # building a read-only worklist through it wrote to the book without a
+        # consent prompt. The source_funds section below reads its coverage
+        # route for the same reason.
         sections["commercial"] = safe_section(
             lambda: _redact_evidence_payload_for_ai(
                 _ui_commercial_payload_from_conn(
                     conn,
                     runtime.runtime_config,
                     runtime.data_root,
-                    "ui.btcpay.provenance.suggest",
-                    {"limit": limit},
+                    "ui.btcpay.provenance.links",
+                    {"state": "suggested", "limit": limit},
                 )
             )
         )

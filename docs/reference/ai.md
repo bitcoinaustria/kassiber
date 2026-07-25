@@ -767,6 +767,11 @@ Loan review writes (`ui_loans_mark`, `ui_loans_link`, `ui_loans_unmark`) are
 also consent-gated and invalidate journals. Open-lock heuristics never create
 marks automatically.
 
+Suggestion seeding (`ui_btcpay_provenance_suggest`, `ui_source_funds_suggest`)
+is consent-gated too: both upsert unreviewed link rows and commit, so neither
+counts as a read. `ui_review_worklist` stays read-only by listing pending
+suggestions through `ui.btcpay.provenance.links` instead of seeding new ones.
+
 The daemon freezes the project/database and active workspace/profile ids when
 the chat starts. Every read and approved mutation rechecks that scope on the
 main SQLite thread immediately before execution. If the user switches projects
