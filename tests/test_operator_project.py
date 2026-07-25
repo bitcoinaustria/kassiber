@@ -738,6 +738,10 @@ class OperatorProjectTest(unittest.TestCase):
                 owner.release()
 
 
+    @unittest.skipIf(
+        os.name == "nt",
+        "Windows refuses the open itself, so no owner record is read",
+    )
     def test_conflict_names_the_holding_process(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
