@@ -250,9 +250,11 @@ OpenCode model IDs identify their source provider (`omlx/...`, `ollama/...`,
 for locally served models — so the route is judged by that source provider's
 resolved endpoint from `opencode debug config`, reading
 `provider.<id>.options.baseURL` and nothing else (the same options block can
-hold an `apiKey`, which never leaves the broker). A loopback endpoint
-(`127.0.0.0/8`, `localhost`, `::1`) is labelled local, because the model cannot
-leave the machine. Everything else stays remote, including LAN addresses and
+hold an `apiKey`, which never leaves the broker). A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
+address, `localhost`, `::1`) is labelled local, because the model cannot leave
+the machine. A loopback address that fronts a reverse proxy is the known
+limit of this check: it reports local while the proxy may forward inference
+off-machine. Everything else stays remote, including LAN addresses and
 any provider for which OpenCode reports no endpoint. The posture is proven from
 configuration, never guessed from a provider's name.
 

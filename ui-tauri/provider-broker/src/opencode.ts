@@ -9,7 +9,12 @@ import {
   runProvider,
 } from "./executables.js";
 import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages } from "./prompt.js";
-import { providerStatus, safeErrorMessage, writeEvent } from "./protocol.js";
+import {
+  providerStatus,
+  safeErrorMessage,
+  safeSessionCursor,
+  writeEvent,
+} from "./protocol.js";
 
 export const DENY_ALL = [{ permission: "*", pattern: "*", action: "deny" as const }];
 export const DISABLED_TOOLS = Object.fromEntries(
@@ -56,7 +61,10 @@ async function startServer(executable: string, cwd: string): Promise<{
   const port = await availablePort();
   const child = spawn(
     executable,
-    ["serve", "--hostname=127.0.0.1", `--port=${String(port)}`],
+    // --pure: global plugins otherwise execute outside the session's DENY_ALL
+    // permission set, with the full provider environment, before any session
+    // permission applies.
+    ["serve", "--pure", "--hostname=127.0.0.1", `--port=${String(port)}`],
     { cwd, env: providerEnvironment("opencode"), stdio: ["pipe", "pipe", "pipe"] },
   );
   const ready = new Promise<void>((resolve, reject) => {
@@ -97,12 +105,15 @@ export function isLoopbackEndpoint(baseUrl: string): boolean {
   }
   // URL() keeps IPv6 hosts in brackets.
   const bare = host.replace(/^\[|\]$/g, "");
-  return (
-    bare === "localhost" ||
-    bare.endsWith(".localhost") ||
-    bare === "::1" ||
-    /^127\./.test(bare)
-  );
+  if (bare === "localhost" || bare.endsWith(".localhost")) return true;
+  if (bare === "::1") return true;
+  // 127.0.0.0/8, matched as a literal IPv4 address. A prefix test like /^127\./
+  // also accepts hostnames such as `127.api.example.com`, which resolve
+  // publicly — that would badge a remote model as local.
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(bare);
+  if (!ipv4) return false;
+  const octets = ipv4.slice(1).map(Number);
+  return octets.every((octet) => octet <= 255) && octets[0] === 127;
 }
 
 /**
@@ -188,7 +199,10 @@ export function parseOpenCodeModels(
     jsonLines = [];
   };
   for (const line of lines) {
-    if (/^[^\s/]+\/[^\s/]+$/.test(line)) {
+    // A provider segment plus an arbitrary remainder: namespaced ids such as
+    // `openrouter/anthropic/claude-x` are valid and must not be dropped, which
+    // would silently empty the inventory and read as "authentication required".
+    if (/^[^\s/]+\/[^\s]+$/.test(line)) {
       flush();
       id = line;
     } else if (id) {
@@ -246,7 +260,7 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
       directory: cwd,
       throwOnError: true,
     });
-    const resumeId = request.options?.provider_session_id;
+    const resumeId = safeSessionCursor(request.options?.provider_session_id);
     let session: { id: string } | undefined;
     let resumed = false;
     if (resumeId) {

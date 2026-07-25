@@ -1,7 +1,12 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
-import { providerStatus, safeErrorMessage, writeEvent } from "./protocol.js";
+import {
+  providerStatus,
+  safeErrorMessage,
+  safeSessionCursor,
+  writeEvent,
+} from "./protocol.js";
 import { providerEnvironment, resolveExecutable } from "./executables.js";
 import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages } from "./prompt.js";
 
@@ -201,7 +206,7 @@ export async function codexChat(request: ChatRequest, cwd: string): Promise<void
         multi_agent_mode: "explicitRequestOnly",
       },
     };
-    const resumeId = request.options?.provider_session_id;
+    const resumeId = safeSessionCursor(request.options?.provider_session_id);
     let opened: { thread: { id: string } };
     let resumed = false;
     try {

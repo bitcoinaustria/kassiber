@@ -7,7 +7,12 @@ import {
   runProvider,
 } from "./executables.js";
 import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages } from "./prompt.js";
-import { providerStatus, safeErrorMessage, writeEvent } from "./protocol.js";
+import {
+  providerStatus,
+  safeErrorMessage,
+  safeSessionCursor,
+  writeEvent,
+} from "./protocol.js";
 
 /**
  * The Claude CLI has no model-enumeration command, so this list is maintained
@@ -139,7 +144,7 @@ type ClaudeStreamLine = {
  *   --strict-mcp-config with no --mcp-config, loads no MCP servers
  *   --permission-mode   dontAsk, so nothing escalates by prompting
  *   --disallowed-tools  the file/exec/network tools by name
- *   --setting-sources   user only, no project or local settings
+ *   --safe-mode         no hooks, plugins, skills, MCP or custom agents
  * and the reader below still hard-fails on any `tool_use` block that appears.
  *
  * ponytail: `--bare` would also drop hooks/LSP/plugins, but it silently
@@ -155,8 +160,11 @@ function chatArgs(request: ChatRequest): string[] {
     // stream-json refuses to emit under --print without --verbose.
     "--verbose",
     "--include-partial-messages",
-    "--setting-sources",
-    "user",
+    // Customizations are arbitrary local code that runs before any tool_use
+    // block exists: a SessionStart hook alone can read or write the disk. Safe
+    // mode disables hooks, plugins, skills, MCP servers, custom commands and
+    // agents. Unlike --bare it keeps stream_event output, so streaming survives.
+    "--safe-mode",
     "--strict-mcp-config",
     "--permission-mode",
     "dontAsk",
@@ -164,8 +172,10 @@ function chatArgs(request: ChatRequest): string[] {
     CHAT_ONLY_INSTRUCTIONS,
   ];
   if (request.model !== "default") args.push("--model", request.model);
-  const sessionId = request.options?.provider_session_id;
-  if (sessionId) args.push("--resume", sessionId);
+  const sessionId = safeSessionCursor(request.options?.provider_session_id);
+  // `--resume=<id>`, never `--resume <id>`: the attached form cannot be
+  // reinterpreted as a separate flag even if validation is ever loosened.
+  if (sessionId) args.push(`--resume=${sessionId}`);
   const effort = request.options?.reasoning_effort;
   if (effort && effort !== "auto") args.push("--effort", effort);
   // Variadic, so it goes last: the CLI consumes tool names until the next flag.
@@ -176,7 +186,7 @@ function chatArgs(request: ChatRequest): string[] {
 export async function claudeChat(request: ChatRequest, cwd: string): Promise<void> {
   const executable = await resolveExecutable("claude");
   if (!executable) throw new Error("Claude is not installed.");
-  const resumed = Boolean(request.options?.provider_session_id);
+  const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
 
   const child = spawn(executable, chatArgs(request), {
     cwd,

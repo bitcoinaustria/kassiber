@@ -81,10 +81,16 @@ export function providerEnvironment(provider: ProviderId): NodeJS.ProcessEnv {
     "TMPDIR",
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",
+    // Both cases: curl/Go/Python honour the lowercase spellings, and dropping
+    // them makes every provider look offline for users who set only those.
     "HTTP_PROXY",
     "HTTPS_PROXY",
     "ALL_PROXY",
     "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
   ]);
   const providerPrefixes: string[] = [];
   if (provider === "codex" || provider === "opencode") {

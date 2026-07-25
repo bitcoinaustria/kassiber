@@ -17,7 +17,11 @@ import {
   parseOpenCodeModels,
 } from "./opencode.js";
 import { promptFromMessages } from "./prompt.js";
-import { providerStatus, safeErrorMessage } from "./protocol.js";
+import {
+  providerStatus,
+  safeErrorMessage,
+  safeSessionCursor,
+} from "./protocol.js";
 import { withWorkingDirectory } from "./working-directory.js";
 
 const roots: string[] = [];
@@ -196,5 +200,59 @@ describe("provider broker safety boundary", () => {
     ]) {
       expect(isLoopbackEndpoint(url)).toBe(false);
     }
+  });
+
+  it("refuses a session cursor that could be read as a CLI flag", () => {
+    // These cursors are echoed back from a prior turn and handed to a CLI, so a
+    // value starting with `-` would become a new top-level flag.
+    for (const hostile of [
+      "--dangerously-skip-permissions",
+      "-r",
+      "--mcp-config=/tmp/evil.json",
+      "--debug-file=/tmp/x",
+      "id with space",
+      "id;rm -rf /",
+      "",
+      "  ",
+      "a".repeat(201),
+      null,
+      42,
+    ]) {
+      expect(safeSessionCursor(hostile)).toBeUndefined();
+    }
+    expect(safeSessionCursor("3146c223-ddaa-4e7a-b1ed-6940080a5a26")).toBe(
+      "3146c223-ddaa-4e7a-b1ed-6940080a5a26",
+    );
+    expect(safeSessionCursor("  ses_01ABC.def:ghi-jkl  ")).toBe("ses_01ABC.def:ghi-jkl");
+  });
+
+  it("redacts the secret itself, not merely its label", () => {
+    const cases: Array<[string, string[]]> = [
+      ["authorization: Bearer sk-secret-123", ["sk-secret-123"]],
+      ['{"apiKey":"sk-live-abcdefgh"}', ["sk-live-abcdefgh"]],
+      ["connect https://user:pa55word@example.com/v1 failed", ["pa55word"]],
+      ["token=ghp_abcdefghijklmnop rejected", ["ghp_abcdefghijklmnop"]],
+      ["cannot read /Users/alice/.config/opencode/auth.json", ["alice"]],
+    ];
+    for (const [input, secrets] of cases) {
+      const safe = safeErrorMessage(new Error(input));
+      for (const secret of secrets) expect(safe).not.toContain(secret);
+    }
+  });
+
+  it("treats a 127-prefixed hostname as remote, not loopback", () => {
+    // A prefix test on "127." also matches names that resolve publicly.
+    expect(isLoopbackEndpoint("http://127.api.example.com/v1")).toBe(false);
+    expect(isLoopbackEndpoint("http://127.0.0.1.example.com/v1")).toBe(false);
+    expect(isLoopbackEndpoint("http://127.999.0.1/v1")).toBe(false);
+    expect(isLoopbackEndpoint("http://127.0.0.1:8000/v1")).toBe(true);
+  });
+
+  it("keeps namespaced OpenCode model ids", () => {
+    const models = parseOpenCodeModels("openrouter/anthropic/claude-x\n");
+    expect(models.map((model) => model.id)).toEqual([
+      "openrouter/anthropic/claude-x",
+    ]);
+    expect(models[0]?.source_provider).toBe("openrouter");
   });
 });
