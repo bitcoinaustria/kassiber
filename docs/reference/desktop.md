@@ -64,6 +64,16 @@ because that cache is keyed by inode. That cost 6s of off-CPU work before the
 daemon answered, on every cold start; a stable path inside the bundle brings it
 to 0.19s. Linux and Windows have no equivalent per-inode cost.
 
+Every packaged artifact is built against uv's own managed CPython — the
+prerelease workflow pins `UV_PYTHON`/`UV_PYTHON_PREFERENCE`, and
+`scripts/build-macos-arm64-app.sh` passes `--python`. Keeping both on the same
+interpreter is what makes a locally verified build and the published one the
+same shape; that divergence is why this cold-start bug never reproduced
+locally. `actions/setup-python` ships a macOS *framework* CPython whose stdlib
+extension modules are 58 separate `.so` files, where the managed build links
+them into `libpython3.11.dylib`: 115 bundled dylibs against 57, each validated
+separately, plus symlinks inside the one-dir tree that Tauri cannot copy.
+
 At runtime the supervisor prefers `KASSIBER_PYTHON` when it is explicitly set,
 then the bundled sidecar from the app resources (one-dir candidate first), then
 the development Python fallback above. The same `KASSIBER_PYTHON` override

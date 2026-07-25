@@ -86,13 +86,9 @@ jobs:
     name: Build ${{ matrix.label }} CLI
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # Build every packaged artifact against uv's own managed CPython, the same
-    # interpreter scripts/build-macos-arm64-app.sh uses, so a locally verified
-    # build and the published one are the same shape. `actions/setup-python`
-    # ships a macOS *framework* build whose stdlib extension modules are 58
-    # separate `.so` files, where the managed build links them into
-    # `libpython3.11.dylib` — 115 bundled dylibs against 57. `only-managed`
-    # keeps a runner-provided 3.11 from being picked up instead.
+    # Same managed CPython as scripts/build-macos-arm64-app.sh, so a locally
+    # verified build and the published one match; see docs/reference/desktop.md.
+    # `only-managed` keeps a runner-provided 3.11 from winning instead.
     env:
       UV_PYTHON: "3.11"
       UV_PYTHON_PREFERENCE: only-managed
@@ -258,14 +254,8 @@ jobs:
             --name kassiber \
             "${pyinstaller_args[@]}"
 
-          # The macOS desktop sidecar is one-*dir*. A one-file sidecar unpacks
-          # ~170 MB into a fresh temp directory on every launch, and macOS
-          # re-validates the code signature of every bundled dylib from scratch
-          # each time because that cache is keyed by inode — ~6s of off-CPU work
-          # before the daemon answers, on every cold start. Shipping the
-          # unpacked tree at a stable path inside the .app lets the cache hit:
-          # measured 6.0s -> 0.19s to `daemon.ready`. Linux and Windows have no
-          # equivalent per-inode cost and keep reusing the one-file CLI.
+          # The macOS desktop sidecar is one-*dir*: cold-start fix, see
+          # docs/reference/desktop.md. Linux and Windows reuse the one-file CLI.
           if [ "$RUNNER_OS" = "macOS" ]; then
             uv run --locked --with pyinstaller==6.20.0 pyinstaller \
               --onedir \
@@ -276,10 +266,10 @@ jobs:
             sidecar_dir="sidecar-dist/kassiber-cli-${{ matrix.triple }}"
             test -x "$sidecar_dir/kassiber-cli-${{ matrix.triple }}"
             test -d "$sidecar_dir/_internal"
-            # Tauri copies resource directories file by file and skips symlinks,
-            # so a symlinked payload would arrive in the bundle broken. A
-            # framework-shaped CPython emits them (Versions/Current and
-            # friends), which is one reason this job pins uv's managed build.
+            # Tauri skips symlinks when copying resource directories, so a
+            # symlinked payload would arrive in the bundle broken. Named, not
+            # just counted: as a bare `test` this failed with nothing but
+            # "exit code 1".
             symlinks="$(find "$sidecar_dir" -type l)"
             if [ -n "$symlinks" ]; then
               echo "Sidecar tree contains symlinks Tauri will not bundle intact:" >&2
@@ -305,9 +295,8 @@ jobs:
             file="$1"
             path="$2"
             expected="$3"
-            # `uv run python`, not a bare `python`: no runner-provided
-            # interpreter is on PATH under every OS in this matrix now that the
-            # job builds against uv's managed CPython.
+            # `uv run python`, not bare `python`: no runner-provided interpreter
+            # is on PATH under every OS in this matrix.
             if ! uv run --locked python -c 'import json, sys; from functools import reduce; value = reduce(lambda current, key: current[key], sys.argv[2].split("."), json.load(open(sys.argv[1], encoding="utf-8"))); assert value == sys.argv[3], f"{sys.argv[2]}: expected {sys.argv[3]!r}, got {value!r}"' "$file" "$path" "$expected"; then
               cat "$file" >&2
               return 1
@@ -500,9 +489,9 @@ jobs:
             release/*.rpm
           if-no-files-found: error
 
-      # macOS stages the one-dir tree under `kassiber-cli/`; the other platforms
-      # stage the identical one-file CLI flat, as before. Both layouts are what
-      # `bundled_sidecar` in ui-tauri/src-tauri/src/supervisor.rs looks for.
+      # macOS stages the one-dir tree under `kassiber-cli/`; the others stage the
+      # identical one-file CLI flat. Both layouts are what `bundled_sidecar` in
+      # ui-tauri/src-tauri/src/supervisor.rs looks for.
       - name: Stage desktop sidecar
         shell: bash
         run: |
@@ -612,29 +601,24 @@ jobs:
           path: ui-tauri/src-tauri/binaries
           merge-multiple: true
 
-      # upload-artifact does not preserve the executable bit, so both branches
-      # restore it before Tauri copies the sidecar into the bundle.
+      # upload-artifact does not preserve the executable bit, so restore it
+      # before Tauri copies the sidecar into the bundle. macOS looks one level
+      # deeper: the one-dir tree lands under `binaries/kassiber-cli/`.
       - name: Verify desktop CLI sidecar inputs
         shell: bash
         run: |
           set -euo pipefail
+          root=ui-tauri/src-tauri/binaries
           if [ "$RUNNER_OS" = "macOS" ]; then
-            # Asserted, not probed: if the artifact layout ever flattens, the
-            # bootloader would lose track of `_internal` and the app would fail
-            # at runtime instead of here.
-            onedir="ui-tauri/src-tauri/binaries/kassiber-cli"
-            test -d "$onedir"
-            test -d "$onedir/_internal"
-            count="$(find "$onedir" -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
-            test "$count" = "${{ matrix.sidecar_expected }}"
-            find "$onedir" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
-            find "$onedir" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec {} --version \;
-          else
-            count="$(find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
-            test "$count" = "${{ matrix.sidecar_expected }}"
-            find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
-            find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -print
+            root=$root/kassiber-cli
+            # A flattened artifact would strand the bootloader from its
+            # `_internal` at runtime instead of failing the build here.
+            test -d "$root/_internal"
           fi
+          count="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
+          test "$count" = "${{ matrix.sidecar_expected }}"
+          find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
+          find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' -print
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
