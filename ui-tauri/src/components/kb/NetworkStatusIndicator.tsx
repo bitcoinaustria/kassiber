@@ -315,6 +315,10 @@ function connectionDotClassName(
   }
 }
 
+// Tone-coded, and deliberately bordered/filled: unlike its neighbours in the
+// floating control strip, this button encodes state, so the box IS the signal.
+// The fills read from `accent`, not `sidebar-accent` — the strip floats over the
+// content panel now, not over the nav.
 function connectionIndicatorClassName(tone: ConnectionIndicatorTone) {
   switch (tone) {
     case "error":
@@ -322,10 +326,10 @@ function connectionIndicatorClassName(tone: ConnectionIndicatorTone) {
     case "warning":
       return "border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300";
     case "online":
-      return "border-emerald-500/20 bg-sidebar-accent/30 text-emerald-700 hover:bg-sidebar-accent/60 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300";
+      return "border-emerald-500/20 bg-accent/40 text-emerald-700 hover:bg-accent/70 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300";
     case "neutral":
     default:
-      return "border-border bg-sidebar-accent/20 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground";
+      return "border-border bg-accent/30 text-muted-foreground hover:bg-accent/60 hover:text-foreground";
   }
 }
 

@@ -3,9 +3,15 @@
  *
  * Most controls are local UI state until the daemon-backed settings surface
  * lands. Hide-sensitive data is wired to the shared UI store.
+ *
+ * Each settings category is its own route (`/settings/<slug>`); this component
+ * renders exactly the panel named by `sectionId`. Navigation lives in the side
+ * nav (see `SettingsSidebarNav`), so there is no in-page rail — but the shared
+ * daemon queries, dialogs, and handlers all stay here, which is why switching
+ * category re-mounts one component rather than swapping twelve route modules.
  */
 import * as React from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -44,8 +50,10 @@ import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
 import { databasePassphraseHint } from "@/components/kb/Onboarding/constants";
 import {
+  DEFAULT_SETTINGS_SECTION_ID,
   PENDING_SETTINGS_BACKEND_EDIT_KEY,
   settingsSectionForHash,
+  settingsSectionRoutePath,
   type SettingsSectionId,
 } from "./settingsSections";
 import { AppearanceSettingsPanel } from "./settings/AppearanceSettingsPanel";
@@ -60,12 +68,11 @@ import { PrivacySettingsPanel } from "./settings/PrivacySettingsPanel";
 import { SecuritySettingsPanel } from "./settings/SecuritySettingsPanel";
 import { SyncSettingsPanel } from "./settings/SyncSettingsPanel";
 import { TerminalCommandSettingsPanel } from "./settings/TerminalCommandSettingsPanel";
-import { DEFAULT_SETTINGS_SECTION, SettingsRail, sectionMeta } from "./settings/SettingsNavigation";
+import { sectionMeta } from "./settings/SettingsNavigation";
 import {
   PLAINTEXT_DELETE_ACK,
   backendPayload,
   backendRowToSettingsBackend,
-  backendsForLayer,
   deriveExplorerSettings,
   formatCount,
   marketRateBackends,
@@ -89,9 +96,14 @@ type ChangePassphraseData = {
 
 interface SettingsScreenProps {
   onLock?: () => void;
+  /** Category to render; supplied by the `/settings/<slug>` route. */
+  sectionId?: SettingsSectionId;
 }
 
-export function SettingsScreen({ onLock }: SettingsScreenProps) {
+export function SettingsScreen({
+  onLock,
+  sectionId = DEFAULT_SETTINGS_SECTION_ID,
+}: SettingsScreenProps) {
   const { t } = useTranslation(["settings", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
@@ -141,11 +153,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     (s) => s.clearDeferredConnectionSetup,
   );
   const navigate = useNavigate();
-  const settingsHash = useRouterState({ select: (s) => s.location.hash });
-  const routeSectionId = React.useMemo(
-    () => settingsSectionForHash(settingsHash),
-    [settingsHash],
-  );
   const statusQuery = useDaemon<StatusData>("status", undefined, {
     enabled: true,
   });
@@ -243,9 +250,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   >(null);
   const [terminalCommandPending, setTerminalCommandPending] =
     React.useState(false);
-  const [activeSectionId, setActiveSectionId] = React.useState<SettingsSectionId>(
-    () => routeSectionId ?? DEFAULT_SETTINGS_SECTION,
-  );
   const [pendingBackendEditId, setPendingBackendEditId] = React.useState<
     string | null
   >(() =>
@@ -357,9 +361,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setAppLockPolicy({ touchIdUnlock: false });
   }, [appLockPolicy.touchIdUnlock, setAppLockPolicy, touchIdStatus?.configured]);
 
-  React.useEffect(() => {
-    setActiveSectionId(routeSectionId ?? DEFAULT_SETTINGS_SECTION);
-  }, [routeSectionId]);
+  const goToSection = React.useCallback(
+    (id: SettingsSectionId) => {
+      void navigate({ to: settingsSectionRoutePath(id) });
+    },
+    [navigate],
+  );
 
   const refreshTerminalCommandStatus = React.useCallback(async () => {
     try {
@@ -381,10 +388,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     void refreshTerminalCommandStatus();
   }, [refreshTerminalCommandStatus]);
 
-  // Native menu may re-fire for the same section while the URL hash is
-  // unchanged (user already on /settings#privacy, clicks Privacy again after
-  // closing the panel). The hash effect won't see a diff, so listen for an
-  // explicit `kassiber:settings-section` event and force re-selection.
+  // The native menu and deep links still speak in section slugs, and may
+  // re-fire for the section already on screen. Translate the slug to its route
+  // (a no-op navigate when it matches) and pick up any backend to open.
   React.useEffect(() => {
     const handler = (event: Event) => {
       const detail = (
@@ -394,7 +400,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         }>
       ).detail;
       const next = settingsSectionForHash(detail?.section ?? "");
-      if (next) setActiveSectionId(next);
+      if (next) goToSection(next);
       if (detail?.backendId) {
         setPendingBackendEditId(detail.backendId);
       }
@@ -403,7 +409,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     return () => {
       window.removeEventListener("kassiber:settings-section", handler);
     };
-  }, []);
+  }, [goToSection]);
 
   const backends = React.useMemo<Backend[]>(() => {
     const syncRows = backendSettingsQuery.data?.data?.backends ?? [];
@@ -551,7 +557,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     }`;
     if (deferredBackendDialogKeyRef.current === key) return;
     deferredBackendDialogKeyRef.current = key;
-    setActiveSectionId(
+    goToSection(
       typeId === "liquid"
         ? "network-liquid"
         : typeId === "coreln" || typeId === "lnd"
@@ -559,7 +565,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           : "network-bitcoin",
     );
     openAddBackend(typeId);
-  }, [deferredConnectionSetup, openAddBackend]);
+  }, [deferredConnectionSetup, goToSection, openAddBackend]);
 
   const onSaveBackend = async (backend: Backend) => {
     const payload = backendPayload(backend);
@@ -688,31 +694,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setTerminalCommandPending(false);
     }
   };
-
-  const goToSection = React.useCallback(
-    (id: SettingsSectionId) => {
-      setActiveSectionId(id);
-      void navigate({
-        to: "/settings",
-        hash: sectionMeta(id).slug,
-        replace: true,
-      });
-    },
-    [navigate],
-  );
-
-  const sectionCounts = React.useMemo<
-    Partial<Record<SettingsSectionId, number>>
-  >(
-    () => ({
-      "network-bitcoin": backendsForLayer(backends, "bitcoin").length,
-      "network-lightning": backendsForLayer(backends, "lightning").length,
-      "network-liquid": backendsForLayer(backends, "liquid").length,
-      "network-market": backends.filter((backend) => backend.net === "FX")
-        .length,
-    }),
-    [backends],
-  );
 
   const onDeleteWorkspace = async () => {
     setDeleteError(null);
@@ -972,9 +953,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     }
   };
 
-  const activeMeta = sectionMeta(activeSectionId);
+  const activeMeta = sectionMeta(sectionId);
   const sectionContent = (() => {
-    switch (activeSectionId) {
+    switch (sectionId) {
       case "general-appearance":
         return (
           <AppearanceSettingsPanel
@@ -1114,16 +1095,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   return (
     <>
       <div className={screenPanelClassName}>
-        <div className="mx-auto flex w-full max-w-[1500px] min-w-0 flex-col gap-5">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {t("page.title")}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {t("page.description")}
-            </p>
-          </div>
-
+        <div className="mx-auto flex w-full max-w-[1100px] min-w-0 flex-col gap-5">
           {deferredConnectionSetup ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
               <span>
@@ -1155,27 +1127,25 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             </div>
           ) : null}
 
-          <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:gap-8">
-            <SettingsRail
-              activeId={activeSectionId}
-              onSelect={goToSection}
-              counts={sectionCounts}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="mb-5 space-y-1 border-b pb-4">
+          <div className="min-w-0">
+            <div className="mb-5 space-y-1 border-b pb-4">
+              {/* dynamic key */}
+              {/* Same label recipe as the side nav's group captions (T3Code's
+                  "Projects" label): plain sentence-case `text-xs font-medium` in
+                  the muted tone, not uppercase mono. */}
+              <p className="text-xs font-medium text-muted-foreground">
+                {t(activeMeta.groupKey as never)}
+              </p>
+              <h1 className="text-2xl font-semibold tracking-tight">
                 {/* dynamic key */}
-                <p className="kb-mono-caption">{t(activeMeta.groupKey as never)}</p>
-                <h2 className="text-lg font-semibold tracking-tight">
-                  {/* dynamic key */}
-                  {t(activeMeta.labelKey as never)}
-                </h2>
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                  {/* dynamic key */}
-                  {t(activeMeta.descriptionKey as never)}
-                </p>
-              </div>
-              {sectionContent}
+                {t(activeMeta.labelKey as never)}
+              </h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                {/* dynamic key */}
+                {t(activeMeta.descriptionKey as never)}
+              </p>
             </div>
+            {sectionContent}
           </div>
         </div>
       </div>

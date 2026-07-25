@@ -755,7 +755,7 @@ export function UtxosInventoryPanel({
   );
 
   return (
-    <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
+    <Card variant="flush">
       <div className="flex flex-col gap-3 border-b bg-muted/[0.08] p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-3.5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/70 text-muted-foreground shadow-sm">

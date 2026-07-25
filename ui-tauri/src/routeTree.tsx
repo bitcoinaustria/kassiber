@@ -18,6 +18,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { RootIntentListener } from "./components/kb/RootIntentListener";
+import { settingsSectionRoute } from "./components/kb/settingsSections";
 import { activateImportProject, canImportProjects } from "./daemon/transport";
 import { useUiStore } from "./store/ui";
 
@@ -300,10 +301,102 @@ const importsRoute = createRoute({
   component: Imports,
 });
 
-const settingsRoute = createRoute({
+/**
+ * Settings is a section of routes, one URL per category, so a category can be
+ * bookmarked, deep-linked, and shown in the side nav as a real link.
+ *
+ * A bare `/settings` visit is never rendered: it redirects to the category its
+ * (legacy) `#hash` names, or to the default category. That keeps every existing
+ * `navigate({ to: "/settings", hash: "market" })` call site working without
+ * change — the hash still selects the panel, it just resolves to a route now.
+ */
+const settingsIndexRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/settings",
-  component: Settings,
+  beforeLoad: ({ location }) => {
+    throw redirect({ to: settingsSectionRoute(location.hash), replace: true });
+  },
+});
+
+/*
+ * The category routes are spelled out one by one rather than generated from
+ * `SETTINGS_SECTION_SLUG`: TanStack Router infers its typed `to` union from
+ * literal `path` strings, and a loop or a path-taking helper widens them to
+ * `string`, which would silently un-type every `<Link to="/settings/…">` in the
+ * app. `SETTINGS_SECTION_ROUTE` is `satisfies`-checked against the same slugs,
+ * so a section added there without a route here fails to compile at its call
+ * sites instead of 404-ing at runtime.
+ */
+const settingsAppearanceRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/appearance",
+  component: () => <Settings section="general-appearance" />,
+});
+
+const settingsMarketRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/market",
+  component: () => <Settings section="network-market" />,
+});
+
+const settingsBitcoinRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/bitcoin",
+  component: () => <Settings section="network-bitcoin" />,
+});
+
+const settingsLightningRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/lightning",
+  component: () => <Settings section="network-lightning" />,
+});
+
+const settingsLiquidRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/liquid",
+  component: () => <Settings section="network-liquid" />,
+});
+
+const settingsPrivacyRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/privacy",
+  component: () => <Settings section="security-privacy" />,
+});
+
+const settingsSecurityRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/security",
+  component: () => <Settings section="security-lock" />,
+});
+
+const settingsAiRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/ai",
+  component: () => <Settings section="assistant-ai" />,
+});
+
+const settingsSyncRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/sync",
+  component: () => <Settings section="data-sync" />,
+});
+
+const settingsDataRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/data",
+  component: () => <Settings section="data-storage" />,
+});
+
+const settingsTerminalRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/terminal",
+  component: () => <Settings section="desktop-terminal" />,
+});
+
+const settingsDeveloperRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings/developer",
+  component: () => <Settings section="desktop-developer" />,
 });
 
 const assistantRoute = createRoute({
@@ -373,7 +466,19 @@ const routeTree = rootRoute.addChildren([
     connectionsRoute,
     connectionDetailRoute,
     importsRoute,
-    settingsRoute,
+    settingsIndexRoute,
+    settingsAppearanceRoute,
+    settingsMarketRoute,
+    settingsBitcoinRoute,
+    settingsLightningRoute,
+    settingsLiquidRoute,
+    settingsPrivacyRoute,
+    settingsSecurityRoute,
+    settingsAiRoute,
+    settingsSyncRoute,
+    settingsDataRoute,
+    settingsTerminalRoute,
+    settingsDeveloperRoute,
     assistantRoute,
   ]),
 ]);

@@ -64,6 +64,33 @@
   --app-auto-scale: 1;
   --app-ui-scale: 0.9;
   /*
+   * Frosted-glass tuning, ported from T3Code. Every frosted surface
+   * (`.kb-glass-*`, the assistant composer) reads these so light and dark keep
+   * one consistent blur/saturation feel instead of hand-tuned per-component
+   * values. Dark mode blurs harder and saturates less — a heavy blur over a
+   * near-black background otherwise reads as flat grey.
+   */
+  --glass-blur: 12px;
+  --glass-opacity: 80%;
+  --glass-saturation: 1.14;
+  /*
+   * Height of the floating control strip above the content panel. The strip
+   * itself is transparent (the buttons float as glass pills); this reserves
+   * its space so page content never slides underneath them.
+   */
+  --kb-topbar-height: 3rem;
+  /*
+   * Side-nav row surfaces, ported from T3Code's sidebar hierarchy. Rows sit on
+   * their own scale rather than reusing `--sidebar-accent` for both hover and
+   * active, so a hovered row and the current page stay distinguishable.
+   * `--sidebar-control-surface` backs inert chrome inside the nav (the ⌘K
+   * hint, count pills).
+   */
+  --sidebar-muted-foreground: oklch(0.47 0 0);
+  --sidebar-control-surface: oklch(0.905 0 0);
+  --sidebar-row-hover: oklch(0.885 0 0 / 55%);
+  --sidebar-row-active: oklch(0.885 0 0);
+  /*
    * Bitcoin Austria brand red, theme-aware. The `@theme inline` block at
    * the bottom remaps --color-accent to shadcn's neutral --accent, which
    * shadows the brand value from the first @theme block at runtime — so
@@ -128,6 +155,15 @@
     margin: 0;
     padding: 0;
     height: 100%;
+    /*
+     * The shell is exactly viewport-height and never scrolls the document, so
+     * any root scrolling is pure macOS rubber-band. That bounce shifts the
+     * statically-positioned alpha banner and the `fixed` nav panel by different
+     * amounts, so the chrome visibly comes apart at the seams when an inner
+     * scroller hits its end and chains upward. Nothing scrolls here by design,
+     * so refusing the bounce costs no behaviour.
+     */
+    overscroll-behavior: none;
   }
   html {
     font-size: calc(16px * var(--app-auto-scale, 1) * var(--app-ui-scale));
@@ -141,14 +177,6 @@
 }
 
 @layer components {
-  .kb-mono-caption {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--color-ink-3);
-  }
-
   .kledger-app-icon {
     position: relative;
     width: var(--icon-size, 128px);
@@ -230,11 +258,12 @@
     border-radius: inherit;
     background: color-mix(
       in srgb,
-      var(--kb-composer-glass-surface) 80%,
+      var(--kb-composer-glass-surface) var(--glass-opacity),
       transparent
     );
-    backdrop-filter: blur(12px) saturate(1.14);
-    -webkit-backdrop-filter: blur(12px) saturate(1.14);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    -webkit-backdrop-filter: blur(var(--glass-blur))
+      saturate(var(--glass-saturation));
   }
 
   .dark .kb-composer-glass {
@@ -244,11 +273,6 @@
       var(--foreground)
     );
     box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
-  }
-
-  .dark .kb-composer-glass::before {
-    backdrop-filter: blur(16px) saturate(1.08);
-    -webkit-backdrop-filter: blur(16px) saturate(1.08);
   }
 
   /* Graceful fallback where backdrop-filter is unsupported: solid surface. */
@@ -315,6 +339,271 @@
       0 18px 48px rgba(0, 0, 0, 0.7),
       0 0 0 1px color-mix(in oklch, var(--primary) 55%, transparent),
       0 0 42px color-mix(in oklch, var(--primary) 48%, transparent);
+  }
+}
+
+/*
+ * Stage-channel nav art, ported from T3Code's `.sidebar-stage-backdrop`.
+ *
+ * The mask lets the nav surface show through at the boundary, and `::after`
+ * ramps the art into the nav's own colour so it dissolves rather than ending on
+ * a hard edge. `--stage-fade` is the surface being faded into: the nav is a
+ * frosted `--card` sheet, so that is what the ramp targets.
+ *
+ * Unlayered for the same reason as the glass classes: the element also carries
+ * Tailwind utilities.
+ */
+.kb-stage-backdrop {
+  --stage-fade: var(--card);
+  mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 92%);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 55%,
+    transparent 92%
+  );
+}
+
+.kb-stage-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 28%,
+    color-mix(in srgb, var(--stage-fade) 10%, transparent) 40%,
+    color-mix(in srgb, var(--stage-fade) 30%, transparent) 52%,
+    color-mix(in srgb, var(--stage-fade) 58%, transparent) 64%,
+    color-mix(in srgb, var(--stage-fade) 82%, transparent) 75%,
+    color-mix(in srgb, var(--stage-fade) 96%, transparent) 93%,
+    var(--stage-fade) 100%
+  );
+}
+
+/*
+ * Ledger-paper palette, in the Bitcoin Austria Markenfarben.
+ *
+ * One page for every build — the art does not vary by release channel (the nav
+ * footer's version line already says which build this is). Light and dark are
+ * two different pages, which is a surface difference, not a channel one:
+ *
+ * - Light: pale Hellgrau-derived stock with Dunkel ink. It sits a shade warmer
+ *   and darker than the near-white nav, so the band reads without going heavy —
+ *   and because the page stays light, the header text on it stays dark.
+ * - Dark: a graphite sheet LIFTED off the nav. The nav is already near-black, so
+ *   a dark page would read as "slightly darker rectangle" and the motif would
+ *   vanish; going lighter makes it a sheet laid on top. There the header text is
+ *   relit to white (`.dark .kb-stage-header-content`).
+ *
+ * `--stage-glow` is the light falling across the page; `--stage-rule` and
+ * `--stage-column` are the ruled writing and column lines; `--stage-ink` is the
+ * bookkeeping marks.
+ */
+.kb-stage-ledger {
+  --stage-paper-top: #f3f1ec;
+  --stage-paper-mid: #eae7e0;
+  --stage-paper-bottom: #dedad1;
+  --stage-glow: #ffffff;
+  --stage-rule: rgb(34 34 34 / 20%);
+  --stage-column: rgb(34 34 34 / 11%);
+  --stage-ink: #222222;
+}
+
+.dark .kb-stage-ledger {
+  --stage-paper-top: #45454b;
+  --stage-paper-mid: #383840;
+  --stage-paper-bottom: #2a2a31;
+  --stage-glow: #cfd3d8;
+  --stage-rule: rgb(255 255 255 / 24%);
+  --stage-column: rgb(255 255 255 / 13%);
+  --stage-ink: #e8e8ea;
+}
+
+/*
+ * Header content sitting on the stage art, DARK MODE ONLY — that is the theme
+ * whose page is dark. Rather than threading an "on backdrop" prop through the
+ * brand and its buttons, redefine the nav tokens they already read: every
+ * descendant relights at once and a new child inherits it for free.
+ */
+.dark .kb-stage-header-content {
+  --sidebar-foreground: #ffffff;
+  --sidebar-muted-foreground: rgb(255 255 255 / 72%);
+  --sidebar-row-hover: rgb(255 255 255 / 14%);
+  --sidebar-control-surface: rgb(255 255 255 / 18%);
+}
+
+/*
+ * Frosted shell surfaces.
+ *
+ * Deliberately declared OUTSIDE `@layer components`: they are applied to
+ * elements that already carry a Tailwind `bg-*` utility (the side-nav container
+ * paints `bg-sidebar`), and an unlayered rule outranks every layered utility.
+ * Layering these would leave the opaque fill on top and the glass invisible.
+ */
+
+/*
+ * Frosted side-nav surface. The nav is a translucent sheet lifted off the app
+ * chrome rather than an opaque slab of the same grey: a `--card` tint at
+ * `--glass-opacity` plus a backdrop blur, so it reads a shade lighter than both
+ * the chrome behind it and the content panel beside it (T3Code's
+ * zinc-50-nav-over-zinc-25-content hierarchy). The inset highlight is the top
+ * edge catching light — the detail that makes it read as glass rather than as a
+ * flat fill.
+ */
+.kb-glass-panel {
+  background-color: color-mix(
+    in srgb,
+    var(--card) var(--glass-opacity),
+    transparent
+  );
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturation));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%);
+}
+
+.dark .kb-glass-panel {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+/*
+ * Floating control cluster — the pills that carry the shell buttons (refresh,
+ * notifications, theme, lock, …) over the content panel. Same frosted recipe as
+ * the nav, but ringed and shadowed, because page content genuinely scrolls
+ * underneath and the cluster needs its own edge to stay readable.
+ */
+.kb-glass-control {
+  background-color: color-mix(
+    in srgb,
+    var(--card) var(--glass-opacity),
+    transparent
+  );
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturation));
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 7%),
+    0 10px 24px -18px rgb(0 0 0 / 45%);
+}
+
+.dark .kb-glass-control {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
+}
+
+/*
+ * Command-palette modal, ported from T3Code's `.dialog-glass` / `.dialog-backdrop`
+ * pair. The popup is a `--background`-tinted frosted sheet; the backdrop is a
+ * lightly blurred wash rather than a flat scrim, so the page stays legible
+ * behind the palette and the whole thing reads as one glass layer.
+ */
+.kb-glass-dialog {
+  background-color: color-mix(
+    in srgb,
+    var(--background) var(--glass-opacity),
+    transparent
+  );
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturation));
+  border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 65%);
+}
+
+.dark .kb-glass-dialog {
+  border-color: color-mix(in srgb, #fff 8%, transparent);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 4%),
+    0 24px 72px -20px rgb(0 0 0 / 90%);
+}
+
+.kb-glass-backdrop {
+  background-color: color-mix(in srgb, var(--background) 60%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.dark .kb-glass-backdrop {
+  background-color: color-mix(in srgb, var(--background) 64%, transparent);
+}
+
+/*
+ * Card surfaces — two tiers, and the distinction matters.
+ *
+ * Cards are deliberately NOT frosted. `backdrop-filter` blurs what is behind an
+ * element, and a card sits on the flat page background: blurring a flat colour
+ * returns that colour, so glass would cost a compositing layer per card and
+ * render nothing. Glass is for surfaces that genuinely float over content.
+ *
+ * - `.kb-surface`       a top-level panel on the page. Large radius, hairline
+ *                       edge, and a two-layer shadow (tight contact + wide
+ *                       ambient) — that pairing is what reads as lifted, where a
+ *                       single flat shadow reads as merely outlined.
+ * - `.kb-surface-inset` a surface nested INSIDE a panel. Small radius, same
+ *                       hairline, and no shadow: an inner tile casting a shadow
+ *                       inside its parent is the tell of an ad-hoc surface.
+ *
+ * The app previously drew this concept at four different radii with a
+ * full-strength border. These two classes are the whole vocabulary.
+ */
+.kb-surface {
+  border-radius: var(--radius-2xl);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background-color: var(--card);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 3.5%),
+    0 10px 30px rgb(0 0 0 / 3.5%);
+}
+
+.dark .kb-surface {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 35%),
+    0 10px 30px rgb(0 0 0 / 20%);
+}
+
+.kb-surface-inset {
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background-color: var(--card);
+}
+
+/*
+ * Elevated glass, ported from T3Code's `.dropdown-glass` — menus, popovers and
+ * select lists.
+ *
+ * The tint is deliberately DENSER than the ambient surfaces above. Nesting the
+ * blur mix inside an 18% `--popover` tint keeps high-contrast page content from
+ * blooming through a menu and washing out its text, while still letting the
+ * opacity token do its work. An overlay carries copy you must be able to read;
+ * an ambient panel does not.
+ */
+.kb-glass-popover {
+  background-color: color-mix(
+    in srgb,
+    var(--popover) 18%,
+    color-mix(in srgb, var(--popover) var(--glass-opacity), transparent)
+  );
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturation));
+  border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
+}
+
+.dark .kb-glass-popover {
+  box-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
+}
+
+/* Graceful fallback where backdrop-filter is unsupported: solid surfaces. */
+@supports not (backdrop-filter: blur(1px)) {
+  .kb-glass-panel,
+  .kb-glass-control {
+    background-color: var(--card);
+  }
+
+  .kb-glass-dialog,
+  .kb-glass-popover {
+    background-color: var(--popover);
   }
 }
 
@@ -416,7 +705,14 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  /*
+   * Brand red, as in light mode. This was a neutral grey, which silently made
+   * every focus ring in dark mode colourless — light mode deliberately spends
+   * the brand on focus, so dropping it in dark read as an oversight rather than
+   * a decision. `--kb-accent` is already the lifted red under `.dark`, so it
+   * clears contrast against the near-black surfaces.
+   */
+  --ring: var(--kb-accent);
   --sidebar: var(--app-chrome);
   --sidebar-foreground: hsl(240 4.8% 95.9%);
   --sidebar-primary: hsl(224.3 76.3% 48%);
@@ -425,6 +721,17 @@
   --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
   --sidebar-border: hsl(240 3.7% 15.9%);
   --sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+  --glass-blur: 16px;
+  --glass-saturation: 1.08;
+
+  /* Dark rows lift off the near-black chrome with translucent white tints
+     rather than fixed greys, so they read the same over the sidebar surface
+     and over the frosted panel behind it. */
+  --sidebar-muted-foreground: oklch(0.708 0 0);
+  --sidebar-control-surface: oklch(1 0 0 / 8%);
+  --sidebar-row-hover: oklch(1 0 0 / 6%);
+  --sidebar-row-active: oklch(1 0 0 / 12%);
 }
 
 /*
@@ -459,6 +766,10 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-control-surface: var(--sidebar-control-surface);
+  --color-sidebar-row-hover: var(--sidebar-row-hover);
+  --color-sidebar-row-active: var(--sidebar-row-active);
 }
 
 /* WKWebView (macOS) draws the blue system focus ring as a native element

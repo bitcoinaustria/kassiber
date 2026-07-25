@@ -102,7 +102,8 @@
         "label": "Entwicklerwerkzeuge",
         "description": "Die integrierte Logs-Ansicht und ihr Speicherpuffer."
       }
-    }
+    },
+    "back": "Zurück"
   },
   "sync": {
     "loading": "Synchronisierungseinstellungen werden geladen…",
@@ -658,11 +659,6 @@
       "info": "Info",
       "warning": "Warnung",
       "alert": "Alarm"
-    },
-    "evidence": {
-      "exact": "exakter Nachweis",
-      "derived": "abgeleiteter Nachweis",
-      "unknown": "unbekannter Nachweis"
     },
     "database": {
       "plaintext": "Klartext",
