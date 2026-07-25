@@ -12,7 +12,6 @@ import json
 import os
 import queue
 import socket
-import subprocess
 import tempfile
 import threading
 import unittest
@@ -37,13 +36,6 @@ from kassiber.ai import (
     clear_default_ai_provider,
     update_db_ai_provider,
     seed_default_ai_provider_if_empty,
-)
-from kassiber.ai.cli_client import (
-    CLI_DEFAULT_MODEL,
-    CliAIClient,
-    _cli_failure,
-    _cli_subprocess_env,
-    _resolve_cli_executable,
 )
 from kassiber.ai.client import (
     DEFAULT_TIMEOUT_SECONDS,
@@ -168,24 +160,6 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ),
             {"mnemonic": "[redacted]", "seed_words": "[redacted]", "safe": "ok"},
         )
-
-    def test_cli_provider_failure_details_do_not_echo_stdout_or_stderr(self):
-        completed = subprocess.CompletedProcess(
-            args=["codex"],
-            returncode=1,
-            stdout="prompt fragment: explain my wallet sk-test-secret",
-            stderr="Authorization: Bearer sk-test-secret\nprompt fragment",
-        )
-
-        error = _cli_failure("codex", completed)
-
-        self.assertEqual(error.details["exit_code"], 1)
-        self.assertIn("stdout_bytes", error.details)
-        self.assertIn("stderr_bytes", error.details)
-        self.assertNotIn("stdout", error.details)
-        self.assertNotIn("stderr", error.details)
-        self.assertNotIn("prompt fragment", repr(error.details))
-        self.assertNotIn("sk-test-secret", repr(error.details))
 
     def test_tool_catalog_stability(self):
         expected_tool_names = {
@@ -1101,160 +1075,6 @@ class ClientDefaultsTest(unittest.TestCase):
         self.assertEqual(headers["Accept"], "text/event-stream")
 
 
-class CliAIClientTest(unittest.TestCase):
-    def test_codex_list_models_reads_visible_catalog(self):
-        catalog = {
-            "models": [
-                {
-                    "slug": "gpt-5.5",
-                    "display_name": "GPT-5.5",
-                    "visibility": "list",
-                    "supported_reasoning_levels": [
-                        {"effort": "low"},
-                        {"effort": "medium"},
-                        {"effort": "high"},
-                        {"effort": "xhigh"},
-                    ],
-                },
-                {
-                    "slug": "hidden-model",
-                    "display_name": "Hidden",
-                    "visibility": "hide",
-                },
-            ]
-        }
-        completed = subprocess.CompletedProcess(
-            ["codex", "debug", "models"],
-            0,
-            stdout=json.dumps(catalog),
-            stderr="",
-        )
-        with (
-            patch("shutil.which", return_value="/usr/local/bin/codex"),
-            patch("subprocess.run", return_value=completed),
-        ):
-            client = CliAIClient(locator="codex-cli://default")
-            self.assertEqual(
-                client.list_models(strict=True),
-                [
-                    {
-                        "id": "gpt-5.5",
-                        "check_kind": "codex_model_catalog",
-                        "display_name": "GPT-5.5",
-                        "supports_reasoning_effort": True,
-                        "reasoning_efforts": ["low", "medium", "high", "xhigh"],
-                    }
-                ],
-            )
-
-    def test_cli_resolution_checks_common_gui_fallback_dirs(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            binary = Path(tmp) / "codex"
-            binary.write_text("#!/bin/sh\n", encoding="utf-8")
-            binary.chmod(0o755)
-
-            with (
-                patch("shutil.which", return_value=None),
-                patch("kassiber.ai.cli_client.CLI_FALLBACK_DIRS", (tmp,)),
-            ):
-                self.assertEqual(_resolve_cli_executable("codex"), str(binary))
-                client = CliAIClient(locator="codex-cli://default")
-                self.assertEqual(client.list_models()[0]["id"], CLI_DEFAULT_MODEL)
-
-    def test_claude_list_models_uses_known_cli_aliases(self):
-        with patch("shutil.which", return_value="/usr/local/bin/claude"):
-            client = CliAIClient(locator="claude-cli://default")
-            self.assertEqual(
-                [row["id"] for row in client.list_models()],
-                [CLI_DEFAULT_MODEL, "sonnet", "opus"],
-            )
-
-    def test_claude_args_keep_normal_cli_auth(self):
-        client = CliAIClient(locator="claude-cli://default")
-        args = client._claude_args(model="sonnet", effort="high")
-        self.assertEqual(args[0], "claude")
-        self.assertIn("--no-session-persistence", args)
-        self.assertIn("--permission-mode", args)
-        self.assertIn("--tools", args)
-        self.assertIn("--model", args)
-        self.assertIn("--effort", args)
-        self.assertNotIn("--bare", args)
-
-    def test_codex_args_use_current_exec_flags(self):
-        client = CliAIClient(locator="codex-cli://default")
-        args = client._codex_args(
-            cwd="/tmp/kassiber-ai-cli",
-            output_path="/tmp/kassiber-ai-cli-output",
-            model="gpt-5.4",
-            effort="medium",
-        )
-        self.assertEqual(args[:2], ["codex", "exec"])
-        self.assertIn("--sandbox", args)
-        self.assertIn("read-only", args)
-        self.assertIn("--skip-git-repo-check", args)
-        self.assertIn("--ephemeral", args)
-        self.assertIn("--ignore-rules", args)
-        self.assertIn("--output-last-message", args)
-        self.assertIn("--model", args)
-        self.assertIn("gpt-5.4", args)
-        self.assertIn("-c", args)
-        self.assertIn('model_reasoning_effort="medium"', args)
-        self.assertEqual(args[-1], "-")
-        self.assertNotIn("--ask-for-approval", args)
-
-    def test_cli_chat_rejects_kassiber_tools(self):
-        client = CliAIClient(locator="claude-cli://default")
-        with self.assertRaises(AppError) as raised:
-            client.chat(
-                messages=[{"role": "user", "content": "hi"}],
-                model=CLI_DEFAULT_MODEL,
-                tools=[{"type": "function", "function": {"name": "status"}}],
-                tool_choice="auto",
-            )
-        self.assertEqual(raised.exception.code, "ai_cli_tools_disabled")
-
-    def test_cli_subprocess_env_drops_unrelated_secrets(self):
-        with patch.dict(
-            "os.environ",
-            {
-                "PATH": "/usr/bin",
-                "KASSIBER_POC_TOKEN": "secret",
-                "BTCPAY_API_KEY": "secret",
-                "ANTHROPIC_API_KEY": "anthropic",
-                "ANTHROPIC_AUTH_TOKEN": "anthropic-token",
-                "ANTHROPIC_BASE_URL": "https://anthropic.example",
-                "CLAUDE_CODE_USE_BEDROCK": "1",
-                "AWS_ACCESS_KEY_ID": "aws-key",
-                "AWS_SECRET_ACCESS_KEY": "aws-secret",
-                "OPENAI_API_KEY": "openai",
-                "CODEX_API_KEY": "codex-key",
-                "CODEX_ACCESS_TOKEN": "codex-token",
-                "HTTPS_PROXY": "http://proxy.example",
-                "NO_PROXY": "localhost,127.0.0.1",
-            },
-            clear=True,
-        ):
-            claude_env = _cli_subprocess_env("claude")
-            codex_env = _cli_subprocess_env("codex")
-        self.assertEqual(claude_env["ANTHROPIC_API_KEY"], "anthropic")
-        self.assertEqual(claude_env["ANTHROPIC_AUTH_TOKEN"], "anthropic-token")
-        self.assertEqual(claude_env["ANTHROPIC_BASE_URL"], "https://anthropic.example")
-        self.assertEqual(claude_env["CLAUDE_CODE_USE_BEDROCK"], "1")
-        self.assertEqual(claude_env["AWS_ACCESS_KEY_ID"], "aws-key")
-        self.assertEqual(claude_env["AWS_SECRET_ACCESS_KEY"], "aws-secret")
-        self.assertNotIn("OPENAI_API_KEY", claude_env)
-        self.assertEqual(codex_env["OPENAI_API_KEY"], "openai")
-        self.assertEqual(codex_env["CODEX_API_KEY"], "codex-key")
-        self.assertEqual(codex_env["CODEX_ACCESS_TOKEN"], "codex-token")
-        self.assertNotIn("ANTHROPIC_API_KEY", codex_env)
-        for env in (claude_env, codex_env):
-            self.assertEqual(env["HTTPS_PROXY"], "http://proxy.example")
-            self.assertEqual(env["NO_PROXY"], "localhost,127.0.0.1")
-            self.assertNotIn("KASSIBER_POC_TOKEN", env)
-            self.assertNotIn("BTCPAY_API_KEY", env)
-            self.assertEqual(env["NO_COLOR"], "1")
-
-
 class ListModelsStrictModeTest(unittest.TestCase):
     """`list_models(strict=True)` must surface 4xx so `ai.test_connection`
     can tell a misconfigured base URL apart from a provider that simply
@@ -1935,6 +1755,68 @@ class DaemonAiTestConnectionTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_model_discovery_returns_freshness_and_last_good_data(self):
+        calls = 0
+
+        class Client:
+            def list_models(self):
+                nonlocal calls
+                calls += 1
+                if calls > 1:
+                    raise AppError("Local model server unavailable", code="ai_unavailable")
+                return [{"id": "mlx-local"}]
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-model-cache-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            ctx = self._ctx(conn)
+            try:
+                with patch(
+                    "kassiber.daemon.ai_client_for_locator",
+                    return_value=Client(),
+                ):
+                    first, _ = daemon_runtime.handle_request(
+                        ctx,
+                        {
+                            "kind": "ai.list_models",
+                            "request_id": "models-1",
+                            "args": {"provider": "omlx"},
+                        },
+                        out=None,
+                    )
+                    cached, _ = daemon_runtime.handle_request(
+                        ctx,
+                        {
+                            "kind": "ai.list_models",
+                            "request_id": "models-2",
+                            "args": {"provider": "omlx"},
+                        },
+                        out=None,
+                    )
+                    stale, _ = daemon_runtime.handle_request(
+                        ctx,
+                        {
+                            "kind": "ai.list_models",
+                            "request_id": "models-3",
+                            "args": {"provider": "omlx", "refresh": True},
+                        },
+                        out=None,
+                    )
+                self.assertEqual(first["data"]["models"], [{"id": "mlx-local"}])
+                self.assertIsInstance(first["data"]["checked_at"], str)
+                self.assertFalse(first["data"]["stale"])
+                self.assertEqual(cached["data"]["models"], [{"id": "mlx-local"}])
+                self.assertEqual(calls, 2)
+                self.assertTrue(stale["data"]["stale"])
+                self.assertEqual(
+                    stale["data"]["error"],
+                    {
+                        "code": "ai_unavailable",
+                        "message": "Local model server unavailable",
+                    },
+                )
+            finally:
+                conn.close()
+
 
 class ProvidersCrudTest(unittest.TestCase):
     """SQLite-backed CRUD round-trip; the API key never leaks into output."""
@@ -1956,11 +1838,20 @@ class ProvidersCrudTest(unittest.TestCase):
         try:
             providers = list_db_ai_providers(conn)
             by_name = {provider["name"]: provider for provider in providers}
-            self.assertEqual(set(by_name), {"ollama", "omlx"})
+            self.assertEqual(
+                set(by_name),
+                {"ollama", "omlx", "codex", "claude", "opencode"},
+            )
             self.assertEqual(by_name["ollama"]["kind"], "local")
             self.assertEqual(by_name["ollama"]["base_url"], "http://localhost:11434/v1")
             self.assertEqual(by_name["omlx"]["kind"], "local")
             self.assertEqual(by_name["omlx"]["base_url"], "http://127.0.0.1:8000/v1")
+            self.assertEqual(by_name["codex"]["base_url"], "codex-cli://default")
+            self.assertEqual(by_name["claude"]["base_url"], "claude-cli://default")
+            self.assertEqual(
+                by_name["opencode"]["base_url"], "opencode-cli://default"
+            )
+            self.assertIsNone(by_name["codex"]["acknowledged_at"])
         finally:
             conn.close()
 
@@ -2344,7 +2235,10 @@ class ProvidersCrudTest(unittest.TestCase):
                 self.assertIn("default", payload)
                 # Seeded ollama is the default.
                 self.assertEqual(payload["default"], "ollama")
-                self.assertEqual(payload["providers"][0]["name"], "ollama")
+                ollama = next(
+                    row for row in payload["providers"] if row["name"] == "ollama"
+                )
+                self.assertTrue(ollama["is_default"])
                 # No raw api_key in any redacted row.
                 for row in payload["providers"]:
                     self.assertNotIn("api_key", row)

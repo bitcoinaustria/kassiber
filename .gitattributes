@@ -1,0 +1,4 @@
+# Generated files. Marked so GitHub collapses them in review and leaves them out
+# of the language stats — resolver output, not code to read.
+
+ui-tauri/pnpm-lock.yaml linguist-generated=true

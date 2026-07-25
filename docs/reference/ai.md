@@ -17,7 +17,8 @@ Two surfaces ship today:
   [bitcoinaustria/kassiber-skill](https://github.com/bitcoinaustria/kassiber-skill) for AI
   coding and terminal assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
-  OpenAI Responses-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
+  OpenAI Responses-compatible endpoint or the chat-only Codex, Claude, and
+  OpenCode provider broker, plus a
   parallel CLI surface (`kassiber chat`, `kassiber ai providers …`,
   `kassiber ai models`) that reuses the same provider config.
 
@@ -82,9 +83,25 @@ Responses.
 The implementation keeps those invariants in one request builder. Prepared
 tool-loop context is an explicit typed input and cannot be combined with the
 legacy message input accidentally. HTTP transport remains in
-`kassiber.ai.client`; fixed external CLI adapters live in
-`kassiber.ai.cli_client`, with shared delta/request contracts isolated in
-`kassiber.ai.contracts`.
+`kassiber.ai.client`. Fixed external CLI locators route through the bundled
+chat-only Node/TypeScript broker in `ui-tauri/provider-broker`; Python
+supervises that JSONL process through `kassiber.ai.broker_client`. Shared
+delta/request contracts remain isolated in `kassiber.ai.contracts`.
+
+### Building the broker from a source checkout
+
+The broker ships as a single bundled `kassiber/ai/provider_broker/index.mjs`,
+built by esbuild from `ui-tauri/provider-broker/src`. It is **not committed** —
+release builds produce it before packaging. In a source checkout the CLI-backed
+providers report `ai_unavailable` until you build it once:
+
+```bash
+pnpm --dir ui-tauri run broker:build
+```
+
+`pnpm --dir ui-tauri run build` runs that step first, so a desktop build already
+covers it. Point `KASSIBER_AI_PROVIDER_BROKER` at another path to override which
+script is spawned.
 
 ## Privacy warning
 
@@ -108,11 +125,18 @@ material into a remote model unless that is acceptable for your threat model.
 
 If in doubt, keep inference local.
 
-Claude CLI and Codex CLI are supported for convenience, but they are not a
-local-privacy guarantee. Kassiber launches them in a narrow non-interactive mode
-that still uses their normal local authentication/config, telemetry, and
-model-provider routing. Treat them as off-device unless your local CLI setup is
-explicitly backed by a local or confidential provider.
+Codex, Claude, and OpenCode CLI providers are supported for convenience, but
+they are not a local-privacy guarantee. The broker denies provider-native tools
+in layers — Claude runs in safe mode with no hooks, plugins, skills or MCP;
+OpenCode serves with `--pure` and a deny-all session permission; Codex runs a
+read-only sandbox with network access off — and any tool item aborts the turn.
+Codex exposes no tool-free profile, so a local read there can begin before the
+abort lands; with its network disabled that content can only surface through
+assistant text on a turn Kassiber is already failing. Kassiber reuses their normal local
+authentication/config, telemetry, and model-provider routing without reading,
+copying, persisting, or displaying provider credentials. Treat them as
+off-device unless the underlying configuration proves local or confidential
+inference.
 
 ## Recommended inference setup
 
@@ -177,19 +201,39 @@ local loopback provider and an installed vision/OCR model. Good Ollama choices
 for that surface are `glm-ocr` for fast document OCR, `qwen3-vl:8b` or
 `qwen3-vl:4b` for stronger multimodal table reasoning, and
 `llama3.2-vision:11b` / `minicpm-v:8b` as broad fallback models. Remote,
-TEE, Claude CLI, and Codex CLI providers are hard-disabled for document OCR.
+TEE, Codex, Claude, and OpenCode CLI providers are hard-disabled for document
+OCR.
 
-Claude CLI and Codex CLI can be added with fixed provider locators:
+Codex, Claude, and OpenCode appear automatically through fixed provider
+locators:
 
 ```bash
-kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
-kassiber ai providers create codex-cli --base-url codex-cli://default --kind remote --acknowledge --default-model default
+codex-cli://default
+claude-cli://default
+opencode-cli://default
 ```
 
-For these providers, `--model` / `default_model` is forwarded to the CLI when it
-is not `default`. The assistant's thinking selector sends `reasoning_effort` for
-Responses-compatible providers, maps to Claude CLI `--effort`, and maps to Codex
-CLI's `model_reasoning_effort` config override.
+No Settings row or API-token entry is required. The broker discovers installed
+executables, reports `ready`, `missing executable`, or `authentication
+required`, and tells the user to run the provider's normal login command
+outside Kassiber when necessary. It uses Codex `app-server`, the Claude
+executable's `--output-format stream-json` event stream, and an ephemeral
+loopback OpenCode server/API. A local Node.js 20+ executable is currently
+required to run the bundled broker.
+
+Model and reasoning-effort selection are forwarded through each provider's
+native protocol.
+
+Codex and OpenCode enumerate their own models, so their rows carry concrete
+model IDs. The Claude CLI has no model-enumeration command, so its rows are the
+aliases the CLI accepts — `fable`, `opus`, `sonnet`, `haiku`, plus Kassiber's
+`default` sentinel meaning "send no `--model`" and let the CLI's configured
+default apply. Aliases are deliberate rather than pinned IDs: an alias always
+resolves to the current model behind it. That is why Claude rows show no version
+number; the concrete ID (for example `claude-sonnet-5`) is only reported in the
+`init` event of a real request. Provider session cursors are kept only in daemon memory and
+are reused only while the visible Kassiber transcript remains unchanged;
+editing or branching starts a clean native provider session.
 
 ## In-app surface
 
@@ -198,6 +242,49 @@ provider/model picker is fed by `ai.providers.list` and `ai.list_models` over
 the daemon protocol; chat streaming is wired through Tauri events
 (`daemon://stream`) so the UI can render loading status, reasoning
 (`<think>`), and the answer in real time without blocking navigation.
+
+The picker uses a provider rail plus a searchable model list. Its
+`ai.provider_runtime.status` snapshot shows Codex, Claude, and OpenCode
+readiness, authentication state, native model inventory, and the explicitly
+remote privacy posture beside Ollama, oMLX, and configured HTTP providers.
+First use still requires Kassiber's off-device acknowledgement.
+
+The **All / Local** control filters the inventory by the posture Kassiber can
+prove. Model rows show both their source namespace and privacy posture.
+OpenCode model IDs identify their source provider (`omlx/...`, `ollama/...`,
+`opencode/...`). OpenCode's model list carries no endpoint — `api.url` is empty
+for locally served models — so the route is judged by that source provider's
+resolved endpoint from `opencode debug config`, reading
+`provider.<id>.options.baseURL` and nothing else (the same options block can
+hold an `apiKey`, which never leaves the broker). A loopback endpoint (`127.0.0.0/8` matched as a literal IPv4
+address, `localhost`, `::1`) is labelled local, because the model cannot leave
+the machine. A loopback address that fronts a reverse proxy is the known
+limit of this check: it reports local while the proxy may forward inference
+off-machine. Everything else stays remote, including LAN addresses and
+any provider for which OpenCode reports no endpoint. The posture is proven from
+configuration, never guessed from a provider's name.
+
+Provider and model discovery uses a daemon-owned, in-memory last-good cache.
+Snapshots include `checked_at`, `stale`, and sanitized `error` metadata, and
+concurrent refreshes for the same provider share one probe. Failed refreshes
+keep the last successful inventory visible. Proven-local loopback HTTP
+providers refresh automatically every five minutes and whenever the picker
+opens; remote HTTP and native CLI providers refresh only after the user opens
+an AI surface. Provider configuration changes invalidate the daemon cache.
+There is intentionally no manual refresh button.
+
+Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
+directory that is removed afterward. Provider subprocesses receive only their
+own authentication/configuration environment plus the shared network/runtime
+minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
+empty built-in tool set plus an explicit deny callback; OpenCode gets a
+deny-all permission ruleset and disabled tool map; Codex runs
+read-only/untrusted and every app-server tool request is rejected. Any native
+tool lifecycle event aborts the turn. The broker receives no repository,
+database, attachment, wallet, browser, MCP, terminal, or source-control
+capability. Kassiber's typed tools stay daemon-owned; they deliberately fail
+closed as unavailable for these providers until a separately audited typed-tool
+bridge exists.
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:
@@ -403,13 +490,13 @@ channel pass through unchanged.
 Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
-and reports the model count without persisting anything. For Claude/Codex CLI
-locators, this only verifies that the CLI executable is present; authentication
-and model reachability are checked when chat starts. For HTTP providers, the
+and reports the model count without persisting anything. For built-in CLI
+locators, model discovery and authentication readiness come from the broker's
+native runtime probes. For HTTP providers, the
 connection test probes `/v1/models`; it does not spend tokens on a generation,
 so the first chat remains the final check that `/v1/responses` is enabled.
 
-Remote, TEE, Claude CLI, and Codex CLI providers require explicit
+Remote, TEE, Codex, Claude, and OpenCode CLI providers require explicit
 acknowledgement before chat. The CLI uses
 `kassiber ai providers update <name> --acknowledge` (or `--acknowledge` during
 `create`), and the desktop Settings form prompts before saving an off-device
@@ -846,7 +933,8 @@ These are directionally in scope, but should remain optional and review-gated:
 
 - [Kassiber CLI Agent Skill](https://github.com/bitcoinaustria/kassiber-skill)
 - [`../../kassiber/ai/client.py`](../../kassiber/ai/client.py)
-- [`../../kassiber/ai/cli_client.py`](../../kassiber/ai/cli_client.py)
+- [`../../kassiber/ai/broker_client.py`](../../kassiber/ai/broker_client.py)
+- [`../../ui-tauri/provider-broker/`](../../ui-tauri/provider-broker/)
 - [`../../kassiber/ai/contracts.py`](../../kassiber/ai/contracts.py)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [`../../SECURITY.md`](../../SECURITY.md)

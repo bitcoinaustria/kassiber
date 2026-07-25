@@ -183,7 +183,8 @@ DAEMON_READ_KINDS = _paths(
     ui.wallets.detect_script_types ui.connections.sources
     ui.connections.node.snapshot ui.reports.lightning_profitability
     ui.metadata.bip329.preview ai.providers.list ai.providers.get
-    ai.list_models ui.chat.sessions.list ui.chat.sessions.get
+    ai.provider_runtime.status ai.list_models
+    ui.chat.sessions.list ui.chat.sessions.get
     """
 )
 

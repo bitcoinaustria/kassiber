@@ -3036,6 +3036,22 @@ export const fixtures: Record<string, unknown> = {
         secret_ref: { store_id: "sqlcipher_inline", state: "missing" },
         is_default: false,
       },
+      ...(["codex", "claude", "opencode"] as const).map((name) => ({
+        name,
+        display_name:
+          name === "codex" ? "Codex" : name === "claude" ? "Claude" : "OpenCode",
+        base_url: `${name}-cli://default`,
+        kind: "remote",
+        default_model: name === "opencode" ? null : "default",
+        notes: "Built-in chat-only CLI broker (mock).",
+        acknowledged_at: null,
+        created_at: "2026-07-23T08:00:00Z",
+        updated_at: "2026-07-23T08:00:00Z",
+        has_api_key: false,
+        secret_ref: { store_id: "sqlcipher_inline", state: "missing" },
+        is_default: false,
+        supports_reasoning_effort: true,
+      })),
     ],
     default: "ollama",
     secret_store_policy: {
@@ -3052,6 +3068,45 @@ export const fixtures: Record<string, unknown> = {
           "Unsigned or ad-hoc macOS builds keep AI keys in SQLCipher by default; Keychain is an explicit experimental move because prompts may appear again after rebuilds or identity changes.",
       },
     },
+  },
+  "ai.provider_runtime.status": {
+    providers: [
+      {
+        provider: "codex",
+        display_name: "Codex",
+        state: "ready",
+        message: "Ready using the existing Codex login.",
+        privacy_posture: "remote",
+        native_tools: "disabled",
+        models: [
+          {
+            id: "gpt-5.4",
+            display_name: "GPT-5.4",
+            owned_by: "OpenAI Codex",
+            supports_reasoning_effort: true,
+            reasoning_efforts: ["low", "medium", "high"],
+          },
+        ],
+      },
+      {
+        provider: "claude",
+        display_name: "Claude",
+        state: "authentication_required",
+        message: "Run `claude login` outside Kassiber.",
+        privacy_posture: "remote",
+        native_tools: "disabled",
+        models: [],
+      },
+      {
+        provider: "opencode",
+        display_name: "OpenCode",
+        state: "missing_executable",
+        message: "Install OpenCode, then run `opencode auth login` outside Kassiber.",
+        privacy_posture: "remote",
+        native_tools: "disabled",
+        models: [],
+      },
+    ],
   },
   "ai.list_models": {
     provider: "ollama",

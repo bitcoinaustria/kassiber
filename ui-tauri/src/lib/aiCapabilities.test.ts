@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  nativeAiProviderRuntime,
   modelSupportsReasoningEffort,
   providerSupportsReasoningEffort,
   selectedModelReasoningEfforts,
   selectedModelSupportsReasoningEffort,
 } from "./aiCapabilities";
+
+describe("native AI provider locator registry", () => {
+  it("recognizes Codex, Claude, and OpenCode locators", () => {
+    expect(nativeAiProviderRuntime(" CODEX-CLI://DEFAULT ")).toBe("codex");
+    expect(nativeAiProviderRuntime("claude-cli://default")).toBe("claude");
+    expect(nativeAiProviderRuntime("opencode-cli://default")).toBe("opencode");
+    expect(nativeAiProviderRuntime("https://example.test/v1")).toBeNull();
+  });
+});
 
 describe("AI reasoning effort capability detection", () => {
   it("uses explicit provider support", () => {

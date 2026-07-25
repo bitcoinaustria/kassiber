@@ -39,11 +39,15 @@
     "attach": "Dateien anhängen",
     "modelContext": "Modell-Kontext",
     "thinking": "Nachdenken",
+    "reasoningEffort": "Denkaufwand",
     "effort": {
       "auto": "Auto",
       "low": "Niedrig",
       "medium": "Mittel",
-      "high": "Hoch"
+      "high": "Hoch",
+      "xhigh": "Sehr hoch",
+      "max": "Maximal",
+      "ultra": "Ultra"
     }
   },
   "prompts": {
@@ -292,6 +296,14 @@
     "models": "Modelle",
     "noProviders": "Keine AI-Provider konfiguriert",
     "noModels": "Keine Modelle gefunden",
-    "refreshModels": "Alle AI-Modelle aktualisieren"
+    "noMatchingModels": "Keine passenden Modelle",
+    "searchModels": "Modelle suchen…",
+    "checkingProvider": "Status des lokalen Providers wird geprüft…",
+    "staleModels": "Letzte bekannte Modelle werden angezeigt · {{error}}",
+    "privacyFilter": "Modell-Datenschutzfilter",
+    "allModels": "Alle",
+    "localModels": "Lokal",
+    "remoteConfirm": "{{provider}} für den Chat verwenden? Die vorhandene lokale CLI-Anmeldung/-Konfiguration wird wiederverwendet, Prompts können dieses Gerät aber verlassen. Provider-eigene Tools und Kassibers typisierte Tools sind für diesen Provider nicht verfügbar.",
+    "cliChatOnly": "Lokaler CLI-Broker · nur Chat · native Tools deaktiviert"
   }
 }

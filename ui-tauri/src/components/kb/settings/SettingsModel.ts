@@ -4,7 +4,10 @@ import {
   inferredInfrastructureOwnership,
   type InfrastructureOwnership,
 } from "@/lib/backendTrust";
-import type { AiModelRow } from "@/lib/aiCapabilities";
+import {
+  isNativeAiProviderLocator,
+  type AiModelRow,
+} from "@/lib/aiCapabilities";
 import {
   CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
   CLN_PRESENCE_SENTINEL_LIGHTNING_DIR,
@@ -307,10 +310,7 @@ export const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
 };
 
 export function isCliAiProvider(row: AiProviderRow): boolean {
-  return (
-    row.base_url === "claude-cli://default" ||
-    row.base_url === "codex-cli://default"
-  );
+  return isNativeAiProviderLocator(row.base_url);
 }
 
 export function aiSecretStoreLabel(storeId: AiSecretStoreId | undefined): string {

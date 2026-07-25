@@ -31,7 +31,7 @@ import urllib.request
 from ..egress_ledger import get_egress_ledger, http_request_bytes_out
 from ..errors import AppError
 from ..redaction import provider_error_body_preview
-from .cli_client import CliAIClient
+from .broker_client import BrokerAIClient
 from .contracts import (
     ChatDelta,
     DEFAULT_TIMEOUT_SECONDS,
@@ -1008,7 +1008,7 @@ def ai_client_for_locator(
     direct_connection: bool = False,
 ):
     if is_cli_provider_locator(base_url):
-        return CliAIClient(locator=base_url, timeout=timeout)
+        return BrokerAIClient(locator=base_url, timeout=timeout)
     return OpenAIResponsesClient(
         base_url=base_url,
         api_key=api_key,
