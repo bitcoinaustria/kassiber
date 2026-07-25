@@ -243,6 +243,10 @@ Short-lived broker child commands run only through the owning project's
 serialized broker worker; SQLite continues to arbitrate ordinary database
 access between that worker and the desktop daemon.
 
+A conflicting owner is reported with its pid. The lock record names a process
+of the same OS user inside a `0700` directory, so the principal could already
+read it; withholding it only leaves an operator unable to find the holder.
+
 Passphrase rotation is database-wide maintenance rather than ordinary SQLite
 access. It temporarily reserves the opposite role and fails with
 `project_in_use` before closing or rekeying anything if another role is live.

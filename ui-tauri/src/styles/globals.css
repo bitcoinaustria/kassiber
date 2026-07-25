@@ -155,6 +155,15 @@
     margin: 0;
     padding: 0;
     height: 100%;
+    /*
+     * The shell is exactly viewport-height and never scrolls the document, so
+     * any root scrolling is pure macOS rubber-band. That bounce shifts the
+     * statically-positioned alpha banner and the `fixed` nav panel by different
+     * amounts, so the chrome visibly comes apart at the seams when an inner
+     * scroller hits its end and chains upward. Nothing scrolls here by design,
+     * so refusing the bounce costs no behaviour.
+     */
+    overscroll-behavior: none;
   }
   html {
     font-size: calc(16px * var(--app-auto-scale, 1) * var(--app-ui-scale));

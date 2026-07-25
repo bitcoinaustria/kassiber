@@ -738,5 +738,33 @@ class OperatorProjectTest(unittest.TestCase):
                 owner.release()
 
 
+    @unittest.skipIf(
+        os.name == "nt",
+        "Windows refuses the open itself, so no owner record is read",
+    )
+    def test_conflict_names_the_holding_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            lease = acquire_project_ownership(
+                project,
+                owner_kind="desktop",
+                generation="desktop-one",
+            )
+            try:
+                with self.assertRaises(AppError) as raised:
+                    acquire_project_ownership(
+                        project,
+                        owner_kind="desktop",
+                        generation="desktop-two",
+                    )
+            finally:
+                lease.release()
+            error = raised.exception
+            self.assertEqual((error.details or {})["pid"], os.getpid())
+            self.assertIn(f"pid {os.getpid()}", error.hint or "")
+            self.assertNotIn(str(Path(tmp)), repr(error.details))
+
+
 if __name__ == "__main__":
     unittest.main()
