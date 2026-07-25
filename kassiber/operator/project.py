@@ -22,6 +22,9 @@ OWNER_LOCK_FILENAME = ".operator-owner.lock"
 _OWNER_KINDS = frozenset({"broker", "desktop"})
 _OWNER_ADMISSION_TIMEOUT_SECONDS = 5.0
 _OWNER_ADMISSION_RETRY_SECONDS = 0.01
+_OWNER_PRUNE_STAMP_FILENAME = "prune-stamp"
+_OWNER_PRUNE_INTERVAL_SECONDS = 24 * 60 * 60
+_OWNER_PRUNE_MIN_AGE_SECONDS = 7 * 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -271,6 +274,11 @@ def acquire_project_ownership(
         )
         for lock_path in dict.fromkeys(lock_paths):
             lease._add_project_lock(lock_path, project)
+        # Janitorial only: a sweep that fails must never deny a valid owner.
+        try:
+            _prune_owner_locks(project.lock_path.parent)
+        except Exception:
+            pass
         return lease
     except Exception:
         lease.release()
@@ -369,6 +377,97 @@ def _acquire_admission_lock(
                     retryable=True,
                 ) from exc
             time.sleep(_OWNER_ADMISSION_RETRY_SECONDS)
+
+
+def _prune_owner_locks(lock_root: Path) -> None:
+    """Unlink ownership records that no live process holds any more.
+
+    Records are keyed per project and never per process, so every throwaway data
+    root — a test tmpdir, a torn-down preview — leaves its set behind forever
+    while `release` only unlocks and closes. Growth is unbounded for anyone who
+    opens many distinct projects, so sweep the dead records occasionally.
+    """
+
+    now = time.time()
+    stamp = lock_root / _OWNER_PRUNE_STAMP_FILENAME
+    try:
+        if now - stamp.stat().st_mtime < _OWNER_PRUNE_INTERVAL_SECONDS:
+            return
+    except OSError:
+        pass
+    # Claim the sweep before running it so concurrent opens do not all scan.
+    _open_owner_lock(stamp, "prune").close()
+    os.utime(stamp, (now, now))
+    keys = {
+        f"{name.split('.lock', 1)[0]}.lock"
+        for name in os.listdir(lock_root)
+        if ".lock" in name
+    }
+    for key in sorted(keys):
+        _prune_owner_lock_key(lock_root / key, now)
+
+
+def _owner_record_is_prunable(path: Path, now: float) -> bool:
+    try:
+        return now - path.stat().st_mtime >= _OWNER_PRUNE_MIN_AGE_SECONDS
+    except OSError:
+        return False
+
+
+def _prune_owner_lock_key(lock_path: Path, now: float) -> None:
+    """Drop one project's dead records while no acquisition can be in flight.
+
+    Unlinking a record another process sits on between `open` and `flock` would
+    move that process onto an orphaned inode while the next owner locks a fresh
+    one — two live owners, no error. Acquisition takes the admission lock across
+    exactly that window, so holding it here excludes the race; the age floor
+    then leaves a margin no scheduling delay can plausibly cross.
+    """
+
+    # ponytail: the .admission file itself is never removed, since it is what
+    # makes this sweep safe. Reclaiming it too needs a second ordering argument
+    # covering acquirers that would race on a freshly created admission inode —
+    # and two concurrent sweeps defeat it. Three of every four files is enough.
+    records = (
+        lock_path,
+        _owner_kind_lock_path(lock_path, "desktop"),
+        _owner_kind_lock_path(lock_path, "broker"),
+    )
+    # Admission files are never removed, so an already-swept key stays on every
+    # later scan. Pre-filter it out for three cheap stats instead of a lock round
+    # trip; the authoritative check still runs under the admission lock below.
+    if not any(_owner_record_is_prunable(path, now) for path in records):
+        return
+    try:
+        admission = _open_owner_lock(_owner_admission_lock_path(lock_path), "prune")
+    except AppError:
+        return
+    try:
+        if not _try_lock_handle(admission):
+            return
+        for path in records:
+            if not _owner_record_is_prunable(path, now):
+                continue
+            try:
+                handle = _open_owner_lock(path, "prune")
+            except AppError:
+                # A Windows share-mode holder is reported at open time.
+                continue
+            dead = False
+            try:
+                dead = _try_lock_handle(handle)
+                if dead:
+                    _unlock_handle(handle)
+            finally:
+                handle.close()
+            if dead:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+    finally:
+        _unlock_handle(admission)
+        admission.close()
 
 
 @contextmanager

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -391,6 +392,90 @@ class OperatorProjectTest(unittest.TestCase):
                     project.local_lock_path,
                 ):
                     self.assertEqual(lock_path.stat().st_mode & 0o777, 0o600)
+
+    def test_prune_drops_dead_records_and_spares_live_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as locks:
+            lock_root = Path(locks)
+            with mock.patch.object(
+                project_module,
+                "_owner_lock_root",
+                return_value=lock_root,
+            ):
+                dead_root = Path(tmp) / "dead"
+                dead_root.mkdir()
+                Path(dead_root, "kassiber.sqlite3").write_bytes(b"database")
+                dead = canonical_project(dead_root)
+                acquire_project_ownership(
+                    dead,
+                    owner_kind="desktop",
+                    generation="dead",
+                ).release()
+
+                live_root = Path(tmp) / "live"
+                live_root.mkdir()
+                Path(live_root, "kassiber.sqlite3").write_bytes(b"database")
+                live = canonical_project(live_root)
+                lease = acquire_project_ownership(
+                    live,
+                    owner_kind="desktop",
+                    generation="live",
+                )
+                try:
+                    # Age everything, so only the held flock — not the floor —
+                    # can be what spares the live records.
+                    aged = (
+                        time.time() - project_module._OWNER_PRUNE_MIN_AGE_SECONDS - 60
+                    )
+                    for path in lock_root.iterdir():
+                        os.utime(path, (aged, aged))
+                    project_module._prune_owner_locks(lock_root)
+
+                    self.assertFalse(dead.lock_path.exists())
+                    self.assertFalse(dead.alias_lock_path.exists())
+                    self.assertFalse(
+                        project_module._owner_kind_lock_path(
+                            dead.lock_path, "desktop"
+                        ).exists()
+                    )
+                    self.assertTrue(
+                        project_module._owner_admission_lock_path(
+                            dead.lock_path
+                        ).exists()
+                    )
+                    self.assertTrue(live.lock_path.exists())
+                    self.assertTrue(
+                        project_module._owner_kind_lock_path(
+                            live.lock_path, "desktop"
+                        ).exists()
+                    )
+                finally:
+                    lease.release()
+
+    def test_prune_spares_records_younger_than_the_age_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as locks:
+            lock_root = Path(locks)
+            with mock.patch.object(
+                project_module,
+                "_owner_lock_root",
+                return_value=lock_root,
+            ):
+                Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+                project = canonical_project(tmp)
+                acquire_project_ownership(
+                    project,
+                    owner_kind="broker",
+                    generation="recent",
+                ).release()
+                # The acquisition above already claimed today's sweep, so drop
+                # the stamp or this asserts against a prune that never ran.
+                (lock_root / project_module._OWNER_PRUNE_STAMP_FILENAME).unlink()
+                project_module._prune_owner_locks(lock_root)
+                self.assertTrue(project.lock_path.exists())
+                self.assertTrue(
+                    project_module._owner_kind_lock_path(
+                        project.lock_path, "broker"
+                    ).exists()
+                )
 
     def test_owner_exclusion_does_not_follow_broker_runtime_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
