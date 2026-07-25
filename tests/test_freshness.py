@@ -83,6 +83,13 @@ class FreshnessTest(unittest.TestCase):
         self.addCleanup(conn.close)
         return conn
 
+    def _data_root(self):
+        # A daemon context's data root is a real settings location, so a
+        # relative literal would write config into the checkout.
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-freshness-root-")
+        self.addCleanup(tmp.cleanup)
+        return tmp.name
+
     def test_module_docstring_is_visible_to_ast(self):
         source = Path(freshness.__file__).read_text(encoding="utf-8")
         self.assertEqual(
@@ -1884,7 +1891,7 @@ class FreshnessTest(unittest.TestCase):
 
         ctx = daemon_runtime.DaemonContext(
             conn=conn,
-            data_root="encrypted-data-root",
+            data_root=self._data_root(),
             runtime_config={},
             active_ai_chats=daemon_runtime.ActiveAiChats(),
             main_thread_tasks=queue.Queue(),
@@ -1971,7 +1978,7 @@ class FreshnessTest(unittest.TestCase):
         owner = Mock()
         ctx = daemon_runtime.DaemonContext(
             conn=conn,
-            data_root="encrypted-data-root",
+            data_root=self._data_root(),
             runtime_config={},
             active_ai_chats=daemon_runtime.ActiveAiChats(),
             main_thread_tasks=queue.Queue(),
@@ -2004,7 +2011,7 @@ class FreshnessTest(unittest.TestCase):
         _seed_profile(conn)
         ctx = daemon_runtime.DaemonContext(
             conn=conn,
-            data_root="encrypted-data-root",
+            data_root=self._data_root(),
             runtime_config={},
             active_ai_chats=daemon_runtime.ActiveAiChats(),
             main_thread_tasks=queue.Queue(),
@@ -2036,7 +2043,7 @@ class FreshnessTest(unittest.TestCase):
         _seed_profile(conn)
         ctx = daemon_runtime.DaemonContext(
             conn=conn,
-            data_root="encrypted-data-root",
+            data_root=self._data_root(),
             runtime_config={},
             active_ai_chats=daemon_runtime.ActiveAiChats(),
             main_thread_tasks=queue.Queue(),
