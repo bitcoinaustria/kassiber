@@ -28,6 +28,13 @@
       "label": "Kassiber durchsuchen",
       "placeholder": "Seiten, Aktionen, Transaktionen suchen…"
     },
+    "searchLabel": "Suchen",
+    "searchPrompt": "Suche Seiten, Aktionen, Einstellungen, Wallets und Transaktionen.",
+    "searchHints": {
+      "navigate": "Navigieren",
+      "open": "Auswählen",
+      "close": "Schließen"
+    },
     "searchNoMatches": "Keine Treffer",
     "dataMode": {
       "real": "Live-Daten",
@@ -58,6 +65,7 @@
       "releaseLabel": "Kassiber v{{version}}",
       "updateTitle": "Kassiber v{{current}} → v{{latest}} ist auf GitHub verfügbar",
       "updateLabel": "Update verfügbar · v{{version}}",
+      "updateDismiss": "Bis zum nächsten Start ausblenden",
       "disabled": "Update-Prüfungen sind deaktiviert. Aktiviere sie unter Einstellungen → Privatsphäre, bevor Kassiber GitHub kontaktiert.",
       "checkFailed": "Kassiber konnte GitHub nicht auf Updates prüfen. Bitte versuche es später erneut.",
       "availablePrompt": "Kassiber v{{version}} ist verfügbar. Release-Seite auf GitHub öffnen?",
@@ -164,14 +172,14 @@
     }
   },
   "search": {
-    "category": {
-      "action": "Aktion",
-      "page": "Seite",
-      "report": "Bericht",
-      "review_item": "Prüfung",
-      "setting": "Einstellung",
-      "transaction": "Transaktion",
-      "wallet": "Wallet"
+    "group": {
+      "actions": "Aktionen",
+      "pages": "Seiten",
+      "reports": "Berichte",
+      "review": "Prüfung",
+      "settings": "Einstellungen",
+      "transactions": "Transaktionen",
+      "wallets": "Wallets"
     },
     "actionReason": {
       "fromSearch": "Aus der globalen Suche geöffnet",

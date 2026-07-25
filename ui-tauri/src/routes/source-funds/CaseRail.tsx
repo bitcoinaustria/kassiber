@@ -73,7 +73,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
 
   return (
     <aside className="flex h-fit flex-col gap-4 lg:sticky lg:top-4">
-      <div className="rounded-lg border bg-card">
+      <div className="kb-surface-inset">
         <div className="border-b px-4 py-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Source of funds
@@ -138,7 +138,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
         </nav>
       </div>
 
-      <div className="rounded-lg border bg-card px-4 py-3">
+      <div className="kb-surface-inset px-4 py-3">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Case state
