@@ -2775,16 +2775,24 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.btcpay.provenance.suggest",
-        description="Run deterministic commercial document/payment matching without writing review decisions.",
+        description=(
+            "Seed commercial document/payment link suggestions after explicit consent. "
+            "Deterministic txid and payment-hash matching writes unreviewed suggestions "
+            "to the book; no review decision is recorded. Use "
+            "ui.btcpay.provenance.links to read existing suggestions without writing."
+        ),
         parameters={
             "type": "object",
             "additionalProperties": False,
             "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}},
         },
-        kind_class="read_only",
+        # core.commercial.suggest_links upserts link rows and commits, so this
+        # has to stay mutating for the consent gate to fire, like the
+        # ui.source_funds.suggest sibling.
+        kind_class="mutating",
         wire_name="ui_btcpay_provenance_suggest",
         daemon_kind="ui.btcpay.provenance.suggest",
-        summary_template="Suggest commercial matches",
+        summary_template="Seed commercial match suggestions",
     ),
     ToolEntry(
         name="ui.btcpay.provenance.links",

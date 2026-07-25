@@ -17,6 +17,7 @@ import threading
 import unittest
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from kassiber import daemon as daemon_runtime
@@ -487,10 +488,46 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_rates_latest",
         ):
             self.assertEqual(get_tool(tool_name).kind_class, "mutating")
+
+        # Both suggest routes upsert link rows and commit, so they must stay
+        # mutating: daemon consent fires on kind_class == "mutating" alone.
+        # ui.transfers.suggest only reads, so it stays read_only.
+        for tool_name in ("ui_btcpay_provenance_suggest", "ui_source_funds_suggest"):
+            self.assertEqual(get_tool(tool_name).kind_class, "mutating")
+        self.assertEqual(get_tool("ui_transfers_suggest").kind_class, "read_only")
         self.assertEqual(
             get_tool("ui_rates_latest").parameters["properties"]["source"]["enum"],
             ["coinbase-exchange", "coingecko"],
         )
+
+    def test_review_worklist_commercial_section_reads_instead_of_suggesting(self):
+        """ui.review.worklist is read_only, so no section may write to the book.
+
+        Its commercial section used to build itself by calling
+        ``ui.btcpay.provenance.suggest``, which upserts link rows and commits,
+        so a consent-free read tool wrote suggestions into the book.
+        """
+
+        seen: list[tuple[str, dict]] = []
+
+        def record(conn, runtime_config, data_root, kind, args):
+            seen.append((kind, args))
+            return {"links": []}
+
+        runtime = SimpleNamespace(runtime_config=object(), data_root=Path("."))
+        with patch.object(
+            daemon_runtime, "_ui_commercial_payload_from_conn", record
+        ), patch.object(
+            daemon_runtime, "build_review_badges_snapshot", lambda conn: {}
+        ):
+            payload = daemon_runtime._review_worklist_payload(
+                None, runtime, {"categories": ["commercial"], "limit": 5}
+            )
+
+        self.assertEqual([kind for kind, _ in seen], ["ui.btcpay.provenance.links"])
+        self.assertEqual(seen[0][1], {"state": "suggested", "limit": 5})
+        self.assertIn("commercial", payload["sections"])
+        self.assertFalse(payload["safety"]["network_contacted"])
 
     def test_live_tool_catalog_is_capability_scoped(self):
         report_tools = {
