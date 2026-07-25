@@ -28,6 +28,13 @@
       "label": "Search Kassiber",
       "placeholder": "Search pages, actions, transactions..."
     },
+    "searchLabel": "Search",
+    "searchPrompt": "Search pages, actions, settings, wallets, and transactions.",
+    "searchHints": {
+      "navigate": "Navigate",
+      "open": "Select",
+      "close": "Close"
+    },
     "searchNoMatches": "No matches",
     "dataMode": {
       "real": "Live data",
@@ -57,7 +64,8 @@
       "devLabel": "Kassiber dev",
       "releaseLabel": "Kassiber v{{version}}",
       "updateTitle": "Kassiber v{{current}} → v{{latest}} is available on GitHub",
-      "updateLabel": "update available · v{{version}}",
+      "updateLabel": "Update available · v{{version}}",
+      "updateDismiss": "Dismiss until next launch",
       "disabled": "Update checks are disabled. Enable them in Settings → Privacy before Kassiber contacts GitHub.",
       "checkFailed": "Kassiber could not check GitHub for updates. Please try again later.",
       "availablePrompt": "Kassiber v{{version}} is available. Open the release page on GitHub?",
@@ -164,14 +172,14 @@
     }
   },
   "search": {
-    "category": {
-      "action": "Action",
-      "page": "Page",
-      "report": "Report",
-      "review_item": "Review",
-      "setting": "Setting",
-      "transaction": "Transaction",
-      "wallet": "Wallet"
+    "group": {
+      "actions": "Actions",
+      "pages": "Pages",
+      "reports": "Reports",
+      "review": "Review",
+      "settings": "Settings",
+      "transactions": "Transactions",
+      "wallets": "Wallets"
     },
     "actionReason": {
       "fromSearch": "Opened from global search",

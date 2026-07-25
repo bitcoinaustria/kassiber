@@ -102,7 +102,8 @@
         "label": "Developer tools",
         "description": "The in-app Logs view and its in-memory buffer."
       }
-    }
+    },
+    "back": "Back"
   },
   "sync": {
     "loading": "Loading sync settings…",
@@ -658,11 +659,6 @@
       "info": "info",
       "warning": "warning",
       "alert": "alert"
-    },
-    "evidence": {
-      "exact": "exact evidence",
-      "derived": "derived evidence",
-      "unknown": "unknown evidence"
     },
     "database": {
       "plaintext": "plaintext",

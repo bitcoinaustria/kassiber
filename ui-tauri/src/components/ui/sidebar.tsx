@@ -241,10 +241,14 @@ function Sidebar({
         )}
         {...props}
       >
+        {/* The surface is painted by `sidebar-container` above (which also takes
+            the caller's className), so the inner wrapper stays transparent —
+            otherwise it covers any custom container surface, e.g. the app
+            shell's frosted `.kb-glass-panel`. */}
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm"
+          className="flex h-full w-full flex-col group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm"
         >
           {children}
         </div>
@@ -374,7 +378,11 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        // `overscroll-contain` (upstream ships the default `auto`): without it,
+        // reaching either end of the nav chains the scroll to the document and
+        // rubber-bands the whole shell, which pulls the frosted panel away from
+        // the banner above it. The main content scroller already does this.
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto overscroll-contain group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
       {...props}
