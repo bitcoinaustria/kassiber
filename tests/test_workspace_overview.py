@@ -153,6 +153,8 @@ def _insert_journal_entry(
     quantity_btc: str,
     fiat_value: float,
     occurred_at: str | None = None,
+    entry_type: str = "acquisition",
+    cost_basis: float | None = None,
 ) -> None:
     conn.execute(
         """
@@ -160,7 +162,7 @@ def _insert_journal_entry(
             id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
             occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
             cost_basis, proceeds, gain_loss, created_at
-        ) VALUES(?, ?, ?, ?, ?, NULL, ?, 'acquisition', 'BTC', ?, ?, ?, ?, NULL, 0, ?)
+        ) VALUES(?, ?, ?, ?, ?, NULL, ?, ?, 'BTC', ?, ?, ?, ?, NULL, 0, ?)
         """,
         (
             entry_id,
@@ -169,10 +171,11 @@ def _insert_journal_entry(
             tx_id,
             wallet_id,
             occurred_at or NOW,
+            entry_type,
             btc_to_msat(quantity_btc),
             fiat_value,
             fiat_value,
-            fiat_value,
+            fiat_value if cost_basis is None else cost_basis,
             NOW,
         ),
     )
@@ -290,6 +293,115 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
             {row["profileLabel"] for row in series_by_date["2026-06-02"]["books"]},
             {"Operating", "Personal"},
         )
+
+    def test_outbound_transaction_reduces_rollup_and_portfolio_series(self):
+        conn = self._db()
+        _insert_workspace(conn, "net-ws", "Net Set")
+        _insert_profile(conn, "net-pf", "net-ws", "Trading", active_transactions=2)
+        _insert_wallet(conn, "net-wal", "net-ws", "net-pf", "Trading Wallet")
+        _insert_transaction(
+            conn,
+            "tx-in",
+            "net-ws",
+            "net-pf",
+            "net-wal",
+            amount_btc="1.0",
+            fiat_currency="EUR",
+            fiat_rate=50_000,
+            occurred_at="2026-06-01T08:00:00Z",
+        )
+        _insert_transaction(
+            conn,
+            "tx-out",
+            "net-ws",
+            "net-pf",
+            "net-wal",
+            amount_btc="0.25",
+            fiat_currency="EUR",
+            fiat_rate=60_000,
+            occurred_at="2026-06-03T08:00:00Z",
+            direction="outbound",
+        )
+        _insert_journal_entry(
+            conn,
+            "je-in",
+            "net-ws",
+            "net-pf",
+            "net-wal",
+            "tx-in",
+            quantity_btc="1.0",
+            fiat_value=50_000,
+            occurred_at="2026-06-01T08:00:00Z",
+        )
+        _insert_journal_entry(
+            conn,
+            "je-out",
+            "net-ws",
+            "net-pf",
+            "net-wal",
+            "tx-out",
+            quantity_btc="-0.25",
+            fiat_value=15_000,
+            occurred_at="2026-06-03T08:00:00Z",
+            entry_type="disposal",
+            cost_basis=12_500,
+        )
+        conn.commit()
+
+        snapshot = build_workspace_overview_snapshot(conn, {"workspace_id": "net-ws"})
+
+        self.assertEqual(snapshot["status"]["transactionCount"], 2)
+        self.assertAlmostEqual(snapshot["fiat"]["btcBalance"], 0.75)
+        self.assertAlmostEqual(snapshot["fiat"]["eurBalance"], 45_000)
+        self.assertAlmostEqual(snapshot["fiat"]["eurCostBasis"], 37_500)
+        self.assertAlmostEqual(snapshot["fiat"]["books"][0]["balance"], 45_000)
+        series_by_date = {point["date"]: point for point in snapshot["portfolioSeries"]}
+        self.assertAlmostEqual(series_by_date["2026-06-01"]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(series_by_date["2026-06-03"]["balanceBtc"], 0.75)
+        self.assertLess(
+            series_by_date["2026-06-03"]["valueEur"],
+            series_by_date["2026-06-01"]["valueEur"] * 1.2,
+        )
+
+    def test_outbound_transaction_reduces_unprocessed_book_rollup(self):
+        # No journals yet, so the rollup is derived straight from transaction
+        # direction rather than from book state.
+        conn = self._db()
+        _insert_workspace(conn, "raw-ws", "Raw Set")
+        _insert_profile(conn, "raw-pf", "raw-ws", "Trading", processed=False)
+        _insert_wallet(conn, "raw-wal", "raw-ws", "raw-pf", "Trading Wallet")
+        _insert_transaction(
+            conn,
+            "tx-raw-in",
+            "raw-ws",
+            "raw-pf",
+            "raw-wal",
+            amount_btc="1.0",
+            fiat_currency="EUR",
+            fiat_rate=50_000,
+            occurred_at="2026-06-01T08:00:00Z",
+        )
+        _insert_transaction(
+            conn,
+            "tx-raw-out",
+            "raw-ws",
+            "raw-pf",
+            "raw-wal",
+            amount_btc="0.25",
+            fiat_currency="EUR",
+            fiat_rate=60_000,
+            occurred_at="2026-06-03T08:00:00Z",
+            direction="outbound",
+        )
+        conn.commit()
+
+        snapshot = build_workspace_overview_snapshot(conn, {"workspace_id": "raw-ws"})
+
+        self.assertAlmostEqual(snapshot["fiat"]["btcBalance"], 0.75)
+        self.assertAlmostEqual(snapshot["fiat"]["eurBalance"], 45_000)
+        series_by_date = {point["date"]: point for point in snapshot["portfolioSeries"]}
+        self.assertAlmostEqual(series_by_date["2026-06-01"]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(series_by_date["2026-06-03"]["balanceBtc"], 0.75)
 
     def test_mixed_currency_rollup_is_partial_and_keeps_per_book_rows(self):
         conn = self._db()
