@@ -23,6 +23,24 @@ _OWNER_KINDS = frozenset({"broker", "desktop"})
 _OWNER_ADMISSION_TIMEOUT_SECONDS = 5.0
 _OWNER_ADMISSION_RETRY_SECONDS = 0.01
 
+# Dev-only leniency. Several worktree previews of the same source tree need to
+# open one real book at once; production keeps exactly one desktop per book.
+DEV_SHARED_DESKTOP_ENV = "KASSIBER_DEV_SHARED_DESKTOP"
+_DEV_SHARED_DESKTOP_TRUE = frozenset({"1", "true", "yes", "on"})
+
+# Stale lock-file collection. Every distinct database path and inode leaves a
+# small lock group behind forever, and a day of test runs creates thousands of
+# throwaway ones. A live owner is excluded by its own lock rather than by age,
+# so the age bound only has to outlast a process that is still starting up.
+_OWNER_LOCK_GC_MIN_AGE_SECONDS = 24 * 60 * 60
+_OWNER_LOCK_GC_MIN_ENTRIES = 512
+# Collection sits on the first ownership acquisition of a process, including a
+# one-shot CLI command, so it is bounded by wall clock rather than by a count
+# whose cost depends on how large the backlog happens to be. A long backlog
+# simply drains across successive runs.
+_OWNER_LOCK_GC_BUDGET_SECONDS = 0.25
+_owner_lock_gc_done = False
+
 
 @dataclass(frozen=True)
 class CanonicalProject:
@@ -34,6 +52,28 @@ class CanonicalProject:
     public_id: str
 
 
+def dev_shared_desktop_enabled() -> bool:
+    """Report whether dev leniency lets desktops share one book.
+
+    Production keeps exactly one desktop per book. A developer running several
+    worktree previews against one real book opts in through the environment,
+    and a packaged sidecar refuses regardless of what it inherited.
+    """
+
+    if not _dev_shared_desktop_supported():
+        return False
+    value = os.environ.get(DEV_SHARED_DESKTOP_ENV, "").strip().lower()
+    return value in _DEV_SHARED_DESKTOP_TRUE
+
+
+def _dev_shared_desktop_supported() -> bool:
+    if getattr(sys, "frozen", False):
+        return False
+    # Windows exclusion is decided by share modes at open time rather than by
+    # convertible advisory locks, so leave its semantics untouched.
+    return os.name != "nt"
+
+
 @dataclass
 class ProjectOwnerLease:
     project: CanonicalProject
@@ -42,6 +82,11 @@ class ProjectOwnerLease:
     _handles: tuple[IO[bytes], ...]
     _lock_paths: set[Path]
     _released: bool = False
+    # "exclusive" is the production role. Dev leniency instead yields one
+    # "shared_primary" desktop plus any number of "shared_secondary" peers,
+    # which stay read-mostly and run no background workers of their own.
+    role: str = "exclusive"
+    _shared_desktop: bool = False
 
     def release(self) -> None:
         if self._released:
@@ -115,12 +160,15 @@ class ProjectOwnerLease:
                     write_record=False,
                 )
             if owner_path not in self._lock_paths:
-                self._add_lock(
-                    owner_path,
-                    project,
-                    shared=False,
-                    write_record=True,
-                )
+                if self._shared_desktop:
+                    self._add_shared_desktop_lock(owner_path, project)
+                else:
+                    self._add_lock(
+                        owner_path,
+                        project,
+                        shared=False,
+                        write_record=True,
+                    )
             _require_compatible_other_owner(lock_path, project, self.owner_kind)
         except Exception:
             added_handles = self._handles[len(original_handles) :]
@@ -144,51 +192,9 @@ class ProjectOwnerLease:
         handle = _open_owner_lock(lock_path, project.public_id, shared=shared)
         try:
             if not _try_lock_handle(handle, shared=shared):
-                owner = _read_owner_record(handle)
-                owner_kind = owner.get("owner", "unknown")
-                hint = (
-                    "Reuse or close the existing desktop app or preview. "
-                    "A CLI broker can coexist, but a second desktop cannot."
-                    if owner_kind == "desktop"
-                    else (
-                        "Reuse or lock the existing CLI broker, then retry."
-                        if owner_kind == "broker"
-                        else None
-                    )
-                )
-                raise AppError(
-                    (
-                        "another desktop app or preview owns this project"
-                        if owner_kind == "desktop"
-                        else (
-                            "another CLI broker owns this project"
-                            if owner_kind == "broker"
-                            else "another long-lived process owns this project path"
-                        )
-                    ),
-                    code="project_in_use",
-                    hint=hint,
-                    details={
-                        "project": project.public_id,
-                        "owner": owner_kind,
-                        "generation": owner.get("generation"),
-                    },
-                    retryable=True,
-                )
+                raise _project_in_use_error(handle, project)
             if write_record:
-                record = json.dumps(
-                    {
-                        "schema_version": 2,
-                        "owner": self.owner_kind,
-                        "generation": self.generation,
-                        "identity": project.identity,
-                        "pid": os.getpid(),
-                    },
-                    sort_keys=True,
-                ).encode("utf-8")
-                handle.seek(0)
-                handle.truncate(0)
-                handle.write(record + b"\n")
+                self._write_owner_record(handle, project)
             self._handles = (*self._handles, handle)
             self._lock_paths.add(lock_path)
         except Exception:
@@ -197,6 +203,63 @@ class ProjectOwnerLease:
             finally:
                 handle.close()
             raise
+
+    def _add_shared_desktop_lock(
+        self,
+        lock_path: Path,
+        project: CanonicalProject,
+    ) -> None:
+        """Join this book's desktop lock as a dev peer.
+
+        The caller holds this lock path's admission lock for the whole
+        sequence, so the primary's exclusive-to-shared conversion is never
+        observed half-done and at most one process claims the primary role.
+        A desktop that did not opt into leniency still holds the lock
+        exclusively, and every peer then fails with the usual conflict.
+        """
+
+        handle = _open_owner_lock(lock_path, project.public_id, shared=True)
+        try:
+            if self.role != "shared_secondary" and _try_lock_handle(handle):
+                role = "shared_primary"
+                _downgrade_lock_to_shared(handle)
+            elif _try_lock_handle(handle, shared=True):
+                role = "shared_secondary"
+            else:
+                raise _project_in_use_error(handle, project)
+            if role == "shared_primary":
+                self._write_owner_record(handle, project, shared=True)
+            self.role = role
+            self._handles = (*self._handles, handle)
+            self._lock_paths.add(lock_path)
+        except Exception:
+            try:
+                _unlock_handle(handle)
+            finally:
+                handle.close()
+            raise
+
+    def _write_owner_record(
+        self,
+        handle: IO[bytes],
+        project: CanonicalProject,
+        *,
+        shared: bool = False,
+    ) -> None:
+        record = json.dumps(
+            {
+                "schema_version": 2,
+                "owner": self.owner_kind,
+                "generation": self.generation,
+                "identity": project.identity,
+                "pid": os.getpid(),
+                "shared": shared,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+        handle.seek(0)
+        handle.truncate(0)
+        handle.write(record + b"\n")
 
     def __enter__(self) -> ProjectOwnerLease:
         return self
@@ -278,17 +341,29 @@ def acquire_project_ownership(
     *,
     owner_kind: str,
     generation: str,
+    allow_shared_desktop: bool = False,
 ) -> ProjectOwnerLease:
-    """Acquire this role's canonical long-lived owner locks without waiting."""
+    """Acquire this role's canonical long-lived owner locks without waiting.
+
+    ``allow_shared_desktop`` lets a desktop caller opt into dev leniency; it
+    only takes effect when the environment also enables it. Callers that need
+    true exclusivity, such as database-wide maintenance, must leave it off.
+    """
 
     if owner_kind not in _OWNER_KINDS:
         raise ValueError(f"invalid owner kind: {owner_kind}")
+    shared_desktop = (
+        owner_kind == "desktop"
+        and allow_shared_desktop
+        and dev_shared_desktop_enabled()
+    )
     lease = ProjectOwnerLease(
         project,
         owner_kind,
         generation,
         (),
         set(),
+        _shared_desktop=shared_desktop,
     )
     try:
         # The shared compatibility locks block older Kassiber versions that
@@ -305,6 +380,52 @@ def acquire_project_ownership(
     except Exception:
         lease.release()
         raise
+
+
+def _project_in_use_error(
+    handle: IO[bytes],
+    project: CanonicalProject,
+) -> AppError:
+    """Describe the conflicting owner well enough to go resolve it.
+
+    The lock record names a process of the same OS user in a 0700 directory,
+    so reporting its pid discloses nothing the principal cannot already read;
+    withholding it only leaves the operator with no way to find the holder.
+    """
+
+    owner = _read_owner_record(handle)
+    owner_kind = owner.get("owner", "unknown")
+    pid = owner.get("pid")
+    held_by = f" It is held by pid {pid}." if isinstance(pid, int) else ""
+    if owner_kind == "desktop":
+        message = "another desktop app or preview owns this project"
+        hint = (
+            f"Reuse or close the existing desktop app or preview.{held_by} "
+            "A CLI broker can coexist, but a second desktop cannot."
+        )
+        if _dev_shared_desktop_supported():
+            hint += (
+                " To run several dev previews against one book, start every "
+                f"one of them with {DEV_SHARED_DESKTOP_ENV}=1."
+            )
+    elif owner_kind == "broker":
+        message = "another CLI broker owns this project"
+        hint = f"Reuse or lock the existing CLI broker, then retry.{held_by}"
+    else:
+        message = "another long-lived process owns this project path"
+        hint = held_by.strip() or None
+    return AppError(
+        message,
+        code="project_in_use",
+        hint=hint,
+        details={
+            "project": project.public_id,
+            "owner": owner_kind,
+            "generation": owner.get("generation"),
+            "pid": pid,
+        },
+        retryable=True,
+    )
 
 
 def _owner_kind_lock_path(lock_path: Path, owner_kind: str) -> Path:
@@ -371,9 +492,16 @@ def exclusive_project_maintenance(
     if active_owner_kind is not None and active_owner_kind not in _OWNER_KINDS:
         raise ValueError(f"invalid active owner kind: {active_owner_kind}")
     project = canonical_project(data_root)
+    # Skipping the caller's own role is only safe when that role is held
+    # exclusively. Under dev leniency a desktop holds it shared, so the lock
+    # must be demanded here too: maintenance then fails closed instead of
+    # rekeying the book underneath an attached preview.
+    skip_own_role = active_owner_kind is not None and not (
+        active_owner_kind == "desktop" and dev_shared_desktop_enabled()
+    )
     owner_kinds = (
         tuple(kind for kind in ("broker", "desktop") if kind != active_owner_kind)
-        if active_owner_kind is not None
+        if skip_own_role
         else ("broker", "desktop")
     )
     leases: list[ProjectOwnerLease] = []
@@ -485,7 +613,108 @@ def _owner_lock_root() -> Path:
         _ensure_owner_lock_directory(runtime_root)
         root = runtime_root / "operator-owners"
     _ensure_owner_lock_directory(root)
+    _collect_stale_owner_locks(root)
     return root.resolve(strict=True)
+
+
+def _collect_stale_owner_locks(root: Path) -> None:
+    """Drop long-abandoned lock groups so the namespace cannot grow forever.
+
+    Every distinct database inode and path leaves a small group behind for
+    good, and test runs create thousands of throwaway ones. Collection is
+    best-effort, runs at most once per process, and never blocks ownership.
+    """
+
+    global _owner_lock_gc_done
+    if _owner_lock_gc_done:
+        return
+    _owner_lock_gc_done = True
+    try:
+        names = sorted(
+            entry.name
+            for entry in os.scandir(root)
+            if entry.name.endswith(".lock")
+        )
+    except OSError:
+        return
+    if len(names) < _OWNER_LOCK_GC_MIN_ENTRIES:
+        return
+    cutoff = time.time() - _OWNER_LOCK_GC_MIN_AGE_SECONDS
+    deadline = time.monotonic() + _OWNER_LOCK_GC_BUDGET_SECONDS
+    for name in names:
+        if time.monotonic() >= deadline:
+            return
+        try:
+            _remove_stale_owner_lock_group(root / name, cutoff)
+        except OSError:
+            continue
+
+
+def _remove_stale_owner_lock_group(base_path: Path, cutoff: float) -> bool:
+    """Remove one lock group only when nothing can still be using it.
+
+    The admission lock is held across the whole removal, and every member must
+    be idle and stale, so a concurrent acquirer can never be left holding a
+    replaced inode while another process locks its successor.
+    """
+
+    admission_path = _owner_admission_lock_path(base_path)
+    members = [
+        base_path,
+        *(_owner_kind_lock_path(base_path, kind) for kind in sorted(_OWNER_KINDS)),
+    ]
+    handles: list[IO[bytes]] = []
+    removed = False
+    if not admission_path.exists():
+        # Opening it would create it. A group without one is either incomplete
+        # or still being created, and neither is collection's to touch.
+        return False
+    try:
+        try:
+            admission = _open_owner_lock(admission_path, "collector")
+        except AppError:
+            return False
+        handles.append(admission)
+        if not _try_lock_handle(admission):
+            return False
+        present: list[Path] = []
+        for member in members:
+            try:
+                info = member.stat()
+            except FileNotFoundError:
+                continue
+            except OSError:
+                return False
+            if info.st_mtime >= cutoff:
+                return False
+            try:
+                handle = _open_owner_lock(member, "collector")
+            except AppError:
+                return False
+            handles.append(handle)
+            if not _try_lock_handle(handle):
+                return False
+            present.append(member)
+        for member in present:
+            try:
+                member.unlink()
+            except OSError:
+                return False
+        removed = True
+        return True
+    finally:
+        if removed:
+            # Unlink the admission file last, while it is still held, so no
+            # other process is waiting on an inode about to disappear.
+            try:
+                admission_path.unlink()
+            except OSError:
+                pass
+        for handle in reversed(handles):
+            try:
+                _unlock_handle(handle)
+            finally:
+                handle.close()
 
 
 def _ensure_owner_lock_directory(path: Path) -> None:
@@ -698,6 +927,23 @@ def _try_lock_handle(handle: IO[bytes], *, shared: bool = False) -> bool:
         return False
 
 
+def _downgrade_lock_to_shared(handle: IO[bytes]) -> None:
+    """Convert a held exclusive flock to shared so dev peers can join.
+
+    A failed conversion simply leaves the exclusive lock in place: the caller
+    stays the sole desktop and peers get the ordinary conflict error.
+    """
+
+    if os.name == "nt":
+        return
+    import fcntl
+
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except OSError:
+        pass
+
+
 def _unlock_handle(handle: IO[bytes]) -> None:
     if os.name == "nt":
         # Closing the last duplicate releases the share-mode reservation.
@@ -722,8 +968,12 @@ def _read_owner_record(handle: IO[bytes]) -> dict[str, object]:
     owner = payload.get("owner")
     generation = payload.get("generation")
     identity = payload.get("identity")
+    pid = payload.get("pid")
     return {
         "owner": owner if owner in _OWNER_KINDS else "unknown",
         "generation": generation if isinstance(generation, str) else None,
         "identity": identity if isinstance(identity, str) else None,
+        # bool is an int subclass, so reject it before trusting the pid.
+        "pid": pid if isinstance(pid, int) and not isinstance(pid, bool) else None,
+        "shared": payload.get("shared") is True,
     }

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -736,6 +737,240 @@ class OperatorProjectTest(unittest.TestCase):
                 self.assertIsNone(legacy)
             finally:
                 owner.release()
+
+
+@unittest.skipIf(os.name == "nt", "dev desktop leniency is POSIX-only")
+class DevSharedDesktopOwnerTests(unittest.TestCase):
+    """Several worktree previews may share one book; production may not."""
+
+    def _dev_shared(self) -> mock._patch_dict:
+        return mock.patch.dict(
+            os.environ,
+            {project_module.DEV_SHARED_DESKTOP_ENV: "1"},
+        )
+
+    def _desktop(self, project: CanonicalProject, generation: str) -> ProjectOwnerLease:
+        return acquire_project_ownership(
+            project,
+            owner_kind="desktop",
+            generation=generation,
+            allow_shared_desktop=True,
+        )
+
+    def test_dev_previews_share_one_book_as_primary_and_secondary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            with self._dev_shared():
+                first = self._desktop(project, "preview-one")
+                try:
+                    second = self._desktop(project, "preview-two")
+                    try:
+                        self.assertEqual(first.role, "shared_primary")
+                        self.assertEqual(second.role, "shared_secondary")
+                    finally:
+                        second.release()
+                finally:
+                    first.release()
+
+    def test_second_desktop_still_fails_without_the_dev_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            first = self._desktop(project, "desktop-one")
+            try:
+                self.assertEqual(first.role, "exclusive")
+                with self.assertRaises(AppError) as raised:
+                    self._desktop(project, "desktop-two")
+                self.assertEqual(raised.exception.code, "project_in_use")
+            finally:
+                first.release()
+
+    def test_packaged_build_ignores_an_inherited_dev_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            with self._dev_shared(), mock.patch.object(
+                project_module.sys, "frozen", True, create=True
+            ):
+                self.assertFalse(project_module.dev_shared_desktop_enabled())
+                first = self._desktop(project, "packaged-one")
+                try:
+                    with self.assertRaises(AppError) as raised:
+                        self._desktop(project, "packaged-two")
+                    self.assertEqual(raised.exception.code, "project_in_use")
+                finally:
+                    first.release()
+
+    def test_shared_desktops_still_exclude_database_maintenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            with self._dev_shared():
+                first = self._desktop(project, "preview-one")
+                second = self._desktop(project, "preview-two")
+                try:
+                    with self.assertRaises(AppError) as raised:
+                        with exclusive_project_maintenance(
+                            tmp,
+                            active_owner_kind=None,
+                        ):
+                            self.fail("maintenance must not overlap a preview")
+                    self.assertEqual(raised.exception.code, "project_in_use")
+                finally:
+                    second.release()
+                    first.release()
+                with exclusive_project_maintenance(tmp, active_owner_kind=None):
+                    pass
+
+    def test_maintenance_from_a_shared_desktop_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            with self._dev_shared():
+                preview = self._desktop(project, "preview-one")
+                peer = self._desktop(project, "preview-two")
+                try:
+                    # The caller's own desktop role may not be skipped while it
+                    # is held shared, or a rekey would run under the peer.
+                    with self.assertRaises(AppError) as raised:
+                        with exclusive_project_maintenance(
+                            tmp,
+                            active_owner_kind="desktop",
+                        ):
+                            self.fail("maintenance must not overlap a peer")
+                    self.assertEqual(raised.exception.code, "project_in_use")
+                finally:
+                    peer.release()
+                    preview.release()
+
+    def test_maintenance_never_opts_into_shared_desktop_ownership(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            with self._dev_shared():
+                lease = acquire_project_ownership(
+                    project,
+                    owner_kind="desktop",
+                    generation="maintenance",
+                )
+                try:
+                    self.assertEqual(lease.role, "exclusive")
+                    with self.assertRaises(AppError):
+                        self._desktop(project, "preview")
+                finally:
+                    lease.release()
+
+    def test_broker_still_coexists_with_shared_desktops(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            with self._dev_shared():
+                first = self._desktop(project, "preview-one")
+                second = self._desktop(project, "preview-two")
+                broker = acquire_project_ownership(
+                    project,
+                    owner_kind="broker",
+                    generation="broker",
+                )
+                broker.release()
+                second.release()
+                first.release()
+
+    def test_conflict_names_the_holding_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "kassiber.sqlite3").write_bytes(b"database")
+            project = canonical_project(tmp)
+            lease = self._desktop(project, "desktop-one")
+            try:
+                with self.assertRaises(AppError) as raised:
+                    self._desktop(project, "desktop-two")
+            finally:
+                lease.release()
+            error = raised.exception
+            self.assertEqual((error.details or {})["pid"], os.getpid())
+            self.assertIn(f"pid {os.getpid()}", error.hint or "")
+            self.assertNotIn(str(Path(tmp)), repr(error.details))
+
+
+@unittest.skipIf(os.name == "nt", "lock collection is exercised on POSIX")
+class OwnerLockCollectionTests(unittest.TestCase):
+    """Abandoned lock groups are reclaimed; live and recent ones are not."""
+
+    def _write_group(self, root: Path, name: str, age_seconds: float) -> list[Path]:
+        base = root / f"{name}.lock"
+        members = [
+            base,
+            project_module._owner_kind_lock_path(base, "broker"),
+            project_module._owner_kind_lock_path(base, "desktop"),
+            project_module._owner_admission_lock_path(base),
+        ]
+        stamp = time.time() - age_seconds
+        for member in members:
+            member.write_bytes(b"")
+            os.utime(member, (stamp, stamp))
+        return members
+
+    def test_collection_removes_stale_groups_and_keeps_the_rest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale = self._write_group(
+                root,
+                "identity-stale",
+                project_module._OWNER_LOCK_GC_MIN_AGE_SECONDS + 60,
+            )
+            recent = self._write_group(root, "identity-recent", 60)
+            held = self._write_group(
+                root,
+                "identity-held",
+                project_module._OWNER_LOCK_GC_MIN_AGE_SECONDS + 60,
+            )
+            handle = project_module._open_owner_lock(held[2], "test")
+            try:
+                self.assertTrue(project_module._try_lock_handle(handle))
+                with mock.patch.object(
+                    project_module, "_owner_lock_gc_done", False
+                ), mock.patch.object(
+                    project_module, "_OWNER_LOCK_GC_MIN_ENTRIES", 1
+                ):
+                    project_module._collect_stale_owner_locks(root)
+            finally:
+                project_module._unlock_handle(handle)
+                handle.close()
+            for member in stale:
+                self.assertFalse(member.exists(), member)
+            for member in recent:
+                self.assertTrue(member.exists(), member)
+            self.assertTrue(held[0].exists())
+
+    def test_collection_leaves_no_admission_file_it_created(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            recent = self._write_group(root, "identity-recent", 60)
+            admission = project_module._owner_admission_lock_path(recent[0])
+            admission.unlink()
+            with mock.patch.object(
+                project_module, "_owner_lock_gc_done", False
+            ), mock.patch.object(project_module, "_OWNER_LOCK_GC_MIN_ENTRIES", 1):
+                project_module._collect_stale_owner_locks(root)
+            # Probing a group may not grow the namespace, and a group without
+            # an admission lock is skipped rather than given one.
+            self.assertFalse(admission.exists())
+            self.assertTrue(recent[0].exists())
+
+    def test_collection_runs_at_most_once_per_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_group(
+                root,
+                "identity-stale",
+                project_module._OWNER_LOCK_GC_MIN_AGE_SECONDS + 60,
+            )
+            with mock.patch.object(
+                project_module, "_owner_lock_gc_done", True
+            ), mock.patch.object(project_module, "_OWNER_LOCK_GC_MIN_ENTRIES", 1):
+                project_module._collect_stale_owner_locks(root)
+            self.assertTrue((root / "identity-stale.lock").exists())
 
 
 if __name__ == "__main__":

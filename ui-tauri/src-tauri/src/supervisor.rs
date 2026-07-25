@@ -872,6 +872,12 @@ impl DaemonProcess {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if command.source == "bundled_sidecar" {
+            // Several dev previews may share one book; an installed app never
+            // may. The sidecar refuses the flag on its own, and dropping it
+            // here keeps a stray environment from reaching it at all.
+            process_command.env_remove("KASSIBER_DEV_SHARED_DESKTOP");
+        }
         hide_console_window(&mut process_command);
         let mut executable_busy_retries = 0u8;
         let mut child = loop {
