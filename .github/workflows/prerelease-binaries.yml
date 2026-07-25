@@ -86,6 +86,16 @@ jobs:
     name: Build ${{ matrix.label }} CLI
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    # Build every packaged artifact against uv's own managed CPython, the same
+    # interpreter scripts/build-macos-arm64-app.sh uses, so a locally verified
+    # build and the published one are the same shape. `actions/setup-python`
+    # ships a macOS *framework* build whose stdlib extension modules are 58
+    # separate `.so` files, where the managed build links them into
+    # `libpython3.11.dylib` — 115 bundled dylibs against 57. `only-managed`
+    # keeps a runner-provided 3.11 from being picked up instead.
+    env:
+      UV_PYTHON: "3.11"
+      UV_PYTHON_PREFERENCE: only-managed
     strategy:
       fail-fast: false
       matrix:
@@ -115,15 +125,14 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.11"
-
       - name: Install uv
         uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
         with:
           enable-cache: true
+
+      - name: Install the managed Python
+        shell: bash
+        run: uv python install "$UV_PYTHON"
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -268,9 +277,15 @@ jobs:
             test -x "$sidecar_dir/kassiber-cli-${{ matrix.triple }}"
             test -d "$sidecar_dir/_internal"
             # Tauri copies resource directories file by file and skips symlinks,
-            # so a symlinked payload would arrive in the bundle broken. Nothing
-            # produces one today; fail loudly if the Python layout ever changes.
-            test -z "$(find "$sidecar_dir" -type l -print -quit)"
+            # so a symlinked payload would arrive in the bundle broken. A
+            # framework-shaped CPython emits them (Versions/Current and
+            # friends), which is one reason this job pins uv's managed build.
+            symlinks="$(find "$sidecar_dir" -type l)"
+            if [ -n "$symlinks" ]; then
+              echo "Sidecar tree contains symlinks Tauri will not bundle intact:" >&2
+              printf '%s\n' "$symlinks" >&2
+              exit 1
+            fi
           fi
 
       - name: Smoke packaged CLI
@@ -290,7 +305,10 @@ jobs:
             file="$1"
             path="$2"
             expected="$3"
-            if ! python -c 'import json, sys; from functools import reduce; value = reduce(lambda current, key: current[key], sys.argv[2].split("."), json.load(open(sys.argv[1], encoding="utf-8"))); assert value == sys.argv[3], f"{sys.argv[2]}: expected {sys.argv[3]!r}, got {value!r}"' "$file" "$path" "$expected"; then
+            # `uv run python`, not a bare `python`: no runner-provided
+            # interpreter is on PATH under every OS in this matrix now that the
+            # job builds against uv's managed CPython.
+            if ! uv run --locked python -c 'import json, sys; from functools import reduce; value = reduce(lambda current, key: current[key], sys.argv[2].split("."), json.load(open(sys.argv[1], encoding="utf-8"))); assert value == sys.argv[3], f"{sys.argv[2]}: expected {sys.argv[3]!r}, got {value!r}"' "$file" "$path" "$expected"; then
               cat "$file" >&2
               return 1
             fi

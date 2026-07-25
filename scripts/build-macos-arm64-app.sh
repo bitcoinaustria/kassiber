@@ -136,10 +136,12 @@ SIDECAR_DIST="dist/$SIDECAR_NAME"
 SIDECAR_BIN="$SIDECAR_DIST/$SIDECAR_NAME"
 
 # Tauri copies resource directories file by file and skips symlinks, so a
-# symlinked payload would arrive in the bundle broken. Nothing produces one
-# today; fail loudly if a future Python build layout starts to.
-if [ -n "$(find "$SIDECAR_DIST" -type l -print -quit)" ]; then
-  echo "$SIDECAR_DIST contains symlinks, which Tauri will not bundle intact." >&2
+# symlinked payload would arrive in the bundle broken. A framework-shaped
+# CPython emits them; uv's managed build, used above, does not.
+sidecar_symlinks="$(find "$SIDECAR_DIST" -type l)"
+if [ -n "$sidecar_symlinks" ]; then
+  echo "$SIDECAR_DIST contains symlinks, which Tauri will not bundle intact:" >&2
+  printf '%s\n' "$sidecar_symlinks" >&2
   exit 1
 fi
 
