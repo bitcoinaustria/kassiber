@@ -853,14 +853,6 @@ export function formatAssetAmount(value: number, asset: string, precision = 8) {
   return `${value.toFixed(precision)} ${asset || "BTC"}`;
 }
 
-export function formatFee(txn: Transaction, currency: Currency) {
-  const feeBtc = txn.feeBtc ?? 0;
-  if (!feeBtc) return "-";
-  if (currency === "btc") return formatBtcAmount(feeBtc);
-  if (txn.feeEur === null || txn.feeEur === undefined) return MISSING_FIAT_LABEL;
-  return currencyFormatter.format(txn.feeEur);
-}
-
 export function createNewTransactionDraft(): NewTransactionDraft {
   return {
     sourceKind: "onchain",

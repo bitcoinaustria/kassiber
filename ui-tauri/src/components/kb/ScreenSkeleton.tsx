@@ -1,5 +1,3 @@
-import { useTranslation } from "react-i18next";
-
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   pageHeaderActionsClassName,
@@ -12,11 +10,6 @@ interface ScreenSkeletonProps {
   className?: string;
   titleWidth?: string;
   metricCount?: number;
-}
-
-interface ScreenRefreshSkeletonProps {
-  className?: string;
-  label?: string;
 }
 
 interface ScreenNoticeProps {
@@ -110,41 +103,6 @@ export function ScreenNotice({ className, title, body }: ScreenNoticeProps) {
         <p className="text-sm font-semibold text-foreground">{title}</p>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{body}</p>
       </div>
-    </div>
-  );
-}
-
-export function ScreenRefreshSkeleton({
-  className,
-  label,
-}: ScreenRefreshSkeletonProps) {
-  const { t } = useTranslation("chrome");
-  const refreshingLabel = label ?? t("screen.refreshing");
-  return (
-    <div
-      className={cn(
-        "pointer-events-none rounded-lg border bg-card/92 p-3 shadow-lg backdrop-blur sm:p-4",
-        className,
-      )}
-      role="status"
-      aria-live="polite"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 space-y-2">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-4 w-44 max-w-full" />
-        </div>
-        <div className="hidden shrink-0 items-center gap-2 sm:flex">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-8 w-9" />
-        </div>
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-9 w-full" />
-        ))}
-      </div>
-      <span className="sr-only">{refreshingLabel}</span>
     </div>
   );
 }

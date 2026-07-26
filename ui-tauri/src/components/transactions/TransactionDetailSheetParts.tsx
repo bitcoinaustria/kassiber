@@ -18,14 +18,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
   copyText,
   currencyFormatter,
-  formatDisplayMoney,
-  formatSignedDisplayMoney,
   transactionFlow,
   type Transaction,
   type TransactionEditDraft,
@@ -75,16 +72,6 @@ export function networkLabel(transaction: Transaction): string {
   if (transaction.paymentMethod === "Liquid") return "Liquid";
   if (transaction.paymentMethod === "Lightning") return "Lightning";
   return transaction.paymentMethod;
-}
-
-export function confirmationsLabel(
-  conf: number | undefined,
-  t?: (key: string, opts?: Record<string, unknown>) => string,
-) {
-  if (conf === undefined) return null;
-  if (conf <= 0) return t ? t("transactions:confirmations.zero") : "0 confirmations";
-  if (conf >= 6) return t ? t("transactions:confirmations.sixPlus") : "6+ conf";
-  return t ? t("transactions:confirmations.count", { count: conf }) : `${conf} conf`;
 }
 
 export function formatRateAtTime(rate: number | null | undefined) {
@@ -632,22 +619,6 @@ export type CommercialContextData = {
   btcpay: CommercialBtcpayMatch[];
   documents: CommercialContextDocument[];
 };
-
-// ─── money + impact helpers (unchanged) ────────────────────────────────
-
-export function formatSheetMoney(
-  eur: number | null,
-  btc: number,
-  currency: Currency,
-  sign = false,
-) {
-  if (sign) return formatSignedDisplayMoney(eur, btc, currency);
-  return formatDisplayMoney(
-    eur === null ? null : Math.abs(eur),
-    Math.abs(btc),
-    currency,
-  );
-}
 
 export function balanceImpactDirection(
   transaction: Transaction,
