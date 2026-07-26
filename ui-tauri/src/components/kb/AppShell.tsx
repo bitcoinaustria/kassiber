@@ -1091,7 +1091,6 @@ export function AppShell() {
       addNotification,
       bumpDaemonSession,
       clearDaemonQueryCache,
-      dataMode,
       navigate,
       queryClient,
       setIdentity,

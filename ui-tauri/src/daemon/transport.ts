@@ -976,7 +976,8 @@ const bridgeDaemon: DaemonTransport = {
   },
 };
 
-export function getTransport(_dataMode?: DataMode): DaemonTransport {
+export function getTransport(dataMode?: DataMode): DaemonTransport {
+  void dataMode;
   switch (DAEMON_MODE) {
     case "bridge":
       return withDaemonLogging(bridgeDaemon, "daemon:bridge");
