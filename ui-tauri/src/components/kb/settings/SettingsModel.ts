@@ -389,10 +389,6 @@ export const DEFAULT_BACKENDS: Backend[] = [
   },
 ];
 
-export const DEFAULT_RATE_BACKENDS: Backend[] = DEFAULT_BACKENDS.filter(
-  (backend) => backend.net === "FX",
-);
-
 function isHttpEndpoint(url: string) {
   try {
     const parsed = new URL(url);

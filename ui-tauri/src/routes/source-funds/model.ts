@@ -609,11 +609,6 @@ export function stringValue(value: unknown): string {
 }
 
 
-export function numberValue(value: unknown): number | null {
-  return typeof value === "number" ? value : null;
-}
-
-
 export function isBulkReviewableLink(link: SourceFundsLink) {
   const method = link.method || "";
   const deterministic = BULK_REVIEWABLE_METHODS.has(method);

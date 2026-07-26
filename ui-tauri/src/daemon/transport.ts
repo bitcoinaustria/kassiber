@@ -892,28 +892,6 @@ export async function removeTerminalCommand(): Promise<TerminalCommandStatus> {
   return invoke<TerminalCommandStatus>("terminal_command_remove_command");
 }
 
-/**
- * Subscribe to unsolicited daemon events (`daemon://event`). Resolves
- * with an unsubscribe function. The mock transport has no daemon and the
- * dev bridge logs events in the Vite terminal instead of pushing them to
- * the browser, so both return a no-op unsubscribe.
- */
-export async function subscribeDaemonEvents<T = unknown>(
-  onEvent: (record: DaemonEventRecord<T>) => void,
-): Promise<() => void> {
-  if (DAEMON_MODE !== "tauri") {
-    return () => {};
-  }
-  const { listen } = await import("@tauri-apps/api/event");
-  const unlisten = await listen<DaemonEventRecord<T>>(
-    "daemon://event",
-    (event) => {
-      onEvent(event.payload);
-    },
-  );
-  return () => safeTauriUnlisten(unlisten);
-}
-
 const tauriDaemon: DaemonTransport = {
   async invoke<T = unknown>(
     req: DaemonRequest,
