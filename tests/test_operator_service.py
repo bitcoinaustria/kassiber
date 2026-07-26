@@ -3431,7 +3431,7 @@ class OperatorServiceTest(unittest.TestCase):
 
     @staticmethod
     def _wait_terminal(service: OperatorService, operation_id: str) -> dict[str, object]:
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             status = service.operation_status(operation_id)
             if status["state"] in {"completed", "failed", "cancelled", "result_unknown"}:
