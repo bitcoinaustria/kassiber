@@ -287,7 +287,7 @@ normal accounting review session with:
 
 ```bash
 kassiber operator mode brokered
-kassiber operator unlock --until-lock
+kassiber operator unlock
 kassiber --machine status
 kassiber --machine reports summary --workspace personal --profile main
 kassiber operator status

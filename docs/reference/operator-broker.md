@@ -70,7 +70,7 @@ must be re-enrolled, which gives it an independent credential generation.
 ## User commands
 
 ```bash
-kassiber operator unlock --until-lock
+kassiber operator unlock
 kassiber operator unlock --duration 8h
 kassiber operator status
 kassiber operator lock
@@ -82,10 +82,11 @@ kassiber operator touch-id enroll
 kassiber operator touch-id forget
 ```
 
-An explicitly started session defaults to `--until-lock`. A duration accepts
-human units such as `30m`, `8h`, and `2d`. The minimum is one minute; there is
-no arbitrary maximum below the platform timestamp range. `--until-lock` is the
-preferred deliberate work-session policy and has no timer.
+An explicitly started session defaults to staying unlocked until an explicit
+lock or broker exit. A duration accepts human units such as `30m`, `8h`, and
+`2d`. The minimum is one minute; there is no arbitrary maximum below the
+platform timestamp range. The default is the preferred deliberate work-session
+policy and has no timer.
 The default cumulative grant is `accounting_decisions`, which includes `read`
 and `operator`, so a real review session can resolve quarantine. A narrower
 grant can be selected explicitly. `admin` is never a lease grant.

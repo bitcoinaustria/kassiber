@@ -37,16 +37,10 @@ def add_operator_parser(subparsers: argparse._SubParsersAction) -> None:
     commands = operator.add_subparsers(dest="operator_command", required=True)
 
     unlock = commands.add_parser("unlock", help="Create or refresh a project lease")
-    duration = unlock.add_mutually_exclusive_group()
-    duration.add_argument(
-        "--until-lock",
-        action="store_true",
-        help="Keep the lease until explicit lock or broker exit (default)",
-    )
-    duration.add_argument(
+    unlock.add_argument(
         "--duration",
         metavar="DURATION",
-        help="Lease duration such as 30m, 8h, or 2d",
+        help="Lease duration such as 30m, 8h, or 2d; omit to keep it until lock",
     )
     unlock.add_argument(
         "--capability",
