@@ -234,7 +234,6 @@
     "passphraseRequiredTitle": "Database passphrase required",
     "booksLocked": "Books locked",
     "defaultReason": "Enter the database passphrase to unlock.",
-    "unlockingTouchId": "Unlocking with Touch ID...",
     "passphrase": "Passphrase",
     "touchIdUnavailableReason": "Touch ID unlock is unavailable: {{reason}}",
     "touchIdUnavailable": "Touch ID unlock is unavailable for this desktop session.",

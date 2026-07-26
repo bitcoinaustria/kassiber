@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Wordmark } from "@/components/kb/Wordmark";
+import { LedgerStageBand } from "@/components/kb/shell/SidebarStageBackdrop";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
   activateImportProject,
@@ -711,10 +712,14 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   return (
-    <section className="min-h-screen bg-paper px-4 py-6 text-ink sm:px-8 lg:px-10">
+    <section className="relative min-h-screen bg-paper px-4 py-6 text-ink sm:px-8 lg:px-10">
+      {/* Same ledger page as the app chrome, so setup and the app it sets up
+          look like one product. Fades into `--color-paper` (this screen's
+          surface) rather than the shell's `--card`. */}
+      <LedgerStageBand className="h-[34rem]" fade="var(--color-paper)" pages={6} />
       <div
         className={cn(
-          "mx-auto flex max-w-7xl flex-col items-center gap-8",
+          "relative z-10 mx-auto flex max-w-7xl flex-col items-center gap-8",
           className,
         )}
       >

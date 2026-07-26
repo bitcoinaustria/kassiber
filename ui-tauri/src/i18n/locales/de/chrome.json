@@ -234,7 +234,6 @@
     "passphraseRequiredTitle": "Datenbank-Passphrase erforderlich",
     "booksLocked": "Bücher gesperrt",
     "defaultReason": "Gib die Datenbank-Passphrase ein, um zu entsperren.",
-    "unlockingTouchId": "Wird mit Touch ID entsperrt…",
     "passphrase": "Passphrase",
     "touchIdUnavailableReason": "Touch-ID-Entsperrung ist nicht verfügbar: {{reason}}",
     "touchIdUnavailable": "Touch-ID-Entsperrung ist für diese Desktop-Sitzung nicht verfügbar.",

@@ -148,7 +148,10 @@ import {
   type SettingsSectionId,
 } from "@/components/kb/settingsSections";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
-import { SidebarStageBackdrop } from "@/components/kb/shell/SidebarStageBackdrop";
+import {
+  LedgerStageBand,
+  SidebarStageBackdrop,
+} from "@/components/kb/shell/SidebarStageBackdrop";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
@@ -3292,9 +3295,22 @@ function LockScreen({
   }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-background px-4 text-foreground">
+      {/*
+       * The nav's ledger page, run across the lock screen: the same stock the
+       * chrome is made of, so a locked window still looks like the app rather
+       * than a bare dialog on a flat field. It fades into `--background`
+       * because that is what this overlay paints.
+       *
+       * Full height with `fitPages`, so the card can sit centred — where a lock
+       * prompt belongs — and still have art behind it for its frost to blur.
+       * `fitPages` is what makes that safe: it derives the page count from the
+       * measured height, holding the ruling at one scale instead of letting it
+       * coarsen with window height.
+       */}
+      <LedgerStageBand className="h-full" fade="var(--background)" fitPages />
       <form
-        className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60"
+        className="kb-glass-dialog relative z-10 w-full max-w-md rounded-lg border p-5 text-card-foreground"
         onSubmit={(event) => {
           void submit(event);
         }}
@@ -3314,12 +3330,15 @@ function LockScreen({
             </p>
           </div>
         </div>
-        {passphraseRequired && touchIdSubmitting ? (
-          <div className="mt-5 flex items-center gap-3 rounded-md border bg-background p-3 text-sm text-muted-foreground">
-            <Fingerprint className="size-4 text-foreground" aria-hidden="true" />
-            <span>{t("lock.unlockingTouchId")}</span>
-          </div>
-        ) : passphraseRequired ? (
+        {/*
+         * The passphrase field stays mounted while Touch ID is pending — it used
+         * to be swapped out for a "Unlocking with Touch ID…" row, which said the
+         * same thing the Touch ID button below already says while it waits, and
+         * collapsed the card mid-interaction. Disabling it instead keeps one
+         * progress signal, holds the card's height steady, and leaves `inputRef`
+         * alive so a failed Touch ID attempt can still focus it.
+         */}
+        {passphraseRequired ? (
           <div className="mt-5 space-y-2">
             <label
               htmlFor="lock-passphrase"
@@ -3334,7 +3353,7 @@ function LockScreen({
               autoComplete="current-password"
               value={passphrase}
               onChange={(event) => setPassphrase(event.target.value)}
-              disabled={submitting}
+              disabled={submitting || touchIdSubmitting}
             />
             {error && <p className="m-0 text-xs text-destructive">{error}</p>}
             {touchIdEnabled &&
