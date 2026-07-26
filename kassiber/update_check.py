@@ -1,10 +1,10 @@
 """Minimal GitHub release checks shared by the human-facing CLI surfaces.
 
-Automatic checks mirror Codex's low-friction pattern: display a previously
-cached result immediately, refresh stale metadata in a detached process, and
-show the new result on a later invocation.  The updater never downloads or
-executes a release; it only prints a trusted release URL or a package-manager
-command for an install method Kassiber can prove locally.
+Nothing here refreshes itself in the background: `kassiber update` and the
+desktop's daily check are the only things that contact GitHub, and every other
+CLI invocation just prints what one of them last cached.  The updater never
+downloads or executes a release; it only prints a trusted release URL or a
+package-manager command for an install method Kassiber can prove locally.
 """
 
 from __future__ import annotations
@@ -13,10 +13,8 @@ import json
 import os
 import re
 import stat
-import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -31,22 +29,21 @@ from .db import DEFAULT_CONFIG_DIRNAME, DEFAULT_STATE_ROOT
 from .errors import AppError
 
 
+_RELEASES_PER_PAGE = 20
 GITHUB_RELEASES_API_URL = (
-    "https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=100"
+    "https://api.github.com/repos/bitcoinaustria/kassiber/releases"
+    f"?per_page={_RELEASES_PER_PAGE}"
 )
 GITHUB_LATEST_RELEASE_API_URL = (
     "https://api.github.com/repos/bitcoinaustria/kassiber/releases/latest"
 )
 GITHUB_RELEASES_PAGE_URL = "https://github.com/bitcoinaustria/kassiber/releases"
 CHECK_INTERVAL = timedelta(hours=20)
-FAILURE_RETRY_INTERVAL = timedelta(hours=1)
 NETWORK_TIMEOUT_SECONDS = 5.0
 CACHE_SCHEMA_VERSION = 1
 CACHE_FILENAME = "update-check.json"
 PREFERENCE_SCHEMA_VERSION = 1
 PREFERENCE_FILENAME = "update-checks.json"
-PREFERENCE_LOCK_FILENAME = "update-checks.lock"
-INTERNAL_REFRESH_ARGUMENT = "--refresh-update-cache"
 UPDATE_CACHE_ENV = "KASSIBER_UPDATE_CACHE_FILE"
 UPDATE_PREFERENCE_ENV = "KASSIBER_UPDATE_PREFERENCE_FILE"
 HOMEBREW_PACKAGE_ENV = "KASSIBER_HOMEBREW_PACKAGE"
@@ -57,12 +54,13 @@ HOMEBREW_CASK_COMMAND = (
 HOMEBREW_FORMULA_COMMAND = (
     "brew upgrade bitcoinaustria/kassiber/kassiber-cli"
 )
-_MAX_RESPONSE_BYTES = 1024 * 1024
-_RELEASES_PER_PAGE = 100
-_MAX_RELEASE_PAGES = 10
+# A listing page inlines the full asset list of every release it names, so this
+# bound is `_RELEASES_PER_PAGE` times the per-release JSON (~19 KiB at 15 build
+# artifacts) plus headroom for a growing build matrix. At `per_page=100` the
+# real listing outgrew a 1 MiB cap after 56 releases and every check failed.
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _MAX_PREFERENCE_BYTES = 1024
 _MAX_CACHE_BYTES = 8 * 1024
-_MAX_REFRESH_ATTEMPT_BYTES = 64
 _SEMVER_RE = re.compile(
     r"^v?(?P<major>0|[1-9][0-9]*)\."
     r"(?P<minor>0|[1-9][0-9]*)\."
@@ -251,82 +249,6 @@ def preference_path() -> Path:
     )
 
 
-def preference_lock_path(path: Path | None = None) -> Path:
-    preference = path or preference_path()
-    return preference.with_name(PREFERENCE_LOCK_FILENAME)
-
-
-@contextmanager
-def _update_check_preference_lock(path: Path):
-    """Serialize consent reads/writes with the native Rust update checker."""
-
-    lock_path = preference_lock_path(path)
-    try:
-        try:
-            if stat.S_ISLNK(os.lstat(lock_path).st_mode):
-                raise OSError(f"Update-check lock must not be a symlink: {lock_path}")
-        except FileNotFoundError:
-            # Expected on first use; os.open below creates the lock safely.
-            pass
-        flags = (
-            os.O_RDWR
-            | os.O_CREAT
-            | getattr(os, "O_BINARY", 0)
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NONBLOCK", 0)
-        )
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
-        descriptor = os.open(lock_path, flags, 0o600)
-        try:
-            info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode):
-                raise OSError(
-                    f"Update-check lock must be a regular file: {lock_path}"
-                )
-            if os.name == "nt":
-                import msvcrt
-
-                if info.st_size == 0:
-                    os.write(descriptor, b"\0")
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-
-                os.fchmod(descriptor, 0o600)
-                fcntl.flock(descriptor, fcntl.LOCK_EX)
-        except BaseException:
-            os.close(descriptor)
-            raise
-    except OSError as exc:
-        raise _update_check_lock_error(exc) from exc
-    try:
-        yield
-    finally:
-        try:
-            if os.name == "nt":
-                import msvcrt
-
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-        finally:
-            os.close(descriptor)
-
-
-def _update_check_lock_error(_exc: OSError) -> AppError:
-    return AppError(
-        "Could not safely coordinate the update-check permission",
-        code="update_check_lock_failed",
-        hint="Check the owner and permissions of ~/.kassiber/config/update-checks.lock.",
-        retryable=True,
-    )
-
-
 def _environment_disables_update_checks(
     environ: Mapping[str, str] | None = None,
 ) -> bool:
@@ -368,7 +290,14 @@ def update_checks_enabled(
 
 
 def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
-    """Atomically persist the global update-check consent as owner-only JSON."""
+    """Atomically persist the global update-check consent as owner-only JSON.
+
+    `_atomic_write_private` finishes with `os.replace`, so a concurrent reader
+    observes either the old consent or the new one and never a torn file. That
+    is the whole ordering guarantee this preference needs; there is deliberately
+    no cross-process lock, which previously made revoking consent wait on an
+    in-flight network request without making revocation any more prompt.
+    """
 
     destination = path or preference_path()
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -377,15 +306,14 @@ def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
     except OSError:
         # Best effort for existing directories; file writes remain owner-only.
         pass
-    with _update_check_preference_lock(destination):
-        document = {
-            "schema_version": PREFERENCE_SCHEMA_VERSION,
-            "enabled": bool(enabled),
-        }
-        _atomic_write_private(
-            destination,
-            json.dumps(document, sort_keys=True) + "\n",
-        )
+    document = {
+        "schema_version": PREFERENCE_SCHEMA_VERSION,
+        "enabled": bool(enabled),
+    }
+    _atomic_write_private(
+        destination,
+        json.dumps(document, sort_keys=True) + "\n",
+    )
     return destination
 
 
@@ -411,13 +339,9 @@ def current_release_channel() -> str:
     return "release" if channel == "release" else "prerelease"
 
 
-def _release_from_response(
-    payload: Any,
-    *,
-    channel: str = "prerelease",
-) -> dict[str, Any]:
-    if channel == "release" and isinstance(payload, dict):
-        payload = [payload]
+def _release_from_response(payload: Any) -> dict[str, Any]:
+    """Pick the highest published semantic version out of a releases payload."""
+
     if not isinstance(payload, list):
         raise ValueError("GitHub returned an invalid releases response")
     selected: tuple[dict[str, Any], ParsedVersion] | None = None
@@ -429,8 +353,6 @@ def _release_from_response(
         if parsed is None:
             continue
         prerelease = bool(item.get("prerelease")) or bool(parsed.prerelease)
-        if channel == "release" and prerelease:
-            continue
         candidate = {
             "latest_version": tag[1:] if tag.startswith("v") else tag,
             "release_tag": tag,
@@ -448,41 +370,29 @@ def fetch_latest_release(
     *,
     opener: Callable[..., BinaryIO] = _open_without_redirects,
 ) -> dict[str, Any]:
-    channel = current_release_channel()
+    # Stable builds ask for the latest-stable object so a run of prereleases
+    # cannot hide a stable update; that endpoint already excludes drafts and
+    # prereleases and returns one release. Prerelease builds read the listing,
+    # which GitHub returns newest-first, so the highest version Kassiber has
+    # published is on the first page — there is nothing later to paginate to.
+    stable = current_release_channel() == "release"
+    api_url = GITHUB_LATEST_RELEASE_API_URL if stable else GITHUB_RELEASES_API_URL
     try:
-        releases: list[Any] = []
-        page_count = 1 if channel == "release" else _MAX_RELEASE_PAGES
-        for page in range(1, page_count + 1):
-            if channel == "release":
-                api_url = GITHUB_LATEST_RELEASE_API_URL
-            elif page == 1:
-                api_url = GITHUB_RELEASES_API_URL
-            else:
-                api_url = f"{GITHUB_RELEASES_API_URL}&page={page}"
-            request = Request(
-                api_url,
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "User-Agent": f"kassiber/{current_version()}",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                },
-                method="GET",
-            )
-            with opener(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
-                raw = response.read(_MAX_RESPONSE_BYTES + 1)
-            if len(raw) > _MAX_RESPONSE_BYTES:
-                raise ValueError("GitHub update response is too large")
-            payload = json.loads(raw.decode("utf-8"))
-            if channel == "release":
-                return _release_from_response(payload, channel=channel)
-            if not isinstance(payload, list):
-                raise ValueError("GitHub returned an invalid releases response")
-            releases.extend(payload)
-            if len(payload) < _RELEASES_PER_PAGE:
-                return _release_from_response(releases, channel=channel)
-        # Do not silently claim the app is current when the bounded scan could
-        # not establish the highest semantic version.
-        raise ValueError("GitHub release history exceeds the bounded scan")
+        request = Request(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": f"kassiber/{current_version()}",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            method="GET",
+        )
+        with opener(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
+            raw = response.read(_MAX_RESPONSE_BYTES + 1)
+        if len(raw) > _MAX_RESPONSE_BYTES:
+            raise ValueError("GitHub update response is too large")
+        payload = json.loads(raw.decode("utf-8"))
+        return _release_from_response([payload] if stable else payload)
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         raise AppError(
             "Could not check GitHub for a Kassiber update",
@@ -600,51 +510,6 @@ def cache_is_stale(
     return checked_at < (now or _utc_now()) - CHECK_INTERVAL
 
 
-def _refresh_attempt_path(path: Path | None = None) -> Path:
-    destination = path or cache_path()
-    return destination.with_suffix(f"{destination.suffix}.attempt")
-
-
-def _read_refresh_attempt(path: Path | None = None) -> datetime | None:
-    raw = read_small_private_file(
-        _refresh_attempt_path(path),
-        _MAX_REFRESH_ATTEMPT_BYTES,
-    )
-    if raw is None:
-        return None
-    try:
-        value = datetime.fromisoformat(
-            raw.decode("utf-8").strip().replace("Z", "+00:00")
-        )
-    except (UnicodeDecodeError, ValueError):
-        return None
-    return value if value.tzinfo is not None else None
-
-
-def _write_refresh_attempt(
-    path: Path | None = None,
-    *,
-    now: datetime | None = None,
-) -> None:
-    _atomic_write_private(
-        _refresh_attempt_path(path),
-        f"{_isoformat(now or _utc_now())}\n",
-    )
-
-
-def automatic_refresh_due(
-    cached: Mapping[str, Any] | None,
-    *,
-    path: Path | None = None,
-    now: datetime | None = None,
-) -> bool:
-    current_time = now or _utc_now()
-    if not cache_is_stale(cached, now=current_time):
-        return False
-    attempted_at = _read_refresh_attempt(path)
-    return attempted_at is None or attempted_at < current_time - FAILURE_RETRY_INTERVAL
-
-
 def check_for_update(
     *,
     path: Path | None = None,
@@ -654,14 +519,12 @@ def check_for_update(
 ) -> dict[str, Any]:
     consent = preference or preference_path()
     require_update_checks_enabled(consent)
-    with _update_check_preference_lock(consent):
-        require_update_checks_enabled(consent)
-        result = _result_from_release(
-            fetch_latest_release(opener=opener),
-            checked_at=now or _utc_now(),
-        )
-        write_cache(result, path)
-        return result
+    result = _result_from_release(
+        fetch_latest_release(opener=opener),
+        checked_at=now or _utc_now(),
+    )
+    write_cache(result, path)
+    return result
 
 
 def detect_install_method(
@@ -761,102 +624,7 @@ def automatic_check_allowed(
     )
 
 
-def _background_command() -> list[str]:
-    if getattr(sys, "frozen", False):
-        return [sys.executable, INTERNAL_REFRESH_ARGUMENT]
-    return [sys.executable, "-m", "kassiber", INTERNAL_REFRESH_ARGUMENT]
-
-
-_BACKGROUND_ENV_NAMES = frozenset(
-    {
-        "ALL_PROXY",
-        "COMSPEC",
-        "CURL_CA_BUNDLE",
-        "DYLD_FALLBACK_LIBRARY_PATH",
-        "DYLD_LIBRARY_PATH",
-        "HOME",
-        "HTTPS_PROXY",
-        "HTTP_PROXY",
-        "LANG",
-        "LANGUAGE",
-        "LD_LIBRARY_PATH",
-        "LOCALAPPDATA",
-        "NO_PROXY",
-        "PATH",
-        "PATHEXT",
-        "REQUESTS_CA_BUNDLE",
-        "SSL_CERT_DIR",
-        "SSL_CERT_FILE",
-        "SYSTEMROOT",
-        "TEMP",
-        "TMP",
-        "TMPDIR",
-        "TZ",
-        "USERPROFILE",
-        "WINDIR",
-        "_MEIPASS2",
-        "all_proxy",
-        "https_proxy",
-        "http_proxy",
-        "no_proxy",
-    }
-)
-
-
-def _background_environment(
-    environ: Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    """Keep OS/runtime/proxy state without forwarding unrelated app secrets."""
-
-    source = os.environ if environ is None else environ
-    environment = {
-        key: value
-        for key, value in source.items()
-        if key in _BACKGROUND_ENV_NAMES
-        or key.startswith("LC_")
-        or key.startswith("_PYI_")
-    }
-    return environment
-
-
-def start_background_refresh(
-    path: Path | None = None,
-    preference: Path | None = None,
-) -> None:
-    destination = path or cache_path()
-    consent = preference or preference_path()
-    if not update_checks_enabled(consent):
-        return
-    environment = _background_environment()
-    environment[UPDATE_CACHE_ENV] = str(destination)
-    environment[UPDATE_PREFERENCE_ENV] = str(consent)
-    try:
-        _write_refresh_attempt(destination)
-    except OSError:
-        # Without the private marker, later CLI runs cannot enforce the retry
-        # interval. Fail closed instead of creating an update-check storm.
-        return
-    kwargs: dict[str, Any] = {
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "close_fds": True,
-        "env": environment,
-    }
-    if os.name == "nt":
-        kwargs["creationflags"] = (
-            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            | getattr(subprocess, "DETACHED_PROCESS", 0)
-        )
-    else:
-        kwargs["start_new_session"] = True
-    try:
-        subprocess.Popen(_background_command(), **kwargs)
-    except OSError:
-        return
-
-
-def show_cached_update_and_refresh(
+def show_cached_update(
     args: Any,
     *,
     path: Path | None = None,
@@ -864,6 +632,13 @@ def show_cached_update_and_refresh(
     stream: TextIO | None = None,
     stdout: TextIO | None = None,
 ) -> None:
+    """Print a banner for an update an earlier authorized check already found.
+
+    This reads only local state. `kassiber update` and the desktop's daily check
+    write that cache; nothing here spawns a refresh, so an ordinary command can
+    never turn into an outbound request.
+    """
+
     output = stream or sys.stderr
     if not automatic_check_allowed(
         args,
@@ -873,26 +648,9 @@ def show_cached_update_and_refresh(
     ):
         return
     cached = read_cache(path)
-    if cached is not None and bool(cached.get("update_available")):
+    if cached is None or cache_is_stale(cached):
+        return
+    if bool(cached.get("update_available")):
         output.write(render_update_status(cached, color=supports_color(output)))
         output.write("\n")
         output.flush()
-    if automatic_refresh_due(cached, path=path):
-        start_background_refresh(path, preference)
-
-
-def refresh_cache_silently(
-    path: Path | None = None,
-    preference: Path | None = None,
-) -> None:
-    # Concurrency control is the refresh-attempt throttle written by the
-    # parent before spawning this child: a racing sibling costs at most one
-    # extra bounded GET racing an atomic cache replace, which is harmless.
-    destination = path or cache_path()
-    consent = preference or preference_path()
-    if not update_checks_enabled(consent):
-        return
-    try:
-        check_for_update(path=destination, preference=consent)
-    except (AppError, OSError):
-        return

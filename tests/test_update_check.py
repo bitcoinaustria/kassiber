@@ -4,9 +4,11 @@ import io
 import json
 import os
 import threading
+import time
 from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from kassiber import update_check
@@ -60,10 +62,6 @@ def test_update_check_consent_is_explicit_owner_only_and_fail_closed(
     update_check.set_update_checks_enabled(True, preference)
     assert update_check.update_checks_enabled(preference)
     assert preference.stat().st_mode & 0o077 == 0
-    lock_path = update_check.preference_lock_path(preference)
-    assert lock_path.is_file()
-    if os.name != "nt":
-        assert lock_path.stat().st_mode & 0o077 == 0
 
     update_check.set_update_checks_enabled(False, preference)
     assert not update_check.update_checks_enabled(preference)
@@ -89,52 +87,20 @@ def test_update_check_consent_rejects_boolean_and_float_schema_versions(
         assert not update_check.update_checks_enabled(preference)
 
 
-def test_update_check_lock_refuses_symlinks_before_network(tmp_path: Path):
-    if os.name == "nt":
-        return
-    preference = _enabled_preference(tmp_path)
-    lock_path = update_check.preference_lock_path(preference)
-    lock_path.unlink()
-    target = tmp_path / "lock-target"
-    target.touch()
-    lock_path.symlink_to(target)
-    opened = False
+def test_disabling_consent_blocks_later_network_without_waiting(tmp_path: Path):
+    """Revocation lands immediately and closes every later request.
 
-    try:
-        update_check.set_update_checks_enabled(False, preference)
-    except update_check.AppError as error:
-        assert error.code == "update_check_lock_failed"
-    else:
-        raise AssertionError("preference write followed a symlinked lock")
-    assert target.read_bytes() == b""
-    assert update_check.update_checks_enabled(preference)
+    There is deliberately no cross-process lock: revoking consent used to block
+    on an in-flight GET without making revocation any more prompt, because the
+    in-flight check had already passed its consent gate. The property that
+    matters is the one asserted here — once disabled, nothing opens the network.
+    """
 
-    def opener(request, *, timeout):
-        del request, timeout
-        nonlocal opened
-        opened = True
-        return _Response(_release_response())
-
-    try:
-        update_check.check_for_update(preference=preference, opener=opener)
-    except update_check.AppError as error:
-        assert error.code == "update_check_lock_failed"
-    else:
-        raise AssertionError("symlinked update-check lock unexpectedly succeeded")
-    assert opened is False
-
-
-def test_disabling_waits_for_inflight_check_and_blocks_later_network(
-    tmp_path: Path,
-):
     preference = _enabled_preference(tmp_path)
     cache = tmp_path / "update-check.json"
     request_started = threading.Event()
     release_request = threading.Event()
-    disable_started = threading.Event()
-    disable_returned = threading.Event()
     check_errors: list[Exception] = []
-    disable_errors: list[Exception] = []
     opener_calls = 0
 
     def opener(request, *, timeout):
@@ -155,35 +121,22 @@ def test_disabling_waits_for_inflight_check_and_blocks_later_network(
         except Exception as exc:
             check_errors.append(exc)
 
-    def disable():
-        disable_started.set()
-        try:
-            update_check.set_update_checks_enabled(False, preference)
-        except Exception as exc:
-            disable_errors.append(exc)
-        finally:
-            disable_returned.set()
-
     check_thread = threading.Thread(target=run_check, daemon=True)
     check_thread.start()
     assert request_started.wait(2)
-    disable_thread = threading.Thread(target=disable, daemon=True)
-    disable_thread.start()
-    assert disable_started.wait(2)
-    returned_while_request_was_inflight = disable_returned.wait(0.1)
+
+    disabled_at = time.monotonic()
+    update_check.set_update_checks_enabled(False, preference)
+    disable_seconds = time.monotonic() - disabled_at
+    assert disable_seconds < 1, "revocation waited on the in-flight request"
+    assert not update_check.update_checks_enabled(preference)
+
     release_request.set()
     check_thread.join(2)
-    disable_thread.join(2)
-
-    assert not returned_while_request_was_inflight
     assert not check_thread.is_alive()
-    assert not disable_thread.is_alive()
     assert check_errors == []
-    assert disable_errors == []
-    assert not update_check.update_checks_enabled(preference)
     assert opener_calls == 1
 
-    calls_before_disabled_check = opener_calls
     try:
         update_check.check_for_update(
             path=cache,
@@ -194,7 +147,7 @@ def test_disabling_waits_for_inflight_check_and_blocks_later_network(
         assert error.code == "update_checks_disabled"
     else:
         raise AssertionError("disabled update check unexpectedly succeeded")
-    assert opener_calls == calls_before_disabled_check
+    assert opener_calls == 1
 
 
 def test_environment_disable_overrides_persisted_consent(tmp_path: Path):
@@ -233,16 +186,27 @@ def test_release_selection_uses_highest_semver_not_response_order():
     assert selected["prerelease"] is False
 
 
-def test_stable_channel_does_not_advertise_prereleases():
-    payload = [
-        {"tag_name": "v1.1.0-rc.1", "draft": False, "prerelease": True},
-        {"tag_name": "v1.0.1", "draft": False, "prerelease": False},
-    ]
+def test_stable_channel_never_serves_a_cached_prerelease(tmp_path: Path):
+    """Stable builds reach the latest-stable endpoint, which excludes
+    prereleases, so the listing filter is gone; the cache still refuses a
+    prerelease result left behind by a build that changed channel."""
 
-    selected = update_check._release_from_response(payload, channel="release")
+    cache = tmp_path / "update-check.json"
+    update_check.write_cache(
+        {
+            "latest_version": "1.1.0-rc.1",
+            "prerelease": True,
+            "release_url": update_check.release_url_for_tag("v1.1.0-rc.1"),
+            "checked_at": "2026-07-22T08:30:00Z",
+        },
+        cache,
+    )
 
-    assert selected["latest_version"] == "1.0.1"
-    assert selected["prerelease"] is False
+    with patch(
+        "kassiber.update_check.packaged_build_info",
+        return_value={"channel": "release", "version": "1.0.0"},
+    ):
+        assert update_check.read_cache(cache) is None
 
 
 def test_default_redirect_handler_refuses_cross_origin_redirects():
@@ -285,38 +249,76 @@ def test_fetch_latest_release_uses_bounded_github_request():
     }
 
 
-def test_fetch_latest_prerelease_paginates_before_selecting_highest_semver():
+def test_prerelease_check_reads_one_page_and_picks_the_highest_semver():
+    """GitHub returns the listing newest-first, so one request is the whole
+    scan. Paginating over ten pages only multiplied requests against a 60/hour
+    unauthenticated rate limit."""
+
     captured_urls = []
-    first_page = [
-        {
-            "tag_name": f"v0.22.{index}",
-            "draft": False,
-            "prerelease": True,
-        }
+    page = [
+        {"tag_name": f"v0.22.{index}", "draft": False, "prerelease": True}
         for index in range(update_check._RELEASES_PER_PAGE)
     ]
-    second_page = [
-        {
-            "tag_name": "v1.0.0-rc.1",
-            "draft": False,
-            "prerelease": True,
-        }
-    ]
+    page.insert(3, {"tag_name": "v1.0.0-rc.1", "draft": False, "prerelease": True})
 
     def opener(request, *, timeout):
         assert timeout == update_check.NETWORK_TIMEOUT_SECONDS
         captured_urls.append(request.full_url)
-        payload = first_page if len(captured_urls) == 1 else second_page
-        return _Response(json.dumps(payload).encode())
+        return _Response(json.dumps(page).encode())
 
     with patch("kassiber.update_check.packaged_build_info", return_value={}):
         release = update_check.fetch_latest_release(opener=opener)
 
-    assert captured_urls == [
-        update_check.GITHUB_RELEASES_API_URL,
-        f"{update_check.GITHUB_RELEASES_API_URL}&page=2",
-    ]
+    assert captured_urls == [update_check.GITHUB_RELEASES_API_URL]
+    assert f"per_page={update_check._RELEASES_PER_PAGE}" in captured_urls[0]
     assert release["latest_version"] == "1.0.0-rc.1"
+
+
+def test_fetch_latest_release_accepts_an_asset_heavy_listing_page():
+    """A listing page inlines every asset of every release it names. The live
+    listing outgrew a 1 MiB read cap at 56 releases and every check began
+    failing as "GitHub returned an invalid update response"."""
+
+    page = [
+        {
+            "tag_name": f"v0.22.{index}",
+            "draft": False,
+            "prerelease": True,
+            "assets": [
+                {
+                    "name": f"kassiber-{index}-{asset}.tar.gz",
+                    "browser_download_url": "https://example.invalid/" + "x" * 700,
+                }
+                for asset in range(15)
+            ],
+        }
+        for index in range(update_check._RELEASES_PER_PAGE)
+    ]
+    body = json.dumps(page).encode()
+    assert len(body) <= update_check._MAX_RESPONSE_BYTES
+    # Headroom for a build matrix that keeps growing, which is what ran out.
+    assert len(body) * 4 <= update_check._MAX_RESPONSE_BYTES
+
+    with patch("kassiber.update_check.packaged_build_info", return_value={}):
+        release = update_check.fetch_latest_release(
+            opener=lambda request, *, timeout: _Response(body),
+        )
+
+    assert release["latest_version"] == "0.22.19"
+
+
+def test_oversized_release_response_is_refused_not_truncated():
+    body = b"[" + b"x" * update_check._MAX_RESPONSE_BYTES
+
+    with patch("kassiber.update_check.packaged_build_info", return_value={}):
+        try:
+            update_check.fetch_latest_release(
+                opener=lambda request, *, timeout: _Response(body),
+            )
+        except update_check.AppError as error:
+            assert error.code == "update_check_failed"
+        else:
+            raise AssertionError("oversized response unexpectedly accepted")
 
 
 def test_fetch_latest_stable_release_uses_latest_object_endpoint():
@@ -497,23 +499,31 @@ def test_notice_colors_only_human_terminal_content():
     assert "0.22.55 → 0.22.56" in plain
 
 
-def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_output(
-    tmp_path: Path,
-):
-    destination = tmp_path / "update-check.json"
-    preference = _enabled_preference(tmp_path)
-    old = datetime.now(timezone.utc) - timedelta(days=2)
-    cached = {
+def _cached_update(checked_at: datetime) -> dict[str, Any]:
+    return {
         "current_version": "0.22.55",
         "latest_version": "0.22.56",
         "update_available": True,
         "prerelease": True,
         "release_url": "https://github.com/bitcoinaustria/kassiber/releases/tag/v0.22.56",
-        "checked_at": old.isoformat().replace("+00:00", "Z"),
+        "checked_at": checked_at.isoformat().replace("+00:00", "Z"),
         "install_method": "manual",
         "update_command": None,
     }
-    update_check.write_cache(cached, destination)
+
+
+def test_ordinary_commands_print_a_fresh_cache_and_never_reach_the_network(
+    tmp_path: Path,
+):
+    """The banner is local-only. Nothing spawns a refresh, so no ordinary
+    command can turn itself into an outbound GitHub request."""
+
+    destination = tmp_path / "update-check.json"
+    preference = _enabled_preference(tmp_path)
+    update_check.write_cache(
+        _cached_update(datetime.now(timezone.utc) - timedelta(hours=1)),
+        destination,
+    )
     args = Namespace(
         machine=False,
         non_interactive=False,
@@ -527,9 +537,9 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
             "kassiber.update_check.packaged_build_info",
             return_value={"version": "0.22.55"},
         ),
-        patch("kassiber.update_check.start_background_refresh") as refresh,
+        patch("kassiber.update_check.fetch_latest_release") as fetch,
     ):
-        update_check.show_cached_update_and_refresh(
+        update_check.show_cached_update(
             args,
             path=destination,
             preference=preference,
@@ -538,18 +548,15 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
         )
 
     assert "Update available" in stream.getvalue()
-    refresh.assert_called_once_with(destination, preference)
+    fetch.assert_not_called()
 
     machine = Namespace(**{**vars(args), "machine": True})
     machine_stream = _Tty()
-    with (
-        patch(
-            "kassiber.update_check.packaged_build_info",
-            return_value={"version": "0.22.55"},
-        ),
-        patch("kassiber.update_check.start_background_refresh") as refresh,
+    with patch(
+        "kassiber.update_check.packaged_build_info",
+        return_value={"version": "0.22.55"},
     ):
-        update_check.show_cached_update_and_refresh(
+        update_check.show_cached_update(
             machine,
             path=destination,
             preference=preference,
@@ -557,7 +564,6 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
             stdout=_Tty(),
         )
     assert machine_stream.getvalue() == ""
-    refresh.assert_not_called()
 
     structured = Namespace(**{**vars(args), "format": "json"})
     with patch(
@@ -572,85 +578,38 @@ def test_automatic_check_uses_cache_and_refreshes_without_touching_machine_outpu
         )
 
 
-def test_failed_automatic_checks_are_throttled(tmp_path: Path):
-    destination = tmp_path / "update-check.json"
-    attempted_at = datetime(2026, 7, 22, 8, 30, tzinfo=timezone.utc)
-    update_check._write_refresh_attempt(destination, now=attempted_at)
+def test_stale_cache_goes_quiet_instead_of_announcing_forever(tmp_path: Path):
+    """Without a background refresher the cache can only be replaced by an
+    explicit `kassiber update` or the desktop's daily check, so a result older
+    than the check interval stops being reported rather than nagging forever."""
 
-    assert not update_check.automatic_refresh_due(
-        None,
-        path=destination,
-        now=attempted_at + timedelta(minutes=59),
-    )
-    assert update_check.automatic_refresh_due(
-        None,
-        path=destination,
-        now=attempted_at + timedelta(hours=1, seconds=1),
-    )
-    assert update_check._refresh_attempt_path(destination).stat().st_mode & 0o077 == 0
-
-
-def test_refresh_attempt_read_refuses_symlinks(tmp_path: Path):
-    destination = tmp_path / "update-check.json"
-    target = tmp_path / "attacker-controlled-attempt"
-    target.write_text("2026-07-22T08:30:00Z\n", encoding="utf-8")
-    update_check._refresh_attempt_path(destination).symlink_to(target)
-
-    assert update_check._read_refresh_attempt(destination) is None
-
-
-def test_background_refresh_passes_only_required_environment(tmp_path: Path):
     destination = tmp_path / "update-check.json"
     preference = _enabled_preference(tmp_path)
-    with (
-        patch.dict(
-            os.environ,
-            {
-                "PATH": "/usr/bin",
-                "HTTPS_PROXY": "http://proxy.example:8080",
-                "OPENAI_API_KEY": "must-not-reach-child",
-            },
-            clear=True,
-        ),
-        patch("kassiber.update_check.subprocess.Popen") as popen,
+    update_check.write_cache(
+        _cached_update(datetime.now(timezone.utc) - update_check.CHECK_INTERVAL
+                       - timedelta(minutes=1)),
+        destination,
+    )
+    stream = _Tty()
+
+    with patch(
+        "kassiber.update_check.packaged_build_info",
+        return_value={"version": "0.22.55"},
     ):
-        update_check.start_background_refresh(destination, preference)
+        update_check.show_cached_update(
+            Namespace(
+                machine=False,
+                non_interactive=False,
+                output=None,
+                command="status",
+            ),
+            path=destination,
+            preference=preference,
+            stream=stream,
+            stdout=_Tty(),
+        )
 
-    environment = popen.call_args.kwargs["env"]
-    assert environment["PATH"] == "/usr/bin"
-    assert environment["HTTPS_PROXY"] == "http://proxy.example:8080"
-    assert environment[update_check.UPDATE_CACHE_ENV] == str(destination)
-    assert environment[update_check.UPDATE_PREFERENCE_ENV] == str(preference)
-    assert "OPENAI_API_KEY" not in environment
-    assert update_check._read_refresh_attempt(destination) is not None
-
-
-def test_background_refresh_does_not_spawn_without_throttle_marker(tmp_path: Path):
-    destination = tmp_path / "update-check.json"
-    preference = _enabled_preference(tmp_path)
-
-    with (
-        patch(
-            "kassiber.update_check._write_refresh_attempt",
-            side_effect=OSError("read-only cache directory"),
-        ),
-        patch("kassiber.update_check.subprocess.Popen") as popen,
-    ):
-        update_check.start_background_refresh(destination, preference)
-
-    popen.assert_not_called()
-
-
-def test_disabled_background_refresh_never_spawns_a_child(tmp_path: Path):
-    destination = tmp_path / "update-check.json"
-    preference = tmp_path / "update-checks.json"
-    update_check.set_update_checks_enabled(False, preference)
-
-    with patch("kassiber.update_check.subprocess.Popen") as popen:
-        update_check.start_background_refresh(destination, preference)
-
-    popen.assert_not_called()
-    assert update_check._read_refresh_attempt(destination) is None
+    assert stream.getvalue() == ""
 
 
 def test_no_color_disables_ansi_not_the_human_update_check():

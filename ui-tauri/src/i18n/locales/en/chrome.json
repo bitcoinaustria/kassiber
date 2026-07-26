@@ -61,6 +61,7 @@
     "version": {
       "devTitle": "Kassiber local dev build ({{commit}})",
       "releaseTitle": "Kassiber v{{version}} ({{commit}})",
+      "checkTitle": "{{build}} — click to check GitHub for updates",
       "devLabel": "Kassiber dev",
       "releaseLabel": "Kassiber v{{version}}",
       "updateTitle": "Kassiber v{{current}} → v{{latest}} is available on GitHub",
