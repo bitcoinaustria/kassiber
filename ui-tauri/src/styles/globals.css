@@ -405,16 +405,32 @@
   --stage-paper-mid: #eae7e0;
   --stage-paper-bottom: #dedad1;
   --stage-glow: #ffffff;
+  --stage-glow-peak: 0.42;
+  --stage-glow-soft: 0.14;
   --stage-rule: rgb(34 34 34 / 20%);
   --stage-column: rgb(34 34 34 / 11%);
   --stage-ink: #222222;
 }
 
+/*
+ * Dark mode runs the page a step lower than light does, and it is the only
+ * theme where that is a legibility question rather than a taste one: the header
+ * text is relit to white here (see `.dark .kb-stage-header-content` below), and
+ * white has to hold up against the *brightest* point of the art — the glow's
+ * peak sitting over the top paper stop. At the previous values that composite
+ * came out rgb(127,129,134), which is 3.9:1 against white and 2.8:1 against the
+ * 72% muted variant: under the 4.5:1 AA floor for text and under even the 3:1
+ * floor for UI. Paper down 10%, glow dimmed 8% and its peak from 0.42 to 0.34
+ * lifts those to 5.3:1 and 3.7:1 while keeping the sheet plainly lighter than
+ * the near-black nav it is laid on, which is the whole point of the dark page.
+ */
 .dark .kb-stage-ledger {
-  --stage-paper-top: #45454b;
-  --stage-paper-mid: #383840;
-  --stage-paper-bottom: #2a2a31;
-  --stage-glow: #cfd3d8;
+  --stage-paper-top: #3e3e44;
+  --stage-paper-mid: #32323a;
+  --stage-paper-bottom: #26262c;
+  --stage-glow: #bec2c7;
+  --stage-glow-peak: 0.34;
+  --stage-glow-soft: 0.11;
   --stage-rule: rgb(255 255 255 / 24%);
   --stage-column: rgb(255 255 255 / 13%);
   --stage-ink: #e8e8ea;

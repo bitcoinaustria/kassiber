@@ -88,11 +88,23 @@ function LedgerPaperArt() {
           gradientTransform="translate(232 6) rotate(142) scale(150 96)"
           gradientUnits="userSpaceOnUse"
         >
-          <stop style={{ stopColor: "var(--stage-glow)" }} stopOpacity="0.42" />
+          {/* Opacity comes from the palette (`.kb-stage-ledger`), not a literal,
+              because the two themes need different glow strengths: the header
+              text is dark on light mode's pale stock, but white on dark mode's
+              graphite sheet, where the glow's peak is what the wordmark has to
+              stay legible against. */}
+          <stop
+            style={{
+              stopColor: "var(--stage-glow)",
+              stopOpacity: "var(--stage-glow-peak)",
+            }}
+          />
           <stop
             offset="0.55"
-            style={{ stopColor: "var(--stage-glow)" }}
-            stopOpacity="0.14"
+            style={{
+              stopColor: "var(--stage-glow)",
+              stopOpacity: "var(--stage-glow-soft)",
+            }}
           />
           <stop
             offset="1"
