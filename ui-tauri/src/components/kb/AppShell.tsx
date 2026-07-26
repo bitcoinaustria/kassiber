@@ -3295,14 +3295,27 @@ function LockScreen({
   }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-background px-4 text-foreground">
-      {/* The nav's ledger page, run across the top of the lock screen: the same
-          stock the chrome is made of, so a locked window still looks like the
-          app rather than a bare dialog on a flat field. It fades into
-          `--background` because that is what this overlay paints. */}
-      <LedgerStageBand className="h-64" fade="var(--background)" pages={4} />
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-hidden bg-background px-4 pt-32 text-foreground">
+      {/*
+       * The nav's ledger page, run across the lock screen: the same stock the
+       * chrome is made of, so a locked window still looks like the app rather
+       * than a bare dialog on a flat field. It fades into `--background`
+       * because that is what this overlay paints.
+       *
+       * The card is top-aligned rather than centred so it sits *inside* this
+       * band. Covering a centred card instead would mean sizing the art to the
+       * viewport, and since `slice` fits the shorter axis that makes the ruling
+       * scale with window height — coarse on a tall window, fine on a short
+       * one. A fixed band keeps one ledger rhythm everywhere and still gives
+       * the card's frost something to blur.
+       */}
+      <LedgerStageBand
+        className="h-[32rem]"
+        fade="var(--background)"
+        pages={10}
+      />
       <form
-        className="relative z-10 w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60"
+        className="kb-glass-dialog relative z-10 w-full max-w-md rounded-lg border p-5 text-card-foreground"
         onSubmit={(event) => {
           void submit(event);
         }}
