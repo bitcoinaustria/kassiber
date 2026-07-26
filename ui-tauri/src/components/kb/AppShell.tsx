@@ -95,7 +95,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { bookIdentityKey, isDaemonDataMode, useUiStore } from "@/store/ui";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { AppNotification, Identity, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
@@ -623,7 +623,6 @@ export function AppShell() {
   const [touchIdStatus, setTouchIdStatus] =
     React.useState<TouchIdPassphraseStatus | null>(null);
   const requiresDaemonUnlock = shouldUseDaemonUnlock({
-    dataMode,
     hasIdentity: Boolean(identity),
     daemonAuthRequired,
   });
@@ -1041,7 +1040,6 @@ export function AppShell() {
 
   const switchProject = React.useCallback(
     async (project: ProjectCatalogEntry) => {
-      if (!isDaemonDataMode(dataMode)) return;
       try {
         const envelope = await getTransport("real").invoke<ProjectSelectSnapshot>({
           kind: "ui.projects.select",
@@ -1279,7 +1277,6 @@ export function AppShell() {
   // workspace; if not, drop the stale identity and bounce back to onboarding
   // instead of stranding the user on /overview with no data.
   React.useEffect(() => {
-    if (!isDaemonDataMode(dataMode)) return;
     if (!daemonEnabled) return;
     if (identity?.importedProject) return;
     if (!identity) return;
@@ -1448,11 +1445,10 @@ export function AppShell() {
   }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
-    const bridgeable = daemonEnabled && isDaemonDataMode(dataMode);
-    if (!bridgeable) return;
-    startDaemonLogBridge({ isEnabled: () => bridgeable });
+    if (!daemonEnabled) return;
+    startDaemonLogBridge({ isEnabled: () => daemonEnabled });
     return () => stopDaemonLogBridge();
-  }, [daemonEnabled, dataMode]);
+  }, [daemonEnabled]);
 
   React.useEffect(() => {
     if (!isAssistantRoute) {

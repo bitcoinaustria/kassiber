@@ -6,7 +6,6 @@ export function dataModeForActiveBackend(
   dataMode: DataMode,
   activeRegtestBackend: boolean,
 ): DataMode {
-  if (dataMode === "mock") return activeRegtestBackend ? "regtest" : "real";
   if (activeRegtestBackend && dataMode === "real") return "regtest";
   if (!activeRegtestBackend && dataMode === "regtest") return "real";
   return dataMode;

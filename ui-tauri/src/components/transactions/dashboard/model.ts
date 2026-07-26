@@ -813,8 +813,8 @@ function historyYearsForBounds(
 }
 
 // Periods a book's history can fill. `earliest`/`latest` come from the daemon's
-// full-history bounds; the record-based variant is for mock mode, where the
-// in-memory rows *are* the whole book.
+// full-history bounds; the record-based variant supports unit tests and callers
+// that do not yet have aggregate daemon bounds.
 function availablePeriodKeysForHistory(
   earliest: string | null | undefined,
   latest: string | null | undefined,

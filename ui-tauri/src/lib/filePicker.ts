@@ -106,16 +106,6 @@ function documentImportSourceSelection(
 
 export async function pickDocumentImportSource(): Promise<DocumentImportSourceSelection | null> {
   if (!isFilePickerAvailable) return null;
-  if (import.meta.env.VITE_DAEMON === "mock") {
-    return {
-      document_token: "mock-document-session",
-      source: {
-        filename: "receipt.png",
-        media_type: "image/png",
-        kind: "image",
-      },
-    };
-  }
   if (isDevBridgeRuntime) {
     const payload = await callFilePickerBridge({ purpose: "document_import" });
     if (payload.error) throw new Error(String(payload.error));

@@ -11,11 +11,8 @@ import {
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon, useDaemonInfinite } from "@/daemon/client";
 import {
-  MOCK_TRANSACTIONS,
   type TransactionsList,
 } from "@/mocks/transactions";
-import { MOCK_OVERVIEW } from "@/mocks/seed";
-import { isDaemonDataMode, useUiStore } from "@/store/ui";
 
 interface OverviewSnapshot {
   priceEur?: number | null;
@@ -32,8 +29,6 @@ function sameDaemonArgs(
 
 export function Transactions() {
   const { t } = useTranslation("transactions");
-  const dataMode = useUiStore((state) => state.dataMode);
-  const daemonBacked = isDaemonDataMode(dataMode);
   const routeSearch = useRouterState({ select: (state) => state.location.search });
   const detailParams = React.useMemo(() => {
     void routeSearch;
@@ -126,15 +121,11 @@ export function Transactions() {
     hasNextTransactionsPage,
     isFetchingNextTransactionsPage,
   ]);
-  const transactions: TransactionsList =
+  const transactions =
     liveTransactions ??
-    (hasLiveTransactions ? firstPage?.data : null) ??
-    (daemonBacked
-      ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
-      : MOCK_TRANSACTIONS);
+    (hasLiveTransactions ? firstPage?.data : null);
   const hasMoreTransactions = Boolean(hasNextTransactionsPage);
   const shouldShowLiveSkeleton =
-    daemonBacked &&
     transactionsQuery.isLoading &&
     !hasLiveTransactions;
 
@@ -142,7 +133,7 @@ export function Transactions() {
     return <ScreenSkeleton titleWidth="w-44" />;
   }
 
-  if (daemonBacked && !hasLiveTransactions) {
+  if (!hasLiveTransactions || !transactions) {
     return (
       <ScreenNotice
         title={t("route.unavailable.title")}
@@ -157,14 +148,9 @@ export function Transactions() {
 
   const hasLiveOverview =
     overview.data?.kind === "ui.overview.snapshot" && Boolean(overview.data.data);
-  const nowRate =
-    hasLiveTransactions && hasLiveOverview
-      ? (overview.data?.data?.priceEur ?? null)
-      : hasLiveTransactions
-        ? null
-        : daemonBacked
-          ? null
-          : MOCK_OVERVIEW.priceEur;
+  const nowRate = hasLiveOverview
+    ? (overview.data?.data?.priceEur ?? null)
+    : null;
   return (
     <TransactionsDashboard
       transactions={transactions}

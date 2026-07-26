@@ -27,7 +27,6 @@ import {
   DocumentImportDialog,
   NewTransactionDialog,
   createNewTransactionDraft,
-  mockNewTransactionWalletSourceOptions,
   type NewTransactionDraft,
 } from "@/components/transactions";
 import { TransactionsTable } from "./TransactionsTable";
@@ -147,7 +146,6 @@ const TransactionsDashboard = ({
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
-  const dataMode = useUiStore((s) => s.dataMode);
   const currency = useCurrency();
   const { isSyncing } = useWalletSyncAction();
   const baseRefreshSkeleton = isSyncing || isDataRefreshing;
@@ -258,16 +256,15 @@ const TransactionsDashboard = ({
   >(undefined);
   // The aggregate endpoint owns full-history bounds in real mode, so long-range
   // tabs never imply that a capped client page represents the whole book.
-  // Mock mode keeps deriving the options from its in-memory records.
   const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
     () =>
       resolveAutoPeriodForRecords(
         records,
         period,
         daemonHistoryYears,
-        dataMode === "mock" ? undefined : daemonAutoPeriod,
+        daemonAutoPeriod,
       ),
-    [daemonAutoPeriod, daemonHistoryYears, dataMode, period, records],
+    [daemonAutoPeriod, daemonHistoryYears, period, records],
   );
   const dashboardWindow = React.useMemo(
     () => transactionPeriodDateWindow(resolvedPeriod),
@@ -290,7 +287,7 @@ const TransactionsDashboard = ({
     // Changing the period changes the query key. Without the previous snapshot
     // as placeholder every range click blanked the whole workbench into
     // skeletons; keep the old numbers on screen until the new ones land.
-    { enabled: dataMode !== "mock", placeholderData: keepPreviousData },
+    { placeholderData: keepPreviousData },
   );
   const dashboardSnapshot =
     dashboardQuery.data?.kind === "ui.transactions.dashboard"
@@ -366,13 +363,10 @@ const TransactionsDashboard = ({
   // Real table pages are already scoped by the canonical daemon request. A
   // second client-side period pass would erase exact txid/chart-bucket results
   // that intentionally override the broad period (the original empty-table
-  // failure). Mock mode still needs the in-memory period behavior.
+  // failure).
   const tablePeriodRecords = React.useMemo(
-    () =>
-      dataMode !== "mock" || resolvedPeriod === "all"
-        ? sortTransactionsByDateDesc(records)
-        : recordsForPeriod(records, resolvedPeriod),
-    [dataMode, resolvedPeriod, records],
+    () => sortTransactionsByDateDesc(records),
+    [records],
   );
   const tableRecords = React.useMemo(() => {
     if (
@@ -578,12 +572,8 @@ const TransactionsDashboard = ({
             <NewTransactionDialog
               open={newTxnOpen}
               draft={newTransactionDraft}
-              walletSourceOptions={
-                dataMode === "mock"
-                  ? mockNewTransactionWalletSourceOptions
-                  : realWalletSourceOptions
-              }
-              movementCandidates={dataMode === "mock" ? undefined : []}
+              walletSourceOptions={realWalletSourceOptions}
+              movementCandidates={[]}
               onOpenChange={setNewTxnOpen}
               onDraftChange={setNewTransactionDraft}
               onSaveDraft={() => {

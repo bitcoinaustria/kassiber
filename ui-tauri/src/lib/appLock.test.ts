@@ -14,32 +14,28 @@ describe("app lock decisions", () => {
   it("routes real workspaces through the daemon unlock path", () => {
     expect(
       shouldUseDaemonUnlock({
-        dataMode: "real",
         hasIdentity: true,
         daemonAuthRequired: false,
       }),
     ).toBe(true);
     expect(
       shouldUseDaemonUnlock({
-        dataMode: "regtest",
         hasIdentity: true,
         daemonAuthRequired: false,
       }),
     ).toBe(true);
   });
 
-  it("keeps mock sessions out of daemon unlock unless auth is explicitly required", () => {
+  it("uses daemon auth requirements without a stored identity", () => {
     expect(
       shouldUseDaemonUnlock({
-        dataMode: "mock",
-        hasIdentity: true,
+        hasIdentity: false,
         daemonAuthRequired: false,
       }),
     ).toBe(false);
     expect(
       shouldUseDaemonUnlock({
-        dataMode: "mock",
-        hasIdentity: true,
+        hasIdentity: false,
         daemonAuthRequired: true,
       }),
     ).toBe(true);

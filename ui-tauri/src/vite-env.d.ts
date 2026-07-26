@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_DAEMON?: "mock" | "bridge" | "tauri";
+  readonly VITE_DAEMON?: "bridge" | "tauri";
 }
 
 interface ImportMeta {

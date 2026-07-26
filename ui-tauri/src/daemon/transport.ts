@@ -1,8 +1,7 @@
 /**
  * Daemon transport selector.
  *
- * Three runtime modes per docs/plan/04-desktop-ui.md §2.6:
- *   - "mock"   — fixture responses, no Python required (default dev mode)
+ * Two runtime modes:
  *   - "bridge" — Vite dev-server bridge to the Python daemon, dev-only
  *   - "tauri"  — JSONL over stdin/stdout via Rust supervisor (production)
  *
@@ -10,8 +9,7 @@
  * whitelisted requests to the local Python daemon.
  */
 
-import { mockDaemon, mockStream } from "./mock";
-import { isDaemonDataMode, useUiStore, type DataMode } from "@/store/ui";
+import { useUiStore, type DataMode } from "@/store/ui";
 import {
   emitAppLog,
   type AppLogField,
@@ -19,23 +17,20 @@ import {
 } from "@/lib/appLogs";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 
-export type DaemonMode = "mock" | "bridge" | "tauri";
+export type DaemonMode = "bridge" | "tauri";
 
 function defaultDaemonMode(): DaemonMode {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
     return "tauri";
   }
-  if (import.meta.env.DEV) {
-    return "bridge";
-  }
-  return "mock";
+  return "bridge";
 }
 
 const RAW_MODE = (import.meta.env.VITE_DAEMON ?? defaultDaemonMode()) as string;
 
-if (!["mock", "bridge", "tauri"].includes(RAW_MODE)) {
+if (!["bridge", "tauri"].includes(RAW_MODE)) {
   throw new Error(
-    `VITE_DAEMON must be one of mock|bridge|tauri (got ${RAW_MODE})`,
+    `VITE_DAEMON must be one of bridge|tauri (got ${RAW_MODE})`,
   );
 }
 
@@ -703,9 +698,6 @@ export function noteActiveImportProject(selection: ImportProjectSelection): void
 }
 
 export async function clearImportProject(): Promise<void> {
-  if (DAEMON_MODE === "mock") {
-    return;
-  }
   importProjectActivationGeneration += 1;
   activeImportProjectActivation = null;
   if (DAEMON_MODE === "bridge") {
@@ -894,9 +886,9 @@ export async function removeTerminalCommand(): Promise<TerminalCommandStatus> {
 
 /**
  * Subscribe to unsolicited daemon events (`daemon://event`). Resolves
- * with an unsubscribe function. The mock transport has no daemon and the
- * dev bridge logs events in the Vite terminal instead of pushing them to
- * the browser, so both return a no-op unsubscribe.
+ * with an unsubscribe function. The dev bridge logs events in the Vite
+ * terminal instead of pushing them to the browser, so it returns a no-op
+ * unsubscribe.
  */
 export async function subscribeDaemonEvents<T = unknown>(
   onEvent: (record: DaemonEventRecord<T>) => void,
@@ -984,20 +976,8 @@ const bridgeDaemon: DaemonTransport = {
   },
 };
 
-export function getTransport(dataMode?: DataMode): DaemonTransport {
-  if (!isDaemonDataMode(dataMode ?? useUiStore.getState().dataMode)) {
-    return withDaemonLogging(
-      { invoke: mockDaemon.invoke, stream: mockStream },
-      "daemon:mock",
-    );
-  }
-
+export function getTransport(_dataMode?: DataMode): DaemonTransport {
   switch (DAEMON_MODE) {
-    case "mock":
-      return withDaemonLogging(
-        { invoke: mockDaemon.invoke, stream: mockStream },
-        "daemon:mock",
-      );
     case "bridge":
       return withDaemonLogging(bridgeDaemon, "daemon:bridge");
     case "tauri":
