@@ -137,7 +137,7 @@ export function StartChoicePanel({
                   {t("start.openExisting.body")}
                 </span>
                 {!importAvailable && (
-                  <span className="mt-3 block font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
+                  <span className="mt-3 block font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
                     {t("start.openExisting.desktopOnly")}
                   </span>
                 )}

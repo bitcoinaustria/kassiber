@@ -2728,7 +2728,7 @@ function AppVersion() {
               commit: APP_COMMIT,
             })
       }
-      className="inline-flex w-full items-center justify-center gap-1 px-2 pb-1 text-center text-[11px] leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
+      className="inline-flex w-full items-center justify-center gap-1 px-2 pb-1 text-center text-xs leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
     >
       <span>
         {APP_IS_DEV_BUILD
@@ -2736,7 +2736,7 @@ function AppVersion() {
           : t("shell.version.releaseLabel", { version: APP_VERSION })}
       </span>
       <span aria-hidden="true">·</span>
-      <span className="font-mono text-[11px] leading-none">
+      <span className="font-mono text-xs leading-none">
         {APP_COMMIT_SHORT}
       </span>
     </a>
@@ -2944,7 +2944,7 @@ function ShellFloatingControls({
             >
               <Bell className="size-4" aria-hidden="true" />
               {notificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-medium text-destructive-foreground">
+                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-3xs font-medium text-destructive-foreground">
                   {notificationCount}
                 </span>
               )}
@@ -3034,7 +3034,7 @@ function ShellFloatingControls({
                         />
                       </div>
                       {progressLabel ? (
-                        <div className="mt-1 text-[11px] text-muted-foreground">
+                        <div className="mt-1 text-xs text-muted-foreground">
                           {progressLabel}
                         </div>
                       ) : null}

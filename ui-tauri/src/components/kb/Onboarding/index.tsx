@@ -716,7 +716,14 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       {/* Same ledger page as the app chrome, so setup and the app it sets up
           look like one product. Fades into `--color-paper` (this screen's
           surface) rather than the shell's `--card`. */}
-      <LedgerStageBand className="h-[34rem]" fade="var(--color-paper)" pages={6} />
+      {/* `fitPages`, like the lock screen: a fixed page count left this band's
+          ruling at 0.73 against the nav's 0.45, so the same paper looked coarser
+          here than anywhere else in the app. */}
+      <LedgerStageBand
+        className="h-[34rem]"
+        fade="var(--color-paper)"
+        fitPages
+      />
       <div
         className={cn(
           "relative z-10 mx-auto flex max-w-7xl flex-col items-center gap-8",

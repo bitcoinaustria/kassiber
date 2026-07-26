@@ -72,7 +72,7 @@ export const StatsCards = ({
             <div className="flex items-center justify-between gap-2 text-muted-foreground">
               <span className="text-xs font-medium">{t("stats.btcPrice")}</span>
               {isMarketRateRefreshing ? (
-                <span className="text-[10px] font-medium text-primary">
+                <span className="text-2xs font-medium text-primary">
                   {t("stats.refreshing")}
                 </span>
               ) : null}
@@ -85,7 +85,7 @@ export const StatsCards = ({
             </p>
             <p
               className={cn(
-                "truncate text-[10px] font-medium leading-tight sm:text-xs",
+                "truncate text-2xs font-medium leading-tight sm:text-xs",
                 marketRateIsSynced
                   ? "text-emerald-600 dark:text-emerald-400"
                   : "text-muted-foreground",
@@ -173,7 +173,7 @@ export const StatsCards = ({
                       numberFormatter.format(stat.value)
                     )}
                   </p>
-                  <div className="flex min-w-0 items-center gap-1.5 text-[10px] sm:text-xs">
+                  <div className="flex min-w-0 items-center gap-1.5 text-2xs sm:text-xs">
                     <span
                       className={cn(
                         "shrink-0 font-medium",

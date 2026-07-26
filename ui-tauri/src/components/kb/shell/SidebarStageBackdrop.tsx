@@ -118,6 +118,15 @@ function LedgerPaperArt({ pages = 1 }: { pages?: number }) {
   // One tile with one set of marks for the nav; a doubled tile carrying two
   // offset sets for anything larger, which is the same marks at half density.
   const markSpread = pages > 1 ? 2 : 1;
+  /*
+   * Marks only cover the top of the band, not all of it. Their count scales with
+   * *area*, so halving the density was not enough on the large surfaces: the
+   * setup band still drew 92 and the full-height lock band 318, against the
+   * nav's 7. Confining them to the first two pages bounds the count regardless
+   * of how tall the band gets, and reads as intent — pencil notes gather where
+   * the eye lands, and the paper below stays clean ruled stock.
+   */
+  const markedHeight = Math.min(artHeight, STAGE_PAGE * 2);
   const markOffsets =
     markSpread === 1
       ? [[0, 0]]
@@ -322,7 +331,7 @@ function LedgerPaperArt({ pages = 1 }: { pages?: number }) {
       <rect width="100%" height={artHeight} fill={`url(#${glowsId})`} />
       <rect width="100%" height={artHeight} fill={`url(#${columnsId})`} />
       <rect width="100%" height={artHeight} fill={`url(#${rulesId})`} />
-      <rect width="100%" height={artHeight} fill={`url(#${marksId})`} />
+      <rect width="100%" height={markedHeight} fill={`url(#${marksId})`} />
     </svg>
   );
 }

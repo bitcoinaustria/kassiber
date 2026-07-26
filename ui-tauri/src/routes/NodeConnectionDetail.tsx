@@ -605,7 +605,7 @@ function NodeOperatorHero({
                 style={{ width: `${remotePct}%` }}
               />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span className={cn("tabular-nums", blurClass(hideSensitive))}>
                 <span className="text-emerald-700 dark:text-emerald-300">
                   {Math.round(localPct)}%
@@ -681,7 +681,7 @@ function HeroStat({
 }: HeroStatProps) {
   return (
     <div className="min-w-0 rounded-md border bg-background px-3 py-2.5">
-      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         {icon}
         <span className="truncate">{label}</span>
       </div>
@@ -696,7 +696,7 @@ function HeroStat({
       </p>
       <p
         className={cn(
-          "mt-0.5 truncate text-[11px] text-muted-foreground",
+          "mt-0.5 truncate text-xs text-muted-foreground",
           blurClass(hideSensitive),
         )}
       >
@@ -962,7 +962,7 @@ function ChannelEconomicsCard({
                       <span className="block truncate text-sm font-medium">
                         {channel.peerAlias}
                       </span>
-                      <span className="block truncate font-mono text-[10px] text-muted-foreground sm:text-xs">
+                      <span className="block truncate font-mono text-2xs text-muted-foreground sm:text-xs">
                         {channel.shortChannelId ?? channel.id}
                       </span>
                     </TableCell>
@@ -980,7 +980,7 @@ function ChannelEconomicsCard({
                     <TableCell className="text-right">
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset",
                           coversOpenCost
                             ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-400/20"
                             : "bg-muted text-muted-foreground ring-border",
@@ -994,7 +994,7 @@ function ChannelEconomicsCard({
                     <TableCell className="text-right">
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset",
                           channelStateTone[channel.state],
                         )}
                       >
@@ -1022,14 +1022,14 @@ interface CompactStatProps {
 function CompactStat({ label, value, detail, icon }: CompactStatProps) {
   return (
     <div className="min-w-0 rounded-md border bg-background px-3 py-2.5">
-      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         {icon}
         <span className="truncate">{label}</span>
       </div>
       <p className="mt-1 truncate font-mono text-sm font-semibold tabular-nums">
         {value}
       </p>
-      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+      <p className="mt-0.5 truncate text-xs text-muted-foreground">
         {detail}
       </p>
     </div>
@@ -1125,7 +1125,7 @@ function RoutingStat({
 }: RoutingStatProps) {
   return (
     <div className="space-y-1 rounded-md border bg-background px-3 py-2.5">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <p
@@ -1140,7 +1140,7 @@ function RoutingStat({
       {detail ? (
         <p
           className={cn(
-            "text-[11px] text-muted-foreground tabular-nums",
+            "text-xs text-muted-foreground tabular-nums",
             blurClass(hideSensitive),
           )}
         >
@@ -1194,7 +1194,7 @@ function ChannelsCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
             {t("node.channels.title")}
-            <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
+            <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-2xs font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
               {channels.length}
             </span>
           </CardTitle>
@@ -1330,19 +1330,19 @@ function ChannelRow({
           <span className="flex items-center gap-1.5 truncate text-sm font-medium">
             {channel.peerAlias}
             {channel.isPrivate ? (
-              <Badge variant="outline" className="rounded-md text-[10px]">
+              <Badge variant="outline" className="rounded-md text-2xs">
                 {t("node.channels.private")}
               </Badge>
             ) : null}
             {channel.isInitiator ? null : (
-              <Badge variant="outline" className="rounded-md text-[10px]">
+              <Badge variant="outline" className="rounded-md text-2xs">
                 {t("node.channels.remoteOpened")}
               </Badge>
             )}
           </span>
           <span
             className={cn(
-              "block truncate font-mono text-[10px] text-muted-foreground sm:text-xs",
+              "block truncate font-mono text-2xs text-muted-foreground sm:text-xs",
               blurClass(hideSensitive),
             )}
           >
@@ -1374,7 +1374,7 @@ function ChannelRow({
           </div>
           <div
             className={cn(
-              "flex items-center justify-between font-mono text-[10px] text-muted-foreground tabular-nums sm:text-xs",
+              "flex items-center justify-between font-mono text-2xs text-muted-foreground tabular-nums sm:text-xs",
               blurClass(hideSensitive),
             )}
           >
@@ -1403,7 +1403,7 @@ function ChannelRow({
           {fmtSat(channel.capacitySat)}
         </span>
         {showSharePct ? (
-          <span className="text-[10px] text-muted-foreground sm:text-xs">
+          <span className="text-2xs text-muted-foreground sm:text-xs">
             {t("node.channels.shareOfNode", { percent: sharePct })}
           </span>
         ) : null}
@@ -1421,7 +1421,7 @@ function ChannelRow({
                     : formatCount(channel.feeRatePpm),
               })}
             </span>
-            <span className="text-[10px] text-muted-foreground sm:text-xs">
+            <span className="text-2xs text-muted-foreground sm:text-xs">
               {t("node.channels.baseMsat", {
                 value: formatCount(channel.baseFeeMsat ?? 0),
               })}
@@ -1429,7 +1429,7 @@ function ChannelRow({
           </Fragment>
         )}
         {channel.forwardCount ? (
-          <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
+          <span className="mt-0.5 block text-2xs text-muted-foreground sm:text-xs">
             {t("node.channels.forwardsEarned", {
               value: formatCount(channel.forwardCount),
               earned: fmtSat(channel.earnedRoutingSat ?? 0),
@@ -1440,14 +1440,14 @@ function ChannelRow({
       <TableCell className="align-top text-right">
         <span
           className={cn(
-            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+            "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset",
             channelStateTone[channel.state],
           )}
         >
           {channelStateLabel(channel.state, t)}
         </span>
         {channel.closedAt ? (
-          <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
+          <span className="mt-0.5 block text-2xs text-muted-foreground sm:text-xs">
             {channelCloseKindLabel(channel.closeKind, t)} ·{" "}
             {formatShortDate(channel.closedAt)}
           </span>
@@ -1683,7 +1683,7 @@ function ChannelDetailBody({
               })}
             </span>
           </div>
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               {t("node.channelDetail.capacity", {
                 capacity: fmtSat(channel.capacitySat),
@@ -1698,7 +1698,7 @@ function ChannelDetailBody({
         </div>
 
         <div className="space-y-2.5">
-          <h4 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("node.channelDetail.peer")}
           </h4>
           <DetailRow
@@ -1735,7 +1735,7 @@ function ChannelDetailBody({
         </div>
 
         <div className="space-y-2.5">
-          <h4 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("node.channelDetail.channel")}
           </h4>
           {channel.shortChannelId ? (
@@ -1817,7 +1817,7 @@ function ChannelDetailBody({
         </div>
 
         <div className="space-y-2.5">
-          <h4 className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <h4 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("node.channelDetail.routing")}
           </h4>
           <DetailRow
@@ -1871,7 +1871,7 @@ function ForwardsCard({ forwards, hideSensitive }: ForwardsCardProps) {
         <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
           <Repeat className="size-4" aria-hidden="true" />
           {t("node.forwards.title")}
-          <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
+          <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-2xs font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
             {sorted.length}
           </span>
         </CardTitle>
@@ -1939,7 +1939,7 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
       <TableCell className="align-top">
         <span className="block text-sm">{formatShortDate(forward.occurredAt)}</span>
         {relative ? (
-          <span className="text-[10px] text-muted-foreground sm:text-xs">
+          <span className="text-2xs text-muted-foreground sm:text-xs">
             {relative}
           </span>
         ) : null}
@@ -1955,7 +1955,7 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
             {forward.inShortChannelId ? (
               <span
                 className={cn(
-                  "shrink-0 font-mono text-[10px] text-muted-foreground",
+                  "shrink-0 font-mono text-2xs text-muted-foreground",
                   blurClass(hideSensitive),
                 )}
               >
@@ -1972,7 +1972,7 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
             {forward.outShortChannelId ? (
               <span
                 className={cn(
-                  "shrink-0 font-mono text-[10px] text-muted-foreground",
+                  "shrink-0 font-mono text-2xs text-muted-foreground",
                   blurClass(hideSensitive),
                 )}
               >
@@ -2016,7 +2016,7 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
       <TableCell className="align-top text-right">
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+            "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset",
             forwardStatusTone[forward.status],
           )}
         >
@@ -2024,7 +2024,7 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
           {forwardStatusLabel(forward.status, t)}
         </span>
         {forward.failureReason ? (
-          <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
+          <span className="mt-0.5 block text-2xs text-muted-foreground sm:text-xs">
             {forward.failureReason}
           </span>
         ) : null}

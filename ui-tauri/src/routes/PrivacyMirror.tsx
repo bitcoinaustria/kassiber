@@ -107,7 +107,7 @@ export function SeverityMark({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-2xs font-semibold uppercase tracking-wide",
         tone.text,
         tone.bg,
       )}

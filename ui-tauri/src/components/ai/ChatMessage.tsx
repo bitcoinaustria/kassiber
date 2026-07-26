@@ -130,7 +130,7 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
           <p className="text-sm text-destructive">
             {message.errorMessage ?? t("message.chatFailed")}
             {message.errorCode ? (
-              <span className="ml-2 rounded-md bg-destructive/10 px-1.5 py-0.5 font-mono text-[10px] uppercase">
+              <span className="ml-2 rounded-md bg-destructive/10 px-1.5 py-0.5 font-mono text-2xs uppercase">
                 {message.errorCode}
               </span>
             ) : null}
@@ -449,7 +449,7 @@ function DeterministicAnswerFacts({
           key={`${fact.source}-${fact.label}`}
           className="rounded-md border border-border/70 bg-muted/20 px-3 py-2"
         >
-          <div className="text-[10px] font-medium uppercase tracking-normal text-muted-foreground">
+          <div className="text-2xs font-medium uppercase tracking-normal text-muted-foreground">
             {fact.source}
           </div>
           <div className="mt-0.5 text-sm font-medium text-foreground">
@@ -482,7 +482,7 @@ function AnswerProvenance({
   );
   if (parts.length === 0) return null;
   return (
-    <p className="mt-2 text-[11px] text-muted-foreground">{parts.join(" · ")}</p>
+    <p className="mt-2 text-xs text-muted-foreground">{parts.join(" · ")}</p>
   );
 }
 

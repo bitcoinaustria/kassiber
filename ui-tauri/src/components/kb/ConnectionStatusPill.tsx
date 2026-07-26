@@ -24,7 +24,7 @@ export function ConnectionStatusPill({
   return (
     <span
       className={cn(
-        "inline-flex w-fit items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+        "inline-flex w-fit items-center rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset",
         connectionStatusStyles[status],
         className,
       )}

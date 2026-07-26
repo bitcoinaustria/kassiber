@@ -327,7 +327,7 @@ export function ReviewDataTable({
             </span>
           ) : null}
           <div className="min-w-0">
-            <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            <p className="text-2xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
               {eyebrow}
             </p>
             <h1 className="mt-0.5 text-base font-semibold">{title}</h1>
@@ -388,7 +388,7 @@ export function ReviewDataTable({
                     ? t("review.tableTitle.review")
                     : t("review.tableTitle.blocked"))}
               </h2>
-              <p className="text-[10px] text-muted-foreground sm:text-xs">
+              <p className="text-2xs text-muted-foreground sm:text-xs">
                 {renderedTableDescription}
               </p>
             </div>
@@ -431,7 +431,7 @@ export function ReviewDataTable({
 
         {hasActiveFilters ? (
           <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
-            <span className="text-[10px] text-muted-foreground sm:text-xs">
+            <span className="text-2xs text-muted-foreground sm:text-xs">
               {t("review.filters.active")}
             </span>
             <Button
@@ -747,13 +747,13 @@ function QuarantineReviewRow({
             {showPriorityBadge ? (
               <Badge
                 variant="secondary"
-                className={cn("h-5 rounded-md px-1.5 text-[10px]", priorityClass[row.priority])}
+                className={cn("h-5 rounded-md px-1.5 text-2xs", priorityClass[row.priority])}
               >
                 {t(priorityLabelKey[row.priority])}
               </Badge>
             ) : null}
           </div>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-muted-foreground sm:text-xs">
             <span className="font-mono">{row.id}</span>
             <span aria-hidden="true">·</span>
             <span className={cn("max-w-[16rem] truncate", blurClass(hideSensitive))}>
@@ -794,7 +794,7 @@ function QuarantineReviewRow({
         </div>
         <div
           className={cn(
-            "mt-1 truncate font-mono text-[11px] text-muted-foreground",
+            "mt-1 truncate font-mono text-xs text-muted-foreground",
             blurClass(hideSensitive),
           )}
         >
@@ -802,7 +802,7 @@ function QuarantineReviewRow({
         </div>
         <div
           className={cn(
-            "mt-2 truncate text-[11px] font-medium",
+            "mt-2 truncate text-xs font-medium",
             impactToneClass(row.impact),
             blurClass(hideSensitive),
           )}
@@ -877,7 +877,7 @@ function ReviewWorklistRow({
                 </Badge>
               ) : null}
             </div>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-muted-foreground sm:text-xs">
               <span className="font-mono">{row.id}</span>
               <span aria-hidden="true">·</span>
               <span className={cn("truncate", blurClass(hideSensitive))}>
@@ -889,7 +889,7 @@ function ReviewWorklistRow({
       </TableCell>
       <TableCell>
         <span className="text-sm text-muted-foreground">{row.source}</span>
-        <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
+        <p className="mt-1 text-2xs text-muted-foreground sm:text-xs">
           {evidenceHint(row, t)}
         </p>
       </TableCell>
@@ -899,7 +899,7 @@ function ReviewWorklistRow({
         </span>
         <p
           className={cn(
-            "mt-1 font-mono text-[10px] text-muted-foreground sm:text-xs",
+            "mt-1 font-mono text-2xs text-muted-foreground sm:text-xs",
             blurClass(hideSensitive),
           )}
         >
@@ -925,7 +925,7 @@ function ReviewWorklistRow({
           >
             {t(statusLabelKey[row.status])}
           </Badge>
-          <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
+          <p className="mt-1 text-2xs text-muted-foreground sm:text-xs">
             {nextActionLabel(row, t)}
           </p>
           {transactionAction ? (

@@ -172,13 +172,13 @@ function WalletOverviewStat({
     <div className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-background/55 p-3.5 shadow-sm shadow-black/[0.025] backdrop-blur-xl">
       <div className="pointer-events-none relative z-20 space-y-1.5">
         <div className="text-muted-foreground">
-          <span className="text-[11px] font-medium tracking-[0.01em]">{label}</span>
+          <span className="text-xs font-medium tracking-[0.01em]">{label}</span>
         </div>
         <p className="truncate text-base font-semibold tracking-tight tabular-nums sm:text-lg">
           {value}
         </p>
         {detail != null ? (
-          <p className="truncate text-[11px] font-medium leading-tight text-muted-foreground">
+          <p className="truncate text-xs font-medium leading-tight text-muted-foreground">
             {detail}
           </p>
         ) : null}
@@ -1464,7 +1464,7 @@ function ConnectionDetailView({
                 <span className="text-xs font-medium tracking-[0.02em] text-muted-foreground">
                   {t("detail.metric.balance")}
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/55 px-2 py-1 text-[10px] font-semibold text-muted-foreground shadow-sm backdrop-blur-xl transition-colors group-hover:text-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/55 px-2 py-1 text-2xs font-semibold text-muted-foreground shadow-sm backdrop-blur-xl transition-colors group-hover:text-foreground">
                   <ArrowLeftRight className="size-3" aria-hidden="true" />
                   {balanceUnit === "btc" ? "BTC" : "EUR"}
                 </span>
@@ -1554,7 +1554,7 @@ function ConnectionDetailView({
               </span>
               <div className="flex items-center gap-4">
                 <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                     {t("detail.reconcile.onChainInventory")}
                   </div>
                   <div
@@ -1565,7 +1565,7 @@ function ConnectionDetailView({
                   >
                     {fmtBtc(reconciliation.utxoSat / 1e8)}
                   </div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-2xs text-muted-foreground">
                     {t("detail.reconcile.watchOnlyTruth")}
                   </div>
                 </div>
@@ -1576,7 +1576,7 @@ function ConnectionDetailView({
                   ≠
                 </span>
                 <div>
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                     {t("detail.reconcile.recordedInBooks")}
                   </div>
                   <div
@@ -1587,7 +1587,7 @@ function ConnectionDetailView({
                   >
                     {fmtBtc(reconciliation.importedSat / 1e8)}
                   </div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-2xs text-muted-foreground">
                     {t("detail.reconcile.feedsTaxReports")}
                   </div>
                 </div>
@@ -2730,21 +2730,21 @@ function ConnectionTransactionRow({
         <span className="block min-w-0 truncate text-sm font-medium">
           {primaryLabel}
         </span>
-        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground sm:text-xs">
+        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-2xs text-muted-foreground sm:text-xs">
           <span className="shrink-0">{tx.date}</span>
           <span aria-hidden="true">·</span>
           <span className={cn("truncate font-mono", blurClass(hideSensitive))}>
             {fmtShortTxid(tx.externalId ?? tx.id)}
           </span>
           {showTypeBadge ? (
-            <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+            <Badge variant="outline" className="h-5 rounded-md px-1.5 text-2xs">
               {tx.type}
             </Badge>
           ) : null}
           {tx.conf > 0 ? null : (
             <Badge
               variant="outline"
-              className="h-5 rounded-md px-1.5 text-[10px] text-amber-700 ring-amber-600/20 dark:text-amber-300"
+              className="h-5 rounded-md px-1.5 text-2xs text-amber-700 ring-amber-600/20 dark:text-amber-300"
             >
               {t("detail.recentTransactions.pending")}
             </Badge>
@@ -2767,7 +2767,7 @@ function ConnectionTransactionRow({
         </span>
         <span
           className={cn(
-            "mt-0.5 block font-mono text-[10px] text-muted-foreground tabular-nums sm:text-xs",
+            "mt-0.5 block font-mono text-2xs text-muted-foreground tabular-nums sm:text-xs",
             blurClass(hideSensitive),
           )}
         >

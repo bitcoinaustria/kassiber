@@ -52,7 +52,7 @@ const ExplainerShell = ({
         <div className="flex size-10 items-center justify-center rounded-md bg-ink text-paper">
           <Icon className="size-5" />
         </div>
-        <p className="mt-4 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
+        <p className="mt-4 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
           {eyebrow}
         </p>
         <h4 className="mt-2 text-lg font-semibold text-ink">{title}</h4>
@@ -83,7 +83,7 @@ const ExplainerShell = ({
                   <p className="m-0 text-sm font-semibold text-ink">
                     {optTitle}
                     {active && (
-                      <span className="ml-2 font-mono text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--kb-accent)]">
+                      <span className="ml-2 font-mono text-3xs font-medium uppercase tracking-[0.12em] text-[var(--kb-accent-text)]">
                         {t("explainer.selected")}
                       </span>
                     )}

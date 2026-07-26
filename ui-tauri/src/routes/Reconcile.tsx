@@ -230,17 +230,17 @@ function LegRow({ leg, hideSensitive }: { leg: Leg; hideSensitive: boolean }) {
   return (
     <div className="flex items-center justify-between gap-2 py-0.5">
       <span
-        className={`font-mono text-[11px] ${hiddenSensitiveClassName(hideSensitive)}`}
+        className={`font-mono text-xs ${hiddenSensitiveClassName(hideSensitive)}`}
       >
         {label}
       </span>
       {leg.owned ? (
-        <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+        <span className="text-xs text-emerald-600 dark:text-emerald-400">
           {leg.wallet}
           {leg.branch ? ` · ${leg.branch}` : ""}
         </span>
       ) : (
-        <span className="text-[11px] text-muted-foreground">{t("reconcile.legs.external")}</span>
+        <span className="text-xs text-muted-foreground">{t("reconcile.legs.external")}</span>
       )}
     </div>
   );
@@ -257,11 +257,11 @@ function LegColumn({
 }) {
   return (
     <div>
-      <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title} ({legs.length})
       </p>
       {legs.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">—</p>
+        <p className="text-xs text-muted-foreground">—</p>
       ) : (
         legs.map((leg, index) => (
           <LegRow key={index} leg={leg} hideSensitive={hideSensitive} />
@@ -628,7 +628,7 @@ export function Reconcile() {
                                 </span>
                                 <CopyButton value={result.input} ariaLabel={t("reconcile.copyInputAria")} />
                               </div>
-                              <span className="ml-[1.625rem] text-[11px] uppercase tracking-wide text-muted-foreground">
+                              <span className="ml-[1.625rem] text-xs uppercase tracking-wide text-muted-foreground">
                                 {result.type}
                                 {result.chain ? ` · ${result.chain}` : ""}
                               </span>
