@@ -47,9 +47,6 @@ VERIFY_SHEET_NAMES = ("Verify", "Acquisitions", "Disposals", "Control")
 # Journal entry types that increase holdings (the Acquisitions ledger) and those
 # that decrease them (the Disposals ledger). Together they partition every
 # entry type the engine emits.
-ADD_ENTRY_TYPES = ("acquisition", "income", "transfer_in")
-SUB_ENTRY_TYPES = ("disposal", "fee", "transfer_fee", "transfer_out")
-
 DEFAULT_FIAT_TOLERANCE = 0.01  # one cent; written to the tolerance cell
 QTY_TOLERANCE = 5e-9  # ~half a sat; msat→BTC is exact integer division
 # Verify-sheet layout: B2 = status banner, B3 = editable tolerance.

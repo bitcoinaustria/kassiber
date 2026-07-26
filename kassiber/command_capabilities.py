@@ -25,11 +25,6 @@ CAPABILITY_ORDER = {
     Capability.ADMIN: 3,
 }
 
-LEASE_CAPABILITIES = frozenset(
-    {Capability.READ, Capability.OPERATOR, Capability.ACCOUNTING_DECISIONS}
-)
-
-
 def capability_allows(granted: Capability, required: Capability) -> bool:
     """Return whether a cumulative non-admin grant covers ``required``."""
 

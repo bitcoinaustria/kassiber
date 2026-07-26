@@ -324,20 +324,6 @@ def _read_json_document(
         ) from exc
 
 
-def _add_json_document_args(parser: argparse.ArgumentParser, *, label: str) -> None:
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument(
-        "--json",
-        dest="json_text",
-        help=f"Inline JSON {label}",
-    )
-    source.add_argument(
-        "--file",
-        dest="json_file",
-        help=f"UTF-8 file containing the JSON {label}",
-    )
-
-
 def _project_payload(entry) -> dict[str, object]:
     return {
         "id": entry.id,

@@ -82,7 +82,6 @@ PROVIDER_UNIQUE_KEYS = (
 )
 PROVIDER_BROAD_KEYS = ("provider_id",)
 PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
-RAW_PRIVACY_HOP_TYPES = PRIVACY_LINK_TYPES | {"payment_in_coinjoin", "sweep"}
 SUGGESTION_WRITE_CAP = 500
 # How a transaction row entered Kassiber, derived from its wallet's kind.
 # This is the "data source" column a strict reviewer wants next to every
