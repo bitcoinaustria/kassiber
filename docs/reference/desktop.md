@@ -86,30 +86,35 @@ that setup choice is persisted. Ten seconds after launch, and then every 24
 hours while open, the desktop asks the bundled CLI sidecar to perform the
 check (`kassiber --format json update`) when **Settings → Privacy → Allow
 GitHub update checks** is enabled. The CLI owns the single GitHub code path:
-prerelease/dev builds examine a bounded page and compare the highest published
-semantic-version tag with the packaged version, while stable `release` builds
-use GitHub's latest-stable endpoint so a run of prereleases cannot hide a
-stable update. Desktop-triggered checks therefore share the CLI's response
-cache and throttling instead of contacting GitHub separately. If a newer
-version exists, the version
+prerelease/dev builds read one listing page — GitHub returns it newest-first, so
+the highest published semantic-version tag is on it — and compare that tag with
+the packaged version, while stable `release` builds use GitHub's latest-stable
+endpoint so a run of prereleases cannot hide a stable update. Desktop-triggered
+checks therefore share the CLI's response cache instead of contacting GitHub
+separately, and dev builds run the same path as release builds rather than a
+stub that always reports "current". If a newer version exists, the version
 label at the bottom-left of the sidebar changes to an underlined
 `update available · vLatest` link to that GitHub release page. The macOS
 Kassiber menu also includes **Check for Updates…** directly below About; while
 permission is enabled, an explicit check reports whether Kassiber is current
-and offers to open the release page when an update exists. While disabled, that
-menu action reports that checks are disabled without spawning the sidecar.
-The switch lives in the existing Privacy panel; there is no
-separate update settings panel.
+and offers to open the release page when an update exists, and reports the
+specific reason when the check fails rather than a generic retry message.
+Clicking the sidebar version line runs that same check while permission is
+enabled; without it the line stays an ordinary link to the repository.
+While disabled, the menu action reports that checks are disabled without
+spawning the sidecar. The switch lives in the existing Privacy panel; there is
+no separate update settings panel.
 Kassiber never selects an asset, downloads a file, installs an update, or
 restarts itself; automatic failures stay silent so they cannot interfere with
 startup. The native shell independently
 reads the same owner-only `~/.kassiber/config/update-checks.json` consent used
 by the packaged CLI before spawning anything, fails closed when it is absent,
 malformed, or disabled, and rejects any release URL that leaves the official
-repository. The renderer hydrates from that canonical native preference and
-never restores consent from its own local storage. The CLI holds the sibling
-`update-checks.lock` across an authorized request; disabling waits for an
-in-flight request and prevents any later request from starting. See
+repository. The renderer hydrates from that canonical native preference at
+startup and never restores consent from its own local storage; every check
+re-reads the file before using its result, so a revocation made from the CLI
+while the desktop is running still suppresses the result and turns the toggle
+off. Consent writes are atomic and take effect immediately. See
 [../../SECURITY.md](../../SECURITY.md) for the outbound-request disclosure.
 The update announcement remains unsigned and relies on HTTPS plus control of
 the Kassiber GitHub repository. Release builds include a versioned SHA-256

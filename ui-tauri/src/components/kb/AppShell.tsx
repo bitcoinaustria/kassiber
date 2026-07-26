@@ -156,6 +156,10 @@ import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvid
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
 import { RouteErrorBoundary } from "@/components/AppErrorBoundary";
+import {
+  canCheckAppUpdates,
+  runManualAppUpdateCheck,
+} from "@/lib/appUpdate";
 import { APP_COMMIT, APP_VERSION } from "@/lib/appVersion";
 import { appWorkflowHotkeyAction } from "@/lib/appWorkflowHotkeys";
 import {
@@ -2715,18 +2719,34 @@ function SidebarUpdatePill() {
 
 function AppVersion() {
   const { t } = useTranslation("chrome");
+  // With consent granted, the version line is the obvious place to ask "am I
+  // current?" — same native check the "Check for Updates…" menu item runs.
+  // Without consent it stays a plain link so the click never reaches GitHub.
+  const canCheck =
+    useUiStore((state) => state.automaticUpdateChecks) && canCheckAppUpdates();
+  const buildTitle = APP_IS_DEV_BUILD
+    ? t("shell.version.devTitle", { commit: APP_COMMIT })
+    : t("shell.version.releaseTitle", {
+        version: APP_VERSION,
+        commit: APP_COMMIT,
+      });
   return (
     <a
       href="https://github.com/bitcoinaustria/kassiber"
       target="_blank"
       rel="noreferrer"
+      onClick={
+        canCheck
+          ? (event) => {
+              event.preventDefault();
+              void runManualAppUpdateCheck();
+            }
+          : undefined
+      }
       title={
-        APP_IS_DEV_BUILD
-          ? t("shell.version.devTitle", { commit: APP_COMMIT })
-          : t("shell.version.releaseTitle", {
-              version: APP_VERSION,
-              commit: APP_COMMIT,
-            })
+        canCheck
+          ? t("shell.version.checkTitle", { build: buildTitle })
+          : buildTitle
       }
       className="inline-flex w-full items-center justify-center gap-1 px-2 pb-1 text-center text-xs leading-none text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
     >

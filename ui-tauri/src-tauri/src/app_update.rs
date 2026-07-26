@@ -1,12 +1,12 @@
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::process::Stdio;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
+use tokio::io::AsyncReadExt;
 
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -18,7 +18,6 @@ const MAX_PREFERENCE_BYTES: u64 = 1024;
 const PREFERENCE_SCHEMA_VERSION: u8 = 1;
 const DISABLE_UPDATE_CHECK_ENV: &str = "KASSIBER_DISABLE_UPDATE_CHECK";
 const PREFERENCE_FILENAME: &str = "update-checks.json";
-const PREFERENCE_LOCK_FILENAME: &str = "update-checks.lock";
 const UPDATE_CHECKS_DISABLED_MESSAGE: &str =
     "GitHub update checks are disabled. Enable them in Settings > Privacy.";
 
@@ -27,16 +26,6 @@ const UPDATE_CHECKS_DISABLED_MESSAGE: &str =
 struct UpdateCheckPreference {
     schema_version: u8,
     enabled: bool,
-}
-
-struct UpdateCheckPreferenceLock {
-    file: File,
-}
-
-impl Drop for UpdateCheckPreferenceLock {
-    fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.file);
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -81,18 +70,17 @@ fn now_unix_seconds() -> u64 {
         .as_secs()
 }
 
-fn debug_update_check(current_version: String, prerelease: bool) -> AppUpdateCheck {
-    AppUpdateCheck {
-        latest_version: Some(current_version.clone()),
-        current_version,
-        release_url: None,
-        update_available: false,
-        prerelease,
-        checked_at: now_unix_seconds(),
-    }
-}
-
+/// Parse the CLI's `--format json update` output.
+///
+/// This handles success and failure alike: the CLI reports failures as an
+/// `error` envelope on stdout, so the exit status adds nothing the body does not
+/// already say, and development builds run exactly this path rather than a stub
+/// that always reports "current" — the stub is why an oversized-response bug
+/// reached a release unnoticed.
 fn update_check_from_envelope(body: &[u8]) -> Result<AppUpdateCheck, String> {
+    if body.iter().all(u8::is_ascii_whitespace) {
+        return Err("Could not reach GitHub to check for updates.".to_string());
+    }
     let envelope: CliUpdateEnvelope = serde_json::from_slice(body)
         .map_err(|_| "The Kassiber CLI returned an invalid update response.".to_string())?;
     if let Some(error) = envelope.error {
@@ -128,77 +116,52 @@ fn cli_error_message(error: &CliErrorBody) -> String {
     }
 }
 
-fn sidecar_failure_message(stdout: &[u8]) -> String {
-    match serde_json::from_slice::<CliUpdateEnvelope>(stdout) {
-        Ok(envelope) => match envelope.error {
-            Some(error) => cli_error_message(&error),
-            None => "Could not reach GitHub to check for updates.".to_string(),
-        },
-        Err(_) => "Could not reach GitHub to check for updates.".to_string(),
-    }
-}
-
-fn run_sidecar_update_check(resource_dir: Option<&Path>) -> Result<AppUpdateCheck, String> {
+/// Run `kassiber --format json update` under a deadline.
+///
+/// `kill_on_drop` plus `tokio::time::timeout` replace what used to be a manual
+/// `try_wait` poll loop and three copies of kill/wait/join cleanup. Stdout is
+/// still read through a hard cap so a broken sidecar cannot grow memory without
+/// bound; stderr stays discarded.
+async fn run_sidecar_update_check(resource_dir: Option<&Path>) -> Result<AppUpdateCheck, String> {
     // `--format` is a global option and must precede the subcommand.
     let (program, args, cwd) = crate::supervisor::cli_invocation(
         resource_dir,
         vec!["--format".into(), "json".into(), "update".into()],
     );
-    let mut child = Command::new(&program)
+    let mut child = tokio::process::Command::new(&program)
         .args(&args)
         .current_dir(&cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        .kill_on_drop(true)
         .spawn()
         .map_err(|_| "Could not start the Kassiber CLI to check for updates.".to_string())?;
-
-    // Drain stdout on a separate thread so a chatty child can never fill the
-    // pipe buffer and deadlock against the bounded wait below.
-    let mut stdout = child
+    let stdout = child
         .stdout
         .take()
         .ok_or_else(|| "Could not read the Kassiber CLI update output.".to_string())?;
-    let reader = std::thread::spawn(move || {
+    let body = tokio::time::timeout(SIDECAR_UPDATE_TIMEOUT, async {
         let mut body = Vec::new();
         stdout
-            .by_ref()
             .take(MAX_SIDECAR_OUTPUT_BYTES as u64 + 1)
             .read_to_end(&mut body)
-            .map(|_| body)
-    });
-
-    let deadline = Instant::now() + SIDECAR_UPDATE_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    let _ = reader.join();
-                    return Err("The update check timed out.".to_string());
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = reader.join();
-                return Err("Could not run the Kassiber CLI update check.".to_string());
-            }
+            .await
+            .map_err(|_| "Could not read the Kassiber CLI update output.".to_string())?;
+        if body.len() > MAX_SIDECAR_OUTPUT_BYTES {
+            let _ = child.kill().await;
+            return Err(
+                "The Kassiber CLI returned an unexpectedly large update response.".to_string(),
+            );
         }
-    };
-    let body = reader
-        .join()
-        .map_err(|_| "Could not read the Kassiber CLI update output.".to_string())?
-        .map_err(|_| "Could not read the Kassiber CLI update output.".to_string())?;
-    if body.len() > MAX_SIDECAR_OUTPUT_BYTES {
-        return Err("The Kassiber CLI returned an unexpectedly large update response.".to_string());
-    }
-    if !status.success() {
-        return Err(sidecar_failure_message(&body));
-    }
+        child
+            .wait()
+            .await
+            .map_err(|_| "Could not run the Kassiber CLI update check.".to_string())?;
+        Ok(body)
+    })
+    .await
+    .map_err(|_| "The update check timed out.".to_string())??;
     update_check_from_envelope(&body)
 }
 
@@ -227,59 +190,6 @@ fn preference_path() -> Result<PathBuf, String> {
                 .join(PREFERENCE_FILENAME)
         })
         .ok_or_else(|| "Could not locate the user update-check preference.".to_string())
-}
-
-fn preference_lock_path(path: &Path) -> Result<PathBuf, String> {
-    path.parent()
-        .map(|parent| parent.join(PREFERENCE_LOCK_FILENAME))
-        .ok_or_else(|| "Update-check preference has no parent directory.".to_string())
-}
-
-fn acquire_update_check_preference_lock(
-    preference: &Path,
-) -> Result<UpdateCheckPreferenceLock, String> {
-    let lock_path = preference_lock_path(preference)?;
-    match fs::symlink_metadata(&lock_path) {
-        Ok(metadata) if !metadata.file_type().is_file() => {
-            return Err("Update-check lock must be a regular file.".to_string());
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => return Err("Could not inspect the update-check lock.".to_string()),
-    }
-
-    let mut options = OpenOptions::new();
-    options.create(true).read(true).write(true);
-    #[cfg(unix)]
-    {
-        options
-            .mode(0o600)
-            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW);
-    }
-    let mut file = options
-        .open(&lock_path)
-        .map_err(|_| "Could not open the update-check lock.".to_string())?;
-    let metadata = file
-        .metadata()
-        .map_err(|_| "Could not inspect the update-check lock.".to_string())?;
-    if !metadata.file_type().is_file() {
-        return Err("Update-check lock must be a regular file.".to_string());
-    }
-    #[cfg(unix)]
-    file.set_permissions(fs::Permissions::from_mode(0o600))
-        .map_err(|_| "Could not protect the update-check lock.".to_string())?;
-
-    // Python's Windows implementation locks byte zero with `msvcrt.locking`.
-    // Keep that byte present so fs2's whole-file Windows lock range overlaps
-    // it; the same file is harmless for Unix `flock` interoperability.
-    if metadata.len() == 0 {
-        file.write_all(b"\0")
-            .and_then(|_| file.sync_all())
-            .map_err(|_| "Could not initialize the update-check lock.".to_string())?;
-    }
-    file.lock_exclusive()
-        .map_err(|_| "Could not acquire the update-check lock.".to_string())?;
-    Ok(UpdateCheckPreferenceLock { file })
 }
 
 fn update_checks_enabled_at(path: &Path) -> bool {
@@ -319,6 +229,12 @@ fn update_checks_enabled() -> bool {
         .is_some_and(|path| update_checks_enabled_at(&path))
 }
 
+/// Replace the consent file atomically.
+///
+/// The closing `fs::rename` is the whole ordering guarantee: a concurrent reader
+/// sees either the old consent or the new one, never a torn file. There is
+/// deliberately no cross-process lock — the previous one made revoking consent
+/// wait on an in-flight network request without making revocation any prompter.
 fn write_update_checks_enabled_at(path: &Path, enabled: bool) -> Result<(), String> {
     let parent = path
         .parent()
@@ -328,8 +244,6 @@ fn write_update_checks_enabled_at(path: &Path, enabled: bool) -> Result<(), Stri
     #[cfg(unix)]
     fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
         .map_err(|error| format!("Could not protect the update-check settings folder: {error}"))?;
-
-    let _lock = acquire_update_check_preference_lock(path)?;
 
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -390,36 +304,24 @@ pub fn get_app_update_checks_enabled() -> bool {
 #[tauri::command]
 pub async fn check_app_update(app: AppHandle) -> Result<AppUpdateCheck, String> {
     // Fail-closed native gate before anything is spawned. The bundled CLI
-    // re-checks the same consent file under the shared cross-process lock, so
-    // revocation racing an in-flight check is closed there, not here.
+    // re-reads the same consent file before it opens a connection, so a
+    // revocation that lands between these two checks is still honored there.
     let preference = preference_path()?;
     if !update_checks_enabled_at(&preference) {
         return Err(UPDATE_CHECKS_DISABLED_MESSAGE.to_string());
     }
-    let current = app.package_info().version.clone();
-    if cfg!(debug_assertions) {
-        return Ok(debug_update_check(
-            current.to_string(),
-            !current.pre.is_empty(),
-        ));
-    }
     let resource_dir = app.path().resource_dir().ok();
-    tauri::async_runtime::spawn_blocking(move || run_sidecar_update_check(resource_dir.as_deref()))
-        .await
-        .map_err(|_| "Could not run the Kassiber CLI update check.".to_string())?
+    run_sidecar_update_check(resource_dir.as_deref()).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        cli_error_message, preference_lock_path, sidecar_failure_message,
-        update_check_from_envelope, update_checks_enabled_at, write_update_checks_enabled_at,
-        CliErrorBody, UPDATE_CHECKS_DISABLED_MESSAGE,
+        cli_error_message, update_check_from_envelope, update_checks_enabled_at,
+        write_update_checks_enabled_at, CliErrorBody, UPDATE_CHECKS_DISABLED_MESSAGE,
     };
-    use std::fs::{self, OpenOptions};
-    use std::sync::mpsc;
-    use std::thread;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn update_check_consent_is_explicit_and_fail_closed() {
@@ -435,86 +337,14 @@ mod tests {
         assert!(!update_checks_enabled_at(&path));
         write_update_checks_enabled_at(&path, true).unwrap();
         assert!(update_checks_enabled_at(&path));
-        let lock_path = preference_lock_path(&path).unwrap();
-        let lock_metadata = fs::metadata(lock_path).unwrap();
-        assert!(lock_metadata.is_file());
-        assert!(lock_metadata.len() >= 1);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
-            assert_eq!(lock_metadata.permissions().mode() & 0o077, 0);
+            assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o077, 0);
         }
         write_update_checks_enabled_at(&path, false).unwrap();
         assert!(!update_checks_enabled_at(&path));
         fs::write(&path, b"not-json\n").unwrap();
-        assert!(!update_checks_enabled_at(&path));
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn preference_writes_wait_for_an_inflight_check_lock() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "kassiber-update-lock-ordering-{}-{nonce}",
-            std::process::id()
-        ));
-        let path = root.join("update-checks.json");
-        write_update_checks_enabled_at(&path, true).unwrap();
-        let inflight = super::acquire_update_check_preference_lock(&path).unwrap();
-        let contender = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(preference_lock_path(&path).unwrap())
-            .unwrap();
-        assert!(fs2::FileExt::try_lock_exclusive(&contender).is_err());
-        drop(contender);
-        let (started_tx, started_rx) = mpsc::channel();
-        let (finished_tx, finished_rx) = mpsc::channel();
-        let writer_path = path.clone();
-        let writer = thread::spawn(move || {
-            started_tx.send(()).unwrap();
-            let result = write_update_checks_enabled_at(&writer_path, false);
-            finished_tx.send(result).unwrap();
-        });
-
-        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
-        assert!(finished_rx
-            .recv_timeout(Duration::from_millis(100))
-            .is_err());
-        drop(inflight);
-        finished_rx
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap();
-        writer.join().unwrap();
-        assert!(!update_checks_enabled_at(&path));
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn preference_lock_rejects_symlinks() {
-        use std::os::unix::fs::symlink;
-
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "kassiber-update-lock-symlink-{}-{nonce}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&root).unwrap();
-        let path = root.join("update-checks.json");
-        let lock_path = preference_lock_path(&path).unwrap();
-        let target = root.join("lock-target");
-        fs::write(&target, b"\0").unwrap();
-        symlink(&target, &lock_path).unwrap();
-
-        assert!(write_update_checks_enabled_at(&path, true).is_err());
         assert!(!update_checks_enabled_at(&path));
         fs::remove_dir_all(root).unwrap();
     }
@@ -603,6 +433,8 @@ mod tests {
         assert!(update_check_from_envelope(br#"{"kind": "update", "schema_version": 1}"#).is_err());
     }
 
+    /// One parser handles both outcomes, so the CLI's specific reason reaches
+    /// the user whether or not the process also exited nonzero.
     #[test]
     fn maps_cli_error_envelopes_to_user_facing_messages() {
         assert_eq!(
@@ -613,17 +445,19 @@ mod tests {
             UPDATE_CHECKS_DISABLED_MESSAGE
         );
         assert_eq!(
-            sidecar_failure_message(
+            update_check_from_envelope(
                 br#"{"kind": "error", "schema_version": 1, "error": {
                     "code": "network", "message": "GitHub is unreachable",
                     "hint": null, "details": null, "retryable": true, "debug": null
                 }}"#
-            ),
+            )
+            .unwrap_err(),
             "Could not check for updates: GitHub is unreachable."
         );
         assert_eq!(
-            sidecar_failure_message(b"garbage"),
+            update_check_from_envelope(b"   \n").unwrap_err(),
             "Could not reach GitHub to check for updates."
         );
+        assert!(update_check_from_envelope(b"garbage").is_err());
     }
 }

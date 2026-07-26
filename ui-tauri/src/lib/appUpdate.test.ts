@@ -1,11 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  APP_UPDATE_CONSENT_REFRESH_MS,
   APP_UPDATE_PERIOD_MS,
   APP_UPDATE_START_DELAY_MS,
   runManualAppUpdateCheck,
-  resolveAppUpdateChecksEnabled,
   startAppUpdateScheduler,
   syncAppUpdateChecksEnabled,
 } from "./appUpdate";
@@ -15,7 +13,6 @@ describe("app update checks", () => {
   it("uses Sparrow's delayed daily cadence", () => {
     expect(APP_UPDATE_START_DELAY_MS).toBe(10_000);
     expect(APP_UPDATE_PERIOD_MS).toBe(86_400_000);
-    expect(APP_UPDATE_CONSENT_REFRESH_MS).toBe(1_000);
   });
 
   it("keeps release information transient", () => {
@@ -38,20 +35,6 @@ describe("app update checks", () => {
   });
 
   it("hydrates consent from the native preference and fails closed", async () => {
-    await expect(
-      resolveAppUpdateChecksEnabled(async () => true),
-    ).resolves.toBe(true);
-    await expect(
-      resolveAppUpdateChecksEnabled(async () => false),
-    ).resolves.toBe(false);
-    await expect(
-      resolveAppUpdateChecksEnabled(async () => {
-        throw new Error("preference unavailable");
-      }),
-    ).resolves.toBe(false);
-  });
-
-  it("synchronizes renderer state with later CLI consent changes", async () => {
     const setEnabled = vi.fn();
 
     await expect(
@@ -60,8 +43,13 @@ describe("app update checks", () => {
     await expect(
       syncAppUpdateChecksEnabled(setEnabled, async () => false),
     ).resolves.toBe(false);
+    await expect(
+      syncAppUpdateChecksEnabled(setEnabled, async () => {
+        throw new Error("preference unavailable");
+      }),
+    ).resolves.toBe(false);
 
-    expect(setEnabled.mock.calls).toEqual([[true], [false]]);
+    expect(setEnabled.mock.calls).toEqual([[true], [false], [false]]);
   });
 
   it("starts once after the delay and repeats daily until stopped", async () => {
@@ -115,16 +103,38 @@ describe("app update checks", () => {
       });
       const setUpdate = vi.fn();
       const setEnabled = vi.fn();
-      startAppUpdateScheduler(
-        check,
-        setUpdate,
-        async () => false,
-        setEnabled,
+      const readEnabled = vi
+        .fn<() => Promise<boolean>>()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      // The consent re-read is what mirrors revocation into the store, so the
+      // scheduler needs no separate setter for it.
+      startAppUpdateScheduler(check, setUpdate, () =>
+        syncAppUpdateChecksEnabled(setEnabled, readEnabled),
       );
 
       await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS);
 
+      expect(check).toHaveBeenCalledTimes(1);
       expect(setUpdate).not.toHaveBeenCalled();
+      expect(setEnabled.mock.calls).toEqual([[true], [false]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("mirrors consent revoked before an automatic check", async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn();
+      const setEnabled = vi.fn();
+      startAppUpdateScheduler(check, vi.fn(), () =>
+        syncAppUpdateChecksEnabled(setEnabled, async () => false),
+      );
+
+      await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS);
+
+      expect(check).not.toHaveBeenCalled();
       expect(setEnabled).toHaveBeenCalledWith(false);
     } finally {
       vi.useRealTimers();
@@ -218,19 +228,40 @@ describe("app update checks", () => {
     expect(openUrl).not.toHaveBeenCalled();
   });
 
-  it("reports GitHub failures for a user-requested check", async () => {
+  it("reports the specific reason a user-requested check failed", async () => {
     const setUpdate = vi.fn();
     const showDialog = vi.fn().mockResolvedValue("OK");
 
+    // Tauri rejects `invoke` with the command's `Err(String)`, so the native
+    // checker's already user-facing reason must reach the dialog verbatim.
     await runManualAppUpdateCheck({
       isEnabled: () => true,
-      check: vi.fn().mockRejectedValue(new Error("offline")),
+      check: vi
+        .fn()
+        .mockRejectedValue("Could not reach GitHub to check for updates."),
       setUpdate,
       showDialog,
       openUrl: vi.fn(),
     });
 
     expect(setUpdate).not.toHaveBeenCalled();
+    expect(showDialog).toHaveBeenCalledWith(
+      "Could not reach GitHub to check for updates.",
+      expect.objectContaining({ kind: "error" }),
+    );
+  });
+
+  it("falls back to the generic failure text when no reason is given", async () => {
+    const showDialog = vi.fn().mockResolvedValue("OK");
+
+    await runManualAppUpdateCheck({
+      isEnabled: () => true,
+      check: vi.fn().mockRejectedValue(new Error("   ")),
+      setUpdate: vi.fn(),
+      showDialog,
+      openUrl: vi.fn(),
+    });
+
     expect(showDialog).toHaveBeenCalledWith(
       expect.stringContaining("could not check GitHub"),
       expect.objectContaining({ kind: "error" }),

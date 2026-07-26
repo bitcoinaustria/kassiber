@@ -180,12 +180,10 @@ from ..operator.cli import add_operator_parser, dispatch_operator, route_brokere
 from ..release_verification import verify_download
 from ..tax_policy import supported_tax_countries
 from ..update_check import (
-    INTERNAL_REFRESH_ARGUMENT,
     check_for_update,
-    refresh_cache_silently,
     render_update_status,
     set_update_checks_enabled,
-    show_cached_update_and_refresh,
+    show_cached_update,
     supports_color,
     update_checks_enabled,
 )
@@ -5667,9 +5665,6 @@ def _configure_cli_logging(args: argparse.Namespace) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
-    if raw_argv == [INTERNAL_REFRESH_ARGUMENT]:
-        refresh_cache_silently()
-        return 0
     if raw_argv == ["--operator-broker-server"]:
         from ..operator.server import main as operator_server_main
 
@@ -5688,7 +5683,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        show_cached_update_and_refresh(args)
+        show_cached_update(args)
     except Exception:
         logging.getLogger(__name__).debug(
             "automatic update check failed",

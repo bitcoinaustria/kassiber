@@ -6,7 +6,6 @@ import { useUiStore } from "@/store/ui";
 
 export const APP_UPDATE_START_DELAY_MS = 10_000;
 export const APP_UPDATE_PERIOD_MS = 24 * 60 * 60 * 1_000;
-export const APP_UPDATE_CONSENT_REFRESH_MS = 1_000;
 
 export interface AppUpdateCheck {
   currentVersion: string;
@@ -41,22 +40,22 @@ export async function readAppUpdateChecksEnabled(): Promise<boolean> {
   return invoke<boolean>("get_app_update_checks_enabled");
 }
 
-export async function resolveAppUpdateChecksEnabled(
-  read: () => Promise<boolean> = readAppUpdateChecksEnabled,
-): Promise<boolean> {
-  try {
-    return (await read()) === true;
-  } catch {
-    return false;
-  }
-}
-
+/**
+ * Read the canonical native consent and mirror it into the store, failing
+ * closed. `read` stays injectable because that is how the fail-closed path is
+ * tested — outside Tauri the real reader can only ever answer `false`.
+ */
 export async function syncAppUpdateChecksEnabled(
   setEnabled: (enabled: boolean) => void = (enabled) =>
     useUiStore.getState().setAutomaticUpdateChecks(enabled),
   read: () => Promise<boolean> = readAppUpdateChecksEnabled,
 ): Promise<boolean> {
-  const enabled = await resolveAppUpdateChecksEnabled(read);
+  let enabled = false;
+  try {
+    enabled = (await read()) === true;
+  } catch {
+    // An unreadable preference is not consent.
+  }
   setEnabled(enabled);
   return enabled;
 }
@@ -75,7 +74,7 @@ export async function setAppUpdateChecksEnabled(
 type ManualUpdateDialogOptions = {
   title: string;
   kind: "info" | "error";
-  buttons: { ok: string } | { ok: string; cancel: string };
+  buttons: { ok: string; cancel?: string };
 };
 
 export interface ManualAppUpdateDeps {
@@ -133,10 +132,19 @@ export async function runManualAppUpdateCheck(
   let result: AppUpdateCheck;
   try {
     result = await deps.check();
-  } catch {
+  } catch (error) {
+    // The native command and the CLI both return a specific, already
+    // user-facing reason (disabled consent, network, oversized response).
+    // Swallowing it left "try again later" as the only diagnosis available.
+    const reason =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "";
     await deps
       .showDialog(
-        i18n.t("shell.version.checkFailed", { ns: "chrome" }),
+        reason.trim() || i18n.t("shell.version.checkFailed", { ns: "chrome" }),
         {
           title: "Kassiber",
           kind: "error",
@@ -202,21 +210,21 @@ export async function runManualAppUpdateCheck(
 export function startAppUpdateScheduler(
   check: () => Promise<AppUpdateCheck>,
   setUpdate: (update: AppUpdateCheck) => void,
-  isEnabled: () => boolean | Promise<boolean> = resolveAppUpdateChecksEnabled,
-  setEnabled: (enabled: boolean) => void = (enabled) =>
-    useUiStore.getState().setAutomaticUpdateChecks(enabled),
+  isEnabled: () => boolean | Promise<boolean> = syncAppUpdateChecksEnabled,
 ): () => void {
   let disposed = false;
   let periodId: ReturnType<typeof globalThis.setInterval> | undefined;
   const run = async () => {
     try {
+      // Mirror a CLI-side revocation before invoking the native checker. The
+      // native gate fails closed too, but its rejection would otherwise skip
+      // the post-check sync below and leave the renderer toggle stale.
+      if (!(await isEnabled())) return;
       const result = await check();
+      // Re-read after the request as well so a revocation that landed during
+      // the check suppresses its result.
       const stillEnabled = await isEnabled();
-      if (disposed) return;
-      if (!stillEnabled) {
-        setEnabled(false);
-        return;
-      }
+      if (disposed || !stillEnabled) return;
       setUpdate(result);
     } catch {
       // A release check is advisory; failures never interrupt the app.
@@ -237,9 +245,6 @@ export function startAppUpdateScheduler(
 export function useAppUpdateScheduler(): void {
   const enabled = useUiStore((state) => state.automaticUpdateChecks);
   const hasIdentity = useUiStore((state) => state.identity !== null);
-  const setAutomaticUpdateChecks = useUiStore(
-    (state) => state.setAutomaticUpdateChecks,
-  );
   const setAppUpdate = useUiStore((state) => state.setAppUpdate);
   const [consentLoaded, setConsentLoaded] = React.useState(
     () => !canCheckAppUpdates(),
@@ -252,25 +257,18 @@ export function useAppUpdateScheduler(): void {
     // The owner-only native/CLI preference is canonical. Renderer persistence
     // is deliberately ignored so imports, upgrades, malformed files, and CLI
     // changes cannot be converted into consent by merely starting the app.
-    // Refreshing this local file also keeps a running desktop synchronized
-    // when the user changes consent through the CLI.
-    const refreshConsent = async () => {
-      const canonicalEnabled = await resolveAppUpdateChecksEnabled();
-      if (disposed) return;
-      setAutomaticUpdateChecks(canonicalEnabled);
-      setConsentLoaded(true);
-    };
-    void refreshConsent();
-    const refreshId = globalThis.setInterval(
-      () => void refreshConsent(),
-      APP_UPDATE_CONSENT_REFRESH_MS,
-    );
+    // Read once: the Privacy toggle updates the store itself, and every check
+    // re-reads consent before using its result, so polling this file each
+    // second only bought noticing a `kassiber update --disable-checks` run in
+    // another terminal a little sooner — at 86,400 IPC round-trips a day.
+    void syncAppUpdateChecksEnabled().then(() => {
+      if (!disposed) setConsentLoaded(true);
+    });
 
     return () => {
       disposed = true;
-      globalThis.clearInterval(refreshId);
     };
-  }, [setAutomaticUpdateChecks]);
+  }, []);
 
   React.useEffect(() => {
     if (
