@@ -52,7 +52,7 @@ import {
   type AiProviderRuntimeStatusData,
   type AiProvidersListData,
 } from "@/lib/aiCapabilities";
-import { useUiStore, type DataMode } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
   dedupeProviderRows,
@@ -124,10 +124,9 @@ function runtimeProviderName(
 }
 
 async function fetchProviderModels(
-  dataMode: DataMode,
   provider: string,
 ): Promise<DaemonEnvelope<AiModelsListData>> {
-  const envelope = await getTransport(dataMode).invoke<AiModelsListData>({
+  const envelope = await getTransport().invoke<AiModelsListData>({
     kind: "ai.list_models",
     args: { provider, refresh: true },
   });
@@ -224,7 +223,7 @@ export function ProviderModelPicker({
         "ai.list_models",
         { provider: provider.name },
       ),
-      queryFn: () => fetchProviderModels(dataMode, provider.name),
+      queryFn: () => fetchProviderModels(provider.name),
       enabled: enabled && shouldPollProviderModels(provider),
       refetchInterval: shouldPollProviderModels(provider)
         ? LOCAL_MODEL_REFRESH_MS

@@ -783,7 +783,7 @@ export function AppShell() {
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
       setLocked(true);
-      void getTransport("real").invoke({ kind: "daemon.lock" });
+      void getTransport().invoke({ kind: "daemon.lock" });
       return;
     }
     if (!hasSessionUnlockPassphrase()) {
@@ -827,7 +827,7 @@ export function AppShell() {
         let nextIdentity: ProjectIdentity | null = null;
         if (pendingProjectUnlock) {
           const projectEnvelope =
-            await getTransport("real").invoke<ProjectSelectSnapshot>({
+            await getTransport().invoke<ProjectSelectSnapshot>({
               kind: "ui.projects.select",
               args: {
                 project_id: pendingProjectUnlock.id,
@@ -846,7 +846,7 @@ export function AppShell() {
             );
           }
         } else {
-          envelope = await getTransport("real").invoke({
+          envelope = await getTransport().invoke({
             kind: "daemon.unlock",
             args: {
               ...(identity?.importedProject
@@ -1041,7 +1041,7 @@ export function AppShell() {
   const switchProject = React.useCallback(
     async (project: ProjectCatalogEntry) => {
       try {
-        const envelope = await getTransport("real").invoke<ProjectSelectSnapshot>({
+        const envelope = await getTransport().invoke<ProjectSelectSnapshot>({
           kind: "ui.projects.select",
           args: { project_id: project.id },
         });
@@ -1284,7 +1284,7 @@ export function AppShell() {
     let cancelled = false;
     void (async () => {
       try {
-        const envelope = await getTransport("real").invoke<ProfilesSnapshot>({
+        const envelope = await getTransport().invoke<ProfilesSnapshot>({
           kind: "ui.profiles.snapshot",
         });
         if (cancelled) return;

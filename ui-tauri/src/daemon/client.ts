@@ -207,7 +207,7 @@ export function useDaemon<T = unknown>(
   return useQuery<DaemonEnvelope<T>>({
     queryKey: daemonQueryKey(dataMode, daemonSession, kind, args),
     queryFn: async () => {
-      const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
+      const envelope = await getTransport().invoke<T>({ kind, args });
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope, daemonSession);
       }
@@ -249,7 +249,7 @@ export function useDaemonInfinite<T = unknown>(
     queryKey: daemonQueryKey(dataMode, daemonSession, kind, args),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
-      const envelope = await getTransport(dataMode).invoke<T>({
+      const envelope = await getTransport().invoke<T>({
         kind,
         args: {
           ...(args ?? {}),
@@ -508,7 +508,7 @@ export function useDaemonMutation<T = unknown>(
     mutationKey: daemonMutationKey(dataMode, kind),
     mutationFn: async (args?: Record<string, unknown>) => {
       const daemonSession = useUiStore.getState().daemonSession;
-      const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
+      const envelope = await getTransport().invoke<T>({ kind, args });
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope, daemonSession);
       }
@@ -550,7 +550,7 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
     mutationKey: daemonMutationKey(dataMode, kind),
     mutationFn: async (args?: Record<string, unknown>) => {
       const daemonSession = useUiStore.getState().daemonSession;
-      const envelope = await getTransport(dataMode).stream<T, R>(
+      const envelope = await getTransport().stream<T, R>(
         { kind, args },
         {
           onRecord: (record) => {

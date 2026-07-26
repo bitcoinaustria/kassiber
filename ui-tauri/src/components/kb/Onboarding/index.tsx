@@ -199,7 +199,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
 
     let cancelled = false;
     setLoadingRegtestStatus(true);
-    void getTransport("regtest")
+    void getTransport()
       .invoke<RegtestStatusData>({
         kind: "status",
         request_id: "onboarding-regtest-status",
@@ -258,7 +258,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     // native boundary remains fail-closed and onboarding can be retried safely.
     await setAppUpdateChecksEnabled(form.updateChecksEnabled);
     if (form.databaseMode === "sqlcipher") {
-      const envelope = await getTransport("real").invoke({
+      const envelope = await getTransport().invoke({
         kind: "ui.secrets.init",
         args: {
           auth_response: { passphrase_secret: form.databasePassphrase },
@@ -303,7 +303,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       form.backendProxyPort.trim()
         ? `${form.backendProxyHost.trim()}:${form.backendProxyPort.trim()}`
         : undefined;
-    const onboarding = await getTransport("real").invoke({
+    const onboarding = await getTransport().invoke({
       kind: "ui.onboarding.complete",
       args: {
         workspace_label: form.workspace.trim() || "My Books",
@@ -356,7 +356,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         kind: form.aiProviderKind,
         acknowledged: form.aiRemoteAcknowledged,
       };
-      const transport = getTransport("real");
+      const transport = getTransport();
       const invokeProvider = async (
         kind:
           | "ai.providers.create"
@@ -584,7 +584,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setLoadingImportProfiles(true);
     setImportError(null);
     try {
-      const envelope = await getTransport("real").invoke<ProfilesSnapshot>({
+      const envelope = await getTransport().invoke<ProfilesSnapshot>({
         kind: "ui.profiles.snapshot",
       });
       if (envelope.kind === "auth_required") {
@@ -617,7 +617,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       if (selection.encrypted) {
         useUiStore.getState().bumpDaemonSession();
       }
-      const envelope = await getTransport("real").invoke({
+      const envelope = await getTransport().invoke({
         kind: "daemon.unlock",
         args: {
           require_existing_project: true,

@@ -9,7 +9,7 @@
  * whitelisted requests to the local Python daemon.
  */
 
-import { useUiStore, type DataMode } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 import {
   emitAppLog,
   type AppLogField,
@@ -976,8 +976,7 @@ const bridgeDaemon: DaemonTransport = {
   },
 };
 
-export function getTransport(dataMode?: DataMode): DaemonTransport {
-  void dataMode;
+export function getTransport(): DaemonTransport {
   switch (DAEMON_MODE) {
     case "bridge":
       return withDaemonLogging(bridgeDaemon, "daemon:bridge");
