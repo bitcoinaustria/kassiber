@@ -38,6 +38,8 @@ const RULE_HEIGHT = 12;
 const COLUMN_WIDTH = 96;
 /** Spacing between repeats of the lighting, in viewBox units. */
 const GLOW_TILE = 2048;
+/** Base spacing between repeats of the bookkeeping marks, in viewBox units. */
+const MARK_TILE = 576;
 
 export function SidebarStageBackdrop() {
   return <LedgerStageBand className="h-14" />;
@@ -82,6 +84,16 @@ export function LedgerStageBand({
 
 function LedgerPaperArt({ pages = 1 }: { pages?: number }) {
   const artHeight = STAGE_PAGE * pages;
+  // One tile with one set of marks for the nav; a doubled tile carrying two
+  // offset sets for anything larger, which is the same marks at half density.
+  const markSpread = pages > 1 ? 2 : 1;
+  const markOffsets =
+    markSpread === 1
+      ? [[0, 0]]
+      : [
+          [0, 0],
+          [MARK_TILE, STAGE_PAGE],
+        ];
   // `useId` output can contain ":" which is invalid inside a url(#…) reference.
   const idPrefix = React.useId().replace(/:/g, "");
   const paperId = `${idPrefix}-paper`;
@@ -228,26 +240,50 @@ function LedgerPaperArt({ pages = 1 }: { pages?: number }) {
           />
         </pattern>
 
-        {/* Bookkeeping marks: reconciliation ticks, pencil dashes, and the
-            double rule ruled under a total. Abstract on purpose — no figures,
-            nothing that could be misread as real data. */}
-        <pattern id={marksId} width="576" height="96" patternUnits="userSpaceOnUse">
-          <g
-            style={{ stroke: "var(--stage-ink)" }}
-            strokeLinecap="round"
-            strokeOpacity="0.5"
-            strokeWidth="0.7"
-          >
-            <path d="M44 33.5l2.6 2.6L51 31" />
-            <path d="M212 57.5l2.6 2.6L219 55" />
-            <path d="M388 21.5l2.6 2.6L395 19" />
-            <path d="M508 69.5l2.6 2.6L515 67" />
-            <path d="M132 47h26" strokeDasharray="4 3" strokeOpacity="0.4" />
-            <path d="M296 83h34" strokeDasharray="4 3" strokeOpacity="0.35" />
-            <path d="M440 47h22" strokeDasharray="4 3" strokeOpacity="0.4" />
-            <path d="M84 70h30M84 72h30" strokeOpacity="0.3" strokeWidth="0.5" />
-            <path d="M340 34h26M340 36h26" strokeOpacity="0.28" strokeWidth="0.5" />
-          </g>
+        {/*
+         * Bookkeeping marks: reconciliation ticks, pencil dashes, and the double
+         * rule ruled under a total. Abstract on purpose — no figures, nothing
+         * that could be misread as real data.
+         *
+         * Density is halved on the large surfaces. The nav only ever shows a
+         * fraction of one tile, so nine marks read as a few incidental pencil
+         * notes there; a full-screen band shows twenty-odd tiles of the same
+         * pattern, where the identical ticks stack into a lattice and start
+         * competing with the content. Doubling the tile in both axes and
+         * placing two diagonally-offset copies inside it keeps the same marks
+         * at exactly half the marks-per-area, and the offset also breaks up the
+         * grid the single tile produced.
+         */}
+        <pattern
+          id={marksId}
+          width={MARK_TILE * markSpread}
+          height={STAGE_PAGE * markSpread}
+          patternUnits="userSpaceOnUse"
+        >
+          {markOffsets.map(([dx, dy]) => (
+            <g
+              key={`${dx}-${dy}`}
+              transform={`translate(${dx} ${dy})`}
+              style={{ stroke: "var(--stage-ink)" }}
+              strokeLinecap="round"
+              strokeOpacity="0.5"
+              strokeWidth="0.7"
+            >
+              <path d="M44 33.5l2.6 2.6L51 31" />
+              <path d="M212 57.5l2.6 2.6L219 55" />
+              <path d="M388 21.5l2.6 2.6L395 19" />
+              <path d="M508 69.5l2.6 2.6L515 67" />
+              <path d="M132 47h26" strokeDasharray="4 3" strokeOpacity="0.4" />
+              <path d="M296 83h34" strokeDasharray="4 3" strokeOpacity="0.35" />
+              <path d="M440 47h22" strokeDasharray="4 3" strokeOpacity="0.4" />
+              <path d="M84 70h30M84 72h30" strokeOpacity="0.3" strokeWidth="0.5" />
+              <path
+                d="M340 34h26M340 36h26"
+                strokeOpacity="0.28"
+                strokeWidth="0.5"
+              />
+            </g>
+          ))}
         </pattern>
       </defs>
 
